@@ -32,21 +32,17 @@ def test_alembic_skeleton_exists() -> None:
 def test_alembic_targets_empty_metadata() -> None:
     env_source = (ALEMBIC_ROOT / "env.py").read_text(encoding="utf-8")
 
+    assert "from backend.app import models" in env_source
     assert "target_metadata = Base.metadata" in env_source
     assert "get_settings().database_url" in env_source
 
 
-def test_versions_contain_no_business_table_migrations() -> None:
-    migration_files = [
-        path
-        for path in VERSIONS_ROOT.rglob("*")
-        if path.is_file() and path.name != ".gitkeep"
-    ]
+def test_versions_contain_only_f07_core_foundation_migration() -> None:
+    migration_files = sorted(VERSIONS_ROOT.glob("*.py"))
 
-    assert migration_files == []
+    assert len(migration_files) == 1
+    assert migration_files[0].name.endswith("create_core_foundation_tables.py")
 
-    migration_source = "\n".join(
-        path.read_text(encoding="utf-8").lower()
-        for path in migration_files
-    )
-    assert not any(table_name in migration_source for table_name in CORE_BUSINESS_TABLES)
+    migration_source = migration_files[0].read_text(encoding="utf-8").lower()
+    assert "insert" not in migration_source
+    assert all(table_name in migration_source for table_name in CORE_BUSINESS_TABLES)

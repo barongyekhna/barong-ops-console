@@ -1,0 +1,326 @@
+from sqlalchemy import Index, UniqueConstraint
+
+from backend.app import models  # noqa: F401
+from backend.app.db.base import Base
+
+CORE_TABLES = {
+    "users",
+    "module_registry",
+    "agent_registry",
+    "workflow_registry",
+    "automation_jobs",
+    "job_events",
+    "artifacts",
+    "review_items",
+    "system_errors",
+    "memory_events",
+    "operation_logs",
+    "context_packets",
+    "memory_summaries",
+    "agent_memory_access_logs",
+}
+
+STABLE_ID_FIELDS = {
+    "users": "username",
+    "module_registry": "module_id",
+    "agent_registry": "agent_id",
+    "workflow_registry": "workflow_id",
+    "automation_jobs": "job_id",
+    "artifacts": "artifact_id",
+    "review_items": "review_id",
+    "system_errors": "error_id",
+    "memory_events": "memory_event_id",
+    "operation_logs": "operation_id",
+    "context_packets": "context_packet_id",
+    "memory_summaries": "memory_summary_id",
+    "agent_memory_access_logs": "access_id",
+}
+
+MINIMUM_FIELDS = {
+    "users": {
+        "id",
+        "username",
+        "password_hash",
+        "role",
+        "is_active",
+        "created_at",
+        "updated_at",
+        "last_login_at",
+    },
+    "module_registry": {
+        "id",
+        "module_id",
+        "name",
+        "responsibilities",
+        "non_responsibilities",
+        "input_schema",
+        "output_schema",
+        "permissions",
+        "risk_level",
+        "version",
+        "status",
+        "dependencies",
+        "artifact_types",
+        "review_types",
+        "error_codes",
+        "healthcheck_config",
+        "rollback_policy",
+        "created_at",
+        "updated_at",
+    },
+    "agent_registry": {
+        "id",
+        "agent_id",
+        "name",
+        "responsibilities",
+        "non_responsibilities",
+        "input_schema",
+        "output_schema",
+        "permissions",
+        "risk_level",
+        "version",
+        "status",
+        "dependencies",
+        "artifact_types",
+        "review_types",
+        "error_codes",
+        "healthcheck_config",
+        "rollback_policy",
+        "created_at",
+        "updated_at",
+    },
+    "workflow_registry": {
+        "id",
+        "workflow_id",
+        "name",
+        "responsibilities",
+        "non_responsibilities",
+        "input_schema",
+        "output_schema",
+        "permissions",
+        "risk_level",
+        "version",
+        "status",
+        "dependencies",
+        "artifact_types",
+        "review_types",
+        "error_codes",
+        "healthcheck_config",
+        "rollback_policy",
+        "created_at",
+        "updated_at",
+    },
+    "automation_jobs": {
+        "id",
+        "job_id",
+        "module_id",
+        "agent_id",
+        "workflow_id",
+        "parent_job_id",
+        "requested_by_user_id",
+        "status",
+        "risk_level",
+        "input_payload",
+        "input_schema_version",
+        "idempotency_key",
+        "correlation_id",
+        "created_at",
+        "started_at",
+        "finished_at",
+        "updated_at",
+    },
+    "job_events": {
+        "id",
+        "job_id",
+        "event_type",
+        "from_status",
+        "to_status",
+        "actor_type",
+        "actor_id",
+        "details",
+        "created_at",
+    },
+    "artifacts": {
+        "id",
+        "artifact_id",
+        "job_id",
+        "module_id",
+        "artifact_type",
+        "name",
+        "storage_provider",
+        "storage_ref",
+        "content_hash",
+        "schema_version",
+        "version",
+        "status",
+        "metadata",
+        "created_at",
+        "updated_at",
+    },
+    "review_items": {
+        "id",
+        "review_id",
+        "job_id",
+        "artifact_id",
+        "review_type",
+        "risk_level",
+        "status",
+        "requested_by",
+        "assigned_to",
+        "decided_by",
+        "decision",
+        "comment",
+        "created_at",
+        "decided_at",
+        "updated_at",
+    },
+    "system_errors": {
+        "id",
+        "error_id",
+        "error_code",
+        "severity",
+        "status",
+        "message",
+        "details",
+        "job_id",
+        "module_id",
+        "agent_id",
+        "workflow_id",
+        "correlation_id",
+        "occurred_at",
+        "acknowledged_by",
+        "resolved_at",
+    },
+    "memory_events": {
+        "id",
+        "memory_event_id",
+        "event_type",
+        "subject_type",
+        "subject_id",
+        "job_id",
+        "payload",
+        "schema_version",
+        "importance",
+        "created_by_type",
+        "created_by_id",
+        "created_at",
+    },
+    "operation_logs": {
+        "id",
+        "operation_id",
+        "actor_type",
+        "actor_id",
+        "action",
+        "target_type",
+        "target_id",
+        "job_id",
+        "result",
+        "error_code",
+        "request_id",
+        "ip_address",
+        "user_agent",
+        "details",
+        "created_at",
+    },
+    "context_packets": {
+        "id",
+        "context_packet_id",
+        "source_job_id",
+        "source_module_id",
+        "target_module_id",
+        "target_agent_id",
+        "schema_version",
+        "payload",
+        "artifact_refs",
+        "access_scope",
+        "expires_at",
+        "created_at",
+    },
+    "memory_summaries": {
+        "id",
+        "memory_summary_id",
+        "subject_type",
+        "subject_id",
+        "summary",
+        "source_event_ids",
+        "schema_version",
+        "version",
+        "valid_from",
+        "valid_until",
+        "created_at",
+    },
+    "agent_memory_access_logs": {
+        "id",
+        "access_id",
+        "agent_id",
+        "job_id",
+        "resource_type",
+        "resource_id",
+        "purpose",
+        "access_scope",
+        "result",
+        "denial_reason",
+        "created_at",
+    },
+}
+
+
+def has_unique_single_column(table_name: str, column_name: str) -> bool:
+    table = Base.metadata.tables[table_name]
+
+    for constraint in table.constraints:
+        if isinstance(constraint, UniqueConstraint):
+            if [column.name for column in constraint.columns] == [column_name]:
+                return True
+
+    for index in table.indexes:
+        if isinstance(index, Index) and index.unique:
+            if [column.name for column in index.columns] == [column_name]:
+                return True
+
+    return False
+
+
+def test_core_tables_exist_in_metadata() -> None:
+    assert set(Base.metadata.tables) == CORE_TABLES
+
+
+def test_each_core_table_has_primary_key_and_minimum_fields() -> None:
+    for table_name, expected_fields in MINIMUM_FIELDS.items():
+        table = Base.metadata.tables[table_name]
+
+        assert table.primary_key is not None
+        assert {column.name for column in table.primary_key.columns} == {"id"}
+        assert expected_fields.issubset(table.columns.keys())
+
+
+def test_stable_business_ids_are_unique() -> None:
+    for table_name, column_name in STABLE_ID_FIELDS.items():
+        table = Base.metadata.tables[table_name]
+
+        assert column_name in table.columns
+        assert table.columns[column_name].nullable is False
+        assert has_unique_single_column(table_name, column_name)
+
+
+def test_password_hash_exists_without_default() -> None:
+    password_hash = Base.metadata.tables["users"].columns["password_hash"]
+
+    assert password_hash.nullable is False
+    assert password_hash.default is None
+    assert password_hash.server_default is None
+
+
+def test_created_at_columns_default_to_current_time() -> None:
+    tables_with_created_at = CORE_TABLES - {"system_errors"}
+
+    for table_name in tables_with_created_at:
+        table = Base.metadata.tables[table_name]
+        created_at = table.columns["created_at"]
+
+        assert created_at.nullable is False
+        assert created_at.server_default is not None
+
+    occurred_at = Base.metadata.tables["system_errors"].columns["occurred_at"]
+    assert occurred_at.nullable is False
+    assert occurred_at.server_default is not None

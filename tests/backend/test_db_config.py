@@ -1,6 +1,7 @@
 from backend.app.core.config import EXAMPLE_DATABASE_URL, Settings
 from backend.app.db.base import Base, metadata
 from backend.app.main import app
+from backend.app import models  # noqa: F401
 
 CORE_BUSINESS_TABLES = {
     "users",
@@ -35,7 +36,6 @@ def test_database_url_uses_example_default(monkeypatch) -> None:
     assert "prod" not in settings.database_url.lower()
 
 
-def test_sqlalchemy_metadata_is_empty() -> None:
+def test_sqlalchemy_metadata_contains_core_foundation_tables() -> None:
     assert Base.metadata is metadata
-    assert list(metadata.tables) == []
-    assert CORE_BUSINESS_TABLES.isdisjoint(metadata.tables)
+    assert set(metadata.tables) == CORE_BUSINESS_TABLES
