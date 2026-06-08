@@ -1,5 +1,6 @@
 from functools import lru_cache
 
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EXAMPLE_DATABASE_URL = (
@@ -16,6 +17,10 @@ class Settings(BaseSettings):
     app_env: str = "development"
     app_version: str = "0.1.0"
     database_url: str = EXAMPLE_DATABASE_URL
+    auth_token_secret: SecretStr | None = None
+    auth_token_expire_minutes: int = Field(default=60, gt=0, le=1440)
+    owner_username: str | None = None
+    owner_password: SecretStr | None = None
 
 
 @lru_cache

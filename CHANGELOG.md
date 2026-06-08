@@ -6,6 +6,9 @@
 
 ### Added
 
+- F08：新增 Argon2id 密码哈希、JWT token、owner 幂等初始化 CLI 与 example Docker 脚本。
+- F08：新增 `POST /auth/login`、`POST /auth/logout`、`GET /auth/me` 和认证 operation logs。
+- F08：新增密码安全、owner bootstrap、登录失败统一响应、停用用户、当前用户和退出审计测试。
 - F07：新增 14 张核心空地基表的 SQLAlchemy 模型与单一 Alembic migration。
 - F07：新增 schema metadata、字段、主键、稳定业务 ID 唯一约束和 migration 无 seed 测试。
 - F07：数据库 Docker 验证脚本新增 migration upgrade、downgrade、再次 upgrade 的完整验证。
@@ -21,6 +24,8 @@
 
 ### Changed
 
+- F08：数据库 Docker 验证覆盖认证测试和 owner CLI，并继续执行 migration upgrade、downgrade、再次 upgrade 和清理。
+- F08：README 明确第一版禁止公开注册，前端登录页留到 F09，example secret/password 不得用于生产。
 - F07：Alembic metadata 现在加载全部核心空地基模型；`/health` 仍不声称已检查数据库。
 - F07：README 明确认证、owner 初始化、业务 API、前端和真实业务仍未实现，认证基础留到 F08。
 - F06：示例后端通过 `DATABASE_URL` 指向示例数据库；`/health` 仍不检查数据库连接，核心业务表留到 F07。

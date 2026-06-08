@@ -1,8 +1,8 @@
 # Backend
 
 This directory contains the F05 FastAPI foundation, the F06 database migration
-foundation, and the F07 core foundation table models and migration. It
-currently exposes only `GET /health`.
+foundation, the F07 core tables, and the F08 backend authentication
+foundation.
 
 F07 adds:
 
@@ -12,9 +12,15 @@ F07 adds:
   timestamps, and the core tracing foreign keys.
 - One Alembic revision that creates and removes the empty tables.
 
-F07 includes no data seed, owner initialization, password handling, login,
-authentication API, business API, frontend, or real external integration. F08
-is responsible for controlled owner initialization and authentication basics.
+F08 adds Argon2id password hashing, controlled owner initialization, JWT
+authentication, and authentication operation logs. It exposes:
+
+- `POST /auth/login`
+- `POST /auth/logout`
+- `GET /auth/me`
+
+There is no registration API, frontend login page, complex permission matrix,
+business API, seed data, or real external integration.
 
 ## Run tests
 
@@ -36,16 +42,32 @@ docker compose -f docker-compose.example.yml run --rm --no-deps backend python -
 The script falls back to the legacy `docker-compose` executable when the
 Compose v2 plugin is unavailable.
 
-Run the isolated PostgreSQL schema and Alembic checks with:
+Run the isolated PostgreSQL schema, Alembic, authentication, and owner
+bootstrap checks with:
 
 ```bash
 ./scripts/test_backend_db_docker.sh
 ```
 
-This uses only the example Compose file and example credentials. It runs
-schema tests and verifies migration upgrade, downgrade, and a second upgrade.
-Do not point `DATABASE_URL` at a production database. Do not install the
-requirements in the system Python or commit a real `.env` file.
+This uses only the example Compose file and example credentials. It runs the
+security and authentication tests and verifies migration upgrade, downgrade,
+and a second upgrade. Do not point `DATABASE_URL` at a production database.
+Do not install the requirements in the system Python or commit a real `.env`
+file.
+
+Initialize an example owner from environment variables with:
+
+```bash
+export OWNER_USERNAME="choose-an-owner-name"
+read -r -s -p "Owner password: " OWNER_PASSWORD
+export OWNER_PASSWORD
+./scripts/bootstrap_owner_docker.sh
+unset OWNER_PASSWORD
+```
+
+The example placeholders in `.env.example` are not production credentials.
+`AUTH_TOKEN_SECRET` must be supplied separately and must contain at least 32
+bytes before login tokens can be issued.
 
 ## Run the example backend
 
@@ -55,6 +77,5 @@ docker compose -f docker-compose.example.yml up --build backend
 
 The health endpoint is available at `http://127.0.0.1:8000/health`.
 It continues to report `database: "not_configured"` and does not perform a
-database connectivity check. Authentication, external integrations, business
-APIs, frontend code, owner initialization, and business modules are not
-included.
+database connectivity check. External integrations, business APIs, frontend
+code, and business modules are not included.
