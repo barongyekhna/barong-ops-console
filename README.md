@@ -15,21 +15,28 @@ The current backend is a minimal FastAPI foundation that provides only
 `GET /health`. It does not include database access, authentication, external
 service integrations, or business modules.
 
-Install the Python dependencies and run the test from the repository root:
+Run backend tests in the isolated Docker example environment. Do not install
+the project dependencies into the server's system Python:
 
 ```bash
-python3 -m pip install -r backend/requirements.txt
-python3 -m pytest tests/backend/test_health.py
+./scripts/test_backend_docker.sh
 ```
 
-Start the backend locally:
+The script builds only the `backend` service from
+`docker-compose.example.yml`, then runs the Compose v2 command below. It also
+supports the legacy `docker-compose` command when Compose v2 is unavailable:
 
 ```bash
-PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port 8000
+docker compose -f docker-compose.example.yml run --rm backend python -m pytest tests/backend/test_health.py
 ```
 
-Alternatively, use the isolated example Compose configuration:
+Start the example backend with:
 
 ```bash
 docker compose -f docker-compose.example.yml up --build backend
 ```
+
+The example configuration is separate from production Compose files and uses
+no real secrets or production mounts. The backend still exposes only
+`GET /health`; database, authentication, n8n, and WooCommerce integrations
+remain intentionally absent.

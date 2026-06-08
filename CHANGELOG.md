@@ -6,6 +6,7 @@
 
 ### Added
 
+- F05B：新增后端 Docker 隔离测试脚本和可复现的健康检查验证方式。
 - F05：新增 FastAPI / Python 后端空骨架、非敏感应用配置和 `GET /health`。
 - F05：新增后端 Dockerfile、示例 Compose 配置和健康检查测试。
 - F04：新增架构、模块合同、API 边界、数据库 Schema、认证、n8n 集成、固定任务序列和 Codex 施工规则文档。
@@ -15,6 +16,8 @@
 
 ### Changed
 
+- F05B：固定后端 Python 直接和传递依赖版本，并调整示例镜像以非 root 用户运行后端和 `pytest`，不依赖系统 Python 环境。
+- F05B：示例 Compose 继续仅包含 backend，明确不使用生产路径、真实密钥、数据库或外部服务。
 - F04：将空地基工程约束拆分为可独立审查和后续实现引用的专题合同，并固定 F04 至 F13 任务代号。
 - 明确第一版禁止公开注册，除 `/login` 外的控制台页面默认要求登录。
 - 明确 n8n 仅作为通过 Adapter / Webhook 接入的执行引擎。
