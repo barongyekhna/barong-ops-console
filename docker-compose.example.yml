@@ -1,11 +1,29 @@
 services:
+  db:
+    image: postgres:17.5-alpine
+    environment:
+      POSTGRES_DB: barong_console_example
+      POSTGRES_USER: barong_console_example
+      POSTGRES_PASSWORD: barong_console_example
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
   backend:
     build:
       context: .
       dockerfile: backend/Dockerfile
+    depends_on:
+      db:
+        condition: service_healthy
     environment:
       APP_NAME: barong-ops-console-backend
       APP_ENV: development
       APP_VERSION: 0.1.0
+      DATABASE_URL: postgresql+psycopg://barong_console_example:barong_console_example@db:5432/barong_console_example
     ports:
       - "127.0.0.1:8000:8000"
