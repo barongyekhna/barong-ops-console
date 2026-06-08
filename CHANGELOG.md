@@ -6,6 +6,8 @@
 
 ### Added
 
+- F05：新增 FastAPI / Python 后端空骨架、非敏感应用配置和 `GET /health`。
+- F05：新增后端 Dockerfile、示例 Compose 配置和健康检查测试。
 - F04：新增架构、模块合同、API 边界、数据库 Schema、认证、n8n 集成、固定任务序列和 Codex 施工规则文档。
 - 新增 `docs/FOUNDATION_BLUEPRINT_V1_1.md`，同步 Barong Ops Console 空地基 V1.1 基线。
 - 将登录认证、`owner` 初始化账号、受保护页面、用户表和密码哈希存储纳入空地基范围。
