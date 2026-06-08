@@ -9,6 +9,63 @@ Core rule:
 - Add business modules one by one.
 - Every module must be registered, isolated, testable, and removable.
 
+## F09 frontend shell and login
+
+F09 adds the Next.js / React / TypeScript frontend shell on top of the F08
+backend authentication foundation:
+
+- Public `/login` page with username and password fields.
+- Login through `POST /auth/login`, current-user validation through
+  `GET /auth/me`, and logout through `POST /auth/logout`.
+- Access-token storage without URL or console output, plus centralized 401
+  handling that clears invalid login state.
+- Protected Dashboard, Products, Modules, Agents, Workflows, Jobs, Artifacts,
+  Reviews, Errors, Memory Events, and Settings routes.
+- Sidebar navigation, current username and role display, logout control, and
+  structured empty states without fabricated business records.
+
+The first version has no public registration page or registration API call.
+Every console page except `/login` is protected by the frontend authentication
+guard; backend APIs remain responsible for their own authentication and
+authorization.
+
+F09 still does not connect real business modules, P-series workflows, n8n,
+WooCommerce, MinIO, or Filebrowser. The frontend authentication proxy only
+allows the three F08 authentication endpoints and does not expose a generic
+business API proxy.
+
+Use only the example backend URL in local configuration:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000
+```
+
+The example Compose frontend uses `BACKEND_API_URL=http://backend:8000` for
+server-side container networking. These URLs contain no credentials. Do not
+create or commit a real `.env`.
+
+Build and verify the frontend entirely in Docker:
+
+```bash
+./scripts/test_frontend_docker.sh
+```
+
+The Docker build installs the locked dependencies in its isolated build stage,
+checks all required routes and prohibited registration references, runs
+TypeScript, and completes a production Next.js build. It does not install npm
+packages on the host.
+
+Start the example frontend, backend, and example-only database with:
+
+```bash
+export AUTH_TOKEN_SECRET="replace-with-an-example-only-value-at-least-32-bytes"
+docker-compose -f docker-compose.example.yml up --build db backend frontend
+```
+
+Initialize the example database and owner using the F08 migration and bootstrap
+instructions below before testing login. Never use production credentials,
+databases, paths, or external services with this Compose file.
+
 ## F08 backend authentication foundation
 
 The current backend includes the F05 FastAPI foundation, the F06 PostgreSQL /
@@ -21,10 +78,9 @@ F08 adds the minimum backend authentication foundation:
 - `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`.
 - Authentication operation logs for owner initialization, login, and logout.
 
-The first version intentionally has no public registration endpoint. F08 also
-does not add a frontend login page; that work remains in F09. It does not add
-business APIs or connect real n8n, WooCommerce, Filebrowser, MinIO, or other
-external services.
+The first version intentionally has no public registration endpoint. F08 does
+not add business APIs or connect real n8n, WooCommerce, Filebrowser, MinIO, or
+other external services.
 
 Do not install project dependencies into the server's system Python and do
 not create a virtual environment for these checks. Run the health test in the
@@ -108,4 +164,4 @@ database and never commit a real `.env` file.
 `GET /health` remains anonymous and continues to report
 `database: "not_configured"` because it does not claim a live database
 readiness check. The authentication endpoints use the database, while real
-business integrations and frontend code remain intentionally absent.
+business integrations remain intentionally absent.

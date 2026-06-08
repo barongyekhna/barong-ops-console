@@ -1,0 +1,54 @@
+"use client";
+
+export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
+
+const API_PROXY_BASE = "/api/backend";
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+type ApiRequestOptions = Omit<RequestInit, "body"> & {
+  body?: unknown;
+  accessToken?: string | null;
+};
+
+export async function apiRequest<T>(
+  path: string,
+  options: ApiRequestOptions = {},
+): Promise<T> {
+  const headers = new Headers(options.headers);
+  headers.set("Accept", "application/json");
+
+  if (options.body !== undefined) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  if (options.accessToken) {
+    headers.set("Authorization", `Bearer ${options.accessToken}`);
+  }
+
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    ...options,
+    body:
+      options.body === undefined ? undefined : JSON.stringify(options.body),
+    cache: "no-store",
+    headers,
+  });
+
+  if (response.status === 401 && typeof window !== "undefined") {
+    window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+  }
+
+  if (!response.ok) {
+    throw new ApiError("The request could not be completed.", response.status);
+  }
+
+  return (await response.json()) as T;
+}
