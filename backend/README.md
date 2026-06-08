@@ -2,7 +2,7 @@
 
 This directory contains the F05 FastAPI foundation, the F06 database migration
 foundation, the F07 core tables, and the F08 backend authentication
-foundation.
+foundation, plus the F10 foundation operations APIs.
 
 F07 adds:
 
@@ -20,7 +20,18 @@ authentication, and authentication operation logs. It exposes:
 - `GET /auth/me`
 
 There is no registration API, frontend login page, complex permission matrix,
-business API, seed data, or real external integration.
+seed data, or real external integration.
+
+F10 adds owner-only list/detail APIs and controlled foundation/demo writes for
+Modules, Agents, Workflows, Jobs, Job Events, Artifacts, Reviews, System
+Errors, Memory Events, and Context Packets. Memory Summaries and Operation
+Logs are read-only. All write operations commit their audit log in the same
+transaction.
+
+F10 records metadata only. It does not trigger a workflow engine, call a
+model, upload a file, connect WooCommerce, or create a real product/business
+job. Job creation accepts only `pending` or `draft`; event-driven completion
+uses the explicit `completed_demo` status.
 
 ## Run tests
 
@@ -50,8 +61,9 @@ bootstrap checks with:
 ```
 
 This uses only the example Compose file and example credentials. It runs the
-security and authentication tests and verifies migration upgrade, downgrade,
-and a second upgrade. Do not point `DATABASE_URL` at a production database.
+security, authentication, F10 API, audit, and external-boundary tests and
+verifies migration upgrade, downgrade, and a second upgrade. Do not point
+`DATABASE_URL` at a production database.
 Do not install the requirements in the system Python or commit a real `.env`
 file.
 
@@ -77,5 +89,5 @@ docker compose -f docker-compose.example.yml up --build backend
 
 The health endpoint is available at `http://127.0.0.1:8000/health`.
 It continues to report `database: "not_configured"` and does not perform a
-database connectivity check. External integrations, business APIs, frontend
-code, and business modules are not included.
+database connectivity check. The authenticated F10 endpoints use the example
+database, while real external integrations and business modules remain absent.

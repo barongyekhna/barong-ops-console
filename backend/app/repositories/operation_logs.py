@@ -42,6 +42,7 @@ def create_operation_log(
     target_type: str,
     target_id: str,
     result: str,
+    job_id: str | None = None,
     error_code: str | None = None,
     request_id: str | None = None,
     ip_address: str | None = None,
@@ -55,6 +56,7 @@ def create_operation_log(
         action=action,
         target_type=target_type,
         target_id=target_id,
+        job_id=job_id,
         result=result,
         error_code=error_code,
         request_id=request_id,
@@ -64,3 +66,34 @@ def create_operation_log(
     )
     db.add(operation_log)
     return operation_log
+
+
+def list_operation_logs(
+    db: Session,
+    *,
+    limit: int,
+    offset: int,
+) -> list[OperationLog]:
+    from sqlalchemy import select
+
+    return list(
+        db.scalars(
+            select(OperationLog)
+            .order_by(OperationLog.id.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    )
+
+
+def get_operation_log(
+    db: Session,
+    operation_id: str,
+) -> OperationLog | None:
+    from sqlalchemy import select
+
+    return db.scalar(
+        select(OperationLog).where(
+            OperationLog.operation_id == operation_id
+        )
+    )

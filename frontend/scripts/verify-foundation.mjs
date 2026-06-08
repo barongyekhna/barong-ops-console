@@ -37,6 +37,16 @@ const sourceFiles = walk(join(frontendRoot, "src")).filter((path) =>
 );
 const source = sourceFiles.map((path) => readFileSync(path, "utf8")).join("\n");
 const registrationEndpoint = "/auth/" + "register";
+const requiredApiPaths = [
+  "/modules",
+  "/agents",
+  "/workflows",
+  "/jobs",
+  "/artifacts",
+  "/reviews",
+  "/errors",
+  "/memory-events",
+];
 
 if (source.includes(registrationEndpoint)) {
   throw new Error("A public registration API reference was found.");
@@ -52,6 +62,19 @@ if (/console\s*\.\s*(?:log|debug|info)\s*\(/.test(source)) {
 
 if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(source)) {
   throw new Error("A private key block was found.");
+}
+
+for (const apiPath of requiredApiPaths) {
+  if (!source.includes(`endpoint="${apiPath}"`)) {
+    throw new Error(`Missing F10 API page connection: ${apiPath}`);
+  }
+}
+
+if (
+  /(?:woocommerce|filebrowser|minio)/i.test(source) ||
+  /https?:\/\/[^"']+\/(?:webhook|hook)/i.test(source)
+) {
+  throw new Error("A prohibited external integration reference was found.");
 }
 
 process.stdout.write("Frontend foundation checks passed.\n");

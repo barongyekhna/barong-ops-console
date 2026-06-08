@@ -1,6 +1,6 @@
 # Frontend
 
-The F09 frontend is a Next.js, React, and TypeScript console shell. It provides
+The frontend is a Next.js, React, and TypeScript console shell. F09 provides
 the public `/login` page, authenticated navigation, the Dashboard, and
 structured empty states for the remaining foundation routes.
 
@@ -11,9 +11,21 @@ Next.js proxy:
 - `GET /auth/me`
 - `POST /auth/logout`
 
-The proxy only accepts these three paths. It exists because the browser and
-backend use separate local ports, while the F08 backend remains unchanged.
-There is no public account creation flow and no business API integration.
+F10 extends the restricted same-origin proxy with GET-only access for:
+
+- `/modules`
+- `/agents`
+- `/workflows`
+- `/jobs`
+- `/artifacts`
+- `/reviews`
+- `/errors`
+- `/memory-events`
+
+Those pages show loading, backend error, empty, and simple list states. The
+proxy does not expose F10 write APIs to the UI. Products remains an empty
+state and does not create product records. There is no public account creation
+flow or real external integration.
 
 ## Configuration
 

@@ -16,6 +16,7 @@ import {
   currentUserRequest,
   loginRequest,
   logoutRequest,
+  readAccessToken,
   type AuthenticatedUser,
 } from "@/lib/auth";
 
@@ -30,14 +31,6 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-function readAccessToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-}
 
 function clearStoredSession() {
   window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);

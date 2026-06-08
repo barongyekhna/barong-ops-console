@@ -1,7 +1,6 @@
-import { Archive } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/empty-state";
+import { FoundationList } from "@/components/foundation-list";
 
 export const metadata: Metadata = {
   title: "Artifacts",
@@ -9,10 +8,16 @@ export const metadata: Metadata = {
 
 export default function ArtifactsPage() {
   return (
-    <EmptyState
-      description="Registered artifacts will appear here."
-      icon={Archive}
-      title="No artifacts registered yet."
+    <FoundationList
+      emptyDescription="Artifact metadata records will appear here."
+      emptyTitle="No artifacts registered yet."
+      endpoint="/artifacts"
+      fields={[
+        { key: "artifact_id", label: "Artifact ID" },
+        { key: "name", label: "Name" },
+        { key: "status", label: "Status" },
+      ]}
+      title="Artifacts"
     />
   );
 }

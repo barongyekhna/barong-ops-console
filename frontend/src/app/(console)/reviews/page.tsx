@@ -1,7 +1,6 @@
-import { ClipboardCheck } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/empty-state";
+import { FoundationList } from "@/components/foundation-list";
 
 export const metadata: Metadata = {
   title: "Reviews",
@@ -9,10 +8,16 @@ export const metadata: Metadata = {
 
 export default function ReviewsPage() {
   return (
-    <EmptyState
-      description="Review items will appear here."
-      icon={ClipboardCheck}
-      title="No reviews waiting."
+    <FoundationList
+      emptyDescription="Foundation review items will appear here."
+      emptyTitle="No reviews waiting."
+      endpoint="/reviews"
+      fields={[
+        { key: "review_id", label: "Review ID" },
+        { key: "review_type", label: "Type" },
+        { key: "status", label: "Status" },
+      ]}
+      title="Reviews"
     />
   );
 }

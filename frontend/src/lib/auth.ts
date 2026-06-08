@@ -2,6 +2,14 @@ import { apiRequest } from "@/lib/api";
 
 export const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
 
+export function readAccessToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
+}
+
 export type AuthenticatedUser = {
   id: number;
   username: string;

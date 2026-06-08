@@ -1,7 +1,6 @@
-import { Bot } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/empty-state";
+import { FoundationList } from "@/components/foundation-list";
 
 export const metadata: Metadata = {
   title: "Agents",
@@ -9,10 +8,16 @@ export const metadata: Metadata = {
 
 export default function AgentsPage() {
   return (
-    <EmptyState
-      description="Registered agents will appear here."
-      icon={Bot}
-      title="No agents registered yet."
+    <FoundationList
+      emptyDescription="Foundation and demo agent records will appear here."
+      emptyTitle="No agents registered yet."
+      endpoint="/agents"
+      fields={[
+        { key: "agent_key", label: "Agent key" },
+        { key: "name", label: "Name" },
+        { key: "status", label: "Status" },
+      ]}
+      title="Agent registry"
     />
   );
 }

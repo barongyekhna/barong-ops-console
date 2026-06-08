@@ -1,7 +1,6 @@
-import { Workflow } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/empty-state";
+import { FoundationList } from "@/components/foundation-list";
 
 export const metadata: Metadata = {
   title: "Workflows",
@@ -9,10 +8,16 @@ export const metadata: Metadata = {
 
 export default function WorkflowsPage() {
   return (
-    <EmptyState
-      description="Registered workflows will appear here."
-      icon={Workflow}
-      title="No workflows registered yet."
+    <FoundationList
+      emptyDescription="Workflow metadata records will appear here."
+      emptyTitle="No workflows registered yet."
+      endpoint="/workflows"
+      fields={[
+        { key: "workflow_key", label: "Workflow key" },
+        { key: "name", label: "Name" },
+        { key: "status", label: "Status" },
+      ]}
+      title="Workflow registry"
     />
   );
 }

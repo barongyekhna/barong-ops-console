@@ -5,6 +5,16 @@ const ALLOWED_AUTH_PATHS = new Set([
   "auth/logout",
   "auth/me",
 ]);
+const ALLOWED_LIST_PATHS = new Set([
+  "modules",
+  "agents",
+  "workflows",
+  "jobs",
+  "artifacts",
+  "reviews",
+  "errors",
+  "memory-events",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -30,19 +40,24 @@ function getApiBaseUrl() {
   return parsedUrl;
 }
 
-async function proxyAuthRequest(
+async function proxyRequest(
   request: NextRequest,
   context: RouteContext,
 ) {
   const { path } = await context.params;
   const requestedPath = path.join("/");
 
-  if (!ALLOWED_AUTH_PATHS.has(requestedPath)) {
+  const isAuthPath = ALLOWED_AUTH_PATHS.has(requestedPath);
+  const isListPath =
+    request.method === "GET" && ALLOWED_LIST_PATHS.has(requestedPath);
+
+  if (!isAuthPath && !isListPath) {
     return Response.json({ detail: "Not found." }, { status: 404 });
   }
 
   try {
     const targetUrl = new URL(`/${requestedPath}`, getApiBaseUrl());
+    targetUrl.search = request.nextUrl.search;
     const headers = new Headers({
       Accept: "application/json",
     });
@@ -81,16 +96,16 @@ async function proxyAuthRequest(
     });
   } catch {
     return Response.json(
-      { detail: "Authentication service is unavailable." },
+      { detail: "Backend API service is unavailable." },
       { status: 503 },
     );
   }
 }
 
 export function GET(request: NextRequest, context: RouteContext) {
-  return proxyAuthRequest(request, context);
+  return proxyRequest(request, context);
 }
 
 export function POST(request: NextRequest, context: RouteContext) {
-  return proxyAuthRequest(request, context);
+  return proxyRequest(request, context);
 }

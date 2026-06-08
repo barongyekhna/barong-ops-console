@@ -1,7 +1,6 @@
-import { Database } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/empty-state";
+import { FoundationList } from "@/components/foundation-list";
 
 export const metadata: Metadata = {
   title: "Memory Events",
@@ -9,10 +8,16 @@ export const metadata: Metadata = {
 
 export default function MemoryEventsPage() {
   return (
-    <EmptyState
-      description="Long-lived context events will appear here."
-      icon={Database}
-      title="No memory events recorded."
+    <FoundationList
+      emptyDescription="Foundation and demo memory events will appear here."
+      emptyTitle="No memory events recorded."
+      endpoint="/memory-events"
+      fields={[
+        { key: "memory_event_id", label: "Memory event ID" },
+        { key: "event_type", label: "Type" },
+        { key: "importance", label: "Importance" },
+      ]}
+      title="Memory events"
     />
   );
 }

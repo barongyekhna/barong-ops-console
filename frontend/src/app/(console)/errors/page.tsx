@@ -1,7 +1,6 @@
-import { CircleAlert } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/empty-state";
+import { FoundationList } from "@/components/foundation-list";
 
 export const metadata: Metadata = {
   title: "Errors",
@@ -9,10 +8,16 @@ export const metadata: Metadata = {
 
 export default function ErrorsPage() {
   return (
-    <EmptyState
-      description="Tracked errors will appear here."
-      icon={CircleAlert}
-      title="No errors recorded."
+    <FoundationList
+      emptyDescription="Foundation error records will appear here."
+      emptyTitle="No errors recorded."
+      endpoint="/errors"
+      fields={[
+        { key: "error_id", label: "Error ID" },
+        { key: "error_code", label: "Code" },
+        { key: "status", label: "Status" },
+      ]}
+      title="System errors"
     />
   );
 }

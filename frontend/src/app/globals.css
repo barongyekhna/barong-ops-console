@@ -35,6 +35,85 @@ input {
   font: inherit;
 }
 
+.list-state {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 28px;
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.list-error {
+  justify-content: space-between;
+  color: var(--ink);
+}
+
+.list-error h2,
+.foundation-list-heading h2 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.list-error p {
+  margin: 6px 0 0;
+  color: #a32f2f;
+}
+
+.foundation-list {
+  display: grid;
+  gap: 16px;
+}
+
+.foundation-list-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.foundation-list-heading span {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.foundation-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.foundation-card {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.foundation-field {
+  display: grid;
+  gap: 4px;
+}
+
+.foundation-field span {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.foundation-field strong {
+  overflow-wrap: anywhere;
+  font-size: 0.9rem;
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;

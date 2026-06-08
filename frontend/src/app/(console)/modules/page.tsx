@@ -1,7 +1,6 @@
-import { Boxes } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/empty-state";
+import { FoundationList } from "@/components/foundation-list";
 
 export const metadata: Metadata = {
   title: "Modules",
@@ -9,10 +8,16 @@ export const metadata: Metadata = {
 
 export default function ModulesPage() {
   return (
-    <EmptyState
-      description="Registered modules will appear here."
-      icon={Boxes}
-      title="No modules registered yet."
+    <FoundationList
+      emptyDescription="Foundation and demo module records will appear here."
+      emptyTitle="No modules registered yet."
+      endpoint="/modules"
+      fields={[
+        { key: "module_key", label: "Module key" },
+        { key: "name", label: "Name" },
+        { key: "status", label: "Status" },
+      ]}
+      title="Module registry"
     />
   );
 }

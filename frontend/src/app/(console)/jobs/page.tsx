@@ -1,7 +1,6 @@
-import { Sparkles } from "lucide-react";
 import type { Metadata } from "next";
 
-import { EmptyState } from "@/components/empty-state";
+import { FoundationList } from "@/components/foundation-list";
 
 export const metadata: Metadata = {
   title: "Jobs",
@@ -9,10 +8,16 @@ export const metadata: Metadata = {
 
 export default function JobsPage() {
   return (
-    <EmptyState
-      description="Job records will appear here."
-      icon={Sparkles}
-      title="No jobs recorded yet."
+    <FoundationList
+      emptyDescription="Foundation and demo jobs will appear here."
+      emptyTitle="No jobs recorded yet."
+      endpoint="/jobs"
+      fields={[
+        { key: "job_id", label: "Job ID" },
+        { key: "module_key", label: "Module" },
+        { key: "status", label: "Status" },
+      ]}
+      title="Jobs"
     />
   );
 }

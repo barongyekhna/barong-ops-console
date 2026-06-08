@@ -9,6 +9,41 @@ Core rule:
 - Add business modules one by one.
 - Every module must be registered, isolated, testable, and removable.
 
+## F10 foundation operations APIs
+
+F10 adds owner-only, Bearer-authenticated foundation APIs over the existing
+F07 tables:
+
+- Module, Agent, and Workflow registry list/detail/demo-create endpoints.
+- Job list/detail/demo-create endpoints and append-only job events with safe
+  demo status changes.
+- Artifact metadata, Review, System Error, Memory Event, and Context Packet
+  foundation endpoints.
+- Read-only Memory Summary and Operation Log endpoints.
+
+Every F10 write records an `operation_logs` row in the same database
+transaction. Operation Logs are an audit entry point and cannot be created,
+changed, or deleted through the API. Requests reject credential-shaped
+structured fields, real network endpoint references, real completion status,
+and non-demo review decisions.
+
+These APIs do not execute workflows, call models, connect WooCommerce, upload
+to MinIO/Filebrowser, or create real business jobs. Workflow and Artifact
+records are metadata only. The frontend Modules, Agents, Workflows, Jobs,
+Artifacts, Reviews, Errors, and Memory Events pages now read their real API
+lists and show loading, API error, empty, or simple record states. Products
+still has no product creation integration, and Settings remains an empty
+foundation page.
+
+Run the isolated backend and frontend checks with:
+
+```bash
+./scripts/test_backend_docker.sh
+./scripts/test_backend_db_docker.sh
+./scripts/test_frontend_docker.sh
+docker-compose -f docker-compose.example.yml config
+```
+
 ## F09 frontend shell and login
 
 F09 adds the Next.js / React / TypeScript frontend shell on top of the F08

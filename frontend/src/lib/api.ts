@@ -47,7 +47,16 @@ export async function apiRequest<T>(
   }
 
   if (!response.ok) {
-    throw new ApiError("The request could not be completed.", response.status);
+    let message = "The request could not be completed.";
+    try {
+      const payload = (await response.json()) as { detail?: unknown };
+      if (typeof payload.detail === "string") {
+        message = payload.detail;
+      }
+    } catch {
+      // Keep the stable fallback when the backend does not return JSON.
+    }
+    throw new ApiError(message, response.status);
   }
 
   return (await response.json()) as T;
