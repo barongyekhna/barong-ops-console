@@ -34,20 +34,17 @@ rg -q 'server_name ops\.barongyekhna\.com;' \
     deploy/nginx/ops.barongyekhna.com.conf.template ||
     fail "Nginx template must use server_name ops.barongyekhna.com."
 
-if [[ -e .env.production ]]; then
-    fail "Refusing to read existing .env.production; move it aside before static placeholder validation."
-fi
-
+config_dir="$(mktemp -d)"
 config_output="$(mktemp)"
 cleanup() {
-    if [[ -f .env.production ]] && cmp -s .env.production .env.production.example; then
-        rm -f .env.production
-    fi
+    rm -rf "$config_dir"
     rm -f "$config_output"
 }
 trap cleanup EXIT
 
-cp .env.production.example .env.production
+sed 's#\.env\.production#.env.production.example#g' \
+    docker-compose.production.yml >"$config_dir/docker-compose.production.yml"
+cp .env.production.example "$config_dir/.env.production.example"
 
 if docker compose version >/dev/null 2>&1; then
     compose=(docker compose)
@@ -57,6 +54,7 @@ else
     fail "Docker Compose is required."
 fi
 
-"${compose[@]}" -f docker-compose.production.yml config >"$config_output"
+"${compose[@]}" -f "$config_dir/docker-compose.production.yml" \
+    config >"$config_output"
 
 printf '%s\n' "Production deploy file check passed."

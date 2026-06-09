@@ -4,11 +4,14 @@ The frontend is a Next.js, React, and TypeScript console shell. F09 provides
 the public `/login` page, authenticated navigation, the Dashboard, and
 structured empty states for the remaining foundation routes.
 
-C01B-1 prepares the production frontend service as `console_frontend`, bound
-only to `127.0.0.1:3000` behind an Nginx template for
-`ops.barongyekhna.com`. It uses `BACKEND_API_URL=http://console_backend:8000`
-for the server-side restricted proxy. The deployment files do not expose a
-generic backend proxy and do not connect real business systems.
+C01 production deployment is complete for
+`https://ops.barongyekhna.com`. The production frontend service is
+`console_frontend`, bound only to `127.0.0.1:3000` behind Nginx HTTPS reverse
+proxy. HTTP redirects to HTTPS. It uses
+`BACKEND_API_URL=http://console_backend:8000` for the server-side restricted
+proxy. The deployment does not expose a generic backend proxy and does not
+connect real business systems. C01 remains foundation/console only; C02 is
+production/test environment separation.
 
 F13 accepts the required routes `/`, `/login`, `/dashboard`,
 `/foundation-demo`, `/n8n-test`, `/products`, `/modules`, `/agents`,

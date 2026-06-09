@@ -39,26 +39,33 @@ production Compose files.
 The detailed acceptance record and residual risks are in
 `docs/FOUNDATION_ACCEPTANCE_F13.md`.
 
-## C01 production deployment preparation
+## C01 production deployment
 
-C01B-1 adds static production deployment files for the formal console domain
-`ops.barongyekhna.com`:
+C01 production deployment is complete and sealed for the formal console domain
+`https://ops.barongyekhna.com`:
 
 - `docker-compose.production.yml` defines `console_frontend`,
   `console_backend`, and `console_postgres` on the dedicated
   `barong-ops-console-prod` network.
 - `.env.production.example` documents placeholder-only production settings.
   The real `.env.production` must stay server-local and must not be committed.
-- `deploy/nginx/ops.barongyekhna.com.conf.template` is a review template only;
-  it is not installed to `/etc/nginx`.
+- Production frontend and backend are exposed only on `127.0.0.1:3000` and
+  `127.0.0.1:8000`; PostgreSQL stays private on the Docker network.
+- Nginx now reverse-proxies `ops.barongyekhna.com`, HTTPS is enabled, and HTTP
+  redirects to HTTPS.
 - `docs/C01_PRODUCTION_DEPLOYMENT.md` contains the deployment, HTTPS,
   bootstrap, rollback, and production-boundary checklist.
+- `docs/C01_PRODUCTION_ACCEPTANCE.md` records the C01C production acceptance
+  evidence and C01 sealing conclusion.
 - `scripts/check_production_deploy_files.sh` validates the deployment files
-  and compose syntax without starting services.
+  and compose syntax without reading or modifying the real `.env.production`.
+- `scripts/production_smoke_check.sh` runs a read-only production smoke check
+  for HTTPS login, backend health proxy, HTTP redirect, and Docker status.
 
-C01B-1 still does not connect real P-series workflows, production n8n,
-WooCommerce, MinIO, or Filebrowser. It does not create real products or real
-business tasks.
+C01 remains foundation/console only. It still does not connect real P-series
+workflows, production n8n, WooCommerce, MinIO, or Filebrowser. It does not
+create real products or real business tasks. The next stage is C02:
+production/test environment separation.
 
 ## Temporary login preview
 
