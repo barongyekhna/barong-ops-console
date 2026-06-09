@@ -25,6 +25,10 @@ staging 是测试服。它用来试新功能、试 migration、试 owner 初始�
 owner、打到真实 webhook、占用正式端口，或者让正式服务停掉。测试服就是为了
 把这些风险挡在正式服外面。
 
+C02C 后的当前状态：staging 已经在服务器本机端口启动，owner 已初始化，后端
+登录链路已测试通过。C02D 不再接真实业务功能，只补双环境运维文档、只读状态
+检查脚本和安全边界说明。
+
 ## 2. production 当前状态
 
 本次只读检查确认：
@@ -109,22 +113,23 @@ C02A 不配置这个域名，不写 Nginx，不申请证书。未来如果要开
 
 ## 5. 端口规划
 
-当前只读端口检查结果：
+当前端口状态：
 
 - `127.0.0.1:3000` 已被 production frontend 使用。
 - `127.0.0.1:8000` 已被 production backend 使用。
-- `3100` 没有在本次检查结果里出现。
-- `8100` 没有在本次检查结果里出现。
-- 宿主机 `5432` 没有在本次检查结果里出现。
+- `127.0.0.1:3100` 已被 staging frontend 使用。
+- `127.0.0.1:8100` 已被 staging backend 使用。
+- console production/staging postgres 都只显示 Docker 内网 `5432/tcp`，不暴露
+  宿主机 PostgreSQL 端口。
 
-建议 staging 使用：
+staging 当前使用：
 
 - staging frontend：`127.0.0.1:3100:3000`。
 - staging backend：`127.0.0.1:8100:8000`。
 - staging postgres：不暴露宿主机端口，只在 staging Docker network 内部使用
   `5432/tcp`。
 
-如果后续 C02C 前发现 `3100` 或 `8100` 已被占用，建议替代：
+如果未来重新规划 staging 端口，备选是：
 
 - frontend 备选：`127.0.0.1:3101`，再不行用 `127.0.0.1:3200`。
 - backend 备选：`127.0.0.1:8101`，再不行用 `127.0.0.1:8200`。
@@ -198,48 +203,58 @@ URL、token secret 都不能交叉复制。
 - 如果 staging 端口配置成 `3000` 或 `8000`，直接失败。
 - 如果 staging Postgres 配置了宿主机 `5432`，直接失败。
 
-## 9. C02B-C02F 后续计划
+## 9. C02A-C02F 当前计划
 
-建议后续任务拆成：
+当前 C02 任务状态：
 
-- C02B：创建 staging compose、`.env.staging.example`、脚本模板，不启动。
-- C02C：创建服务器本地 `.env.staging`，启动 staging
-  postgres/backend/frontend，绑定本机端口。
-- C02D：执行 staging migration，初始化 staging owner 测试账号。
-- C02E：做 staging smoke check，并验证 production 不受影响。
-- C02F：C02 环境隔离封板。
-- 未来可选：配置 `staging.ops.barongyekhna.com`、Nginx 和 HTTPS。
+- C02A：完成 production 只读审计和 staging/test 隔离方案。
+- C02B：完成 staging compose、`.env.staging.example`、静态检查和 smoke check
+  模板，不启动服务。
+- C02C：已在服务器本地创建 `.env.staging`，启动 staging
+  postgres/backend/frontend，初始化 staging owner，并测试后端登录链路。
+- C02D：补双环境运维手册、只读状态检查脚本和安全边界说明，不接任何真实业务
+  功能。
+- C02E / C02F：环境隔离最终验收与封板。
+- 未来可选：单独配置 `staging.ops.barongyekhna.com`、DNS、Nginx、HTTPS 和访问
+  控制。
 
-C02B 仍不应该接真实业务。真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser
+C02D 仍不应该接真实业务。真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser
 接入要等单独阶段。
 
-## 10. C02B 施工图文件清单
+## 10. C02B-C02D 文件清单
 
 C02B 在 C02A 隔离方案基础上准备这些文件：
 
-- `docker-compose.staging.yml`：staging compose 施工图，不启动服务。
+- `docker-compose.staging.yml`：staging compose 施工图。
 - `.env.staging.example`：placeholder-only staging env 模板。
 - `scripts/check_staging_deploy_files.sh`：只做静态检查，不读取真实 env，不启动
   服务。
-- `scripts/staging_smoke_check.sh`：staging 启动后使用的只读 smoke check 模板。
+- `scripts/staging_smoke_check.sh`：staging 启动后使用的只读 smoke check。
 - `docs/C02_STAGING_SETUP.md`：测试服创建、启动和边界说明。
 
-C02B 仍不创建真实 `.env.staging`，不读取或修改 `.env.production`，不启动、
-停止、重启或删除容器，不修改 Nginx 或证书，不接真实业务。
+C02D 补充这些文件：
 
-## 11. C02A/C02B 结论
+- `docs/C02_DUAL_ENV_OPERATIONS.md`：production/staging 双环境运维手册。
+- `scripts/check_dual_env_status.sh`：production + staging 双环境只读状态检查。
 
-C02A/C02B 的结论：
+C02D 不读取或修改 `.env.production` / `.env.staging`，不启动、停止、重启或
+删除容器，不修改 Nginx 或证书，不接真实业务。
+
+## 11. C02A-C02D 结论
+
+C02A-C02D 当前结论：
 
 - production 当前正常运行。
 - production frontend/backend 只绑定本机端口，由 Nginx 通过 HTTPS 对外服务。
-- production postgres 没有暴露宿主机端口。
+- production postgres 没有暴露宿主机 PostgreSQL 端口。
 - production 证书存在且 HTTPS 正常。
+- staging 当前在服务器本机运行，frontend/backend 绑定 `127.0.0.1:3100` 和
+  `127.0.0.1:8100`。
+- staging postgres 没有暴露宿主机 PostgreSQL 端口。
+- staging 暂不暴露公网。
 - 当前 external services 是 `not_connected`，符合还没有接真实业务的状态。
-- example/test 当前没有直接污染 production 的设计，但不适合作为长期 staging
-  直接运行，因为它使用 production 已占用的 `3000/8000` 端口。
-- staging 应使用独立 project、独立端口、独立 network、独立 volume、独立 env、
-  独立 owner 和独立 secret。
-- C02B 已准备 staging 施工图和静态检查，但尚未启动 staging。
-- C02A/C02B 没有修改 production，没有读取或修改 `.env.production`，没有启动、
-  停止、重启或删除容器，没有修改 Nginx 或证书，没有接任何真实业务。
+- production 和 staging 使用独立 project、独立端口、独立 network、独立
+  volume、独立 env、独立 owner 和独立 secret。
+- production 数据库和 staging 数据库绝不共用，测试数据不能复制到 production。
+- C02D 只补运维文档和只读检查，没有读取或修改真实 env，没有启动、停止、重启
+  或删除容器，没有修改 Nginx 或证书，没有接任何真实业务。

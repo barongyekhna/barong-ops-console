@@ -70,12 +70,12 @@ production/test environment separation.
 ## C02 staging/test separation
 
 C02A documented the production/test isolation plan in
-`docs/C02_ENVIRONMENT_ISOLATION_PLAN.md`. C02B prepares the staging
-construction files only; it does not start staging, create a real
-`.env.staging`, change production, modify Nginx, request certificates, or
-connect real business systems.
+`docs/C02_ENVIRONMENT_ISOLATION_PLAN.md`. C02B prepared the staging
+construction files. C02C has now started staging on server-local ports,
+initialized the staging owner, and tested the backend login path. C02D adds
+dual-environment operations documentation and read-only checks.
 
-Planned staging defaults:
+Current staging defaults:
 
 - Compose project: `barong-ops-console-staging`
 - Frontend: `127.0.0.1:3100`
@@ -85,19 +85,30 @@ Planned staging defaults:
 - Volume: `console_staging_postgres_data`
 - Env files: `.env.staging.example` committed, real `.env.staging` local only
 
-Run the C02B static check with:
+Staging is still not exposed publicly. C02D does not modify production,
+Nginx, certificates, real env files, containers, or real business systems.
+
+Run the staging static check with:
 
 ```bash
 ./scripts/check_staging_deploy_files.sh
 ```
 
-After a later C02C starts staging, use the read-only smoke check:
+Run the staging read-only smoke check with:
 
 ```bash
 ./scripts/staging_smoke_check.sh
 ```
 
-Details are in `docs/C02_STAGING_SETUP.md`.
+Run the production + staging read-only status check with:
+
+```bash
+./scripts/check_dual_env_status.sh
+```
+
+Details are in `docs/C02_STAGING_SETUP.md` and
+`docs/C02_DUAL_ENV_OPERATIONS.md`. The next C02 step is C02E / C02F:
+environment isolation final acceptance and sealing.
 
 ## Temporary login preview
 
