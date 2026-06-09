@@ -16,6 +16,15 @@ owner bootstrap and should be cleared from the server env after bootstrap.
 C01 remains foundation/console only; C02 is production/test environment
 separation.
 
+C02B prepares the staging/test construction files only. Staging uses
+`console_staging_backend`, `console_staging_postgres`,
+`barong-ops-console-staging`, `console_staging_postgres_data`, and server-local
+`.env.staging`. Its `DATABASE_URL` must point at
+`console_staging_postgres:5432`, `AUTH_TOKEN_SECRET` and `POSTGRES_PASSWORD`
+must be different from production, and the staging owner must be a test
+account. C02B does not create `.env.staging`, start staging, or connect real
+n8n, P-series, WooCommerce, MinIO, or Filebrowser systems.
+
 F12 adds the n8n test webhook bridge:
 
 - `POST /n8n-test/run`

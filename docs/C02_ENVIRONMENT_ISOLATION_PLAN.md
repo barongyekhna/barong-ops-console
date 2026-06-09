@@ -213,9 +213,23 @@ URL、token secret 都不能交叉复制。
 C02B 仍不应该接真实业务。真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser
 接入要等单独阶段。
 
-## 10. C02A 结论
+## 10. C02B 施工图文件清单
 
-C02A 的结论：
+C02B 在 C02A 隔离方案基础上准备这些文件：
+
+- `docker-compose.staging.yml`：staging compose 施工图，不启动服务。
+- `.env.staging.example`：placeholder-only staging env 模板。
+- `scripts/check_staging_deploy_files.sh`：只做静态检查，不读取真实 env，不启动
+  服务。
+- `scripts/staging_smoke_check.sh`：staging 启动后使用的只读 smoke check 模板。
+- `docs/C02_STAGING_SETUP.md`：测试服创建、启动和边界说明。
+
+C02B 仍不创建真实 `.env.staging`，不读取或修改 `.env.production`，不启动、
+停止、重启或删除容器，不修改 Nginx 或证书，不接真实业务。
+
+## 11. C02A/C02B 结论
+
+C02A/C02B 的结论：
 
 - production 当前正常运行。
 - production frontend/backend 只绑定本机端口，由 Nginx 通过 HTTPS 对外服务。
@@ -226,5 +240,6 @@ C02A 的结论：
   直接运行，因为它使用 production 已占用的 `3000/8000` 端口。
 - staging 应使用独立 project、独立端口、独立 network、独立 volume、独立 env、
   独立 owner 和独立 secret。
-- C02A 没有修改 production，没有读取或修改 `.env.production`，没有启动、
+- C02B 已准备 staging 施工图和静态检查，但尚未启动 staging。
+- C02A/C02B 没有修改 production，没有读取或修改 `.env.production`，没有启动、
   停止、重启或删除容器，没有修改 Nginx 或证书，没有接任何真实业务。

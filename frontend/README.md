@@ -13,6 +13,13 @@ proxy. The deployment does not expose a generic backend proxy and does not
 connect real business systems. C01 remains foundation/console only; C02 is
 production/test environment separation.
 
+C02B prepares the staging/test construction files only. The staging frontend
+service is `console_staging_frontend`, binds to `127.0.0.1:3100`, and uses
+`BACKEND_API_URL=http://console_staging_backend:8000` for the server-side
+restricted proxy. The real `.env.staging` is not committed; it is created only
+in a later C02C step and must not reuse production owner passwords or token
+secrets.
+
 F13 accepts the required routes `/`, `/login`, `/dashboard`,
 `/foundation-demo`, `/n8n-test`, `/products`, `/modules`, `/agents`,
 `/workflows`, `/jobs`, `/artifacts`, `/reviews`, `/errors`,

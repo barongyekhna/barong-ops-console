@@ -6,6 +6,8 @@
 
 ### Added
 
+- C02B：新增 `docker-compose.staging.yml`、`.env.staging.example`、staging 静态检查脚本和 staging smoke check 模板，只准备测试服施工图，不启动服务。
+- C02B：新增 `docs/C02_STAGING_SETUP.md`，说明 staging 与 production 的端口、命名、env、volume、network 隔离，以及 C02C 才能创建真实 `.env.staging` 和启动 staging。
 - C01C：新增 `docs/C01_PRODUCTION_ACCEPTANCE.md`，归档 `https://ops.barongyekhna.com` production 验收证据、证书状态、Nginx/容器暴露面、非集成边界、已知风险和 C01 封板结论。
 - C01C：补齐 production smoke check，覆盖 HTTPS login、HTTPS backend health proxy、HTTP 到 HTTPS 跳转和 `docker ps` 状态检查，不读取 `.env.production`，不修改任何服务。
 - C01B-1：新增 `docker-compose.production.yml`、`.env.production.example`、Nginx 模板、production 部署文档和静态部署文件检查脚本，准备 `ops.barongyekhna.com` 正式部署文件。
@@ -44,6 +46,7 @@
 
 ### Changed
 
+- C02B：README、backend/frontend README、C02A 隔离方案和 F13 验收脚本补充 staging 施工图说明；`.gitignore` 明确忽略真实 `.env.staging`，但保留 `.env.staging.example` 可提交。
 - C01C：README、backend/frontend README 和部署检查脚本更新为 C01 production 已上线封板状态，明确当前仍是 foundation/console 阶段，下一阶段为 C02 生产/测试环境分离。
 - C01C：`scripts/check_production_deploy_files.sh` 不再创建、覆盖、读取或要求移动真实 `.env.production`；compose 静态验证改用临时目录中的 `.env.production.example`。
 - C01B-1：F13 验收脚本允许仓库存在 `docker-compose.production.yml`，继续禁止未审查的额外 Compose 文件。

@@ -32,7 +32,9 @@ git diff --check -- \
     README.md \
     CHANGELOG.md \
     docker-compose.example.yml \
+    docker-compose.staging.yml \
     .env.example \
+    .env.staging.example \
     backend/README.md \
     frontend/README.md \
     docs
@@ -112,7 +114,8 @@ unexpected_compose="$(
     find . -maxdepth 3 -type f \
         \( -iname '*compose*.yml' -o -iname '*compose*.yaml' \) \
         ! -path './docker-compose.example.yml' \
-        ! -path './docker-compose.production.yml' -print
+        ! -path './docker-compose.production.yml' \
+        ! -path './docker-compose.staging.yml' -print
 )"
 if [[ -n "$unexpected_compose" ]]; then
     printf '%s\n' "$unexpected_compose" >&2

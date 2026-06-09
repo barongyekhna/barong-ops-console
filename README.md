@@ -67,6 +67,38 @@ workflows, production n8n, WooCommerce, MinIO, or Filebrowser. It does not
 create real products or real business tasks. The next stage is C02:
 production/test environment separation.
 
+## C02 staging/test separation
+
+C02A documented the production/test isolation plan in
+`docs/C02_ENVIRONMENT_ISOLATION_PLAN.md`. C02B prepares the staging
+construction files only; it does not start staging, create a real
+`.env.staging`, change production, modify Nginx, request certificates, or
+connect real business systems.
+
+Planned staging defaults:
+
+- Compose project: `barong-ops-console-staging`
+- Frontend: `127.0.0.1:3100`
+- Backend: `127.0.0.1:8100`
+- PostgreSQL: Docker network only, no host `5432`
+- Network: `barong-ops-console-staging`
+- Volume: `console_staging_postgres_data`
+- Env files: `.env.staging.example` committed, real `.env.staging` local only
+
+Run the C02B static check with:
+
+```bash
+./scripts/check_staging_deploy_files.sh
+```
+
+After a later C02C starts staging, use the read-only smoke check:
+
+```bash
+./scripts/staging_smoke_check.sh
+```
+
+Details are in `docs/C02_STAGING_SETUP.md`.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not
