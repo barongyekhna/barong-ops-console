@@ -67,15 +67,15 @@ workflows, production n8n, WooCommerce, MinIO, or Filebrowser. It does not
 create real products or real business tasks. The next stage is C02:
 production/test environment separation.
 
-## C02 staging/test separation
+## C02 production/staging isolation
 
 C02A documented the production/test isolation plan in
 `docs/C02_ENVIRONMENT_ISOLATION_PLAN.md`. C02B prepared the staging
 construction files. C02C started staging on server-local ports, initialized
 the staging owner, and tested the backend login path. C02D added
-dual-environment operations documentation and read-only checks. C02E has now
-completed final production/staging acceptance and confirmed both environments
-are usable and isolated.
+dual-environment operations documentation and read-only checks. C02E completed
+final production/staging acceptance. C02F has now sealed the environment
+isolation system.
 
 Current staging defaults:
 
@@ -87,8 +87,9 @@ Current staging defaults:
 - Volume: `console_staging_postgres_data`
 - Env files: `.env.staging.example` committed, real `.env.staging` local only
 
-Staging is still not exposed publicly. C02E did not modify production, Nginx,
-certificates, real env files, containers, or real business systems.
+Staging is still not exposed publicly. C02F did not modify production, Nginx,
+certificates, real env files, production/staging containers, or real business
+systems.
 
 Run the staging static check with:
 
@@ -110,12 +111,12 @@ Run the production + staging read-only status check with:
 
 Details are in `docs/C02_STAGING_SETUP.md`,
 `docs/C02_DUAL_ENV_OPERATIONS.md`, and
-`docs/C02_ENVIRONMENT_ISOLATION_ACCEPTANCE.md`. The next C02 step is C02F:
-environment isolation sealing.
+`docs/C02_ENVIRONMENT_ISOLATION_ACCEPTANCE.md`. The final seal is in
+`docs/C02_ENVIRONMENT_ISOLATION_SEAL.md`.
 
 C02 remains foundation/console only. It still does not connect real n8n,
 P-series, WooCommerce, MinIO, Filebrowser, products, orders, or business
-tasks.
+tasks. The next stage is C03: Owner creates sub-accounts.
 
 ## Temporary login preview
 

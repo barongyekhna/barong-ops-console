@@ -2,7 +2,7 @@
 
 日期：2026-06-09 UTC
 
-## 0. C02C-C02E 当前状态
+## 0. C02C-C02F 当前状态
 
 C02C 已经完成 staging 本机启动：
 
@@ -13,10 +13,11 @@ C02C 已经完成 staging 本机启动：
 - staging 暂不暴露公网。
 
 C02D 只补双环境运维文档、只读状态检查脚本和安全边界说明。C02E 已经完成
-production/staging 最终只读验收，确认两套环境都可用并且隔离有效。
+production/staging 最终只读验收，确认两套环境都可用并且隔离有效。C02F 已经
+完成环境隔离最终封板。
 
-C02D/C02E 不启动、停止、重启或删除任何 production/staging 容器，不读取真实
-env，不修改 Nginx，不申请证书，也不接真实业务。
+C02D/C02E/C02F 不启动、停止、重启或删除任何 production/staging 容器，不读取
+真实 env，不修改 Nginx，不申请证书，也不接真实业务。
 
 ## 1. 这是什么
 
@@ -38,7 +39,8 @@ C02B 当时只准备施工图：
 - 更新文档。
 
 C02C 后，staging 已经在本机端口启动。C02E 后，production/staging 已完成最终
-只读验收。当前仍然不修改 production，不改 Nginx，不申请证书，也不接真实业务。
+只读验收。C02F 后，C02 已封板。当前仍然不修改 production，不改 Nginx，不申请
+证书，也不接真实业务。
 
 ## 2. staging 和 production 的区别
 
@@ -142,8 +144,8 @@ staging 是测试服，数据可以随时被清理或重建。它不能接：
 - 真实商品、订单、素材或业务任务。
 
 如果 staging 打到真实 webhook，就可能把测试数据当成真实业务执行；如果接到
-真实存储或真实电商系统，就可能污染 production 数据。C02B/C02C/C02D/C02E 都
-只允许 foundation/demo 验证。
+真实存储或真实电商系统，就可能污染 production 数据。C02B/C02C/C02D/C02E/C02F
+都只允许 foundation/demo 验证。
 
 ## 6. 静态检查怎么跑
 
@@ -237,8 +239,10 @@ C02E 已经确认：
   service。
 - staging smoke check 通过。
 
-验收归档在 `docs/C02_ENVIRONMENT_ISOLATION_ACCEPTANCE.md`。下一步是 C02F：环境
-隔离封板。
+验收归档在 `docs/C02_ENVIRONMENT_ISOLATION_ACCEPTANCE.md`。封板记录在
+`docs/C02_ENVIRONMENT_ISOLATION_SEAL.md`。
 
 未来如果要开放 `staging.ops.barongyekhna.com`，必须单独做 DNS、Nginx、
-HTTPS、访问控制和 smoke check。C02E 不做这些事。
+HTTPS、访问控制和 smoke check。C02E/C02F 不做这些事。
+
+C02 已完成。下一阶段是 C03：Owner 创建子账户。

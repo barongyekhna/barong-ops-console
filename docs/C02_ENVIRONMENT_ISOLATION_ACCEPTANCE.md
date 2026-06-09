@@ -14,15 +14,19 @@ C02E 是 production / staging 双环境最终验收。它只做只读检查和�
 - 不读取、打印或修改 `.env.production` / `.env.staging` 内容。
 - 不 git commit。
 
-C02A 到 C02E 当前完成情况：
+C02F 已在 C02E 验收基础上完成最终封板。封板记录见
+`docs/C02_ENVIRONMENT_ISOLATION_SEAL.md`。
+
+C02A 到 C02F 当前完成情况：
 
 - C02A：看清 production 当前状态，写下 staging 隔离方案。
 - C02B：准备 staging compose、`.env.staging.example`、静态检查和 smoke check。
 - C02C：在服务器本机启动 staging，初始化 staging owner，完成后端登录链路测试。
 - C02D：补双环境运维手册和只读检查脚本。
 - C02E：对 production 和 staging 做最终只读验收，确认隔离真实有效。
+- C02F：完成环境隔离最终封板。
 
-下一步是 C02F：环境隔离封板。
+下一阶段是 C03：Owner 创建子账户。
 
 ## 2. production 当前状态
 
@@ -220,6 +224,10 @@ Compose 静态检查全部通过：
 - `docker-compose -f docker-compose.production.yml config`，在 `/tmp` 安全目录中使用
   临时 `.env.production`
 
+C02F 复核时也运行了 `./scripts/test_foundation_acceptance.sh`。该建议项只使用
+`docker-compose.example.yml` 和独立 example 测试 project，不影响 production 或
+staging。结果通过。
+
 ## 11. 当前剩余风险
 
 当前剩余风险和后续事项：
@@ -231,9 +239,9 @@ Compose 静态检查全部通过：
 - SSH 安全加固后续做。
 - 旧 Nginx unrelated warning 后续单独处理。
 
-## 12. C02E 结论
+## 12. C02E/C02F 结论
 
-C02E 验收通过：
+C02E 验收通过，C02F 已封板：
 
 - production 正式服可用。
 - staging 测试服可用。
@@ -241,4 +249,5 @@ C02E 验收通过：
   真实有效。
 - production 没有被 staging 影响。
 - 当前仍未接真实业务模块。
-- 下一步可以进入 C02F 环境隔离封板。
+- 后续真实功能接入必须先 staging 验收，再 production 发布。
+- 下一阶段是 C03：Owner 创建子账户。

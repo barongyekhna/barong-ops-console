@@ -18,10 +18,11 @@ frontend service is `console_staging_frontend` and uses
 `BACKEND_API_URL=http://console_staging_backend:8000` for the server-side
 restricted proxy. The real `.env.staging` is not committed and must not reuse
 production owner passwords or token secrets. C02D added read-only
-dual-environment checks, and C02E has completed final production/staging
-acceptance. Both environments are usable and isolated. Staging is still not
-exposed publicly, no real business integration is connected, and the next C02
-step is C02F environment isolation sealing.
+dual-environment checks, C02E completed final production/staging acceptance,
+and C02F sealed the environment isolation system. Both environments are usable
+and isolated. Staging is still not exposed publicly, no real business
+integration is connected, and the next stage is C03: Owner creates
+sub-accounts.
 
 F13 accepts the required routes `/`, `/login`, `/dashboard`,
 `/foundation-demo`, `/n8n-test`, `/products`, `/modules`, `/agents`,
