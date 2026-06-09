@@ -118,6 +118,27 @@ C02 remains foundation/console only. It still does not connect real n8n,
 P-series, WooCommerce, MinIO, Filebrowser, products, orders, or business
 tasks. The next stage is C03: Owner creates sub-accounts.
 
+## C03 owner account management
+
+C03A has started the owner-created sub-account phase. This step is design and
+audit only:
+
+- `docs/C03_OWNER_ACCOUNT_MANAGEMENT_PLAN.md` records the current users/auth
+  audit, risks, C03 scope, API draft, frontend draft, security rules,
+  staging-first release flow, and C03B-C03F task split.
+- C03 targets owner-managed account basics: list users, create sub-accounts,
+  view user details, enable/disable users, and reset sub-account passwords.
+- C03 does not implement full RBAC, public registration, OAuth, email invites,
+  password recovery email, robot accounts, organization structure, or real
+  business workflows.
+- C03A does not add a migration, create users, change backend/frontend
+  behavior, read real env contents, restart production/staging containers,
+  modify Nginx/certificates, or connect real business systems.
+
+The current system remains foundation/console only. Real n8n, P-series,
+WooCommerce, MinIO, Filebrowser, products, orders, and business tasks are
+still not connected.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not
