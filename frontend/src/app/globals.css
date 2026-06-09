@@ -260,6 +260,14 @@ input {
   line-height: 1.55;
 }
 
+.demo-error-summary {
+  border-color: #e2bcbc;
+}
+
+.demo-error-summary p {
+  color: #9b3030;
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;

@@ -21,6 +21,13 @@ class Settings(BaseSettings):
     auth_token_expire_minutes: int = Field(default=60, gt=0, le=1440)
     owner_username: str | None = None
     owner_password: SecretStr | None = None
+    n8n_test_webhook_url: str = ""
+    n8n_test_callback_secret: SecretStr | None = None
+    n8n_test_request_timeout_seconds: int = Field(
+        default=10,
+        gt=0,
+        le=60,
+    )
 
 
 @lru_cache

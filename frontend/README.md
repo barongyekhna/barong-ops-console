@@ -38,6 +38,18 @@ trigger real n8n, WooCommerce, MinIO/Filebrowser, P-series tasks, external
 HTTP calls, uploads, or real business work. The proxy allowlist exposes only
 the two exact Foundation Demo paths and does not become a generic write proxy.
 
+F12 adds the protected `/n8n-test` page. The **Run n8n Test** button calls only
+`POST /n8n-test/run`; the page loads and polls `GET /n8n-test/latest` while a
+Job is pending, running, or waiting for callback. It displays only the test
+Job ID/status, latest event, demo Artifact/Review/Memory summary, operation-log
+count, and safe error message.
+
+The page states: “Test bridge only. Does not run real n8n production
+workflows.” The restricted proxy exposes only the exact run and latest paths.
+It does not proxy `/n8n-test/callback`, display callback credentials, or
+provide a generic webhook route. F12 does not add registration, product
+creation, WooCommerce, P-series, MinIO, or Filebrowser UI integration.
+
 ## Configuration
 
 For host-based development, use the example backend URL:

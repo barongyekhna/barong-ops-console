@@ -54,12 +54,19 @@ def clean_auth_tables() -> None:
 
 
 @pytest.fixture
-def auth_client(clean_auth_tables: None) -> TestClient:
-    settings = Settings(
+def test_settings() -> Settings:
+    return Settings(
         auth_token_secret=TEST_AUTH_SECRET,
         auth_token_expire_minutes=30,
     )
-    app.dependency_overrides[get_settings] = lambda: settings
+
+
+@pytest.fixture
+def auth_client(
+    clean_auth_tables: None,
+    test_settings: Settings,
+) -> TestClient:
+    app.dependency_overrides[get_settings] = lambda: test_settings
     with TestClient(app) as client:
         yield client
     app.dependency_overrides.clear()

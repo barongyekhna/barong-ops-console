@@ -4,6 +4,37 @@ This directory contains the F05 FastAPI foundation, the F06 database migration
 foundation, the F07 core tables, and the F08 backend authentication
 foundation, plus the F10 foundation operations APIs.
 
+F12 adds the n8n test webhook bridge:
+
+- `POST /n8n-test/run`
+- `POST /n8n-test/callback`
+- `GET /n8n-test/latest`
+
+Run and latest require the owner Bearer token. Run creates or reuses only the
+`n8n_test_bridge`, `n8n_test_agent`, and `n8n_test_webhook_workflow` demo
+registry records, creates a test Job, and sends the minimal test payload
+through the standard-library HTTP client. The configured URL must use HTTP(S)
+and contain an explicit test/demo marker. Redirects are rejected.
+
+The callback does not use owner authentication. It requires
+`X-Barong-Callback-Secret` to match `N8N_TEST_CALLBACK_SECRET`, accepts only
+the `n8n_test_bridge` run type and `completed_demo` or `failed`, and cannot
+trigger a downstream workflow. Successful callbacks register metadata-only
+demo Artifact, pending demo Review, no-model Memory Event, Job Events, and
+Operation Logs. Dispatch failures mark the test Job failed and write a
+System Error.
+
+`N8N_TEST_WEBHOOK_URL` is empty by default, so the run endpoint fails safely
+without a network request until explicitly configured.
+`N8N_TEST_CALLBACK_SECRET` and `N8N_TEST_REQUEST_TIMEOUT_SECONDS` are also
+environment settings. Neither the URL nor callback value is stored in the
+workflow registry, returned by an API, or written to operation logs.
+
+F12 uses the existing foundation tables and adds no migration or dependency.
+Its tests mock the HTTP sender. It does not call real n8n production
+workflows, P-series endpoints, WooCommerce, MinIO, or Filebrowser and does not
+create real business tasks.
+
 F11 adds the owner-only Foundation Demo transaction:
 
 - `POST /foundation-demo/run`
@@ -77,7 +108,7 @@ bootstrap checks with:
 ```
 
 This uses only the example Compose file and example credentials. It runs the
-security, authentication, F10/F11 API, audit, and external-boundary tests and
+security, authentication, F10/F11/F12 API, audit, and external-boundary tests and
 verifies migration upgrade, downgrade, and a second upgrade. Do not point
 `DATABASE_URL` at a production database.
 Do not install the requirements in the system Python or commit a real `.env`

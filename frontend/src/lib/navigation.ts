@@ -39,6 +39,11 @@ export const navigationGroups: NavigationGroup[] = [
         label: "Foundation Demo",
         icon: Activity,
       },
+      {
+        href: "/n8n-test",
+        label: "n8n Test Bridge",
+        icon: Workflow,
+      },
     ],
   },
   {

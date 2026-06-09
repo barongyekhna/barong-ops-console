@@ -27,6 +27,9 @@ services:
       AUTH_TOKEN_EXPIRE_MINUTES: ${AUTH_TOKEN_EXPIRE_MINUTES:-60}
       AUTH_TOKEN_SECRET: ${AUTH_TOKEN_SECRET:-}
       DATABASE_URL: postgresql+psycopg://barong_console_example:barong_console_example@db:5432/barong_console_example
+      N8N_TEST_CALLBACK_SECRET: ${N8N_TEST_CALLBACK_SECRET:-}
+      N8N_TEST_REQUEST_TIMEOUT_SECONDS: ${N8N_TEST_REQUEST_TIMEOUT_SECONDS:-10}
+      N8N_TEST_WEBHOOK_URL: ${N8N_TEST_WEBHOOK_URL:-}
     ports:
       - "127.0.0.1:8000:8000"
 

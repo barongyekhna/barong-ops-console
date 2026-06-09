@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-compose_project="barong-ops-console-f11-test"
+compose_project="barong-ops-console-f12-test"
 
 if docker compose version >/dev/null 2>&1; then
     compose=(docker compose -p "$compose_project" -f docker-compose.example.yml)
@@ -37,7 +37,8 @@ trap cleanup EXIT
         tests/backend/test_jobs_api.py \
         tests/backend/test_artifacts_reviews_errors_api.py \
         tests/backend/test_memory_operation_logs_api.py \
-        tests/backend/test_foundation_demo_api.py &&
+        tests/backend/test_foundation_demo_api.py \
+        tests/backend/test_n8n_test_bridge_api.py &&
     OWNER_USERNAME=f08_example_owner \
         OWNER_PASSWORD=f08-example-only-not-for-production-password \
         python -m backend.app.cli.bootstrap_owner &&

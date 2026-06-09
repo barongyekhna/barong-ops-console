@@ -9,6 +9,54 @@ Core rule:
 - Add business modules one by one.
 - Every module must be registered, isolated, testable, and removable.
 
+## F12 n8n test webhook bridge
+
+F12 adds a test-only Console to n8n webhook loop:
+
+`Test Job -> configured test webhook -> authenticated callback -> Job Events
+-> demo Artifact -> demo Review -> demo Memory Event -> Operation Logs`
+
+The protected **n8n Test Bridge** page at `/n8n-test` can create a test Job,
+call only an explicitly test/demo-marked webhook, poll the latest result, and
+show the Job status, latest event, demo records, and safe error summary. A
+successful callback ends as `completed_demo`; failures end as `failed`.
+Neither state represents real business completion.
+
+Configure the bridge only through environment variables:
+
+```bash
+export N8N_TEST_WEBHOOK_URL="https://n8n-test.example.invalid/webhook-test/barong-demo"
+read -r -s -p "Test callback value: " N8N_TEST_CALLBACK_SECRET
+export N8N_TEST_CALLBACK_SECRET
+export N8N_TEST_REQUEST_TIMEOUT_SECONDS=10
+```
+
+The webhook URL is empty by default. An empty URL, an URL not explicitly
+marked test/demo, or a missing callback value fails safely before any network
+request. The callback uses `X-Barong-Callback-Secret`; its value is never
+returned to the frontend or stored in operation logs. The workflow registry
+stores only a `demo://` reference, never the configured network URL.
+
+This bridge does not trigger real P-series work or WooCommerce, does not
+connect MinIO/Filebrowser, and does not create real products or business
+tasks. Tests replace the HTTP sender with a fake and never call a network
+webhook.
+
+F12 APIs:
+
+- `POST /n8n-test/run` (owner Bearer token)
+- `POST /n8n-test/callback` (callback header authentication)
+- `GET /n8n-test/latest` (owner Bearer token)
+
+Run the complete isolated verification:
+
+```bash
+./scripts/test_backend_docker.sh
+./scripts/test_backend_db_docker.sh
+./scripts/test_frontend_docker.sh
+docker-compose -f docker-compose.example.yml config
+```
+
 ## F11 Foundation Demo closed loop
 
 F11 adds an owner-only Foundation Demo exercise that validates the complete

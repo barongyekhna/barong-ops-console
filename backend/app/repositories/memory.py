@@ -34,10 +34,11 @@ def create_memory_event(
     *,
     payload: MemoryEventCreate,
     created_by_id: str,
+    created_by_type: str = "user",
 ) -> MemoryEvent:
     event = MemoryEvent(
         **payload.model_dump(),
-        created_by_type="user",
+        created_by_type=created_by_type,
         created_by_id=created_by_id,
     )
     db.add(event)

@@ -14,7 +14,9 @@ SENSITIVE_KEY_MARKERS = (
     "private_key",
     "credential",
 )
-FOUNDATION_ID_PATTERN = r"^(?:foundation|demo)[._-][A-Za-z0-9._-]+$"
+FOUNDATION_ID_PATTERN = (
+    r"^(?:foundation|demo|n8n_test)[._-][A-Za-z0-9._-]+$"
+)
 
 
 def reject_sensitive_data(value: Any) -> Any:

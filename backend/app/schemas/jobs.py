@@ -9,6 +9,7 @@ JobCreateStatus = Literal["pending", "draft"]
 JobSafeStatus = Literal[
     "pending",
     "running",
+    "waiting_callback",
     "waiting_review",
     "failed",
     "cancelled",

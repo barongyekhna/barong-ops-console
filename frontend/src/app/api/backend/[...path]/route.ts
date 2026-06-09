@@ -53,8 +53,16 @@ async function proxyRequest(
   const isFoundationDemoPath =
     (request.method === "POST" && requestedPath === "foundation-demo/run") ||
     (request.method === "GET" && requestedPath === "foundation-demo/latest");
+  const isN8nTestPath =
+    (request.method === "POST" && requestedPath === "n8n-test/run") ||
+    (request.method === "GET" && requestedPath === "n8n-test/latest");
 
-  if (!isAuthPath && !isListPath && !isFoundationDemoPath) {
+  if (
+    !isAuthPath &&
+    !isListPath &&
+    !isFoundationDemoPath &&
+    !isN8nTestPath
+  ) {
     return Response.json({ detail: "Not found." }, { status: 404 });
   }
 

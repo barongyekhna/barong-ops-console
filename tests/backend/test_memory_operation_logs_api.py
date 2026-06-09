@@ -97,6 +97,7 @@ def test_f10_runtime_code_has_no_external_http_clients() -> None:
         path.read_text(encoding="utf-8")
         for root in inspected_roots
         for path in root.glob("*.py")
+        if not path.name.startswith("n8n_test")
     )
 
     assert "import httpx" not in source

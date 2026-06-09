@@ -7,6 +7,7 @@ const requiredRoutes = [
   "login",
   "(console)/dashboard",
   "(console)/foundation-demo",
+  "(console)/n8n-test",
   "(console)/products",
   "(console)/modules",
   "(console)/agents",
@@ -77,6 +78,12 @@ for (const demoPath of ["/foundation-demo/run", "/foundation-demo/latest"]) {
   }
 }
 
+for (const testPath of ["/n8n-test/run", "/n8n-test/latest"]) {
+  if (!source.includes(testPath)) {
+    throw new Error(`Missing F12 API connection: ${testPath}`);
+  }
+}
+
 if (
   !source.includes("Run Foundation Demo") ||
   !source.includes("without triggering real n8n") ||
@@ -86,12 +93,27 @@ if (
 }
 
 if (
-  /https?:\/\/[^"']*(?:n8n|woocommerce|filebrowser|minio)/i.test(source) ||
-  /https?:\/\/[^"']+\/(?:webhook|hook)/i.test(source) ||
-  /from\s+["'][^"']*(?:woocommerce|minio|filebrowser|n8n)[^"']*["']/i.test(
-    source,
-  )
+  !source.includes("Run n8n Test") ||
+  !source.includes(
+    "Test bridge only. Does not run real n8n production workflows.",
+  ) ||
+  !source.includes("triggers no downstream business work")
 ) {
+  throw new Error("The n8n Test Bridge safety panel is incomplete.");
+}
+
+const hasProhibitedExternalIntegration = sourceFiles.some((path) => {
+  const fileSource = readFileSync(path, "utf8");
+  return (
+    /https?:\/\/[^"']*(?:n8n|woocommerce|filebrowser|minio)/i.test(fileSource) ||
+    /https?:\/\/[^"']+\/(?:webhook|hook)/i.test(fileSource) ||
+    /from\s+["'](?!(?:@\/|\.{1,2}\/))[^"']*(?:woocommerce|minio|filebrowser|n8n)[^"']*["']/i.test(
+      fileSource,
+    )
+  );
+});
+
+if (hasProhibitedExternalIntegration) {
   throw new Error("A prohibited external integration reference was found.");
 }
 
