@@ -9,6 +9,67 @@ Core rule:
 - Add business modules one by one.
 - Every module must be registered, isolated, testable, and removable.
 
+## F13 foundation acceptance
+
+F05 through F12 are complete and accepted as the first-generation empty
+foundation. The repository is still in the foundation/demo stage:
+
+- The FastAPI backend, PostgreSQL migration path, owner authentication,
+  Next.js shell, F10 foundation APIs, F11 Foundation Demo, and F12 n8n Test
+  Bridge are present.
+- F11 and F12 are exercise loops only. They do not represent real business
+  completion.
+- No real P-series, Baisuwan, WooCommerce, MinIO, Filebrowser, production n8n
+  workflow, AI model, product task, or product page is connected.
+- The next phase may add real modules only after separate design, security,
+  and production-readiness review.
+
+Run the complete F13 acceptance suite from the repository root:
+
+```bash
+./scripts/test_foundation_acceptance.sh
+```
+
+The script runs only the existing example Docker tests, validates the example
+Compose file, checks the diff, and scans foundation source for prohibited
+registration, credential, external-integration, host-dependency, and
+production-path changes. It does not operate on production containers or
+production Compose files.
+
+The detailed acceptance record and residual risks are in
+`docs/FOUNDATION_ACCEPTANCE_F13.md`.
+
+## Temporary login preview
+
+Use a distinct example-only Compose project and shell-provided values. Do not
+write or commit a real `.env`:
+
+```bash
+export COMPOSE_PROJECT_NAME=barong-ops-console-preview
+read -r -s -p "Preview token signing value (32+ bytes): " AUTH_TOKEN_SECRET
+export AUTH_TOKEN_SECRET
+export OWNER_USERNAME="preview_owner"
+read -r -s -p "Preview owner password (12+ characters): " OWNER_PASSWORD
+export OWNER_PASSWORD
+
+./scripts/bootstrap_owner_docker.sh
+docker-compose -p "$COMPOSE_PROJECT_NAME" \
+  -f docker-compose.example.yml up --build backend frontend
+```
+
+Open `http://127.0.0.1:3000/login`. When the temporary preview is finished,
+stop the foreground process and remove only that named example project:
+
+```bash
+docker-compose -p "$COMPOSE_PROJECT_NAME" \
+  -f docker-compose.example.yml down --volumes --remove-orphans
+unset OWNER_PASSWORD AUTH_TOKEN_SECRET OWNER_USERNAME COMPOSE_PROJECT_NAME
+```
+
+`AUTH_TOKEN_SECRET`, `N8N_TEST_WEBHOOK_URL`, and
+`N8N_TEST_CALLBACK_SECRET` are environment variables. Never commit real
+values. Leave the n8n test variables empty for a login-only preview.
+
 ## F12 n8n test webhook bridge
 
 F12 adds a test-only Console to n8n webhook loop:

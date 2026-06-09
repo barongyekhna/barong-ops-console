@@ -1,8 +1,9 @@
 # Backend
 
-This directory contains the F05 FastAPI foundation, the F06 database migration
-foundation, the F07 core tables, and the F08 backend authentication
-foundation, plus the F10 foundation operations APIs.
+This directory contains the F05 FastAPI foundation, F06 migration mechanism,
+F07 core tables, F08 owner authentication, F10 foundation APIs, F11
+Foundation Demo, and F12 n8n Test Bridge. F13 accepts this backend as an empty
+foundation; it does not add a real business integration.
 
 F12 adds the n8n test webhook bridge:
 
@@ -66,8 +67,9 @@ authentication, and authentication operation logs. It exposes:
 - `POST /auth/logout`
 - `GET /auth/me`
 
-There is no registration API, frontend login page, complex permission matrix,
-seed data, or real external integration.
+F08 itself did not add a frontend login page; F09 added that page later.
+There is still no registration API, complex permission matrix, seed data, or
+real external integration.
 
 F10 adds owner-only list/detail APIs and controlled foundation/demo writes for
 Modules, Agents, Workflows, Jobs, Job Events, Artifacts, Reviews, System
@@ -114,6 +116,17 @@ verifies migration upgrade, downgrade, and a second upgrade. Do not point
 Do not install the requirements in the system Python or commit a real `.env`
 file.
 
+Run the repository-wide F13 acceptance, including this backend suite, the
+frontend build, Compose validation, diff checks, and safety scans with:
+
+```bash
+./scripts/test_foundation_acceptance.sh
+```
+
+The database test performs `alembic upgrade head`, `downgrade base`, a second
+`upgrade head`, and `alembic check`. The accepted foundation has one migration:
+`f07_core_001`. F13 adds no migration or dependency.
+
 Initialize an example owner from environment variables with:
 
 ```bash
@@ -127,6 +140,9 @@ unset OWNER_PASSWORD
 The example placeholders in `.env.example` are not production credentials.
 `AUTH_TOKEN_SECRET` must be supplied separately and must contain at least 32
 bytes before login tokens can be issued.
+`N8N_TEST_WEBHOOK_URL` and `N8N_TEST_CALLBACK_SECRET` must also be supplied
+through the environment only when intentionally exercising a test/demo
+webhook. Never commit real values or point them at a production workflow.
 
 ## Run the example backend
 

@@ -6,6 +6,8 @@
 
 ### Added
 
+- F13：新增第一代空地基统一验收脚本与封板报告，覆盖后端、数据库迁移、owner 认证、F10/F11/F12 API、前端 required routes/build、Compose config、diff 和安全边界扫描。
+- F13：补齐 foundation/demo 阶段说明、example-only 临时登录预览、安全启动方式、环境变量密钥规则、剩余风险和下一阶段接入边界。
 - F12：新增 owner-only `POST /n8n-test/run`、公开但 callback header 鉴权的 `POST /n8n-test/callback`、owner-only `GET /n8n-test/latest`，完成 Console 与 n8n test webhook 闭环。
 - F12：新增 `n8n_test_bridge` / `n8n_test_agent` / `n8n_test_webhook_workflow` demo Registry、test Job、callback Job Events、demo Artifact / Review / Memory Event、System Error 与 Operation Logs。
 - F12：新增受保护的 `/n8n-test` 页面、Run n8n Test 按钮、waiting callback 自动轮询、latest event / artifact / review / memory / error 展示及 test-only 安全提示。
@@ -38,6 +40,8 @@
 
 ### Changed
 
+- F13：前端 foundation verifier 现在显式检查根路由、受保护 layout 和 auth guard；修正后端 README 中仅适用于 F08 当时状态的“无前端登录页”表述。
+- F13：确认不新增 migration、依赖或真实业务接入，不修改生产 Compose，不创建真实产品任务，并保持 F12 网络能力仅限显式配置的 test/demo webhook。
 - F12：example 配置新增 `N8N_TEST_WEBHOOK_URL`、`N8N_TEST_CALLBACK_SECRET`、`N8N_TEST_REQUEST_TIMEOUT_SECONDS`；URL 默认空并安全失败，示例值仅使用 `example.invalid`。
 - F12：数据库 Docker 测试纳入 n8n test bridge API/回调鉴权/审计/失败测试；前端验证纳入 `/n8n-test` 路由、精确 API 代理及 test bridge only 文案。
 - F11：数据库 Docker 测试纳入 Foundation Demo API/事务/失败回滚/敏感信息/无外部客户端测试，前端验证纳入 demo 页面和精确 API 代理检查。

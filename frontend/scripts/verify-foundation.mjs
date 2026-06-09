@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 
 const frontendRoot = resolve(import.meta.dirname, "..");
 const appRoot = join(frontendRoot, "src", "app");
+const rootPage = join(appRoot, "page.tsx");
 const requiredRoutes = [
   "login",
   "(console)/dashboard",
@@ -20,10 +21,23 @@ const requiredRoutes = [
   "(console)/settings",
 ];
 
+if (!existsSync(rootPage)) {
+  throw new Error("Missing required root route file: page.tsx");
+}
+
 for (const route of requiredRoutes) {
   const page = join(appRoot, route, "page.tsx");
   if (!existsSync(page)) {
     throw new Error(`Missing required route file: ${route}/page.tsx`);
+  }
+}
+
+for (const requiredFile of [
+  join(appRoot, "(console)", "layout.tsx"),
+  join(frontendRoot, "src", "components", "auth-guard.tsx"),
+]) {
+  if (!existsSync(requiredFile)) {
+    throw new Error(`Missing protected console file: ${requiredFile}`);
   }
 }
 

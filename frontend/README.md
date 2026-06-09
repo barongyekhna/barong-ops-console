@@ -4,6 +4,12 @@ The frontend is a Next.js, React, and TypeScript console shell. F09 provides
 the public `/login` page, authenticated navigation, the Dashboard, and
 structured empty states for the remaining foundation routes.
 
+F13 accepts the required routes `/`, `/login`, `/dashboard`,
+`/foundation-demo`, `/n8n-test`, `/products`, `/modules`, `/agents`,
+`/workflows`, `/jobs`, `/artifacts`, `/reviews`, `/errors`,
+`/memory-events`, and `/settings`. The console route group uses the protected
+layout and authentication guard. There is no `/register` page.
+
 Authentication uses the F08 backend endpoints through a restricted same-origin
 Next.js proxy:
 
@@ -72,3 +78,32 @@ Do not install dependencies on the host. From the repository root, run:
 
 The frontend Docker build runs the route and safety verification, TypeScript
 typecheck, and the production Next.js build before producing the runtime image.
+
+Run the full repository acceptance with:
+
+```bash
+./scripts/test_foundation_acceptance.sh
+```
+
+## Temporary login preview
+
+From the repository root, set example-only owner and token values, bootstrap
+the named example project, and start the example backend/frontend:
+
+```bash
+export COMPOSE_PROJECT_NAME=barong-ops-console-preview
+read -r -s -p "Preview token signing value (32+ bytes): " AUTH_TOKEN_SECRET
+export AUTH_TOKEN_SECRET
+export OWNER_USERNAME="preview_owner"
+read -r -s -p "Preview owner password (12+ characters): " OWNER_PASSWORD
+export OWNER_PASSWORD
+./scripts/bootstrap_owner_docker.sh
+docker-compose -p "$COMPOSE_PROJECT_NAME" \
+  -f docker-compose.example.yml up --build backend frontend
+```
+
+Open `http://127.0.0.1:3000/login`. Leave `N8N_TEST_WEBHOOK_URL` and
+`N8N_TEST_CALLBACK_SECRET` empty for a login-only preview. These settings and
+`AUTH_TOKEN_SECRET` are environment variables; real values must not be
+committed. This preview uses only `docker-compose.example.yml` and does not
+connect production n8n, P-series, WooCommerce, MinIO, or Filebrowser services.
