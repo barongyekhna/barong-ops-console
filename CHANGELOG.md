@@ -6,6 +6,8 @@
 
 ### Added
 
+- C01B-1：新增 `docker-compose.production.yml`、`.env.production.example`、Nginx 模板、production 部署文档和静态部署文件检查脚本，准备 `ops.barongyekhna.com` 正式部署文件。
+- C01B-1：新增 production smoke check 脚本，用于部署后人工验收登录页/API 可达性，不包含凭证、不触发业务动作。
 - F13：新增第一代空地基统一验收脚本与封板报告，覆盖后端、数据库迁移、owner 认证、F10/F11/F12 API、前端 required routes/build、Compose config、diff 和安全边界扫描。
 - F13：补齐 foundation/demo 阶段说明、example-only 临时登录预览、安全启动方式、环境变量密钥规则、剩余风险和下一阶段接入边界。
 - F12：新增 owner-only `POST /n8n-test/run`、公开但 callback header 鉴权的 `POST /n8n-test/callback`、owner-only `GET /n8n-test/latest`，完成 Console 与 n8n test webhook 闭环。
@@ -40,6 +42,8 @@
 
 ### Changed
 
+- C01B-1：F13 验收脚本允许仓库存在 `docker-compose.production.yml`，继续禁止未审查的额外 Compose 文件。
+- C01B-1：README、backend/frontend README 补充 production 部署文件边界，明确真实 `.env.production`、证书、Nginx 安装和业务接入均不在本阶段执行。
 - F13：前端 foundation verifier 现在显式检查根路由、受保护 layout 和 auth guard；修正后端 README 中仅适用于 F08 当时状态的“无前端登录页”表述。
 - F13：确认不新增 migration、依赖或真实业务接入，不修改生产 Compose，不创建真实产品任务，并保持 F12 网络能力仅限显式配置的 test/demo webhook。
 - F12：example 配置新增 `N8N_TEST_WEBHOOK_URL`、`N8N_TEST_CALLBACK_SECRET`、`N8N_TEST_REQUEST_TIMEOUT_SECONDS`；URL 默认空并安全失败，示例值仅使用 `example.invalid`。

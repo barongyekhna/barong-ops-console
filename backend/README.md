@@ -5,6 +5,13 @@ F07 core tables, F08 owner authentication, F10 foundation APIs, F11
 Foundation Demo, and F12 n8n Test Bridge. F13 accepts this backend as an empty
 foundation; it does not add a real business integration.
 
+C01B-1 adds production deployment file preparation at the repository root. The
+production backend service is named `console_backend`, reads only
+`.env.production`, and connects to the compose-internal `console_postgres`
+host. The real `.env.production` file must remain server-local. `OWNER_PASSWORD`
+is only for the first owner bootstrap and should be cleared from the server
+env after bootstrap.
+
 F12 adds the n8n test webhook bridge:
 
 - `POST /n8n-test/run`

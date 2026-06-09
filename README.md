@@ -39,6 +39,27 @@ production Compose files.
 The detailed acceptance record and residual risks are in
 `docs/FOUNDATION_ACCEPTANCE_F13.md`.
 
+## C01 production deployment preparation
+
+C01B-1 adds static production deployment files for the formal console domain
+`ops.barongyekhna.com`:
+
+- `docker-compose.production.yml` defines `console_frontend`,
+  `console_backend`, and `console_postgres` on the dedicated
+  `barong-ops-console-prod` network.
+- `.env.production.example` documents placeholder-only production settings.
+  The real `.env.production` must stay server-local and must not be committed.
+- `deploy/nginx/ops.barongyekhna.com.conf.template` is a review template only;
+  it is not installed to `/etc/nginx`.
+- `docs/C01_PRODUCTION_DEPLOYMENT.md` contains the deployment, HTTPS,
+  bootstrap, rollback, and production-boundary checklist.
+- `scripts/check_production_deploy_files.sh` validates the deployment files
+  and compose syntax without starting services.
+
+C01B-1 still does not connect real P-series workflows, production n8n,
+WooCommerce, MinIO, or Filebrowser. It does not create real products or real
+business tasks.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not

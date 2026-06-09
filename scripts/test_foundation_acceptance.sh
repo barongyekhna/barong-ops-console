@@ -111,7 +111,8 @@ fi
 unexpected_compose="$(
     find . -maxdepth 3 -type f \
         \( -iname '*compose*.yml' -o -iname '*compose*.yaml' \) \
-        ! -path './docker-compose.example.yml' -print
+        ! -path './docker-compose.example.yml' \
+        ! -path './docker-compose.production.yml' -print
 )"
 if [[ -n "$unexpected_compose" ]]; then
     printf '%s\n' "$unexpected_compose" >&2

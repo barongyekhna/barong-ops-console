@@ -1,0 +1,39 @@
+# Local environment files and production secrets.
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Secret material must stay outside Git. Commit only explicit *.example files.
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+*.keystore
+*secret*
+*secrets*
+
+# Python and test caches.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node and Next.js build output.
+node_modules/
+.next/
+out/
+dist/
+coverage/
+
+# Local editor and OS files.
+.DS_Store
+.idea/
+.vscode/
+*.swp
