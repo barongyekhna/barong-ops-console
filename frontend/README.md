@@ -27,8 +27,8 @@ sub-accounts.
 F13 accepts the required routes `/`, `/login`, `/dashboard`,
 `/foundation-demo`, `/n8n-test`, `/products`, `/modules`, `/agents`,
 `/workflows`, `/jobs`, `/artifacts`, `/reviews`, `/errors`,
-`/memory-events`, and `/settings`. The console route group uses the protected
-layout and authentication guard. There is no `/register` page.
+`/memory-events`, `/users`, and `/settings`. The console route group uses the
+protected layout and authentication guard. There is no `/register` page.
 
 Authentication uses the F08 backend endpoints through a restricted same-origin
 Next.js proxy:
@@ -75,6 +75,16 @@ workflows.” The restricted proxy exposes only the exact run and latest paths.
 It does not proxy `/n8n-test/callback`, display callback credentials, or
 provide a generic webhook route. F12 does not add registration, product
 creation, WooCommerce, P-series, MinIO, or Filebrowser UI integration.
+
+C03C adds the protected `/users` page under **User Management** in the System
+navigation. It calls only the owner-only C03B `/users` APIs through the
+restricted same-origin proxy. The page lists users, creates `viewer`,
+`operator`, and `reviewer` accounts, shows user detail, updates managed roles,
+enables/disables users, and resets sub-account passwords with confirmation.
+It does not show `owner` or `super_admin` as create options, does not add
+public registration, does not print passwords or tokens, and does not connect
+real business systems. C03C is code only: it has not been deployed to staging
+or production and has not created real users.
 
 ## Configuration
 

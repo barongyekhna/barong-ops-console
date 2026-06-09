@@ -10,6 +10,7 @@ import {
   Package,
   Settings,
   Sparkles,
+  UserRoundCog,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -72,7 +73,10 @@ export const navigationGroups: NavigationGroup[] = [
   },
   {
     label: "System",
-    items: [{ href: "/settings", label: "Settings", icon: Settings }],
+    items: [
+      { href: "/users", label: "User Management", icon: UserRoundCog },
+      { href: "/settings", label: "Settings", icon: Settings },
+    ],
   },
 ];
 

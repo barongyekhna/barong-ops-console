@@ -15,6 +15,11 @@ const ALLOWED_LIST_PATHS = new Set([
   "errors",
   "memory-events",
 ]);
+const ALLOWED_USER_ACTIONS = new Set([
+  "disable",
+  "enable",
+  "reset-password",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -40,6 +45,34 @@ function getApiBaseUrl() {
   return parsedUrl;
 }
 
+function isIntegerPathSegment(segment: string) {
+  return /^[1-9]\d*$/.test(segment);
+}
+
+function isAllowedUsersPath(method: string, path: string[]) {
+  if (path[0] !== "users") {
+    return false;
+  }
+
+  if (path.length === 1) {
+    return method === "GET" || method === "POST";
+  }
+
+  if (path.length === 2 && isIntegerPathSegment(path[1])) {
+    return method === "GET" || method === "PATCH";
+  }
+
+  if (
+    path.length === 3 &&
+    isIntegerPathSegment(path[1]) &&
+    ALLOWED_USER_ACTIONS.has(path[2])
+  ) {
+    return method === "POST";
+  }
+
+  return false;
+}
+
 async function proxyRequest(
   request: NextRequest,
   context: RouteContext,
@@ -57,13 +90,15 @@ async function proxyRequest(
   const isN8nTestPath =
     (request.method === "POST" && requestedPath === "n8n-test/run") ||
     (request.method === "GET" && requestedPath === "n8n-test/latest");
+  const isUsersPath = isAllowedUsersPath(request.method, path);
 
   if (
     !isHealthPath &&
     !isAuthPath &&
     !isListPath &&
     !isFoundationDemoPath &&
-    !isN8nTestPath
+    !isN8nTestPath &&
+    !isUsersPath
   ) {
     return Response.json({ detail: "Not found." }, { status: 404 });
   }
@@ -120,5 +155,9 @@ export function GET(request: NextRequest, context: RouteContext) {
 }
 
 export function POST(request: NextRequest, context: RouteContext) {
+  return proxyRequest(request, context);
+}
+
+export function PATCH(request: NextRequest, context: RouteContext) {
   return proxyRequest(request, context);
 }

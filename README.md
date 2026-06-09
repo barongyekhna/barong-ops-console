@@ -120,24 +120,31 @@ tasks. The next stage is C03: Owner creates sub-accounts.
 
 ## C03 owner account management
 
-C03B has implemented the backend owner-created sub-account API:
+C03B has implemented the backend owner-created sub-account API, and C03C adds
+the frontend user management surface:
 
 - `docs/C03_OWNER_ACCOUNT_MANAGEMENT_PLAN.md` records the users/auth audit,
-  C03 scope, backend API, frontend draft, security rules, staging-first flow,
-  and C03B-C03F task split.
+  C03 scope, backend API, frontend implementation, security rules,
+  staging-first flow, and C03B-C03F task split.
 - Owner-only `/users` APIs now support list, create, detail, update,
   enable/disable, and reset-password for sub-accounts.
+- The protected `/users` console page is available under **User Management**
+  in the System navigation.
+- The page can list users, create `viewer`, `operator`, and `reviewer`
+  accounts, view user details, update managed roles, enable/disable users,
+  and reset sub-account passwords through the restricted frontend API proxy.
 - `get_current_user` now validates active authenticated users, while
   `require_owner` handles owner-only authorization for `/users`.
 - Active non-owner users can log in and call `/auth/me`; inactive users cannot
   log in or use protected APIs.
-- C03B still does not add a migration, frontend user management page, full
-  RBAC, public registration, OAuth/email flows, staging or production
-  deployment, or real business workflows.
+- C03C does not add `super_admin`, full RBAC, public registration,
+  OAuth/email flows, staging or production deployment, production/staging user
+  creation, or real business workflows.
 
 The current system remains foundation/console only. Real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, and business tasks are
-still not connected.
+still not connected. The next step is C03D: deploy this C03B/C03C code to the
+staging test environment for acceptance.
 
 ## Temporary login preview
 

@@ -57,6 +57,34 @@ C03B 仍不做：
 - staging/production 发布。
 - 真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser 或真实业务任务。
 
+## 2.2. C03C 前端实现状态
+
+C03C 已完成前端用户管理页面和受限 API proxy 接入，仍然不部署
+staging、不发布 production、不创建真实用户、不读取真实 env、不接真实业务。
+
+C03C 实现内容：
+
+- 新增受保护的 `/users` 页面，位于 authenticated console layout 内。
+- 左侧 System 导航新增 **User Management**。
+- 页面明确这是内部账号管理，不是公开注册。
+- 用户列表展示 username、role、is_active、created_at、updated_at，并可查看详情。
+- 创建用户表单只提供 `viewer`、`operator`、`reviewer`。
+- 前端不提供 `owner` 或 `super_admin` 创建选项；`super_admin` 留到 C04/C05。
+- 停用、启用、重置密码都走二次确认或确认表单。
+- 当前 owner 自己的停用和重置密码危险按钮在前端禁用，后端继续兜底。
+- 新增 `frontend/src/lib/users-api.ts`，支持 list/create/get/update/disable/enable/reset-password。
+- 前端 API proxy 精确放行 `/users` 相关 GET/POST/PATCH 路径。
+- `frontend/scripts/verify-foundation.mjs` 纳入 `/users` route、API 接线、PATCH proxy 和无公开注册检查。
+
+C03C 仍不做：
+
+- 完整 RBAC 或模块级权限矩阵。
+- `super_admin` 权限。
+- email、邀请、找回密码、首次登录强制改密。
+- staging/production 部署。
+- production/staging 真实用户创建。
+- 真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser 或真实业务任务。
+
 ## 3. 审计过的主要文件
 
 后端用户和认证：
@@ -547,36 +575,46 @@ C03B 只允许很小范围：
 
 C03B 记录成功写操作。普通 409/422 校验失败不额外写账号管理日志，避免日志噪音。
 
-## 12. C03C 前端页面设计草案
+## 12. C03C 前端页面实现
 
-建议新增 `/users` 页面，并在左侧 System 分组下增加：
+C03C 已新增 `/users` 页面，并在左侧 System 分组下增加：
 
 - User Management
 
 页面组成：
 
 - 用户列表。
-- 创建用户按钮。
-- 创建用户弹窗或独立页面。
-- 用户详情抽屉或详情页。
+- 创建用户表单。
+- 用户详情展开面板。
 - 启用/停用按钮。
 - 重置密码按钮。
 - 当前登录用户标识。
 
-用户列表建议字段：
+用户列表字段：
 
 - Username
 - Role
 - Status
-- Last login
 - Created at
+- Updated at
 - Actions
+
+详情字段：
+
+- User ID
+- Username
+- Role
+- Status
+- Created
+- Updated
+- Last login
 
 交互规则：
 
-- 当前用户这一行禁用“停用”按钮。
+- 当前 owner 自己这一行禁用“停用”和“重置密码”按钮。
 - 不提供删除按钮。
-- 创建用户时 role 默认 `viewer` 或 `operator`，不能选择 `owner`。
+- 创建用户时 role 默认 `viewer`，只能选择 `viewer`、`operator`、`reviewer`。
+- 不提供 `owner` 或 `super_admin` 选项。
 - 停用、启用、重置密码都必须二次确认。
 - 重置密码输入框使用 password 类型。
 - 不在浏览器 console 打印密码。
@@ -585,7 +623,7 @@ C03B 记录成功写操作。普通 409/422 校验失败不额外写账号管理
 - 401 时沿用当前 auth provider 清 session。
 - 403 时显示无权限错误。
 
-前端 API proxy 需要调整：
+前端 API proxy 已调整：
 
 - allowlist 增加 `/users`。
 - 支持 `GET /users`。
@@ -595,7 +633,8 @@ C03B 记录成功写操作。普通 409/422 校验失败不额外写账号管理
 - 支持 `POST /users/{id}/reset-password`。
 - 支持 `POST /users/{id}/disable`。
 - 支持 `POST /users/{id}/enable`。
-- 当前 route 文件没有 PATCH export，C03C 或 C03B/C03C 协同时需要补。
+- route 文件已新增 PATCH export。
+- proxy 仍只转发 `Accept`、`Authorization` 和 `Content-Type`，不转发浏览器 `Host` 等危险 headers。
 
 `/settings` 可以继续保留为系统设置空状态。用户管理建议使用独立 `/users`，避免 settings 页面变成多个职责混合的页面。
 
@@ -697,6 +736,9 @@ C03 必须 staging-first：
 - 当前用户不能停用自己。
 - proxy allowlist 精确放行用户管理 API。
 - 不加公开注册页面。
+
+状态：C03C 已完成前端代码、API client、proxy、验证脚本和文档更新；未
+git commit，等待老板审核。C03C 未部署 staging/production，未创建真实用户。
 
 ### C03D：staging 部署和验收
 

@@ -31,7 +31,8 @@ body {
 }
 
 button,
-input {
+input,
+select {
   font: inherit;
 }
 
@@ -275,7 +276,8 @@ a {
 
 button:focus-visible,
 a:focus-visible,
-input:focus-visible {
+input:focus-visible,
+select:focus-visible {
   outline: 3px solid rgb(32 180 134 / 28%);
   outline-offset: 2px;
 }
@@ -348,6 +350,8 @@ input:focus-visible {
 }
 
 .primary-button,
+.secondary-button,
+.danger-button,
 .logout-button,
 .login-button,
 .icon-button {
@@ -366,6 +370,36 @@ input:focus-visible {
   background: var(--signal-dark);
   border-radius: 6px;
   font-weight: 700;
+}
+
+.secondary-button,
+.danger-button {
+  min-height: 38px;
+  gap: 8px;
+  padding: 0 13px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 750;
+}
+
+.secondary-button {
+  color: #38413d;
+}
+
+.danger-button {
+  color: #9f2f2f;
+  border-color: #e1c0c0;
+}
+
+.secondary-button:hover:not(:disabled) {
+  border-color: #aeb8b4;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #fff7f7;
+  border-color: #c98282;
 }
 
 .login-page {
@@ -516,7 +550,8 @@ input:focus-visible {
   gap: 8px;
 }
 
-.field-group label {
+.field-group label,
+.field-group > span:first-child {
   color: #3e4542;
   font-size: 0.78rem;
   font-weight: 720;
@@ -560,6 +595,16 @@ input:focus-visible {
   line-height: 1.4;
 }
 
+.select-shell {
+  width: 100%;
+  height: 50px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #cfd4d1;
+  border-radius: 6px;
+}
+
 .login-button {
   width: 100%;
   min-height: 50px;
@@ -578,8 +623,12 @@ input:focus-visible {
   transform: translateY(-1px);
 }
 
+.primary-button:disabled,
+.secondary-button:disabled,
+.danger-button:disabled,
 .login-button:disabled,
-.logout-button:disabled {
+.logout-button:disabled,
+.icon-button:disabled {
   cursor: wait;
   opacity: 0.68;
 }
@@ -852,6 +901,215 @@ input:focus-visible {
   line-height: 1.6;
 }
 
+.users-workspace {
+  display: grid;
+  gap: 18px;
+}
+
+.users-create-panel,
+.users-reset-panel,
+.users-list-panel,
+.user-detail-panel {
+  display: grid;
+  gap: 18px;
+  padding: clamp(20px, 3vw, 28px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.users-panel-heading,
+.users-list-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.users-panel-heading h3,
+.users-list-heading h3,
+.users-reset-panel h3 {
+  margin: 4px 0 0;
+  font-size: 1rem;
+}
+
+.users-panel-heading p,
+.users-list-heading p,
+.users-reset-panel p,
+.users-muted-note {
+  max-width: 680px;
+  margin: 7px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+.users-form-grid {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1.2fr) minmax(150px, 0.7fr);
+  gap: 14px;
+}
+
+.users-submit-button {
+  justify-self: flex-start;
+}
+
+.users-alert {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 15px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.users-alert-error {
+  color: #9f2f2f;
+  background: #fff7f7;
+  border: 1px solid #e2bcbc;
+}
+
+.users-alert-success {
+  color: #0a684e;
+  background: #e8f7f1;
+  border: 1px solid #bee5d7;
+}
+
+.users-inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.users-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.users-table {
+  width: 100%;
+  min-width: 900px;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.users-table th,
+.users-table td {
+  padding: 13px 14px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+}
+
+.users-table th {
+  color: var(--muted);
+  background: #f7f9f8;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.users-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.users-table td:first-child {
+  min-width: 180px;
+}
+
+.users-table td:first-child strong,
+.users-table td:first-child span {
+  display: block;
+}
+
+.users-table td:first-child strong {
+  overflow-wrap: anywhere;
+}
+
+.users-table td:first-child span {
+  margin-top: 4px;
+  color: var(--signal-dark);
+  font-size: 0.68rem;
+  font-weight: 750;
+}
+
+.users-role-pill,
+.users-status {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.users-role-pill {
+  color: #39433e;
+  background: #eef2f0;
+  border: 1px solid #dbe1de;
+}
+
+.users-status-active {
+  color: #087c5e;
+  background: #e5f6ef;
+  border: 1px solid #bde7d6;
+}
+
+.users-status-disabled {
+  color: #8a3a28;
+  background: #fff1e8;
+  border: 1px solid #efc8af;
+}
+
+.users-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.user-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0;
+}
+
+.user-detail-grid div {
+  min-width: 0;
+  padding: 14px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+.user-detail-grid dt {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.user-detail-grid dd {
+  margin: 7px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+.users-role-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) auto;
+  align-items: end;
+  gap: 12px;
+}
+
 @media (max-width: 900px) {
   .login-page {
     grid-template-columns: 1fr;
@@ -908,6 +1166,11 @@ input:focus-visible {
   .demo-result-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+
+  .users-form-grid,
+  .user-detail-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 600px) {
@@ -952,6 +1215,22 @@ input:focus-visible {
     align-items: flex-start;
     flex-direction: column;
     padding: 28px;
+  }
+
+  .users-panel-heading,
+  .users-list-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .users-form-grid,
+  .user-detail-grid,
+  .users-role-form {
+    grid-template-columns: 1fr;
+  }
+
+  .users-actions {
+    min-width: 320px;
   }
 }
 

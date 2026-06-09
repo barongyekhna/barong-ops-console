@@ -18,6 +18,7 @@ const requiredRoutes = [
   "(console)/reviews",
   "(console)/errors",
   "(console)/memory-events",
+  "(console)/users",
   "(console)/settings",
 ];
 
@@ -98,6 +99,24 @@ for (const testPath of ["/n8n-test/run", "/n8n-test/latest"]) {
   }
 }
 
+for (const usersPath of [
+  "/users",
+  "/disable",
+  "/enable",
+  "/reset-password",
+]) {
+  if (!source.includes(usersPath)) {
+    throw new Error(`Missing C03C user management API connection: ${usersPath}`);
+  }
+}
+
+if (
+  !source.includes("User Management") ||
+  !source.includes("not a public registration flow")
+) {
+  throw new Error("The C03C user management page is incomplete.");
+}
+
 const backendProxyRoute = join(
   appRoot,
   "api",
@@ -106,6 +125,10 @@ const backendProxyRoute = join(
   "route.ts",
 );
 const backendProxySource = readFileSync(backendProxyRoute, "utf8");
+
+if (!backendProxySource.includes("export function PATCH")) {
+  throw new Error("The backend API proxy must support PATCH for user updates.");
+}
 
 if (
   !backendProxySource.includes('requestedPath === "health"') ||
