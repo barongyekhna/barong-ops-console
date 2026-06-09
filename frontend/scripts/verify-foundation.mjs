@@ -98,6 +98,26 @@ for (const testPath of ["/n8n-test/run", "/n8n-test/latest"]) {
   }
 }
 
+const backendProxyRoute = join(
+  appRoot,
+  "api",
+  "backend",
+  "[...path]",
+  "route.ts",
+);
+const backendProxySource = readFileSync(backendProxyRoute, "utf8");
+
+if (
+  !backendProxySource.includes('requestedPath === "health"') ||
+  !backendProxySource.includes('new URL(`/${requestedPath}`, getApiBaseUrl())')
+) {
+  throw new Error("The backend API proxy health path is not safely routed.");
+}
+
+if (/headers\.set\(["']Host["']/i.test(backendProxySource)) {
+  throw new Error("The backend API proxy must not forward the browser Host header.");
+}
+
 if (
   !source.includes("Run Foundation Demo") ||
   !source.includes("without triggering real n8n") ||

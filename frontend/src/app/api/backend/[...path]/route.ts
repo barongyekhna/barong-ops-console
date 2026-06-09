@@ -47,6 +47,7 @@ async function proxyRequest(
   const { path } = await context.params;
   const requestedPath = path.join("/");
 
+  const isHealthPath = request.method === "GET" && requestedPath === "health";
   const isAuthPath = ALLOWED_AUTH_PATHS.has(requestedPath);
   const isListPath =
     request.method === "GET" && ALLOWED_LIST_PATHS.has(requestedPath);
@@ -58,6 +59,7 @@ async function proxyRequest(
     (request.method === "GET" && requestedPath === "n8n-test/latest");
 
   if (
+    !isHealthPath &&
     !isAuthPath &&
     !isListPath &&
     !isFoundationDemoPath &&
