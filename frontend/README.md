@@ -27,6 +27,17 @@ proxy does not expose F10 write APIs to the UI. Products remains an empty
 state and does not create product records. There is no public account creation
 flow or real external integration.
 
+F11 adds the protected `/foundation-demo` page. Its **Run Foundation Demo**
+button calls only `POST /foundation-demo/run`, while initial/retry loading
+calls only `GET /foundation-demo/latest`. The page displays the demo job ID and
+status, event count, artifact title, review status, memory event summary, and
+operation-log count.
+
+The panel explicitly identifies the flow as an internal demo. It does not
+trigger real n8n, WooCommerce, MinIO/Filebrowser, P-series tasks, external
+HTTP calls, uploads, or real business work. The proxy allowlist exposes only
+the two exact Foundation Demo paths and does not become a generic write proxy.
+
 ## Configuration
 
 For host-based development, use the example backend URL:

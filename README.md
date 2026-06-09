@@ -9,6 +9,44 @@ Core rule:
 - Add business modules one by one.
 - Every module must be registered, isolated, testable, and removable.
 
+## F11 Foundation Demo closed loop
+
+F11 adds an owner-only Foundation Demo exercise that validates the complete
+console data path:
+
+`Module -> Agent -> Workflow -> Job -> Job Events -> Artifact -> Review ->
+Memory Event -> Operation Logs -> Frontend`
+
+Use the protected **Foundation Demo** navigation page to run the exercise and
+view the latest demo job ID/status, event count, artifact title, pending demo
+review, memory summary, and related operation-log count.
+
+The endpoint creates or reuses the fixed `foundation_demo` module,
+`foundation_demo_agent`, and `foundation_demo_workflow`. Every run creates a
+new pending demo job, records the six demo events, registers metadata-only
+artifact and review records, writes a no-model memory event, and finishes only
+as `completed_demo`. Registry records are not duplicated across runs.
+
+This is an internal database exercise only. It does not call external HTTP,
+trigger real n8n or P-series work, connect WooCommerce, upload to
+MinIO/Filebrowser, or create a real business task. A failed run rolls back its
+demo transaction and records a separate safe system error and failure
+operation log.
+
+F11 APIs:
+
+- `POST /foundation-demo/run`
+- `GET /foundation-demo/latest`
+
+Both require an owner Bearer token. Run all isolated checks with:
+
+```bash
+./scripts/test_backend_docker.sh
+./scripts/test_backend_db_docker.sh
+./scripts/test_frontend_docker.sh
+docker-compose -f docker-compose.example.yml config
+```
+
 ## F10 foundation operations APIs
 
 F10 adds owner-only, Bearer-authenticated foundation APIs over the existing

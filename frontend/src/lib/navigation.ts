@@ -1,4 +1,5 @@
 import {
+  Activity,
   Archive,
   Bot,
   Boxes,
@@ -32,6 +33,11 @@ export const navigationGroups: NavigationGroup[] = [
         href: "/dashboard",
         label: "Dashboard",
         icon: LayoutDashboard,
+      },
+      {
+        href: "/foundation-demo",
+        label: "Foundation Demo",
+        icon: Activity,
       },
     ],
   },

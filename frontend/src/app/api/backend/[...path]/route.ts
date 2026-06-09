@@ -50,8 +50,11 @@ async function proxyRequest(
   const isAuthPath = ALLOWED_AUTH_PATHS.has(requestedPath);
   const isListPath =
     request.method === "GET" && ALLOWED_LIST_PATHS.has(requestedPath);
+  const isFoundationDemoPath =
+    (request.method === "POST" && requestedPath === "foundation-demo/run") ||
+    (request.method === "GET" && requestedPath === "foundation-demo/latest");
 
-  if (!isAuthPath && !isListPath) {
+  if (!isAuthPath && !isListPath && !isFoundationDemoPath) {
     return Response.json({ detail: "Not found." }, { status: 404 });
   }
 

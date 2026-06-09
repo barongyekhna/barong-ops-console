@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-compose_project="barong-ops-console-f10-frontend-test"
+compose_project="barong-ops-console-f11-frontend-test"
 
 if docker compose version >/dev/null 2>&1; then
     compose=(docker compose -p "$compose_project" -f docker-compose.example.yml)

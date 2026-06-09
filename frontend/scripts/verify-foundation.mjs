@@ -6,6 +6,7 @@ const appRoot = join(frontendRoot, "src", "app");
 const requiredRoutes = [
   "login",
   "(console)/dashboard",
+  "(console)/foundation-demo",
   "(console)/products",
   "(console)/modules",
   "(console)/agents",
@@ -70,9 +71,26 @@ for (const apiPath of requiredApiPaths) {
   }
 }
 
+for (const demoPath of ["/foundation-demo/run", "/foundation-demo/latest"]) {
+  if (!source.includes(demoPath)) {
+    throw new Error(`Missing F11 API connection: ${demoPath}`);
+  }
+}
+
 if (
-  /(?:woocommerce|filebrowser|minio)/i.test(source) ||
-  /https?:\/\/[^"']+\/(?:webhook|hook)/i.test(source)
+  !source.includes("Run Foundation Demo") ||
+  !source.includes("without triggering real n8n") ||
+  !source.includes("P-series tasks")
+) {
+  throw new Error("The Foundation Demo safety panel is incomplete.");
+}
+
+if (
+  /https?:\/\/[^"']*(?:n8n|woocommerce|filebrowser|minio)/i.test(source) ||
+  /https?:\/\/[^"']+\/(?:webhook|hook)/i.test(source) ||
+  /from\s+["'][^"']*(?:woocommerce|minio|filebrowser|n8n)[^"']*["']/i.test(
+    source,
+  )
 ) {
   throw new Error("A prohibited external integration reference was found.");
 }

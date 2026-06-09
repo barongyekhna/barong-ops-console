@@ -4,6 +4,7 @@ from .api.routes.agents import router as agents_router
 from .api.routes.artifacts import router as artifacts_router
 from .api.routes.auth import router as auth_router
 from .api.routes.errors import router as errors_router
+from .api.routes.foundation_demo import router as foundation_demo_router
 from .api.routes.health import router as health_router
 from .api.routes.jobs import router as jobs_router
 from .api.routes.memory import router as memory_router
@@ -30,3 +31,4 @@ app.include_router(reviews_router)
 app.include_router(errors_router)
 app.include_router(memory_router)
 app.include_router(operation_logs_router)
+app.include_router(foundation_demo_router)

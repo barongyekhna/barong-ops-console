@@ -4,6 +4,22 @@ This directory contains the F05 FastAPI foundation, the F06 database migration
 foundation, the F07 core tables, and the F08 backend authentication
 foundation, plus the F10 foundation operations APIs.
 
+F11 adds the owner-only Foundation Demo transaction:
+
+- `POST /foundation-demo/run`
+- `GET /foundation-demo/latest`
+
+The run endpoint creates or reuses demo Module, Agent, and Workflow registry
+records, then records a new pending demo Job, six Job Events, metadata-only
+Artifact, pending demo Review, no-model Memory Event, and related Operation
+Logs. The only terminal status is `completed_demo`. The job type is stored in
+the existing safe input payload, so F11 requires no schema migration.
+
+All successful writes are committed as one unit. If a run fails, that unit is
+rolled back and a separate safe System Error plus failure Operation Log is
+recorded. The service has no external HTTP client and does not trigger real
+n8n, WooCommerce, MinIO/Filebrowser, P-series work, models, or business tasks.
+
 F07 adds:
 
 - SQLAlchemy models for all 14 reviewed core foundation tables.
@@ -61,7 +77,7 @@ bootstrap checks with:
 ```
 
 This uses only the example Compose file and example credentials. It runs the
-security, authentication, F10 API, audit, and external-boundary tests and
+security, authentication, F10/F11 API, audit, and external-boundary tests and
 verifies migration upgrade, downgrade, and a second upgrade. Do not point
 `DATABASE_URL` at a production database.
 Do not install the requirements in the system Python or commit a real `.env`
