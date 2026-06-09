@@ -30,6 +30,33 @@ C03A 不做这些事：
 - 不修改 Nginx、证书或真实业务系统。
 - 不接真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser。
 
+## 2.1. C03B 后端实现状态
+
+C03B 已完成后端 owner-only 用户管理 API，仍然不做前端页面、不部署
+staging、不发布 production、不创建真实用户、不接真实业务。
+
+C03B 实现内容：
+
+- 新增 `/users` 后端 API，全部使用 `require_owner`。
+- 拆分 `get_current_user` 和 `require_owner`。
+- `/auth/login` 允许 active 用户登录，不再限制只能 `owner` 登录。
+- `/auth/me` 允许任何已登录且 active 的用户访问。
+- inactive 用户不能登录，也不能继续通过 token 访问 protected API。
+- owner 可创建 `viewer`、`operator`、`reviewer` 子账户。
+- 创建、更新、停用、启用、重置密码都写 `operation_logs`。
+- API response 不返回 `password_hash`。
+- 继续没有 `/auth/register`，也没有公开注册页面。
+- 未新增 migration，继续使用现有 `users` 表字段。
+
+C03B 仍不做：
+
+- 前端用户管理页面。
+- 完整 RBAC 或模块级权限矩阵。
+- email、邀请、找回密码、首次登录强制改密。
+- session table 或 token revocation。
+- staging/production 发布。
+- 真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser 或真实业务任务。
+
 ## 3. 审计过的主要文件
 
 后端用户和认证：
@@ -252,16 +279,17 @@ C03A 不做这些事：
 - 密码哈希、登录审计、logout 审计、owner bootstrap 审计已经存在。
 - 公开注册已经被禁止并有测试覆盖。
 - `is_active` 已经可以作为停用/启用基础状态。
-- 但后端认证目前硬性要求 `role == "owner"`，所以 viewer/operator 这类子账户即使被创建，也无法登录。
-- 当前所有受保护 API 通过 `get_current_user` 间接 owner-only。C03B 如果要允许子账户登录，需要把“当前登录用户”和“必须是 owner”的授权逻辑拆开。
+- C03A 时后端认证硬性要求 `role == "owner"`，所以 viewer/operator 这类子账户即使被创建，也无法登录。
+- C03B 已把“当前登录用户”和“必须是 owner”的授权逻辑拆开：`get_current_user` 只做登录态校验，`require_owner` 做 owner 授权。
 
-C03B 推荐改法：
+C03B 实际改法：
 
 - `get_current_user` 改为只校验 token 有效、用户存在、`is_active = true`、token role 与数据库 role 一致。
-- 新增 `require_owner` 或 `get_current_owner` dependency。
+- 新增 `require_owner` dependency。
 - 用户管理 API 全部使用 `require_owner`。
-- 现有 F10/F11/F12 owner-only API 在 C04/C05 之前继续使用 `require_owner`，避免子账户突然获得业务或 demo 写权限。
-- `/auth/login` 允许 active 的基础角色登录，但角色必须在后端白名单中，例如 `owner`、`operator`、`viewer`。
+- `/auth/login` 允许 active 用户登录，C03B 创建用户时只允许
+  `viewer`、`operator`、`reviewer` 这些基础子账户角色。
+- 完整 RBAC 和其他模块的细粒度角色权限不在 C03B 内实现。
 
 ## 8. C03 功能边界设计
 
@@ -344,7 +372,7 @@ C03 必须遵守这些安全规则：
 - 未来如果需要强制踢下线、设备管理、单 token 撤销，需要 session table 或 token revocation 表。
 - 这不是 C03 必做，但必须作为已知风险保留。
 
-## 11. C03B 后端 API 设计草案
+## 11. C03B 后端 API 实现
 
 所有 `/users` API 都需要 owner 身份。不要开放 `/auth/register`，也不要让未登录用户创建账号。
 
@@ -373,15 +401,14 @@ C03 必须遵守这些安全规则：
 
 用途：owner 查看用户列表。
 
-建议参数：
+C03B 参数：
 
 - `limit`：默认 50，范围 1-100。
 - `offset`：默认 0。
-- `role`：可选，过滤角色。
-- `is_active`：可选，过滤启用/停用。
-- `q`：可选，按 username 模糊搜索。若实现复杂度高，可放到 C03D 之后。
 
-建议响应延续现有 `ListResponse` 风格：
+C03B 暂不做 role、is_active、q 过滤；后续可以在 C03C/C04 结合前端需求再加。
+
+响应延续现有 `ListResponse` 风格：
 
 - `items`
 - `count`
@@ -392,7 +419,7 @@ C03 必须遵守这些安全规则：
 
 用途：owner 创建子账户。
 
-建议请求：
+C03B 请求：
 
 ```json
 {
@@ -407,7 +434,7 @@ C03 必须遵守这些安全规则：
 
 - `username` 必填，最大 255。
 - `password` 必填，建议最少 12 位，最大长度沿用认证层限制。
-- `role` 只允许基础子账户角色，例如 `viewer`、`operator`。
+- `role` 只允许基础子账户角色：`viewer`、`operator`、`reviewer`。
 - C03 不允许通过这个接口创建 `owner`。
 - 后端 hash 密码后落库。
 - username 冲突返回 409。
@@ -427,7 +454,7 @@ C03 必须遵守这些安全规则：
 
 用途：owner 更新基础账号字段。
 
-C03 建议只允许很小范围：
+C03B 只允许很小范围：
 
 - 更新 `role`，但不能把子账户改成 `owner`。
 - 可选更新 `is_active`，但更推荐启用/停用走专用 endpoint。
@@ -461,7 +488,8 @@ C03 建议只允许很小范围：
 - 不写明文密码到日志。
 - 找不到返回 404。
 - 成功写 `operation_logs`，action 建议为 `user.reset_password`。
-- 如果以后要做“首次登录必须改密码”，需要新增字段或 session 策略，不在 C03A 决定。
+- C03B 禁止 owner 通过这个接口重置自己的密码。自助改密留到后续单独任务。
+- 如果以后要做“首次登录必须改密码”，需要新增字段或 session 策略，不在 C03B 决定。
 
 ### `POST /users/{user_id}/disable`
 
@@ -471,7 +499,7 @@ C03 建议只允许很小范围：
 
 - 不能停用自己。
 - 找不到返回 404。
-- 已停用可以幂等返回当前状态，或返回 409；建议幂等成功并写 details 标明 already_disabled，便于前端重试。
+- C03B 幂等设置 `is_active = false` 并返回当前用户状态。
 - 停用后该用户不能登录，也不能继续通过 `get_current_user` 访问受保护 API。
 - 成功写 `operation_logs`，action 建议为 `user.disable`。
 
@@ -482,7 +510,7 @@ C03 建议只允许很小范围：
 规则：
 
 - 找不到返回 404。
-- 已启用可以幂等返回当前状态，或返回 409；建议幂等成功。
+- C03B 幂等设置 `is_active = true` 并返回当前用户状态。
 - 成功写 `operation_logs`，action 建议为 `user.enable`。
 
 ### 错误码规则
@@ -494,7 +522,8 @@ C03 建议只允许很小范围：
 - 404：用户不存在。
 - 409：username 唯一约束冲突，或状态冲突如果不做幂等。
 - 422：请求字段不合法，例如密码太短、role 不在允许列表。
-- 400 或 422：试图停用自己、创建 owner、非法自操作。建议 C03B 统一选一种并写测试。
+- 400：试图停用自己、通过 reset-password 重置自己的密码。
+- 422：请求字段不合法，例如密码太短、role 不在允许列表、试图创建或设置 `owner` 角色。
 
 ### operation_logs 规则
 
@@ -516,7 +545,7 @@ C03 建议只允许很小范围：
 - `request_id`、`ip_address`、`user_agent` 来自 audit context
 - `details` 只放安全信息，例如 role、状态变化、是否幂等，不放密码
 
-如果创建失败但已经进入服务层校验，可以记录安全相关 failure，例如尝试创建 owner、尝试停用自己。不要为了普通 422 校验产生过多噪音，C03B 可以在测试中明确边界。
+C03B 记录成功写操作。普通 409/422 校验失败不额外写账号管理日志，避免日志噪音。
 
 ## 12. C03C 前端页面设计草案
 
@@ -646,6 +675,8 @@ C03 必须 staging-first：
 - 确认 operation log 不含密码。
 - 默认不新增 migration，除非老板先批准字段变更。
 
+状态：已由 C03B 完成后端实现，等待老板审核；未提交 git commit。
+
 验收重点：
 
 - owner 可以创建 viewer/operator。
@@ -713,7 +744,7 @@ C03 只处理账号管理基础，不代表系统可以开始跑真实业务。
 
 真实业务接入必须等账号、角色、权限、审核、日志和 staging-first 发布链路继续封板后，再按独立任务进入。
 
-## 17. C03A 结论
+## 17. C03A/C03B 结论
 
 C03A 审计结论：
 
@@ -724,3 +755,15 @@ C03A 审计结论：
 - 当前 logout 是 stateless，C03 可接受，但必须记录风险。
 - C03 应先 staging 验证，再 production 发布。
 - C03A 不创建真实账号，不改业务代码，不接真实业务。
+
+C03B 后端结论：
+
+- 现有 `users` 表足够支撑本阶段，不新增 migration。
+- owner-only `/users` API 已实现。
+- active 非 owner 子账户可以登录，并可访问 `/auth/me`。
+- 非 owner 访问 `/users` 返回 403，未登录访问 `/users` 返回 401。
+- inactive 用户登录失败，已有 token 也会被 `get_current_user` 拒绝。
+- `/auth/register` 继续不存在。
+- operation logs 覆盖 `user.create`、`user.update`、`user.disable`、
+  `user.enable`、`user.reset_password`。
+- C03B 未做前端页面、完整 RBAC、staging/production 部署或真实业务接入。

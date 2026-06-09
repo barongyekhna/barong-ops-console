@@ -1,9 +1,9 @@
 # Backend
 
 This directory contains the F05 FastAPI foundation, F06 migration mechanism,
-F07 core tables, F08 owner authentication, F10 foundation APIs, F11
-Foundation Demo, and F12 n8n Test Bridge. F13 accepts this backend as an empty
-foundation; it does not add a real business integration.
+F07 core tables, F08 authentication, F10 foundation APIs, F11 Foundation Demo,
+F12 n8n Test Bridge, and C03B owner-only user management API. F13 accepts this
+backend as an empty foundation; it does not add a real business integration.
 
 C01 production deployment is complete for
 `https://ops.barongyekhna.com`. The production backend service is named
@@ -26,8 +26,25 @@ account. C02D added read-only dual-environment checks, C02E completed final
 production/staging acceptance, and C02F sealed the environment isolation
 system. Both environments are usable and isolated. C02F did not read real env
 files, restart production/staging containers, or connect real n8n, P-series,
-WooCommerce, MinIO, or Filebrowser systems. The next stage is C03: Owner
-creates sub-accounts.
+WooCommerce, MinIO, or Filebrowser systems. C03B now implements backend
+owner-created sub-account APIs without deploying staging or production.
+
+C03B exposes owner-only user management:
+
+- `GET /users`
+- `POST /users`
+- `GET /users/{user_id}`
+- `PATCH /users/{user_id}`
+- `POST /users/{user_id}/reset-password`
+- `POST /users/{user_id}/disable`
+- `POST /users/{user_id}/enable`
+
+It creates only non-owner sub-account roles: `viewer`, `operator`, and
+`reviewer`. It hashes all passwords, omits `password_hash` from responses,
+writes `user.create`, `user.update`, `user.disable`, `user.enable`, and
+`user.reset_password` operation logs, and keeps `/auth/register` absent. C03B
+adds no migration, no frontend user management page, no full RBAC, no staging
+or production deployment, and no real business integration.
 
 F12 adds the n8n test webhook bridge:
 
@@ -85,7 +102,8 @@ F07 adds:
 - One Alembic revision that creates and removes the empty tables.
 
 F08 adds Argon2id password hashing, controlled owner initialization, JWT
-authentication, and authentication operation logs. It exposes:
+authentication, and authentication operation logs. C03B later split active-user
+authentication from owner-only authorization. Auth exposes:
 
 - `POST /auth/login`
 - `POST /auth/logout`
@@ -95,8 +113,8 @@ F08 itself did not add a frontend login page; F09 added that page later.
 There is still no registration API, complex permission matrix, seed data, or
 real external integration.
 
-F10 adds owner-only list/detail APIs and controlled foundation/demo writes for
-Modules, Agents, Workflows, Jobs, Job Events, Artifacts, Reviews, System
+F10 adds authenticated list/detail APIs and controlled foundation/demo writes
+for Modules, Agents, Workflows, Jobs, Job Events, Artifacts, Reviews, System
 Errors, Memory Events, and Context Packets. Memory Summaries and Operation
 Logs are read-only. All write operations commit their audit log in the same
 transaction.

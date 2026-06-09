@@ -74,20 +74,28 @@ def get_current_user(
         secret = require_token_secret(settings.auth_token_secret)
         payload = decode_access_token(credentials.credentials, secret)
         user_id = int(payload["sub"])
+        token_role = payload["role"]
     except (
         InvalidAccessTokenError,
         SecurityConfigurationError,
+        KeyError,
         TypeError,
         ValueError,
     ):
         raise unauthorized() from None
 
     user = get_user_by_id(db, user_id)
-    if (
-        user is None
-        or not user.is_active
-        or user.role != "owner"
-        or payload["role"] != user.role
-    ):
+    if user is None or not user.is_active or token_role != user.role:
         raise unauthorized()
+    return user
+
+
+def require_owner(
+    user: User = Depends(get_current_user),
+) -> User:
+    if user.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner role required.",
+        )
     return user

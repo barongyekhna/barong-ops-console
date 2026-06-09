@@ -13,6 +13,8 @@ from backend.app.models.user import User
 
 USERNAME = "api_owner"
 PASSWORD = "example-only-api-owner-password"
+OPERATOR_USERNAME = "api_operator"
+OPERATOR_PASSWORD = "example-only-api-operator-password"
 TEST_AUTH_SECRET = "f08-test-signing-value-not-for-production-use"
 
 
@@ -27,6 +29,25 @@ def create_test_owner(*, is_active: bool = True) -> int:
         db.add(owner)
         db.commit()
         return owner.id
+
+
+def create_test_user(
+    *,
+    username: str = OPERATOR_USERNAME,
+    password: str = OPERATOR_PASSWORD,
+    role: str = "operator",
+    is_active: bool = True,
+) -> int:
+    with SessionLocal() as db:
+        user = User(
+            username=username,
+            password_hash=hash_password(password),
+            role=role,
+            is_active=is_active,
+        )
+        db.add(user)
+        db.commit()
+        return user.id
 
 
 def login(client: TestClient) -> dict:
@@ -134,6 +155,22 @@ def test_inactive_user_cannot_login(auth_client: TestClient) -> None:
     assert response.json()["detail"] == "Invalid username or password."
 
 
+def test_active_non_owner_user_can_login(auth_client: TestClient) -> None:
+    user_id = create_test_user()
+
+    response = auth_client.post(
+        "/auth/login",
+        json={"username": OPERATOR_USERNAME, "password": OPERATOR_PASSWORD},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["access_token"]
+    assert payload["user"]["id"] == user_id
+    assert payload["user"]["role"] == "operator"
+    assert "password_hash" not in json.dumps(payload)
+
+
 def test_auth_me_returns_current_user(auth_client: TestClient) -> None:
     owner_id = create_test_owner()
     access_token = login(auth_client)["access_token"]
@@ -146,6 +183,31 @@ def test_auth_me_returns_current_user(auth_client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json()["id"] == owner_id
     assert response.json()["username"] == USERNAME
+    assert "password_hash" not in response.json()
+
+
+def test_auth_me_allows_active_non_owner_user(
+    auth_client: TestClient,
+) -> None:
+    user_id = create_test_user(role="viewer")
+    login_response = auth_client.post(
+        "/auth/login",
+        json={"username": OPERATOR_USERNAME, "password": OPERATOR_PASSWORD},
+    )
+    assert login_response.status_code == 200
+
+    response = auth_client.get(
+        "/auth/me",
+        headers={
+            "Authorization": (
+                f"Bearer {login_response.json()['access_token']}"
+            )
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["id"] == user_id
+    assert response.json()["role"] == "viewer"
     assert "password_hash" not in response.json()
 
 

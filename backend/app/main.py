@@ -12,6 +12,7 @@ from .api.routes.modules import router as modules_router
 from .api.routes.n8n_test import router as n8n_test_router
 from .api.routes.operation_logs import router as operation_logs_router
 from .api.routes.reviews import router as reviews_router
+from .api.routes.users import router as users_router
 from .api.routes.workflows import router as workflows_router
 from .core.config import get_settings
 
@@ -23,6 +24,7 @@ app = FastAPI(
 )
 app.include_router(health_router)
 app.include_router(auth_router)
+app.include_router(users_router)
 app.include_router(modules_router)
 app.include_router(agents_router)
 app.include_router(workflows_router)

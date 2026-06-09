@@ -6,6 +6,8 @@
 
 ### Added
 
+- C03B：新增 owner-only `/users` 后端用户管理 API，支持列表、创建、详情、更新、停用、启用和重置子账户密码；只允许创建 `viewer`、`operator`、`reviewer` 子账户，不允许创建 `owner`。
+- C03B：新增用户管理 schema、repository、service、router 和数据库集成测试，覆盖非 owner 登录、`/auth/me`、`/users` 401/403、重复 username、弱密码、禁用用户、密码重置、禁止 owner 自停用和 operation logs。
 - C03A：新增 `docs/C03_OWNER_ACCOUNT_MANAGEMENT_PLAN.md`，用大白话记录现有 users/auth/frontend 鉴权审计、当前 owner-only 限制、C03 账号管理边界、后端 API 草案、前端页面草案、安全规则、migration 判断、staging-first 发布流程和 C03B-C03F 任务拆分；本阶段只设计不实现。
 - C02F：新增 `docs/C02_ENVIRONMENT_ISOLATION_SEAL.md`，用大白话归档 C02 最终结论、C02A-C02F 完成清单、production/staging 当前状态、隔离规则、发布原则、n8n/workflow 未来原则、安全禁止项、剩余风险和 C02 封板结论。
 - C02E：新增 `docs/C02_ENVIRONMENT_ISOLATION_ACCEPTANCE.md`，归档 production/staging 最终只读验收结果、双环境隔离证据、脚本结果、compose config 安全临时 env 方法、真实业务边界、剩余风险和 C02F 封板下一步。
@@ -52,6 +54,9 @@
 
 ### Changed
 
+- C03B：拆分 `get_current_user` 和 `require_owner`；`get_current_user` 只验证 token、用户存在、active 状态和 token role 与数据库 role 一致，`require_owner` 负责 `/users` owner-only 授权。
+- C03B：`/auth/login` 和 `/auth/me` 不再要求用户必须是 `owner`；active 非 owner 子账户可以登录并读取当前用户信息，inactive 用户仍被拒绝。公开注册继续不存在。
+- C03B：`scripts/test_backend_db_docker.sh` 纳入 `tests/backend/test_user_management_api.py`，确保 example/test 数据库测试覆盖用户管理 API；本阶段不新增 migration、不做前端页面、不做完整 RBAC、不接真实业务。
 - C03A：README 补充 C03 owner 创建子账户阶段说明，明确 C03A 只做审计和设计，不新增 migration、不创建用户、不改 production/staging 容器、不接真实业务。
 - C02F：README、backend/frontend README、C02A-C02E 文档和双环境运维文档更新为 C02 已封板，production/staging 双环境隔离体系完成，当前仍未接真实业务，下一阶段为 C03：Owner 创建子账户。
 - C02E：README、backend/frontend README、`docs/C02_DUAL_ENV_OPERATIONS.md`、`docs/C02_STAGING_SETUP.md` 和 `docs/C02_ENVIRONMENT_ISOLATION_PLAN.md` 更新为 production/staging 双环境最终验收完成、两套环境均可用、当前仍未接真实业务模块、下一步 C02F 环境隔离封板。

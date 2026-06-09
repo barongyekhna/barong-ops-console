@@ -32,6 +32,7 @@ trap cleanup EXIT
     python -m alembic -c backend/alembic.ini current &&
     python -m pytest \
         tests/backend/test_auth_api.py \
+        tests/backend/test_user_management_api.py \
         tests/backend/test_owner_bootstrap.py \
         tests/backend/test_registry_api.py \
         tests/backend/test_jobs_api.py \

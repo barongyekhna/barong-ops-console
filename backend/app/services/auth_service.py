@@ -49,12 +49,7 @@ def login(
     else:
         password_matches = verify_password(password, user.password_hash)
 
-    if (
-        user is None
-        or not password_matches
-        or not user.is_active
-        or user.role != "owner"
-    ):
+    if user is None or not password_matches or not user.is_active:
         create_operation_log(
             db,
             actor_type="anonymous",
