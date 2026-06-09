@@ -22,9 +22,11 @@ C02C has started the staging/test backend on `127.0.0.1:8100` with
 `.env.staging`. Its `DATABASE_URL` must point at
 `console_staging_postgres:5432`, `AUTH_TOKEN_SECRET` and `POSTGRES_PASSWORD`
 must be different from production, and the staging owner must be a test
-account. C02D adds read-only dual-environment checks and does not read real
-env files, restart containers, or connect real n8n, P-series, WooCommerce,
-MinIO, or Filebrowser systems.
+account. C02D added read-only dual-environment checks, and C02E has completed
+final production/staging acceptance. Both environments are usable and isolated.
+C02E did not read real env files, restart containers, or connect real n8n,
+P-series, WooCommerce, MinIO, or Filebrowser systems. The next C02 step is
+C02F environment isolation sealing.
 
 F12 adds the n8n test webhook bridge:
 

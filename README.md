@@ -71,9 +71,11 @@ production/test environment separation.
 
 C02A documented the production/test isolation plan in
 `docs/C02_ENVIRONMENT_ISOLATION_PLAN.md`. C02B prepared the staging
-construction files. C02C has now started staging on server-local ports,
-initialized the staging owner, and tested the backend login path. C02D adds
-dual-environment operations documentation and read-only checks.
+construction files. C02C started staging on server-local ports, initialized
+the staging owner, and tested the backend login path. C02D added
+dual-environment operations documentation and read-only checks. C02E has now
+completed final production/staging acceptance and confirmed both environments
+are usable and isolated.
 
 Current staging defaults:
 
@@ -85,8 +87,8 @@ Current staging defaults:
 - Volume: `console_staging_postgres_data`
 - Env files: `.env.staging.example` committed, real `.env.staging` local only
 
-Staging is still not exposed publicly. C02D does not modify production,
-Nginx, certificates, real env files, containers, or real business systems.
+Staging is still not exposed publicly. C02E did not modify production, Nginx,
+certificates, real env files, containers, or real business systems.
 
 Run the staging static check with:
 
@@ -106,9 +108,14 @@ Run the production + staging read-only status check with:
 ./scripts/check_dual_env_status.sh
 ```
 
-Details are in `docs/C02_STAGING_SETUP.md` and
-`docs/C02_DUAL_ENV_OPERATIONS.md`. The next C02 step is C02E / C02F:
-environment isolation final acceptance and sealing.
+Details are in `docs/C02_STAGING_SETUP.md`,
+`docs/C02_DUAL_ENV_OPERATIONS.md`, and
+`docs/C02_ENVIRONMENT_ISOLATION_ACCEPTANCE.md`. The next C02 step is C02F:
+environment isolation sealing.
+
+C02 remains foundation/console only. It still does not connect real n8n,
+P-series, WooCommerce, MinIO, Filebrowser, products, orders, or business
+tasks.
 
 ## Temporary login preview
 

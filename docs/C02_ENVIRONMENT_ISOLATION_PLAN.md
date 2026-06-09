@@ -25,9 +25,9 @@ staging 是测试服。它用来试新功能、试 migration、试 owner 初始�
 owner、打到真实 webhook、占用正式端口，或者让正式服务停掉。测试服就是为了
 把这些风险挡在正式服外面。
 
-C02C 后的当前状态：staging 已经在服务器本机端口启动，owner 已初始化，后端
-登录链路已测试通过。C02D 不再接真实业务功能，只补双环境运维文档、只读状态
-检查脚本和安全边界说明。
+C02C 后，staging 已经在服务器本机端口启动，owner 已初始化，后端登录链路已
+测试通过。C02D 补了双环境运维文档、只读状态检查脚本和安全边界说明。C02E 已
+经完成 production/staging 最终只读验收，确认两套环境都可用并且隔离有效。
 
 ## 2. production 当前状态
 
@@ -214,11 +214,13 @@ URL、token secret 都不能交叉复制。
   postgres/backend/frontend，初始化 staging owner，并测试后端登录链路。
 - C02D：补双环境运维手册、只读状态检查脚本和安全边界说明，不接任何真实业务
   功能。
-- C02E / C02F：环境隔离最终验收与封板。
+- C02E：完成 production/staging 最终只读验收，确认双环境可用、隔离真实有效、
+  production 未受 staging 影响。
+- C02F：环境隔离封板。
 - 未来可选：单独配置 `staging.ops.barongyekhna.com`、DNS、Nginx、HTTPS 和访问
   控制。
 
-C02D 仍不应该接真实业务。真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser
+C02E 后仍不应该接真实业务。真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser
 接入要等单独阶段。
 
 ## 10. C02B-C02D 文件清单
@@ -237,12 +239,17 @@ C02D 补充这些文件：
 - `docs/C02_DUAL_ENV_OPERATIONS.md`：production/staging 双环境运维手册。
 - `scripts/check_dual_env_status.sh`：production + staging 双环境只读状态检查。
 
-C02D 不读取或修改 `.env.production` / `.env.staging`，不启动、停止、重启或
-删除容器，不修改 Nginx 或证书，不接真实业务。
+C02E 补充这些文件：
 
-## 11. C02A-C02D 结论
+- `docs/C02_ENVIRONMENT_ISOLATION_ACCEPTANCE.md`：production/staging 双环境最终
+  验收归档。
 
-C02A-C02D 当前结论：
+C02D/C02E 不读取或修改 `.env.production` / `.env.staging`，不启动、停止、重启
+或删除容器，不修改 Nginx 或证书，不接真实业务。
+
+## 11. C02A-C02E 结论
+
+C02A-C02E 当前结论：
 
 - production 当前正常运行。
 - production frontend/backend 只绑定本机端口，由 Nginx 通过 HTTPS 对外服务。
@@ -256,5 +263,7 @@ C02A-C02D 当前结论：
 - production 和 staging 使用独立 project、独立端口、独立 network、独立
   volume、独立 env、独立 owner 和独立 secret。
 - production 数据库和 staging 数据库绝不共用，测试数据不能复制到 production。
-- C02D 只补运维文档和只读检查，没有读取或修改真实 env，没有启动、停止、重启
-  或删除容器，没有修改 Nginx 或证书，没有接任何真实业务。
+- C02E 已经运行双环境脚本、smoke check 和 compose 静态检查，结果通过。
+- C02E 没有读取或修改真实 env，没有启动、停止、重启或删除容器，没有修改
+  Nginx 或证书，没有接任何真实业务。
+- 下一步是 C02F 环境隔离封板。

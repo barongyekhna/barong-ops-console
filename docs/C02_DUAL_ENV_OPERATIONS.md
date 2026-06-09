@@ -93,8 +93,8 @@ webhook 配置都不能复制到 production。
 
 ## 6. n8n 和真实业务边界
 
-C02D 不接真实 n8n workflow，不接 P 系列，不接 WooCommerce，不接 MinIO，不接
-Filebrowser，也不创建真实业务任务。
+C02D/C02E 不接真实 n8n workflow，不接 P 系列，不接 WooCommerce，不接 MinIO，
+不接 Filebrowser，也不创建真实业务任务。
 
 未来如果要接 n8n workflow，也必须版本化：
 
@@ -106,7 +106,7 @@ Filebrowser，也不创建真实业务任务。
 
 ## 7. 安全只读检查命令
 
-这些命令属于 C02D 允许的只读检查。它们不应该启动、停止、重启或删除服务：
+这些命令属于 C02D/C02E 允许的只读检查。它们不应该启动、停止、重启或删除服务：
 
 ```bash
 git status --short --untracked-files=all
@@ -119,6 +119,8 @@ docker ps --format '{{.Names}}|{{.Status}}|{{.Ports}}'
 ./scripts/check_production_deploy_files.sh
 ```
 
+其中 C02E 已经运行这些脚本，结果全部通过。
+
 Compose config 也只能用安全临时目录跑。做法是把 compose 文件复制到临时目录，
 再把 `.env.production.example` 或 `.env.staging.example` 复制成临时同名 env。
 这样 `docker-compose -f ... config` 不会读取服务器本地真实 env。
@@ -128,7 +130,7 @@ Compose config 也只能用安全临时目录跑。做法是把 compose 文件�
 
 ## 8. 危险命令
 
-这些命令在 C02D 禁止执行：
+这些命令在 C02D/C02E 禁止执行：
 
 ```bash
 cat .env.production
@@ -150,11 +152,12 @@ certbot
 也不要用 `docker exec` 进入 production 或 staging 数据库里做写操作。只读检查
 够用时，不要碰数据库 shell。
 
-## 9. C02D 边界
+## 9. C02D/C02E 边界
 
-C02D 只补文档、只读状态检查脚本和安全边界说明。
+C02D 只补文档、只读状态检查脚本和安全边界说明。C02E 只做最终只读验收和文档
+归档。
 
-C02D 不做这些事：
+C02D/C02E 不做这些事：
 
 - 不修改 Nginx。
 - 不 reload 或 restart Nginx。
@@ -166,4 +169,18 @@ C02D 不做这些事：
 - 不创建真实业务任务。
 - 不 git commit。
 
-下一步是 C02E / C02F：环境隔离最终验收与封板。
+## 10. C02E 验收结论
+
+C02E 已经完成 production/staging 双环境最终验收：
+
+- production login、backend health、HTTP 到 HTTPS 跳转和 smoke check 通过。
+- staging login、backend proxy health、backend direct health 和 smoke check 通过。
+- 两套环境的 compose project、容器名、network、volume、env 文件、端口和数据库
+  均保持隔离。
+- `.env.production` 和 `.env.staging` 被 Git 忽略，真实 env 内容未读取。
+- `.env.production.example` 和 `.env.staging.example` 可追踪。
+- staging 仍不暴露公网，仍未接真实业务。
+- n8n test bridge webhook 未配置，安全失败是预期。
+
+验收归档在 `docs/C02_ENVIRONMENT_ISOLATION_ACCEPTANCE.md`。下一步是 C02F：环境
+隔离封板。
