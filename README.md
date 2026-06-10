@@ -173,8 +173,10 @@ C04A started the role-system stage with the design plan in
 `docs/C04_ROLE_SYSTEM_PLAN.md`. C04B has added backend role constants,
 metadata, validation, tests, and an owner-only `GET /users/roles` catalog.
 C04C has updated the User Management frontend to read that catalog through
-`/api/backend/users/roles`. C04D has accepted the role catalog UI/API on
-staging; the acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`.
+`/api/backend/users/roles`. C04D accepted the role catalog UI/API on staging;
+the acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`. C04E has now
+released the role catalog backend and frontend UI to production; the release
+archive is `docs/C04_PRODUCTION_RELEASE.md`.
 
 C04 defines account identity types. It does not define the full permission
 matrix. C05 will define permissions, module access, and how roles map to
@@ -201,6 +203,8 @@ Current C04 status:
 - C04C makes the create-user and managed-role selectors use the backend role
   catalog. The selectors currently show only `viewer`, `operator`, and
   `reviewer`.
+- The production User Management page at `https://ops.barongyekhna.com/users`
+  now uses the role catalog UI.
 - The User Management page now explains that `super_admin`, `module_admin`,
   and `bot_agent` are reserved roles and are not assignable in C04.
 - C04D verified on staging that `/users/roles` is owner-only, unauthenticated
@@ -215,8 +219,15 @@ Current C04 status:
   containers; did not run `docker-compose up/down`; did not read real env
   files; did not modify Nginx/certificates; did not create production users;
   and did not connect real business systems.
-- C04 does not add `super_admin` powers, complete RBAC, production deployment,
-  or real user/business creation.
+- C04E verified production `/users` returns 200, unauthenticated
+  `/api/backend/users/roles` returns 401, production backend health is normal,
+  staging `/users` remains normal, and production/staging/dual-env smoke
+  checks pass.
+- C04E did not read or modify real env files, create production users,
+  restart/rebuild/remove containers, modify Nginx/certificates, or connect
+  real business systems.
+- C04 does not add `super_admin` powers, complete RBAC, or real user/business
+  creation.
 - Company positions such as designer, SEO editor, customer service, or factory
   supervisor should be represented with `role` plus later `job_title`,
   `department`, `module_access`, and `permissions`, not as new hard-coded role
@@ -224,7 +235,7 @@ Current C04 status:
 
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
-The next step is C04E: production release evaluation after explicit approval.
+The next step is C04F: role-system sealing.
 
 ## Temporary login preview
 

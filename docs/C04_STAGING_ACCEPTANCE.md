@@ -150,4 +150,23 @@ C04D staging 角色目录 UI 和 API 验收通过。
 - C04 仍不做完整 RBAC，不给 `super_admin`、`module_admin` 或 `bot_agent`
   实际权限，不接真实业务。
 
-下一步是 C04E：老板批准后再按单独发布流程考虑 production 发布。
+## 8. C04E production 发布状态
+
+C04E 已在 2026-06-10 UTC 由人工完成 production 发布，并在
+`docs/C04_PRODUCTION_RELEASE.md` 中归档只读验收结果。
+
+当前 production 状态：
+
+- C04B 后端角色目录已进入 production。
+- C04C 前端角色目录 UI 已进入 production。
+- production `/users` 页面可用。
+- 未登录访问 production `/api/backend/users/roles` 返回 401。
+- 创建用户下拉仍只允许 `viewer`、`operator`、`reviewer`。
+- `owner`、`super_admin`、`module_admin`、`bot_agent` 仍是 reserved，不可创建、
+  不可选择。
+- 当前不做 `super_admin` 放权。
+- 当前不做完整 RBAC。
+- production smoke、staging smoke、dual env check 均通过。
+- staging 仍保留为测试服。
+
+下一步是 C04F：角色体系总封板。

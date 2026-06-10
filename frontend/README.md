@@ -100,15 +100,18 @@ C04A has started the role-system stage with
 full permission system. C04B added the owner-only `GET /users/roles` catalog,
 and C04C updates the `/users` page to read it through
 `/api/backend/users/roles`. C04D accepted the role catalog UI on staging; the
-acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`.
+acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`. C04E has released the
+role catalog UI to production; the release archive is
+`docs/C04_PRODUCTION_RELEASE.md`.
 
 The User Management create-user selector and managed-role selector are now
 generated from catalog roles that are `assignable=true` and pass the frontend
 safety whitelist. They currently show only `viewer`, `operator`, and
-`reviewer`. The page also displays `owner`, `super_admin`, `module_admin`, and
-`bot_agent` as reserved/not assignable in C04. `super_admin` is not enabled,
-`module_admin` still needs module scope, and `bot_agent` still needs agent
-identity and token scope design.
+`reviewer`. The production page at `https://ops.barongyekhna.com/users` now
+uses this role catalog UI. The page also displays `owner`, `super_admin`,
+`module_admin`, and `bot_agent` as reserved/not assignable in C04.
+`super_admin` is not enabled, `module_admin` still needs module scope, and
+`bot_agent` still needs agent identity and token scope design.
 
 C04 does not make `super_admin` all-powerful, does not connect `bot_agent` to
 real automation, and does not define module permissions. C05 will define
@@ -122,8 +125,12 @@ strings. C04D verified on staging that `/login`, `/users`, and
 to `viewer`, `operator`, and `reviewer`, and reserved roles remain displayed
 but not selectable. C04D did not rebuild/recreate/restart containers, run
 `docker-compose up/down`, read real env files, modify Nginx/certificates, or
-connect real business systems. The next step is C04E production release
-evaluation after explicit approval.
+connect real business systems. C04E verified production `/users` returns 200,
+unauthenticated `/api/backend/users/roles` returns 401, production backend
+health is normal, staging remains normal, and production/staging/dual-env
+checks pass. C04E did not read real env files, create production users,
+restart/rebuild/remove containers, modify Nginx/certificates, or connect real
+business systems. The next step is C04F role-system sealing.
 
 ## Configuration
 

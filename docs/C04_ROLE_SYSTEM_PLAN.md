@@ -3,7 +3,8 @@
 日期：2026-06-10 UTC
 
 本文件记录 C04A：角色体系审计与设计方案，并追加 C04B 后端角色常量与校验落地状态、
-C04C 前端角色目录显示与选择优化状态、C04D staging 验收结果。
+C04C 前端角色目录显示与选择优化状态、C04D staging 验收结果、C04E production
+发布验收归档状态。
 
 C04A 只做审计、设计、风险分析、后续任务拆分和文档更新。它不实现功能，不新增
 migration，不修改 production/staging 容器，不创建真实用户，不接真实业务。
@@ -21,6 +22,12 @@ C04D 已在已恢复运行的 staging 测试服完成角色目录 UI/API 验收�
 `docs/C04_STAGING_ACCEPTANCE.md`。本轮没有 build、recreate、stop、rm 容器，没有
 执行 `docker-compose up/down`，没有读取真实 `.env.production` 或 `.env.staging`
 文件内容，没有修改 Nginx/证书，没有接真实业务，也没有 git commit。
+
+C04E 已在人工完成 production 发布后做只读验收和归档，结果归档到
+`docs/C04_PRODUCTION_RELEASE.md`。C04B 后端角色目录和 C04C 前端角色目录 UI
+已经进入 production，正式页面为 `https://ops.barongyekhna.com/users`。本轮没有
+重新部署、重建、停止或删除容器，没有读取真实 env，没有创建 production 用户，没有
+修改 Nginx/证书，没有接真实业务，也没有 git commit。
 
 ## 一、为什么要做角色体系
 
@@ -338,7 +345,8 @@ C04 不做这些事：
 - 不接 bot/agent 真实账号。
 - 不让 super_admin 真正拥有全部权限。
 - 不做模块权限。
-- 不发布 production。
+- 不把 C04 扩展成新的 production 部署工程；C04E 只归档已经人工完成的 production
+  发布，不再部署、不重建容器。
 - 不接真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser。
 - 不创建真实业务任务。
 
@@ -436,11 +444,15 @@ C04A 判断：不建议 C04B 新增 migration。
 
 ### C04E：production 发布
 
-- 只在 C04B/C04C/C04D 通过并得到老板明确批准后发布。
-- 发布前后运行 production/staging/dual env smoke。
-- 不读取真实 env。
-- 不重启、删除、重建 production/staging 容器，除非进入单独发布流程并获准。
-- 不接真实业务。
+- 已完成：C04B/C04C 新代码已经由人工发布到 production。
+- 已完成：production `/users` 返回 200。
+- 已完成：未登录访问 production `/api/backend/users/roles` 返回 401。
+- 已完成：production backend health 返回 `environment=production`。
+- 已完成：staging `/users` 和 staging backend health 仍正常。
+- 已完成：production smoke、staging smoke、dual env check 均通过。
+- 已完成：发布归档见 `docs/C04_PRODUCTION_RELEASE.md`。
+- 本轮 C04E-6 只做只读复核和文档归档，不读取真实 env，不创建 production 用户，
+  不重启、删除、重建 production/staging 容器，不修改 Nginx/证书，不接真实业务。
 
 ### C04F：角色体系封板
 
@@ -449,22 +461,22 @@ C04A 判断：不建议 C04B 新增 migration。
 - 记录未做权限系统。
 - 明确 C05 承接 permissions、module access、role_permissions。
 
-## 十三、C04C 当前边界
+## 十三、C04E 当前边界
 
-本轮 C04C：
+本轮 C04E-6：
 
 - 不读取或修改真实 `.env.production` / `.env.staging`。
 - 不打印 secret、token、password。
-- 不创建 production/staging 真实用户。
+- 不创建 production 真实用户。
 - 不操作 production/staging 数据库。
 - 不新增 migration。
-- 不修改后端业务代码。
-- 只修改前端 role catalog 接入、API client、代理 allowlist、验证脚本和文档。
+- 不修改后端或前端业务代码。
+- 只做只读复核和文档归档。
 - 不启动、停止、重启、删除、重建容器。
 - 不修改 Nginx 或证书。
 - 不接真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser。
 - 不创建真实业务任务。
 - 不 git commit。
 
-当前仍然是 foundation/console 阶段。C04 只定义角色体系，不接真实业务。C04D
-staging 验收已完成，下一步是 C04E production 发布评估。
+当前仍然是 foundation/console 阶段。C04 只定义角色体系，不接真实业务。C04E
+production 发布验收归档已完成，下一步是 C04F 角色体系封板。

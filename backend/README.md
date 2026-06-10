@@ -57,10 +57,12 @@ C04A started the role-system stage with `docs/C04_ROLE_SYSTEM_PLAN.md`. C04B
 has added backend role constants, role metadata, unified assignable-role
 validation, tests, and owner-only `GET /users/roles`. C04C connected the
 frontend role catalog UI, and C04D accepted the role catalog API/UI on staging
-in `docs/C04_STAGING_ACCEPTANCE.md`. C04 defines account identity types, not
+in `docs/C04_STAGING_ACCEPTANCE.md`. C04E has released the backend role
+catalog and frontend role catalog UI to production, with the release archive
+in `docs/C04_PRODUCTION_RELEASE.md`. C04 defines account identity types, not
 the complete permission system. The current backend still stores `users.role`
 as a plain string, which is enough for C04 standard role validation and does
-not require a migration in C04B.
+not require a migration in C04.
 
 C04 standard roles are `owner`, `super_admin`, `module_admin`, `operator`,
 `reviewer`, `viewer`, and `bot_agent`. Owner-created `/users` roles remain
@@ -73,8 +75,13 @@ robot-account work. C04D verified on staging that owner can read
 roles cannot be created or assigned, `/auth/register` remains 404, operation
 logs contain user management records, and staging `alembic current` is
 `f07_core_001 (head)`. C05 will define permissions, module access, and
-role-to-permission bindings. C04 still does not connect real n8n, P-series,
-WooCommerce, MinIO, Filebrowser, or real business tasks.
+role-to-permission bindings. C04E verified production `/users` returns 200,
+unauthenticated `/api/backend/users/roles` returns 401, production backend
+health is normal, staging remains normal, and production/staging/dual-env
+checks pass. C04 still does not give `super_admin` power, does not implement
+complete RBAC, and does not connect real n8n, P-series, WooCommerce, MinIO,
+Filebrowser, or real business tasks. The next step is C04F role-system
+sealing.
 
 F12 adds the n8n test webhook bridge:
 
