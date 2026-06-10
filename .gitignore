@@ -32,6 +32,7 @@ node_modules/
 out/
 dist/
 coverage/
+*.tsbuildinfo
 
 # Local editor and OS files.
 .DS_Store

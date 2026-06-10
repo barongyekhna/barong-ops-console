@@ -221,7 +221,9 @@ C05C 的目标是接入权限 dependency 和只读权限合同，不改变真实
 - `POST /users/{user_id}/disable`
 - `POST /users/{user_id}/enable`
 
-把 `/users` 从 owner-only 升级到 `users.manage` 留到 C05D，避免同一轮同时改变用户管理授权面。
+C05D 已承接前端权限感知，但没有把 `/users` 从 owner-only 升级到 `users.manage`。原因是后端
+真实安全边界仍是 `require_owner()`；前端不能提前让普通 `users.manage` 非 owner 看到 User
+Management。后续如需改变 `/users` 授权，必须作为 C06 或独立后端任务处理。
 
 ## 为什么 role defaults 暂不自动生效
 
@@ -235,15 +237,24 @@ C05C 继续保证：
 
 后续权限管理 UI 可以把 role defaults 作为创建 assignment 的建议，但必须由 owner 或被授权管理者明确确认。
 
-## C05D 下一步
+## C05D 承接说明
 
-C05D 建议做：
+C05D 已做：
 
-- 把 `/users` 从 `require_owner()` 升级为 `require_permission("users.manage")`。
-- 明确 `GET /users/roles` 使用 `roles.read` 还是 `users.manage`。
-- 增加权限管理 UI 或最小授权 API 前，先完成 staging 验收方案。
 - 前端读取 `/auth/me.permissions`，但仍以后端 403 作为安全边界。
 - 企业管理菜单按权限隐藏，业务板块无权限显示清晰提示。
+- User Management 前端入口只在 owner full access 时可见。
+- 普通非 owner 即使拥有 `users.manage` assignment，C05D 也不显示 `/users` 入口，因为后端
+  `/users` 仍是 owner-only。
+
+C05D 没有做：
+
+- 没有把 `/users` 从 `require_owner()` 升级为 `require_permission("users.manage")`。
+- 没有决定 `GET /users/roles` 使用 `roles.read` 还是 `users.manage`。
+- 没有增加权限管理 UI 或 grant/revoke API。
+- 没有部署 staging 或 production。
+
+后续如果要开放 User Management，必须先做后端任务并完成 staging 验收。
 
 ## 安全边界
 

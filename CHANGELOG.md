@@ -6,6 +6,18 @@
 
 ### Added
 
+- C05D：新增前端权限感知和基础路由保护；`/auth/me.permissions` 在前端归一化为
+  `is_owner_full_access`、`permission_keys`、`assignments`、`scope_summary`，
+  permissions 缺失或异常时安全降级为无权限且页面不崩溃。
+- C05D：新增 `frontend/src/lib/permissions.ts`、无权访问提示组件和 layout 级
+  `PermissionRouteGuard`；业务板块无权限时保留导航并显示 locked，点击后显示
+  “无权访问此板块”，管理/系统板块无权限时隐藏入口。
+- C05D：新增 `tests/frontend/permissions.test.mjs`，用 Node 内置 test runner 覆盖 owner
+  full access、普通用户业务 locked、业务权限解锁、直接访问 denied、permissions 缺失安全降级、
+  以及 `/users` 仍仅 owner full access 可见。
+- C05D：新增 `docs/C05_PERMISSION_FRONTEND_ACCESS.md`，记录前端权限不是安全边界、
+  business `show_locked`、admin/system `hide_when_denied`、`/users` 仍 owner-only、
+  本轮不做 grant/revoke UI、不接真实业务、不部署 staging/production。
 - C05C：新增后端权限 dependency `require_permission(permission_key, scope_type="global",
   scope_key="*")`；owner 在 dependency 层直接通过，非 owner 只通过 enabled、未过期、
   scope 匹配的 `user_permission_assignments` 获权；`super_admin` 不默认全局权限。
@@ -96,6 +108,11 @@
 
 ### Changed
 
+- C05D：前端导航从静态显示改为权限元数据驱动；`User Management` 入口和页面挡板改为只认
+  `permissions.is_owner_full_access=true`，不向 `super_admin` 或普通 `users.manage`
+  非 owner 开放，因为后端 `/users` 仍是 `require_owner()`。
+- C05D：README、frontend README、C05 权限系统计划和 C05 后端权限文档补充 C05D 承接说明；
+  明确 `/users` 改为 `users.manage` 不是 C05D 范围，必须作为 C06 或独立后端任务处理。
 - C05C：README、backend README、C05 权限系统计划和 C05 权限数据模型文档更新为后端权限
   dependency/API 合同已接入；`/users` 仍保持 `require_owner()`，前端 UI、权限管理页面、
   grant/revoke API、staging/production 发布和真实业务接入仍不在本轮范围。

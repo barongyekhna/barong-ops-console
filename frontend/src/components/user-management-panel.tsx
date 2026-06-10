@@ -21,6 +21,7 @@ import {
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { isOwnerFullAccess } from "@/lib/permissions";
 import {
   MANAGED_USER_ROLES,
   createUser,
@@ -163,7 +164,7 @@ export function UserManagementPanel() {
   const [createRole, setCreateRole] =
     useState<ManagedUserRole>("viewer");
 
-  const isOwner = currentUser?.role === "owner";
+  const isOwner = isOwnerFullAccess(currentUser?.permissions);
   const isBusy = pendingAction !== null;
 
   const loadRoleCatalog = useCallback(async () => {

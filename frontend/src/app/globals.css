@@ -715,6 +715,20 @@ select:focus-visible {
   color: #5ee4b9;
 }
 
+.navigation-link.locked {
+  color: #8b938f;
+}
+
+.navigation-link.locked:hover {
+  color: #ffffff;
+  border-color: #4b4033;
+}
+
+.navigation-lock {
+  margin-left: auto;
+  color: #d5a14c;
+}
+
 .sidebar-footer {
   display: flex;
   align-items: center;
@@ -895,6 +909,44 @@ select:focus-visible {
 
 .empty-state p {
   max-width: 480px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.permission-denied {
+  min-height: 260px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  padding: 42px;
+  background-color: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.permission-denied-icon {
+  width: 48px;
+  height: 48px;
+  display: inline-flex;
+  flex: 0 0 48px;
+  align-items: center;
+  justify-content: center;
+  color: #8a5d13;
+  background: #fff2d7;
+  border: 1px solid #ebd19e;
+  border-radius: 6px;
+}
+
+.permission-denied h2 {
+  margin: 0 0 6px;
+  font-size: 1rem;
+}
+
+.permission-denied p {
+  max-width: 520px;
   margin: 0;
   color: var(--muted);
   font-size: 0.82rem;
@@ -1295,6 +1347,13 @@ select:focus-visible {
   }
 
   .empty-state {
+    min-height: 240px;
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 28px;
+  }
+
+  .permission-denied {
     min-height: 240px;
     align-items: flex-start;
     flex-direction: column;

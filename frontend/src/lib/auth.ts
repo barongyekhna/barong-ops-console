@@ -1,4 +1,8 @@
 import { apiRequest } from "@/lib/api";
+import {
+  normalizeCurrentUserPermissions,
+  type FrontendPermissions,
+} from "@/lib/permissions";
 
 export const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
 
@@ -16,6 +20,17 @@ export type AuthenticatedUser = {
   role: string;
   is_active: boolean;
   last_login_at: string | null;
+  permissions: FrontendPermissions | null;
+};
+
+type AuthenticatedUserPayload = Omit<AuthenticatedUser, "permissions"> & {
+  permissions?: unknown;
+};
+
+type LoginResponsePayload = {
+  access_token: string;
+  token_type: string;
+  user: AuthenticatedUserPayload;
 };
 
 type LoginResponse = {
@@ -24,18 +39,34 @@ type LoginResponse = {
   user: AuthenticatedUser;
 };
 
-export function loginRequest(username: string, password: string) {
-  return apiRequest<LoginResponse>("/auth/login", {
+function normalizeAuthenticatedUser(
+  user: AuthenticatedUserPayload,
+): AuthenticatedUser {
+  return {
+    ...user,
+    permissions: normalizeCurrentUserPermissions(user.permissions),
+  };
+}
+
+export async function loginRequest(username: string, password: string) {
+  const response = await apiRequest<LoginResponsePayload>("/auth/login", {
     method: "POST",
     body: { username, password },
   });
+
+  return {
+    ...response,
+    user: normalizeAuthenticatedUser(response.user),
+  };
 }
 
-export function currentUserRequest(accessToken: string) {
-  return apiRequest<AuthenticatedUser>("/auth/me", {
+export async function currentUserRequest(accessToken: string) {
+  const user = await apiRequest<AuthenticatedUserPayload>("/auth/me", {
     accessToken,
     method: "GET",
   });
+
+  return normalizeAuthenticatedUser(user);
 }
 
 export function logoutRequest(accessToken: string) {

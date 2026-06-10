@@ -289,7 +289,9 @@ C05A starts the permission-system stage with
 `docs/C05_PERMISSION_SYSTEM_PLAN.md`. C05B adds the backend permission data
 model documented in `docs/C05_PERMISSION_DATA_MODEL.md`. C05C adds backend
 permission access enforcement and current-user permission APIs documented in
-`docs/C05_PERMISSION_BACKEND_ACCESS.md`.
+`docs/C05_PERMISSION_BACKEND_ACCESS.md`. C05D adds frontend permission-aware
+navigation, no-permission messaging, and lightweight route protection
+documented in `docs/C05_PERMISSION_FRONTEND_ACCESS.md`.
 
 C05 is about authorization, not business-module onboarding. It does not connect
 real n8n, P-series, WooCommerce, MinIO, Filebrowser, product flows, orders, or
@@ -316,18 +318,21 @@ Current C05 status:
   `require_owner`.
 - Current `/auth/me` keeps the old identity fields and now adds a
   `permissions` object. The login response keeps the older user contract.
-- Current frontend navigation is still static; C05 will later define business
-  module visibility and admin menu hiding rules.
+- Current frontend navigation reads `permissions` from `/auth/me`. Business
+  modules remain visible with a locked state when denied, while admin/system
+  entries are hidden when denied.
 - C05A defines Permission Registry, User Permission Assignment, Role Default
   Permissions, Permission Scope, and Module Permission Manifest concepts;
   C05B implements the first three as backend tables.
 - Ordinary users receive permissions through manual assignment by owner or an
   authorized scoped super_admin.
-- C05C does not add frontend permission UI, does not replace `/users`
-  `require_owner()`, does not add grant/revoke permission APIs, does not deploy
-  staging/production, and does not create real users.
-
-C05D should later upgrade User Management from owner-only to `users.manage`.
+- C05D does not add permission grant/revoke UI, does not replace `/users`
+  `require_owner()`, does not deploy staging/production, and does not connect
+  real business systems.
+- User Management remains owner-only in both backend and frontend. C05D does
+  not expose `/users` to `super_admin` or ordinary non-owner users with
+  `users.manage`; changing `/users` to permission-based access must be C06 or
+  a separate backend task.
 
 ## Temporary login preview
 

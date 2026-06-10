@@ -1,12 +1,13 @@
 "use client";
 
-import { Blocks, LogOut, Menu } from "lucide-react";
+import { Blocks, LockKeyhole, LogOut, Menu } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { navigationGroups, pageTitles } from "@/lib/navigation";
+import { getPermissionAccessState } from "@/lib/permissions";
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -14,6 +15,17 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
+  const visibleNavigationGroups = navigationGroups
+    .map((group) => ({
+      ...group,
+      items: group.items
+        .map((item) => ({
+          ...item,
+          access: getPermissionAccessState(user?.permissions, item),
+        }))
+        .filter((item) => item.access.isVisible),
+    }))
+    .filter((group) => group.items.length > 0);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -43,23 +55,41 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav aria-label="Console navigation" className="sidebar-navigation">
-          {navigationGroups.map((group) => (
+          {visibleNavigationGroups.map((group) => (
             <div className="navigation-group" key={group.label}>
               <span className="navigation-label">{group.label}</span>
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href;
+                const locked = item.access.isLocked;
 
                 return (
                   <Link
                     aria-current={active ? "page" : undefined}
-                    className={`navigation-link ${active ? "active" : ""}`}
+                    aria-label={
+                      locked ? `${item.label} locked` : item.label
+                    }
+                    className={`navigation-link ${active ? "active" : ""} ${
+                      locked ? "locked" : ""
+                    }`}
                     href={item.href}
                     key={item.href}
                     onClick={() => setIsNavigationOpen(false)}
+                    title={
+                      locked
+                        ? "No permission for this section"
+                        : item.label
+                    }
                   >
                     <Icon aria-hidden="true" size={18} />
                     <span>{item.label}</span>
+                    {locked ? (
+                      <LockKeyhole
+                        aria-hidden="true"
+                        className="navigation-lock"
+                        size={14}
+                      />
+                    ) : null}
                   </Link>
                 );
               })}

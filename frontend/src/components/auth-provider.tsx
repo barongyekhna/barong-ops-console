@@ -91,15 +91,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [clearSession, refresh]);
 
-  const login = useCallback(async (username: string, password: string) => {
-    const result = await loginRequest(username, password);
-    window.localStorage.setItem(
-      ACCESS_TOKEN_STORAGE_KEY,
-      result.access_token,
-    );
-    setUser(result.user);
-    setStatus("authenticated");
-  }, []);
+  const login = useCallback(
+    async (username: string, password: string) => {
+      const result = await loginRequest(username, password);
+      window.localStorage.setItem(
+        ACCESS_TOKEN_STORAGE_KEY,
+        result.access_token,
+      );
+
+      let sessionUser = result.user;
+      try {
+        sessionUser = await currentUserRequest(result.access_token);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 401) {
+          clearSession();
+          throw error;
+        }
+      }
+
+      setUser(sessionUser);
+      setStatus("authenticated");
+    },
+    [clearSession],
+  );
 
   const logout = useCallback(async () => {
     const accessToken = readAccessToken();

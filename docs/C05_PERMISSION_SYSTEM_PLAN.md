@@ -18,6 +18,11 @@ C05C 已在 C05B 之后接入后端权限 dependency 和当前用户权限返回
 `GET /permissions/me` 和 `GET /permissions/registry`，并保持 `/users` 暂时 owner-only。
 本阶段不做前端 UI，不做 grant/revoke API，不接真实业务，不发布 production。
 
+C05D 已在 C05C 后接入前端权限感知。C05D 的实现记录见
+`docs/C05_PERMISSION_FRONTEND_ACCESS.md`。C05D 读取 `/auth/me.permissions`，实现 business
+板块 `show_locked`、admin/system 板块 `hide_when_denied`、无权访问提示和基础路由保护。
+C05D 继续保持 `/users` owner-only，不把普通 `users.manage` 非 owner 放进 User Management。
+
 ## 一、为什么要做权限系统
 
 C03 已经让 owner 可以创建内部子账户。C04 已经把标准 role 定清楚。
@@ -564,8 +569,11 @@ def require_permission(
 `/users` 未来升级路径：
 
 - 当前：`Depends(require_owner)`
-- C05D 后：`Depends(require_permission("users.manage"))`
-- `GET /users/roles` 可升级为 `roles.read` 或 `users.manage`，具体 C05D 定。
+- C05D 后：后端仍是 `Depends(require_owner)`，前端也只允许 owner full access 看到
+  User Management。
+- 未来如需改成 `Depends(require_permission("users.manage"))`，必须作为 C06 或独立后端任务，
+  同步更新后端 dependency、测试、staging 验收和前端策略。
+- `GET /users/roles` 如需改为 `roles.read` 或 `users.manage`，也必须放到后续后端任务处理。
 
 `/auth/me` 未来返回建议：
 
@@ -635,7 +643,9 @@ C05 第一版应该做：
 - Permission Registry seed 方案。
 - `require_permission()` 设计和实现。
 - `/auth/me` 返回 permissions 的合同设计和实现。
-- User Management 从 `require_owner` 升级到 `users.manage` 的方案和实现。
+- 前端读取 permissions 并按业务/管理策略显示导航。
+- User Management 保持 owner-only；从 `require_owner` 升级到 `users.manage` 不属于
+  C05D，留给 C06 或独立后端任务。
 - 前端企业管理菜单按权限隐藏。
 - 前端业务板块无权限提示。
 - scope 字段和接口参数预留。
@@ -668,9 +678,10 @@ C05 暂不做：
 - C05C：`require_permission()`、API dependency 接入、只读 permission registry API 和
   `/auth/me.permissions` 合同。C05C 已完成，新增 `/permissions/me` 和 `/permissions/registry`，
   且 `/users` 仍保持 owner-only。
-- C05D：User Management 权限化。把 `/users` 从 `require_owner` 升级到 `users.manage`，前端
-  System 菜单按管理权限隐藏。
-- C05E：前端菜单策略和无权页面。业务板块可见但无权提示，企业管理板块无权限隐藏。
+- C05D：前端权限感知和访问提示。读取 `/auth/me.permissions`，业务板块可见但 locked，
+  企业管理/系统板块无权限隐藏，直接访问无权页面显示无权访问；`/users` 继续 owner-only。
+- C05E：staging 前端权限验收。验证 owner、无权限普通用户、单一业务权限用户和 `/users`
+  owner-only 行为。
 - C05F：staging 权限验收。验证 owner 全局权限、普通用户无授权 403、有授权可访问、scope 预留不破坏现有功能。
 - C05G：production 发布。按 OPS01 safe release 流程发布，先 backend 再 frontend，保留 rollback tag。
 - C05H：权限系统封板。归档最终行为、风险、未做范围和后续模块接入规则。

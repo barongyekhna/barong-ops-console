@@ -140,18 +140,29 @@ Nginx/certificates, commit, or connect real business systems. C04 is sealed;
 OPS01 Docker Compose v1 `ContainerConfig` issue cleanup is also sealed, and
 C05A has started permissions / RBAC design.
 
-C05A is documented in `docs/C05_PERMISSION_SYSTEM_PLAN.md`. It does not change
-frontend behavior. Current navigation is still the static
-`frontend/src/lib/navigation.ts` catalog, and the User Management page still
-checks `currentUser?.role === "owner"` before loading owner-only data. C05D/E
-should later split menu behavior: business modules may remain visible and show
-a no-permission state after click, while enterprise management entries such as
-User Management, permission management, and Settings should be hidden unless
-the user has the corresponding management permission.
+C05A is documented in `docs/C05_PERMISSION_SYSTEM_PLAN.md`. C05B adds the
+backend permission data model, C05C adds `/auth/me.permissions` and read-only
+permission APIs, and C05D adds frontend permission awareness documented in
+`docs/C05_PERMISSION_FRONTEND_ACCESS.md`.
+
+C05D reads `permissions` from `GET /auth/me`, safely downgrades missing or
+malformed permissions to no access, and uses `frontend/src/lib/permissions.ts`
+for owner wildcard, exact permission, navigation, and route decisions.
+Business navigation items remain visible with a locked state when denied and
+show the no-permission notice after click. Admin/system navigation items are
+hidden when denied. Direct access to a denied protected route shows
+“无权访问此板块”.
+
+User Management remains owner-only in C05D. The `/users` entry is visible only
+when `permissions.is_owner_full_access=true`, and the page guard does not open
+it to `super_admin` or non-owner users with `users.manage`, because the backend
+still uses `require_owner()` for `/users`. Moving `/users` to `users.manage`
+must be a later backend task.
 
 C05 is not a real business-module connection stage. The frontend still does
-not connect real n8n, P-series, WooCommerce, MinIO, Filebrowser, products,
-orders, or business tasks.
+not add permission grant/revoke management, and it still does not connect real
+n8n, P-series, WooCommerce, MinIO, Filebrowser, products, orders, or business
+tasks.
 
 ## Configuration
 
