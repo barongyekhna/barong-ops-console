@@ -196,6 +196,12 @@ OPS01C staging safe release 演练通过。
 - 没有修改 Nginx 或证书。
 - 没有接真实业务。
 
-下一步 OPS01D：基于 OPS01C 结果，治理 production safe release 演练/发布流程。
-OPS01D 必须先 dry-run，必须显式确认 production 映射和 project name，必须继续禁止
-postgres、禁止 `down`、禁止读取真实 env、禁止接真实业务。
+OPS01D-1 已基于 OPS01C 结果完成 production backend/frontend safe release dry-run
+和映射复核，归档见 `docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`。OPS01D-1 没有
+真实发布 production。
+
+下一步 OPS01D-2 才能做 production safe release 真实演练。OPS01D-2 必须先 backend、
+后 frontend，一次只动一个服务，必须先打 rollback tag，必须有 health check 和 smoke
+check，必须继续禁止 postgres、禁止 `down`、禁止读取真实 env、禁止接真实业务。
+production 真实执行必须同时设置 `CONFIRM_SAFE_RELEASE=yes` 和
+`CONFIRM_PRODUCTION_RELEASE=yes`。

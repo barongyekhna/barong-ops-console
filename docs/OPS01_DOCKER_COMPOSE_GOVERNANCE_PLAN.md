@@ -272,11 +272,18 @@ OPS01C：staging 发布脚本改造与演练
 
 OPS01D：production 发布脚本改造与演练
 
-- 新增或改造 production-only 发布脚本。
+- OPS01D-1 已完成 production backend/frontend dry-run 和映射复核，归档见
+  `docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`。
+- OPS01D-1 没有真实发布 production，没有 build，没有 `up/down`，没有删除、停止、
+  重启或重建任何容器。
 - 明确 project：`barong-ops-console-prod`。
 - 只允许 `console_backend` / `console_frontend`。
 - 禁止 `down`，默认不动 `console_postgres`。
-- 发布后运行 production smoke、staging smoke 和 dual-env check。
+- production 真实执行必须 double confirmation：
+  `CONFIRM_SAFE_RELEASE=yes` 和 `CONFIRM_PRODUCTION_RELEASE=yes`。
+- OPS01D-2 才能做 production 真实演练，必须一次只动一个服务，先 backend 再
+  frontend。
+- 发布前后都要运行 production smoke、staging smoke 和 dual-env check。
 
 OPS01E：文档和回滚流程封板
 
@@ -356,3 +363,48 @@ OPS01C 说明：本次演练证明当前 v1 safe release 流程可以替代
 `docker-compose v1 --force-recreate` 的高风险路径。它只删除目标 service 容器，再用
 `up -d --no-deps --no-build SERVICE` 创建目标 service，没有触发
 `KeyError: 'ContainerConfig'`。
+
+## 13. OPS01D-1 验证
+
+OPS01D-1 已在 2026-06-10 UTC 完成 production dry-run 和安全门禁复核。
+
+实际执行范围：
+
+- 只读检查 production/staging 当前状态。
+- dry-run production backend。
+- dry-run production frontend。
+- 更新文档和 dry-run 输出门禁说明。
+- 没有真实发布 production。
+- 没有 build、`up/down`、stop、restart、rm 或 recreate 容器。
+- 没有读取或打印真实 env。
+- 没有修改 Nginx 或证书。
+- 没有接真实业务。
+
+production backend dry-run 映射：
+
+- project：`barong-ops-console-prod`
+- compose：`docker-compose.production.yml`
+- service：`console_backend`
+- container：`barong-ops-console-prod_console_backend_1`
+- health：`http://127.0.0.1:8000/health`
+
+production frontend dry-run 映射：
+
+- project：`barong-ops-console-prod`
+- compose：`docker-compose.production.yml`
+- service：`console_frontend`
+- container：`barong-ops-console-prod_console_frontend_1`
+- health：`https://ops.barongyekhna.com/login`
+
+验证结果：
+
+- `./scripts/check_safe_release_plan.sh`：通过。
+- production backend dry-run：映射正确，double confirmation 显示正确。
+- production frontend dry-run：映射正确，double confirmation 显示正确。
+- `./scripts/production_smoke_check.sh`：通过。
+- `./scripts/staging_smoke_check.sh`：通过。
+- `./scripts/check_dual_env_status.sh`：通过。
+
+OPS01D-1 后的下一步是 OPS01D-2。OPS01D-2 才允许 production safe release 真实演练，
+并且必须先 backend、后 frontend，一次只动一个服务，先打 rollback tag，再等 health
+check 和 smoke 通过。OPS01D-2 仍然不接真实业务。

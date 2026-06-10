@@ -6,6 +6,7 @@
 
 ### Added
 
+- OPS01D-1：新增 `docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`，归档 production backend/frontend safe release dry-run、映射复核和安全门禁检查；本轮确认 production/staging smoke 和 dual-env status 通过，production backend 映射到 `barong-ops-console-prod_console_backend_1` / `http://127.0.0.1:8000/health`，production frontend 映射到 `barong-ops-console-prod_console_frontend_1` / `https://ops.barongyekhna.com/login`；本轮没有真实发布 production，没有 build、up/down、停止、删除、重建容器，没有读取真实 env，没有修改 Nginx/证书，没有接真实业务。
 - OPS01C：新增 `docs/OPS01_STAGING_SAFE_RELEASE_ACCEPTANCE.md`，归档 staging safe release 真实演练结果；本轮使用 `scripts/safe_compose_release.sh` 分别发布 staging backend 和 staging frontend，绕开 `docker-compose` v1 `--force-recreate` 的 `ContainerConfig` 风险路径，生成 staging backend/frontend rollback tag，确认 staging smoke、production smoke 和 dual-env status 均通过；本轮未发布 production，未停止/删除/重建 staging postgres，未读取真实 env，未修改 Nginx/证书，未接真实业务。
 - OPS01B-alt：新增 `scripts/safe_compose_release.sh`、`scripts/check_safe_release_plan.sh` 和 `docs/OPS01_SAFE_RELEASE_RUNBOOK.md`，准备基于当前 `docker-compose` v1.29.2 的短期安全发布流程；脚本默认 dry-run，真实执行必须显式 `--execute` 和确认变量，只允许 staging/production 的 backend/frontend，禁止 postgres，所有 `docker-compose` 调用必须带 project name 和 compose file。本阶段只做脚本、文档和 dry-run 检查，没有真实发布 staging/production，没有删除、停止、重建容器，没有读取真实 env，没有修改 Nginx/证书，没有接真实业务。
 - OPS01A：新增 `docs/OPS01_DOCKER_COMPOSE_GOVERNANCE_PLAN.md`，用大白话归档 Docker / Compose 当前状态、项目脚本 Compose 用法扫描、`docker-compose` v1 `KeyError: 'ContainerConfig'` 根因判断、三种治理方案对比、推荐 staging-first 路线、绝对禁止项和 OPS01B-OPS01E 后续拆分；本轮只做只读审计和文档方案，不安装/升级工具，不重启/删除/重建 production/staging 容器，不读取真实 env，不修改 Nginx/证书，不接真实业务。
@@ -72,6 +73,7 @@
 
 ### Changed
 
+- OPS01D-1：`scripts/safe_compose_release.sh` 的 dry-run 输出现在显式打印 `env=...`、`project=...`、`compose=...`、`container=...`、`health=...` 和安全门禁；`scripts/check_safe_release_plan.sh` 增强为检查默认 dry-run、production double confirmation、staging 单确认、env/service allowlist、postgres 拒绝、禁止 `down`、禁止 `docker stop/restart`、所有 Compose v1 命令带 project name。README、OPS01 runbook、OPS01 governance plan 和 OPS01C staging acceptance 同步为 OPS01D-1 已完成 production dry-run，production 尚未真实发布，下一步 OPS01D-2 才做 production safe release 真实演练。
 - OPS01C：README、OPS01 safe release runbook 和 OPS01 Docker Compose governance plan 更新为 staging safe release 演练已完成；文档明确 OPS01C 只动 staging backend/frontend，staging postgres 和 production 未被发布或重建，rollback tag 只作为后续人工回滚参考，本阶段不执行 rollback，下一步 OPS01D 再治理 production safe release 演练和发布流程。
 - OPS01B-alt：OPS01 Docker Compose 治理说明更新为 Compose v2 安装路线暂因 apt 找不到 `docker-compose-plugin` 暂停，当前采用短期 B-alt 路线准备安全发布脚本；Compose v2 后续可以单独评估，但不打断当前项目。README 同步说明新增 safe release runbook 和 dry-run script，当前还没有真实使用脚本发布 staging/production，下一步 OPS01C 是 staging 演练。
 - OPS01A：README 更新为 OPS01 已开始，目标是治理 Docker Compose v1 `ContainerConfig` 发布问题；当前只做审计方案，不改运行环境，后续先 OPS01B 处理 Compose v2 或安全 fallback，再 staging-first 演练发布脚本，最后才进入 production。

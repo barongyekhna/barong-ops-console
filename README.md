@@ -275,8 +275,18 @@ The acceptance record is in
 OPS01C used the script to publish only staging backend/frontend, generated
 staging rollback tags, kept staging postgres healthy, and left production to
 read-only smoke/status checks. No real env files, Nginx/certificates, or real
-business systems were touched. The next step is OPS01D: production safe release
-script rehearsal and release-flow governance.
+business systems were touched.
+
+OPS01D-1 has completed the production backend/frontend safe release dry-run and
+mapping review. The archive is in
+`docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`. Production has not been
+released by the safe release script yet; no containers were started, stopped,
+removed, or recreated. Real production execution still requires both
+`CONFIRM_SAFE_RELEASE=yes` and `CONFIRM_PRODUCTION_RELEASE=yes`.
+
+The next step is OPS01D-2: production safe release real rehearsal. It must move
+one service at a time, backend first and then frontend, with a rollback tag,
+health check, production/staging smoke checks, and no real business integration.
 
 ## Temporary login preview
 

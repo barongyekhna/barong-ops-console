@@ -140,6 +140,31 @@ print_plan() {
     printf 'compose service: %s\n' "$compose_service"
     printf 'container name: %s\n' "$container_name"
     printf 'health check URL: %s\n' "$health_url"
+    printf 'env=%s\n' "$target_env"
+    printf 'service=%s\n' "$target_service"
+    printf 'project=%s\n' "$project_name"
+    printf 'compose=%s\n' "$compose_file"
+    printf 'compose_service=%s\n' "$compose_service"
+    printf 'container=%s\n' "$container_name"
+    printf 'health=%s\n' "$health_url"
+    printf '\n%s\n' "Safe release safeguards"
+    printf '%s\n' "default mode: dry-run"
+    printf '%s\n' "allowed envs: staging, production"
+    printf '%s\n' "allowed target services: backend, frontend"
+    printf '%s\n' "postgres target is forbidden."
+    printf '%s\n' "down is forbidden."
+    printf '%s\n' "docker stop/restart is forbidden."
+    printf '%s\n' "all Compose v1 commands use -p project and -f compose."
+    printf '%s\n' "execution requires --execute and CONFIRM_SAFE_RELEASE=yes."
+    if [[ "$target_env" == "production" ]]; then
+        printf '%s\n' \
+            "production execution also requires CONFIRM_PRODUCTION_RELEASE=yes."
+    else
+        printf '%s\n' \
+            "staging execution requires CONFIRM_SAFE_RELEASE=yes; CONFIRM_PRODUCTION_RELEASE is not required."
+    fi
+    printf '%s\n' \
+        "dry-run does not execute build, tag, rm, up, smoke, or health checks."
 }
 
 print_dry_run_steps() {
