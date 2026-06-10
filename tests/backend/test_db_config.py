@@ -18,6 +18,9 @@ CORE_BUSINESS_TABLES = {
     "context_packets",
     "memory_summaries",
     "agent_memory_access_logs",
+    "permission_registry",
+    "user_permission_assignments",
+    "role_default_permissions",
 }
 
 

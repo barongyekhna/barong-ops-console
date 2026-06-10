@@ -2,11 +2,12 @@
 
 This directory contains the F05 FastAPI foundation, F06 migration mechanism,
 F07 core tables, F08 authentication, F10 foundation APIs, F11 Foundation Demo,
-F12 n8n Test Bridge, C03 owner-only user management API, and C04B backend
-role constants/validation. C05A has started permission-system design only; no
-backend permission implementation or migration has been added yet. F13 accepts
-this backend as an empty foundation; it does not add a real business
-integration.
+F12 n8n Test Bridge, C03 owner-only user management API, C04B backend role
+constants/validation, and C05B backend permission data-model groundwork. C05B
+adds permission tables, seed/upsert, repositories, services, owner full-access
+resolution, and tests; it does not expose permission APIs, replace
+`require_owner()`, add frontend permission UI, deploy production, or connect a
+real business integration.
 
 C01 production deployment is complete for
 `https://ops.barongyekhna.com`. The production backend service is named
@@ -92,19 +93,24 @@ Nginx/certificates, commit, or connect real business systems. C04 is sealed;
 OPS01 Docker Compose v1 `ContainerConfig` issue cleanup is also sealed, and
 C05A has started permissions / RBAC design.
 
-C05A is documented in `docs/C05_PERMISSION_SYSTEM_PLAN.md`. It does not change
-backend behavior. The current backend still has no authorization Permission
-Registry, no User Permission Assignment table, no Role Default Permissions
-table, no scoped permission enforcement, and no `require_permission()` helper.
-`/auth/me` still returns only identity fields: `id`, `username`, `role`,
-`is_active`, and `last_login_at`.
+C05A is documented in `docs/C05_PERMISSION_SYSTEM_PLAN.md`. C05B is documented
+in `docs/C05_PERMISSION_DATA_MODEL.md`. C05B adds:
 
-C05A recommends that C05B add permission tables staging-first if the project is
-ready to implement real manual authorization. Owner should remain globally
-authorized without per-permission assignment rows, while `super_admin` should
-only receive scoped permissions granted by owner or another authorized account.
-Current `/users` routes remain owner-only until C05D upgrades them to
-`users.manage`.
+- `permission_registry`
+- `user_permission_assignments`
+- `role_default_permissions`
+
+The current backend now has a permission registry seed source, registry
+upsert, user assignment grant/disable/revoke helpers, role default permission
+storage, and `user_has_permission()` / `resolve_effective_permissions()` service
+helpers. Owner is treated as full global access without assignment rows.
+`super_admin` receives no permissions from role alone and must have scoped
+assignments.
+
+C05B still does not add `require_permission()`, does not return permissions
+from `/auth/me`, does not expose public permission APIs, and does not change
+current `/users` owner-only behavior. `/auth/me` still returns only identity
+fields: `id`, `username`, `role`, `is_active`, and `last_login_at`.
 
 F12 adds the n8n test webhook bridge:
 
@@ -226,8 +232,9 @@ frontend build, Compose validation, diff checks, and safety scans with:
 ```
 
 The database test performs `alembic upgrade head`, `downgrade base`, a second
-`upgrade head`, and `alembic check`. The accepted foundation has one migration:
-`f07_core_001`. F13 adds no migration or dependency.
+`upgrade head`, and `alembic check`. The accepted foundation started with
+`f07_core_001`; C05B adds `c05b_permissions_001` for permission data-model
+tables. F13 itself adds no migration or dependency.
 
 Initialize an example owner from environment variables with:
 

@@ -18,6 +18,9 @@ CORE_TABLES = {
     "context_packets",
     "memory_summaries",
     "agent_memory_access_logs",
+    "permission_registry",
+    "user_permission_assignments",
+    "role_default_permissions",
 }
 
 STABLE_ID_FIELDS = {
@@ -34,6 +37,7 @@ STABLE_ID_FIELDS = {
     "context_packets": "context_packet_id",
     "memory_summaries": "memory_summary_id",
     "agent_memory_access_logs": "access_id",
+    "permission_registry": "permission_key",
 }
 
 MINIMUM_FIELDS = {
@@ -261,6 +265,44 @@ MINIMUM_FIELDS = {
         "result",
         "denial_reason",
         "created_at",
+    },
+    "permission_registry": {
+        "id",
+        "permission_key",
+        "module_key",
+        "category",
+        "action",
+        "label",
+        "description",
+        "risk_level",
+        "menu_policy",
+        "is_system",
+        "is_enabled",
+        "created_at",
+        "updated_at",
+    },
+    "user_permission_assignments": {
+        "id",
+        "user_id",
+        "permission_key",
+        "scope_type",
+        "scope_key",
+        "granted_by_user_id",
+        "reason",
+        "is_enabled",
+        "expires_at",
+        "created_at",
+        "updated_at",
+    },
+    "role_default_permissions": {
+        "id",
+        "role",
+        "permission_key",
+        "scope_type",
+        "scope_key",
+        "is_enabled",
+        "created_at",
+        "updated_at",
     },
 }
 

@@ -15,6 +15,9 @@ CORE_BUSINESS_TABLES = {
     "context_packets",
     "memory_summaries",
     "agent_memory_access_logs",
+    "permission_registry",
+    "user_permission_assignments",
+    "role_default_permissions",
 }
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -37,12 +40,19 @@ def test_alembic_targets_empty_metadata() -> None:
     assert "get_settings().database_url" in env_source
 
 
-def test_versions_contain_only_f07_core_foundation_migration() -> None:
+def test_versions_contain_core_and_permission_migrations() -> None:
     migration_files = sorted(VERSIONS_ROOT.glob("*.py"))
 
-    assert len(migration_files) == 1
+    assert len(migration_files) == 2
     assert migration_files[0].name.endswith("create_core_foundation_tables.py")
+    assert migration_files[1].name.endswith("create_permission_tables.py")
 
-    migration_source = migration_files[0].read_text(encoding="utf-8").lower()
-    assert "insert" not in migration_source
-    assert all(table_name in migration_source for table_name in CORE_BUSINESS_TABLES)
+    migration_sources = [
+        migration_file.read_text(encoding="utf-8").lower()
+        for migration_file in migration_files
+    ]
+    assert all("insert" not in source for source in migration_sources)
+    assert all(
+        any(table_name in source for source in migration_sources)
+        for table_name in CORE_BUSINESS_TABLES
+    )

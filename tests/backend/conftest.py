@@ -16,6 +16,11 @@ from backend.app.models.memory import (
     MemorySummary,
 )
 from backend.app.models.operation_log import OperationLog
+from backend.app.models.permission import (
+    PermissionRegistry,
+    RoleDefaultPermission,
+    UserPermissionAssignment,
+)
 from backend.app.models.registry import (
     AgentRegistry,
     ModuleRegistry,
@@ -39,6 +44,9 @@ def clear_auth_tables() -> None:
         db.execute(delete(JobEvent))
         db.execute(delete(OperationLog))
         db.execute(delete(AutomationJob))
+        db.execute(delete(UserPermissionAssignment))
+        db.execute(delete(RoleDefaultPermission))
+        db.execute(delete(PermissionRegistry))
         db.execute(delete(AgentRegistry))
         db.execute(delete(WorkflowRegistry))
         db.execute(delete(ModuleRegistry))

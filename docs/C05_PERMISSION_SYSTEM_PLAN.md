@@ -7,6 +7,12 @@
 C05A 只做审计、设计、数据模型建议、后续任务拆分和文档更新。不实现功能，不新增
 migration，不部署，不修改 production/staging，不接真实业务。
 
+C05B 已在此方案之后开始落地后端权限数据地基。C05B 的实现记录见
+`docs/C05_PERMISSION_DATA_MODEL.md`。C05B 新增 `permission_registry`、
+`user_permission_assignments`、`role_default_permissions` 三张表，以及后端 seed/upsert、
+基础查询服务、owner 全局 resolver 和测试。C05B 仍不做前端权限 UI，不接 `/auth/me.permissions`
+正式响应，不替换 `require_owner()`，不发布 production。
+
 ## 一、为什么要做权限系统
 
 C03 已经让 owner 可以创建内部子账户。C04 已经把标准 role 定清楚。
@@ -653,8 +659,9 @@ C05 暂不做：
 建议把 C05 拆成更安全的小步：
 
 - C05B：后端权限目录、数据模型和 migration。新增 `permission_registry`、
-  `user_permission_assignments`、`role_default_permissions`，完成 seed/upsert 和测试。
-- C05C：权限解析服务、`require_permission()`、owner wildcard、scoped permission 查询和
+  `user_permission_assignments`、`role_default_permissions`，完成 seed/upsert、owner 全局
+  resolver、基础查询服务和测试。
+- C05C：`require_permission()`、API dependency 接入、只读 permission registry API 和
   `/auth/me.permissions` 合同。
 - C05D：User Management 权限化。把 `/users` 从 `require_owner` 升级到 `users.manage`，前端
   System 菜单按管理权限隐藏。

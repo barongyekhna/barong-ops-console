@@ -6,6 +6,15 @@
 
 ### Added
 
+- C05B：新增后端权限数据模型与 migration `c05b_permissions_001`，创建
+  `permission_registry`、`user_permission_assignments`、`role_default_permissions`
+  三张表；新增 SQLAlchemy models、Pydantic schemas、permission seed 常量、
+  registry upsert、assignment grant/revoke/disable、role default storage、owner
+  全局 resolver、非 owner scoped assignment 查询服务和权限测试；本轮不新增公开 API，
+  不替换 `require_owner()`，不修改前端 UI，不发布 staging/production，不接真实业务。
+- C05B：新增 `docs/C05_PERMISSION_DATA_MODEL.md`，记录 registry 与 assignment 的区别、
+  owner 为什么不需要逐条 assignment、`super_admin` 为什么不能默认全局、role defaults
+  当前不自动生效、scope 第一版预留和 C05C/C05D 下一步。
 - C05A：新增 `docs/C05_PERMISSION_SYSTEM_PLAN.md`，开始权限系统阶段，只做现状审计和设计方案；文档记录当前 owner 判断、`require_owner`、`/users` owner-only、`/auth/me` 返回字段、静态前端菜单、当前没有真实 user permission/scope assignment，并提出 Permission Registry、User Permission Assignment、Role Default Permissions、Permission Scope、Module Permission Manifest、第一批基础权限点、业务/管理菜单策略、migration 判断和 C05B-C05H 后续拆分；本轮不实现功能、不新增 migration、不部署、不修改 production/staging、不接真实业务。
 - OPS01E：新增 `docs/OPS01_SAFE_RELEASE_SEAL.md`，归档 Docker Compose v1 `ContainerConfig` 问题治理最终封板结论；本轮只做只读复核和文档封板，确认 safe release plan check 通过、staging/production backend/frontend 四个 dry-run 映射正确、production/staging smoke 和 dual-env status 通过、rollback tag 存在；本轮没有安装或升级工具，没有执行真实 release，没有设置确认变量，没有读取真实 env，没有修改 Nginx/证书，没有接真实业务，没有 git commit。
 - OPS01D-3：新增 `docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`，归档 production backend/frontend safe release 真实演练结果；OPS01D-2 已使用 `scripts/safe_compose_release.sh` 先后完成 production backend 和 production frontend 真实发布，两次都使用 `CONFIRM_SAFE_RELEASE=yes`、`CONFIRM_PRODUCTION_RELEASE=yes` 和 `--execute`，均未触发 `docker-compose` v1 `KeyError: 'ContainerConfig'`，已生成 production backend/frontend rollback tag，production smoke、staging smoke 和 dual-env status 均通过；本轮 OPS01D-3 只做只读复核和文档归档，没有重新发布、重建、停止或删除容器，没有读取真实 env，没有修改 Nginx/证书，没有接真实业务。
@@ -76,6 +85,9 @@
 
 ### Changed
 
+- C05B：README、backend README 和 C05 权限系统计划更新为后端权限数据地基已实现；当前仍不暴露
+  `/auth/me.permissions`，不增加 permission API，不修改前端权限菜单，不把 `/users` 从
+  `require_owner` 切到 `users.manage`，C05C/C05D 继续处理正式 enforcement 和 UI 接入。
 - C05A：README、backend README、frontend README 和 C04 角色体系封板文档更新为 C05 权限系统已开始；说明 C05 目标是权限基础设施而不是业务模块接入，当前仍未接真实业务，`super_admin` 仍不是全局 owner，C05B 如实现 User Permission Assignment 和 Permission Registry 应 staging-first 新增 migration。
 - OPS01E：README、OPS01 safe release runbook、OPS01 Docker Compose governance plan、OPS01 production acceptance、OPS01 production dry-run 归档和 OPS01 staging acceptance 归档更新为 OPS01 已封板；文档明确当前仍未安装 Compose v2，后续 backend/frontend 发布默认使用 `scripts/safe_compose_release.sh`，不再默认使用 `docker-compose --force-recreate`，下一阶段回到 C05 权限系统。
 - OPS01D-3：README、OPS01 safe release runbook、OPS01 Docker Compose governance plan、OPS01 production dry-run 归档和 OPS01 staging acceptance 归档更新为 production safe release 真实演练已完成；文档明确 backend/frontend 都已在 production 演练成功，`ContainerConfig` 问题未复现，当前仍未安装 Compose v2，仍保留 `docker-compose` v1.29.2，但后续 production backend/frontend 发布应优先使用 `scripts/safe_compose_release.sh`，不要把 `docker-compose --force-recreate` 作为默认发布方式；后来 OPS01E 做安全发布流程封板。
