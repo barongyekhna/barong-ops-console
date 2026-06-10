@@ -212,3 +212,23 @@ C04 已完成。
 - C04 不做完整 RBAC。
 - C05 才做 permissions / RBAC。
 - C04 后先做 OPS01：Docker Compose v1 `ContainerConfig` 问题治理。
+
+## 十二、C05A 承接说明
+
+OPS01 安全发布流程治理已封板后，C05A 已开始权限系统阶段。C05A 文档见
+`docs/C05_PERMISSION_SYSTEM_PLAN.md`。
+
+C05 目标是权限基础设施，不是新增业务板块。当前仍不接真实 n8n、P 系列、WooCommerce、
+MinIO、Filebrowser、产品、订单或业务任务。
+
+C05A 明确：
+
+- role 只是身份，不等于最终权限。
+- owner 拥有所有公司、所有工厂、所有组织、所有板块、所有权限，不需要逐条 assignment。
+- `super_admin` 不是全局 owner，必须在被授权 scope 内管理。
+- 普通员工通过 owner 或被授权的 scoped super_admin 手动分配权限。
+- 业务板块菜单可以显示，无权限点击后提示无权。
+- 企业管理板块没有权限则菜单不显示。
+- 新模块必须自带 Permission Manifest，注册时写入 Permission Registry。
+- C05B 如实现 Permission Registry 和 User Permission Assignment，应 staging-first 新增
+  migration；C05A 不新增 migration。

@@ -244,7 +244,7 @@ Current C04 status:
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
 C04 is sealed. OPS01 Docker Compose v1 `ContainerConfig` cleanup is also
-sealed. The next stage is C05 permissions / RBAC.
+sealed. C05A has started permissions / RBAC design.
 
 ## OPS01 Docker Compose governance
 
@@ -280,7 +280,42 @@ The OPS01 records are:
 
 Future staging/production backend/frontend releases should prefer
 `scripts/safe_compose_release.sh` instead of `docker-compose --force-recreate`.
-OPS01 is complete; the next stage is C05 permissions / RBAC.
+OPS01 is complete. C05A has now started the permissions / RBAC stage with a
+design-only audit and plan.
+
+## C05 permission system
+
+C05A starts the permission-system stage with
+`docs/C05_PERMISSION_SYSTEM_PLAN.md`.
+
+C05 is about authorization, not business-module onboarding. It does not connect
+real n8n, P-series, WooCommerce, MinIO, Filebrowser, product flows, orders, or
+business tasks.
+
+Current C05A status:
+
+- C05A audits the existing auth, role, user-management, frontend navigation,
+  and role-system tests/docs.
+- Current `/users` management remains owner-only through backend
+  `require_owner`.
+- Current `/auth/me` returns user identity fields only; it does not return
+  permissions or scopes yet.
+- Current frontend navigation is still static; C05 will later define business
+  module visibility and admin menu hiding rules.
+- C05A defines Permission Registry, User Permission Assignment, Role Default
+  Permissions, Permission Scope, and Module Permission Manifest concepts.
+- Owner will remain the global highest-permission account and should not need
+  per-permission assignment rows.
+- `super_admin` is not a global owner; it must receive scoped assignments
+  before it can manage anything.
+- Ordinary users receive permissions through manual assignment by owner or an
+  authorized scoped super_admin.
+- C05A does not implement permission code, does not add a migration, does not
+  deploy staging/production, and does not create real users.
+
+C05B is expected to decide and implement the backend permission data model
+staging-first. Long-term permission assignment requires new tables; C05A only
+documents that recommendation.
 
 ## Temporary login preview
 

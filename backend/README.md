@@ -3,8 +3,10 @@
 This directory contains the F05 FastAPI foundation, F06 migration mechanism,
 F07 core tables, F08 authentication, F10 foundation APIs, F11 Foundation Demo,
 F12 n8n Test Bridge, C03 owner-only user management API, and C04B backend
-role constants/validation. F13 accepts this
-backend as an empty foundation; it does not add a real business integration.
+role constants/validation. C05A has started permission-system design only; no
+backend permission implementation or migration has been added yet. F13 accepts
+this backend as an empty foundation; it does not add a real business
+integration.
 
 C01 production deployment is complete for
 `https://ops.barongyekhna.com`. The production backend service is named
@@ -87,8 +89,22 @@ returns 200, unauthenticated `/api/backend/users/roles` and
 404, and production/staging/dual-env checks pass. C04F did not read real env
 files, create production users, restart/rebuild/remove containers, modify
 Nginx/certificates, commit, or connect real business systems. C04 is sealed;
-the next step is OPS01 Docker Compose v1 `ContainerConfig` issue cleanup,
-followed by C05 permissions / RBAC.
+OPS01 Docker Compose v1 `ContainerConfig` issue cleanup is also sealed, and
+C05A has started permissions / RBAC design.
+
+C05A is documented in `docs/C05_PERMISSION_SYSTEM_PLAN.md`. It does not change
+backend behavior. The current backend still has no authorization Permission
+Registry, no User Permission Assignment table, no Role Default Permissions
+table, no scoped permission enforcement, and no `require_permission()` helper.
+`/auth/me` still returns only identity fields: `id`, `username`, `role`,
+`is_active`, and `last_login_at`.
+
+C05A recommends that C05B add permission tables staging-first if the project is
+ready to implement real manual authorization. Owner should remain globally
+authorized without per-permission assignment rows, while `super_admin` should
+only receive scoped permissions granted by owner or another authorized account.
+Current `/users` routes remain owner-only until C05D upgrades them to
+`users.manage`.
 
 F12 adds the n8n test webhook bridge:
 

@@ -137,8 +137,21 @@ unauthenticated `/api/backend/users/roles` and `/api/backend/users` return
 production/staging/dual-env checks pass. C04F did not read real env files,
 create production users, restart/rebuild/remove containers, modify
 Nginx/certificates, commit, or connect real business systems. C04 is sealed;
-the next step is OPS01 Docker Compose v1 `ContainerConfig` issue cleanup,
-followed by C05 permissions / RBAC.
+OPS01 Docker Compose v1 `ContainerConfig` issue cleanup is also sealed, and
+C05A has started permissions / RBAC design.
+
+C05A is documented in `docs/C05_PERMISSION_SYSTEM_PLAN.md`. It does not change
+frontend behavior. Current navigation is still the static
+`frontend/src/lib/navigation.ts` catalog, and the User Management page still
+checks `currentUser?.role === "owner"` before loading owner-only data. C05D/E
+should later split menu behavior: business modules may remain visible and show
+a no-permission state after click, while enterprise management entries such as
+User Management, permission management, and Settings should be hidden unless
+the user has the corresponding management permission.
+
+C05 is not a real business-module connection stage. The frontend still does
+not connect real n8n, P-series, WooCommerce, MinIO, Filebrowser, products,
+orders, or business tasks.
 
 ## Configuration
 
