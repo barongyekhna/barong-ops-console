@@ -3,11 +3,12 @@
 This directory contains the F05 FastAPI foundation, F06 migration mechanism,
 F07 core tables, F08 authentication, F10 foundation APIs, F11 Foundation Demo,
 F12 n8n Test Bridge, C03 owner-only user management API, C04B backend role
-constants/validation, and C05B backend permission data-model groundwork. C05B
-adds permission tables, seed/upsert, repositories, services, owner full-access
-resolution, and tests; it does not expose permission APIs, replace
-`require_owner()`, add frontend permission UI, deploy production, or connect a
-real business integration.
+constants/validation, C05B backend permission data-model groundwork, and C05C
+backend permission dependency/API access. C05C adds `require_permission()`,
+`/auth/me.permissions`, read-only `/permissions/me` and
+`/permissions/registry`, while keeping `/users` owner-only and leaving frontend
+permission UI, grant/revoke APIs, production deploy, and real business
+integration out of scope.
 
 C01 production deployment is complete for
 `https://ops.barongyekhna.com`. The production backend service is named
@@ -94,7 +95,8 @@ OPS01 Docker Compose v1 `ContainerConfig` issue cleanup is also sealed, and
 C05A has started permissions / RBAC design.
 
 C05A is documented in `docs/C05_PERMISSION_SYSTEM_PLAN.md`. C05B is documented
-in `docs/C05_PERMISSION_DATA_MODEL.md`. C05B adds:
+in `docs/C05_PERMISSION_DATA_MODEL.md`. C05C is documented in
+`docs/C05_PERMISSION_BACKEND_ACCESS.md`. C05B adds:
 
 - `permission_registry`
 - `user_permission_assignments`
@@ -107,10 +109,26 @@ helpers. Owner is treated as full global access without assignment rows.
 `super_admin` receives no permissions from role alone and must have scoped
 assignments.
 
-C05B still does not add `require_permission()`, does not return permissions
-from `/auth/me`, does not expose public permission APIs, and does not change
-current `/users` owner-only behavior. `/auth/me` still returns only identity
-fields: `id`, `username`, `role`, `is_active`, and `last_login_at`.
+C05C adds `require_permission(permission_key, scope_type="global",
+scope_key="*")`. Owner passes in the dependency layer without assignments or
+scope checks. Non-owner users must have enabled, unexpired, scope-matching
+`user_permission_assignments`; `super_admin` does not default to global access.
+
+`GET /auth/me` now keeps the original identity fields and adds a `permissions`
+object. Owner returns `is_owner_full_access=true` and
+`permission_keys=["*"]`, so the response does not depend on registry seed
+state. Non-owner users receive only explicit effective assignments.
+`POST /auth/login` keeps the previous `AuthenticatedUser` response contract.
+
+C05C also exposes read-only permission APIs:
+
+- `GET /permissions/me` for the current user's effective permissions.
+- `GET /permissions/registry`, protected by owner or `permissions.read`, for
+  enabled registry entries.
+
+C05C still does not add frontend permission UI, does not add grant/revoke API,
+does not replace current `/users` owner-only behavior, and does not connect
+real business integrations.
 
 F12 adds the n8n test webhook bridge:
 

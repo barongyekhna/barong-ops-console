@@ -13,6 +13,11 @@ C05B 已在此方案之后开始落地后端权限数据地基。C05B 的实现�
 基础查询服务、owner 全局 resolver 和测试。C05B 仍不做前端权限 UI，不接 `/auth/me.permissions`
 正式响应，不替换 `require_owner()`，不发布 production。
 
+C05C 已在 C05B 之后接入后端权限 dependency 和当前用户权限返回。C05C 的实现记录见
+`docs/C05_PERMISSION_BACKEND_ACCESS.md`。C05C 新增 `require_permission()`、`/auth/me.permissions`、
+`GET /permissions/me` 和 `GET /permissions/registry`，并保持 `/users` 暂时 owner-only。
+本阶段不做前端 UI，不做 grant/revoke API，不接真实业务，不发布 production。
+
 ## 一、为什么要做权限系统
 
 C03 已经让 owner 可以创建内部子账户。C04 已经把标准 role 定清楚。
@@ -381,7 +386,7 @@ Owner 不需要逐条写入 User Permission Assignment。否则新增模块时�
 推荐规则：
 
 - `has_permission(user, permission, scope)` 看到 `role=owner` 直接返回 true。
-- `/auth/me` 对 owner 可以返回 `is_owner=true`、`permissions=["*"]` 或返回完整 registry 列表；具体合同 C05C 再定。
+- `/auth/me` 对 owner 返回 `is_owner_full_access=true`、`permission_keys=["*"]`。
 - Owner 仍然不能被普通 `/users` 创建。
 - Owner 的全局权限必须在文档、测试和后端 helper 里明确表达。
 
@@ -540,10 +545,9 @@ C05 后端必须新增统一 `require_permission()` 设计。
 
 ```python
 def require_permission(
-    permission_code: str,
-    *,
+    permission_key: str,
     scope_type: str = "global",
-    scope_id: str | None = None,
+    scope_key: str = "*",
 ) -> Callable[..., User]:
     ...
 ```
@@ -566,9 +570,9 @@ def require_permission(
 `/auth/me` 未来返回建议：
 
 - 当前 user 字段保持兼容。
-- 新增 `permissions`。
-- 新增 `permission_scopes` 或 `scoped_permissions`。
-- 新增 `is_owner`。
+- C05C 已新增 `permissions`。
+- owner 返回 wildcard `permission_keys=["*"]`，不依赖 registry seed。
+- 非 owner 只返回 enabled、未过期、scope 匹配的 explicit assignment。
 - 可新增 `manageable_modules` 或 `module_access`，但不要把它当成后端唯一安全判断。
 
 ## 十、是否需要 migration
@@ -662,7 +666,8 @@ C05 暂不做：
   `user_permission_assignments`、`role_default_permissions`，完成 seed/upsert、owner 全局
   resolver、基础查询服务和测试。
 - C05C：`require_permission()`、API dependency 接入、只读 permission registry API 和
-  `/auth/me.permissions` 合同。
+  `/auth/me.permissions` 合同。C05C 已完成，新增 `/permissions/me` 和 `/permissions/registry`，
+  且 `/users` 仍保持 owner-only。
 - C05D：User Management 权限化。把 `/users` 从 `require_owner` 升级到 `users.manage`，前端
   System 菜单按管理权限隐藏。
 - C05E：前端菜单策略和无权页面。业务板块可见但无权提示，企业管理板块无权限隐藏。

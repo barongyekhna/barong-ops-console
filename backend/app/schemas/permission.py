@@ -108,3 +108,34 @@ class UserEffectivePermissionsRead(BaseModel):
     is_owner_full_access: bool
     permissions: list[str]
     scoped_permissions: list[UserEffectivePermissionScopeRead]
+
+
+class EffectivePermissionAssignmentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    permission_key: str
+    scope_type: str
+    scope_key: str
+
+
+class EffectivePermissionScopeSummaryRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    scope_type: str
+    scope_key: str
+    permission_keys: list[str]
+
+
+class CurrentUserPermissionsRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    is_owner_full_access: bool
+    permission_keys: list[str]
+    assignments: list[EffectivePermissionAssignmentRead]
+    scope_summary: list[EffectivePermissionScopeSummaryRead]
+
+
+class CurrentUserPermissionResponse(BaseModel):
+    user_id: int
+    role: str
+    permissions: CurrentUserPermissionsRead

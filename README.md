@@ -287,7 +287,9 @@ design-only audit and plan.
 
 C05A starts the permission-system stage with
 `docs/C05_PERMISSION_SYSTEM_PLAN.md`. C05B adds the backend permission data
-model documented in `docs/C05_PERMISSION_DATA_MODEL.md`.
+model documented in `docs/C05_PERMISSION_DATA_MODEL.md`. C05C adds backend
+permission access enforcement and current-user permission APIs documented in
+`docs/C05_PERMISSION_BACKEND_ACCESS.md`.
 
 C05 is about authorization, not business-module onboarding. It does not connect
 real n8n, P-series, WooCommerce, MinIO, Filebrowser, product flows, orders, or
@@ -302,14 +304,18 @@ Current C05 status:
 - C05B adds the first permission registry seed source, idempotent registry
   upsert, assignment grant/disable/revoke helpers, role default permission
   storage, and base permission query services.
-- Owner has full global access through resolver logic and does not need
-  per-permission assignment rows.
+- C05C adds `require_permission()`, extends `GET /auth/me` with
+  `permissions`, and exposes read-only `GET /permissions/me` plus
+  `GET /permissions/registry`.
+- Owner has full global access through dependency/resolver logic and does not
+  need per-permission assignment rows. C05C API responses use
+  `permission_keys: ["*"]` for owner.
 - `super_admin` is still not a global owner; it receives no permission from
   role alone and only gets power through explicit scoped assignments.
 - Current `/users` management remains owner-only through backend
   `require_owner`.
-- Current `/auth/me` returns user identity fields only; it does not return
-  permissions or scopes yet.
+- Current `/auth/me` keeps the old identity fields and now adds a
+  `permissions` object. The login response keeps the older user contract.
 - Current frontend navigation is still static; C05 will later define business
   module visibility and admin menu hiding rules.
 - C05A defines Permission Registry, User Permission Assignment, Role Default
@@ -317,11 +323,10 @@ Current C05 status:
   C05B implements the first three as backend tables.
 - Ordinary users receive permissions through manual assignment by owner or an
   authorized scoped super_admin.
-- C05B does not add public permission APIs, does not add frontend permission
-  UI, does not replace `require_owner()`, does not deploy staging/production,
-  and does not create real users.
+- C05C does not add frontend permission UI, does not replace `/users`
+  `require_owner()`, does not add grant/revoke permission APIs, does not deploy
+  staging/production, and does not create real users.
 
-C05C should connect these services to API contracts and `require_permission()`.
 C05D should later upgrade User Management from owner-only to `users.manage`.
 
 ## Temporary login preview

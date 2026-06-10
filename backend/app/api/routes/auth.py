@@ -7,15 +7,18 @@ from ...db.session import get_db
 from ...models.user import User
 from ...schemas.auth import (
     AuthenticatedUser,
+    AuthenticatedUserWithPermissions,
     LoginRequest,
     LoginResponse,
     LogoutResponse,
 )
+from ...schemas.permission import CurrentUserPermissionsRead
 from ...services.auth_service import (
     InvalidCredentialsError,
     login as login_user,
     logout as logout_user,
 )
+from ...services.permission_service import resolve_current_user_permission_info
 from ..deps import get_audit_context, get_current_user
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -56,9 +59,22 @@ def login(
     )
 
 
-@router.get("/me", response_model=AuthenticatedUser)
-def me(user: User = Depends(get_current_user)) -> AuthenticatedUser:
-    return AuthenticatedUser.model_validate(user)
+@router.get("/me", response_model=AuthenticatedUserWithPermissions)
+def me(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> AuthenticatedUserWithPermissions:
+    permissions = CurrentUserPermissionsRead.model_validate(
+        resolve_current_user_permission_info(db, user)
+    )
+    return AuthenticatedUserWithPermissions(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        is_active=user.is_active,
+        last_login_at=user.last_login_at,
+        permissions=permissions,
+    )
 
 
 @router.post("/logout", response_model=LogoutResponse)

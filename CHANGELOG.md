@@ -6,6 +6,17 @@
 
 ### Added
 
+- C05C：新增后端权限 dependency `require_permission(permission_key, scope_type="global",
+  scope_key="*")`；owner 在 dependency 层直接通过，非 owner 只通过 enabled、未过期、
+  scope 匹配的 `user_permission_assignments` 获权；`super_admin` 不默认全局权限。
+- C05C：`GET /auth/me` 保持旧身份字段并追加 `permissions`；owner 返回
+  `is_owner_full_access=true` 和 `permission_keys=["*"]`，非 owner 只返回 explicit
+  effective assignments；`POST /auth/login` 保持旧 user response 合同。
+- C05C：新增只读 `GET /permissions/me` 和 `GET /permissions/registry`；registry route
+  对 owner 直接开放，非 owner 需要 `permissions.read`，本轮不新增 grant/revoke API。
+- C05C：新增 `docs/C05_PERMISSION_BACKEND_ACCESS.md` 和后端权限 API 测试，覆盖 owner
+  wildcard、非 owner 403、assignment 生效、scope 不反向变 global、`super_admin` 无默认全局、
+  `/auth/me.permissions`、`/permissions/me`、`/permissions/registry` 和 role defaults 不自动生效。
 - C05B：新增后端权限数据模型与 migration `c05b_permissions_001`，创建
   `permission_registry`、`user_permission_assignments`、`role_default_permissions`
   三张表；新增 SQLAlchemy models、Pydantic schemas、permission seed 常量、
@@ -85,6 +96,9 @@
 
 ### Changed
 
+- C05C：README、backend README、C05 权限系统计划和 C05 权限数据模型文档更新为后端权限
+  dependency/API 合同已接入；`/users` 仍保持 `require_owner()`，前端 UI、权限管理页面、
+  grant/revoke API、staging/production 发布和真实业务接入仍不在本轮范围。
 - C05B：README、backend README 和 C05 权限系统计划更新为后端权限数据地基已实现；当前仍不暴露
   `/auth/me.permissions`，不增加 permission API，不修改前端权限菜单，不把 `/users` 从
   `require_owner` 切到 `users.manage`，C05C/C05D 继续处理正式 enforcement 和 UI 接入。

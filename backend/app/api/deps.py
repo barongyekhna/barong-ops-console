@@ -5,6 +5,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from ..core.config import Settings, get_settings
+from ..core.permissions import SCOPE_GLOBAL
 from ..core.security import (
     InvalidAccessTokenError,
     SecurityConfigurationError,
@@ -16,6 +17,7 @@ from ..db.session import get_db
 from ..models.user import User
 from ..repositories.users import get_user_by_id
 from ..services.auth_service import AuditContext
+from ..services.permission_service import user_has_permission
 
 bearer_scheme = HTTPBearer(auto_error=False)
 SENSITIVE_HEADER_MARKERS = (
@@ -100,3 +102,36 @@ def require_owner(
             detail="Owner role required.",
         )
     return user
+
+
+def require_permission(
+    permission_key: str,
+    scope_type: str = SCOPE_GLOBAL,
+    scope_key: str = "*",
+):
+    def dependency(
+        user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> User:
+        if is_owner_role(user.role):
+            return user
+
+        try:
+            has_permission = user_has_permission(
+                db,
+                user,
+                permission_key,
+                scope_type=scope_type,
+                scope_key=scope_key,
+            )
+        except ValueError:
+            has_permission = False
+
+        if not has_permission:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Missing permission: {permission_key}",
+            )
+        return user
+
+    return dependency

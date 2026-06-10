@@ -166,17 +166,21 @@ C05B 在 `backend/app/core/permissions.py` 定义第一批基础权限点：
 
 这些常量是 registry seed source，不是任何用户的实际授权。
 
-## C05C 下一步
+## C05C 后端接入
 
-C05C 建议继续做：
+C05C 已在 C05B 数据模型之上接入后端权限判断和只读权限查询：
 
-- `require_permission()` FastAPI dependency。
-- `/auth/me.permissions` 响应合同。
-- 只读 permission registry API。
-- Owner wildcard 在 API dependency 层的正式接入。
-- 非 owner 403 行为测试。
+- 新增 `require_permission(permission_key, scope_type="global", scope_key="*")`。
+- Owner 在 dependency 层直接通过，不查询 assignment，不受 scope 限制。
+- 非 owner 依赖 enabled、未过期、registry enabled、scope 匹配的 `user_permission_assignments`。
+- `super_admin` 不默认全局全权限。
+- `/auth/me` 追加 `permissions`，owner 返回 `permission_keys=["*"]`。
+- 新增 `GET /permissions/me` 查看当前用户 effective permissions。
+- 新增 `GET /permissions/registry` 查看 enabled registry，非 owner 需要 `permissions.read`。
 
-C05D 再把 User Management 从 `require_owner` 升级为 `users.manage`，并处理前端菜单权限。
+详细合同见 `docs/C05_PERMISSION_BACKEND_ACCESS.md`。
+
+C05C 仍不把 User Management 从 `require_owner` 升级为 `users.manage`。这一步留给 C05D，并需要同步处理前端菜单权限。
 
 ## 安全边界
 

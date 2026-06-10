@@ -72,6 +72,28 @@ class EffectivePermissions:
     scoped_permissions: list[EffectivePermissionScope]
 
 
+@dataclass(frozen=True)
+class EffectivePermissionAssignment:
+    permission_key: str
+    scope_type: str
+    scope_key: str
+
+
+@dataclass(frozen=True)
+class EffectivePermissionScopeSummary:
+    scope_type: str
+    scope_key: str
+    permission_keys: list[str]
+
+
+@dataclass(frozen=True)
+class CurrentUserPermissionInfo:
+    is_owner_full_access: bool
+    permission_keys: list[str]
+    assignments: list[EffectivePermissionAssignment]
+    scope_summary: list[EffectivePermissionScopeSummary]
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -333,6 +355,52 @@ def resolve_effective_permissions(
         is_owner_full_access=False,
         permissions=permission_keys,
         scoped_permissions=scoped_permissions,
+    )
+
+
+def resolve_current_user_permission_info(
+    db: Session,
+    user: User,
+) -> CurrentUserPermissionInfo:
+    effective = resolve_effective_permissions(db, user)
+    if effective.is_owner_full_access:
+        return CurrentUserPermissionInfo(
+            is_owner_full_access=True,
+            permission_keys=["*"],
+            assignments=[],
+            scope_summary=[],
+        )
+
+    assignments = [
+        EffectivePermissionAssignment(
+            permission_key=permission.permission_key,
+            scope_type=permission.scope_type,
+            scope_key=permission.scope_key,
+        )
+        for permission in effective.scoped_permissions
+    ]
+    scope_permissions: dict[tuple[str, str], set[str]] = {}
+    for permission in effective.scoped_permissions:
+        scope_permissions.setdefault(
+            (permission.scope_type, permission.scope_key),
+            set(),
+        ).add(permission.permission_key)
+
+    scope_summary = [
+        EffectivePermissionScopeSummary(
+            scope_type=scope_type,
+            scope_key=scope_key,
+            permission_keys=sorted(permission_keys),
+        )
+        for (scope_type, scope_key), permission_keys in sorted(
+            scope_permissions.items()
+        )
+    ]
+    return CurrentUserPermissionInfo(
+        is_owner_full_access=False,
+        permission_keys=effective.permissions,
+        assignments=assignments,
+        scope_summary=scope_summary,
     )
 
 

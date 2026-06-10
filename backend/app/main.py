@@ -11,6 +11,7 @@ from .api.routes.memory import router as memory_router
 from .api.routes.modules import router as modules_router
 from .api.routes.n8n_test import router as n8n_test_router
 from .api.routes.operation_logs import router as operation_logs_router
+from .api.routes.permissions import router as permissions_router
 from .api.routes.reviews import router as reviews_router
 from .api.routes.users import router as users_router
 from .api.routes.workflows import router as workflows_router
@@ -34,5 +35,6 @@ app.include_router(reviews_router)
 app.include_router(errors_router)
 app.include_router(memory_router)
 app.include_router(operation_logs_router)
+app.include_router(permissions_router)
 app.include_router(foundation_demo_router)
 app.include_router(n8n_test_router)

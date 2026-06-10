@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
+from .permission import CurrentUserPermissionsRead
+
 
 class LoginRequest(BaseModel):
     username: str = Field(min_length=1, max_length=255)
@@ -16,6 +18,10 @@ class AuthenticatedUser(BaseModel):
     role: str
     is_active: bool
     last_login_at: datetime | None
+
+
+class AuthenticatedUserWithPermissions(AuthenticatedUser):
+    permissions: CurrentUserPermissionsRead
 
 
 class LoginResponse(BaseModel):
