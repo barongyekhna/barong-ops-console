@@ -59,10 +59,11 @@ validation, tests, and owner-only `GET /users/roles`. C04C connected the
 frontend role catalog UI, and C04D accepted the role catalog API/UI on staging
 in `docs/C04_STAGING_ACCEPTANCE.md`. C04E has released the backend role
 catalog and frontend role catalog UI to production, with the release archive
-in `docs/C04_PRODUCTION_RELEASE.md`. C04 defines account identity types, not
-the complete permission system. The current backend still stores `users.role`
-as a plain string, which is enough for C04 standard role validation and does
-not require a migration in C04.
+in `docs/C04_PRODUCTION_RELEASE.md`. C04F has sealed the role system in
+`docs/C04_ROLE_SYSTEM_SEAL.md`. C04 defines account identity types, not the
+complete permission system. The current backend still stores `users.role` as a
+plain string, which is enough for C04 standard role validation and does not
+require a migration in C04.
 
 C04 standard roles are `owner`, `super_admin`, `module_admin`, `operator`,
 `reviewer`, `viewer`, and `bot_agent`. Owner-created `/users` roles remain
@@ -80,8 +81,14 @@ unauthenticated `/api/backend/users/roles` returns 401, production backend
 health is normal, staging remains normal, and production/staging/dual-env
 checks pass. C04 still does not give `super_admin` power, does not implement
 complete RBAC, and does not connect real n8n, P-series, WooCommerce, MinIO,
-Filebrowser, or real business tasks. The next step is C04F role-system
-sealing.
+Filebrowser, or real business tasks. C04F confirmed production `/users`
+returns 200, unauthenticated `/api/backend/users/roles` and
+`/api/backend/users` return 401, `/api/backend/auth/register` still returns
+404, and production/staging/dual-env checks pass. C04F did not read real env
+files, create production users, restart/rebuild/remove containers, modify
+Nginx/certificates, commit, or connect real business systems. C04 is sealed;
+the next step is OPS01 Docker Compose v1 `ContainerConfig` issue cleanup,
+followed by C05 permissions / RBAC.
 
 F12 adds the n8n test webhook bridge:
 

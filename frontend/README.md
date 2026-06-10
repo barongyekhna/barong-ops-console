@@ -102,7 +102,8 @@ and C04C updates the `/users` page to read it through
 `/api/backend/users/roles`. C04D accepted the role catalog UI on staging; the
 acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`. C04E has released the
 role catalog UI to production; the release archive is
-`docs/C04_PRODUCTION_RELEASE.md`.
+`docs/C04_PRODUCTION_RELEASE.md`. C04F has sealed the role system in
+`docs/C04_ROLE_SYSTEM_SEAL.md`.
 
 The User Management create-user selector and managed-role selector are now
 generated from catalog roles that are `assignable=true` and pass the frontend
@@ -130,7 +131,14 @@ unauthenticated `/api/backend/users/roles` returns 401, production backend
 health is normal, staging remains normal, and production/staging/dual-env
 checks pass. C04E did not read real env files, create production users,
 restart/rebuild/remove containers, modify Nginx/certificates, or connect real
-business systems. The next step is C04F role-system sealing.
+business systems. C04F confirmed production `/users` returns 200,
+unauthenticated `/api/backend/users/roles` and `/api/backend/users` return
+401, `/api/backend/auth/register` still returns 404, and
+production/staging/dual-env checks pass. C04F did not read real env files,
+create production users, restart/rebuild/remove containers, modify
+Nginx/certificates, commit, or connect real business systems. C04 is sealed;
+the next step is OPS01 Docker Compose v1 `ContainerConfig` issue cleanup,
+followed by C05 permissions / RBAC.
 
 ## Configuration
 

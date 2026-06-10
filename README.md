@@ -174,9 +174,10 @@ C04A started the role-system stage with the design plan in
 metadata, validation, tests, and an owner-only `GET /users/roles` catalog.
 C04C has updated the User Management frontend to read that catalog through
 `/api/backend/users/roles`. C04D accepted the role catalog UI/API on staging;
-the acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`. C04E has now
-released the role catalog backend and frontend UI to production; the release
-archive is `docs/C04_PRODUCTION_RELEASE.md`.
+the acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`. C04E released the
+role catalog backend and frontend UI to production; the release archive is
+`docs/C04_PRODUCTION_RELEASE.md`. C04F has sealed the role-system stage in
+`docs/C04_ROLE_SYSTEM_SEAL.md`.
 
 C04 defines account identity types. It does not define the full permission
 matrix. C05 will define permissions, module access, and how roles map to
@@ -226,6 +227,13 @@ Current C04 status:
 - C04E did not read or modify real env files, create production users,
   restart/rebuild/remove containers, modify Nginx/certificates, or connect
   real business systems.
+- C04F sealed the role system: production `/users` returns 200,
+  unauthenticated `/api/backend/users/roles` and `/api/backend/users` return
+  401, `/api/backend/auth/register` still returns 404, and
+  production/staging/dual-env checks pass.
+- C04F did not read or modify real env files, create production users,
+  restart/rebuild/remove containers, modify Nginx/certificates, commit, or
+  connect real business systems.
 - C04 does not add `super_admin` powers, complete RBAC, or real user/business
   creation.
 - Company positions such as designer, SEO editor, customer service, or factory
@@ -235,7 +243,8 @@ Current C04 status:
 
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
-The next step is C04F: role-system sealing.
+C04 is sealed. The next step is OPS01: Docker Compose v1 `ContainerConfig`
+issue cleanup, followed by C05 permissions / RBAC.
 
 ## Temporary login preview
 

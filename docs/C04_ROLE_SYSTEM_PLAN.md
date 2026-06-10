@@ -4,7 +4,7 @@
 
 本文件记录 C04A：角色体系审计与设计方案，并追加 C04B 后端角色常量与校验落地状态、
 C04C 前端角色目录显示与选择优化状态、C04D staging 验收结果、C04E production
-发布验收归档状态。
+发布验收归档状态、C04F 角色体系总封板状态。
 
 C04A 只做审计、设计、风险分析、后续任务拆分和文档更新。它不实现功能，不新增
 migration，不修改 production/staging 容器，不创建真实用户，不接真实业务。
@@ -28,6 +28,12 @@ C04E 已在人工完成 production 发布后做只读验收和归档，结果归
 已经进入 production，正式页面为 `https://ops.barongyekhna.com/users`。本轮没有
 重新部署、重建、停止或删除容器，没有读取真实 env，没有创建 production 用户，没有
 修改 Nginx/证书，没有接真实业务，也没有 git commit。
+
+C04F 已完成角色体系总封板，结果归档到 `docs/C04_ROLE_SYSTEM_SEAL.md`。C04
+最终确认只定义账号身份，不做完整 RBAC；当前可创建角色只有 `viewer`、`operator`、
+`reviewer`；`owner`、`super_admin`、`module_admin`、`bot_agent` 继续保留为
+不可创建、不可分配的 reserved roles。C04 后建议先做 OPS01：Docker Compose v1
+`ContainerConfig` 问题治理，再进入 C05 permissions / RBAC。
 
 ## 一、为什么要做角色体系
 
@@ -456,10 +462,13 @@ C04A 判断：不建议 C04B 新增 migration。
 
 ### C04F：角色体系封板
 
-- 归档 C04 完成内容。
-- 记录最终允许创建的角色。
-- 记录未做权限系统。
-- 明确 C05 承接 permissions、module access、role_permissions。
+- 已完成：归档 C04 完成内容，见 `docs/C04_ROLE_SYSTEM_SEAL.md`。
+- 已完成：记录最终允许创建的角色为 `viewer`、`operator`、`reviewer`。
+- 已完成：记录 `owner`、`super_admin`、`module_admin`、`bot_agent` 为 reserved，
+  当前不可通过 `/users` 创建或分配。
+- 已完成：记录 C04 不做完整权限系统。
+- 已完成：明确 C05 承接 permissions、module access、role_permissions 和完整 RBAC。
+- 已完成：明确 C04 后先做 OPS01：Docker Compose v1 `ContainerConfig` 问题治理。
 
 ## 十三、C04E 当前边界
 
@@ -478,5 +487,31 @@ C04A 判断：不建议 C04B 新增 migration。
 - 不创建真实业务任务。
 - 不 git commit。
 
-当前仍然是 foundation/console 阶段。C04 只定义角色体系，不接真实业务。C04E
-production 发布验收归档已完成，下一步是 C04F 角色体系封板。
+当前仍然是 foundation/console 阶段。C04 只定义角色体系，不接真实业务。C04F
+角色体系封板已完成，封板文档见 `docs/C04_ROLE_SYSTEM_SEAL.md`。
+
+## 十四、C04F 封板结果
+
+C04F 只读复核和文档封板已完成。
+
+最终结论：
+
+- C04 已封板。
+- 标准角色为 `owner`、`super_admin`、`module_admin`、`operator`、`reviewer`、
+  `viewer`、`bot_agent`。
+- 当前可创建和可分配角色只有 `viewer`、`operator`、`reviewer`。
+- `owner` 只能 bootstrap 或 system 初始化。
+- `super_admin` 只定义，不放权，C05 后续处理。
+- `module_admin` 缺少 module scope，C05/C07 后续处理。
+- `bot_agent` 缺少 agent identity / token scope，后续机器人体系处理。
+- C04 不做完整 RBAC，不新增 permissions、role_permissions 或 module_permissions。
+- production `/users` 返回 200。
+- 未登录 production `/api/backend/users/roles` 返回 401。
+- 未登录 production `/api/backend/users` 返回 401。
+- production `/api/backend/auth/register` 仍返回 404。
+- production smoke、staging smoke、dual env check 均通过。
+- C04F 没有读取真实 env，没有创建 production 用户，没有重启、删除、重建容器，
+  没有修改 Nginx/证书，没有接真实业务，没有 git commit。
+
+下一步建议先做 OPS01：Docker Compose v1 `ContainerConfig` 问题治理；随后 C05
+再做 permissions / RBAC。

@@ -104,4 +104,34 @@ C04E production 发布验收归档通过。
 - C04 不做完整 RBAC，C05 才做权限系统。
 - staging 仍保留为测试服。
 
-下一步是 C04F：做 C04 角色体系总封板。
+C04F 角色体系总封板已完成，封板文档见
+`docs/C04_ROLE_SYSTEM_SEAL.md`。
+
+下一步建议先做 OPS01：Docker Compose v1 `ContainerConfig` 问题治理；随后 C05
+再做 permissions / RBAC。
+
+## 6. C04F 封板补充
+
+2026-06-10 UTC，C04F 对 production 发布后的角色体系做了只读复核和总封板。
+
+C04F 复核结果：
+
+- production `/users` 返回 `200`。
+- 未登录 production `/api/backend/users/roles` 返回 `401`。
+- 未登录 production `/api/backend/users` 返回 `401`。
+- production `/api/backend/auth/register` 仍返回 `404`。
+- `./scripts/production_smoke_check.sh` 通过。
+- `./scripts/staging_smoke_check.sh` 通过。
+- `./scripts/check_dual_env_status.sh` 通过。
+- production/staging 容器均正常运行。
+- production/staging PostgreSQL 未暴露宿主机 `5432`。
+
+C04F 封板结论：
+
+- C04 已完成，当前只定义账号身份，不做完整 RBAC。
+- 当前可创建角色为 `viewer`、`operator`、`reviewer`。
+- `owner`、`super_admin`、`module_admin`、`bot_agent` 仍为 reserved，不可创建、
+  不可分配。
+- `super_admin` 当前没有放权，必须等 C05 权限系统。
+- C04F 没有读取真实 env，没有创建 production 用户，没有重启、删除、重建容器，
+  没有修改 Nginx/证书，没有接真实业务，没有 git commit。

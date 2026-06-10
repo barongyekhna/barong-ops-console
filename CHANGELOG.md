@@ -6,6 +6,7 @@
 
 ### Added
 
+- C04F：新增 `docs/C04_ROLE_SYSTEM_SEAL.md`，归档角色体系总封板结论，记录 C04 已完成、标准角色 `owner` / `super_admin` / `module_admin` / `operator` / `reviewer` / `viewer` / `bot_agent` 已统一、当前可创建角色仅 `viewer` / `operator` / `reviewer`、`owner` / `super_admin` / `module_admin` / `bot_agent` 仍为 reserved、C04 不做完整 RBAC、C05 才做权限系统、production `/users` 返回 200、未登录 `/api/backend/users/roles` 和 `/api/backend/users` 返回 401、`/api/backend/auth/register` 仍返回 404，以及本轮未读取真实 env、未创建 production 用户、未重启/删除/重建容器、未修改 Nginx/证书、未接真实业务。
 - C04E：新增 `docs/C04_PRODUCTION_RELEASE.md`，归档角色目录 UI production 发布后的只读验收结果，记录 C04B 后端角色目录和 C04C 前端角色目录 UI 已进入 production、`https://ops.barongyekhna.com/users` 可用、未登录 `/api/backend/users/roles` 返回 401、创建用户下拉只允许 `viewer` / `operator` / `reviewer`、`owner` / `super_admin` / `module_admin` / `bot_agent` 仍为 reserved、C04 不做完整 RBAC、C05 才做权限系统，以及本轮未新增 migration、未读取真实 env、未创建 production 用户、未重启/删除/重建容器、未修改 Nginx/证书、未接真实业务。
 - C04D：新增 `docs/C04_STAGING_ACCEPTANCE.md`，归档 staging 角色目录 UI/API 验收结果，记录 `/users/roles` owner-only 行为、标准角色和可创建角色目录、reserved roles 拒绝矩阵、staging 页面检查、operation logs 验证、production 仍正常，以及本轮未读取真实 env、未 build/recreate/stop/rm 容器、未执行 `docker-compose up/down`、未修改 Nginx/证书、未接真实业务。
 - C04C：前端 User Management 页面新增角色目录说明区，显示 “Current assignable roles” 的 `viewer` / `operator` / `reviewer`，以及 “Reserved roles, not assignable in C04” 的 `owner` / `super_admin` / `module_admin` / `bot_agent`，并明确完整 RBAC 留到 C05。
@@ -68,6 +69,7 @@
 
 ### Changed
 
+- C04F：README、backend README、frontend README、C04 角色计划、C04 staging 验收文档和 C04 production 发布文档更新为 C04 已封板；production 已有角色目录 UI，当前仍不做完整 RBAC，不给 `super_admin` 放权，C05 才做 permissions / RBAC；C04 后先做 OPS01：Docker Compose v1 `ContainerConfig` 问题治理。
 - C04E：README、backend README、frontend README、C04 角色计划和 C04 staging 验收文档更新为 production 角色目录发布已完成；production `/users` 页面已经使用角色目录 UI，当前仍不做 `super_admin` 放权、不做完整 RBAC，下一步为 C04F 角色体系封板。
 - C04D：README、backend README、frontend README 和 C04 角色计划当时更新为 staging 角色目录 UI/API 已验收通过，C04 仍不做完整 RBAC、不创建 production 用户、不接真实业务。
 - C04C：创建用户和详情页 managed role 下拉改为由 `/users/roles` 返回的 `assignable=true` 角色生成，并在前端安全过滤为 `viewer` / `operator` / `reviewer`；`owner`、`super_admin`、`module_admin`、`bot_agent` 不可选择。

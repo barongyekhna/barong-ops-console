@@ -169,4 +169,28 @@ C04E 已在 2026-06-10 UTC 由人工完成 production 发布，并在
 - production smoke、staging smoke、dual env check 均通过。
 - staging 仍保留为测试服。
 
-下一步是 C04F：角色体系总封板。
+C04F 角色体系总封板已完成，封板文档见
+`docs/C04_ROLE_SYSTEM_SEAL.md`。
+
+下一步建议先做 OPS01：Docker Compose v1 `ContainerConfig` 问题治理；随后 C05
+再做 permissions / RBAC。
+
+## 9. C04F 封板补充
+
+2026-06-10 UTC，C04F 对 C04 角色体系做了最终封板。
+
+封板结论：
+
+- C04 已完成，当前仍只定义角色身份，不做完整 RBAC。
+- 标准角色为 `owner`、`super_admin`、`module_admin`、`operator`、`reviewer`、
+  `viewer`、`bot_agent`。
+- 当前可通过 `/users` 创建和分配的角色只有 `viewer`、`operator`、`reviewer`。
+- `owner`、`super_admin`、`module_admin`、`bot_agent` 仍为 reserved roles，
+  不可创建、不可分配。
+- production 已有角色目录 UI，`https://ops.barongyekhna.com/users` 返回 200。
+- 未登录 production `/api/backend/users/roles` 返回 401。
+- 未登录 production `/api/backend/users` 返回 401。
+- production `/api/backend/auth/register` 仍返回 404。
+- production smoke、staging smoke、dual env check 在 C04F 只读复核中均通过。
+- C04F 没有读取真实 env，没有创建 production 用户，没有重启、删除、重建容器，
+  没有修改 Nginx/证书，没有接真实业务。
