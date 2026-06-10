@@ -228,7 +228,8 @@ service selector 和 smoke check 的问题，而不会影响 production 登录/A
 4. OPS01D 再改造 production 发布脚本并演练，必须显式
    `-p barong-ops-console-prod`，必须只动指定 backend/frontend 服务。本项已经完成：
    OPS01D-1 完成 dry-run，OPS01D-2 完成 backend/frontend production 真实演练。
-5. OPS01E 更新文档、回滚流程和封板记录。
+5. OPS01E 更新文档、回滚流程和封板记录。本项已经完成，封板记录见
+   `docs/OPS01_SAFE_RELEASE_SEAL.md`。
 
 脚本设计硬规则：
 
@@ -294,10 +295,12 @@ OPS01D：production 发布脚本改造与演练
 
 OPS01E：文档和回滚流程封板
 
-- 更新 production/staging 发布手册。
-- 明确 v2 正常路径和 v1 fallback 路径。
-- 明确 `ContainerConfig` 复发时的处理边界。
-- 归档验证结果，等待 owner 审核后封板。
+- 已更新 production/staging 发布手册和 OPS01 归档文档。
+- 已明确当前没有安装 Compose v2，v2 后续单独评估。
+- 已明确当前 v1 fallback 路线是 `scripts/safe_compose_release.sh`。
+- 已明确 `ContainerConfig` 复发时的处理边界：backend/frontend 用 safe release，
+  postgres、Nginx、证书和真实业务不在 OPS01 范围内。
+- 已归档最终验证结果，封板记录见 `docs/OPS01_SAFE_RELEASE_SEAL.md`。
 
 ## 10. OPS01A 验证
 
@@ -457,4 +460,29 @@ OPS01D production safe release 真实演练已在 2026-06-10 UTC 完成，OPS01D
 backend/frontend 发布应优先使用 `scripts/safe_compose_release.sh`，不要把
 `docker-compose --force-recreate` 作为默认发布方式。
 
-下一步 OPS01E 是安全发布流程封板。
+## 15. OPS01E 封板
+
+OPS01E 已在 2026-06-10 UTC 完成最终只读复核和文档封板。
+
+本轮复核确认：
+
+- `./scripts/check_safe_release_plan.sh`：通过。
+- staging backend dry-run：映射为 `barong-ops-console-staging` /
+  `docker-compose.staging.yml` / `console_staging_backend`。
+- staging frontend dry-run：映射为 `barong-ops-console-staging` /
+  `docker-compose.staging.yml` / `console_staging_frontend`。
+- production backend dry-run：映射为 `barong-ops-console-prod` /
+  `docker-compose.production.yml` / `console_backend`。
+- production frontend dry-run：映射为 `barong-ops-console-prod` /
+  `docker-compose.production.yml` / `console_frontend`。
+- `./scripts/production_smoke_check.sh`：通过。
+- `./scripts/staging_smoke_check.sh`：通过。
+- `./scripts/check_dual_env_status.sh`：通过。
+- rollback tag 查询能看到 staging 和 production backend/frontend rollback tag。
+
+OPS01E 没有安装或升级工具，没有执行真实 safe release，没有设置确认变量，没有读取真实
+env，没有修改 Nginx/证书，没有接真实业务，也没有 git commit。
+
+OPS01 结论：Docker Compose v1 `ContainerConfig` 问题治理完成。当前不安装 Compose
+v2，后续 backend/frontend 发布默认使用 `scripts/safe_compose_release.sh`。下一阶段
+回到 C05：权限系统。

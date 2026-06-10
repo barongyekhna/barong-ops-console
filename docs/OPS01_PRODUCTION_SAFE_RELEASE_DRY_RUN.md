@@ -8,7 +8,8 @@
 
 后续状态：OPS01D-2 已经完成 production backend/frontend safe release 真实演练，
 OPS01D-3 已完成只读复核和归档。真实演练归档见
-`docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`。下一步 OPS01E 是安全发布流程封板。
+`docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`。OPS01E 也已完成安全发布流程封板，
+封板记录见 `docs/OPS01_SAFE_RELEASE_SEAL.md`。
 
 ## 1. 这次只做什么
 
@@ -229,4 +230,8 @@ OPS01D-1 当时还没有真实发布 production，当时下一步是 OPS01D-2：
 frontend 的顺序做 production safe release 真实演练。
 
 后续更新：OPS01D-2 已完成 production backend/frontend safe release 真实演练，
-OPS01D-3 已完成归档。下一步是 OPS01E 安全发布流程封板。
+OPS01D-3 已完成归档，OPS01E 已完成安全发布流程封板。
+
+当前仍未安装 Compose v2。后续 backend/frontend 发布默认使用
+`scripts/safe_compose_release.sh`，不再默认使用
+`docker-compose --force-recreate`。OPS01 封板后，下一阶段回到 C05：权限系统。

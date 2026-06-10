@@ -39,7 +39,8 @@ OPS01D-2 的意义是把 staging 已经演练过的 safe release 流程放到 pr
 一遍，确认它能在正式环境完成 backend/frontend 发布，同时不动 postgres、不影响
 staging、不修改 Nginx/证书、不接真实业务。
 
-OPS01D-3 的意义是把这件事记录清楚，方便 OPS01E 做安全发布流程封板。
+OPS01D-3 的意义是把这件事记录清楚，方便 OPS01E 做安全发布流程封板。OPS01E 现已
+完成，封板记录见 `docs/OPS01_SAFE_RELEASE_SEAL.md`。
 
 ## 3. ContainerConfig 问题是什么
 
@@ -198,6 +199,9 @@ OPS01D production safe release 真实演练通过。
 - Nginx/证书未修改。
 - 未接真实业务。
 
-下一步 OPS01E 是安全发布流程封板：把 safe release 流程、rollback tag 说明、
-`ContainerConfig` 复发处理边界和 production 发布手册整理成最终版本，等待 owner
-审核后封板。
+OPS01E 已完成安全发布流程封板：safe release 流程、rollback tag 说明、
+`ContainerConfig` 复发处理边界和 production 发布手册已经整理成最终版本。
+
+当前仍未安装 Compose v2。后续 production backend/frontend 发布继续优先使用
+`scripts/safe_compose_release.sh`，不要把 `docker-compose --force-recreate` 作为默认
+发布方式。OPS01 封板后，下一阶段回到 C05：权限系统。

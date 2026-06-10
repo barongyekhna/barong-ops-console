@@ -31,6 +31,11 @@ OPS01B-alt 阶段没有删除容器、没有重建容器、没有启动发布、
 backend/frontend 目标容器，没有动 production postgres，没有动 staging，没有修改
 Nginx/证书，也没有接真实业务。
 
+OPS01E 已完成最终只读复核和封板，封板记录见
+`docs/OPS01_SAFE_RELEASE_SEAL.md`。OPS01E 没有执行真实 release，也没有安装 Compose
+v2。OPS01 封板后，backend/frontend 发布默认走
+`scripts/safe_compose_release.sh`，下一阶段回到 C05 权限系统。
+
 ## 2. 为什么不用 --force-recreate
 
 `--force-recreate` 会强迫 Compose 按旧容器信息重建服务。当前服务器只有
@@ -59,7 +64,7 @@ metadata 里这个字段不稳定，于是 v1 抛错。
 要安装 Compose v2，可能需要改 apt 源、安装 Docker 官方源或下载二进制。那些都是
 服务器工具链变更，应该单独评估和演练，不能混进当前发布风险治理里。
 
-Compose v2 后续可以继续评估，但它不阻塞 OPS01B-alt 的短期安全脚本准备。
+Compose v2 后续可以继续评估，但它不阻塞当前 safe release 流程，也不阻塞 C05 主线。
 
 ## 4. safe release 脚本目标
 
@@ -221,4 +226,8 @@ OPS01D-1 已完成 production dry-run。
 
 OPS01D-2 已完成 production 真实演练，且使用了 double confirmation。
 
-OPS01D-3 已完成只读复核和归档。下一步 OPS01E 是安全发布流程封板。
+OPS01D-3 已完成只读复核和归档。
+
+OPS01E 已完成最终封板。当前仍未安装 Compose v2；后续 backend/frontend 发布优先使用
+`scripts/safe_compose_release.sh`，不再默认使用
+`docker-compose --force-recreate`。下一阶段回到 C05：权限系统。

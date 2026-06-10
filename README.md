@@ -243,60 +243,44 @@ Current C04 status:
 
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
-C04 is sealed. The next step is OPS01: Docker Compose v1 `ContainerConfig`
-issue cleanup, followed by C05 permissions / RBAC.
+C04 is sealed. OPS01 Docker Compose v1 `ContainerConfig` cleanup is also
+sealed. The next stage is C05 permissions / RBAC.
 
 ## OPS01 Docker Compose governance
 
-OPS01A has started as a read-only audit and governance plan for the recurring
-Docker Compose v1 `KeyError: 'ContainerConfig'` deployment issue.
+OPS01 is sealed. It governed the recurring Docker Compose v1
+`KeyError: 'ContainerConfig'` deployment issue without installing tools,
+upgrading Docker, reading real env files, modifying Nginx/certificates, or
+connecting real business systems.
 
-OPS01A does not install or upgrade Docker/Compose, does not run
-`docker-compose up/down`, does not stop, restart, remove, or recreate
-production/staging containers, does not read real env files, does not modify
-Nginx or certificates, and does not connect real business systems.
+The current server still has only `docker-compose` v1.29.2 available. Docker
+Compose v2 was not installed because the current apt source has no
+`docker-compose-plugin` candidate package. Compose v2 can be evaluated later as
+a separate toolchain task, but it does not block the product roadmap.
 
-The plan is documented in `docs/OPS01_DOCKER_COMPOSE_GOVERNANCE_PLAN.md`.
-The recommended route is to handle Compose v2 enablement or a safe fallback in
-a separate OPS01B task, rehearse release-script changes on staging first, and
-only then apply the approved flow to production.
+OPS01 now uses `scripts/safe_compose_release.sh` as the default backend/frontend
+release path. The script defaults to dry-run, requires explicit project names,
+allows only staging/production backend/frontend targets, rejects postgres, and
+requires double confirmation for production real execution.
 
-OPS01B-alt has prepared the short-term safe release path for the current
-server, which still has only `docker-compose` v1.29.2 available. It adds
-`scripts/safe_compose_release.sh`, `scripts/check_safe_release_plan.sh`, and
-`docs/OPS01_SAFE_RELEASE_RUNBOOK.md`.
+OPS01C rehearsed safe release on staging backend/frontend. OPS01D rehearsed it
+on production backend/frontend. Both environments passed smoke checks and
+dual-env status checks, rollback tags exist, production postgres remained
+untouched, staging remained isolated, and the Docker Compose v1
+`ContainerConfig` issue did not recur.
 
-The safe release script defaults to dry-run, requires explicit project names,
-allows only staging/production backend/frontend targets, and rejects postgres.
-OPS01C has now rehearsed the flow on staging for both backend and frontend.
-The acceptance record is in
-`docs/OPS01_STAGING_SAFE_RELEASE_ACCEPTANCE.md`.
+The OPS01 records are:
 
-OPS01C used the script to publish only staging backend/frontend, generated
-staging rollback tags, kept staging postgres healthy, and left production to
-read-only smoke/status checks. No real env files, Nginx/certificates, or real
-business systems were touched.
+- `docs/OPS01_DOCKER_COMPOSE_GOVERNANCE_PLAN.md`
+- `docs/OPS01_SAFE_RELEASE_RUNBOOK.md`
+- `docs/OPS01_STAGING_SAFE_RELEASE_ACCEPTANCE.md`
+- `docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`
+- `docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`
+- `docs/OPS01_SAFE_RELEASE_SEAL.md`
 
-OPS01D-1 has completed the production backend/frontend safe release dry-run and
-mapping review. The archive is in
-`docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`. OPS01D-2 has now completed the
-production backend/frontend safe release real rehearsal. The acceptance archive
-is in `docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`.
-
-OPS01D-2 used `scripts/safe_compose_release.sh` for production backend and then
-production frontend, with `CONFIRM_SAFE_RELEASE=yes`,
-`CONFIRM_PRODUCTION_RELEASE=yes`, and `--execute` for both runs. The rehearsal
-generated production rollback tags, kept production postgres untouched, left
-staging untouched, did not modify Nginx/certificates, did not connect real
-business systems, and did not reproduce the Docker Compose v1
-`KeyError: 'ContainerConfig'` issue. Production smoke, staging smoke, and
-dual-env status checks pass.
-
-The server still does not have Compose v2 installed and still keeps
-`docker-compose` v1.29.2. Future production backend/frontend releases should
-prefer `scripts/safe_compose_release.sh` instead of
-`docker-compose --force-recreate`. The next step is OPS01E: safe release process
-seal.
+Future staging/production backend/frontend releases should prefer
+`scripts/safe_compose_release.sh` instead of `docker-compose --force-recreate`.
+OPS01 is complete; the next stage is C05 permissions / RBAC.
 
 ## Temporary login preview
 

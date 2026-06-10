@@ -207,5 +207,10 @@ frontend，一次只动一个服务，先打 rollback tag，再等 health check 
 `CONFIRM_PRODUCTION_RELEASE=yes`。两次演练都没有触发
 `KeyError: 'ContainerConfig'`。
 
-下一步 OPS01E 是安全发布流程封板。封板前仍必须继续禁止 postgres、禁止 `down`、
+OPS01E 已完成安全发布流程封板，封板记录见
+`docs/OPS01_SAFE_RELEASE_SEAL.md`。封板后仍必须继续禁止 postgres、禁止 `down`、
 禁止读取真实 env、禁止修改 Nginx/证书、禁止接真实业务。
+
+当前仍未安装 Compose v2。后续 staging/production backend/frontend 发布默认使用
+`scripts/safe_compose_release.sh`，不再默认使用
+`docker-compose --force-recreate`。OPS01 封板后，下一阶段回到 C05：权限系统。
