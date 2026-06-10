@@ -92,8 +92,8 @@ non-owner `/users`, disable, enable, password reset, `role=owner` rejection,
 read-only checks confirmed `/users` returns 200, unauthenticated
 `/api/backend/users` returns 401, `/auth/register` still returns 404, and
 production/staging/dual-env checks pass. C03 still does not add
-`super_admin`, full RBAC, or real business integration. The next step is C03F:
-C03 Owner-created sub-account sealing.
+`super_admin`, full RBAC, or real business integration. C03F has sealed this
+stage; the next stage is C04: role system.
 
 ## Configuration
 

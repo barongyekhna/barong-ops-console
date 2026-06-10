@@ -3,6 +3,8 @@
 日期：2026-06-10 UTC
 
 本文件记录 C03E：Owner 用户管理功能已经进入 production 的发布归档。
+C03F 最终封板已经完成，封板归档见
+`docs/C03_OWNER_ACCOUNT_MANAGEMENT_SEAL.md`。
 
 ## 1. 这次发布了什么
 
@@ -96,4 +98,5 @@ C03E production 发布验收通过。
 - staging 继续保留为测试服。
 - 当前仍然没有接真实业务模块。
 
-下一步是 C03F：C03 Owner 创建子账户封板。
+C03F 已完成 C03 Owner 创建子账户总封板。C03 不包含 `super_admin` 或完整
+RBAC；下一阶段是 C04：角色体系。

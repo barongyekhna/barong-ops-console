@@ -121,8 +121,9 @@ tasks. The next stage is C03: Owner creates sub-accounts.
 ## C03 owner account management
 
 C03B implemented the backend owner-created sub-account API, C03C added the
-frontend user management surface, C03D accepted the flow on staging, and C03E
-has released it to production:
+frontend user management surface, C03D accepted the flow on staging, C03E
+released it to production, and C03F has sealed the Owner-created sub-account
+stage:
 
 - `docs/C03_OWNER_ACCOUNT_MANAGEMENT_PLAN.md` records the users/auth audit,
   C03 scope, backend API, frontend implementation, security rules,
@@ -134,6 +135,9 @@ has released it to production:
   acceptance result, including production `/users` availability, unauthenticated
   `/api/backend/users` returning 401, `/auth/register` still returning 404, and
   production/staging/dual-env smoke checks passing.
+- `docs/C03_OWNER_ACCOUNT_MANAGEMENT_SEAL.md` records the C03F final seal:
+  C03 is complete, User Management is in production, there is still no public
+  registration, and `super_admin` plus full RBAC stay out of C03.
 - Owner-only `/users` APIs now support list, create, detail, update,
   enable/disable, and reset-password for sub-accounts.
 - The protected `/users` console page is available under **User Management**
@@ -153,13 +157,15 @@ has released it to production:
 - C03E verified production read-only behavior without reading real env files,
   creating production users, changing Nginx/certificates, restarting containers,
   or connecting real business workflows.
-- C03 still does not add `super_admin`, full RBAC, public registration,
+- C03F sealed the scope without reading or modifying real env files, creating
+  production users, restarting/rebuilding containers, changing Nginx or
+  certificates, committing, or connecting real business systems.
+- C03 does not add `super_admin`, full RBAC, public registration,
   OAuth/email flows, or real business workflows.
 
 The current system remains foundation/console only. Real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, and business tasks are
-still not connected. The next step is C03F: seal C03 Owner-created
-sub-accounts.
+still not connected. The next stage is C04: role system.
 
 ## Temporary login preview
 

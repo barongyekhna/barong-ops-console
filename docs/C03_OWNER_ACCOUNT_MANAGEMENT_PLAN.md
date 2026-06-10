@@ -109,6 +109,22 @@ env，没有重启、删除、重建容器，没有修改 Nginx/证书，没有�
 git commit。当前仍只支持 `viewer`、`operator`、`reviewer` 子账户，
 `super_admin` 和完整 RBAC 留到 C04/C05。
 
+## 2.4. C03F 最终封板状态
+
+C03F 已完成 C03 Owner 创建子账户功能总封板。封板文档见
+`docs/C03_OWNER_ACCOUNT_MANAGEMENT_SEAL.md`。
+
+封板结论：
+
+- C03 已完成。
+- production User Management 已可访问：
+  `https://ops.barongyekhna.com/users`。
+- 当前仍无公开注册，`/auth/register` 仍返回 404。
+- 当前账号管理能力只覆盖 owner 创建和管理 `viewer`、`operator`、
+  `reviewer` 子账户。
+- 当前不做 `super_admin`，不做完整 RBAC，不做模块权限，不接真实业务。
+- 下一阶段是 C04：角色体系。
+
 ## 3. 审计过的主要文件
 
 后端用户和认证：
@@ -844,7 +860,17 @@ backend/frontend 上做验收，没有 build、recreate、stop、rm 容器，没
 - 记录已知风险。
 - 明确 C04/C05 角色权限系统入口。
 
-下一步：C03F 做 C03 Owner 创建子账户总封板。
+状态：C03F 已完成。最终封板归档见
+`docs/C03_OWNER_ACCOUNT_MANAGEMENT_SEAL.md`。
+
+封板结果：
+
+- C03 Owner 创建子账户功能已完成。
+- production User Management 已进入正式服。
+- 当前仍只做账号管理基础，不做 `super_admin` 或完整 RBAC。
+- 后续所有账号权限扩展必须基于 C03 已封板能力，不允许绕过 owner-only
+  管理边界。
+- 下一阶段是 C04：角色体系。
 
 ## 16. 当前不接真实业务
 
@@ -863,7 +889,7 @@ C03 只处理账号管理基础，不代表系统可以开始跑真实业务。
 
 真实业务接入必须等账号、角色、权限、审核、日志和 staging-first 发布链路继续封板后，再按独立任务进入。
 
-## 17. C03A-C03E 结论
+## 17. C03A-C03F 结论
 
 C03A 审计结论：
 
@@ -922,4 +948,20 @@ C03E production 结论：
 - 本次没有新增 migration，没有接真实业务模块，没有修改 Nginx/证书。
 - production smoke、staging smoke、dual env check 均通过。
 - staging 仍保留为测试服。
-- 下一步是 C03F：C03 Owner 创建子账户封板。
+
+C03F 封板结论：
+
+- C03 Owner 创建子账户功能已完成。
+- production 正式地址为 `https://ops.barongyekhna.com/users`。
+- production `/users` 返回 200。
+- 未登录访问 production `/api/backend/users` 返回 401。
+- production `/api/backend/auth/register` 仍返回 404。
+- production smoke、staging smoke、dual env check 均通过。
+- 当前支持 owner 查看用户列表、创建 `viewer` / `operator` / `reviewer`
+  子账户、查看详情、停用 / 启用、重置密码。
+- active 非 owner 子账户可以登录；非 owner 不能访问 `/users` 管理 API；
+  inactive 用户不能登录。
+- API 不返回 `password_hash`，用户管理动作写 `operation_logs`。
+- 当前不做 `super_admin`、完整 RBAC、模块权限、部门组织架构、机器人账号、
+  邮件邀请、密码找回邮件或真实业务模块。
+- C03 已封板，下一阶段是 C04：角色体系。
