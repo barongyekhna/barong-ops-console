@@ -101,6 +101,7 @@ for (const testPath of ["/n8n-test/run", "/n8n-test/latest"]) {
 
 for (const usersPath of [
   "/users",
+  "/users/roles",
   "/disable",
   "/enable",
   "/reset-password",
@@ -112,7 +113,10 @@ for (const usersPath of [
 
 if (
   !source.includes("User Management") ||
-  !source.includes("not a public registration flow")
+  !source.includes("not a public registration flow") ||
+  !source.includes("Current assignable roles") ||
+  !source.includes("Reserved roles, not assignable in C04") ||
+  !source.includes("Full RBAC is planned for C05.")
 ) {
   throw new Error("The C03C user management page is incomplete.");
 }
@@ -128,6 +132,10 @@ const backendProxySource = readFileSync(backendProxyRoute, "utf8");
 
 if (!backendProxySource.includes("export function PATCH")) {
   throw new Error("The backend API proxy must support PATCH for user updates.");
+}
+
+if (!backendProxySource.includes('path[1] === "roles"')) {
+  throw new Error("The backend API proxy must allow GET /users/roles.");
 }
 
 if (

@@ -907,6 +907,7 @@ select:focus-visible {
 }
 
 .users-create-panel,
+.users-role-catalog-panel,
 .users-reset-panel,
 .users-list-panel,
 .user-detail-panel {
@@ -954,6 +955,14 @@ select:focus-visible {
   justify-self: flex-start;
 }
 
+.users-field-note {
+  display: block;
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
 .users-alert {
   display: flex;
   align-items: center;
@@ -974,6 +983,57 @@ select:focus-visible {
   color: #0a684e;
   background: #e8f7f1;
   border: 1px solid #bee5d7;
+}
+
+.users-alert-warning {
+  color: #775b12;
+  background: #fff8e4;
+  border: 1px solid #e9d28a;
+}
+
+.users-role-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.users-role-group {
+  min-width: 0;
+}
+
+.users-role-group h4 {
+  margin: 0 0 10px;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.users-role-group ul {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--line);
+}
+
+.users-role-group li {
+  min-width: 0;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.users-role-group li span {
+  display: block;
+  color: var(--ink);
+  font-size: 0.8rem;
+  font-weight: 800;
+}
+
+.users-role-group li p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  line-height: 1.5;
 }
 
 .users-inline-actions {
@@ -1055,6 +1115,20 @@ select:focus-visible {
   border: 1px solid #dbe1de;
 }
 
+.users-role-cell {
+  display: grid;
+  gap: 5px;
+  align-items: start;
+}
+
+.users-role-description {
+  display: block;
+  max-width: 280px;
+  color: var(--muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
 .users-status-active {
   color: #087c5e;
   background: #e5f6ef;
@@ -1101,6 +1175,15 @@ select:focus-visible {
   overflow-wrap: anywhere;
   font-size: 0.82rem;
   font-weight: 700;
+}
+
+.user-detail-description {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 500;
+  line-height: 1.45;
 }
 
 .users-role-form {
@@ -1168,6 +1251,7 @@ select:focus-visible {
   }
 
   .users-form-grid,
+  .users-role-catalog-grid,
   .user-detail-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -1224,6 +1308,7 @@ select:focus-visible {
   }
 
   .users-form-grid,
+  .users-role-catalog-grid,
   .user-detail-grid,
   .users-role-form {
     grid-template-columns: 1fr;

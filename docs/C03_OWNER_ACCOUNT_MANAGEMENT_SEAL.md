@@ -109,6 +109,12 @@ C04B 已补充后端统一角色常量和校验。标准角色现在已在代码
 但 `/users` 当前仍只允许 owner 创建 `viewer`、`operator`、`reviewer`。`super_admin`、
 `module_admin` 和 `bot_agent` 仍未放权、未开放创建，完整权限系统仍由 C05 承接。
 
+C04C 已补充前端 User Management 角色目录化：页面通过 owner-only
+`GET /users/roles` 读取角色目录，创建用户下拉只展示 `viewer`、`operator`、
+`reviewer`，并在说明区展示 `owner`、`super_admin`、`module_admin`、`bot_agent`
+为 C04 当前不可选择角色。C04C 不做完整 RBAC，不部署 staging/production，不创建真实用户，
+不接真实业务。下一步 C04D 是部署到 staging 测试服验收角色目录 UI。
+
 ## 九、C03 封板结论
 
 C03 已完成。

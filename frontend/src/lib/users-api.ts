@@ -9,6 +9,20 @@ export const MANAGED_USER_ROLES = [
 
 export type ManagedUserRole = (typeof MANAGED_USER_ROLES)[number];
 
+export type UserRoleMetadata = {
+  name: string;
+  label: string;
+  description: string;
+  human_or_agent: string;
+  c04_status: string;
+  assignable: boolean;
+};
+
+export type UserRolesResponse = {
+  assignable_roles: UserRoleMetadata[];
+  standard_roles: UserRoleMetadata[];
+};
+
 export type ManagedUser = {
   id: number;
   username: string;
@@ -48,6 +62,13 @@ export function listUsers(limit = 50, offset = 0) {
   });
 
   return apiRequest<UserListResponse>(`/users?${params.toString()}`, {
+    accessToken: readAccessToken(),
+    method: "GET",
+  });
+}
+
+export function listUserRoles() {
+  return apiRequest<UserRolesResponse>("/users/roles", {
     accessToken: readAccessToken(),
     method: "GET",
   });
@@ -119,7 +140,7 @@ export function formatUsersApiError(error: unknown, fallback: string) {
     return "That username already exists. Choose a different username.";
   }
   if (error.status === 404) {
-    return "The selected user was not found. Refresh the list and try again.";
+    return "The user management endpoint or selected user was not found. Refresh the list and try again.";
   }
   if (error.status === 422) {
     return error.message === "The request could not be completed."
@@ -128,6 +149,9 @@ export function formatUsersApiError(error: unknown, fallback: string) {
   }
   if (error.status === 503) {
     return "The backend API service is unavailable.";
+  }
+  if (error.status >= 500) {
+    return "The backend API returned an internal error. Try again after checking the service.";
   }
 
   return error.message || fallback;

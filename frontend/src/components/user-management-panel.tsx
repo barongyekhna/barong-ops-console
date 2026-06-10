@@ -29,15 +29,94 @@ import {
   formatUsersApiError,
   getUser,
   isManagedUserRole,
+  listUserRoles,
   listUsers,
   resetUserPassword,
   updateUser,
   type ManagedUser,
   type ManagedUserRole,
+  type UserRoleMetadata,
+  type UserRolesResponse,
 } from "@/lib/users-api";
 
 const PASSWORD_LENGTH_MESSAGE =
   "Password must be 12 to 256 characters.";
+const RESERVED_ROLE_NAMES = [
+  "owner",
+  "super_admin",
+  "module_admin",
+  "bot_agent",
+] as const;
+const RESERVED_ROLE_NOTES: Record<string, string> = {
+  bot_agent: "Bot Agent requires agent identity and token scope design.",
+  module_admin: "Module Admin requires module scope first.",
+  owner: "Owner remains bootstrap-only and cannot be created through /users.",
+  super_admin: "Super Admin will be enabled in the later permission system.",
+};
+const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
+  {
+    assignable: false,
+    c04_status: "bootstrap_only",
+    description: "Bootstrap/system owner account.",
+    human_or_agent: "human",
+    label: "Owner",
+    name: "owner",
+  },
+  {
+    assignable: false,
+    c04_status: "reserved_no_permissions",
+    description: "Reserved standard role; no C04 permissions.",
+    human_or_agent: "human",
+    label: "Super Admin",
+    name: "super_admin",
+  },
+  {
+    assignable: false,
+    c04_status: "reserved_until_c05_c07",
+    description: "Reserved until module scope is defined.",
+    human_or_agent: "human",
+    label: "Module Admin",
+    name: "module_admin",
+  },
+  {
+    assignable: true,
+    c04_status: "assignable_user_role",
+    description: "Assignable managed user role.",
+    human_or_agent: "human",
+    label: "Viewer",
+    name: "viewer",
+  },
+  {
+    assignable: true,
+    c04_status: "assignable_user_role",
+    description: "Assignable managed user role.",
+    human_or_agent: "human",
+    label: "Operator",
+    name: "operator",
+  },
+  {
+    assignable: true,
+    c04_status: "assignable_user_role",
+    description: "Assignable managed user role.",
+    human_or_agent: "human",
+    label: "Reviewer",
+    name: "reviewer",
+  },
+  {
+    assignable: false,
+    c04_status: "reserved_no_login_flow",
+    description: "Reserved for future robot accounts.",
+    human_or_agent: "agent",
+    label: "Bot Agent",
+    name: "bot_agent",
+  },
+];
+const FALLBACK_ROLE_METADATA_BY_NAME = new Map(
+  FALLBACK_ROLE_METADATA.map((role) => [role.name, role]),
+);
+const FALLBACK_ASSIGNABLE_ROLES = MANAGED_USER_ROLES.map((role) =>
+  FALLBACK_ROLE_METADATA_BY_NAME.get(role),
+).filter((role): role is UserRoleMetadata => Boolean(role));
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
@@ -62,14 +141,14 @@ function validatePassword(password: string) {
   return "";
 }
 
-function roleLabel(role: string) {
-  return role.replaceAll("_", " ");
-}
-
 export function UserManagementPanel() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<ManagedUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [roleCatalog, setRoleCatalog] =
+    useState<UserRolesResponse | null>(null);
+  const [isRoleCatalogLoading, setIsRoleCatalogLoading] = useState(true);
+  const [roleCatalogError, setRoleCatalogError] = useState("");
   const [listError, setListError] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionNotice, setActionNotice] = useState("");
@@ -86,6 +165,32 @@ export function UserManagementPanel() {
 
   const isOwner = currentUser?.role === "owner";
   const isBusy = pendingAction !== null;
+
+  const loadRoleCatalog = useCallback(async () => {
+    if (!isOwner) {
+      setRoleCatalog(null);
+      setRoleCatalogError("");
+      setIsRoleCatalogLoading(false);
+      return;
+    }
+
+    setIsRoleCatalogLoading(true);
+    setRoleCatalogError("");
+
+    try {
+      setRoleCatalog(await listUserRoles());
+    } catch (error) {
+      setRoleCatalog(null);
+      setRoleCatalogError(
+        formatUsersApiError(
+          error,
+          "The role catalog could not be loaded.",
+        ),
+      );
+    } finally {
+      setIsRoleCatalogLoading(false);
+    }
+  }, [isOwner]);
 
   const loadUsers = useCallback(
     async (showLoading = true) => {
@@ -120,8 +225,67 @@ export function UserManagementPanel() {
   );
 
   useEffect(() => {
+    void loadRoleCatalog();
+  }, [loadRoleCatalog]);
+
+  useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
+
+  const catalogRoleByName = useMemo(
+    () =>
+      new Map(
+        (roleCatalog?.standard_roles ?? []).map((role) => [
+          role.name,
+          role,
+        ]),
+      ),
+    [roleCatalog],
+  );
+
+  const assignableRoleOptions = useMemo(() => {
+    if (!roleCatalog) {
+      return roleCatalogError ? FALLBACK_ASSIGNABLE_ROLES : [];
+    }
+
+    return roleCatalog.assignable_roles.filter(
+      (role) => role.assignable && isManagedUserRole(role.name),
+    );
+  }, [roleCatalog, roleCatalogError]);
+
+  const assignableRoleNames = useMemo(
+    () => new Set(assignableRoleOptions.map((role) => role.name)),
+    [assignableRoleOptions],
+  );
+
+  const reservedRoleOptions = useMemo(
+    () =>
+      RESERVED_ROLE_NAMES.map(
+        (role) =>
+          roleCatalog?.standard_roles.find((entry) => entry.name === role) ??
+          FALLBACK_ROLE_METADATA_BY_NAME.get(role),
+      ).filter((role): role is UserRoleMetadata => Boolean(role)),
+    [roleCatalog],
+  );
+
+  useEffect(() => {
+    if (assignableRoleOptions.length === 0) {
+      return;
+    }
+
+    const firstRole = assignableRoleOptions[0].name as ManagedUserRole;
+    if (!assignableRoleNames.has(createRole)) {
+      setCreateRole(firstRole);
+    }
+    if (!assignableRoleNames.has(detailRole)) {
+      setDetailRole(firstRole);
+    }
+  }, [
+    assignableRoleNames,
+    assignableRoleOptions,
+    createRole,
+    detailRole,
+  ]);
 
   const sortedUsers = useMemo(
     () =>
@@ -136,6 +300,9 @@ export function UserManagementPanel() {
       }),
     [users],
   );
+  const expandedRoleMetadata = expandedUser
+    ? catalogRoleByName.get(expandedUser.role)
+    : null;
 
   function clearActionMessages() {
     setActionError("");
@@ -169,6 +336,15 @@ export function UserManagementPanel() {
     }
     if (passwordError) {
       setActionError(passwordError);
+      return;
+    }
+    if (
+      !isManagedUserRole(createRole) ||
+      !assignableRoleNames.has(createRole)
+    ) {
+      setActionError(
+        "Choose one of the current assignable C04 roles before creating the account.",
+      );
       return;
     }
 
@@ -272,6 +448,15 @@ export function UserManagementPanel() {
     }
     if (!isManagedUserRole(expandedUser.role)) {
       setActionError("Only managed sub-account roles can be updated here.");
+      return;
+    }
+    if (
+      !isManagedUserRole(detailRole) ||
+      !assignableRoleNames.has(detailRole)
+    ) {
+      setActionError(
+        "Choose one of the current assignable C04 roles before saving.",
+      );
       return;
     }
 
@@ -400,24 +585,39 @@ export function UserManagementPanel() {
             <span>Role</span>
             <select
               className="select-shell"
-              disabled={isBusy}
+              disabled={
+                isBusy ||
+                isRoleCatalogLoading ||
+                assignableRoleOptions.length === 0
+              }
               onChange={(event) =>
                 setCreateRole(event.target.value as ManagedUserRole)
               }
               value={createRole}
             >
-              {MANAGED_USER_ROLES.map((role) => (
-                <option key={role} value={role}>
-                  {roleLabel(role)}
+              {assignableRoleOptions.map((role) => (
+                <option key={role.name} value={role.name}>
+                  {role.label}
                 </option>
               ))}
             </select>
+            <span className="users-field-note">
+              {isRoleCatalogLoading
+                ? "Loading owner-only role catalog."
+                : roleCatalogError
+                  ? "Using safe fallback roles after the role catalog failed."
+                  : "Loaded from /users/roles."}
+            </span>
           </label>
         </div>
 
         <button
           className="primary-button users-submit-button"
-          disabled={isBusy}
+          disabled={
+            isBusy ||
+            isRoleCatalogLoading ||
+            assignableRoleOptions.length === 0
+          }
           type="submit"
         >
           {pendingAction === "create" ? (
@@ -428,6 +628,76 @@ export function UserManagementPanel() {
           Create user
         </button>
       </form>
+
+      <section className="users-role-catalog-panel" aria-label="Role catalog">
+        <div className="users-panel-heading">
+          <div>
+            <span className="eyebrow">C04 role catalog</span>
+            <h3>Roles</h3>
+            <p>
+              User Management reads role labels and selectable roles from the
+              owner-only role catalog. Full RBAC is planned for C05.
+            </p>
+          </div>
+          <button
+            className="secondary-button"
+            disabled={isBusy || isRoleCatalogLoading}
+            onClick={() => void loadRoleCatalog()}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={17} />
+            Refresh roles
+          </button>
+        </div>
+
+        {isRoleCatalogLoading ? (
+          <div className="list-state" aria-label="Loading role catalog">
+            <LoaderCircle className="spin" aria-hidden="true" size={22} />
+            Loading role catalog
+          </div>
+        ) : null}
+
+        {!isRoleCatalogLoading && roleCatalogError ? (
+          <div className="users-alert users-alert-warning" role="status">
+            <ShieldAlert aria-hidden="true" size={18} />
+            <span>
+              {roleCatalogError} Safe fallback roles are limited to viewer,
+              operator, and reviewer.
+            </span>
+          </div>
+        ) : null}
+
+        {!isRoleCatalogLoading ? (
+          <div className="users-role-catalog-grid">
+            <div className="users-role-group">
+              <h4>Current assignable roles</h4>
+              <ul>
+                {assignableRoleOptions.map((role) => (
+                  <li key={role.name}>
+                    <span>{role.label}</span>
+                    <p>{role.description}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="users-role-group">
+              <h4>Reserved roles, not assignable in C04</h4>
+              <ul>
+                {reservedRoleOptions.map((role) => (
+                  <li key={role.name}>
+                    <span>{role.label}</span>
+                    <p>
+                      {role.description} {RESERVED_ROLE_NOTES[role.name]}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+              <p className="users-muted-note">Full RBAC is planned for C05.</p>
+            </div>
+          </div>
+        ) : null}
+      </section>
 
       {actionError ? (
         <div className="users-alert users-alert-error" role="alert">
@@ -550,6 +820,7 @@ export function UserManagementPanel() {
                   const actionDisabled = isBusy || isSelf;
                   const rowPending =
                     pendingAction?.endsWith(`-${target.id}`) ?? false;
+                  const roleMetadata = catalogRoleByName.get(target.role);
 
                   return (
                     <tr key={target.id}>
@@ -558,9 +829,16 @@ export function UserManagementPanel() {
                         {isSelf ? <span>Current account</span> : null}
                       </td>
                       <td>
-                        <span className="users-role-pill">
-                          {roleLabel(target.role)}
-                        </span>
+                        <div className="users-role-cell">
+                          <span className="users-role-pill">
+                            {roleMetadata?.label ?? target.role}
+                          </span>
+                          {roleMetadata ? (
+                            <span className="users-role-description">
+                              {roleMetadata.description}
+                            </span>
+                          ) : null}
+                        </div>
                       </td>
                       <td>
                         <span
@@ -704,7 +982,14 @@ export function UserManagementPanel() {
             </div>
             <div>
               <dt>Role</dt>
-              <dd>{roleLabel(expandedUser.role)}</dd>
+              <dd>
+                {expandedRoleMetadata?.label ?? expandedUser.role}
+                {expandedRoleMetadata ? (
+                  <span className="user-detail-description">
+                    {expandedRoleMetadata.description}
+                  </span>
+                ) : null}
+              </dd>
             </div>
             <div>
               <dt>Status</dt>
@@ -730,15 +1015,20 @@ export function UserManagementPanel() {
                 <span>Managed role</span>
                 <select
                   className="select-shell"
-                  disabled={isBusy || expandedUser.id === currentUser?.id}
+                  disabled={
+                    isBusy ||
+                    isRoleCatalogLoading ||
+                    assignableRoleOptions.length === 0 ||
+                    expandedUser.id === currentUser?.id
+                  }
                   onChange={(event) =>
                     setDetailRole(event.target.value as ManagedUserRole)
                   }
                   value={detailRole}
                 >
-                  {MANAGED_USER_ROLES.map((role) => (
-                    <option key={role} value={role}>
-                      {roleLabel(role)}
+                  {assignableRoleOptions.map((role) => (
+                    <option key={role.name} value={role.name}>
+                      {role.label}
                     </option>
                   ))}
                 </select>
@@ -747,6 +1037,8 @@ export function UserManagementPanel() {
                 className="secondary-button"
                 disabled={
                   isBusy ||
+                  isRoleCatalogLoading ||
+                  assignableRoleOptions.length === 0 ||
                   expandedUser.id === currentUser?.id ||
                   detailRole === expandedUser.role
                 }
@@ -758,8 +1050,9 @@ export function UserManagementPanel() {
             </form>
           ) : (
             <p className="users-muted-note">
-              Owner accounts are displayed for audit context. C03C does not
-              allow changing owner or super admin roles.
+              Owner and reserved roles are displayed for audit context. C04C
+              does not allow changing owner, super admin, module admin, or bot
+              agent roles.
             </p>
           )}
         </section>

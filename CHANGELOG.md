@@ -6,6 +6,8 @@
 
 ### Added
 
+- C04C：前端 User Management 页面新增角色目录说明区，显示 “Current assignable roles” 的 `viewer` / `operator` / `reviewer`，以及 “Reserved roles, not assignable in C04” 的 `owner` / `super_admin` / `module_admin` / `bot_agent`，并明确完整 RBAC 留到 C05。
+- C04C：`frontend/src/lib/users-api.ts` 新增 role metadata 类型和 `listUserRoles()`，通过 `/api/backend/users/roles` 调用 C04B 的 owner-only `GET /users/roles`，保留 token 不打印和用户管理错误提示。
 - C04B：新增 `backend/app/core/roles.py`，统一定义标准角色 `owner` / `super_admin` / `module_admin` / `operator` / `reviewer` / `viewer` / `bot_agent`、当前 `/users` 可创建角色 `viewer` / `operator` / `reviewer`、不可创建角色 `owner` / `super_admin` / `module_admin` / `bot_agent`、role normalize/validation helper 和角色展示 metadata。
 - C04B：新增 owner-only `GET /users/roles`，返回当前用户管理可创建角色和标准角色目录；不可创建角色只展示为 `assignable=false`，不开放选择或放权。
 - C04B：新增 `tests/backend/test_roles.py` 并扩展用户管理测试，覆盖标准角色、可创建/不可创建角色、大小写和空格 normalize、创建/PATCH role 拒绝矩阵、非 owner 禁止访问、`/auth/register` 404、API 不返回 `password_hash` 和 operation logs。
@@ -64,6 +66,9 @@
 
 ### Changed
 
+- C04C：创建用户和详情页 managed role 下拉改为由 `/users/roles` 返回的 `assignable=true` 角色生成，并在前端安全过滤为 `viewer` / `operator` / `reviewer`；`owner`、`super_admin`、`module_admin`、`bot_agent` 不可选择。
+- C04C：前端 API proxy 最小放行 `GET /api/backend/users/roles`，不破坏 `/health`、`/auth` 和既有 `/users` list/create/detail/update/disable/enable/reset-password 路径。
+- C04C：README、frontend README、C03 封板文档和 C04 角色计划更新为前端已使用后端角色目录；本阶段不做完整 RBAC、不部署 staging/production、不创建真实用户、不接真实业务，下一步为 C04D staging 验收角色目录 UI。
 - C04B：`backend/app/schemas/user.py` 和 `backend/app/services/user_management_service.py` 改为调用统一 `validate_assignable_user_role`；创建和更新用户 role 仍只允许 `viewer` / `operator` / `reviewer`，继续拒绝 `owner` / `super_admin` / `module_admin` / `bot_agent`。
 - C04B：`backend/app/api/deps.py` 的 owner-only 判断改为 `is_owner_role` helper，不改变 `/users` 权限结果；`super_admin`、`module_admin`、`bot_agent` 只定义不放权，完整权限系统仍留给 C05。
 - C04B：README、backend README、C03 封板文档和 C04 角色计划更新为 C04B 后端角色常量与统一校验已落地；本阶段不新增 migration、不部署 staging、不发布 production、不接真实业务。

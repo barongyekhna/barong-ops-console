@@ -172,6 +172,8 @@ still not connected. The next stage is C04: role system.
 C04A started the role-system stage with the design plan in
 `docs/C04_ROLE_SYSTEM_PLAN.md`. C04B has added backend role constants,
 metadata, validation, tests, and an owner-only `GET /users/roles` catalog.
+C04C has updated the User Management frontend to read that catalog through
+`/api/backend/users/roles`.
 
 C04 defines account identity types. It does not define the full permission
 matrix. C05 will define permissions, module access, and how roles map to
@@ -195,6 +197,13 @@ Current C04 status:
   real bot/agent workflow in C04.
 - C04B keeps `/users` owner-only and only replaces hard-coded owner checks
   with the shared role helper.
+- C04C makes the create-user and managed-role selectors use the backend role
+  catalog. The selectors currently show only `viewer`, `operator`, and
+  `reviewer`.
+- The User Management page now explains that `super_admin`, `module_admin`,
+  and `bot_agent` are reserved roles and are not assignable in C04.
+- C04C does not add `super_admin` powers, complete RBAC, staging/production
+  deployment, or real user/business creation.
 - Company positions such as designer, SEO editor, customer service, or factory
   supervisor should be represented with `role` plus later `job_title`,
   `department`, `module_access`, and `permissions`, not as new hard-coded role
@@ -202,6 +211,8 @@ Current C04 status:
 
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
+The next step is C04D: deploy to the staging test environment and accept the
+role catalog UI.
 
 ## Temporary login preview
 

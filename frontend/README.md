@@ -97,10 +97,17 @@ stage; the next stage is C04: role system.
 
 C04A has started the role-system stage with
 `docs/C04_ROLE_SYSTEM_PLAN.md`. C04 is about account identity labels, not the
-full permission system. The frontend should eventually display the standard
-roles `owner`, `super_admin`, `module_admin`, `operator`, `reviewer`,
-`viewer`, and `bot_agent`, but the `/users` create selector must show only the
-roles that C04B explicitly allows owner to create.
+full permission system. C04B added the owner-only `GET /users/roles` catalog,
+and C04C updates the `/users` page to read it through
+`/api/backend/users/roles`.
+
+The User Management create-user selector and managed-role selector are now
+generated from catalog roles that are `assignable=true` and pass the frontend
+safety whitelist. They currently show only `viewer`, `operator`, and
+`reviewer`. The page also displays `owner`, `super_admin`, `module_admin`, and
+`bot_agent` as reserved/not assignable in C04. `super_admin` is not enabled,
+`module_admin` still needs module scope, and `bot_agent` still needs agent
+identity and token scope design.
 
 C04 does not make `super_admin` all-powerful, does not connect `bot_agent` to
 real automation, and does not define module permissions. C05 will define
@@ -108,7 +115,9 @@ permissions, module access, and role-to-permission bindings. Future company
 positions such as designer, SEO editor, customer service, or factory
 supervisor should be represented through role plus later job title,
 department, module access, and permissions, not as hard-coded frontend role
-strings. Real business systems remain disconnected.
+strings. C04C does not deploy staging/production, create real users, add
+public registration, or connect real business systems. The next step is C04D:
+staging test acceptance for the role catalog UI.
 
 ## Configuration
 

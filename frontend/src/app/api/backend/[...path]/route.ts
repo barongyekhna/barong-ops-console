@@ -58,6 +58,10 @@ function isAllowedUsersPath(method: string, path: string[]) {
     return method === "GET" || method === "POST";
   }
 
+  if (path.length === 2 && path[1] === "roles") {
+    return method === "GET";
+  }
+
   if (path.length === 2 && isIntegerPathSegment(path[1])) {
     return method === "GET" || method === "PATCH";
   }

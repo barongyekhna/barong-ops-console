@@ -2,13 +2,20 @@
 
 日期：2026-06-10 UTC
 
-本文件记录 C04A：角色体系审计与设计方案，并追加 C04B 后端角色常量与校验落地状态。
+本文件记录 C04A：角色体系审计与设计方案，并追加 C04B 后端角色常量与校验落地状态、
+C04C 前端角色目录显示与选择优化状态。
 
 C04A 只做审计、设计、风险分析、后续任务拆分和文档更新。它不实现功能，不新增
 migration，不修改 production/staging 容器，不创建真实用户，不接真实业务。
 
 C04B 已在后端新增统一 role constants、role metadata、assignable-role 校验和测试。
 C04B 仍不做完整 RBAC，不新增 migration，不部署 staging，不发布 production，不接真实业务。
+
+C04C 已在前端 User Management 页面接入 owner-only `GET /users/roles` 角色目录。
+创建用户和角色更新下拉只展示目录中 `assignable=true` 且属于安全白名单的
+`viewer`、`operator`、`reviewer`。`owner`、`super_admin`、`module_admin`、
+`bot_agent` 只展示为当前 C04 不可选择角色。C04C 不部署 staging，不发布 production，
+不创建真实用户，不接真实业务。
 
 ## 一、为什么要做角色体系
 
@@ -84,8 +91,9 @@ C05 才是权限系统：
   用户 role 被修改后，旧 token 会因为 role 不一致失效，需要重新登录。
 - owner bootstrap 通过 `create_owner` 创建 `role="owner"` 且 `is_active=True` 的用户。
 - 前端 `/users` 页面用 `currentUser?.role === "owner"` 判断是否显示用户管理界面。
-- 前端 role 下拉来自 `MANAGED_USER_ROLES`，当前只有 `viewer`、`operator`、
-  `reviewer`。
+- C04C 后，前端 role 下拉来自 `listUserRoles()` 调用的 `/users/roles` 角色目录。
+  创建和更新角色下拉只展示 `assignable=true` 的 `viewer`、`operator`、`reviewer`。
+  目录加载失败时，前端只退回安全兜底白名单，不开放 owner 或预留角色。
 - 前端列表可以显示已有 owner，但详情页只允许修改 managed sub-account role。
 - 测试覆盖了 operator 创建、viewer 默认创建、reviewer 更新、owner 创建被拒绝、
   非 owner 访问 `/users` 返回 403、禁用/启用/重置密码和 operation logs。
@@ -299,6 +307,19 @@ C04B 实际落地：
 - 新增 owner-only `GET /users/roles`，返回用户管理页可创建角色和标准角色目录。
 - `require_owner` 改为通过统一 helper 判断 owner，不改变 `/users` owner-only 行为。
 
+C04C 实际落地：
+
+- `frontend/src/lib/users-api.ts` 新增 role metadata 类型和 `listUserRoles()`。
+- 前端 API proxy 最小放行 `GET /api/backend/users/roles`，不开放通用代理。
+- User Management 创建用户下拉和详情页 managed role 下拉改为使用 `/users/roles`
+  返回的 assignable roles。
+- 用户列表和详情在角色目录可用时显示后端返回的 role label 和 description；目录加载
+  失败时降级显示原始 role 字符串。
+- 页面新增 “Current assignable roles” 和 “Reserved roles, not assignable in C04”
+  说明区，明确 `super_admin` 后续权限系统才启用，`module_admin` 需要 module scope，
+  `bot_agent` 需要 agent identity/token scope 设计，完整 RBAC 留到 C05。
+- C04C 不新增 `super_admin` 权限，不新增公开注册，不接真实业务，不新增 migration。
+
 ## 九、C04 暂不做什么
 
 C04 不做这些事：
@@ -381,14 +402,17 @@ C04A 判断：不建议 C04B 新增 migration。
 
 ### C04C：前端角色显示/选择优化
 
-- 前端复用标准角色列表。
-- 优化 role label，例如 `super_admin` 显示为 Super admin。
-- 创建用户下拉只展示 C04B 允许 owner 创建的角色。
-- 对 `owner`、`super_admin`、`bot_agent` 等不可创建或不可编辑角色给出安全边界。
-- 不接真实业务。
+- 已完成：前端通过 `listUserRoles()` 读取 owner-only `/users/roles`。
+- 已完成：创建用户下拉只展示 C04B 允许 owner 创建的 `viewer`、`operator`、
+  `reviewer`。
+- 已完成：用户列表和详情在目录可用时显示后端 role label/description。
+- 已完成：`owner`、`super_admin`、`module_admin`、`bot_agent` 在说明区展示为 C04
+  当前不可选择角色。
+- 已完成：不新增 `super_admin` 权限，不做完整 RBAC，不接真实业务。
 
 ### C04D：staging 验收角色创建和登录
 
+- 下一步：部署到 staging 测试服验收角色目录 UI。
 - 在 staging 验收允许创建的基础角色。
 - 验证非 owner 仍不能访问 `/users`。
 - 验证不可创建 `owner`、`super_admin`、`bot_agent`。
@@ -410,9 +434,9 @@ C04A 判断：不建议 C04B 新增 migration。
 - 记录未做权限系统。
 - 明确 C05 承接 permissions、module access、role_permissions。
 
-## 十三、C04A 当前边界
+## 十三、C04C 当前边界
 
-本轮 C04A：
+本轮 C04C：
 
 - 不读取或修改真实 `.env.production` / `.env.staging`。
 - 不打印 secret、token、password。
@@ -420,11 +444,12 @@ C04A 判断：不建议 C04B 新增 migration。
 - 不操作 production/staging 数据库。
 - 不新增 migration。
 - 不修改后端业务代码。
-- 不修改前端功能代码。
+- 只修改前端 role catalog 接入、API client、代理 allowlist、验证脚本和文档。
 - 不启动、停止、重启、删除、重建容器。
 - 不修改 Nginx 或证书。
 - 不接真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser。
 - 不创建真实业务任务。
 - 不 git commit。
 
-当前仍然是 foundation/console 阶段。C04 只定义角色体系，不接真实业务。
+当前仍然是 foundation/console 阶段。C04 只定义角色体系，不接真实业务。C04D 才进入
+staging 测试服验收角色目录 UI。
