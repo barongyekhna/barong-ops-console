@@ -167,6 +167,36 @@ The current system remains foundation/console only. Real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, and business tasks are
 still not connected. The next stage is C04: role system.
 
+## C04 role system
+
+C04A has started the role-system stage. The design plan is in
+`docs/C04_ROLE_SYSTEM_PLAN.md`.
+
+C04 defines account identity types. It does not define the full permission
+matrix. C05 will define permissions, module access, and how roles map to
+allowed actions.
+
+Current C04A conclusions:
+
+- Existing `users.role` is a string and can hold the C04 standard role names.
+- C04B should not add a migration unless the owner explicitly approves a
+  database-level role constraint later.
+- Standard roles are `owner`, `super_admin`, `module_admin`, `operator`,
+  `reviewer`, `viewer`, and `bot_agent`.
+- `owner` must still come only from bootstrap or system initialization, not
+  from `/users`.
+- `super_admin` is defined in C04 but should not receive all permissions in
+  C04; C05 must decide concrete permissions.
+- `bot_agent` is reserved for future robot accounts and is not connected to a
+  real bot/agent workflow in C04.
+- Company positions such as designer, SEO editor, customer service, or factory
+  supervisor should be represented with `role` plus later `job_title`,
+  `department`, `module_access`, and `permissions`, not as new hard-coded role
+  strings.
+
+C04 remains foundation/console only. It does not connect real n8n, P-series,
+WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not

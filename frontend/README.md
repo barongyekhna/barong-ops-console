@@ -95,6 +95,21 @@ production/staging/dual-env checks pass. C03 still does not add
 `super_admin`, full RBAC, or real business integration. C03F has sealed this
 stage; the next stage is C04: role system.
 
+C04A has started the role-system stage with
+`docs/C04_ROLE_SYSTEM_PLAN.md`. C04 is about account identity labels, not the
+full permission system. The frontend should eventually display the standard
+roles `owner`, `super_admin`, `module_admin`, `operator`, `reviewer`,
+`viewer`, and `bot_agent`, but the `/users` create selector must show only the
+roles that C04B explicitly allows owner to create.
+
+C04 does not make `super_admin` all-powerful, does not connect `bot_agent` to
+real automation, and does not define module permissions. C05 will define
+permissions, module access, and role-to-permission bindings. Future company
+positions such as designer, SEO editor, customer service, or factory
+supervisor should be represented through role plus later job title,
+department, module access, and permissions, not as hard-coded frontend role
+strings. Real business systems remain disconnected.
+
 ## Configuration
 
 For host-based development, use the example backend URL:

@@ -52,6 +52,20 @@ and `/api/backend/auth/register` still returns 404. C03 still does not add
 `super_admin`, complete RBAC, or real business integration. C03F has sealed
 this stage; the next stage is C04: role system.
 
+C04A has started the role-system stage with
+`docs/C04_ROLE_SYSTEM_PLAN.md`. C04 defines account identity types, not the
+complete permission system. The current backend still stores `users.role` as a
+plain string, which is enough for C04 standard role validation and does not
+require a migration in C04B.
+
+C04 standard roles are `owner`, `super_admin`, `module_admin`, `operator`,
+`reviewer`, `viewer`, and `bot_agent`. C04B should centralize backend role
+constants and validation, keep `owner` bootstrap-only, avoid granting real
+`super_admin` power, and reserve `bot_agent` for future robot-account work.
+C05 will define permissions, module access, and role-to-permission bindings.
+C04 still does not connect real n8n, P-series, WooCommerce, MinIO,
+Filebrowser, or real business tasks.
+
 F12 adds the n8n test webhook bridge:
 
 - `POST /n8n-test/run`

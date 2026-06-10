@@ -78,7 +78,33 @@ production 和 staging 容器均正常运行。
 - 用户管理页面更多体验优化后续再做。
 - 下一阶段是 C04：角色体系。
 
-## 八、C03 封板结论
+## 八、C04 后续承接说明
+
+C04 已由 C04A 开始，方案文档见 `docs/C04_ROLE_SYSTEM_PLAN.md`。
+
+C04 只定义角色体系，也就是账号身份类型。C04 不等于完整权限系统，不新增
+permissions 表，不做 role_permissions，不做模块权限，不接真实业务。
+
+C04 标准角色建议为：
+
+- `owner`
+- `super_admin`
+- `module_admin`
+- `operator`
+- `reviewer`
+- `viewer`
+- `bot_agent`
+
+其中 `owner` 只能通过 bootstrap 或系统初始化产生，不能通过 `/users` 创建。
+`super_admin` 在 C04 只定义，不应在 C04 直接拥有全部权限；具体能做什么留给 C05
+权限系统。`bot_agent` 只作为未来机器人账号类型预留，不在 C04 接真实机器人。
+
+美工、SEO 编辑、客服、工厂主管等公司岗位不应该硬编码成 role。后续应通过
+`role` + `job_title` + `department` + `module_access` + `permissions` 组合表达。
+
+C05 才承接 permissions、module access 和角色权限绑定。
+
+## 九、C03 封板结论
 
 C03 已完成。
 
