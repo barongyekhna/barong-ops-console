@@ -246,6 +246,21 @@ WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
 C04 is sealed. The next step is OPS01: Docker Compose v1 `ContainerConfig`
 issue cleanup, followed by C05 permissions / RBAC.
 
+## OPS01 Docker Compose governance
+
+OPS01A has started as a read-only audit and governance plan for the recurring
+Docker Compose v1 `KeyError: 'ContainerConfig'` deployment issue.
+
+OPS01A does not install or upgrade Docker/Compose, does not run
+`docker-compose up/down`, does not stop, restart, remove, or recreate
+production/staging containers, does not read real env files, does not modify
+Nginx or certificates, and does not connect real business systems.
+
+The plan is documented in `docs/OPS01_DOCKER_COMPOSE_GOVERNANCE_PLAN.md`.
+The recommended route is to handle Compose v2 enablement or a safe fallback in
+a separate OPS01B task, rehearse release-script changes on staging first, and
+only then apply the approved flow to production.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not
