@@ -226,7 +226,8 @@ service selector 和 smoke check 的问题，而不会影响 production 登录/A
 3. OPS01C 先改造 staging 发布脚本并演练，只允许指定服务，不允许 `down`，postgres
    默认不可重建。
 4. OPS01D 再改造 production 发布脚本并演练，必须显式
-   `-p barong-ops-console-prod`，必须只动指定 backend/frontend 服务。
+   `-p barong-ops-console-prod`，必须只动指定 backend/frontend 服务。本项已经完成：
+   OPS01D-1 完成 dry-run，OPS01D-2 完成 backend/frontend production 真实演练。
 5. OPS01E 更新文档、回滚流程和封板记录。
 
 脚本设计硬规则：
@@ -276,14 +277,20 @@ OPS01D：production 发布脚本改造与演练
   `docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`。
 - OPS01D-1 没有真实发布 production，没有 build，没有 `up/down`，没有删除、停止、
   重启或重建任何容器。
+- OPS01D-2 已完成 production backend/frontend safe release 真实演练，归档见
+  `docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`。
+- OPS01D-2 两次真实执行都使用 `CONFIRM_SAFE_RELEASE=yes`、
+  `CONFIRM_PRODUCTION_RELEASE=yes` 和 `--execute`。
 - 明确 project：`barong-ops-console-prod`。
 - 只允许 `console_backend` / `console_frontend`。
 - 禁止 `down`，默认不动 `console_postgres`。
 - production 真实执行必须 double confirmation：
   `CONFIRM_SAFE_RELEASE=yes` 和 `CONFIRM_PRODUCTION_RELEASE=yes`。
-- OPS01D-2 才能做 production 真实演练，必须一次只动一个服务，先 backend 再
-  frontend。
+- OPS01D-2 已按一次只动一个服务、先 backend 再 frontend 的顺序完成。
 - 发布前后都要运行 production smoke、staging smoke 和 dual-env check。
+- production backend/frontend 发布后没有触发 `KeyError: 'ContainerConfig'`。
+- production backend/frontend rollback tag 已生成。
+- production postgres 未被动到，staging 未被动到，Nginx/证书未修改，未接真实业务。
 
 OPS01E：文档和回滚流程封板
 
@@ -405,6 +412,49 @@ production frontend dry-run 映射：
 - `./scripts/staging_smoke_check.sh`：通过。
 - `./scripts/check_dual_env_status.sh`：通过。
 
-OPS01D-1 后的下一步是 OPS01D-2。OPS01D-2 才允许 production safe release 真实演练，
-并且必须先 backend、后 frontend，一次只动一个服务，先打 rollback tag，再等 health
-check 和 smoke 通过。OPS01D-2 仍然不接真实业务。
+OPS01D-1 后已经完成 OPS01D-2 production safe release 真实演练。OPS01D-2 按先
+backend、后 frontend，一次只动一个服务的顺序执行，先打 rollback tag，再等 health
+check 和 smoke 通过。OPS01D-2 没有接真实业务。
+
+## 14. OPS01D-2 / OPS01D-3 验证
+
+OPS01D production safe release 真实演练已在 2026-06-10 UTC 完成，OPS01D-3 已做只读
+复核和归档。
+
+实际执行范围：
+
+- 真实发布 production backend。
+- 真实发布 production frontend。
+- 两次都通过 `scripts/safe_compose_release.sh`。
+- 两次都使用 `CONFIRM_SAFE_RELEASE=yes`。
+- 两次都使用 `CONFIRM_PRODUCTION_RELEASE=yes`。
+- 两次都使用 `--execute`。
+- 不发布 staging。
+- 不停止、删除、重启或重建 production postgres。
+- 不停止、删除、重启或重建 staging。
+- 不读取或打印真实 env。
+- 不修改 Nginx 或证书。
+- 不接真实业务。
+
+验证结果：
+
+- production backend safe release：通过。
+- production frontend safe release：通过。
+- `KeyError: 'ContainerConfig'` 未复现。
+- `https://ops.barongyekhna.com/login`：HTTP 200。
+- `https://ops.barongyekhna.com/users`：HTTP 200。
+- `https://ops.barongyekhna.com/api/backend/health`：`status=ok`，
+  `environment=production`。
+- `./scripts/production_smoke_check.sh`：通过。
+- `./scripts/staging_smoke_check.sh`：通过。
+- `./scripts/check_dual_env_status.sh`：通过。
+- production backend rollback tag 已生成：
+  `barong-ops-console-prod_console_backend:rollback-20260610103907`。
+- production frontend rollback tag 已生成：
+  `barong-ops-console-prod_console_frontend:rollback-20260610104306`。
+
+当前仍未安装 Compose v2，仍保留 `docker-compose` v1.29.2。后续 production
+backend/frontend 发布应优先使用 `scripts/safe_compose_release.sh`，不要把
+`docker-compose --force-recreate` 作为默认发布方式。
+
+下一步 OPS01E 是安全发布流程封板。

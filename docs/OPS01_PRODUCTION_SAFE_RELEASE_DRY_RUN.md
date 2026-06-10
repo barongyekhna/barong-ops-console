@@ -6,6 +6,10 @@
 `scripts/safe_compose_release.sh`，对 production backend/frontend 做 dry-run、
 映射复核、风险检查和文档准备。
 
+后续状态：OPS01D-2 已经完成 production backend/frontend safe release 真实演练，
+OPS01D-3 已完成只读复核和归档。真实演练归档见
+`docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`。下一步 OPS01E 是安全发布流程封板。
+
 ## 1. 这次只做什么
 
 OPS01D-1 只做 dry-run 和只读检查，没有真实发布 production。
@@ -26,7 +30,8 @@ OPS01D-1 只做 dry-run 和只读检查，没有真实发布 production。
 - 没有 git commit。
 
 这次的目的很简单：先确认脚本指向的 production 映射是对的，安全门禁还在，当前
-production/staging 都正常。真正的 production 演练留到 OPS01D-2。
+production/staging 都正常。真正的 production 演练当时留到 OPS01D-2；OPS01D-2
+现在已经完成。
 
 ## 2. 当前只读检查结果
 
@@ -187,12 +192,12 @@ OPS01D-1 复核到 production dry-run 中的 would-run 命令都带
 本轮还增强了 dry-run 输出和 `check_safe_release_plan.sh`，让这些门禁在 production
 dry-run 中直接可见，并被检查脚本覆盖。
 
-## 10. OPS01D-2 下一步
+## 10. OPS01D-2 后续结果
 
-OPS01D-2 才能做 production safe release 真实演练。进入 OPS01D-2 前仍然不接真实
-业务。
+OPS01D-2 已经完成 production safe release 真实演练。进入 OPS01D-2 前仍然没有接
+真实业务。
 
-OPS01D-2 必须遵守：
+OPS01D-2 实际遵守：
 
 - 先跑 production/staging smoke 和 dual-env check。
 - 先打 rollback tag，保留发布前正在运行的目标镜像引用。
@@ -203,6 +208,14 @@ OPS01D-2 必须遵守：
   `CONFIRM_SAFE_RELEASE=yes` 和 `CONFIRM_PRODUCTION_RELEASE=yes`。
 - 仍然禁止 postgres、禁止 `down`、禁止读取真实 env、禁止修改 Nginx/证书、禁止接
   真实业务。
+- production backend safe release 通过。
+- production frontend safe release 通过。
+- 两次都没有触发 `KeyError: 'ContainerConfig'`。
+- production backend rollback tag 已生成：
+  `barong-ops-console-prod_console_backend:rollback-20260610103907`。
+- production frontend rollback tag 已生成：
+  `barong-ops-console-prod_console_frontend:rollback-20260610104306`。
+- production smoke、staging smoke 和 dual-env check 都通过。
 
 ## 11. 结论
 
@@ -212,5 +225,8 @@ production backend/frontend safe release dry-run 映射正确，double confirmat
 门禁存在，postgres target 被禁止，`down` 被禁止，production/staging smoke 和
 dual-env check 均通过。
 
-当前还没有真实发布 production。下一步是 OPS01D-2：按 backend 再 frontend 的顺序
-做 production safe release 真实演练。
+OPS01D-1 当时还没有真实发布 production，当时下一步是 OPS01D-2：按 backend 再
+frontend 的顺序做 production safe release 真实演练。
+
+后续更新：OPS01D-2 已完成 production backend/frontend safe release 真实演练，
+OPS01D-3 已完成归档。下一步是 OPS01E 安全发布流程封板。

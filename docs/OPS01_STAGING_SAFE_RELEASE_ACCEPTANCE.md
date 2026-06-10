@@ -200,8 +200,12 @@ OPS01D-1 已基于 OPS01C 结果完成 production backend/frontend safe release 
 和映射复核，归档见 `docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`。OPS01D-1 没有
 真实发布 production。
 
-下一步 OPS01D-2 才能做 production safe release 真实演练。OPS01D-2 必须先 backend、
-后 frontend，一次只动一个服务，必须先打 rollback tag，必须有 health check 和 smoke
-check，必须继续禁止 postgres、禁止 `down`、禁止读取真实 env、禁止接真实业务。
-production 真实执行必须同时设置 `CONFIRM_SAFE_RELEASE=yes` 和
-`CONFIRM_PRODUCTION_RELEASE=yes`。
+OPS01D-2 已经完成 production backend/frontend safe release 真实演练，归档见
+`docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`。OPS01D-2 先 backend、后
+frontend，一次只动一个服务，先打 rollback tag，再等 health check 和 smoke check
+通过；production 真实执行同时使用 `CONFIRM_SAFE_RELEASE=yes` 和
+`CONFIRM_PRODUCTION_RELEASE=yes`。两次演练都没有触发
+`KeyError: 'ContainerConfig'`。
+
+下一步 OPS01E 是安全发布流程封板。封板前仍必须继续禁止 postgres、禁止 `down`、
+禁止读取真实 env、禁止修改 Nginx/证书、禁止接真实业务。

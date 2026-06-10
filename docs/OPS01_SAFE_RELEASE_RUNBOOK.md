@@ -19,9 +19,17 @@ OPS01D-1 已经对 production backend/frontend 完成 safe release dry-run 和�
 复核。归档见 `docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`。OPS01D-1 没有真实
 发布 production。
 
+OPS01D-2 已经对 production backend 和 production frontend 完成 safe release 真实
+演练。归档见 `docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`。两次 production
+执行都使用 `CONFIRM_SAFE_RELEASE=yes`、`CONFIRM_PRODUCTION_RELEASE=yes` 和
+`--execute`，都通过 `scripts/safe_compose_release.sh`，没有触发
+`KeyError: 'ContainerConfig'`。
+
 OPS01B-alt 阶段没有删除容器、没有重建容器、没有启动发布、没有读取真实 env、
 没有修改 Nginx 或证书。OPS01C 只删除并重建 staging backend/frontend 目标容器，
-没有动 staging postgres，也没有动 production。
+没有动 staging postgres，也没有动 production。OPS01D-2 只发布 production
+backend/frontend 目标容器，没有动 production postgres，没有动 staging，没有修改
+Nginx/证书，也没有接真实业务。
 
 ## 2. 为什么不用 --force-recreate
 
@@ -134,8 +142,9 @@ smoke 仍通过。
 
 ## 8. production 后续怎么使用
 
-OPS01D 才能用于 production。production 使用前必须已经完成 OPS01C staging 演练。
-OPS01D-1 已完成 production dry-run，只确认映射和门禁，没有发布 production。
+OPS01D 已经用于 production 真实演练。production 使用前必须已经完成 OPS01C staging
+演练和 OPS01D-1 production dry-run。OPS01D-2 已经按 backend 再 frontend 的顺序完成
+真实演练。
 
 production 真实执行需要两个确认变量：
 
@@ -145,7 +154,9 @@ CONFIRM_PRODUCTION_RELEASE=yes \
 ./scripts/safe_compose_release.sh --env production --service backend --execute
 ```
 
-production frontend 同理，但必须先 dry-run，确认映射仍然是：
+production frontend 同理。后续所有 production backend/frontend 发布都应该优先使用
+`scripts/safe_compose_release.sh`，而不是
+`docker-compose --force-recreate`。每次真实发布前仍必须先 dry-run，确认映射仍然是：
 
 - project：`barong-ops-console-prod`
 - compose：`docker-compose.production.yml`
@@ -154,9 +165,18 @@ production frontend 同理，但必须先 dry-run，确认映射仍然是：
 - backend container：`barong-ops-console-prod_console_backend_1`
 - frontend container：`barong-ops-console-prod_console_frontend_1`
 
-OPS01D-2 才能做 production 真实演练。OPS01D-2 必须一次只动一个服务，先 backend，
-后 frontend；每个服务都必须先有 rollback tag，再等 health check 和 smoke 通过。
-OPS01D 不能绕过 staging，不能在不确认 project name 的情况下运行。
+production 发布必须一次只动一个服务，先有 rollback tag，再等 health check 和 smoke
+通过。OPS01D 不能绕过 staging，不能在不确认 project name 的情况下运行。
+
+OPS01D-2 的 production 演练结果：
+
+- production backend safe release 通过。
+- production frontend safe release 通过。
+- 两次都使用 double confirmation 和 `--execute`。
+- 两次都没有触发 `KeyError: 'ContainerConfig'`。
+- production smoke、staging smoke 和 dual-env check 都通过。
+- production postgres 未被动到。
+- staging 未被动到。
 
 ## 9. rollback tag 的意义
 
@@ -170,7 +190,13 @@ barong-ops-console-prod_console_backend:rollback-YYYYmmddHHMMSS
 不过，后续人工回滚时能知道上一版镜像是哪一个。
 
 OPS01B-alt 只准备这个机制，不实际打 tag。OPS01C 已经在 staging backend/frontend
-演练中生成 rollback tag。本阶段只确认 tag 存在，不执行 rollback。
+演练中生成 rollback tag。OPS01D-2 已经在 production backend/frontend 演练中生成
+rollback tag：
+
+- `barong-ops-console-prod_console_backend:rollback-20260610103907`
+- `barong-ops-console-prod_console_frontend:rollback-20260610104306`
+
+本阶段只确认 tag 存在，不执行 rollback。
 
 ## 10. 绝对禁止项
 
@@ -179,7 +205,7 @@ OPS01B-alt 只准备这个机制，不实际打 tag。OPS01C 已经在 staging b
 - 不允许 `down`。
 - 不允许动 postgres。
 - 不允许无 project name 的 `docker-compose`。
-- 不允许直接操作 production。
+- 不允许绕过 safe release 流程直接操作 production。
 - 不允许跳过 staging。
 - 不允许读取或打印 `.env.production` / `.env.staging`。
 - 不允许修改 Nginx 或证书。
@@ -193,4 +219,6 @@ OPS01C 已完成 staging 真实演练。
 
 OPS01D-1 已完成 production dry-run。
 
-OPS01D-2 才会用于 production 真实演练，且必须 double confirmation。
+OPS01D-2 已完成 production 真实演练，且使用了 double confirmation。
+
+OPS01D-3 已完成只读复核和归档。下一步 OPS01E 是安全发布流程封板。

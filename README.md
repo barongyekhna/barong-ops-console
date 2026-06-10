@@ -279,14 +279,24 @@ business systems were touched.
 
 OPS01D-1 has completed the production backend/frontend safe release dry-run and
 mapping review. The archive is in
-`docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`. Production has not been
-released by the safe release script yet; no containers were started, stopped,
-removed, or recreated. Real production execution still requires both
-`CONFIRM_SAFE_RELEASE=yes` and `CONFIRM_PRODUCTION_RELEASE=yes`.
+`docs/OPS01_PRODUCTION_SAFE_RELEASE_DRY_RUN.md`. OPS01D-2 has now completed the
+production backend/frontend safe release real rehearsal. The acceptance archive
+is in `docs/OPS01_PRODUCTION_SAFE_RELEASE_ACCEPTANCE.md`.
 
-The next step is OPS01D-2: production safe release real rehearsal. It must move
-one service at a time, backend first and then frontend, with a rollback tag,
-health check, production/staging smoke checks, and no real business integration.
+OPS01D-2 used `scripts/safe_compose_release.sh` for production backend and then
+production frontend, with `CONFIRM_SAFE_RELEASE=yes`,
+`CONFIRM_PRODUCTION_RELEASE=yes`, and `--execute` for both runs. The rehearsal
+generated production rollback tags, kept production postgres untouched, left
+staging untouched, did not modify Nginx/certificates, did not connect real
+business systems, and did not reproduce the Docker Compose v1
+`KeyError: 'ContainerConfig'` issue. Production smoke, staging smoke, and
+dual-env status checks pass.
+
+The server still does not have Compose v2 installed and still keeps
+`docker-compose` v1.29.2. Future production backend/frontend releases should
+prefer `scripts/safe_compose_release.sh` instead of
+`docker-compose --force-recreate`. The next step is OPS01E: safe release process
+seal.
 
 ## Temporary login preview
 
