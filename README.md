@@ -120,12 +120,15 @@ tasks. The next stage is C03: Owner creates sub-accounts.
 
 ## C03 owner account management
 
-C03B has implemented the backend owner-created sub-account API, and C03C adds
-the frontend user management surface:
+C03B implemented the backend owner-created sub-account API, C03C added the
+frontend user management surface, and C03D has accepted the flow on staging:
 
 - `docs/C03_OWNER_ACCOUNT_MANAGEMENT_PLAN.md` records the users/auth audit,
   C03 scope, backend API, frontend implementation, security rules,
   staging-first flow, and C03B-C03F task split.
+- `docs/C03_STAGING_ACCEPTANCE.md` records the C03D staging acceptance result,
+  including the test user lifecycle, operation log verification, production
+  smoke result, and environment safety boundaries.
 - Owner-only `/users` APIs now support list, create, detail, update,
   enable/disable, and reset-password for sub-accounts.
 - The protected `/users` console page is available under **User Management**
@@ -137,14 +140,17 @@ the frontend user management surface:
   `require_owner` handles owner-only authorization for `/users`.
 - Active non-owner users can log in and call `/auth/me`; inactive users cannot
   log in or use protected APIs.
-- C03C does not add `super_admin`, full RBAC, public registration,
-  OAuth/email flows, staging or production deployment, production/staging user
-  creation, or real business workflows.
+- C03D verified this on staging with a `c03d_test_<timestamp>` account, without
+  reading real env files, printing secrets, changing Nginx/certificates,
+  restarting containers, or connecting real business workflows.
+- C03 still does not add `super_admin`, full RBAC, public registration,
+  OAuth/email flows, production user-management release, or real business
+  workflows.
 
 The current system remains foundation/console only. Real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, and business tasks are
-still not connected. The next step is C03D: deploy this C03B/C03C code to the
-staging test environment for acceptance.
+still not connected. The next step is C03E: owner-approved production release
+and production user-management acceptance.
 
 ## Temporary login preview
 

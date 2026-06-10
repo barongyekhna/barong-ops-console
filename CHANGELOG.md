@@ -6,6 +6,7 @@
 
 ### Added
 
+- C03D：新增 `docs/C03_STAGING_ACCEPTANCE.md`，归档 staging 用户管理验收结果，记录测试用户 `c03d_test_<timestamp>` 的创建、登录、停用、启用、重置密码、非 owner 403、`role=owner` 拒绝、`/auth/register` 404、operation logs 验证和 production smoke 仍正常。
 - C03C：新增受保护的 `/users` 前端用户管理页面和 System 导航入口，支持用户列表、创建 `viewer`/`operator`/`reviewer`、查看详情、更新基础 role、停用、启用和重置子账户密码；页面明确是内部账号管理，不是公开注册。
 - C03C：新增 `frontend/src/lib/users-api.ts` 前端用户管理 API client，接入现有 token 和 `/api/backend` 代理，补充 401/403/409/422 友好错误提示，避免打印 password/token。
 - C03C：前端 API proxy 精确放行 owner-only `/users` 相关 GET/POST/PATCH 路径，并继续不暴露通用写代理、不转发危险 headers、不破坏 `/auth`、`/health`、F10/F11/F12 代理。
@@ -57,7 +58,8 @@
 
 ### Changed
 
-- C03C：`frontend/scripts/verify-foundation.mjs` 纳入 `/users` route、用户管理 API 连接、PATCH proxy 和无公开注册检查；README/frontend README/C03 文档更新为 C03C 代码完成但仍未部署 staging/production。
+- C03D：README、backend README、frontend README 和 C03 计划文档更新为 C03D staging 已验收通过，production 用户管理发布仍属于 C03E，真实业务仍未接入；本轮未读取真实 env 文件、未打印 secret、未修改 Nginx/证书、未重启或删除容器。
+- C03C：`frontend/scripts/verify-foundation.mjs` 纳入 `/users` route、用户管理 API 连接、PATCH proxy 和无公开注册检查；README/frontend README/C03 文档当时更新为 C03C 代码完成状态，后续 C03D 再更新为 staging 已验收。
 - C03B：拆分 `get_current_user` 和 `require_owner`；`get_current_user` 只验证 token、用户存在、active 状态和 token role 与数据库 role 一致，`require_owner` 负责 `/users` owner-only 授权。
 - C03B：`/auth/login` 和 `/auth/me` 不再要求用户必须是 `owner`；active 非 owner 子账户可以登录并读取当前用户信息，inactive 用户仍被拒绝。公开注册继续不存在。
 - C03B：`scripts/test_backend_db_docker.sh` 纳入 `tests/backend/test_user_management_api.py`，确保 example/test 数据库测试覆盖用户管理 API；本阶段不新增 migration、不做前端页面、不做完整 RBAC、不接真实业务。

@@ -2,7 +2,7 @@
 
 This directory contains the F05 FastAPI foundation, F06 migration mechanism,
 F07 core tables, F08 authentication, F10 foundation APIs, F11 Foundation Demo,
-F12 n8n Test Bridge, and C03B owner-only user management API. F13 accepts this
+F12 n8n Test Bridge, and C03 owner-only user management API. F13 accepts this
 backend as an empty foundation; it does not add a real business integration.
 
 C01 production deployment is complete for
@@ -26,8 +26,9 @@ account. C02D added read-only dual-environment checks, C02E completed final
 production/staging acceptance, and C02F sealed the environment isolation
 system. Both environments are usable and isolated. C02F did not read real env
 files, restart production/staging containers, or connect real n8n, P-series,
-WooCommerce, MinIO, or Filebrowser systems. C03B now implements backend
-owner-created sub-account APIs without deploying staging or production.
+WooCommerce, MinIO, or Filebrowser systems. C03D has now accepted the
+owner-created sub-account flow on staging. Production user-management release
+remains C03E and still requires owner approval.
 
 C03B exposes owner-only user management:
 
@@ -43,8 +44,10 @@ It creates only non-owner sub-account roles: `viewer`, `operator`, and
 `reviewer`. It hashes all passwords, omits `password_hash` from responses,
 writes `user.create`, `user.update`, `user.disable`, `user.enable`, and
 `user.reset_password` operation logs, and keeps `/auth/register` absent. C03B
-adds no migration, no frontend user management page, no full RBAC, no staging
-or production deployment, and no real business integration.
+adds no migration and no full RBAC. C03C added the frontend page, and C03D
+accepted the user lifecycle on staging with a `c03d_test_<timestamp>` account.
+Production remains unreleased for C03 user management, and no real business
+integration is connected.
 
 F12 adds the n8n test webhook bridge:
 

@@ -738,7 +738,8 @@ C03 必须 staging-first：
 - 不加公开注册页面。
 
 状态：C03C 已完成前端代码、API client、proxy、验证脚本和文档更新；未
-git commit，等待老板审核。C03C 未部署 staging/production，未创建真实用户。
+git commit，等待老板审核。C03C 本身是代码阶段；后续 C03D 已在 staging
+完成验收，production 发布仍留到 C03E。
 
 ### C03D：staging 部署和验收
 
@@ -750,6 +751,36 @@ git commit，等待老板审核。C03C 未部署 staging/production，未创建�
 - 验证 operation logs。
 - 验证 staging 不暴露公网。
 - 不复制 staging 数据到 production。
+
+状态：C03D staging 后半段验收已完成，结果归档到
+`docs/C03_STAGING_ACCEPTANCE.md`。本次只在已恢复的 staging
+backend/frontend 上做验收，没有 build、recreate、stop、rm 容器，没有
+`docker-compose up/down`，没有读取真实 `.env.production` 或 `.env.staging`
+文件内容，没有修改 Nginx/证书，没有接真实业务，也没有 git commit。
+
+验收结果：
+
+- staging frontend、backend、postgres 运行正常，postgres healthy。
+- production frontend、backend、postgres 运行正常，production smoke 通过。
+- staging `alembic upgrade head` 成功，`alembic current` 为
+  `f07_core_001 (head)`。
+- 使用 staging owner 登录后，创建了唯一测试用户
+  `c03d_test_1781064878`。
+- 测试用户完成 `viewer -> operator -> reviewer` role 流程。
+- list/detail 响应不包含 `password_hash`。
+- 测试用户可登录，非 owner 访问 `/users` 返回 403。
+- disable 后测试用户不能登录，已有 token 不能继续访问 `/auth/me`。
+- enable 后测试用户可登录。
+- reset password 后旧密码失效，新密码可登录。
+- 创建 `role=owner` 被拒绝。
+- `/auth/register` 仍返回 404。
+- operation logs 覆盖 `user.create`、`user.update`、`user.disable`、
+  `user.enable`、`user.reset_password`。
+
+说明：`./scripts/test_foundation_acceptance.sh` 本轮没有执行，因为它会调用
+`docker compose build`、`docker compose up`、`docker compose run --rm` 和
+`docker compose down --volumes`，与本轮“不要 build / recreate / stop / rm
+容器、不要 docker-compose up/down”的边界冲突。
 
 ### C03E：production 发布和验收
 
@@ -786,7 +817,7 @@ C03 只处理账号管理基础，不代表系统可以开始跑真实业务。
 
 真实业务接入必须等账号、角色、权限、审核、日志和 staging-first 发布链路继续封板后，再按独立任务进入。
 
-## 17. C03A/C03B 结论
+## 17. C03A-C03D 结论
 
 C03A 审计结论：
 
@@ -809,3 +840,25 @@ C03B 后端结论：
 - operation logs 覆盖 `user.create`、`user.update`、`user.disable`、
   `user.enable`、`user.reset_password`。
 - C03B 未做前端页面、完整 RBAC、staging/production 部署或真实业务接入。
+
+C03C 前端结论：
+
+- 受保护 `/users` 页面已实现。
+- System 导航已有 User Management。
+- 前端 API client 和 `/api/backend` proxy 只放行需要的 `/users` 路径。
+- 创建角色只提供 `viewer`、`operator`、`reviewer`。
+- 前端不提供 `owner` 或 `super_admin` 创建入口。
+- 停用、启用、重置密码都有确认路径。
+- 公开注册页面仍不存在。
+
+C03D staging 结论：
+
+- staging 用户管理功能验收通过。
+- staging 测试用户创建、登录、停用、启用、重置密码通过。
+- 非 owner 访问 `/users` 返回 403。
+- `/auth/register` 仍返回 404。
+- operation logs 已验证。
+- production smoke 仍正常。
+- 本轮没有读取真实 env 文件，没有打印 password/token/secret，没有重启或删除
+  容器，没有修改 Nginx/证书，没有接真实业务。
+- production 用户管理发布仍未执行，必须等 C03E owner 明确批准。

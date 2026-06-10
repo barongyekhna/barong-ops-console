@@ -83,8 +83,11 @@ restricted same-origin proxy. The page lists users, creates `viewer`,
 enables/disables users, and resets sub-account passwords with confirmation.
 It does not show `owner` or `super_admin` as create options, does not add
 public registration, does not print passwords or tokens, and does not connect
-real business systems. C03C is code only: it has not been deployed to staging
-or production and has not created real users.
+real business systems. C03D accepted this flow on staging with a
+`c03d_test_<timestamp>` account, including list/detail, login, 403 for
+non-owner `/users`, disable, enable, password reset, `role=owner` rejection,
+`/auth/register` 404, and operation log verification. Production
+user-management release remains C03E and still requires owner approval.
 
 ## Configuration
 
