@@ -263,11 +263,12 @@ OPS01B-alt：Compose v1 安全发布脚本准备
 
 OPS01C：staging 发布脚本改造与演练
 
-- 新增或改造 staging-only 发布脚本。
+- 已使用 OPS01B-alt 的 `scripts/safe_compose_release.sh` 在 staging 真实演练。
 - 明确 project：`barong-ops-console-staging`。
 - 只允许 `console_staging_backend` / `console_staging_frontend`。
 - 禁止 `down`，默认不动 `console_staging_postgres`。
-- 演练后运行 staging smoke 和 dual-env check。
+- 演练后运行 staging smoke、production smoke 和 dual-env check。
+- 演练记录见 `docs/OPS01_STAGING_SAFE_RELEASE_ACCEPTANCE.md`。
 
 OPS01D：production 发布脚本改造与演练
 
@@ -319,3 +320,39 @@ git diff --check -- scripts docs README.md CHANGELOG.md
 这些验证不安装或升级工具，不运行真实发布模式，不读取真实 env，不修改 Nginx/证书，
 不接真实业务。`production_smoke_check.sh`、`staging_smoke_check.sh` 和
 `check_dual_env_status.sh` 只做只读运行状态检查。
+
+## 12. OPS01C 验证
+
+OPS01C 已在 2026-06-10 UTC 完成 staging safe release 真实演练。
+
+实际执行范围：
+
+- 真实发布 staging backend。
+- 真实发布 staging frontend。
+- 不发布 production。
+- 不停止、删除、重启或重建 staging postgres。
+- 不读取或打印真实 env。
+- 不修改 Nginx 或证书。
+- 不接真实业务。
+
+验证结果：
+
+- `./scripts/check_safe_release_plan.sh`：通过。
+- staging backend dry-run：映射为 `staging/backend`，
+  service 为 `console_staging_backend`。
+- staging frontend dry-run：映射为 `staging/frontend`，
+  service 为 `console_staging_frontend`。
+- staging backend safe release：通过。
+- staging frontend safe release：通过。
+- `./scripts/staging_smoke_check.sh`：最终通过。
+- `./scripts/production_smoke_check.sh`：最终通过。
+- `./scripts/check_dual_env_status.sh`：最终通过。
+- rollback tag 已生成：
+  `barong-ops-console-staging_console_staging_backend:rollback-20260610100243`
+  和
+  `barong-ops-console-staging_console_staging_frontend:rollback-20260610100511`。
+
+OPS01C 说明：本次演练证明当前 v1 safe release 流程可以替代
+`docker-compose v1 --force-recreate` 的高风险路径。它只删除目标 service 容器，再用
+`up -d --no-deps --no-build SERVICE` 创建目标 service，没有触发
+`KeyError: 'ContainerConfig'`。

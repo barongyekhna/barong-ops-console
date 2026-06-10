@@ -10,10 +10,14 @@
 Docker。
 
 所以 OPS01B-alt 先做一件更稳的事：把已经人工验证过的绕过流程写成安全脚本和
-检查脚本。这个阶段只准备，不真实发布 staging 或 production。
+检查脚本。OPS01B-alt 只准备，不真实发布 staging 或 production。
 
-本阶段没有删除容器、没有重建容器、没有启动发布、没有读取真实 env、没有修改
-Nginx 或证书。
+OPS01C 已经在 staging 真实演练 backend 和 frontend safe release。演练记录见
+`docs/OPS01_STAGING_SAFE_RELEASE_ACCEPTANCE.md`。
+
+OPS01B-alt 阶段没有删除容器、没有重建容器、没有启动发布、没有读取真实 env、
+没有修改 Nginx 或证书。OPS01C 只删除并重建 staging backend/frontend 目标容器，
+没有动 staging postgres，也没有动 production。
 
 ## 2. 为什么不用 --force-recreate
 
@@ -93,7 +97,7 @@ dry-run 只打印映射和将来会执行的步骤，不会 build、不会删除
 
 ## 6. staging 后续怎么演练
 
-OPS01C 才能在 staging 做真实演练。建议顺序：
+OPS01C 已经按下面顺序在 staging 做完真实演练：
 
 1. 先确认 production smoke、staging smoke、dual-env status 都通过。
 2. 先选 staging backend，执行 dry-run，确认 project、compose file、service、
@@ -102,10 +106,27 @@ OPS01C 才能在 staging 做真实演练。建议顺序：
 4. 发布后跑 staging smoke 和 dual-env status。
 5. backend 通过后，再按同样方式演练 staging frontend。
 
-OPS01C 仍然不能跳过 smoke check，不能碰 postgres，不能改 Nginx/证书，不能接真实
-业务。
+OPS01C 没有跳过 smoke check，没有碰 postgres，没有改 Nginx/证书，没有接真实
+业务。结果是 staging backend 和 staging frontend safe release 都通过，production
+smoke 仍通过。
 
-## 7. production 后续怎么使用
+## 7. OPS01C 演练结果
+
+2026-06-10 UTC，OPS01C 在 staging 完成真实演练：
+
+- staging backend safe release 通过。
+- staging frontend safe release 通过。
+- 两次发布都没有使用 `--force-recreate`。
+- 两次发布都只删除并重建目标 staging service 容器。
+- staging postgres 仍 healthy，未被停止、删除、重启或重建。
+- production 只做 smoke/status 只读检查，未被发布或重建。
+- staging smoke、production smoke、dual-env status 最终都通过。
+- 已生成 staging rollback tag：
+  `barong-ops-console-staging_console_staging_backend:rollback-20260610100243`
+  和
+  `barong-ops-console-staging_console_staging_frontend:rollback-20260610100511`。
+
+## 8. production 后续怎么使用
 
 OPS01D 才能用于 production。production 使用前必须已经完成 OPS01C staging 演练。
 
@@ -127,7 +148,7 @@ production frontend 同理，但必须先 dry-run，确认映射仍然是：
 OPS01D 不能直接跳到 production，不能绕过 staging，不能在不确认 project name 的
 情况下运行。
 
-## 8. rollback tag 的意义
+## 9. rollback tag 的意义
 
 发布前脚本会把当前正在运行的目标服务镜像打一个 rollback tag，例如：
 
@@ -138,9 +159,10 @@ barong-ops-console-prod_console_backend:rollback-YYYYmmddHHMMSS
 它的意义是保留“发布前正在跑的那版镜像”的明确引用。这样如果新镜像发布后健康检查
 不过，后续人工回滚时能知道上一版镜像是哪一个。
 
-OPS01B-alt 只准备这个机制，不实际打 tag。
+OPS01B-alt 只准备这个机制，不实际打 tag。OPS01C 已经在 staging backend/frontend
+演练中生成 rollback tag。本阶段只确认 tag 存在，不执行 rollback。
 
-## 9. 绝对禁止项
+## 10. 绝对禁止项
 
 这些规则在 OPS01B-alt、OPS01C、OPS01D 都必须遵守：
 
@@ -153,10 +175,10 @@ OPS01B-alt 只准备这个机制，不实际打 tag。
 - 不允许修改 Nginx 或证书。
 - 不允许接真实业务。
 
-## 10. 阶段边界
+## 11. 阶段边界
 
 OPS01B-alt 只完成脚本、文档和 dry-run 检查。
 
-OPS01C 才会在 staging 真实演练。
+OPS01C 已完成 staging 真实演练。
 
 OPS01D 才会用于 production。

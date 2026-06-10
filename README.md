@@ -268,9 +268,15 @@ server, which still has only `docker-compose` v1.29.2 available. It adds
 
 The safe release script defaults to dry-run, requires explicit project names,
 allows only staging/production backend/frontend targets, and rejects postgres.
-OPS01B-alt has not used the script to publish staging or production. The next
-step is OPS01C, where the flow can be rehearsed on staging before any
-production use.
+OPS01C has now rehearsed the flow on staging for both backend and frontend.
+The acceptance record is in
+`docs/OPS01_STAGING_SAFE_RELEASE_ACCEPTANCE.md`.
+
+OPS01C used the script to publish only staging backend/frontend, generated
+staging rollback tags, kept staging postgres healthy, and left production to
+read-only smoke/status checks. No real env files, Nginx/certificates, or real
+business systems were touched. The next step is OPS01D: production safe release
+script rehearsal and release-flow governance.
 
 ## Temporary login preview
 
