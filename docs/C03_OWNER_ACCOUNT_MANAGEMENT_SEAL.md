@@ -104,6 +104,11 @@ C04 标准角色建议为：
 
 C05 才承接 permissions、module access 和角色权限绑定。
 
+C04B 已补充后端统一角色常量和校验。标准角色现在已在代码中定义为 `owner`、
+`super_admin`、`module_admin`、`operator`、`reviewer`、`viewer`、`bot_agent`，
+但 `/users` 当前仍只允许 owner 创建 `viewer`、`operator`、`reviewer`。`super_admin`、
+`module_admin` 和 `bot_agent` 仍未放权、未开放创建，完整权限系统仍由 C05 承接。
+
 ## 九、C03 封板结论
 
 C03 已完成。

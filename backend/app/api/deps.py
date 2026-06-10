@@ -11,6 +11,7 @@ from ..core.security import (
     decode_access_token,
     require_token_secret,
 )
+from ..core.roles import is_owner_role
 from ..db.session import get_db
 from ..models.user import User
 from ..repositories.users import get_user_by_id
@@ -93,7 +94,7 @@ def get_current_user(
 def require_owner(
     user: User = Depends(get_current_user),
 ) -> User:
-    if user.role != "owner":
+    if not is_owner_role(user.role):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Owner role required.",

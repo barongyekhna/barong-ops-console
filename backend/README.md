@@ -2,7 +2,8 @@
 
 This directory contains the F05 FastAPI foundation, F06 migration mechanism,
 F07 core tables, F08 authentication, F10 foundation APIs, F11 Foundation Demo,
-F12 n8n Test Bridge, and C03 owner-only user management API. F13 accepts this
+F12 n8n Test Bridge, C03 owner-only user management API, and C04B backend
+role constants/validation. F13 accepts this
 backend as an empty foundation; it does not add a real business integration.
 
 C01 production deployment is complete for
@@ -52,17 +53,20 @@ and `/api/backend/auth/register` still returns 404. C03 still does not add
 `super_admin`, complete RBAC, or real business integration. C03F has sealed
 this stage; the next stage is C04: role system.
 
-C04A has started the role-system stage with
-`docs/C04_ROLE_SYSTEM_PLAN.md`. C04 defines account identity types, not the
-complete permission system. The current backend still stores `users.role` as a
-plain string, which is enough for C04 standard role validation and does not
-require a migration in C04B.
+C04A started the role-system stage with `docs/C04_ROLE_SYSTEM_PLAN.md`. C04B
+has added backend role constants, role metadata, unified assignable-role
+validation, tests, and owner-only `GET /users/roles`. C04 defines account
+identity types, not the complete permission system. The current backend still
+stores `users.role` as a plain string, which is enough for C04 standard role
+validation and does not require a migration in C04B.
 
 C04 standard roles are `owner`, `super_admin`, `module_admin`, `operator`,
-`reviewer`, `viewer`, and `bot_agent`. C04B should centralize backend role
-constants and validation, keep `owner` bootstrap-only, avoid granting real
-`super_admin` power, and reserve `bot_agent` for future robot-account work.
-C05 will define permissions, module access, and role-to-permission bindings.
+`reviewer`, `viewer`, and `bot_agent`. Owner-created `/users` roles remain
+limited to `viewer`, `operator`, and `reviewer`. `owner` stays
+bootstrap-only, `super_admin` is defined without real power, `module_admin` is
+reserved until module scope is defined, and `bot_agent` remains future
+robot-account work. C05 will define permissions, module access, and
+role-to-permission bindings.
 C04 still does not connect real n8n, P-series, WooCommerce, MinIO,
 Filebrowser, or real business tasks.
 

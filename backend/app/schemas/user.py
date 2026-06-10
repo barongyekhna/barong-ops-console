@@ -1,9 +1,17 @@
 from datetime import datetime
-from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, SecretStr, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SecretStr,
+    field_validator,
+    model_validator,
+)
 
-ManagedUserRole = Literal["viewer", "operator", "reviewer"]
+from ..core.roles import validate_assignable_user_role
+
+ManagedUserRole = str
 
 
 class UserResponse(BaseModel):
@@ -24,6 +32,11 @@ class UserCreate(BaseModel):
     role: ManagedUserRole
     is_active: bool = True
 
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str) -> str:
+        return validate_assignable_user_role(value)
+
     @model_validator(mode="after")
     def strip_username(self) -> "UserCreate":
         self.username = self.username.strip()
@@ -36,6 +49,13 @@ class UserUpdate(BaseModel):
     role: ManagedUserRole | None = None
     is_active: bool | None = None
 
+    @field_validator("role")
+    @classmethod
+    def validate_role(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        return validate_assignable_user_role(value)
+
     @model_validator(mode="after")
     def require_change(self) -> "UserUpdate":
         if self.role is None and self.is_active is None:
@@ -45,3 +65,17 @@ class UserUpdate(BaseModel):
 
 class PasswordResetRequest(BaseModel):
     new_password: SecretStr = Field(min_length=12, max_length=256)
+
+
+class UserRoleResponse(BaseModel):
+    name: str
+    label: str
+    description: str
+    human_or_agent: str
+    c04_status: str
+    assignable: bool
+
+
+class UserRolesResponse(BaseModel):
+    assignable_roles: list[UserRoleResponse]
+    standard_roles: list[UserRoleResponse]

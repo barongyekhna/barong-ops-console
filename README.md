@@ -169,26 +169,32 @@ still not connected. The next stage is C04: role system.
 
 ## C04 role system
 
-C04A has started the role-system stage. The design plan is in
-`docs/C04_ROLE_SYSTEM_PLAN.md`.
+C04A started the role-system stage with the design plan in
+`docs/C04_ROLE_SYSTEM_PLAN.md`. C04B has added backend role constants,
+metadata, validation, tests, and an owner-only `GET /users/roles` catalog.
 
 C04 defines account identity types. It does not define the full permission
 matrix. C05 will define permissions, module access, and how roles map to
 allowed actions.
 
-Current C04A conclusions:
+Current C04 status:
 
 - Existing `users.role` is a string and can hold the C04 standard role names.
-- C04B should not add a migration unless the owner explicitly approves a
-  database-level role constraint later.
+- C04B adds no migration; role validation is application-level for now.
 - Standard roles are `owner`, `super_admin`, `module_admin`, `operator`,
   `reviewer`, `viewer`, and `bot_agent`.
 - `owner` must still come only from bootstrap or system initialization, not
   from `/users`.
+- Owner-created `/users` roles remain limited to `viewer`, `operator`, and
+  `reviewer`.
 - `super_admin` is defined in C04 but should not receive all permissions in
   C04; C05 must decide concrete permissions.
+- `module_admin` is defined but not open for `/users` creation until module
+  scope is defined in C05/C07.
 - `bot_agent` is reserved for future robot accounts and is not connected to a
   real bot/agent workflow in C04.
+- C04B keeps `/users` owner-only and only replaces hard-coded owner checks
+  with the shared role helper.
 - Company positions such as designer, SEO editor, customer service, or factory
   supervisor should be represented with `role` plus later `job_title`,
   `department`, `module_access`, and `permissions`, not as new hard-coded role

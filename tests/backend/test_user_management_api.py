@@ -1,8 +1,21 @@
 import json
 
+import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from backend.app.core.roles import (
+    ASSIGNABLE_USER_ROLES,
+    ROLE_BOT_AGENT,
+    ROLE_MODULE_ADMIN,
+    ROLE_OPERATOR,
+    ROLE_OWNER,
+    ROLE_REVIEWER,
+    ROLE_SUPER_ADMIN,
+    ROLE_VIEWER,
+    STANDARD_ROLES,
+    UNASSIGNABLE_USER_ROLES,
+)
 from backend.app.core.security import hash_password, verify_password
 from backend.app.db.session import SessionLocal
 from backend.app.models.operation_log import OperationLog
@@ -89,6 +102,77 @@ def test_users_requires_owner_auth(
     assert unauthenticated.status_code == 401
     assert forbidden.status_code == 403
 
+    unauthenticated_roles = auth_client.get("/users/roles")
+    forbidden_roles = auth_client.get(
+        "/users/roles",
+        headers={
+            "Authorization": (
+                f"Bearer {login_response.json()['access_token']}"
+            )
+        },
+    )
+
+    assert unauthenticated_roles.status_code == 401
+    assert forbidden_roles.status_code == 403
+
+
+@pytest.mark.parametrize(
+    "role",
+    [ROLE_VIEWER, ROLE_OPERATOR, ROLE_REVIEWER],
+)
+def test_owner_creates_assignable_user_roles(
+    owner_client: TestClient,
+    role: str,
+) -> None:
+    created = create_user_via_api(
+        owner_client,
+        username=f"managed_{role}",
+        role=role,
+    )
+
+    assert created["role"] == role
+
+
+@pytest.mark.parametrize(
+    "role",
+    [ROLE_OWNER, ROLE_SUPER_ADMIN, ROLE_MODULE_ADMIN, ROLE_BOT_AGENT],
+)
+def test_owner_cannot_create_unassignable_user_roles(
+    owner_client: TestClient,
+    role: str,
+) -> None:
+    response = owner_client.post(
+        "/users",
+        json={
+            "username": f"blocked_{role}",
+            "password": OWNER_ROLE_PASSWORD,
+            "role": role,
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_owner_reads_user_role_catalog(owner_client: TestClient) -> None:
+    response = owner_client.get("/users/roles")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert [role["name"] for role in payload["assignable_roles"]] == list(
+        ASSIGNABLE_USER_ROLES
+    )
+    assert [role["name"] for role in payload["standard_roles"]] == list(
+        STANDARD_ROLES
+    )
+
+    assignable_by_name = {
+        role["name"]: role["assignable"] for role in payload["standard_roles"]
+    }
+    for role in ASSIGNABLE_USER_ROLES:
+        assert assignable_by_name[role] is True
+    for role in UNASSIGNABLE_USER_ROLES:
+        assert assignable_by_name[role] is False
+
 
 def test_owner_creates_user_and_rejects_invalid_create_requests(
     owner_client: TestClient,
@@ -143,6 +227,18 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
     assert weak_password.status_code == 422
 
 
+def test_auth_register_remains_absent(auth_client: TestClient) -> None:
+    response = auth_client.post(
+        "/auth/register",
+        json={
+            "username": "blocked_register",
+            "password": "example-only-register-password",
+        },
+    )
+
+    assert response.status_code == 404
+
+
 def test_user_list_and_detail_exclude_password_hash(
     owner_client: TestClient,
 ) -> None:
@@ -174,6 +270,18 @@ def test_owner_updates_disables_enables_and_resets_user_password(
     updated = owner_client.patch(
         f"/users/{user_id}",
         json={"role": "reviewer", "is_active": True},
+    )
+    patch_to_viewer = owner_client.patch(
+        f"/users/{user_id}",
+        json={"role": " Viewer "},
+    )
+    patch_to_operator = owner_client.patch(
+        f"/users/{user_id}",
+        json={"role": ROLE_OPERATOR},
+    )
+    patch_to_reviewer = owner_client.patch(
+        f"/users/{user_id}",
+        json={"role": ROLE_REVIEWER},
     )
     disabled = owner_client.post(f"/users/{user_id}/disable")
     disabled_login = owner_client.post(
@@ -207,6 +315,12 @@ def test_owner_updates_disables_enables_and_resets_user_password(
 
     assert updated.status_code == 200
     assert updated.json()["role"] == "reviewer"
+    assert patch_to_viewer.status_code == 200
+    assert patch_to_viewer.json()["role"] == ROLE_VIEWER
+    assert patch_to_operator.status_code == 200
+    assert patch_to_operator.json()["role"] == ROLE_OPERATOR
+    assert patch_to_reviewer.status_code == 200
+    assert patch_to_reviewer.json()["role"] == ROLE_REVIEWER
     assert disabled.status_code == 200
     assert disabled.json()["is_active"] is False
     assert disabled_login.status_code == 401
@@ -245,3 +359,21 @@ def test_owner_updates_disables_enables_and_resets_user_password(
     assert VIEWER_PASSWORD not in serialized_logs
     assert RESET_PASSWORD not in serialized_logs
     assert "password_hash" not in serialized_logs
+
+
+@pytest.mark.parametrize(
+    "role",
+    [ROLE_OWNER, ROLE_SUPER_ADMIN, ROLE_MODULE_ADMIN, ROLE_BOT_AGENT],
+)
+def test_owner_cannot_update_user_to_unassignable_roles(
+    owner_client: TestClient,
+    role: str,
+) -> None:
+    created = create_user_via_api(owner_client)
+
+    response = owner_client.patch(
+        f"/users/{created['id']}",
+        json={"role": role},
+    )
+
+    assert response.status_code == 422

@@ -6,6 +6,9 @@
 
 ### Added
 
+- C04B：新增 `backend/app/core/roles.py`，统一定义标准角色 `owner` / `super_admin` / `module_admin` / `operator` / `reviewer` / `viewer` / `bot_agent`、当前 `/users` 可创建角色 `viewer` / `operator` / `reviewer`、不可创建角色 `owner` / `super_admin` / `module_admin` / `bot_agent`、role normalize/validation helper 和角色展示 metadata。
+- C04B：新增 owner-only `GET /users/roles`，返回当前用户管理可创建角色和标准角色目录；不可创建角色只展示为 `assignable=false`，不开放选择或放权。
+- C04B：新增 `tests/backend/test_roles.py` 并扩展用户管理测试，覆盖标准角色、可创建/不可创建角色、大小写和空格 normalize、创建/PATCH role 拒绝矩阵、非 owner 禁止访问、`/auth/register` 404、API 不返回 `password_hash` 和 operation logs。
 - C04A：新增 `docs/C04_ROLE_SYSTEM_PLAN.md`，开始角色体系阶段，记录现有 role 使用方式审计、标准角色 `owner` / `super_admin` / `module_admin` / `operator` / `reviewer` / `viewer` / `bot_agent` 的边界、role 与 job_title/department/permissions/module access 的区别、C04 与 C05 的分工、migration 判断、风险分析和 C04B-C04F 后续任务拆分；本阶段只设计不实现，不接真实业务。
 - C03F：新增 `docs/C03_OWNER_ACCOUNT_MANAGEMENT_SEAL.md`，归档 C03 Owner 创建子账户最终封板结论，记录 production `/users` 已可用、未登录 `/api/backend/users` 返回 401、`/auth/register` 仍返回 404、production/staging/dual env check 通过、当前只支持 owner 管理 `viewer`/`operator`/`reviewer` 子账户，并明确 `super_admin`、完整 RBAC、模块权限、邮件邀请、密码找回和真实业务接入留到后续 C04/C05 或单独任务。
 - C03E：新增 `docs/C03_PRODUCTION_RELEASE.md`，归档 production 用户管理发布验收结果，记录 C03B 后端 `/users` API 和 C03C 前端 `/users` 页面已进入 production、`https://ops.barongyekhna.com/users` 可用、未登录 `/api/backend/users` 返回 401、`/auth/register` 仍返回 404、production/staging/dual env check 通过，以及本轮未读取真实 env、未创建 production 用户、未重启/删除/重建容器、未修改 Nginx/证书、未接真实业务。
@@ -61,6 +64,9 @@
 
 ### Changed
 
+- C04B：`backend/app/schemas/user.py` 和 `backend/app/services/user_management_service.py` 改为调用统一 `validate_assignable_user_role`；创建和更新用户 role 仍只允许 `viewer` / `operator` / `reviewer`，继续拒绝 `owner` / `super_admin` / `module_admin` / `bot_agent`。
+- C04B：`backend/app/api/deps.py` 的 owner-only 判断改为 `is_owner_role` helper，不改变 `/users` 权限结果；`super_admin`、`module_admin`、`bot_agent` 只定义不放权，完整权限系统仍留给 C05。
+- C04B：README、backend README、C03 封板文档和 C04 角色计划更新为 C04B 后端角色常量与统一校验已落地；本阶段不新增 migration、不部署 staging、不发布 production、不接真实业务。
 - C04A：README、backend README、frontend README 和 C03 封板文档更新为 C04 已开始，明确 C04 是角色体系、不是完整权限系统；C05 才做 permissions、module access 和角色权限绑定；当前仍不读取真实 env、不创建真实用户、不操作 production/staging 数据库、不改容器、不改 Nginx/证书、不接真实业务。
 - C03F：README、backend README、frontend README、C03 计划文档、C03D staging 验收文档和 C03E production 发布文档更新为 C03 已封板、User Management 已进入 production、C03 不包含 `super_admin` 或完整 RBAC，下一阶段为 C04：角色体系。
 - C03E：README、backend README、frontend README、C03 计划文档和 C03D staging 验收文档更新为 production 用户管理发布已完成，`/users` 页面已在 production 可用；当前仍不做 `super_admin`、完整 RBAC 或真实业务接入，后续由 C03F 完成封板。

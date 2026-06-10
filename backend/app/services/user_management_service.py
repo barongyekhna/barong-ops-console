@@ -3,6 +3,7 @@ from dataclasses import dataclass
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..core.roles import validate_assignable_user_role
 from ..core.security import hash_password
 from ..models.user import User
 from ..repositories.operation_logs import create_operation_log
@@ -96,8 +97,10 @@ def create_managed_user(
     actor: User,
     audit: AuditContext,
 ) -> User:
-    if payload.role == "owner":
-        raise OwnerRoleNotAllowedError("Owner role cannot be created here.")
+    try:
+        role = validate_assignable_user_role(payload.role)
+    except ValueError as exc:
+        raise OwnerRoleNotAllowedError(str(exc)) from None
 
     username = payload.username.strip()
     if get_user_by_username(db, username) is not None:
@@ -108,7 +111,7 @@ def create_managed_user(
             db,
             username=username,
             password_hash=hash_password(payload.password.get_secret_value()),
-            role=payload.role,
+            role=role,
             is_active=payload.is_active,
         )
         _log_user_operation(
@@ -144,8 +147,12 @@ def update_managed_user(
     audit: AuditContext,
 ) -> User:
     user = get_managed_user(db, user_id)
-    if payload.role == "owner":
-        raise OwnerRoleNotAllowedError("Owner role cannot be assigned here.")
+    role = None
+    if payload.role is not None:
+        try:
+            role = validate_assignable_user_role(payload.role)
+        except ValueError as exc:
+            raise OwnerRoleNotAllowedError(str(exc)) from None
     if user.id == actor.id and payload.is_active is False:
         raise SelfDisableNotAllowedError("Current owner cannot be disabled.")
 
@@ -153,7 +160,7 @@ def update_managed_user(
     user = update_user_record(
         db,
         user,
-        role=payload.role,
+        role=role,
         is_active=payload.is_active,
     )
     after = {"role": user.role, "is_active": user.is_active}

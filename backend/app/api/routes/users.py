@@ -1,6 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from ...core.roles import (
+    list_assignable_user_role_metadata,
+    list_standard_role_metadata,
+)
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.common import ListResponse
@@ -8,6 +12,7 @@ from ...schemas.user import (
     PasswordResetRequest,
     UserCreate,
     UserResponse,
+    UserRolesResponse,
     UserUpdate,
 )
 from ...services.user_management_service import (
@@ -94,6 +99,17 @@ def user_create(
     except Exception as exc:
         _raise_user_management_error(exc)
     return UserResponse.model_validate(user)
+
+
+@router.get("/roles", response_model=UserRolesResponse)
+def user_roles(
+    owner: User = Depends(require_owner),
+) -> UserRolesResponse:
+    del owner
+    return UserRolesResponse(
+        assignable_roles=list_assignable_user_role_metadata(),
+        standard_roles=list_standard_role_metadata(),
+    )
 
 
 @router.get("/{user_id}", response_model=UserResponse)

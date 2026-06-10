@@ -2,10 +2,13 @@
 
 日期：2026-06-10 UTC
 
-本文件记录 C04A：角色体系审计与设计方案。
+本文件记录 C04A：角色体系审计与设计方案，并追加 C04B 后端角色常量与校验落地状态。
 
 C04A 只做审计、设计、风险分析、后续任务拆分和文档更新。它不实现功能，不新增
 migration，不修改 production/staging 容器，不创建真实用户，不接真实业务。
+
+C04B 已在后端新增统一 role constants、role metadata、assignable-role 校验和测试。
+C04B 仍不做完整 RBAC，不新增 migration，不部署 staging，不发布 production，不接真实业务。
 
 ## 一、为什么要做角色体系
 
@@ -150,7 +153,7 @@ module_admin 是未来的模块管理员身份。它只说明这个账号可能�
 
 - 人类账号：是。
 - 机器人账号：否。
-- 是否可由 owner 创建：C04 可以考虑允许，但只作为身份标签，不给真实模块管理权限。
+- 是否可由 owner 创建：C04B 先不开放，等 C05/C07 明确模块范围后再决定。
 - 是否可由普通用户创建：否。
 - 是否可以管理用户：C04 不授权。C05 再决定是否有 scoped user management。
 - 是否可以操作模块：C04 不授权。模块范围必须由后续 module access / permissions 决定。
@@ -217,7 +220,7 @@ bot_agent 是未来机器人或自动化代理账号类型。
 | --- | --- | --- | --- | --- | --- | --- |
 | `owner` | 系统所有者 | 是 | 否 | 否，只能 bootstrap/系统初始化 | 否 | 不新增放权 |
 | `super_admin` | 未来超级管理员 | 是 | 否 | 建议否，先定义 | 否 | 不放权 |
-| `module_admin` | 未来模块管理员 | 是 | 否 | 可考虑允许，但只作为身份标签 | 否 | 不放权 |
+| `module_admin` | 未来模块管理员 | 是 | 否 | 否，C04B 先不开放 | 否 | 不放权 |
 | `operator` | 日常操作员 | 是 | 否 | 是 | 否 | 不放权 |
 | `reviewer` | 审核员 | 是 | 否 | 是 | 否 | 不放权 |
 | `viewer` | 只读查看账号 | 是 | 否 | 是 | 否 | 不放权 |
@@ -282,8 +285,19 @@ C04B 的保守建议：
 - `/users` 继续禁止创建 `owner`。
 - `/users` 暂不开放创建 `super_admin`。
 - `/users` 暂不开放创建 `bot_agent`。
-- 可以讨论是否开放 `module_admin` 作为身份标签；如果开放，必须在 UI 和文档里明确它没有真实模块管理权限。
+- `/users` 暂不开放创建 `module_admin`，等 C05/C07 明确模块范围后再决定。
 - `viewer`、`operator`、`reviewer` 继续作为普通 owner-created 子账户角色。
+
+C04B 实际落地：
+
+- 新增 `backend/app/core/roles.py`，集中定义 `owner`、`super_admin`、
+  `module_admin`、`operator`、`reviewer`、`viewer`、`bot_agent`。
+- 当前 owner 通过 `/users` 可创建角色仍只有 `viewer`、`operator`、`reviewer`。
+- `/users` 继续拒绝创建或更新为 `owner`、`super_admin`、`module_admin`、`bot_agent`。
+- `super_admin` 只作为标准角色定义存在，没有任何 C04B 实际权限。
+- `module_admin` 和 `bot_agent` 只预留，不开放创建。
+- 新增 owner-only `GET /users/roles`，返回用户管理页可创建角色和标准角色目录。
+- `require_owner` 改为通过统一 helper 判断 owner，不改变 `/users` owner-only 行为。
 
 ## 九、C04 暂不做什么
 
@@ -334,8 +348,8 @@ C04A 判断：不建议 C04B 新增 migration。
 
 2. `module_admin` 被误解的风险
 
-   没有 module access 前，`module_admin` 不能表示“管哪个模块”。如果 C04 开放创建，
-   必须明确它只是身份标签。
+   没有 module access 前，`module_admin` 不能表示“管哪个模块”。C04B 已选择先不开放
+   `/users` 创建，等 C05/C07 明确模块范围后再决定。
 
 3. 职位塞进 role 的风险
 
@@ -360,7 +374,7 @@ C04A 判断：不建议 C04B 新增 migration。
 - 统一 `owner`、`viewer`、`operator`、`reviewer` 等字符串来源。
 - 扩展或调整 `ManagedUserRole` 的校验策略。
 - 明确禁止 `/users` 创建 `owner`、`super_admin`、`bot_agent`。
-- 根据老板确认决定是否允许 `/users` 创建 `module_admin`。
+- C04B 已保守决定暂不允许 `/users` 创建 `module_admin`。
 - 增加测试覆盖标准角色、危险角色和未知角色。
 - 不新增 migration。
 - 不发布 production。
