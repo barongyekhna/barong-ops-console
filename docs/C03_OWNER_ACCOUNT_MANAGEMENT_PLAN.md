@@ -85,6 +85,30 @@ C03C 仍不做：
 - production/staging 真实用户创建。
 - 真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser 或真实业务任务。
 
+## 2.3. C03E production 发布状态
+
+C03E 已完成 production 发布验收归档。C03B 后端 `/users` API 和 C03C
+前端 `/users` 页面已经进入 production。
+
+production 正式地址：
+
+- `https://ops.barongyekhna.com/users`
+
+本轮只读复核确认：
+
+- production `/users` 页面返回 200。
+- 未登录访问 production `/api/backend/users` 返回 401。
+- production `/api/backend/auth/register` 返回 404。
+- `./scripts/production_smoke_check.sh` 通过。
+- `./scripts/staging_smoke_check.sh` 通过。
+- `./scripts/check_dual_env_status.sh` 通过。
+- production 和 staging 容器均正常运行。
+
+C03E 没有新增 migration，没有创建 production 用户，没有读取或修改真实
+env，没有重启、删除、重建容器，没有修改 Nginx/证书，没有接真实业务，也没有
+git commit。当前仍只支持 `viewer`、`operator`、`reviewer` 子账户，
+`super_admin` 和完整 RBAC 留到 C04/C05。
+
 ## 3. 审计过的主要文件
 
 后端用户和认证：
@@ -287,9 +311,9 @@ C03C 仍不做：
 
 左上角显示 Barong Ops Console，右上角显示当前用户 `username` 和 `role`。Logout 按钮调用 auth provider 的 logout。
 
-### 当前用户管理入口
+### 用户管理入口
 
-当前没有用户管理入口：
+C03A 审计时还没有用户管理入口：
 
 - 左侧导航 System 下面只有 `/settings`。
 - `/settings` 现在是空状态。
@@ -297,7 +321,10 @@ C03C 仍不做：
 - 前端 API proxy allowlist 当前不允许 `/users`。
 - 前端 API route 当前只有 GET 和 POST handler，没有 PATCH handler。
 
-结论：C03C 可以新增独立 `/users` 页面，并在 System 菜单中增加 User Management。`/settings` 可以保留为空状态，或者后续放系统配置；不建议把完整用户列表塞进空状态 settings 页面里。
+后续 C03C 已新增独立 `/users` 页面，并在 System 菜单中增加 User
+Management。C03E 已把该页面发布到 production：
+`https://ops.barongyekhna.com/users`。`/settings` 继续保留为系统设置空状态，
+用户管理不塞进 settings 页面。
 
 ## 7. 当前 users/auth 系统总体结论
 
@@ -737,9 +764,8 @@ C03 必须 staging-first：
 - proxy allowlist 精确放行用户管理 API。
 - 不加公开注册页面。
 
-状态：C03C 已完成前端代码、API client、proxy、验证脚本和文档更新；未
-git commit，等待老板审核。C03C 本身是代码阶段；后续 C03D 已在 staging
-完成验收，production 发布仍留到 C03E。
+状态：C03C 已完成前端代码、API client、proxy、验证脚本和文档更新；后续
+C03D 已在 staging 完成验收，C03E 已完成 production 发布验收归档。
 
 ### C03D：staging 部署和验收
 
@@ -791,6 +817,24 @@ backend/frontend 上做验收，没有 build、recreate、stop、rm 容器，没
 - owner 在 production 创建真实需要的子账户前，先确认账号命名和密码交付规则。
 - 不接真实业务。
 
+状态：C03E 已完成。production 已经部署 C03B 后端用户管理 API 和 C03C
+前端 `/users` 用户管理页面。本轮 C03E-6 只做只读复核和文档归档，没有再部署、
+重建、停止或删除任何容器。
+
+验收结果：
+
+- production `/users` 页面返回 200。
+- 未登录访问 production `/api/backend/users` 返回 401。
+- production `/api/backend/auth/register` 返回 404。
+- production smoke check 通过。
+- staging smoke check 通过。
+- dual env check 通过。
+- production/staging 容器均正常。
+- 没有读取或修改真实 env。
+- 没有创建 production 用户。
+- 没有修改 Nginx/证书。
+- 没有接真实业务。
+
 ### C03F：C03 封板
 
 目标：
@@ -799,6 +843,8 @@ backend/frontend 上做验收，没有 build、recreate、stop、rm 容器，没
 - 归档 staging 和 production 验收证据。
 - 记录已知风险。
 - 明确 C04/C05 角色权限系统入口。
+
+下一步：C03F 做 C03 Owner 创建子账户总封板。
 
 ## 16. 当前不接真实业务
 
@@ -817,7 +863,7 @@ C03 只处理账号管理基础，不代表系统可以开始跑真实业务。
 
 真实业务接入必须等账号、角色、权限、审核、日志和 staging-first 发布链路继续封板后，再按独立任务进入。
 
-## 17. C03A-C03D 结论
+## 17. C03A-C03E 结论
 
 C03A 审计结论：
 
@@ -861,4 +907,19 @@ C03D staging 结论：
 - production smoke 仍正常。
 - 本轮没有读取真实 env 文件，没有打印 password/token/secret，没有重启或删除
   容器，没有修改 Nginx/证书，没有接真实业务。
-- production 用户管理发布仍未执行，必须等 C03E owner 明确批准。
+- C03D 完成后，production 用户管理发布进入 C03E。
+
+C03E production 结论：
+
+- C03B 后端 `/users` API 已进入 production。
+- C03C 前端 `/users` 用户管理页面已进入 production。
+- production 正式地址为 `https://ops.barongyekhna.com/users`。
+- 当前 owner 可以在网页中进入 User Management。
+- 未登录访问 production `/api/backend/users` 返回 401。
+- production `/api/backend/auth/register` 仍返回 404，没有公开注册。
+- 当前只支持 `viewer`、`operator`、`reviewer`，不做 `super_admin`。
+- 当前不做完整 RBAC。
+- 本次没有新增 migration，没有接真实业务模块，没有修改 Nginx/证书。
+- production smoke、staging smoke、dual env check 均通过。
+- staging 仍保留为测试服。
+- 下一步是 C03F：C03 Owner 创建子账户封板。

@@ -77,17 +77,23 @@ provide a generic webhook route. F12 does not add registration, product
 creation, WooCommerce, P-series, MinIO, or Filebrowser UI integration.
 
 C03C adds the protected `/users` page under **User Management** in the System
-navigation. It calls only the owner-only C03B `/users` APIs through the
-restricted same-origin proxy. The page lists users, creates `viewer`,
-`operator`, and `reviewer` accounts, shows user detail, updates managed roles,
-enables/disables users, and resets sub-account passwords with confirmation.
+navigation. C03E has released it to production at
+`https://ops.barongyekhna.com/users`. It calls only the owner-only C03B
+`/users` APIs through the restricted same-origin proxy. The page lists users,
+creates `viewer`, `operator`, and `reviewer` accounts, shows user detail,
+updates managed roles, enables/disables users, and resets sub-account
+passwords with confirmation.
 It does not show `owner` or `super_admin` as create options, does not add
 public registration, does not print passwords or tokens, and does not connect
 real business systems. C03D accepted this flow on staging with a
 `c03d_test_<timestamp>` account, including list/detail, login, 403 for
 non-owner `/users`, disable, enable, password reset, `role=owner` rejection,
-`/auth/register` 404, and operation log verification. Production
-user-management release remains C03E and still requires owner approval.
+`/auth/register` 404, and operation log verification. C03E production
+read-only checks confirmed `/users` returns 200, unauthenticated
+`/api/backend/users` returns 401, `/auth/register` still returns 404, and
+production/staging/dual-env checks pass. C03 still does not add
+`super_admin`, full RBAC, or real business integration. The next step is C03F:
+C03 Owner-created sub-account sealing.
 
 ## Configuration
 

@@ -121,7 +121,8 @@ tasks. The next stage is C03: Owner creates sub-accounts.
 ## C03 owner account management
 
 C03B implemented the backend owner-created sub-account API, C03C added the
-frontend user management surface, and C03D has accepted the flow on staging:
+frontend user management surface, C03D accepted the flow on staging, and C03E
+has released it to production:
 
 - `docs/C03_OWNER_ACCOUNT_MANAGEMENT_PLAN.md` records the users/auth audit,
   C03 scope, backend API, frontend implementation, security rules,
@@ -129,10 +130,16 @@ frontend user management surface, and C03D has accepted the flow on staging:
 - `docs/C03_STAGING_ACCEPTANCE.md` records the C03D staging acceptance result,
   including the test user lifecycle, operation log verification, production
   smoke result, and environment safety boundaries.
+- `docs/C03_PRODUCTION_RELEASE.md` records the C03E production release
+  acceptance result, including production `/users` availability, unauthenticated
+  `/api/backend/users` returning 401, `/auth/register` still returning 404, and
+  production/staging/dual-env smoke checks passing.
 - Owner-only `/users` APIs now support list, create, detail, update,
   enable/disable, and reset-password for sub-accounts.
 - The protected `/users` console page is available under **User Management**
   in the System navigation.
+- The production user management page is available at
+  `https://ops.barongyekhna.com/users`.
 - The page can list users, create `viewer`, `operator`, and `reviewer`
   accounts, view user details, update managed roles, enable/disable users,
   and reset sub-account passwords through the restricted frontend API proxy.
@@ -143,14 +150,16 @@ frontend user management surface, and C03D has accepted the flow on staging:
 - C03D verified this on staging with a `c03d_test_<timestamp>` account, without
   reading real env files, printing secrets, changing Nginx/certificates,
   restarting containers, or connecting real business workflows.
+- C03E verified production read-only behavior without reading real env files,
+  creating production users, changing Nginx/certificates, restarting containers,
+  or connecting real business workflows.
 - C03 still does not add `super_admin`, full RBAC, public registration,
-  OAuth/email flows, production user-management release, or real business
-  workflows.
+  OAuth/email flows, or real business workflows.
 
 The current system remains foundation/console only. Real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, and business tasks are
-still not connected. The next step is C03E: owner-approved production release
-and production user-management acceptance.
+still not connected. The next step is C03F: seal C03 Owner-created
+sub-accounts.
 
 ## Temporary login preview
 

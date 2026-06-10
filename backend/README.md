@@ -26,9 +26,9 @@ account. C02D added read-only dual-environment checks, C02E completed final
 production/staging acceptance, and C02F sealed the environment isolation
 system. Both environments are usable and isolated. C02F did not read real env
 files, restart production/staging containers, or connect real n8n, P-series,
-WooCommerce, MinIO, or Filebrowser systems. C03D has now accepted the
-owner-created sub-account flow on staging. Production user-management release
-remains C03E and still requires owner approval.
+WooCommerce, MinIO, or Filebrowser systems. C03D accepted the owner-created
+sub-account flow on staging, and C03E has released the user-management API and
+page to production.
 
 C03B exposes owner-only user management:
 
@@ -44,10 +44,13 @@ It creates only non-owner sub-account roles: `viewer`, `operator`, and
 `reviewer`. It hashes all passwords, omits `password_hash` from responses,
 writes `user.create`, `user.update`, `user.disable`, `user.enable`, and
 `user.reset_password` operation logs, and keeps `/auth/register` absent. C03B
-adds no migration and no full RBAC. C03C added the frontend page, and C03D
-accepted the user lifecycle on staging with a `c03d_test_<timestamp>` account.
-Production remains unreleased for C03 user management, and no real business
-integration is connected.
+adds no migration and no full RBAC. C03C added the frontend page, C03D accepted
+the user lifecycle on staging with a `c03d_test_<timestamp>` account, and C03E
+released it to production at `https://ops.barongyekhna.com/users`. Production
+read-only checks confirmed unauthenticated `/api/backend/users` returns 401
+and `/api/backend/auth/register` still returns 404. C03 still does not add
+`super_admin`, complete RBAC, or real business integration. The next step is
+C03F: C03 Owner-created sub-account sealing.
 
 F12 adds the n8n test webhook bridge:
 

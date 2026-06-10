@@ -3,6 +3,8 @@
 日期：2026-06-10 UTC
 
 本文件记录 C03D：Owner 创建子账户在 staging 的后半段验收结果。
+C03E production 发布已经在 2026-06-10 UTC 完成，production 发布归档见
+`docs/C03_PRODUCTION_RELEASE.md`。
 
 ## 1. 验收边界
 
@@ -132,8 +134,22 @@ C03D staging 用户管理功能通过本轮验收。
 - 公开注册仍不存在。
 - operation logs 已验证。
 - production smoke 仍正常。
-- production 未发布 C03E 用户管理验收。
+- C03E 已完成 production 用户管理发布验收。
 - 真实业务仍未接入。
 
-下一步是 C03E：在 owner 明确批准后，再做 production 发布和 production
-用户管理验收。
+staging 仍保留为测试服，不复制 staging 测试账号到 production。
+
+## 7. C03E 后续状态
+
+C03E 已把 C03B 后端 `/users` API 和 C03C 前端 `/users` 页面发布到
+production：
+
+- production 正式地址：`https://ops.barongyekhna.com/users`
+- 未登录访问 production `/api/backend/users` 返回 401。
+- production `/api/backend/auth/register` 仍返回 404。
+- 当前只支持 `viewer`、`operator`、`reviewer`，不做 `super_admin`。
+- 当前不做完整 RBAC。
+- 本次没有新增 migration，没有修改 Nginx/证书，没有接真实业务。
+- production smoke、staging smoke、dual env check 均通过。
+
+下一步是 C03F：C03 Owner 创建子账户封板。
