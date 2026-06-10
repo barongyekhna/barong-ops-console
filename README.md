@@ -173,7 +173,8 @@ C04A started the role-system stage with the design plan in
 `docs/C04_ROLE_SYSTEM_PLAN.md`. C04B has added backend role constants,
 metadata, validation, tests, and an owner-only `GET /users/roles` catalog.
 C04C has updated the User Management frontend to read that catalog through
-`/api/backend/users/roles`.
+`/api/backend/users/roles`. C04D has accepted the role catalog UI/API on
+staging; the acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`.
 
 C04 defines account identity types. It does not define the full permission
 matrix. C05 will define permissions, module access, and how roles map to
@@ -202,8 +203,20 @@ Current C04 status:
   `reviewer`.
 - The User Management page now explains that `super_admin`, `module_admin`,
   and `bot_agent` are reserved roles and are not assignable in C04.
-- C04C does not add `super_admin` powers, complete RBAC, staging/production
-  deployment, or real user/business creation.
+- C04D verified on staging that `/users/roles` is owner-only, unauthenticated
+  access returns 401, non-owner access returns 403, `viewer`/`operator`/
+  `reviewer` can be created and assigned, reserved roles cannot be created or
+  assigned, `/auth/register` remains 404, and operation logs contain user
+  management records.
+- C04D also verified staging `/login`, `/users`, and `/api/backend/health`,
+  confirmed the running frontend build contains the role catalog UI, and
+  reran production/staging/dual-env smoke checks successfully.
+- C04D did not rebuild, recreate, stop, remove, or restart production/staging
+  containers; did not run `docker-compose up/down`; did not read real env
+  files; did not modify Nginx/certificates; did not create production users;
+  and did not connect real business systems.
+- C04 does not add `super_admin` powers, complete RBAC, production deployment,
+  or real user/business creation.
 - Company positions such as designer, SEO editor, customer service, or factory
   supervisor should be represented with `role` plus later `job_title`,
   `department`, `module_access`, and `permissions`, not as new hard-coded role
@@ -211,8 +224,7 @@ Current C04 status:
 
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
-The next step is C04D: deploy to the staging test environment and accept the
-role catalog UI.
+The next step is C04E: production release evaluation after explicit approval.
 
 ## Temporary login preview
 

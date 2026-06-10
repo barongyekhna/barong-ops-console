@@ -6,6 +6,7 @@
 
 ### Added
 
+- C04D：新增 `docs/C04_STAGING_ACCEPTANCE.md`，归档 staging 角色目录 UI/API 验收结果，记录 `/users/roles` owner-only 行为、标准角色和可创建角色目录、reserved roles 拒绝矩阵、staging 页面检查、operation logs 验证、production 仍正常，以及本轮未读取真实 env、未 build/recreate/stop/rm 容器、未执行 `docker-compose up/down`、未修改 Nginx/证书、未接真实业务。
 - C04C：前端 User Management 页面新增角色目录说明区，显示 “Current assignable roles” 的 `viewer` / `operator` / `reviewer`，以及 “Reserved roles, not assignable in C04” 的 `owner` / `super_admin` / `module_admin` / `bot_agent`，并明确完整 RBAC 留到 C05。
 - C04C：`frontend/src/lib/users-api.ts` 新增 role metadata 类型和 `listUserRoles()`，通过 `/api/backend/users/roles` 调用 C04B 的 owner-only `GET /users/roles`，保留 token 不打印和用户管理错误提示。
 - C04B：新增 `backend/app/core/roles.py`，统一定义标准角色 `owner` / `super_admin` / `module_admin` / `operator` / `reviewer` / `viewer` / `bot_agent`、当前 `/users` 可创建角色 `viewer` / `operator` / `reviewer`、不可创建角色 `owner` / `super_admin` / `module_admin` / `bot_agent`、role normalize/validation helper 和角色展示 metadata。
@@ -66,6 +67,7 @@
 
 ### Changed
 
+- C04D：README、backend README、frontend README 和 C04 角色计划更新为 staging 角色目录 UI/API 已验收通过；下一步改为 C04E production 发布评估，C04 仍不做完整 RBAC、不创建 production 用户、不接真实业务。
 - C04C：创建用户和详情页 managed role 下拉改为由 `/users/roles` 返回的 `assignable=true` 角色生成，并在前端安全过滤为 `viewer` / `operator` / `reviewer`；`owner`、`super_admin`、`module_admin`、`bot_agent` 不可选择。
 - C04C：前端 API proxy 最小放行 `GET /api/backend/users/roles`，不破坏 `/health`、`/auth` 和既有 `/users` list/create/detail/update/disable/enable/reset-password 路径。
 - C04C：README、frontend README、C03 封板文档和 C04 角色计划更新为前端已使用后端角色目录；本阶段不做完整 RBAC、不部署 staging/production、不创建真实用户、不接真实业务，下一步为 C04D staging 验收角色目录 UI。

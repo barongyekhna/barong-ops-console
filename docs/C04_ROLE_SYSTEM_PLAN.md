@@ -3,7 +3,7 @@
 日期：2026-06-10 UTC
 
 本文件记录 C04A：角色体系审计与设计方案，并追加 C04B 后端角色常量与校验落地状态、
-C04C 前端角色目录显示与选择优化状态。
+C04C 前端角色目录显示与选择优化状态、C04D staging 验收结果。
 
 C04A 只做审计、设计、风险分析、后续任务拆分和文档更新。它不实现功能，不新增
 migration，不修改 production/staging 容器，不创建真实用户，不接真实业务。
@@ -16,6 +16,11 @@ C04C 已在前端 User Management 页面接入 owner-only `GET /users/roles` 角
 `viewer`、`operator`、`reviewer`。`owner`、`super_admin`、`module_admin`、
 `bot_agent` 只展示为当前 C04 不可选择角色。C04C 不部署 staging，不发布 production，
 不创建真实用户，不接真实业务。
+
+C04D 已在已恢复运行的 staging 测试服完成角色目录 UI/API 验收，结果归档到
+`docs/C04_STAGING_ACCEPTANCE.md`。本轮没有 build、recreate、stop、rm 容器，没有
+执行 `docker-compose up/down`，没有读取真实 `.env.production` 或 `.env.staging`
+文件内容，没有修改 Nginx/证书，没有接真实业务，也没有 git commit。
 
 ## 一、为什么要做角色体系
 
@@ -412,16 +417,26 @@ C04A 判断：不建议 C04B 新增 migration。
 
 ### C04D：staging 验收角色创建和登录
 
-- 下一步：部署到 staging 测试服验收角色目录 UI。
-- 在 staging 验收允许创建的基础角色。
-- 验证非 owner 仍不能访问 `/users`。
-- 验证不可创建 `owner`、`super_admin`、`bot_agent`。
-- 验证角色变更后旧 token 失效或需要重新登录的行为。
-- 不创建 production 用户。
+- 已完成：在已恢复运行的 staging 测试服验收角色目录 UI 和 API。
+- 已完成：staging `alembic upgrade head` 成功，`alembic current` 为
+  `f07_core_001 (head)`。
+- 已完成：owner `GET /users/roles` 返回标准角色目录和可创建角色目录。
+- 已完成：未登录 `GET /users/roles` 返回 401，非 owner 返回 403。
+- 已完成：在 staging 创建 `viewer`、`operator`、`reviewer` 测试账号成功。
+- 已完成：创建或 PATCH 为 `owner`、`super_admin`、`module_admin`、
+  `bot_agent` 均被拒绝。
+- 已完成：`/auth/register` 仍返回 404，operation logs 有用户管理记录。
+- 已完成：staging `/login`、`/users`、`/api/backend/health` 返回正常，运行中的
+  frontend build 含 `/users/roles` 和 reserved role UI 文案。
+- 已完成：验收前后 production/staging/dual-env smoke 均通过，production 仍正常。
+- 未执行：`./scripts/test_foundation_acceptance.sh`，因为脚本内部会调用
+  `docker compose build/up/run/down`，与本轮“不要 build / recreate / stop / rm
+  容器、不要 docker-compose up/down”边界冲突。
+- 不创建 production 用户，不接真实业务。
 
 ### C04E：production 发布
 
-- 只在 C04B/C04C/C04D 通过后发布。
+- 只在 C04B/C04C/C04D 通过并得到老板明确批准后发布。
 - 发布前后运行 production/staging/dual env smoke。
 - 不读取真实 env。
 - 不重启、删除、重建 production/staging 容器，除非进入单独发布流程并获准。
@@ -451,5 +466,5 @@ C04A 判断：不建议 C04B 新增 migration。
 - 不创建真实业务任务。
 - 不 git commit。
 
-当前仍然是 foundation/console 阶段。C04 只定义角色体系，不接真实业务。C04D 才进入
-staging 测试服验收角色目录 UI。
+当前仍然是 foundation/console 阶段。C04 只定义角色体系，不接真实业务。C04D
+staging 验收已完成，下一步是 C04E production 发布评估。

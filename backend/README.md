@@ -55,20 +55,26 @@ this stage; the next stage is C04: role system.
 
 C04A started the role-system stage with `docs/C04_ROLE_SYSTEM_PLAN.md`. C04B
 has added backend role constants, role metadata, unified assignable-role
-validation, tests, and owner-only `GET /users/roles`. C04 defines account
-identity types, not the complete permission system. The current backend still
-stores `users.role` as a plain string, which is enough for C04 standard role
-validation and does not require a migration in C04B.
+validation, tests, and owner-only `GET /users/roles`. C04C connected the
+frontend role catalog UI, and C04D accepted the role catalog API/UI on staging
+in `docs/C04_STAGING_ACCEPTANCE.md`. C04 defines account identity types, not
+the complete permission system. The current backend still stores `users.role`
+as a plain string, which is enough for C04 standard role validation and does
+not require a migration in C04B.
 
 C04 standard roles are `owner`, `super_admin`, `module_admin`, `operator`,
 `reviewer`, `viewer`, and `bot_agent`. Owner-created `/users` roles remain
 limited to `viewer`, `operator`, and `reviewer`. `owner` stays
 bootstrap-only, `super_admin` is defined without real power, `module_admin` is
 reserved until module scope is defined, and `bot_agent` remains future
-robot-account work. C05 will define permissions, module access, and
-role-to-permission bindings.
-C04 still does not connect real n8n, P-series, WooCommerce, MinIO,
-Filebrowser, or real business tasks.
+robot-account work. C04D verified on staging that owner can read
+`/users/roles`, unauthenticated access returns 401, non-owner access returns
+403, `viewer`/`operator`/`reviewer` can be created and assigned, reserved
+roles cannot be created or assigned, `/auth/register` remains 404, operation
+logs contain user management records, and staging `alembic current` is
+`f07_core_001 (head)`. C05 will define permissions, module access, and
+role-to-permission bindings. C04 still does not connect real n8n, P-series,
+WooCommerce, MinIO, Filebrowser, or real business tasks.
 
 F12 adds the n8n test webhook bridge:
 

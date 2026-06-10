@@ -99,7 +99,8 @@ C04A has started the role-system stage with
 `docs/C04_ROLE_SYSTEM_PLAN.md`. C04 is about account identity labels, not the
 full permission system. C04B added the owner-only `GET /users/roles` catalog,
 and C04C updates the `/users` page to read it through
-`/api/backend/users/roles`.
+`/api/backend/users/roles`. C04D accepted the role catalog UI on staging; the
+acceptance record is `docs/C04_STAGING_ACCEPTANCE.md`.
 
 The User Management create-user selector and managed-role selector are now
 generated from catalog roles that are `assignable=true` and pass the frontend
@@ -115,9 +116,14 @@ permissions, module access, and role-to-permission bindings. Future company
 positions such as designer, SEO editor, customer service, or factory
 supervisor should be represented through role plus later job title,
 department, module access, and permissions, not as hard-coded frontend role
-strings. C04C does not deploy staging/production, create real users, add
-public registration, or connect real business systems. The next step is C04D:
-staging test acceptance for the role catalog UI.
+strings. C04D verified on staging that `/login`, `/users`, and
+`/api/backend/health` return normally, the running frontend build contains
+`/users/roles` and reserved role UI text, the create-user selector is limited
+to `viewer`, `operator`, and `reviewer`, and reserved roles remain displayed
+but not selectable. C04D did not rebuild/recreate/restart containers, run
+`docker-compose up/down`, read real env files, modify Nginx/certificates, or
+connect real business systems. The next step is C04E production release
+evaluation after explicit approval.
 
 ## Configuration
 
