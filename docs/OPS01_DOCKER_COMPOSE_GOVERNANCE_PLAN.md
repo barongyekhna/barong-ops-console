@@ -248,6 +248,19 @@ OPS01B：Compose v2 安装/启用或安全 fallback 方案准备
 - 如果安装/启用 v2，记录版本、路径、plugin 目录和回滚办法。
 - 如果暂时不能装 v2，准备 v1 fallback 的目标容器检查和人工兜底规则。
 
+OPS01B-alt：Compose v1 安全发布脚本准备
+
+- OPS01B 原安装 Compose v2 路线暂时暂停，因为当前 apt 源找不到
+  `docker-compose-plugin`。
+- 本阶段不升级 Docker，不安装 Compose v2，不添加 Docker 官方 apt 源，也不通过
+  `curl` 下载 compose 二进制。
+- 当前采用短期稳妥路线：继续基于 `docker-compose` v1.29.2 准备安全发布脚本。
+- 新脚本默认 dry-run，只允许明确的 staging/production backend/frontend target，
+  禁止 postgres，禁止无 project name，禁止 `down`。
+- OPS01B-alt 只准备脚本、runbook 和 dry-run 检查，不真实发布 staging/production，
+  不删除、不停止、不重建容器。
+- Compose v2 后续可以作为单独工具链任务再评估，但不打断当前项目。
+
 OPS01C：staging 发布脚本改造与演练
 
 - 新增或改造 staging-only 发布脚本。
@@ -285,3 +298,24 @@ git diff --check -- docs README.md CHANGELOG.md scripts
 
 这些验证只读检查运行状态和文档 diff，不安装工具、不升级 Compose、不重启/删除容器、
 不读取真实 env、不修改 Nginx/证书、不接真实业务。
+
+## 11. OPS01B-alt 验证
+
+OPS01B-alt 计划完成后需要运行：
+
+```bash
+git status --short --untracked-files=all
+./scripts/check_safe_release_plan.sh
+./scripts/safe_compose_release.sh --env staging --service backend --dry-run
+./scripts/safe_compose_release.sh --env staging --service frontend --dry-run
+./scripts/safe_compose_release.sh --env production --service backend --dry-run
+./scripts/safe_compose_release.sh --env production --service frontend --dry-run
+./scripts/production_smoke_check.sh
+./scripts/staging_smoke_check.sh
+./scripts/check_dual_env_status.sh
+git diff --check -- scripts docs README.md CHANGELOG.md
+```
+
+这些验证不安装或升级工具，不运行真实发布模式，不读取真实 env，不修改 Nginx/证书，
+不接真实业务。`production_smoke_check.sh`、`staging_smoke_check.sh` 和
+`check_dual_env_status.sh` 只做只读运行状态检查。

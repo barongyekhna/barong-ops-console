@@ -261,6 +261,17 @@ The recommended route is to handle Compose v2 enablement or a safe fallback in
 a separate OPS01B task, rehearse release-script changes on staging first, and
 only then apply the approved flow to production.
 
+OPS01B-alt has prepared the short-term safe release path for the current
+server, which still has only `docker-compose` v1.29.2 available. It adds
+`scripts/safe_compose_release.sh`, `scripts/check_safe_release_plan.sh`, and
+`docs/OPS01_SAFE_RELEASE_RUNBOOK.md`.
+
+The safe release script defaults to dry-run, requires explicit project names,
+allows only staging/production backend/frontend targets, and rejects postgres.
+OPS01B-alt has not used the script to publish staging or production. The next
+step is OPS01C, where the flow can be rehearsed on staging before any
+production use.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not

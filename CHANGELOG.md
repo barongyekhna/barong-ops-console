@@ -6,6 +6,7 @@
 
 ### Added
 
+- OPS01B-alt：新增 `scripts/safe_compose_release.sh`、`scripts/check_safe_release_plan.sh` 和 `docs/OPS01_SAFE_RELEASE_RUNBOOK.md`，准备基于当前 `docker-compose` v1.29.2 的短期安全发布流程；脚本默认 dry-run，真实执行必须显式 `--execute` 和确认变量，只允许 staging/production 的 backend/frontend，禁止 postgres，所有 `docker-compose` 调用必须带 project name 和 compose file。本阶段只做脚本、文档和 dry-run 检查，没有真实发布 staging/production，没有删除、停止、重建容器，没有读取真实 env，没有修改 Nginx/证书，没有接真实业务。
 - OPS01A：新增 `docs/OPS01_DOCKER_COMPOSE_GOVERNANCE_PLAN.md`，用大白话归档 Docker / Compose 当前状态、项目脚本 Compose 用法扫描、`docker-compose` v1 `KeyError: 'ContainerConfig'` 根因判断、三种治理方案对比、推荐 staging-first 路线、绝对禁止项和 OPS01B-OPS01E 后续拆分；本轮只做只读审计和文档方案，不安装/升级工具，不重启/删除/重建 production/staging 容器，不读取真实 env，不修改 Nginx/证书，不接真实业务。
 - C04F：新增 `docs/C04_ROLE_SYSTEM_SEAL.md`，归档角色体系总封板结论，记录 C04 已完成、标准角色 `owner` / `super_admin` / `module_admin` / `operator` / `reviewer` / `viewer` / `bot_agent` 已统一、当前可创建角色仅 `viewer` / `operator` / `reviewer`、`owner` / `super_admin` / `module_admin` / `bot_agent` 仍为 reserved、C04 不做完整 RBAC、C05 才做权限系统、production `/users` 返回 200、未登录 `/api/backend/users/roles` 和 `/api/backend/users` 返回 401、`/api/backend/auth/register` 仍返回 404，以及本轮未读取真实 env、未创建 production 用户、未重启/删除/重建容器、未修改 Nginx/证书、未接真实业务。
 - C04E：新增 `docs/C04_PRODUCTION_RELEASE.md`，归档角色目录 UI production 发布后的只读验收结果，记录 C04B 后端角色目录和 C04C 前端角色目录 UI 已进入 production、`https://ops.barongyekhna.com/users` 可用、未登录 `/api/backend/users/roles` 返回 401、创建用户下拉只允许 `viewer` / `operator` / `reviewer`、`owner` / `super_admin` / `module_admin` / `bot_agent` 仍为 reserved、C04 不做完整 RBAC、C05 才做权限系统，以及本轮未新增 migration、未读取真实 env、未创建 production 用户、未重启/删除/重建容器、未修改 Nginx/证书、未接真实业务。
@@ -70,6 +71,7 @@
 
 ### Changed
 
+- OPS01B-alt：OPS01 Docker Compose 治理说明更新为 Compose v2 安装路线暂因 apt 找不到 `docker-compose-plugin` 暂停，当前采用短期 B-alt 路线准备安全发布脚本；Compose v2 后续可以单独评估，但不打断当前项目。README 同步说明新增 safe release runbook 和 dry-run script，当前还没有真实使用脚本发布 staging/production，下一步 OPS01C 是 staging 演练。
 - OPS01A：README 更新为 OPS01 已开始，目标是治理 Docker Compose v1 `ContainerConfig` 发布问题；当前只做审计方案，不改运行环境，后续先 OPS01B 处理 Compose v2 或安全 fallback，再 staging-first 演练发布脚本，最后才进入 production。
 - C04F：README、backend README、frontend README、C04 角色计划、C04 staging 验收文档和 C04 production 发布文档更新为 C04 已封板；production 已有角色目录 UI，当前仍不做完整 RBAC，不给 `super_admin` 放权，C05 才做 permissions / RBAC；C04 后先做 OPS01：Docker Compose v1 `ContainerConfig` 问题治理。
 - C04E：README、backend README、frontend README、C04 角色计划和 C04 staging 验收文档更新为 production 角色目录发布已完成；production `/users` 页面已经使用角色目录 UI，当前仍不做 `super_admin` 放权、不做完整 RBAC，下一步为 C04F 角色体系封板。
