@@ -9,6 +9,12 @@ C07A 只做只读审计、方案设计、任务拆分和文档归档。本阶段
 不新增 migration，不发布 staging 或 production，不接真实业务模块，不进入 K01 或 P
 系列。
 
+2026-06-11 C07B 更新：后端 Module Manifest v1 和只读 Module Registry API 已在
+`docs/C07_MODULE_REGISTRY_BACKEND.md` 归档。C07B 新增静态代码内 registry、manifest
+schema、registry validation、`GET /modules/registry` 和 `GET /modules/me`，继续不实现
+Module Adapter、Execution Provider、module switch、sandbox、n8n/WooCommerce/MinIO/
+Filebrowser 接入、K01、P 系列或真实业务。
+
 ## 一、C07A 结论
 
 C07 可以开始。
@@ -731,6 +737,19 @@ C07 与 C18 组织结构 / scope：
 - permission registry 映射校验。
 - 不放宽现有 `/users` 和 C06B owner-only 边界。
 
+当前状态：C07B 后端基础已实现并记录在
+`docs/C07_MODULE_REGISTRY_BACKEND.md`。产物包括：
+
+- `backend/app/schemas/module.py`
+- `backend/app/core/modules.py`
+- `backend/app/services/module_registry.py`
+- `GET /modules/registry`
+- `GET /modules/me`
+- `tests/backend/test_modules_registry.py`
+
+C07B 仍不新增 migration，不新增 frontend UI，不接真实业务，不接 K01，不接 P 系列，
+不发布 staging 或 production。
+
 ### C07C：前端 module-aware navigation / route guard
 
 目标：
@@ -757,6 +776,9 @@ C07 与 C18 组织结构 / scope：
 - User Management / Permission Management 仍 owner-only。
 - 未注册/未启用模块不可触发动作。
 
+当前状态：未开始。C07B 只提供后端 registry 和 access-state API，不改 frontend
+runtime。
+
 ### C07D：模块隔离 verify/test 体系
 
 目标：
@@ -779,6 +801,8 @@ C07 与 C18 组织结构 / scope：
 - navigation/module mapping 测试。
 - route/API/proxy 隔离测试。
 - C05/C06 回归测试。
+
+当前状态：未开始。C07B 只新增后端 module registry 定点测试。
 
 ### C07E：staging 模块隔离验收
 
@@ -803,6 +827,8 @@ C07 与 C18 组织结构 / scope：
 - staging acceptance 文档。
 - staging smoke/status 记录。
 - C05/C06 权限管理回归通过。
+
+当前状态：未开始。C07B 未发布 staging。
 
 ### C07F：production 模块隔离发布归档
 
@@ -829,6 +855,8 @@ C07 与 C18 组织结构 / scope：
 - owner 只读验收。
 - smoke/status 记录。
 
+当前状态：未开始。C07B 未发布 production。
+
 ### C07G：C07 模块隔离封板
 
 目标：
@@ -849,6 +877,8 @@ C07 与 C18 组织结构 / scope：
 
 - C07 final seal 文档。
 - 下一阶段进入 C08，而不是 K01/P 系列真实业务开发。
+
+当前状态：未开始。
 
 ## 十六、测试与验收策略
 

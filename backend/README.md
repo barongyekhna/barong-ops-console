@@ -5,11 +5,14 @@ F07 core tables, F08 authentication, F10 foundation APIs, F11 Foundation Demo,
 F12 n8n Test Bridge, C03 owner-only user management API, C04B backend role
 constants/validation, C05B backend permission data-model groundwork, C05C
 backend permission dependency/API access, and C06B backend owner-only
-permission assignment APIs. C05C adds `require_permission()`,
+permission assignment APIs, plus the C07B backend Module Manifest v1 and
+read-only module registry foundation. C05C adds `require_permission()`,
 `/auth/me.permissions`, read-only `/permissions/me` and
 `/permissions/registry`; C06B adds owner-only assignment list/grant/update/
-revoke API while keeping `/users` owner-only. C06E has released the C06B
-backend API to production, and C06F has sealed C06 in
+revoke API while keeping `/users` owner-only. C07B adds authenticated
+`GET /modules/registry` and `GET /modules/me` without adding a migration or
+real business integration. C06E has released the C06B backend API to production,
+and C06F has sealed C06 in
 `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
 
@@ -197,6 +200,28 @@ external dependencies, isolation policy, and staging/production acceptance
 requirements before they enter backend routes. C07A does not implement Module
 Adapter, Execution Provider, sandboxing, module switches, n8n integration, new
 API, migration, staging release, production release, or real business tasks.
+
+C07B has implemented that backend registry foundation and is documented in
+`docs/C07_MODULE_REGISTRY_BACKEND.md`. It adds:
+
+- `backend/app/schemas/module.py` for Module Manifest v1 and access-state
+  response schemas.
+- `backend/app/core/modules.py` for the static code-only manifest registry.
+- `backend/app/services/module_registry.py` for validation and current-user
+  access-state decisions.
+- `GET /modules/registry` for authenticated safe registry metadata.
+- `GET /modules/me` for authenticated module access state based on existing
+  C05/C06 effective permissions.
+
+The C07B registry covers current console modules such as `core.dashboard`,
+`admin.users`, `admin.permissions`, `admin.modules`, `business.jobs`,
+`business.products`, `integration.n8n_test_bridge`, `system.errors`, and
+`system.memory_events`. Business modules default to `show_locked`;
+admin/system modules default to `hide_when_denied`; planned and
+adapter-pending modules are not executable. C07B does not add frontend UI, does
+not add migration, does not implement Module Adapter or Execution Provider,
+does not connect K01/P-series/n8n/WooCommerce/MinIO/Filebrowser, and does not
+write real business data.
 
 F12 adds the n8n test webhook bridge:
 

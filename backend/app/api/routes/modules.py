@@ -5,11 +5,20 @@ from ...db.session import get_db
 from ...models.user import User
 from ...repositories.registry import create_module, get_module, list_modules
 from ...schemas.common import ListResponse
+from ...schemas.module import (
+    ModuleAccessListResponse,
+    ModuleManifestRead,
+    ModuleRegistryResponse,
+)
 from ...schemas.registry import ModuleCreate, ModuleResponse
 from ...services.foundation_service import (
     commit_foundation_write,
     conflict,
     not_found,
+)
+from ...services.module_registry import (
+    list_module_manifests,
+    list_modules_for_user,
 )
 from ..deps import get_audit_context, get_current_user
 
@@ -26,6 +35,34 @@ def modules(
     del user
     items = list_modules(db, limit=limit, offset=offset)
     return ListResponse(items=items, count=len(items), limit=limit, offset=offset)
+
+
+@router.get("/registry", response_model=ModuleRegistryResponse)
+def module_registry(
+    user: User = Depends(get_current_user),
+) -> ModuleRegistryResponse:
+    del user
+    manifests = list_module_manifests()
+    items = [
+        ModuleManifestRead.model_validate(manifest.model_dump())
+        for manifest in manifests
+    ]
+    return ModuleRegistryResponse(items=items, count=len(items))
+
+
+@router.get("/me", response_model=ModuleAccessListResponse)
+def modules_me(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> ModuleAccessListResponse:
+    permission_info, items = list_modules_for_user(db, user)
+    return ModuleAccessListResponse(
+        user_id=user.id,
+        role=user.role,
+        is_owner_full_access=permission_info.is_owner_full_access,
+        items=items,
+        count=len(items),
+    )
 
 
 @router.get("/{module_key}", response_model=ModuleResponse)

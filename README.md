@@ -501,9 +501,29 @@ Current C07A conclusions:
   should remain `adapter_pending`, disabled by default, and hidden from normal
   navigation.
 
+C07B has added the backend Module Manifest v1 and read-only module registry
+foundation documented in `docs/C07_MODULE_REGISTRY_BACKEND.md`:
+
+- Static code-only module manifests in `backend/app/core/modules.py`; no new
+  database table and no migration.
+- Manifest and access-state schemas in `backend/app/schemas/module.py`.
+- Central validation and current-user access-state logic in
+  `backend/app/services/module_registry.py`.
+- Authenticated `GET /modules/registry` for safe registry metadata.
+- Authenticated `GET /modules/me` for owner/non-owner module access state.
+- Initial registry includes current console/core modules such as
+  `core.dashboard`, `admin.users`, `admin.permissions`, `admin.modules`,
+  `business.jobs`, `business.products`, `integration.n8n_test_bridge`,
+  `system.errors`, and `system.memory_events`.
+- business modules denied by permission return locked metadata through
+  `show_locked`; admin/system modules denied by permission use
+  `hide_when_denied`.
+- `planned`, `adapter_pending`, and `unavailable` modules are not executable.
+- C07B does not add frontend UI, does not add migration, does not connect K01,
+  P-series, n8n, WooCommerce, MinIO, Filebrowser, or real business flows.
+
 Recommended next split:
 
-- C07B: backend module manifest / registry foundation.
 - C07C: frontend module-aware navigation / route guard.
 - C07D: module isolation verify/test system.
 - C07E: staging module isolation acceptance.

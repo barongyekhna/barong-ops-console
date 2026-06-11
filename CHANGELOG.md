@@ -6,6 +6,28 @@
 
 ### Added
 
+- C07B：新增后端 Module Manifest v1 和只读 Module Registry 基础，包含
+  `backend/app/schemas/module.py`、`backend/app/core/modules.py`、
+  `backend/app/services/module_registry.py`，采用代码内静态 registry，不新增数据库表或
+  migration。
+- C07B：新增 authenticated `GET /modules/registry` 和 `GET /modules/me`；
+  `/modules/registry` 返回安全的 module manifest metadata，`/modules/me` 基于当前用户
+  C05/C06 effective permissions 返回 `available`、`locked`、`hidden`、`planned`、
+  `adapter_pending`、`unavailable` 等 access state。
+- C07B：初始 registry 覆盖当前控制台已有或平台内置模块，包括 `core.dashboard`、
+  `experimental.foundation_demo`、`integration.n8n_test_bridge`、`admin.users`、
+  `admin.permissions`、`admin.modules`、`admin.agents`、`admin.workflows`、
+  `admin.settings`、`business.products`、`business.jobs`、`business.artifacts`、
+  `business.reviews`、`system.errors`、`system.memory_events` 和
+  `system.operation_logs`；占位模块标记为 `planned` 或 `adapter_pending`，不可执行。
+- C07B：新增 `tests/backend/test_modules_registry.py`，覆盖 `/modules/registry` 和
+  `/modules/me` 鉴权、manifest 校验、business `show_locked`、admin/system
+  `hide_when_denied`、external dependency 安全声明、K01 未接入、owner/non-owner access
+  state、role defaults 不自动生效、`super_admin` 不默认全局、`/users` owner-only、
+  `/auth/register` 404、C06B assignment API 和 `/permissions/me` 回归。
+- C07B：新增 `docs/C07_MODULE_REGISTRY_BACKEND.md`，归档 C07B 后端 registry 做了什么、
+  Module Manifest v1 字段、初始模块列表、API 语义、owner/non-owner 访问规则、
+  planned/adapter_pending/unavailable 行为和 C07C 下一步边界。
 - C07A：新增 `docs/C07_MODULE_ISOLATION_PLAN.md`，完成模块隔离审计与方案设计；文档确认 C07 可以开始，C01-C06 已完成控制台部署、环境隔离、账号、角色、权限、权限管理闭环，C07 目标是模块隔离，不接真实业务，C07A 只做方案、不实现功能。
 - C07A：归纳当前控制台内置板块与核心能力，包括 Dashboard、Foundation Demo、n8n Test Bridge、Products、Modules、Agents、Workflows、Jobs、Artifacts、Reviews、Errors、Memory Events、User Management、Permission Management、Settings、Auth、Health 和 Operation Logs，并明确这些现状还不是正式 Module Manifest v1。
 - C07A：提出 Module Manifest v1 草案、`module_key` 命名规则、模块分类、模块状态/lifecycle、权限声明、navigation、route namespace、API namespace、external dependencies、denied/unavailable behavior、K01 adapter_pending 接入边界、C07 与 C08/C09/C10/C13/C15/C18 分工，以及 C07B-C07G 拆分和未来测试验收策略。
@@ -207,6 +229,13 @@
 
 ### Changed
 
+- C07B：`backend/app/api/routes/modules.py` 在保留现有 F10 `/modules` foundation registry
+  list/detail/demo-create API 的基础上，新增 `/modules/registry` 和 `/modules/me` 两个
+  静态只读路径，并确保它们位于动态 `/{module_key}` route 之前。
+- C07B：README、backend README 和 C07 module isolation plan 更新为 C07B 后端 registry
+  基础已实现；继续明确没有新增 frontend UI、没有新增 migration、没有接 K01/P 系列、
+  没有接 n8n/WooCommerce/MinIO/Filebrowser 或真实业务，下一步是 C07C 前端
+  module-aware navigation / route guard。
 - C07A：README、backend README 和 frontend README 更新为 C07 已启动且 C07A 只是模块隔离方案阶段；继续明确 C07 不实现 API/UI/migration，不发布 staging/production，不接真实 n8n/WooCommerce/MinIO/Filebrowser/P 系列/K01 业务开发，下一步建议 C07B 后端 module manifest / registry 基础。
 - C06C：README、frontend README、C06 permission management plan 和 C06 backend access 文档更新为 C06C 前端权限管理 UI 已实现；继续明确 `/users` 后端仍 owner-only，User Management 和权限管理入口仍仅 owner full access 可见，`super_admin` 不默认 grant/revoke，`role_default_permissions` 不自动生效，C06C 不新增后端 API/migration、不发布 staging/production、不接真实业务。
 - C06B：README、backend README 和 C06 permission management plan 更新为 C06B 后端
