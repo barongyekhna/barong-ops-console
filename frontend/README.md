@@ -164,6 +164,16 @@ not add permission grant/revoke management, and it still does not connect real
 n8n, P-series, WooCommerce, MinIO, Filebrowser, products, orders, or business
 tasks.
 
+C05 has been sealed in `docs/C05_PERMISSION_SYSTEM_SEAL.md`, and C06A has
+started user permission management planning in
+`docs/C06_PERMISSION_MANAGEMENT_PLAN.md`. C06A is documentation-only. It
+recommends adding the first permission management UI inside User Management in
+a later C06C task, using `/permissions/registry` for selectable permission
+keys and new C06B owner-only assignment APIs for per-user assignment state.
+The current frontend still has no permission grant/revoke UI, User Management
+still requires owner full access, and frontend permission checks remain UX
+only rather than the security boundary.
+
 ## Configuration
 
 For host-based development, use the example backend URL:

@@ -130,6 +130,18 @@ C05C still does not add frontend permission UI, does not add grant/revoke API,
 does not replace current `/users` owner-only behavior, and does not connect
 real business integrations.
 
+C05 has been sealed in `docs/C05_PERMISSION_SYSTEM_SEAL.md`, and C06A has
+started user permission management planning in
+`docs/C06_PERMISSION_MANAGEMENT_PLAN.md`. C06A is documentation-only: it
+audits the current permission tables, `require_permission()`,
+`/auth/me.permissions`, `/permissions/me`, `/permissions/registry`, `/users`
+owner-only behavior, and operation log model. It proposes C06B owner-only
+assignment list/grant/revoke/update APIs, high-risk confirmation, and
+permission change audit logging, but it does not implement those APIs.
+`super_admin` still does not receive grant/revoke power by default, and
+`role_default_permissions` still does not automatically grant effective
+permissions.
+
 F12 adds the n8n test webhook bridge:
 
 - `POST /n8n-test/run`

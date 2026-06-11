@@ -6,6 +6,16 @@
 
 ### Added
 
+- C06A：新增 `docs/C06_PERMISSION_MANAGEMENT_PLAN.md`，完成用户权限管理页面与
+  grant/revoke 方案审计；文档确认 C05 已封板且 production 生效，当前
+  `permission_registry`、`user_permission_assignments`、`role_default_permissions`、
+  `/auth/me.permissions`、`/permissions/me`、`/permissions/registry`、`/users`
+  owner-only 和前端 User Management owner-only 的真实状态，并明确 C06A 不实现
+  API/UI、不新增 migration、不发布、不接真实业务。
+- C06A：提出 C06B owner-only assignment list/grant/revoke/update API 草案、
+  operation_logs 记录结构、高风险权限二次确认规则、owner 防自锁规则、non-owner
+  防越权规则、scope 第一版策略、User Management 内权限管理 UI 草案、测试计划，以及
+  C06B/C06C/C06D/C06E/C06F 后续拆分。
 - C05G：新增 `docs/C05_PERMISSION_SYSTEM_SEAL.md`，归档 C05 权限系统最终封板结论；
   明确 C05A-F 已形成完整闭环，staging 和 production 已完成验收，production 已发布并通过
   owner 验收，下一步是 C06 或 C18/业务模块接入前置规划，不进入 P 系列，不接真实业务。
@@ -146,6 +156,10 @@
 
 ### Changed
 
+- C06A：README、backend README 和 frontend README 更新为 C06 已启动且 C06A 只是
+  权限管理方案阶段；继续明确 `/users` 后端 owner-only、User Management 仅 owner full
+  access 可见，`super_admin` 不默认全局授权，`role_default_permissions` 不自动生效，
+  本轮没有实现 grant/revoke API 或权限分配 UI。
 - C05G：README、C05 权限系统计划、C05 staging 验收、C05 production 发布、C05 后端权限文档和
   C05 前端权限文档更新为 C05 已封板；下一步是 C06 或 C18/业务模块接入前置规划，不是 P 系列，
   不接 WooCommerce、n8n 真实业务流、MinIO、Filebrowser 或产品页业务模块。

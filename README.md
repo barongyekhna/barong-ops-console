@@ -244,7 +244,8 @@ Current C04 status:
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
 C04 is sealed. OPS01 Docker Compose v1 `ContainerConfig` cleanup is also
-sealed. C05A has started permissions / RBAC design.
+sealed. C05 is sealed, and C06A has started user permission management
+planning.
 
 ## OPS01 Docker Compose governance
 
@@ -374,8 +375,42 @@ not P-series work and not real business onboarding.
 - C05 does not include grant/revoke API, permission assignment UI, complete
   company/factory/department scope management, or real n8n/P-series/
   WooCommerce/MinIO/Filebrowser business integration.
-- The next step is C06 for user permission management, or C18/later planning
-  for organization scope and business-module Permission Manifest rules.
+- C06A has started user permission management planning. C18/later remains the
+  place for organization scope and business-module Permission Manifest rules.
+
+## C06 user permission management
+
+C06A has started with `docs/C06_PERMISSION_MANAGEMENT_PLAN.md`. C06A is a
+read-only audit and design stage for owner-managed user permission assignment.
+It does not implement grant/revoke APIs, does not implement a permission
+assignment UI, does not add migrations, does not release staging or production,
+and does not connect real business systems.
+
+C06 is scoped to user permission management after the C05 permission-system
+seal:
+
+- owner can view a user's permission assignments.
+- owner can grant, revoke, and update permission assignments in later C06
+  implementation tasks.
+- assignment changes must write `operation_logs`.
+- high-risk permissions require explicit secondary confirmation.
+- `/users` remains backend owner-only.
+- User Management remains visible only to owner full access.
+- `super_admin` is not a global owner and does not default to grant/revoke
+  ability.
+- `role_default_permissions` remains a template only and does not
+  automatically grant effective permissions.
+- C06 first-version scope handling stays limited to existing assignment scope
+  fields such as `global` and `module`; complete company/factory/department
+  organization scope management remains deferred to C18.
+
+Planned split:
+
+- C06B: backend owner-only assignment list/grant/revoke/update API and tests.
+- C06C: frontend permission management UI inside User Management and tests.
+- C06D: staging permission-management acceptance.
+- C06E: production permission-management release archive.
+- C06F: C06 permission-management seal.
 
 ## Temporary login preview
 
