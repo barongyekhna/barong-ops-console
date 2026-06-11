@@ -6,6 +6,10 @@
 
 ### Added
 
+- C06D：新增 `docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`，归档 staging 用户权限管理联调验收；本轮仅使用 OPS01 safe release 发布 staging backend/frontend，未发布 production，未执行 Alembic upgrade，未操作 staging postgres 容器，未直接操作数据库，未读取真实 env，未接真实业务。
+- C06D：发布后发现 staging `permission_registry` 为空；经老板批准，在 staging backend 容器内通过现有应用层 helper `upsert_permission_registry()` 初始化系统权限点 seed，registry count 为 18，未新增 migration、未手写 SQL、未 psql、未操作 postgres 容器。
+- C06D：完成 staging 动态验收；owner assignment list、普通 `artifacts.read` grant/update/revoke、`/permissions/me` 生效和移除、high-risk `jobs.manage` reason/confirmation 阻断与成功 grant/revoke、operation_logs、non-owner 越权 403、`/users` owner-only、`/auth/register` 404、role defaults 不自动生效和 `super_admin` 不默认 grant/revoke 均通过。
+- C06D：创建 staging-only 临时 viewer 测试账号 `c06d_viewer_test_1781168578`，未输出密码/token/Authorization header；测试结束后已通过 owner-only API disable，普通和 high-risk 测试 assignment 均已 revoke/disabled。
 - C06C：新增 User Management 内的前端“用户权限管理”UI；owner 可从用户行“权限”入口打开用户详情权限面板，查看 explicit assignments，给非 owner 用户 grant permission，更新 enabled/expires_at/scope/reason，撤销 assignment，并在 revoke 后刷新列表。
 - C06C：新增前端 permission management helper 和 API client，覆盖 `PermissionAssignment`、`PermissionAssignmentListResponse`、`PermissionAssignmentCreateInput`、`PermissionAssignmentUpdateInput`、`PermissionAssignmentActionResponse`、`PermissionRegistryItem`，并通过现有 `/api/backend` proxy 调用 C06B 的 list/grant/update/revoke assignment API 和 `/permissions/registry`。
 - C06C：新增 high-risk 前端识别和二次确认 UI；按 C06B 规则识别 high/critical、users/permissions/settings/system/secrets/release/production/billing/admin 类权限，high-risk grant 要求 reason、`confirm_high_risk=true` 和 `confirmation_text="CONFIRM_HIGH_RISK_PERMISSION"`，high-risk re-enable/scope change update 要求确认，high-risk revoke 要求 reason。

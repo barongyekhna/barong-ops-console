@@ -169,7 +169,8 @@ the user permission management plan in
 `docs/C06_PERMISSION_MANAGEMENT_PLAN.md`, C06B added the owner-only backend
 assignment APIs in `docs/C06_PERMISSION_BACKEND_ACCESS.md`, and C06C has added
 the frontend User Management permission UI in
-`docs/C06_PERMISSION_FRONTEND_UI.md`.
+`docs/C06_PERMISSION_FRONTEND_UI.md`. C06D has released this UI to staging and
+archived the acceptance in `docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`.
 
 C06C keeps User Management owner-only. The `/users` entry remains visible only
 when `permissions.is_owner_full_access=true`, and the permission management
@@ -191,8 +192,10 @@ grant/revoke.
 The restricted proxy now precisely allows the C06B assignment paths in
 addition to the existing `/permissions/me` and `/permissions/registry` paths.
 Frontend permission checks remain UX only; backend `require_owner()` and the
-C06B owner-only APIs are still the security boundary. C06C does not publish
-staging or production and does not connect real business systems.
+C06B owner-only APIs are still the security boundary. C06D verified staging
+`/users`, frontend proxy owner login, owner `/auth/me`, registry access, and
+the published C06C bundle markers. Production is still not released for C06,
+and real business systems remain unconnected.
 
 ## Configuration
 

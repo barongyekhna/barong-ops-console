@@ -153,6 +153,17 @@ re-enable or scope-changing update. Revoke is a soft revoke through
 C06B adds no migration, no frontend permission UI, no staging/production
 release, and no real business integration.
 
+C06D has released the C06B backend API to staging and archived the acceptance
+in `docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`. The staging backend assignment
+routes are live, Alembic current/head remains `c05b_permissions_001 (head)`,
+and no Alembic upgrade was executed for C06D. During acceptance, staging
+`permission_registry` was initially empty; with explicit approval, the existing
+`upsert_permission_registry()` application helper was run inside the staging
+backend container to initialize only registry seed rows. C06D did not use psql,
+did not hand-write SQL, did not operate the staging postgres container, did not
+read real env files, did not release production, and did not connect real
+business systems.
+
 F12 adds the n8n test webhook bridge:
 
 - `POST /n8n-test/run`

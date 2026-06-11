@@ -298,8 +298,28 @@ operation_logs 仍由 C06B 后端记录。C06C 只传 reason、`confirm_high_ris
 - `role_default_permissions` 不自动生效。
 - `super_admin` 不因 role defaults 获得 grant/revoke 能力。
 
-## 九、下一步
+## 九、C06D staging 验收引用
 
-- C06D：staging 验收。
+C06D 已将本文件记录的 C06B assignment API 发布到 staging，并完成动态验收。
+归档文件为 `docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`。
+
+验收结论：
+
+- staging backend safe release 成功，assignment route 未登录返回 `401`，确认 C06B
+  路由已发布。
+- staging Alembic current/head 只读检查为 `c05b_permissions_001 (head)`，未执行
+  upgrade，未新增 migration。
+- 发布后 staging `permission_registry` 曾为空；经老板批准，在 staging backend
+  容器内通过现有 `upsert_permission_registry()` 应用层 helper 初始化 seed，registry
+  count 为 18。未 psql、未手写 SQL、未操作 staging postgres 容器。
+- owner 通过 API 查看 assignments、普通 grant/update/revoke、high-risk 阻断与确认、
+  `/permissions/me` 生效/移除、operation_logs、non-owner 403 和 `/users`
+  owner-only 均通过。
+- 测试 assignment 均通过 C06B API 创建/更新/revoke，没有直接写
+  `user_permission_assignments`。
+- production 未发布，未读取真实 env，未接真实业务。
+
+## 十、下一步
+
 - C06E：production 发布归档。
 - C06F：C06 权限管理封板。

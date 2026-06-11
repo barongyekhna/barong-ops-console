@@ -181,13 +181,33 @@ C06C 继续使用 restricted same-origin proxy，不开放通用 backend proxy�
 - 没有新增 migration。
 - 没有新增 grant/revoke 后端逻辑，C06B 已完成。
 - 没有改变 `/users` owner-only 后端边界。
-- 没有发布 staging。
+- C06C 本身没有发布 staging；C06D 已按 OPS01 safe release 将 C06C 前端发布到
+  staging 并完成验收。
 - 没有发布 production。
-- 没有执行 safe release。
+- C06C 本身没有执行 safe release；C06D 执行的是 staging backend/frontend safe
+  release。
 - 没有读取真实 `.env.staging` 或 `.env.production`。
-- 没有操作 production/staging 容器或数据库。
+- C06C 本身没有操作 production/staging 容器或数据库。
 - 没有接真实业务。
 
-## 十一、下一步
+## 十一、C06D staging 验收引用
 
-C06D：staging 用户权限管理联调验收。
+C06D 已发布并验收本文件记录的 C06C 前端权限管理 UI。归档文件为
+`docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`。
+
+验收结论：
+
+- staging frontend safe release 成功，`/users` 页面返回 `200`。
+- staging frontend proxy owner login、`/auth/me` 和 `/permissions/registry` 均通过。
+- 已发布 bundle 包含 `C06C permissions`、`Grant permission`、
+  `Explicit assignments`、`CONFIRM_HIGH_RISK_PERMISSION` 等 C06C UI 标识。
+- 本地 `tests/frontend/permission-management.test.mjs` 覆盖 owner 可见权限入口、
+  non-owner 不可见、owner target full access、grant/update/revoke payload 和
+  high-risk 前端阻断逻辑。
+- 本机没有 Playwright/Puppeteer 或 Chromium，可点击浏览器截图验收未执行；C06D
+  记录了该环境限制。
+- production 未发布，未读取真实 env，未接真实业务。
+
+## 十二、下一步
+
+C06E：production 权限管理发布归档。

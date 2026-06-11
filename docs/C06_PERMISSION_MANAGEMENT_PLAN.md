@@ -18,6 +18,13 @@ C06C 已实现前端 User Management 内的用户权限管理 UI，记录文件�
 API client、权限管理面板、high-risk 二次确认 UI、frontend proxy 精确 allowlist 和
 前端测试；不新增后端 API，不新增 migration，不发布 staging/production，不接真实业务。
 
+C06D 已完成 staging 发布和联调验收，记录文件为
+`docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`。C06D 只发布 staging backend/frontend，
+未发布 production，未执行 Alembic upgrade，未新增 migration，未操作 postgres 容器，
+未直接操作数据库，未读取真实 env，未接真实业务。发布后 staging
+`permission_registry` 曾为空；经老板批准，通过 staging backend 容器内现有
+`upsert_permission_registry()` 应用层 helper 初始化系统权限点 seed。
+
 ## 一、C06A 结论
 
 - C06 可以开始。
@@ -68,8 +75,8 @@ C06B 仍不做：
 - 不执行 safe release。
 - 不接 WooCommerce、n8n 真实业务流、MinIO、Filebrowser、产品页或 P 系列。
 
-后续拆分更新为：C06D 做 staging 验收，C06E 做 production 发布归档，C06F 做
-C06 封板。
+后续拆分更新为：C06D 已完成 staging 验收，C06E 做 production 发布归档，C06F
+做 C06 封板。
 
 ## 一点六、C06C 实现状态
 
@@ -822,7 +829,7 @@ UI 边界：
 
 ### C06B：后端 API 与测试
 
-状态：已实现，待代码审核和后续 C06D staging 验收。
+状态：已实现，并已通过 C06D staging 验收。
 
 允许：
 
@@ -843,7 +850,7 @@ UI 边界：
 
 ### C06C：前端 UI 与测试
 
-状态：已实现，待代码审核和后续 C06D staging 验收。
+状态：已实现，并已通过 C06D staging 验收。
 
 允许：
 
@@ -860,6 +867,18 @@ UI 边界：
 - 不接真实业务。
 
 ### C06D：staging 验收
+
+状态：已完成。验收归档见 `docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`。
+
+已验证：
+
+- staging backend/frontend safe release 成功。
+- Alembic current/head 只读检查为 `c05b_permissions_001 (head)`，未执行 upgrade。
+- owner assignment list、普通 grant/update/revoke、high-risk 二次确认、
+  `/permissions/me` 生效/移除、operation_logs 和 non-owner 越权拒绝通过。
+- `/users` 仍 owner-only，`/auth/register` 仍 404。
+- `role_default_permissions` 不自动生效，`super_admin` 不默认 grant/revoke。
+- production 未发布，production smoke 只读通过。
 
 允许：
 
