@@ -121,7 +121,7 @@ frontend test framework。覆盖：
 
 同时保留现有 frontend `typecheck`、`build`、`verify` 检查。
 
-## C05E / C06 建议
+## C05E / C05F / C06 建议
 
 - C05E 已完成 staging 联调验收，记录见
   `docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`。
@@ -135,7 +135,17 @@ frontend test framework。覆盖：
 - C05E 未给临时 non-owner 授予 permission assignment，因此未验证“有 explicit
   business permission 的 non-owner 可访问业务模块”。这一步应留到未来权限分配功能或
   明确的测试 fixture。
-- C05F 下一步是 production 发布归档；C05G 下一步是 C05 权限系统封板。
+- C05F 已完成 production 发布归档，记录见
+  `docs/C05_PERMISSION_PRODUCTION_RELEASE.md`。
+- C05F production frontend 已通过 OPS01 safe release 发布。发布后发现 frontend proxy
+  未放行 C05C 的只读 `GET /permissions/me` 和 `GET /permissions/registry`，本轮已做
+  最小 allowlist 修复并重新发布 production frontend。
+- C05F 验证 production `/login` 和 `/users` 页面返回 200，owner 通过 production
+  frontend proxy 可读取 `/auth/me.permissions`，C05D helper 确认 User Management 对 owner
+  visible/can_access。
+- production non-owner 动态 UI 验证未执行，因为没有现成账号和密码，且 C05F 不创建
+  production 测试账号。
+- C05G 下一步是 C05 权限系统封板。
 - C06 或独立后端任务：如果要开放 User Management，先把后端 `/users` 从
   `require_owner()` 正式改为合适的 permission dependency，再改前端。
 - 后续权限管理阶段：设计 owner 可用的 assignment 管理 UI 和 grant/revoke API，但必须先做

@@ -293,7 +293,9 @@ permission access enforcement and current-user permission APIs documented in
 navigation, no-permission messaging, and lightweight route protection
 documented in `docs/C05_PERMISSION_FRONTEND_ACCESS.md`. C05E accepted the
 permission system on staging in
-`docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`.
+`docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`. C05F released and accepted the
+permission system on production in
+`docs/C05_PERMISSION_PRODUCTION_RELEASE.md`.
 
 C05 is about authorization, not business-module onboarding. It does not connect
 real n8n, P-series, WooCommerce, MinIO, Filebrowser, product flows, orders, or
@@ -333,23 +335,35 @@ Current C05 status:
 - C05E verified the C05D frontend policy: User Management is hidden for
   non-owner users, admin/system entries hide when denied, business entries show
   locked when denied, and direct denied routes show the no-permission notice.
+- C05F released production backend with the OPS01 safe release flow, then ran
+  Alembic `upgrade head` only inside the new production backend container.
+  Production Alembic current/head is `c05b_permissions_001 (head)`.
+- C05F released production frontend with the OPS01 safe release flow and
+  confirmed production `/auth/me`, `/permissions/me`, `/permissions/registry`,
+  `/users`, `/auth/register`, `/login`, and `/users` page behavior.
+- C05F added the missing frontend proxy allowlist for read-only
+  `GET /permissions/me` and `GET /permissions/registry`, plus a verifier check
+  so these C05 endpoints stay exposed through `/api/backend`.
+- C05F verified production owner full access and wildcard through both the
+  frontend proxy and backend direct path. Production non-owner dynamic
+  verification was not run because there was no existing account/password and
+  C05F does not create production test accounts.
 - C05A defines Permission Registry, User Permission Assignment, Role Default
   Permissions, Permission Scope, and Module Permission Manifest concepts;
   C05B implements the first three as backend tables.
 - Ordinary users receive permissions through manual assignment by owner or an
   authorized scoped super_admin.
-- C05D does not add permission grant/revoke UI, does not replace `/users`
-  `require_owner()`, does not deploy staging/production, and does not connect
-  real business systems.
+- C05D/C05F do not add permission grant/revoke UI, do not replace `/users`
+  `require_owner()`, and do not connect real business systems.
 - User Management remains owner-only in both backend and frontend. C05D does
   not expose `/users` to `super_admin` or ordinary non-owner users with
   `users.manage`; changing `/users` to permission-based access must be C06 or
   a separate backend task.
-- C05E did not publish production, did not operate production containers or
-  databases, did not read real env files, did not operate staging postgres
-  directly, did not add grant/revoke UI or API, and did not connect real
-  business systems. The next step is C05F production release archive, then
-  C05G permission-system seal.
+- C05F did not operate production postgres, did not directly connect
+  production DB, did not read real env files, did not add grant/revoke UI or
+  API, did not create production test accounts, and did not connect real
+  business systems.
+- The next step is C05G permission-system seal.
 
 ## Temporary login preview
 

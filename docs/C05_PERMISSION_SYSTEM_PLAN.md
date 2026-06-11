@@ -23,6 +23,19 @@ C05D 已在 C05C 后接入前端权限感知。C05D 的实现记录见
 板块 `show_locked`、admin/system 板块 `hide_when_denied`、无权访问提示和基础路由保护。
 C05D 继续保持 `/users` owner-only，不把普通 `users.manage` 非 owner 放进 User Management。
 
+C05E 已在 staging 完成权限系统联调验收。C05E 的验收记录见
+`docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`。C05E 使用 OPS01 safe release 发布 staging
+backend/frontend，在 staging backend 容器内执行 Alembic `upgrade head`，并验证 owner
+wildcard、non-owner 空权限、`/users` owner-only、`/auth/register` 404 和前端权限 UX。
+
+C05F 已完成 production 安全发布归档。C05F 的验收记录见
+`docs/C05_PERMISSION_PRODUCTION_RELEASE.md`。C05F 使用 OPS01 safe release 发布 production
+backend/frontend，在 production backend 容器内执行 Alembic `upgrade head` 到
+`c05b_permissions_001 (head)`，并验证 production owner `/auth/me`、`/permissions/me`、
+`/permissions/registry`、`/users`、未登录 401 边界、`/auth/register` 404 和前端 owner
+User Management 可见性。C05F 没有操作 production postgres 容器，没有直接连接 production
+DB，没有读取真实 env，没有接真实业务。
+
 ## 一、为什么要做权限系统
 
 C03 已经让 owner 可以创建内部子账户。C04 已经把标准 role 定清楚。
@@ -685,8 +698,9 @@ C05 暂不做：
   owner-only 行为。C05E 已完成，验收记录见
   `docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`。
 - C05F：production 发布归档。按 OPS01 safe release 流程发布 production
-  backend/frontend，保留 rollback tag，并归档 production 只读验收结果。
-- C05G：权限系统封板。归档最终行为、风险、未做范围和后续模块接入规则。
+  backend/frontend，保留 rollback tag，并归档 production 只读验收结果。C05F 已完成，
+  验收记录见 `docs/C05_PERMISSION_PRODUCTION_RELEASE.md`。
+- C05G：权限系统封板。下一步只归档最终行为、风险、未做范围和后续模块接入规则。
 
 如果 C05B 发现 migration 风险高，可以再拆：
 
@@ -732,4 +746,4 @@ Super Admin 不是全局 owner，必须通过带 scope 的 assignment 获得管�
 新模块必须自带 Permission Manifest，注册时写入 Permission Registry，然后由 owner 或被授权的
 super_admin 分配给员工，后端 API 使用 `require_permission("module.action")` enforce。
 
-C05A 不实现。C05B 建议 staging-first 新增权限相关 migration。
+C05A 不实现。C05B-C05F 已完成。下一步是 C05G 权限系统封板，不进入 P 系列，不接真实业务。

@@ -6,6 +6,23 @@
 
 ### Added
 
+- C05F：新增 `docs/C05_PERMISSION_PRODUCTION_RELEASE.md`，归档权限系统 production
+  安全发布和验收；本轮使用 OPS01 safe release 发布 production backend/frontend，在
+  production backend 容器内执行 Alembic `upgrade head` 到
+  `c05b_permissions_001 (head)`，未操作 production postgres 容器，未直接连接
+  production DB，未读取真实 env，未接真实业务。
+- C05F：完成 production owner 权限 API 验收；owner `/auth/me` 和
+  `/permissions/me` 返回 `is_owner_full_access=true` 且 `permission_keys` 包含
+  wildcard，`/permissions/registry` 返回 list response 结构，`/users` 返回 200 且不泄漏
+  `password_hash`，未登录 `/auth/me`、`/permissions/me`、`/users` 均返回 401，
+  `/auth/register` 仍返回 404。
+- C05F：production frontend proxy 最小放行 `GET /permissions/me` 和
+  `GET /permissions/registry`，并在 frontend verify 中增加 C05 permissions proxy 防回归检查；
+  该修复不新增 grant/revoke API，不新增权限分配 UI，不改变后端权限模型。
+- C05F：完成 production frontend 权限 UI 验收；production `/login` 和 `/users` 页面返回
+  200，owner 通过 production frontend proxy 可取得 permissions，C05D helper 验证
+  User Management 对 owner visible/can_access，non-owner production 因无现成账号且不创建
+  生产测试账号而未动态验证。
 - C05E：新增 `docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`，归档权限系统 staging
   联调验收；本轮使用 OPS01 safe release 只发布 staging backend/frontend，在 staging
   backend 容器内执行 Alembic `upgrade head` 到 `c05b_permissions_001 (head)`，未发布
@@ -120,6 +137,9 @@
 
 ### Changed
 
+- C05F：README、C05 权限系统计划、C05 staging 验收、C05 后端权限文档和 C05 前端权限文档
+  更新为 production 发布归档已完成；C05G 下一步是 C05 权限系统封板，不进入 P 系列，不接
+  WooCommerce、n8n 真实业务流、MinIO、Filebrowser 或产品页业务模块。
 - C05E：README、C05 权限系统计划、C05 后端权限文档和 C05 前端权限文档更新为
   staging 验收已完成；C05F 下一步是 production 发布归档，C05G 下一步是 C05 权限系统
   封板。

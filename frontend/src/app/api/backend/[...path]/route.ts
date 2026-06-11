@@ -20,6 +20,10 @@ const ALLOWED_USER_ACTIONS = new Set([
   "enable",
   "reset-password",
 ]);
+const ALLOWED_PERMISSION_PATHS = new Set([
+  "permissions/me",
+  "permissions/registry",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -88,6 +92,8 @@ async function proxyRequest(
   const isAuthPath = ALLOWED_AUTH_PATHS.has(requestedPath);
   const isListPath =
     request.method === "GET" && ALLOWED_LIST_PATHS.has(requestedPath);
+  const isPermissionPath =
+    request.method === "GET" && ALLOWED_PERMISSION_PATHS.has(requestedPath);
   const isFoundationDemoPath =
     (request.method === "POST" && requestedPath === "foundation-demo/run") ||
     (request.method === "GET" && requestedPath === "foundation-demo/latest");
@@ -100,6 +106,7 @@ async function proxyRequest(
     !isHealthPath &&
     !isAuthPath &&
     !isListPath &&
+    !isPermissionPath &&
     !isFoundationDemoPath &&
     !isN8nTestPath &&
     !isUsersPath

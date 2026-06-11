@@ -277,6 +277,26 @@ C05E 已在 staging 完成权限后端联调验收，记录见
 - `/auth/register` 仍返回 404。
 - 本轮未新增 grant/revoke API，未新增权限管理 UI，未发布 production，未接真实业务。
 
+## C05F production 发布状态
+
+C05F 已完成 production 安全发布归档，记录见
+`docs/C05_PERMISSION_PRODUCTION_RELEASE.md`。
+
+production 后端状态：
+
+- production backend 已通过 OPS01 safe release 发布。
+- production Alembic 已在新的 production backend 容器内执行 `upgrade head`。
+- production Alembic current/head 为 `c05b_permissions_001 (head)`。
+- owner `GET /auth/me` 返回 200，并包含 `permissions`。
+- owner `GET /permissions/me` 返回 200，`is_owner_full_access=true`，且
+  `permission_keys` 包含 wildcard。
+- owner `GET /permissions/registry` 返回 200 和 list response 结构。
+- owner `GET /users` 返回 200，响应不泄漏 `password_hash`。
+- 未登录 `/auth/me`、`/permissions/me`、`/users` 均返回 401。
+- `/auth/register` 仍返回 404。
+- `/users` 仍使用 `require_owner()`，未改为 `require_permission("users.manage")`。
+- 本轮未新增 grant/revoke API，未新增权限管理 UI，未接真实业务。
+
 ## 安全边界
 
 C05C 不做这些事：

@@ -250,5 +250,7 @@ C05E staging 联调验收通过。
 
 下一步：
 
-- C05F：production 发布归档。按 OPS01 safe release 机制把 C05 权限系统发布到 production，并只做 production 发布验收归档。
-- C05G：C05 权限系统封板。归档最终安全边界、未做范围和后续业务模块接入规则。
+- C05F：production 发布归档已经完成，记录见
+  `docs/C05_PERMISSION_PRODUCTION_RELEASE.md`。C05F 按 OPS01 safe release 机制发布
+  production backend/frontend，并在 production backend 容器内执行 Alembic `upgrade head`。
+- C05G：下一步是 C05 权限系统封板。归档最终安全边界、未做范围和后续业务模块接入规则。

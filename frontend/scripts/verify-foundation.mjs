@@ -138,6 +138,14 @@ if (!backendProxySource.includes('path[1] === "roles"')) {
   throw new Error("The backend API proxy must allow GET /users/roles.");
 }
 
+for (const permissionsPath of ["permissions/me", "permissions/registry"]) {
+  if (!backendProxySource.includes(permissionsPath)) {
+    throw new Error(
+      `The backend API proxy must allow GET /${permissionsPath}.`,
+    );
+  }
+}
+
 if (
   !backendProxySource.includes('requestedPath === "health"') ||
   !backendProxySource.includes('new URL(`/${requestedPath}`, getApiBaseUrl())')
