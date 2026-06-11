@@ -1,19 +1,31 @@
 import json
+import re
+from typing import Any, get_args
 
 from fastapi.testclient import TestClient
+import pytest
 
+from backend.app.core.modules import MODULE_MANIFESTS_V1
 from backend.app.core.security import hash_password
 from backend.app.db.session import SessionLocal
 from backend.app.models.user import User
+from backend.app.schemas.module import (
+    ModuleLifecycle,
+    ModuleManifestV1,
+)
 from backend.app.services.module_registry import (
     ALLOWED_DENIED_BEHAVIORS,
     ALLOWED_EXTERNAL_DEPENDENCIES,
     ALLOWED_MODULE_CATEGORIES,
     ALLOWED_MODULE_STATUSES,
+    MODULE_KEY_PATTERN,
+    SENSITIVE_DEPENDENCY_MARKERS,
+    build_module_access_state,
     list_module_manifests,
     validate_module_manifests,
 )
 from backend.app.services.permission_service import (
+    CurrentUserPermissionInfo,
     upsert_permission_registry,
     upsert_role_default_permission,
 )
@@ -69,6 +81,102 @@ def access_items_by_key(payload: dict[str, object]) -> dict[str, dict[str, objec
     }
 
 
+def contract_manifest(
+    *,
+    module_key: str = "business.contract_test",
+    category: str = "business",
+    status: str = "enabled",
+    lifecycle: str = "production_released",
+    denied_behavior: str | None = None,
+    route_namespace: str = "/contract-test",
+    api_namespace: str = "no_api",
+    no_api: bool = True,
+    permission_key: str = "contract_test.read",
+    external_dependencies: list[str] | None = None,
+) -> dict[str, Any]:
+    resolved_denied_behavior = denied_behavior or (
+        "show_locked" if category == "business" else "hide_when_denied"
+    )
+    return {
+        "module_key": module_key,
+        "display_name": "Contract Test",
+        "description": "C07D test-only module manifest fixture.",
+        "category": category,
+        "status": status,
+        "lifecycle": lifecycle,
+        "route_namespace": route_namespace,
+        "api_namespace": api_namespace,
+        "no_api": no_api,
+        "navigation": {
+            "group": "Contract",
+            "label": "Contract Test",
+            "icon": "Boxes",
+            "order": 999,
+            "default_visible": True,
+            "owner_only": False,
+        },
+        "required_permissions": [permission_key],
+        "permission_manifest": [
+            {
+                "permission_key": permission_key,
+                "module_key": module_key,
+                "category": category,
+                "action": "read",
+                "label": "Read contract test",
+                "description": "Read C07D contract fixture metadata.",
+                "risk_level": "low",
+                "menu_policy": resolved_denied_behavior,
+                "default_scope_type": "global",
+                "allowed_scope_types": ["global", "module"],
+                "high_risk_confirmation_required": False,
+                "operation_log_required": False,
+            }
+        ],
+        "denied_behavior": resolved_denied_behavior,
+        "unavailable_behavior": "show_unavailable",
+        "external_dependencies": external_dependencies or [],
+        "execution_provider_required": False,
+        "module_adapter_required": False,
+        "sandbox_required": False,
+        "feature_flag_key": None,
+        "audit_log_actions": [],
+        "operation_log_policy": {
+            "read": "optional",
+            "write": "required",
+            "approve": "required",
+            "release": "required",
+        },
+        "allowed_scope_types": ["global", "module"],
+        "data_boundary": {
+            "reads": [],
+            "writes": [],
+            "blocked_objects": [
+                "server_local_config",
+                "external_provider_config",
+                "cross_module_writes",
+            ],
+        },
+        "release_requirements": {
+            "local_verify": True,
+            "staging_acceptance": False,
+            "production_archive": False,
+            "required_checks": [],
+        },
+        "staging_acceptance_required": False,
+        "production_release_required": False,
+        "docs_path": "docs/C07_MODULE_ISOLATION_VERIFICATION.md",
+    }
+
+
+def owner_permission_info() -> CurrentUserPermissionInfo:
+    return CurrentUserPermissionInfo(
+        is_owner_full_access=True,
+        permission_keys=["*"],
+        assignments=[],
+        scope_summary=[],
+    )
+
+
 def test_modules_registry_api_requires_login_and_owner_can_read(
     auth_client: TestClient,
 ) -> None:
@@ -100,18 +208,61 @@ def test_modules_registry_api_requires_login_and_owner_can_read(
 def test_static_module_registry_validation_rules() -> None:
     manifests = validate_module_manifests()
     module_keys = [manifest.module_key for manifest in manifests]
+    allowed_lifecycles = frozenset(get_args(ModuleLifecycle))
+    required_manifest_fields = set(ModuleManifestV1.model_fields)
 
     assert len(module_keys) == len(set(module_keys))
     assert {"admin.users", "admin.permissions", "business.products"}.issubset(
         set(module_keys)
     )
+    assert {
+        "module_key",
+        "display_name",
+        "description",
+        "category",
+        "status",
+        "lifecycle",
+        "route_namespace",
+        "api_namespace",
+        "no_api",
+        "navigation",
+        "required_permissions",
+        "permission_manifest",
+        "denied_behavior",
+        "unavailable_behavior",
+        "external_dependencies",
+        "execution_provider_required",
+        "module_adapter_required",
+        "sandbox_required",
+        "feature_flag_key",
+        "audit_log_actions",
+        "operation_log_policy",
+        "allowed_scope_types",
+        "data_boundary",
+        "release_requirements",
+        "staging_acceptance_required",
+        "production_release_required",
+        "docs_path",
+    }.issubset(required_manifest_fields)
     for manifest in manifests:
+        raw_manifest = next(
+            raw
+            for raw in MODULE_MANIFESTS_V1
+            if raw["module_key"] == manifest.module_key
+        )
+        assert required_manifest_fields.issubset(set(raw_manifest))
+        assert MODULE_KEY_PATTERN.fullmatch(manifest.module_key)
         assert manifest.category in ALLOWED_MODULE_CATEGORIES
         assert manifest.status in ALLOWED_MODULE_STATUSES
+        assert manifest.lifecycle in allowed_lifecycles
         assert manifest.denied_behavior in ALLOWED_DENIED_BEHAVIORS
-        assert manifest.route_namespace
+        assert manifest.route_namespace.startswith("/")
+        assert re.fullmatch(r"/[a-z0-9][a-z0-9_./-]*", manifest.route_namespace)
         assert manifest.api_namespace
-        assert manifest.no_api or manifest.api_namespace.startswith("/")
+        if manifest.no_api:
+            assert manifest.api_namespace == "no_api"
+        else:
+            assert manifest.api_namespace.startswith("/")
         if manifest.category in {"admin", "system"}:
             assert manifest.denied_behavior == "hide_when_denied"
         if manifest.category == "business":
@@ -120,23 +271,161 @@ def test_static_module_registry_validation_rules() -> None:
             entry.permission_key for entry in manifest.permission_manifest
         }
         assert set(manifest.required_permissions).issubset(declared_permissions)
+        for permission_key in declared_permissions:
+            assert re.fullmatch(
+                r"[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+",
+                permission_key,
+            )
+            assert permission_key not in {
+                "product",
+                "task",
+                "automation",
+                "manage_all",
+            }
+
+
+def test_module_manifest_contract_rejects_invalid_shapes() -> None:
+    valid = contract_manifest()
+
+    with pytest.raises(ValueError, match="Duplicate module_key"):
+        validate_module_manifests([valid, {**valid}])
+
+    for bad_key in [
+        "ContractTest",
+        "business.ContractTest",
+        "business-contract-test",
+        "business",
+    ]:
+        with pytest.raises(Exception):
+            validate_module_manifests([{**valid, "module_key": bad_key}])
+
+    for field_name in [
+        "display_name",
+        "category",
+        "status",
+        "lifecycle",
+        "route_namespace",
+        "api_namespace",
+        "navigation",
+        "denied_behavior",
+    ]:
+        missing = {**valid}
+        del missing[field_name]
+        with pytest.raises(Exception):
+            validate_module_manifests([missing])
+
+    for key, value in [
+        ("category", "planned"),
+        ("status", "executable"),
+        ("lifecycle", "live"),
+        ("denied_behavior", "show_admin_anyway"),
+    ]:
+        with pytest.raises(Exception):
+            validate_module_manifests([{**valid, key: value}])
+
+    with pytest.raises(ValueError, match="Business modules must default"):
+        validate_module_manifests(
+            [contract_manifest(category="business", denied_behavior="hide_when_denied")]
+        )
+    with pytest.raises(ValueError, match="Admin/system modules must default"):
+        validate_module_manifests(
+            [
+                contract_manifest(
+                    category="admin",
+                    denied_behavior="show_locked",
+                    module_key="admin.contract_test",
+                )
+            ]
+        )
+    with pytest.raises(ValueError, match="route_namespace must start"):
+        validate_module_manifests(
+            [contract_manifest(route_namespace="contract-test")]
+        )
+    with pytest.raises(ValueError, match="no_api manifests must use"):
+        validate_module_manifests(
+            [contract_manifest(no_api=True, api_namespace="/contract-test")]
+        )
+    with pytest.raises(ValueError, match="api_namespace must start"):
+        validate_module_manifests(
+            [
+                contract_manifest(
+                    api_namespace="contract-test",
+                    no_api=False,
+                )
+            ]
+        )
+
+
+def test_module_permission_manifest_rejects_drift_and_generic_keys() -> None:
+    valid = contract_manifest()
+    missing_required = {
+        **valid,
+        "required_permissions": ["contract_test.manage"],
+    }
+    mismatched_module = contract_manifest()
+    mismatched_module["permission_manifest"][0]["module_key"] = "business.other"
+    mismatched_category = contract_manifest()
+    mismatched_category["permission_manifest"][0]["category"] = "admin"
+    mismatched_menu_policy = contract_manifest()
+    mismatched_menu_policy["permission_manifest"][0][
+        "menu_policy"
+    ] = "hide_when_denied"
+
+    for invalid_manifest in [
+        missing_required,
+        mismatched_module,
+        mismatched_category,
+        mismatched_menu_policy,
+    ]:
+        with pytest.raises(ValueError):
+            validate_module_manifests([invalid_manifest])
+
+    for generic_permission_key in [
+        "product",
+        "task",
+        "automation",
+        "manage_all",
+    ]:
+        with pytest.raises(ValueError):
+            validate_module_manifests(
+                [
+                    contract_manifest(
+                        permission_key=generic_permission_key,
+                    )
+                ]
+            )
+
+    for generic_permission_key in [
+        "product",
+        "task",
+        "automation",
+        "manage_all",
+    ]:
+        assert all(
+            generic_permission_key != entry.permission_key
+            for manifest in list_module_manifests()
+            for entry in manifest.permission_manifest
+        )
+
+
+def test_module_external_dependencies_reject_sensitive_or_live_values() -> None:
+    for dependency in [
+        "N8N",
+        "n8n_url",
+        "webhook_secret",
+        "api_key",
+        "https://example.invalid/hook",
+        "woocommerce_password",
+        "env",
+    ]:
+        with pytest.raises(ValueError):
+            validate_module_manifests(
+                [contract_manifest(external_dependencies=[dependency])]
+            )
 
 
 def test_module_registry_dependency_and_runtime_safety_metadata() -> None:
     manifests = list_module_manifests()
-    dependency_markers = (
-        "secret",
-        "token",
-        "password",
-        "credential",
-        "authorization",
-        "api_key",
-        "env",
-        "url",
-        "http",
-        "://",
-        "=",
-    )
     blocked_runtime_fragments = (
         ".env.production",
         ".env.staging",
@@ -149,13 +438,18 @@ def test_module_registry_dependency_and_runtime_safety_metadata() -> None:
         "console_postgres",
         "https://",
         "http://",
+        "api_key",
+        "bearer ",
+        "authorization",
+        "webhook_secret",
+        "provider_url",
     )
 
     for manifest in manifests:
         for dependency in manifest.external_dependencies:
             lowered_dependency = dependency.lower()
             assert lowered_dependency in ALLOWED_EXTERNAL_DEPENDENCIES
-            for marker in dependency_markers:
+            for marker in SENSITIVE_DEPENDENCY_MARKERS:
                 assert marker not in lowered_dependency
 
     serialized = json.dumps(
@@ -172,6 +466,46 @@ def test_module_registry_dependency_and_runtime_safety_metadata() -> None:
         or "product_knowledge" in manifest.module_key
     ]
     assert k01_modules == []
+    assert not re.search(
+        r"\bp0[1-8]\b|p_series|product_page_automation|woocommerce",
+        serialized,
+    )
+
+    n8n_bridge = next(
+        manifest
+        for manifest in manifests
+        if manifest.module_key == "integration.n8n_test_bridge"
+    )
+    assert n8n_bridge.category == "integration"
+    assert n8n_bridge.status == "adapter_pending"
+    assert n8n_bridge.external_dependencies == ["n8n"]
+    assert "test" in n8n_bridge.module_key
+    assert "test" in n8n_bridge.description.lower()
+
+
+def test_non_executable_statuses_never_return_executable_access() -> None:
+    for status, expected_state in [
+        ("planned", "planned"),
+        ("adapter_pending", "adapter_pending"),
+        ("unavailable", "unavailable"),
+    ]:
+        manifest = validate_module_manifests(
+            [
+                contract_manifest(
+                    module_key=f"business.contract_{status}",
+                    permission_key=f"contract_{status}.read",
+                    route_namespace=f"/contract-{status}",
+                    status=status,
+                    lifecycle="designed",
+                )
+            ]
+        )[0]
+        access = build_module_access_state(manifest, owner_permission_info())
+
+        assert access.visible is True
+        assert access.unavailable is True
+        assert access.executable is False
+        assert access.access_state == expected_state
 
 
 def test_owner_and_non_owner_module_access_states(
@@ -200,10 +534,18 @@ def test_owner_and_non_owner_module_access_states(
     assert owner_items["admin.users"]["access_state"] == "available"
     assert owner_items["admin.permissions"]["visible"] is True
     assert owner_items["admin.permissions"]["access_state"] == "available"
+    for key, access in owner_items.items():
+        if access["category"] in {"admin", "system"}:
+            assert access["visible"] is True
+            assert access["hidden"] is False
     assert viewer_items["admin.users"]["hidden"] is True
     assert viewer_items["admin.users"]["access_state"] == "hidden"
     assert viewer_items["admin.permissions"]["hidden"] is True
     assert viewer_items["admin.permissions"]["access_state"] == "hidden"
+    for key, access in viewer_items.items():
+        if access["category"] in {"admin", "system"}:
+            assert access["visible"] is False
+            assert access["access_state"] == "hidden"
     assert viewer_items["business.jobs"]["visible"] is True
     assert viewer_items["business.jobs"]["locked"] is True
     assert viewer_items["business.jobs"]["access_state"] == "locked"

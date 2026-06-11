@@ -17,6 +17,12 @@ MinIO、Filebrowser，不接 K01，不接 P 系列，不发布 staging 或 produ
 Unavailable 和 route namespace guard 对齐到 C07B access state。C07C 没有修改本后端
 API contract，没有新增后端 API 或 migration。
 
+2026-06-11 C07D 补充：模块隔离 verify/test 体系已完成并归档在
+`docs/C07_MODULE_ISOLATION_VERIFICATION.md`。C07D 强化
+`tests/backend/test_modules_registry.py`，把本文件的 Module Manifest v1、registry
+validation、access state、K01/P 系列禁止、真实 provider 禁止和 C05/C06 回归固化为自动
+测试。C07D 没有修改后端 runtime contract，没有新增后端 API 或 migration。
+
 ## 实现范围
 
 新增后端集中模块 registry：
@@ -30,7 +36,8 @@ API contract，没有新增后端 API 或 migration。
 - `backend/app/api/routes/modules.py`：新增只读 API，同时保留现有 F10 `/modules`
   foundation registry API。
 - `tests/backend/test_modules_registry.py`：C07B API、registry validation、access
-  state、C05/C06 regression 测试。
+  state、C05/C06 regression 测试；C07D 在同一文件中补强 contract 负向测试、安全
+  元数据扫描、planned/adapter_pending/unavailable 不可执行和 K01/P 系列禁止接入回归。
 
 ## Module Manifest v1 字段
 
@@ -210,7 +217,29 @@ C07C 仍保持 User Management / Permission Management owner-only，继续不接
 不接 K01/P 系列、不接 n8n/WooCommerce/MinIO/Filebrowser、不实现 Module Adapter 或
 Execution Provider。
 
+## C07D 后端测试引用
+
+C07D 后端 contract 测试入口：
+
+- `tests/backend/test_modules_registry.py`
+
+新增和强化覆盖：
+
+- Module Manifest v1 必填字段、唯一 `module_key`、合法 category/status/lifecycle/
+  denied_behavior。
+- business `show_locked` 与 admin/system `hide_when_denied`。
+- route namespace 与 API namespace/no_api 规则。
+- permission manifest key 格式、required permission 对齐、泛名 permission key 禁止。
+- external dependencies 只能是安全依赖名，不得包含 secret/token/password/env/URL/
+  credential/API key。
+- `planned`、`adapter_pending`、`unavailable` 不可执行。
+- K01 未进入当前 runtime registry；P 系列真实业务模块未接入。
+- `integration.n8n_test_bridge` 只能保持 test/integration + adapter_pending。
+- owner/non-owner module access state、`role_default_permissions` 不自动生效、
+  `super_admin` 不默认全局、`/users` owner-only、`/auth/register` 404、
+  `/permissions/me` 和 C06B assignment API 回归。
+
 ## 下一步
 
-C07D 应继续完善模块隔离 verify/test 体系，确保后续模块必须有 manifest、navigation 绑定
-`module_key`、permissions 可追踪、route/API/proxy 不漂移，并继续回归 C05/C06 行为。
+C07D 已完成本地 verify/test 体系。下一步才是 C07E staging 模块隔离验收；C07E 不应进入
+K01/P 系列或真实 provider 接入。

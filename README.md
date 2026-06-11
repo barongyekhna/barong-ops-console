@@ -544,9 +544,32 @@ C07C has added frontend module-aware navigation and route guards documented in
   WooCommerce, MinIO, Filebrowser, Module Adapter, Execution Provider,
   staging release, production release, or real business flows.
 
+C07D has added the module-isolation verify/test system documented in
+`docs/C07_MODULE_ISOLATION_VERIFICATION.md`:
+
+- Backend module registry contract tests now cover Module Manifest v1 required
+  fields, unique and valid `module_key`, legal category/status/lifecycle/
+  denied behavior, route/API namespace rules, permission manifest drift,
+  generic permission-key rejection, safe external dependencies, K01/P-series
+  no-connect boundaries, n8n test bridge limits, non-executable module states,
+  and C05/C06 permission regressions.
+- Frontend module-isolation tests now cover navigation `module_key` binding,
+  registry alignment, User Management as `admin.users`, Permission Management
+  as `admin.permissions`, owner/non-owner access behavior, business
+  `show_locked`, admin/system `hide_when_denied`, planned/adapter_pending/
+  unavailable route decisions, `/modules/me` failure fallback, wildcard
+  non-bypass, safe module notices, and C05D/C06C helper regressions.
+- `frontend/scripts/verify-foundation.mjs` now verifies exact
+  `GET /modules/registry` and `GET /modules/me` proxy allowlist entries,
+  rejects broad `/modules/*` patterns, checks C07C helper/provider/test files,
+  keeps C05/C06 permission proxy paths covered, and blocks default K01/P-series
+  or live n8n/WooCommerce/MinIO/Filebrowser action markers.
+- C07D does not add runtime features, backend APIs, frontend business UI,
+  migrations, K01, P-series, real provider connections, staging release, or
+  production release.
+
 Recommended next split:
 
-- C07D: module isolation verify/test system.
 - C07E: staging module isolation acceptance.
 - C07F: production module isolation release archive.
 - C07G: C07 module isolation seal.

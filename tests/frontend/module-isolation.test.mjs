@@ -87,6 +87,19 @@ const permissionsReadPermissions = {
   scope_summary: [],
 };
 
+const wildcardNonOwnerPermissions = {
+  assignments: [
+    {
+      permission_key: "*",
+      scope_key: "*",
+      scope_type: "global",
+    },
+  ],
+  is_owner_full_access: false,
+  permission_keys: ["*"],
+  scope_summary: [],
+};
+
 function item(moduleKey) {
   return navigationModuleRecords.find(
     (entry) => entry.module_key === moduleKey,
@@ -266,12 +279,45 @@ test("backend proxy precisely allows C07B module registry paths", () => {
     true,
   );
   assert.equal(isAllowedBackendProxyPath("GET", ["modules", "me"]), true);
+  assert.equal(isAllowedBackendProxyPath("GET", ["permissions", "me"]), true);
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["permissions", "registry"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", [
+      "permissions",
+      "users",
+      "42",
+      "assignments",
+    ]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("PATCH", [
+      "permissions",
+      "users",
+      "42",
+      "assignments",
+      "123e4567-e89b-12d3-a456-426614174000",
+    ]),
+    true,
+  );
   assert.equal(
     isAllowedBackendProxyPath("POST", ["modules", "registry"]),
     false,
   );
   assert.equal(
     isAllowedBackendProxyPath("GET", ["modules", "anything-else"]),
+    false,
+  );
+  assert.equal(isAllowedBackendProxyPath("GET", ["modules", "me", "x"]), false);
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["module-api", "business.jobs"]),
+    false,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["n8n-test", "callback"]),
     false,
   );
 });
@@ -284,6 +330,10 @@ test("verify-foundation checks C07 module proxy allowlist", () => {
   assert.match(verifier, /modules\/registry/);
   assert.match(verifier, /modules\/me/);
   assert.match(verifier, /ALLOWED_MODULE_REGISTRY_PATHS/);
+  assert.match(verifier, /module-isolation\.test\.mjs/);
+  assert.match(verifier, /admin\.users/);
+  assert.match(verifier, /admin\.permissions/);
+  assert.match(verifier, /\/modules\/\*/);
 });
 
 test("module access helpers expose owner visible and non-owner hidden or locked states", () => {
@@ -380,6 +430,44 @@ test("planned and adapter_pending modules are unavailable and not enterable", ()
   assert.equal(canEnterModuleRoute(adapterPendingBridge), false);
 });
 
+test("unavailable modules use Module Unavailable decisions and stay non-enterable", () => {
+  const unavailableJobs = getNavigationStateForModule(
+    ownerPermissions,
+    item("business.jobs"),
+    [
+      access({
+        access_state: "unavailable",
+        category: "business",
+        module_key: "business.jobs",
+        route_namespace: "/jobs",
+        status: "unavailable",
+        unavailable: true,
+      }),
+    ],
+  );
+  const unavailableDecision = getModuleRouteDecision(
+    ownerPermissions,
+    "/jobs",
+    navigationModuleRecords,
+    [
+      access({
+        access_state: "unavailable",
+        category: "business",
+        module_key: "business.jobs",
+        route_namespace: "/jobs",
+        status: "unavailable",
+        unavailable: true,
+      }),
+    ],
+  );
+
+  assert.equal(isModuleUnavailable(unavailableJobs), true);
+  assert.equal(unavailableJobs.badge, "unavailable");
+  assert.equal(canEnterModuleRoute(unavailableJobs), false);
+  assert.equal(unavailableDecision.noticeType, "module_unavailable");
+  assert.equal(unavailableDecision.canEnter, false);
+});
+
 test("missing module access state safely degrades without exposing admin/system modules", () => {
   const adminModules = getNavigationStateForModule(
     modulesReadPermissions,
@@ -399,6 +487,38 @@ test("missing module access state safely degrades without exposing admin/system 
   assert.equal(adminModules.isHidden, true);
   assert.equal(businessJobs.isVisible, true);
   assert.equal(businessJobs.isLocked, true);
+});
+
+test("/modules/me failure fallback keeps non-owner admin/system hidden", () => {
+  const missingUsers = getModuleRouteDecision(
+    noPermissions,
+    "/users",
+    navigationModuleRecords,
+    [],
+    { moduleAccessUnknown: true },
+  );
+  const missingErrors = getModuleRouteDecision(
+    noPermissions,
+    "/errors",
+    navigationModuleRecords,
+    [],
+    { moduleAccessUnknown: true },
+  );
+  const missingJobs = getModuleRouteDecision(
+    noPermissions,
+    "/jobs",
+    navigationModuleRecords,
+    [],
+    { moduleAccessUnknown: true },
+  );
+
+  assert.equal(missingUsers.accessState, "hidden");
+  assert.equal(missingUsers.noticeType, "no_permission");
+  assert.equal(missingErrors.accessState, "hidden");
+  assert.equal(missingErrors.noticeType, "no_permission");
+  assert.equal(missingJobs.isLocked, true);
+  assert.equal(missingJobs.canEnter, false);
+  assert.equal(missingJobs.noticeType, "no_permission");
 });
 
 test("external_dependencies normalization keeps only safe dependency names", () => {
@@ -423,12 +543,26 @@ test("external_dependencies normalization keeps only safe dependency names", () 
     JSON.stringify(normalized.external_dependencies),
     /secret|token|password|env|url|http|authorization/i,
   );
+  assert.doesNotMatch(
+    JSON.stringify(registryItems),
+    /secret|token|password|env|url|http|authorization|credential/i,
+  );
 });
 
 test("every navigation module is registered and aligned with registry metadata", () => {
+  const registryKeys = new Set(
+    registryItems.map((manifestItem) => manifestItem.module_key),
+  );
+
   assert.equal(
     navigationModuleRecords.every(
       (record) => record.module_key || record.core_shell_exception,
+    ),
+    true,
+  );
+  assert.equal(
+    navigationModuleRecords.every((record) =>
+      record.core_shell_exception ? true : registryKeys.has(record.module_key),
     ),
     true,
   );
@@ -452,9 +586,16 @@ test("admin.users and admin.permissions remain hidden for non-owner and visible 
   const adminUsers = item("admin.users");
   const adminPermissions = embeddedNavigationModules[0];
 
+  assert.equal(adminUsers.label, "User Management");
+  assert.equal(adminUsers.module_key, "admin.users");
   assert.equal(adminUsers.owner_only, true);
+  assert.equal(adminUsers.denied_behavior, "hide_when_denied");
+  assert.equal(adminUsers.category, "admin");
+  assert.equal(adminPermissions.label, "Permission Management");
   assert.equal(adminPermissions.module_key, "admin.permissions");
   assert.equal(adminPermissions.owner_only, true);
+  assert.equal(adminPermissions.denied_behavior, "hide_when_denied");
+  assert.equal(adminPermissions.category, "admin");
 
   assert.equal(
     getNavigationStateForModule(noPermissions, adminUsers, [], {
@@ -485,7 +626,7 @@ test("admin.users and admin.permissions remain hidden for non-owner and visible 
   );
 });
 
-test("business.products stays locked for users without permission", () => {
+test("business modules stay locked for users without permission", () => {
   const productsState = getNavigationStateForModule(
     noPermissions,
     item("business.products"),
@@ -506,6 +647,32 @@ test("business.products stays locked for users without permission", () => {
   assert.equal(productsState.isVisible, true);
   assert.equal(productsState.isLocked, true);
   assert.equal(productsState.badge, "locked");
+
+  for (const record of navigationModuleRecords.filter(
+    (entry) => entry.category === "business",
+  )) {
+    assert.equal(record.denied_behavior, "show_locked");
+    assert.equal(
+      getNavigationStateForModule(noPermissions, record, [], {
+        moduleAccessUnknown: true,
+      }).isVisible,
+      true,
+    );
+  }
+});
+
+test("admin and system modules keep hide_when_denied behavior", () => {
+  for (const record of navigationModuleRecords.filter(
+    (entry) => entry.category === "admin" || entry.category === "system",
+  )) {
+    assert.equal(record.denied_behavior, "hide_when_denied");
+    assert.equal(
+      getNavigationStateForModule(noPermissions, record, [], {
+        moduleAccessUnknown: true,
+      }).isHidden,
+      true,
+    );
+  }
 });
 
 test("module route guard decisions cover locked, hidden, unavailable, and owner paths", () => {
@@ -588,6 +755,15 @@ test("module notice copy remains module-aware", () => {
   assert.match(MODULE_UNAVAILABLE_DESCRIPTION, /尚未接入执行能力/);
   assert.equal(MODULE_NO_PERMISSION_TITLE, "无权访问此模块");
   assert.match(MODULE_NO_PERMISSION_DESCRIPTION, /后端校验/);
+  assert.doesNotMatch(
+    [
+      MODULE_UNAVAILABLE_TITLE,
+      MODULE_UNAVAILABLE_DESCRIPTION,
+      MODULE_NO_PERMISSION_TITLE,
+      MODULE_NO_PERMISSION_DESCRIPTION,
+    ].join(" "),
+    /secret|token|password|credential|api[_ -]?key|authorization|env|url/i,
+  );
 });
 
 test("C05 and C06 regression assumptions remain intact", () => {
@@ -651,6 +827,35 @@ test("role defaults and super_admin do not become implicit module access", () =>
   assert.equal(superAdminWithoutAssignments.isHidden, true);
 });
 
+test("wildcard permission does not override module access safety states", () => {
+  const wildcardHiddenUsers = getNavigationStateForModule(
+    wildcardNonOwnerPermissions,
+    item("admin.users"),
+    [],
+    { moduleAccessUnknown: true },
+  );
+  const backendLockedJobs = getNavigationStateForModule(
+    wildcardNonOwnerPermissions,
+    item("business.jobs"),
+    [
+      access({
+        access_state: "locked",
+        category: "business",
+        locked: true,
+        missing_permissions: ["jobs.read"],
+        module_key: "business.jobs",
+        route_namespace: "/jobs",
+        status: "enabled",
+      }),
+    ],
+  );
+
+  assert.equal(wildcardHiddenUsers.isHidden, true);
+  assert.equal(wildcardHiddenUsers.canEnter, false);
+  assert.equal(backendLockedJobs.isLocked, true);
+  assert.equal(backendLockedJobs.canEnter, false);
+});
+
 test("sidebar navigation keeps C07B module keys and no K01 or P-series menus", () => {
   const moduleKeys = navigationItems.map((entry) => entry.module_key);
 
@@ -660,6 +865,14 @@ test("sidebar navigation keeps C07B module keys and no K01 or P-series menus", (
   assert.equal(moduleKeys.some((key) => key.startsWith("k01")), false);
   assert.equal(
     navigationItems.some((entry) => /P0[1-8]|K01|WooCommerce/i.test(entry.label)),
+    false,
+  );
+  assert.equal(
+    navigationModuleRecords.some((entry) =>
+      /k01|product_knowledge|p0[1-8]|p_series|woocommerce|minio|filebrowser/i.test(
+        `${entry.module_key} ${entry.label}`,
+      ),
+    ),
     false,
   );
 });

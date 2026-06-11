@@ -245,6 +245,27 @@ does not connect n8n, WooCommerce, MinIO, Filebrowser, product flows, or real
 business tasks, does not implement Module Adapter or Execution Provider, and
 does not publish staging or production.
 
+C07D has added frontend module-isolation verification documented in
+`docs/C07_MODULE_ISOLATION_VERIFICATION.md`. The primary frontend test entry is
+`tests/frontend/module-isolation.test.mjs`, using Node's built-in test runner
+without new dependencies. It verifies exact C07 proxy allowlist behavior,
+navigation `module_key` binding, registry alignment, `admin.users` and
+`admin.permissions` ownership, business `show_locked`, admin/system
+`hide_when_denied`, planned/adapter_pending/unavailable non-enterable route
+decisions, `/modules/me` failure fallback, external dependency display safety,
+wildcard non-bypass, safe module notice copy, and C05D/C06C helper
+regressions.
+
+`frontend/scripts/verify-foundation.mjs` now also checks that the C07C helper,
+API helper, ModuleAccessProvider, and module-isolation test file exist; that
+the backend proxy precisely allows only `GET /modules/registry` and
+`GET /modules/me` for C07 registry access; that `/modules/*` broad wildcards
+are not introduced; that `/permissions/me`, `/permissions/registry`, and C06B
+assignment proxy paths remain covered; and that K01/P-series or live
+n8n/WooCommerce/MinIO/Filebrowser action markers are not default-enabled.
+C07D does not add runtime UI, K01/P-series menus, real provider connections,
+staging release, or production release.
+
 ## Configuration
 
 For host-based development, use the example backend URL:

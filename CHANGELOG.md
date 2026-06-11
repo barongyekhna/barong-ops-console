@@ -6,6 +6,29 @@
 
 ### Added
 
+- C07D：新增 `docs/C07_MODULE_ISOLATION_VERIFICATION.md`，归档模块隔离 verify/test
+  体系；明确 C07D 只强化测试和只读 verifier，不实现 Module Adapter、Execution
+  Provider、module switch、sandbox、审批门、密钥规则，不新增后端业务 API、前端业务 UI
+  或 migration，不接 K01/P 系列/n8n/WooCommerce/MinIO/Filebrowser，不发布 staging 或
+  production。
+- C07D：强化 `tests/backend/test_modules_registry.py`，覆盖 Module Manifest v1 必填字段、
+  `module_key` 唯一和命名、category/status/lifecycle/denied_behavior 合法性、business
+  `show_locked`、admin/system `hide_when_denied`、route/API namespace、permission
+  manifest 对齐、泛 permission key 禁止、external dependency 安全、K01/P 系列和真实
+  provider 值禁止、`integration.n8n_test_bridge` test-only/adapter_pending 边界、
+  planned/adapter_pending/unavailable 不可执行，以及 C05/C06 `/users`、`/auth/register`、
+  `/permissions/me`、C06B assignment API、`role_default_permissions` 和 `super_admin` 回归。
+- C07D：强化 `tests/frontend/module-isolation.test.mjs`，覆盖 C07 proxy 精确 allowlist、
+  navigation `module_key` 和 registry 对齐、User Management=`admin.users`、Permission
+  Management=`admin.permissions`、non-owner admin/system hidden、business locked、owner
+  可见、planned/adapter_pending/unavailable route guard decision、`/modules/me` 失败安全
+  降级、external dependency 展示安全、wildcard 不绕过 access state、No Permission /
+  Module Unavailable 文案不泄密，以及 C05D/C06C helper 回归。
+- C07D：强化 `frontend/scripts/verify-foundation.mjs`，解析并校验 C07 module proxy
+  allowlist 只包含 `modules/registry` 和 `modules/me`，拒绝 `/modules/*` 宽通配，继续
+  检查 `/permissions/me`、`/permissions/registry` 和 C06B assignment proxy，确认 C07C
+  helper/provider/test 文件存在，并阻止默认启用 K01/P 系列菜单或 live
+  n8n/WooCommerce/MinIO/Filebrowser action marker。
 - C07C：新增前端 module registry 类型、归一化 helper、module access helper 和 API client，
   通过现有 restricted frontend backend proxy 调用 `GET /modules/registry` 与
   `GET /modules/me`；API 失败时返回安全错误摘要并标记 `module_access_unknown`，不打印

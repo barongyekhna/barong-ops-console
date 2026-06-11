@@ -6,6 +6,13 @@ C07C 在 C07B 后端 Module Manifest / Registry API 已完成后，把前端导�
 路由保护接到模块 access state。C07C 只做前端 module-aware navigation / route guard，
 不接真实业务，不新增后端 API，不新增 migration，不发布 staging 或 production。
 
+2026-06-11 C07D 补充：模块隔离 verify/test 体系已完成并归档在
+`docs/C07_MODULE_ISOLATION_VERIFICATION.md`。C07D 强化
+`tests/frontend/module-isolation.test.mjs` 和 `frontend/scripts/verify-foundation.mjs`，
+把本文件的 navigation `module_key`、proxy allowlist、safe fallback、business
+`show_locked`、admin/system `hide_when_denied`、planned/adapter_pending/unavailable
+不可进入、K01/P 系列不接入和 C05/C06 helper 回归固化为自动测试。
+
 ## 实现范围
 
 C07C 新增前端模块类型、纯 helper 和 API client：
@@ -145,8 +152,29 @@ C07C 明确不做：
 - locked、hidden、unavailable、owner route guard decision。
 - C05D/C06C 回归假设、`role_default_permissions` 和 `super_admin` 边界。
 
+C07D 已在该文件中继续强化：
+
+- C07B module registry proxy 只能精确允许 `GET /modules/registry` 和
+  `GET /modules/me`，并确认 `/permissions/me`、`/permissions/registry` 和 C06B
+  assignment API 仍保留。
+- User Management 必须映射 `admin.users`，Permission Management 必须映射
+  `admin.permissions`。
+- unavailable module 必须显示 Module Unavailable decision，不能 enter。
+- `/modules/me` 失败或缺失时，non-owner 直接访问 admin/system route 仍是 No
+  Permission，不暴露入口。
+- wildcard permission 不能绕过 owner-only、hidden、locked 或 module access state。
+- Module Unavailable / No Permission 文案不得包含 secret/token/password/env/URL/
+  credential/API key。
+- business navigation 必须保持 `show_locked`；admin/system navigation 必须保持
+  `hide_when_denied`。
+- navigation 中不得默认启用 K01、P 系列、WooCommerce、MinIO 或 Filebrowser 菜单。
+
+`frontend/scripts/verify-foundation.mjs` 也在 C07D 中升级为只读 verifier，检查 C07C
+helper/provider/test 文件存在、C07 proxy allowlist 精确、没有 `/modules/*` 宽通配、
+C05/C06 permission proxy 路径保留，以及没有 live n8n/WooCommerce/MinIO/Filebrowser
+action route marker。
+
 ## 下一步
 
-建议下一步是 C07D：模块隔离 verify/test 体系。C07D 应继续补自动化校验，确保模块
-manifest、navigation、permissions、route namespace、proxy allowlist 和 C05/C06 回归在未来
-模块接入时不会漂移。
+C07D 已完成本地 verify/test 体系。下一步才是 C07E：staging 模块隔离验收；C07E 仍不得
+接 K01/P 系列或真实 n8n/WooCommerce/MinIO/Filebrowser。

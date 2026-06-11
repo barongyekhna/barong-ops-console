@@ -22,6 +22,14 @@ API client、纯 helper、module access provider、module-aware sidebar 和 rout
 Execution Provider、模块开关、sandbox、n8n/WooCommerce/MinIO/Filebrowser 接入、K01、
 P 系列或真实业务。
 
+2026-06-11 C07D 更新：模块隔离 verify/test 体系已在
+`docs/C07_MODULE_ISOLATION_VERIFICATION.md` 归档。C07D 强化后端 module registry
+contract 测试、前端 module isolation Node 测试和 `frontend/scripts/verify-foundation.mjs`
+只读 verifier，覆盖 manifest 必填字段、module_key、denied_behavior、proxy allowlist、
+external dependency 安全、planned/adapter_pending/unavailable 不可执行、K01/P 系列不接入
+以及 C05/C06 回归。C07D 不新增 API/UI/migration，不接真实业务，不发布 staging 或
+production。
+
 ## 一、C07A 结论
 
 C07 可以开始。
@@ -814,7 +822,27 @@ C07C 仍不新增真实业务页面，不接 K01/P 系列，不接 n8n/WooCommer
 - route/API/proxy 隔离测试。
 - C05/C06 回归测试。
 
-当前状态：未开始。C07B 只新增后端 module registry 定点测试。
+当前状态：已完成并记录在 `docs/C07_MODULE_ISOLATION_VERIFICATION.md`。C07D 强化：
+
+- `tests/backend/test_modules_registry.py`：Module Manifest v1 必填字段、唯一
+  `module_key`、合法 category/status/lifecycle/denied_behavior、business
+  `show_locked`、admin/system `hide_when_denied`、route/API namespace、permission
+  manifest、泛 permission key 禁止、external dependency 安全、K01/P 系列不接入、
+  n8n test bridge 只能 adapter_pending/test、planned/adapter_pending/unavailable
+  不可执行，以及 C05/C06 回归。
+- `tests/frontend/module-isolation.test.mjs`：navigation `module_key` 绑定、registry
+  对齐、User Management=`admin.users`、Permission Management=`admin.permissions`、
+  non-owner admin/system hidden、business locked、owner visible、planned/
+  adapter_pending/unavailable 不可进入、`/modules/me` 失败安全降级、external dependency
+  安全展示、wildcard 不绕过 access state、route guard decision 和 C05/C06 helper 回归。
+- `frontend/scripts/verify-foundation.mjs`：精确校验 `GET /modules/registry` 和
+  `GET /modules/me` proxy allowlist，不允许 `/modules/*` 宽通配，继续保留
+  `/permissions/me`、`/permissions/registry` 和 C06B assignment proxy，检查 C07C helper/
+  provider/test 文件存在，并阻止 K01/P 系列菜单和 live n8n/WooCommerce/MinIO/Filebrowser
+  action marker 默认启用。
+
+C07D 仍不新增后端业务 API，不新增前端业务 UI，不新增 migration，不接 K01/P 系列，不接
+真实 n8n/WooCommerce/MinIO/Filebrowser，不发布 staging 或 production。
 
 ### C07E：staging 模块隔离验收
 

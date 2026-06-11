@@ -223,6 +223,20 @@ not add migration, does not implement Module Adapter or Execution Provider,
 does not connect K01/P-series/n8n/WooCommerce/MinIO/Filebrowser, and does not
 write real business data.
 
+C07D has added backend module registry contract verification documented in
+`docs/C07_MODULE_ISOLATION_VERIFICATION.md`. The primary backend test entry is
+`tests/backend/test_modules_registry.py`; it now covers Module Manifest v1
+required fields, unique and valid `module_key`, legal category/status/
+lifecycle/denied behavior, route/API namespace rules, permission manifest
+alignment, generic permission-key rejection, external dependency safety,
+planned/adapter_pending/unavailable non-executable access states, K01/P-series
+no-connect boundaries, the `integration.n8n_test_bridge` test-only limit, and
+C05/C06 regressions for owner full access, non-owner hidden admin/system,
+business locked state, `role_default_permissions`, `super_admin`,
+`/users`, `/auth/register`, `/permissions/me`, and C06B assignment APIs.
+C07D does not modify backend runtime code, add APIs, add migrations, connect
+providers, or release staging/production.
+
 F12 adds the n8n test webhook bridge:
 
 - `POST /n8n-test/run`
