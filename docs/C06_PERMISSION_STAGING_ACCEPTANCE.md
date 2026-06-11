@@ -235,6 +235,7 @@ C06D staging 发布和动态验收通过。
 - `/auth/register` 仍 404。
 - `role_default_permissions` 不自动生效。
 - `super_admin` 不默认 grant/revoke。
-- production 未发布，production smoke 仍通过。
+- production 未在 C06D 发布，production smoke 仍通过。后续 C06E 已完成 production
+  发布归档，见 `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`。
 
-下一步：C06E production 权限管理发布归档。
+下一步：C06F 用户权限管理封板。

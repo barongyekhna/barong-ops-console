@@ -319,7 +319,27 @@ C06D 已将本文件记录的 C06B assignment API 发布到 staging，并完成�
   `user_permission_assignments`。
 - production 未发布，未读取真实 env，未接真实业务。
 
-## 十、下一步
+## 十、C06E production 发布引用
 
-- C06E：production 发布归档。
+C06E 已将本文件记录的 C06B assignment API 发布到 production，并完成归档验收。
+归档文件为 `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`。
+
+验收结论：
+
+- production backend safe release 成功，assignment list route owner 返回 `200`。
+- production Alembic current/head 仍为 `c05b_permissions_001 (head)`，未执行
+  upgrade，C06B 没有新增 migration。
+- production `permission_registry` 发布后曾为空；经老板单独批准，在 production
+  backend 容器内通过现有 `upsert_permission_registry()` 应用层 helper 初始化 seed，
+  registry count 为 18。未 psql、未手写 SQL、未操作 production postgres 容器。
+- owner `GET /permissions/users/{owner_id}/assignments` 返回 `200`，target owner
+  `is_owner_full_access=true`，assignment list 合理为空。
+- owner `/auth/me`、`/permissions/me`、`/permissions/registry` 和 `/users` 通过。
+- `/users` 仍 owner-only，`/auth/register` 仍 404，未登录 `/auth/me`、
+  `/permissions/me`、`/users` 仍 401。
+- C06E 未执行 production grant/update/revoke 动态写入验收，未写
+  `user_permission_assignments`，未创建 production 测试账号，未接真实业务。
+
+## 十一、下一步
+
 - C06F：C06 权限管理封板。

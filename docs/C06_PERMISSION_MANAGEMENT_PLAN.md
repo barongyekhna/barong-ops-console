@@ -25,6 +25,14 @@ C06D 已完成 staging 发布和联调验收，记录文件为
 `permission_registry` 曾为空；经老板批准，通过 staging backend 容器内现有
 `upsert_permission_registry()` 应用层 helper 初始化系统权限点 seed。
 
+C06E 已完成 production 发布和归档验收，记录文件为
+`docs/C06_PERMISSION_PRODUCTION_RELEASE.md`。C06E 只发布 production backend/frontend，
+未执行 Alembic upgrade，未操作 production postgres 容器，未直接 psql/SQL 操作
+production DB，未读取真实 env，未发布 staging，未接真实业务。发布后 production
+`permission_registry` 曾为空；经老板单独批准，通过 production backend 容器内现有
+`upsert_permission_registry()` 应用层 helper 初始化系统权限点 seed，registry count
+为 18。
+
 ## 一、C06A 结论
 
 - C06 可以开始。
@@ -75,8 +83,8 @@ C06B 仍不做：
 - 不执行 safe release。
 - 不接 WooCommerce、n8n 真实业务流、MinIO、Filebrowser、产品页或 P 系列。
 
-后续拆分更新为：C06D 已完成 staging 验收，C06E 做 production 发布归档，C06F
-做 C06 封板。
+后续拆分更新为：C06D 已完成 staging 验收，C06E 已完成 production 发布归档，
+C06F 做 C06 封板。
 
 ## 一点六、C06C 实现状态
 
@@ -897,14 +905,25 @@ UI 边界：
 
 ### C06E：production 发布
 
-允许：
+状态：已完成。验收归档见 `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`。
 
-- C06D 验收通过后，按 OPS01 safe release 流程发布 production backend/frontend。
-- 做 owner API/UI 只读和最小写入验收，具体写入范围必须在 C06E 任务中再次确认。
+已验证：
+
+- production backend/frontend safe release 成功。
+- Alembic current/head 只读检查为 `c05b_permissions_001 (head)`，未执行 upgrade。
+- owner `/auth/me`、`/permissions/me`、`/permissions/registry`、
+  `/permissions/users/{user_id}/assignments` 和 `/users` 验收通过。
+- production `permission_registry` 初始为空；经老板批准，通过 production backend
+  容器内现有 `upsert_permission_registry()` 应用层 helper 初始化 seed，registry
+  count 为 18。
+- production C06C `/users` bundle marker 存在。
+- `/users` 仍 owner-only，`/auth/register` 仍 404。
+- `role_default_permissions` 不自动生效，`super_admin` 不默认 grant/revoke。
+- staging smoke 只读通过，staging 未受影响。
 
 禁止：
 
-- 不创建 production 测试账号，除非后续任务明确批准。
+- 不创建 production 测试账号。
 - 不直接操作 production postgres。
 - 不读取真实 env。
 - 不接真实业务。

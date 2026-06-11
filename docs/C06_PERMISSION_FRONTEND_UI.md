@@ -208,6 +208,27 @@ C06D 已发布并验收本文件记录的 C06C 前端权限管理 UI。归档文
   记录了该环境限制。
 - production 未发布，未读取真实 env，未接真实业务。
 
-## 十二、下一步
+## 十二、C06E production 发布引用
 
-C06E：production 权限管理发布归档。
+C06E 已将本文件记录的 C06C 前端权限管理 UI 发布到 production，并完成归档验收。
+归档文件为 `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`。
+
+验收结论：
+
+- production frontend safe release 成功。
+- production `/users` 返回 `200`。
+- production `/users` linked JS bundle 包含 `C06C permissions` marker。
+- owner 通过 frontend proxy 可读取 `/auth/me`、`/permissions/registry`、
+  `/permissions/users/{owner_id}/assignments` 和 `/users`。
+- production `permission_registry` 曾为空；经老板单独批准，通过 production backend
+  容器内现有应用层 helper 初始化 seed 后，registry count 为 18，UI 可读取普通和
+  high-risk permission 展示数据。
+- 本机没有 Chromium/Google Chrome，Node 环境也没有 Playwright 包，因此没有执行真实
+  浏览器 DOM 截图验收；C06E 使用 production page、bundle marker、owner frontend
+  proxy API 和本地前端测试共同确认 C06C 已进入 production。
+- C06E 未创建 production 测试账号，未执行 production grant/update/revoke 动态写入
+  验收，未读取真实 env，未接真实业务。
+
+## 十三、下一步
+
+C06F：C06 用户权限管理封板。

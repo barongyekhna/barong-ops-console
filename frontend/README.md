@@ -194,8 +194,14 @@ addition to the existing `/permissions/me` and `/permissions/registry` paths.
 Frontend permission checks remain UX only; backend `require_owner()` and the
 C06B owner-only APIs are still the security boundary. C06D verified staging
 `/users`, frontend proxy owner login, owner `/auth/me`, registry access, and
-the published C06C bundle markers. Production is still not released for C06,
-and real business systems remain unconnected.
+the published C06C bundle markers. C06E has released the C06C UI to
+production, verified production `/users` returns 200, confirmed the linked JS
+bundle contains the `C06C permissions` marker, and verified owner frontend
+proxy access to `/auth/me`, `/permissions/registry`,
+`/permissions/users/{user_id}/assignments`, and `/users`. Production
+`permission_registry` was initially empty; with explicit approval it was
+initialized through the backend helper so registry-driven UI options are
+available. Real business systems remain unconnected.
 
 ## Configuration
 

@@ -6,6 +6,10 @@
 
 ### Added
 
+- C06E：新增 `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`，归档 production 权限管理安全发布；本轮仅按 OPS01 safe release 发布 production backend/frontend，未执行 Alembic upgrade，未操作 production postgres 容器，未直接 psql/SQL 操作 production DB，未读取真实 env，未发布 staging，未接真实业务。
+- C06E：完成 production owner 权限管理只读验收；owner `/auth/me`、`/permissions/me`、`/permissions/registry`、`/permissions/users/{user_id}/assignments`、`/users` 均返回 200，registry count 为 18，assignment list 对 owner 合理为空，`/users` 未泄漏 `password_hash`，未登录 `/auth/me`、`/permissions/me`、`/users` 仍为 401，`/auth/register` 仍为 404。
+- C06E：production `permission_registry` 发布后曾为空；经老板单独批准，仅在 production backend 容器内通过现有应用层 helper `upsert_permission_registry()` 初始化系统权限点 seed，未写 `user_permission_assignments`，未写 `role_default_permissions`，未 grant/update/revoke 任何 production 用户权限，未创建 production 测试账号。
+- C06E：完成 production C06C frontend marker 验收；production `/users` 返回 200，linked JS bundle 包含 `C06C permissions` marker，owner frontend proxy 可读取 registry、assignment list 和 `/users`。本机无 Chromium/Playwright，未执行浏览器截图验收。
 - C06D：新增 `docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`，归档 staging 用户权限管理联调验收；本轮仅使用 OPS01 safe release 发布 staging backend/frontend，未发布 production，未执行 Alembic upgrade，未操作 staging postgres 容器，未直接操作数据库，未读取真实 env，未接真实业务。
 - C06D：发布后发现 staging `permission_registry` 为空；经老板批准，在 staging backend 容器内通过现有应用层 helper `upsert_permission_registry()` 初始化系统权限点 seed，registry count 为 18，未新增 migration、未手写 SQL、未 psql、未操作 postgres 容器。
 - C06D：完成 staging 动态验收；owner assignment list、普通 `artifacts.read` grant/update/revoke、`/permissions/me` 生效和移除、high-risk `jobs.manage` reason/confirmation 阻断与成功 grant/revoke、operation_logs、non-owner 越权 403、`/users` owner-only、`/auth/register` 404、role defaults 不自动生效和 `super_admin` 不默认 grant/revoke 均通过。

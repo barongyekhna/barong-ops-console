@@ -304,9 +304,9 @@ business tasks.
 
 Current C05 status:
 
-C05 is sealed. C06 user permission management is now through staging
-acceptance. The next step is C06E production permission-management release
-archive, not P-series work and not real business onboarding.
+C05 is sealed. C06 user permission management has now completed the
+production permission-management release archive. The next step is C06F
+sealing, not P-series work and not real business onboarding.
 
 - C05A audited the existing auth, role, user-management, frontend navigation,
   and role-system tests/docs.
@@ -368,6 +368,31 @@ archive, not P-series work and not real business onboarding.
   production DB, did not read real env files, did not add grant/revoke UI or
   API, did not create production test accounts, and did not connect real
   business systems.
+- C06B added owner-only assignment list/grant/update/revoke APIs under
+  `/permissions/users/{user_id}/assignments`, kept `/users` owner-only, kept
+  `super_admin` from receiving grant/revoke by default, and kept
+  `role_default_permissions` from auto-applying.
+- C06C added the User Management “权限” entry and “用户权限管理” panel, using
+  `/permissions/registry` plus the C06B assignment APIs through the restricted
+  frontend proxy. Frontend checks remain UX only; backend `require_owner()`
+  remains the security boundary.
+- C06D released C06B/C06C to staging, initialized staging
+  `permission_registry` seed only after explicit approval through the existing
+  backend helper, and completed dynamic owner/non-owner grant/update/revoke,
+  high-risk, operation_logs, `/users` owner-only, `/auth/register` 404,
+  `role_default_permissions`, and `super_admin` checks.
+- C06E released production backend/frontend with OPS01 safe release. Production
+  Alembic stayed at `c05b_permissions_001 (head)` and no upgrade was executed.
+  Production `permission_registry` was initially empty; after explicit
+  approval it was initialized only through backend helper
+  `upsert_permission_registry()` and now returns 18 registry items.
+- C06E verified production owner `/auth/me`, `/permissions/me`,
+  `/permissions/registry`, `/permissions/users/{user_id}/assignments`, and
+  `/users`; verified C06C bundle marker on `/users`; confirmed unauthenticated
+  `/auth/me`, `/permissions/me`, `/users` remain 401 and `/auth/register`
+  remains 404. It did not create production test accounts, did not write
+  production assignments, did not operate production postgres, did not read
+  real env files, did not publish staging, and did not connect real business.
 - C05G sealed the permission system. The sealed record confirms `/users` stays
   owner-only, User Management stays owner full access only, owner remains
   global full access, `super_admin` is not global by default, role defaults do

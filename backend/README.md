@@ -8,8 +8,8 @@ backend permission dependency/API access, and C06B backend owner-only
 permission assignment APIs. C05C adds `require_permission()`,
 `/auth/me.permissions`, read-only `/permissions/me` and
 `/permissions/registry`; C06B adds owner-only assignment list/grant/update/
-revoke API while keeping `/users` owner-only and leaving frontend permission
-UI, production deploy, and real business integration out of scope.
+revoke API while keeping `/users` owner-only. C06E has released the C06B
+backend API to production; real business integration remains out of scope.
 
 C01 production deployment is complete for
 `https://ops.barongyekhna.com`. The production backend service is named
@@ -162,6 +162,19 @@ and no Alembic upgrade was executed for C06D. During acceptance, staging
 backend container to initialize only registry seed rows. C06D did not use psql,
 did not hand-write SQL, did not operate the staging postgres container, did not
 read real env files, did not release production, and did not connect real
+business systems.
+
+C06E has released the C06B backend API to production and archived the release
+in `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`. Production backend safe
+release succeeded, Alembic current/head remained `c05b_permissions_001 (head)`
+with no upgrade, and owner `/permissions/users/{owner_id}/assignments` returns
+200 with owner full-access metadata. Production `permission_registry` was
+initially empty; with explicit approval, the existing backend helper
+`upsert_permission_registry()` was run inside the production backend container
+to initialize only registry seed rows. C06E did not use psql, did not hand-write
+SQL, did not operate the production postgres container, did not write
+`user_permission_assignments` or `role_default_permissions`, did not create
+production test accounts, did not read real env files, and did not connect real
 business systems.
 
 F12 adds the n8n test webhook bridge:
