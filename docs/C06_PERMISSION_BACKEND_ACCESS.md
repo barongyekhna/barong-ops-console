@@ -342,4 +342,18 @@ C06E 已将本文件记录的 C06B assignment API 发布到 production，并完�
 
 ## 十一、下一步
 
-- C06F：C06 权限管理封板。
+C06F 已完成 C06 权限管理封板。封板归档文件为
+`docs/C06_PERMISSION_MANAGEMENT_SEAL.md`。
+
+封板结论：
+
+- 本文件记录的 C06B assignment list/grant/update/revoke API 已随 C06 封板。
+- 四个 assignment API 仍全部 owner-only。
+- `/users` 仍 owner-only。
+- `/auth/register` 仍 404。
+- owner 仍全局全权限，不依赖普通 assignment。
+- `super_admin` 仍不默认拥有 grant/revoke。
+- `role_default_permissions` 仍不自动生效。
+- high-risk 二次确认策略保留。
+- grant/update/revoke 仍由后端写 `operation_logs`。
+- C06 不接真实业务，不进入 P 系列。

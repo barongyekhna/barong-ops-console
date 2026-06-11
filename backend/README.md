@@ -9,7 +9,9 @@ permission assignment APIs. C05C adds `require_permission()`,
 `/auth/me.permissions`, read-only `/permissions/me` and
 `/permissions/registry`; C06B adds owner-only assignment list/grant/update/
 revoke API while keeping `/users` owner-only. C06E has released the C06B
-backend API to production; real business integration remains out of scope.
+backend API to production, and C06F has sealed C06 in
+`docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
+out of scope.
 
 C01 production deployment is complete for
 `https://ops.barongyekhna.com`. The production backend service is named
@@ -176,6 +178,15 @@ SQL, did not operate the production postgres container, did not write
 `user_permission_assignments` or `role_default_permissions`, did not create
 production test accounts, did not read real env files, and did not connect real
 business systems.
+
+C06F has sealed C06 user permission management in
+`docs/C06_PERMISSION_MANAGEMENT_SEAL.md`. The backend boundary remains: all
+C06B assignment list/grant/update/revoke routes are owner-only, `/users` still
+uses `require_owner()`, `/auth/register` still returns 404, owner still has
+global full access without assignment rows, `super_admin` does not default to
+grant/revoke, `role_default_permissions` does not auto-apply, high-risk
+confirmation remains required, and grant/update/revoke operation logs are
+written by the backend.
 
 F12 adds the n8n test webhook bridge:
 

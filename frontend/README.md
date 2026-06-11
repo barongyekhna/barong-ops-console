@@ -170,7 +170,9 @@ the user permission management plan in
 assignment APIs in `docs/C06_PERMISSION_BACKEND_ACCESS.md`, and C06C has added
 the frontend User Management permission UI in
 `docs/C06_PERMISSION_FRONTEND_UI.md`. C06D has released this UI to staging and
-archived the acceptance in `docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`.
+archived the acceptance in `docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`. C06E
+has released it to production in `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`,
+and C06F has sealed C06 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`.
 
 C06C keeps User Management owner-only. The `/users` entry remains visible only
 when `permissions.is_owner_full_access=true`, and the permission management
@@ -202,6 +204,13 @@ proxy access to `/auth/me`, `/permissions/registry`,
 `permission_registry` was initially empty; with explicit approval it was
 initialized through the backend helper so registry-driven UI options are
 available. Real business systems remain unconnected.
+
+C06F keeps the frontend boundary sealed: User Management and the permission
+management entry remain visible only to owner full access, owner users render
+as full access instead of ordinary assignments, wildcard is not a grant option,
+high-risk confirmation remains in the UI, and frontend checks remain UX only.
+The backend owner-only C06B APIs, `require_owner()`, and `require_permission()`
+remain the real security boundary.
 
 ## Configuration
 

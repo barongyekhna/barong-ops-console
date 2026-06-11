@@ -304,5 +304,7 @@ C06E production 发布归档通过。
 - production smoke、staging smoke、dual env status、safe release plan 均通过。
 - staging 未受影响。
 - 未接真实业务。
+- C06F 已完成 C06 用户权限管理封板，见
+  `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`。
 
-下一步：C06F 用户权限管理封板。
+C06E production 发布归档结果已纳入 C06F 最终封板归档。

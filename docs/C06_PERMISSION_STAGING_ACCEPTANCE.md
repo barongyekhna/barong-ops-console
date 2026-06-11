@@ -237,5 +237,7 @@ C06D staging 发布和动态验收通过。
 - `super_admin` 不默认 grant/revoke。
 - production 未在 C06D 发布，production smoke 仍通过。后续 C06E 已完成 production
   发布归档，见 `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`。
+- C06F 已完成 C06 用户权限管理封板，见
+  `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`。
 
-下一步：C06F 用户权限管理封板。
+C06D staging 验收结果已纳入 C06F 最终封板归档。

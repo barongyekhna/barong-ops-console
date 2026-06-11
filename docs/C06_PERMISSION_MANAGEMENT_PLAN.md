@@ -33,6 +33,12 @@ production DB，未读取真实 env，未发布 staging，未接真实业务。�
 `upsert_permission_registry()` 应用层 helper 初始化系统权限点 seed，registry count
 为 18。
 
+C06F 已完成 C06 用户权限管理系统最终封板，记录文件为
+`docs/C06_PERMISSION_MANAGEMENT_SEAL.md`。C06F 只做文档封板归档，不新增 API/UI/
+migration，不发布 staging/production，不接真实业务，不进入 P 系列。封板结论确认
+C06A-E 承接链条完整，C06 后端 owner-only assignment API、前端 owner-only 权限管理
+入口、staging 动态验收和 production owner 只读验收均已完成。
+
 ## 一、C06A 结论
 
 - C06 可以开始。
@@ -931,6 +937,8 @@ UI 边界：
 
 ### C06F：封板
 
+状态：已完成。封板归档见 `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`。
+
 允许：
 
 - 归档 C06B-E 完成范围、生产状态、安全边界、残余风险和后续任务。
@@ -941,13 +949,6 @@ UI 边界：
 - 不发布 staging/production。
 - 不接真实业务。
 - 不进入 P 系列。
-
-如 C06B 发现高风险确认、operation_logs 或 frontend proxy 变更过大，可以额外拆出：
-
-- C06B-1：后端只读 list API。
-- C06B-2：grant/revoke/update 写 API 与 operation_logs。
-- C06C-1：只读 UI。
-- C06C-2：grant/revoke UI。
 
 ## 十二、风险与暂缓项
 

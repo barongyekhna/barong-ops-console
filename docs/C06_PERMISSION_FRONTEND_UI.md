@@ -231,4 +231,18 @@ C06E 已将本文件记录的 C06C 前端权限管理 UI 发布到 production，
 
 ## 十三、下一步
 
-C06F：C06 用户权限管理封板。
+C06F 已完成 C06 用户权限管理封板。封板归档文件为
+`docs/C06_PERMISSION_MANAGEMENT_SEAL.md`。
+
+封板结论：
+
+- 本文件记录的 C06C User Management 权限管理 UI 已随 C06 封板。
+- 权限管理入口仍仅 owner 可见。
+- owner 可查看、grant、update、revoke explicit assignments。
+- owner 用户仍显示 full access，不渲染成普通 assignment。
+- permission registry 仍用于权限选择，wildcard 不作为可选 grant。
+- high-risk 二次确认 UI 保留。
+- 前端只传 reason、`confirm_high_risk`、`confirmation_text`，后端记录
+  `operation_logs`。
+- 前端只是 UX，不是安全边界。
+- C06 不接真实业务，不进入 P 系列。

@@ -244,8 +244,8 @@ Current C04 status:
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
 C04 is sealed. OPS01 Docker Compose v1 `ContainerConfig` cleanup is also
-sealed. C05 is sealed, and C06D has accepted user permission management on
-staging after C06B backend assignment APIs and C06C frontend UI.
+sealed. C05 is sealed, and C06 user permission management is sealed in
+`docs/C06_PERMISSION_MANAGEMENT_SEAL.md`.
 
 ## OPS01 Docker Compose governance
 
@@ -281,7 +281,8 @@ The OPS01 records are:
 
 Future staging/production backend/frontend releases should prefer
 `scripts/safe_compose_release.sh` instead of `docker-compose --force-recreate`.
-OPS01 is complete. C05 permission-system work is now sealed.
+OPS01 is complete. C05 permission-system work and C06 user permission
+management work are now sealed.
 
 ## C05 permission system
 
@@ -304,9 +305,9 @@ business tasks.
 
 Current C05 status:
 
-C05 is sealed. C06 user permission management has now completed the
-production permission-management release archive. The next step is C06F
-sealing, not P-series work and not real business onboarding.
+C05 is sealed. C06 user permission management is also sealed in
+`docs/C06_PERMISSION_MANAGEMENT_SEAL.md`. The next step must follow the
+project plan, not P-series work and not real business onboarding inside C06.
 
 - C05A audited the existing auth, role, user-management, frontend navigation,
   and role-system tests/docs.
@@ -401,8 +402,9 @@ sealing, not P-series work and not real business onboarding.
 - C05 does not include grant/revoke API, permission assignment UI, complete
   company/factory/department scope management, or real n8n/P-series/
   WooCommerce/MinIO/Filebrowser business integration.
-- C06D accepted user permission management on staging. C18/later remains the
-  place for organization scope and business-module Permission Manifest rules.
+- C06F sealed user permission management after C06D staging acceptance and
+  C06E production release archival. C18/later remains the place for
+  organization scope and business-module Permission Manifest rules.
 
 ## C06 user permission management
 
@@ -412,7 +414,10 @@ added the backend owner-only assignment API documented in
 `docs/C06_PERMISSION_BACKEND_ACCESS.md`. C06C added the frontend User
 Management permission UI documented in `docs/C06_PERMISSION_FRONTEND_UI.md`.
 C06D released C06B/C06C to staging and archived the acceptance in
-`docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`.
+`docs/C06_PERMISSION_STAGING_ACCEPTANCE.md`. C06E released C06B/C06C to
+production and archived owner read-only acceptance in
+`docs/C06_PERMISSION_PRODUCTION_RELEASE.md`. C06F sealed the full C06 user
+permission management stage in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`.
 
 C06 is scoped to user permission management after the C05 permission-system
 seal:
@@ -444,16 +449,27 @@ seal:
   helper initialized the staging registry seed from inside the staging backend
   container. No migration, direct SQL, postgres-container operation, env read,
   production release, or real business connection was performed.
+- During C06E, production `permission_registry` was initially empty. With
+  explicit approval, the same existing backend helper initialized the
+  production registry seed from inside the production backend container;
+  registry count is 18. C06E did not create production test accounts and did
+  not execute production grant/update/revoke writes.
+- C06F sealed C06 with backend C06B assignment APIs still owner-only,
+  frontend permission management still owner-only, `/users` still owner-only,
+  `/auth/register` still 404, owner still global full access,
+  `super_admin` still without default grant/revoke, `role_default_permissions`
+  still not auto-applying, high-risk confirmation preserved, and
+  `operation_logs` written by the backend.
 
-Planned split:
+Final split:
 
 - C06B: backend owner-only assignment list/grant/revoke/update API and tests
   are implemented.
 - C06C: frontend permission management UI inside User Management and tests are
   implemented.
 - C06D: staging permission-management acceptance is complete.
-- C06E: production permission-management release archive.
-- C06F: C06 permission-management seal.
+- C06E: production permission-management release archive is complete.
+- C06F: C06 permission-management seal is complete.
 
 ## Temporary login preview
 

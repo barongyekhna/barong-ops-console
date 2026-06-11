@@ -6,6 +6,9 @@
 
 ### Added
 
+- C06F：新增 `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`，归档 C06 用户权限管理系统最终封板；确认 C06A 方案审计、C06B 后端 owner-only assignment API、C06C 前端 User Management 权限 UI、C06D staging 动态验收和 C06E production 发布归档均已完成，C06 已封板。
+- C06F：同步 README、backend README、frontend README 和 C06A-E 文档 sealed 引用；最终边界保持 `/permissions/users/{user_id}/assignments` list/grant/update/revoke API 全部 owner-only、权限管理入口仅 owner 可见、`/users` owner-only、`/auth/register` 404、owner 全局全权限、`super_admin` 不默认 grant/revoke、`role_default_permissions` 不自动生效、high-risk 二次确认保留、grant/update/revoke 由后端写 `operation_logs`。
+- C06F：封板记录明确 C06 不包含完整 company/factory/department scope 管理，不接 n8n/P 系列/WooCommerce/MinIO/Filebrowser 真实业务，不创建 production 测试账号，不执行 production grant/update/revoke 写入型动态验证；production `permission_registry` 已在 C06E 经批准通过后端 helper 初始化 seed，count=18。
 - C06E：新增 `docs/C06_PERMISSION_PRODUCTION_RELEASE.md`，归档 production 权限管理安全发布；本轮仅按 OPS01 safe release 发布 production backend/frontend，未执行 Alembic upgrade，未操作 production postgres 容器，未直接 psql/SQL 操作 production DB，未读取真实 env，未发布 staging，未接真实业务。
 - C06E：完成 production owner 权限管理只读验收；owner `/auth/me`、`/permissions/me`、`/permissions/registry`、`/permissions/users/{user_id}/assignments`、`/users` 均返回 200，registry count 为 18，assignment list 对 owner 合理为空，`/users` 未泄漏 `password_hash`，未登录 `/auth/me`、`/permissions/me`、`/users` 仍为 401，`/auth/register` 仍为 404。
 - C06E：production `permission_registry` 发布后曾为空；经老板单独批准，仅在 production backend 容器内通过现有应用层 helper `upsert_permission_registry()` 初始化系统权限点 seed，未写 `user_permission_assignments`，未写 `role_default_permissions`，未 grant/update/revoke 任何 production 用户权限，未创建 production 测试账号。
