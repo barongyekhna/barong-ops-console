@@ -188,6 +188,16 @@ grant/revoke, `role_default_permissions` does not auto-apply, high-risk
 confirmation remains required, and grant/update/revoke operation logs are
 written by the backend.
 
+C07A has started module-isolation planning in
+`docs/C07_MODULE_ISOLATION_PLAN.md`. C07A is docs-only and does not change the
+backend runtime. Future C07B work should define backend Module Manifest v1 and
+module registry foundations so future business modules declare `module_key`,
+category, status, lifecycle, permissions, route namespace, API namespace,
+external dependencies, isolation policy, and staging/production acceptance
+requirements before they enter backend routes. C07A does not implement Module
+Adapter, Execution Provider, sandboxing, module switches, n8n integration, new
+API, migration, staging release, production release, or real business tasks.
+
 F12 adds the n8n test webhook bridge:
 
 - `POST /n8n-test/run`

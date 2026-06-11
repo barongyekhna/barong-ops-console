@@ -6,6 +6,9 @@
 
 ### Added
 
+- C07A：新增 `docs/C07_MODULE_ISOLATION_PLAN.md`，完成模块隔离审计与方案设计；文档确认 C07 可以开始，C01-C06 已完成控制台部署、环境隔离、账号、角色、权限、权限管理闭环，C07 目标是模块隔离，不接真实业务，C07A 只做方案、不实现功能。
+- C07A：归纳当前控制台内置板块与核心能力，包括 Dashboard、Foundation Demo、n8n Test Bridge、Products、Modules、Agents、Workflows、Jobs、Artifacts、Reviews、Errors、Memory Events、User Management、Permission Management、Settings、Auth、Health 和 Operation Logs，并明确这些现状还不是正式 Module Manifest v1。
+- C07A：提出 Module Manifest v1 草案、`module_key` 命名规则、模块分类、模块状态/lifecycle、权限声明、navigation、route namespace、API namespace、external dependencies、denied/unavailable behavior、K01 adapter_pending 接入边界、C07 与 C08/C09/C10/C13/C15/C18 分工，以及 C07B-C07G 拆分和未来测试验收策略。
 - C06F：新增 `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`，归档 C06 用户权限管理系统最终封板；确认 C06A 方案审计、C06B 后端 owner-only assignment API、C06C 前端 User Management 权限 UI、C06D staging 动态验收和 C06E production 发布归档均已完成，C06 已封板。
 - C06F：同步 README、backend README、frontend README 和 C06A-E 文档 sealed 引用；最终边界保持 `/permissions/users/{user_id}/assignments` list/grant/update/revoke API 全部 owner-only、权限管理入口仅 owner 可见、`/users` owner-only、`/auth/register` 404、owner 全局全权限、`super_admin` 不默认 grant/revoke、`role_default_permissions` 不自动生效、high-risk 二次确认保留、grant/update/revoke 由后端写 `operation_logs`。
 - C06F：封板记录明确 C06 不包含完整 company/factory/department scope 管理，不接 n8n/P 系列/WooCommerce/MinIO/Filebrowser 真实业务，不创建 production 测试账号，不执行 production grant/update/revoke 写入型动态验证；production `permission_registry` 已在 C06E 经批准通过后端 helper 初始化 seed，count=18。
@@ -204,6 +207,7 @@
 
 ### Changed
 
+- C07A：README、backend README 和 frontend README 更新为 C07 已启动且 C07A 只是模块隔离方案阶段；继续明确 C07 不实现 API/UI/migration，不发布 staging/production，不接真实 n8n/WooCommerce/MinIO/Filebrowser/P 系列/K01 业务开发，下一步建议 C07B 后端 module manifest / registry 基础。
 - C06C：README、frontend README、C06 permission management plan 和 C06 backend access 文档更新为 C06C 前端权限管理 UI 已实现；继续明确 `/users` 后端仍 owner-only，User Management 和权限管理入口仍仅 owner full access 可见，`super_admin` 不默认 grant/revoke，`role_default_permissions` 不自动生效，C06C 不新增后端 API/migration、不发布 staging/production、不接真实业务。
 - C06B：README、backend README 和 C06 permission management plan 更新为 C06B 后端
   owner-only assignment API 已实现；继续明确本阶段不新增 migration、不做前端权限分配

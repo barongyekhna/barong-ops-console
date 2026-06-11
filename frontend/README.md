@@ -212,6 +212,16 @@ high-risk confirmation remains in the UI, and frontend checks remain UX only.
 The backend owner-only C06B APIs, `require_owner()`, and `require_permission()`
 remain the real security boundary.
 
+C07A has started module-isolation planning in
+`docs/C07_MODULE_ISOLATION_PLAN.md`. C07A is docs-only and does not change the
+frontend runtime. Future C07C work should make navigation and route guards
+module-aware so navigation items bind to Module Manifest metadata, business
+modules default to `show_locked`, admin/system modules default to
+`hide_when_denied`, and disabled/unavailable/adapter-pending modules cannot
+trigger real actions. C07A does not add new UI, does not add module adapter
+runtime, does not relax the restricted backend proxy, does not connect n8n,
+WooCommerce, MinIO, Filebrowser, K01, P-series work, or real business flows.
+
 ## Configuration
 
 For host-based development, use the example backend URL:

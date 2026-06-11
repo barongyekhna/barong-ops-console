@@ -471,6 +471,45 @@ Final split:
 - C06E: production permission-management release archive is complete.
 - C06F: C06 permission-management seal is complete.
 
+## C07 module isolation
+
+C07 has started with C07A, documented in
+`docs/C07_MODULE_ISOLATION_PLAN.md`. C07A is a module-isolation audit and
+design stage only. It does not implement Module Adapter, Execution Provider,
+module sandbox, module switches, approval gates, secret rules, n8n
+integration, new API, new UI, migration, staging release, production release,
+or real business workflows.
+
+C07 defines the rule set for future modules such as SEO, GEO, K01 product
+knowledge, product page automation, image assets, article generation, review,
+publish, and integration bridges. Future modules must declare stable
+`module_key`, category, status, lifecycle, route namespace, API namespace,
+navigation behavior, denied behavior, permissions, external dependencies,
+isolation policy, and staging/production acceptance requirements before they
+enter the console.
+
+Current C07A conclusions:
+
+- User Management is an admin/system management module and remains owner-only.
+- Permission Management is an admin/system security management module and
+  remains owner-only.
+- Business modules default to `show_locked` when denied.
+- Admin/system modules default to `hide_when_denied` when denied.
+- C07 does not allow modules to directly connect real n8n, WooCommerce,
+  MinIO, Filebrowser, AI providers, or production business workflows.
+- K01 is a future business module, not C07. Before later adapter work, it
+  should remain `adapter_pending`, disabled by default, and hidden from normal
+  navigation.
+
+Recommended next split:
+
+- C07B: backend module manifest / registry foundation.
+- C07C: frontend module-aware navigation / route guard.
+- C07D: module isolation verify/test system.
+- C07E: staging module isolation acceptance.
+- C07F: production module isolation release archive.
+- C07G: C07 module isolation seal.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not
