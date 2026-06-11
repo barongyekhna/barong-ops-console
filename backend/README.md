@@ -3,12 +3,13 @@
 This directory contains the F05 FastAPI foundation, F06 migration mechanism,
 F07 core tables, F08 authentication, F10 foundation APIs, F11 Foundation Demo,
 F12 n8n Test Bridge, C03 owner-only user management API, C04B backend role
-constants/validation, C05B backend permission data-model groundwork, and C05C
-backend permission dependency/API access. C05C adds `require_permission()`,
+constants/validation, C05B backend permission data-model groundwork, C05C
+backend permission dependency/API access, and C06B backend owner-only
+permission assignment APIs. C05C adds `require_permission()`,
 `/auth/me.permissions`, read-only `/permissions/me` and
-`/permissions/registry`, while keeping `/users` owner-only and leaving frontend
-permission UI, grant/revoke APIs, production deploy, and real business
-integration out of scope.
+`/permissions/registry`; C06B adds owner-only assignment list/grant/update/
+revoke API while keeping `/users` owner-only and leaving frontend permission
+UI, production deploy, and real business integration out of scope.
 
 C01 production deployment is complete for
 `https://ops.barongyekhna.com`. The production backend service is named
@@ -132,15 +133,25 @@ real business integrations.
 
 C05 has been sealed in `docs/C05_PERMISSION_SYSTEM_SEAL.md`, and C06A has
 started user permission management planning in
-`docs/C06_PERMISSION_MANAGEMENT_PLAN.md`. C06A is documentation-only: it
-audits the current permission tables, `require_permission()`,
-`/auth/me.permissions`, `/permissions/me`, `/permissions/registry`, `/users`
-owner-only behavior, and operation log model. It proposes C06B owner-only
-assignment list/grant/revoke/update APIs, high-risk confirmation, and
-permission change audit logging, but it does not implement those APIs.
-`super_admin` still does not receive grant/revoke power by default, and
-`role_default_permissions` still does not automatically grant effective
-permissions.
+`docs/C06_PERMISSION_MANAGEMENT_PLAN.md`. C06B is documented in
+`docs/C06_PERMISSION_BACKEND_ACCESS.md` and implements:
+
+- `GET /permissions/users/{user_id}/assignments`
+- `POST /permissions/users/{user_id}/assignments`
+- `PATCH /permissions/users/{user_id}/assignments/{assignment_id}`
+- `DELETE /permissions/users/{user_id}/assignments/{assignment_id}`
+
+All four C06B routes use `require_owner()`. They do not use
+`require_permission("permissions.manage")`, so `super_admin` still does not
+receive grant/revoke power by default. `role_default_permissions` still does
+not automatically grant effective permissions. High-risk permissions require a
+reason, `confirm_high_risk=true`, and
+`confirmation_text="CONFIRM_HIGH_RISK_PERMISSION"` for grant and high-risk
+re-enable or scope-changing update. Revoke is a soft revoke through
+`is_enabled=false`. Grant/update/revoke write existing `operation_logs`.
+
+C06B adds no migration, no frontend permission UI, no staging/production
+release, and no real business integration.
 
 F12 adds the n8n test webhook bridge:
 

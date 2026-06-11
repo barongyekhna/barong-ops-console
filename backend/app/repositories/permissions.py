@@ -193,6 +193,15 @@ def disable_assignment(
     return assignment
 
 
+def save_user_assignment(
+    db: Session,
+    assignment: UserPermissionAssignment,
+) -> UserPermissionAssignment:
+    db.add(assignment)
+    db.flush()
+    return assignment
+
+
 def list_role_default_permissions(
     db: Session,
     role: str | None = None,

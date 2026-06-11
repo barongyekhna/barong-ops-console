@@ -355,8 +355,8 @@ not P-series work and not real business onboarding.
 - C05A defines Permission Registry, User Permission Assignment, Role Default
   Permissions, Permission Scope, and Module Permission Manifest concepts;
   C05B implements the first three as backend tables.
-- Ordinary users receive permissions through manual assignment by owner or an
-  authorized scoped super_admin.
+- Ordinary users currently receive permissions through explicit assignment by
+  owner. Scoped admin delegation is future work, not C06B behavior.
 - C05D/C05F do not add permission grant/revoke UI, do not replace `/users`
   `require_owner()`, and do not connect real business systems.
 - User Management remains owner-only in both backend and frontend. C05D does
@@ -380,20 +380,22 @@ not P-series work and not real business onboarding.
 
 ## C06 user permission management
 
-C06A has started with `docs/C06_PERMISSION_MANAGEMENT_PLAN.md`. C06A is a
-read-only audit and design stage for owner-managed user permission assignment.
-It does not implement grant/revoke APIs, does not implement a permission
-assignment UI, does not add migrations, does not release staging or production,
-and does not connect real business systems.
+C06A started with `docs/C06_PERMISSION_MANAGEMENT_PLAN.md` as the read-only
+audit and design stage for owner-managed user permission assignment. C06B has
+now added the backend owner-only assignment API documented in
+`docs/C06_PERMISSION_BACKEND_ACCESS.md`. C06B does not implement a frontend
+permission assignment UI, does not add migrations, does not release staging or
+production, and does not connect real business systems.
 
 C06 is scoped to user permission management after the C05 permission-system
 seal:
 
 - owner can view a user's permission assignments.
-- owner can grant, revoke, and update permission assignments in later C06
-  implementation tasks.
-- assignment changes must write `operation_logs`.
-- high-risk permissions require explicit secondary confirmation.
+- owner can grant, revoke, and update permission assignments through the C06B
+  backend API.
+- assignment changes write `operation_logs`.
+- high-risk permissions require explicit secondary confirmation with
+  `CONFIRM_HIGH_RISK_PERMISSION`.
 - `/users` remains backend owner-only.
 - User Management remains visible only to owner full access.
 - `super_admin` is not a global owner and does not default to grant/revoke
@@ -406,7 +408,8 @@ seal:
 
 Planned split:
 
-- C06B: backend owner-only assignment list/grant/revoke/update API and tests.
+- C06B: backend owner-only assignment list/grant/revoke/update API and tests
+  are implemented.
 - C06C: frontend permission management UI inside User Management and tests.
 - C06D: staging permission-management acceptance.
 - C06E: production permission-management release archive.

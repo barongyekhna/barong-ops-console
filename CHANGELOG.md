@@ -6,6 +6,37 @@
 
 ### Added
 
+- C06B：新增 owner-only permission assignment 后端管理 API：
+  `GET /permissions/users/{user_id}/assignments`、
+  `POST /permissions/users/{user_id}/assignments`、
+  `PATCH /permissions/users/{user_id}/assignments/{assignment_id}`、
+  `DELETE /permissions/users/{user_id}/assignments/{assignment_id}`；所有新增 route
+  都使用 `require_owner()`，不向 `super_admin`、`module_admin` 或拥有
+  `permissions.manage` 的非 owner 默认开放。
+- C06B：新增/扩展 permission assignment schemas、repository 写入 helper 和
+  permission service 管理入口，支持 list/grant/update/revoke、registry key 校验、
+  wildcard 拒绝、owner target 拒绝、duplicate active assignment 拒绝、soft revoke、
+  scope_type/scope_key 与 scope_id 兼容返回，以及 grant/revoke/update 后
+  `/permissions/me` 按最新 assignment 生效。
+- C06B：新增 high-risk 权限策略，优先使用 `permission_registry.risk_level`，并覆盖
+  users/permissions/settings/system/secrets/release/production/billing/admin 类权限；
+  high-risk grant 和 high-risk 重新启用或 scope 变更要求 reason、
+  `confirm_high_risk=true` 与
+  `confirmation_text="CONFIRM_HIGH_RISK_PERMISSION"`。
+- C06B：grant/update/revoke 沿用现有 `operation_logs` 和
+  `create_operation_log()`；action 使用 `permission.assignment.grant`、
+  `permission.assignment.update`、`permission.assignment.revoke`，details 记录 actor、
+  target、permission_key、assignment_id、scope、before/after、reason、risk_level、
+  confirmation 和 result。
+- C06B：新增 `tests/backend/test_permission_assignments_api.py`，覆盖 owner-only、
+  non-owner/super_admin 禁止、普通 grant 后 `/permissions/me` 生效、wildcard/不存在
+  permission/owner target/重复 active assignment 拒绝、high-risk 确认、update、
+  expired/disabled 不生效、revoke 软撤销、operation_logs、`/users` owner-only、
+  `/auth/register` 404、role defaults 不自动生效。
+- C06B：新增 `docs/C06_PERMISSION_BACKEND_ACCESS.md`，归档 C06B 后端 API、owner-only
+  原因、super_admin 和 role_default_permissions 边界、high-risk 二次确认、
+  operation_logs 写入策略、`/users` owner-only 保持不变，以及 C06C/C06D/C06E/C06F
+  后续拆分。
 - C06A：新增 `docs/C06_PERMISSION_MANAGEMENT_PLAN.md`，完成用户权限管理页面与
   grant/revoke 方案审计；文档确认 C05 已封板且 production 生效，当前
   `permission_registry`、`user_permission_assignments`、`role_default_permissions`、
@@ -156,6 +187,10 @@
 
 ### Changed
 
+- C06B：README、backend README 和 C06 permission management plan 更新为 C06B 后端
+  owner-only assignment API 已实现；继续明确本阶段不新增 migration、不做前端权限分配
+  UI、不发布 staging/production、不接真实业务，`/users` 仍 owner-only，
+  `super_admin` 不默认 grant/revoke，`role_default_permissions` 不自动生效。
 - C06A：README、backend README 和 frontend README 更新为 C06 已启动且 C06A 只是
   权限管理方案阶段；继续明确 `/users` 后端 owner-only、User Management 仅 owner full
   access 可见，`super_admin` 不默认全局授权，`role_default_permissions` 不自动生效，

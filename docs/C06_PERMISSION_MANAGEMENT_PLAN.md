@@ -8,6 +8,11 @@ C06A 只做只读审计、方案设计、任务拆分和文档归档。本阶段
 grant/revoke API，不实现权限分配 UI，不新增 migration，不发布 staging 或
 production，不接真实业务模块。
 
+C06B 已实现后端 owner-only permission assignment 管理 API，记录文件为
+`docs/C06_PERMISSION_BACKEND_ACCESS.md`。C06B 新增 list/grant/update/revoke
+后端 API、service/repository/schema、operation_logs 和后端测试；不新增 migration，
+不实现前端 UI，不发布 staging/production，不接真实业务。
+
 ## 一、C06A 结论
 
 - C06 可以开始。
@@ -23,6 +28,43 @@ production，不接真实业务模块。
 - 当前服务层已有 `grant_permission()`、`revoke_permission()` 和
   `disable_assignment()` helper，但这些 helper 没有 route 暴露，也没有写入
   `operation_logs`。C06B 不能把这些 helper 直接视为完整管理能力。
+
+## 一点五、C06B 实现状态
+
+C06B 已完成后端实现：
+
+- 新增 `GET /permissions/users/{user_id}/assignments`。
+- 新增 `POST /permissions/users/{user_id}/assignments`。
+- 新增 `PATCH /permissions/users/{user_id}/assignments/{assignment_id}`。
+- 新增 `DELETE /permissions/users/{user_id}/assignments/{assignment_id}`。
+- 所有新增 API 都是 owner-only，使用 `require_owner()`。
+- `super_admin` 不默认拥有 list/grant/update/revoke 能力。
+- `role_default_permissions` 不自动生效。
+- `permission_key` 必须来自 enabled `permission_registry`。
+- 不允许 wildcard assignment。
+- 不允许给 owner 创建普通 assignment。
+- 重复 active assignment 返回冲突。
+- 高风险 grant 和高风险重新启用或 scope 变更要求 reason、`confirm_high_risk=true`
+  和 `confirmation_text="CONFIRM_HIGH_RISK_PERMISSION"`。
+- revoke 为软撤销，设置 `is_enabled=false`。
+- grant/update/revoke 写现有 `operation_logs`，details 包含 actor、target、action、
+  permission_key、assignment_id、scope、before、after、reason、risk_level、result
+  和 request trace。
+- grant 后 `/permissions/me` 下一次请求会返回新增 effective permission。
+- disable/revoke/expired 后 `/permissions/me` 不再返回该 effective permission。
+- `/users` 仍保持 owner-only。
+- `/auth/register` 仍保持 404。
+
+C06B 仍不做：
+
+- 不做前端权限分配 UI。
+- 不发布 staging。
+- 不发布 production。
+- 不执行 safe release。
+- 不接 WooCommerce、n8n 真实业务流、MinIO、Filebrowser、产品页或 P 系列。
+
+后续拆分保持不变：C06C 做前端权限管理 UI，C06D 做 staging 验收，C06E 做
+production 发布归档，C06F 做 C06 封板。
 
 ## 二、C06 总目标
 
@@ -736,6 +778,8 @@ UI 边界：
 ## 十一、C06 施工拆分
 
 ### C06B：后端 API 与测试
+
+状态：已实现，待代码审核和后续 C06D staging 验收。
 
 允许：
 
