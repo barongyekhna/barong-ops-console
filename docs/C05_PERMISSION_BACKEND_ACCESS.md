@@ -8,6 +8,10 @@ permissions API。
 C05C 只做后端权限判断、当前用户权限返回、只读权限目录 API 和测试。不做前端 UI，不做权限管理页面，
 不部署 staging/production，不接真实业务。
 
+C05G 已在 `docs/C05_PERMISSION_SYSTEM_SEAL.md` 中引用本文件作为后端权限最终状态依据。
+C05 封板后，`require_permission()` 已完成，`/users` 仍保持 `require_owner()`，grant/revoke
+API 仍未做。
+
 ## 只读审计结论
 
 ### 当前 `/auth/me`
@@ -310,3 +314,17 @@ C05C 不做这些事：
 - 不接真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser。
 - 不创建真实业务任务。
 - 不执行 git commit。
+
+## C05G 封板状态
+
+C05G 已完成 C05 权限系统封板，记录见
+`docs/C05_PERMISSION_SYSTEM_SEAL.md`。
+
+封板后后端边界保持：
+
+- owner 仍在 dependency 层直接通过。
+- 非 owner 仍基于 explicit assignment 和 scope 判断。
+- `super_admin` 仍不默认全局权限。
+- `role_default_permissions` 仍不自动生效。
+- `/users` 仍 owner-only。
+- grant/revoke API 仍未实现，留给 C06。

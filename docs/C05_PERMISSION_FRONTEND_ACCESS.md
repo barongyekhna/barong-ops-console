@@ -8,6 +8,9 @@ C05D 只做前端用户体验层的权限感知。真正安全边界仍然是后
 `require_permission()`、`require_owner()` 和各 API 自己的 401/403 返回。前端隐藏菜单或显示
 locked 状态不能替代后端授权。
 
+C05G 已在 `docs/C05_PERMISSION_SYSTEM_SEAL.md` 中引用本文件作为前端权限最终状态依据。
+C05 封板后，前端权限仍只是 UX；User Management 仍仅 owner full access 可见。
+
 ## C05D 做了什么
 
 - 前端 `GET /auth/me` client 现在读取并归一化 `permissions`。
@@ -150,3 +153,16 @@ frontend test framework。覆盖：
   `require_owner()` 正式改为合适的 permission dependency，再改前端。
 - 后续权限管理阶段：设计 owner 可用的 assignment 管理 UI 和 grant/revoke API，但必须先做
   后端安全设计、审计记录和 staging-first 验收。
+
+## C05G 封板状态
+
+C05G 已完成 C05 权限系统封板，记录见
+`docs/C05_PERMISSION_SYSTEM_SEAL.md`。
+
+封板后前端边界保持：
+
+- 业务板块无权限时继续 `show_locked`。
+- 管理/系统板块无权限时继续 `hide_when_denied`。
+- User Management 继续只对 owner full access 可见。
+- 直接访问无权 route 继续显示无权访问提示或安全降级。
+- 前端权限继续只是 UX，真实安全边界仍在后端。

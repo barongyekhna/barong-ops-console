@@ -8,6 +8,9 @@ C05E 只做 staging 验收和归档。它不新增业务功能，不新增 grant
 权限分配 UI，不接真实 n8n、P 系列、WooCommerce、MinIO、Filebrowser 或产品页业务模块，
 也不发布 production。
 
+C05G 已引用本文件作为 C05 staging 验收依据，并在
+`docs/C05_PERMISSION_SYSTEM_SEAL.md` 中完成 C05 权限系统最终封板。
+
 ## 1. 验收目标
 
 C05E 验证 C05B/C05C/C05D 的权限系统闭环：
@@ -253,4 +256,6 @@ C05E staging 联调验收通过。
 - C05F：production 发布归档已经完成，记录见
   `docs/C05_PERMISSION_PRODUCTION_RELEASE.md`。C05F 按 OPS01 safe release 机制发布
   production backend/frontend，并在 production backend 容器内执行 Alembic `upgrade head`。
-- C05G：下一步是 C05 权限系统封板。归档最终安全边界、未做范围和后续业务模块接入规则。
+- C05G：C05 权限系统封板已完成，记录见
+  `docs/C05_PERMISSION_SYSTEM_SEAL.md`。C05G 只归档最终安全边界、未做范围和后续业务模块
+  接入规则，不进入 P 系列，不接真实业务。

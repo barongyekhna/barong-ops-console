@@ -7,6 +7,9 @@
 C05F 不是功能开发任务，不是 staging 验收任务，也不是真实业务接入任务。本轮只把
 C05B/C05C/C05D/C05E 已完成的权限系统结果安全发布到 production，并完成验收归档。
 
+C05G 已引用本文件作为 C05 production 发布和验收依据，并在
+`docs/C05_PERMISSION_SYSTEM_SEAL.md` 中完成 C05 权限系统最终封板。
+
 ## 1. C05F 目标
 
 C05F 的目标是把 C05 权限系统发布到 production：
@@ -290,4 +293,6 @@ C05F production 发布归档通过。
 - staging 未受影响。
 - 未接真实业务。
 
-下一步是 C05G：C05 权限系统封板。C05G 只应封板 C05 权限系统，不进入 P 系列，不接真实业务。
+下一步：C05G 已完成 C05 权限系统封板，记录见
+`docs/C05_PERMISSION_SYSTEM_SEAL.md`。后续进入 C06 或 C18/业务模块接入前置规划，不进入
+P 系列，不在 C05G 中接真实业务。

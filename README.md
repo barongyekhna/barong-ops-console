@@ -280,8 +280,7 @@ The OPS01 records are:
 
 Future staging/production backend/frontend releases should prefer
 `scripts/safe_compose_release.sh` instead of `docker-compose --force-recreate`.
-OPS01 is complete. C05A has now started the permissions / RBAC stage with a
-design-only audit and plan.
+OPS01 is complete. C05 permission-system work is now sealed.
 
 ## C05 permission system
 
@@ -295,7 +294,8 @@ documented in `docs/C05_PERMISSION_FRONTEND_ACCESS.md`. C05E accepted the
 permission system on staging in
 `docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`. C05F released and accepted the
 permission system on production in
-`docs/C05_PERMISSION_PRODUCTION_RELEASE.md`.
+`docs/C05_PERMISSION_PRODUCTION_RELEASE.md`. C05G sealed the full permission
+system in `docs/C05_PERMISSION_SYSTEM_SEAL.md`.
 
 C05 is about authorization, not business-module onboarding. It does not connect
 real n8n, P-series, WooCommerce, MinIO, Filebrowser, product flows, orders, or
@@ -303,14 +303,17 @@ business tasks.
 
 Current C05 status:
 
-- C05A audits the existing auth, role, user-management, frontend navigation,
+C05 is sealed. The next step is C06 or later permission/organization planning,
+not P-series work and not real business onboarding.
+
+- C05A audited the existing auth, role, user-management, frontend navigation,
   and role-system tests/docs.
-- C05B adds `permission_registry`, `user_permission_assignments`, and
+- C05B added `permission_registry`, `user_permission_assignments`, and
   `role_default_permissions` with Alembic migration `c05b_permissions_001`.
-- C05B adds the first permission registry seed source, idempotent registry
+- C05B added the first permission registry seed source, idempotent registry
   upsert, assignment grant/disable/revoke helpers, role default permission
   storage, and base permission query services.
-- C05C adds `require_permission()`, extends `GET /auth/me` with
+- C05C added `require_permission()`, extended `GET /auth/me` with
   `permissions`, and exposes read-only `GET /permissions/me` plus
   `GET /permissions/registry`.
 - Owner has full global access through dependency/resolver logic and does not
@@ -363,7 +366,16 @@ Current C05 status:
   production DB, did not read real env files, did not add grant/revoke UI or
   API, did not create production test accounts, and did not connect real
   business systems.
-- The next step is C05G permission-system seal.
+- C05G sealed the permission system. The sealed record confirms `/users` stays
+  owner-only, User Management stays owner full access only, owner remains
+  global full access, `super_admin` is not global by default, role defaults do
+  not auto-grant permissions, frontend permissions are UX only, and backend
+  `require_permission()` / `require_owner()` remain the security boundary.
+- C05 does not include grant/revoke API, permission assignment UI, complete
+  company/factory/department scope management, or real n8n/P-series/
+  WooCommerce/MinIO/Filebrowser business integration.
+- The next step is C06 for user permission management, or C18/later planning
+  for organization scope and business-module Permission Manifest rules.
 
 ## Temporary login preview
 

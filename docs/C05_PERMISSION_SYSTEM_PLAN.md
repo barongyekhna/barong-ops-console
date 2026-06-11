@@ -36,6 +36,11 @@ backend/frontend，在 production backend 容器内执行 Alembic `upgrade head`
 User Management 可见性。C05F 没有操作 production postgres 容器，没有直接连接 production
 DB，没有读取真实 env，没有接真实业务。
 
+C05G 已完成 C05 权限系统最终封板。C05G 的封板记录见
+`docs/C05_PERMISSION_SYSTEM_SEAL.md`。C05G 只归档 C05A-F 完成范围、最终权限模型、
+后端/前端状态、staging/production 验收摘要、安全边界和后续 C06/C18/业务模块接入规则；
+不新增功能，不发布 staging/production，不接真实业务，不新增 grant/revoke API 或权限分配 UI。
+
 ## 一、为什么要做权限系统
 
 C03 已经让 owner 可以创建内部子账户。C04 已经把标准 role 定清楚。
@@ -700,7 +705,8 @@ C05 暂不做：
 - C05F：production 发布归档。按 OPS01 safe release 流程发布 production
   backend/frontend，保留 rollback tag，并归档 production 只读验收结果。C05F 已完成，
   验收记录见 `docs/C05_PERMISSION_PRODUCTION_RELEASE.md`。
-- C05G：权限系统封板。下一步只归档最终行为、风险、未做范围和后续模块接入规则。
+- C05G：权限系统封板。C05G 已完成，封板记录见
+  `docs/C05_PERMISSION_SYSTEM_SEAL.md`。
 
 如果 C05B 发现 migration 风险高，可以再拆：
 
@@ -746,4 +752,5 @@ Super Admin 不是全局 owner，必须通过带 scope 的 assignment 获得管�
 新模块必须自带 Permission Manifest，注册时写入 Permission Registry，然后由 owner 或被授权的
 super_admin 分配给员工，后端 API 使用 `require_permission("module.action")` enforce。
 
-C05A 不实现。C05B-C05F 已完成。下一步是 C05G 权限系统封板，不进入 P 系列，不接真实业务。
+C05A 不实现。C05B-C05F 已完成。C05G 已完成权限系统封板。下一步是 C06 或 C18/业务模块
+接入前置规划，不进入 P 系列，不接真实业务。

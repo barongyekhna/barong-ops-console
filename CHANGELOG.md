@@ -6,6 +6,15 @@
 
 ### Added
 
+- C05G：新增 `docs/C05_PERMISSION_SYSTEM_SEAL.md`，归档 C05 权限系统最终封板结论；
+  明确 C05A-F 已形成完整闭环，staging 和 production 已完成验收，production 已发布并通过
+  owner 验收，下一步是 C06 或 C18/业务模块接入前置规划，不进入 P 系列，不接真实业务。
+- C05G：封板文档记录最终权限模型：role 只是基础身份，permission assignment 才是实际授权来源，
+  owner 全局全权限，`super_admin` 不默认全局权限，`role_default_permissions` 不自动生效，
+  scope 仅预留，未来业务模块必须带 Permission Manifest。
+- C05G：封板文档记录最终安全边界：`/users` 仍 owner-only，User Management 仍仅 owner full
+  access 可见，前端权限只是 UX，后端 `require_permission()` / `require_owner()` 仍是真实安全边界；
+  C05 不包含 grant/revoke API、权限分配 UI、完整组织 scope 管理或真实业务接入。
 - C05F：新增 `docs/C05_PERMISSION_PRODUCTION_RELEASE.md`，归档权限系统 production
   安全发布和验收；本轮使用 OPS01 safe release 发布 production backend/frontend，在
   production backend 容器内执行 Alembic `upgrade head` 到
@@ -137,6 +146,9 @@
 
 ### Changed
 
+- C05G：README、C05 权限系统计划、C05 staging 验收、C05 production 发布、C05 后端权限文档和
+  C05 前端权限文档更新为 C05 已封板；下一步是 C06 或 C18/业务模块接入前置规划，不是 P 系列，
+  不接 WooCommerce、n8n 真实业务流、MinIO、Filebrowser 或产品页业务模块。
 - C05F：README、C05 权限系统计划、C05 staging 验收、C05 后端权限文档和 C05 前端权限文档
   更新为 production 发布归档已完成；C05G 下一步是 C05 权限系统封板，不进入 P 系列，不接
   WooCommerce、n8n 真实业务流、MinIO、Filebrowser 或产品页业务模块。
