@@ -6,6 +6,24 @@
 
 ### Added
 
+- C07E：新增 `docs/C07_MODULE_STAGING_ACCEPTANCE.md`，归档 staging 模块隔离发布和
+  验收；本轮仅执行 staging backend/frontend safe release，未执行 Alembic，未操作
+  staging/production postgres，未读取真实 env，未发布 production，未接 K01/P 系列或
+  n8n/WooCommerce/MinIO/Filebrowser 真实业务。
+- C07E：staging backend safe release 成功，发布 C07B `/modules/registry` 和
+  `/modules/me` runtime；staging frontend safe release 成功，发布 C07C module-aware
+  navigation / route guard、ModuleAccessProvider 和精确 module proxy allowlist。
+- C07E：发布后 staging 未登录 `/modules/registry` 与 `/modules/me` 返回 401；
+  frontend proxy 精确放行 `/api/backend/modules/registry` 和
+  `/api/backend/modules/me`，危险 `/api/backend/modules/not-allowed` 仍 404；frontend
+  bundle marker 命中 module-aware navigation / route guard。
+- C07E：修复 frontend Docker verification stage，复制 `tests/frontend/` 到
+  `/tests/frontend/`，使 C07D verifier 可在 release image build 中检查
+  `tests/frontend/module-isolation.test.mjs`；runtime image 不复制测试目录。
+- C07E：记录 owner/non-owner live 登录验收限制。本轮未获得 approved staging owner
+  凭据，也未发现 active staging-only non-owner 测试账号；未创建账号、未 grant/update/
+  revoke staging assignment，相关 owner/non-owner 行为由 C07D Docker/Node tests 覆盖，
+  不伪造 staging 通过。
 - C07D：新增 `docs/C07_MODULE_ISOLATION_VERIFICATION.md`，归档模块隔离 verify/test
   体系；明确 C07D 只强化测试和只读 verifier，不实现 Module Adapter、Execution
   Provider、module switch、sandbox、审批门、密钥规则，不新增后端业务 API、前端业务 UI

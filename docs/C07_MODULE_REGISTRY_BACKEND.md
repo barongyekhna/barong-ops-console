@@ -23,6 +23,14 @@ API contract，没有新增后端 API 或 migration。
 validation、access state、K01/P 系列禁止、真实 provider 禁止和 C05/C06 回归固化为自动
 测试。C07D 没有修改后端 runtime contract，没有新增后端 API 或 migration。
 
+2026-06-11 C07E 补充：staging 模块隔离验收已归档在
+`docs/C07_MODULE_STAGING_ACCEPTANCE.md`。C07E 已将本文件的 C07B backend runtime 通过
+safe release 发布到 staging backend，未执行 Alembic，未操作 staging/production
+postgres，未读取真实 env，未发布 production。发布后未登录 `/modules/registry` 和
+`/modules/me` 均返回 401；owner/non-owner live login 因无 approved staging owner
+凭据和 active non-owner 测试账号未执行，相关 access-state 规则由
+`tests/backend/test_modules_registry.py` 的 Docker 回归覆盖。
+
 ## 实现范围
 
 新增后端集中模块 registry：
@@ -239,7 +247,22 @@ C07D 后端 contract 测试入口：
   `super_admin` 不默认全局、`/users` owner-only、`/auth/register` 404、
   `/permissions/me` 和 C06B assignment API 回归。
 
+## C07E staging 验收引用
+
+C07E 对本后端 contract 的 staging 结论：
+
+- staging backend safe release 成功。
+- 未执行 Alembic upgrade。
+- 未操作 staging postgres 容器或数据库。
+- 未登录 `GET /modules/registry` 返回 401。
+- 未登录 `GET /modules/me` 返回 401。
+- C07D Docker 后端测试覆盖 owner full access、non-owner admin/system hidden、
+  business locked/show_locked、planned/adapter_pending/unavailable 不可执行、
+  `/users` owner-only、`/auth/register` 404、`/permissions/me` 和 C06B assignment API。
+- K01/P 系列未进入 runtime registry，`integration.n8n_test_bridge` 保持
+  adapter_pending/test-only，未连接真实 provider。
+
 ## 下一步
 
-C07D 已完成本地 verify/test 体系。下一步才是 C07E staging 模块隔离验收；C07E 不应进入
+C07E staging 验收已归档。下一步是 C07F production 模块隔离发布归档；C07F 仍不得进入
 K01/P 系列或真实 provider 接入。

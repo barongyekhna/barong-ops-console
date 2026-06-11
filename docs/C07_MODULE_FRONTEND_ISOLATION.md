@@ -6,6 +6,16 @@ C07C 在 C07B 后端 Module Manifest / Registry API 已完成后，把前端导�
 路由保护接到模块 access state。C07C 只做前端 module-aware navigation / route guard，
 不接真实业务，不新增后端 API，不新增 migration，不发布 staging 或 production。
 
+2026-06-11 C07E 补充：staging 模块隔离验收已归档在
+`docs/C07_MODULE_STAGING_ACCEPTANCE.md`。C07E 已将本文件记录的 C07C frontend
+runtime 通过 safe release 发布到 staging frontend。发布后 `/login` 返回 200，
+frontend bundle 命中 `ModuleAccessProvider`、`modules/me`、`admin.users`、
+`admin.permissions`、`show_locked`、`Module unavailable`、`No permission`、
+`adapter_pending` 等 marker；frontend proxy 对
+`/api/backend/modules/registry` 和 `/api/backend/modules/me` 返回 backend 401，对
+`/api/backend/modules/not-allowed` 返回 404。C07E 未发布 production，未读取真实 env，
+未接 K01/P 系列或真实 provider。
+
 2026-06-11 C07D 补充：模块隔离 verify/test 体系已完成并归档在
 `docs/C07_MODULE_ISOLATION_VERIFICATION.md`。C07D 强化
 `tests/frontend/module-isolation.test.mjs` 和 `frontend/scripts/verify-foundation.mjs`，
@@ -176,5 +186,5 @@ action route marker。
 
 ## 下一步
 
-C07D 已完成本地 verify/test 体系。下一步才是 C07E：staging 模块隔离验收；C07E 仍不得
-接 K01/P 系列或真实 n8n/WooCommerce/MinIO/Filebrowser。
+C07E staging 模块隔离验收已归档。下一步是 C07F：production 模块隔离发布归档；C07F
+仍不得接 K01/P 系列或真实 n8n/WooCommerce/MinIO/Filebrowser。

@@ -30,6 +30,16 @@ external dependency 安全、planned/adapter_pending/unavailable 不可执行、
 以及 C05/C06 回归。C07D 不新增 API/UI/migration，不接真实业务，不发布 staging 或
 production。
 
+2026-06-11 C07E 更新：staging 模块隔离验收已在
+`docs/C07_MODULE_STAGING_ACCEPTANCE.md` 归档。C07E 仅执行 staging backend/frontend
+safe release，未执行 Alembic，未操作 staging/production postgres，未读取真实 env，
+未发布 production，未接 K01/P 系列或真实业务。staging 未登录 `/modules/registry`
+和 `/modules/me` 返回 401，frontend proxy 精确放行
+`/api/backend/modules/registry` 与 `/api/backend/modules/me`，不放开
+`/api/backend/modules/*` 宽通配。owner/non-owner live login 因无 approved staging
+owner 凭据和 active non-owner 测试账号未执行，相关 access-state 规则由 C07D Docker/
+Node tests 覆盖并在 C07E 文档中记录限制。
+
 ## 一、C07A 结论
 
 C07 可以开始。
@@ -868,7 +878,12 @@ C07D 仍不新增后端业务 API，不新增前端业务 UI，不新增 migrati
 - staging smoke/status 记录。
 - C05/C06 权限管理回归通过。
 
-当前状态：未开始。C07B 未发布 staging。
+当前状态：已完成 staging backend/frontend safe release，并记录在
+`docs/C07_MODULE_STAGING_ACCEPTANCE.md`。C07E 未执行 Alembic，未操作
+staging/production postgres，未读取真实 env，未发布 production，未接 K01/P 系列或
+真实业务。owner/non-owner live login 因无 approved staging owner 凭据和 active
+non-owner 测试账号未执行，已在验收文档中作为限制记录；C07D Docker/Node tests 覆盖
+对应 access-state 规则。
 
 ### C07F：production 模块隔离发布归档
 

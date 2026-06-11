@@ -11,9 +11,10 @@ read-only module registry foundation. C05C adds `require_permission()`,
 `/permissions/registry`; C06B adds owner-only assignment list/grant/update/
 revoke API while keeping `/users` owner-only. C07B adds authenticated
 `GET /modules/registry` and `GET /modules/me` without adding a migration or
-real business integration. C06E has released the C06B backend API to production,
-and C06F has sealed C06 in
-`docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
+real business integration. C07E has released the C07B backend runtime to
+staging and archived the result in `docs/C07_MODULE_STAGING_ACCEPTANCE.md`.
+C06E has released the C06B backend API to production, and C06F has sealed C06
+in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
 
 C01 production deployment is complete for
@@ -236,6 +237,16 @@ business locked state, `role_default_permissions`, `super_admin`,
 `/users`, `/auth/register`, `/permissions/me`, and C06B assignment APIs.
 C07D does not modify backend runtime code, add APIs, add migrations, connect
 providers, or release staging/production.
+
+C07E has released the backend module registry runtime to staging via safe
+release. Staging unauthenticated `GET /modules/registry` and `GET /modules/me`
+return 401. No Alembic upgrade was executed, no staging/production postgres
+container or database was modified, no real env file was read, production was
+not released, and no K01/P-series/provider/business flow was connected. Owner
+and non-owner live login API checks require approved staging credentials or a
+separately approved staging-only test account; this limitation is recorded in
+`docs/C07_MODULE_STAGING_ACCEPTANCE.md`, while the access-state contract remains
+covered by `tests/backend/test_modules_registry.py`.
 
 F12 adds the n8n test webhook bridge:
 

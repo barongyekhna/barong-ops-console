@@ -568,9 +568,31 @@ C07D has added the module-isolation verify/test system documented in
   migrations, K01, P-series, real provider connections, staging release, or
   production release.
 
+C07E has released the C07B/C07C runtime to staging and archived the acceptance
+in `docs/C07_MODULE_STAGING_ACCEPTANCE.md`:
+
+- Staging backend safe release completed for `console_staging_backend`.
+- Staging frontend safe release completed for `console_staging_frontend`.
+- No Alembic upgrade was executed, no staging/production postgres container was
+  modified, no real env file was read, and production was not released.
+- Staging unauthenticated `GET /modules/registry` and `GET /modules/me` return
+  401.
+- Staging frontend proxy precisely forwards `GET /api/backend/modules/registry`
+  and `GET /api/backend/modules/me` to backend auth, while broad
+  `/api/backend/modules/*` remains blocked.
+- Staging frontend bundle contains C07C module-aware provider and route guard
+  markers, including locked/no-permission and unavailable module states.
+- C05/C06 unauthenticated regressions remain intact: `/auth/me`,
+  `/permissions/me`, and `/users` return 401; `/auth/register` remains 404.
+- The release did not connect K01, P-series, n8n, WooCommerce, MinIO,
+  Filebrowser, Module Adapter, Execution Provider, or real business flows.
+- Owner/non-owner live login requests were not executed because no approved
+  staging owner credentials or active non-owner staging test account were
+  available. The same access-state rules remain covered by the C07D Docker and
+  frontend test suites.
+
 Recommended next split:
 
-- C07E: staging module isolation acceptance.
 - C07F: production module isolation release archive.
 - C07G: C07 module isolation seal.
 

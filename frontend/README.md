@@ -266,6 +266,20 @@ n8n/WooCommerce/MinIO/Filebrowser action markers are not default-enabled.
 C07D does not add runtime UI, K01/P-series menus, real provider connections,
 staging release, or production release.
 
+C07E has released the frontend module-aware runtime to staging and archived the
+acceptance in `docs/C07_MODULE_STAGING_ACCEPTANCE.md`. Staging `/login` returns
+200 after release, the linked bundle contains C07C module access provider and
+route-guard markers, `GET /api/backend/modules/registry` and
+`GET /api/backend/modules/me` are precisely allowed and reach backend auth
+401, and a broad `/api/backend/modules/not-allowed` path remains 404. No
+production release, Alembic upgrade, env read, postgres operation, K01/P-series
+menu, provider connection, or real business flow was performed.
+
+The frontend Docker verification stage now copies `tests/frontend/` to
+`/tests/frontend/` before running `npm run verify`, because the C07D verifier
+checks `tests/frontend/module-isolation.test.mjs` during image builds. The
+runtime image still only copies the built Next.js output and public assets.
+
 ## Configuration
 
 For host-based development, use the example backend URL:

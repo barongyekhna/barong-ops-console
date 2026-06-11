@@ -7,6 +7,7 @@ RUN npm ci --ignore-scripts
 FROM dependencies AS verification
 
 COPY frontend/ ./
+COPY tests/frontend/ /tests/frontend/
 RUN npm run verify
 RUN npm run typecheck
 
