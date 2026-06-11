@@ -1,4 +1,4 @@
-import { NextRequest } from "next/server";
+import type { NextRequest } from "next/server";
 
 const ALLOWED_AUTH_PATHS = new Set([
   "auth/login",
@@ -53,6 +53,12 @@ function isIntegerPathSegment(segment: string) {
   return /^[1-9]\d*$/.test(segment);
 }
 
+function isUuidPathSegment(segment: string) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    segment,
+  );
+}
+
 function isAllowedUsersPath(method: string, path: string[]) {
   if (path[0] !== "users") {
     return false;
@@ -81,6 +87,53 @@ function isAllowedUsersPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedPermissionPath(method: string, path: string[]) {
+  const requestedPath = path.join("/");
+
+  if (method === "GET" && ALLOWED_PERMISSION_PATHS.has(requestedPath)) {
+    return true;
+  }
+
+  if (path[0] !== "permissions" || path[1] !== "users") {
+    return false;
+  }
+
+  if (
+    path.length === 4 &&
+    isIntegerPathSegment(path[2]) &&
+    path[3] === "assignments"
+  ) {
+    return method === "GET" || method === "POST";
+  }
+
+  if (
+    path.length === 5 &&
+    isIntegerPathSegment(path[2]) &&
+    path[3] === "assignments" &&
+    isUuidPathSegment(path[4])
+  ) {
+    return method === "PATCH" || method === "DELETE";
+  }
+
+  return false;
+}
+
+export function isAllowedBackendProxyPath(method: string, path: string[]) {
+  const requestedPath = path.join("/");
+
+  return (
+    (method === "GET" && requestedPath === "health") ||
+    ALLOWED_AUTH_PATHS.has(requestedPath) ||
+    (method === "GET" && ALLOWED_LIST_PATHS.has(requestedPath)) ||
+    isAllowedPermissionPath(method, path) ||
+    (method === "POST" && requestedPath === "foundation-demo/run") ||
+    (method === "GET" && requestedPath === "foundation-demo/latest") ||
+    (method === "POST" && requestedPath === "n8n-test/run") ||
+    (method === "GET" && requestedPath === "n8n-test/latest") ||
+    isAllowedUsersPath(method, path)
+  );
+}
+
 async function proxyRequest(
   request: NextRequest,
   context: RouteContext,
@@ -88,29 +141,7 @@ async function proxyRequest(
   const { path } = await context.params;
   const requestedPath = path.join("/");
 
-  const isHealthPath = request.method === "GET" && requestedPath === "health";
-  const isAuthPath = ALLOWED_AUTH_PATHS.has(requestedPath);
-  const isListPath =
-    request.method === "GET" && ALLOWED_LIST_PATHS.has(requestedPath);
-  const isPermissionPath =
-    request.method === "GET" && ALLOWED_PERMISSION_PATHS.has(requestedPath);
-  const isFoundationDemoPath =
-    (request.method === "POST" && requestedPath === "foundation-demo/run") ||
-    (request.method === "GET" && requestedPath === "foundation-demo/latest");
-  const isN8nTestPath =
-    (request.method === "POST" && requestedPath === "n8n-test/run") ||
-    (request.method === "GET" && requestedPath === "n8n-test/latest");
-  const isUsersPath = isAllowedUsersPath(request.method, path);
-
-  if (
-    !isHealthPath &&
-    !isAuthPath &&
-    !isListPath &&
-    !isPermissionPath &&
-    !isFoundationDemoPath &&
-    !isN8nTestPath &&
-    !isUsersPath
-  ) {
+  if (!isAllowedBackendProxyPath(request.method, path)) {
     return Response.json({ detail: "Not found." }, { status: 404 });
   }
 
@@ -170,5 +201,9 @@ export function POST(request: NextRequest, context: RouteContext) {
 }
 
 export function PATCH(request: NextRequest, context: RouteContext) {
+  return proxyRequest(request, context);
+}
+
+export function DELETE(request: NextRequest, context: RouteContext) {
   return proxyRequest(request, context);
 }

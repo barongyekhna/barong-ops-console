@@ -244,6 +244,36 @@ C06B 沿用现有 `backend/app/repositories/operation_logs.py` 的
 - C06B 不发布 staging 或 production。
 - C06B 不接真实业务。
 
+## 七点五、C06C 前端接入状态
+
+C06C 已在前端接入本文件记录的 C06B API：
+
+- User Management 用户行新增“权限”入口。
+- 用户详情区域新增“用户权限管理”面板。
+- 前端通过 `GET /permissions/users/{user_id}/assignments` 读取 explicit assignments。
+- 前端通过 `POST /permissions/users/{user_id}/assignments` grant assignment。
+- 前端通过 `PATCH /permissions/users/{user_id}/assignments/{assignment_id}` update
+  enabled、expires_at、scope 和 reason。
+- 前端通过 `DELETE /permissions/users/{user_id}/assignments/{assignment_id}` revoke
+  assignment。
+- 前端通过 `GET /permissions/registry` 读取可授予的 permission key。
+- frontend proxy 已精确放行上述 assignment API，`user_id` 限定正整数，
+  `assignment_id` 限定 UUID，不开放通用 permissions proxy。
+- 前端 high-risk 判断和二次确认 UI 与 C06B 规则保持一致。
+
+C06C 没有改变后端：
+
+- 没有新增后端 API。
+- 没有新增 migration。
+- 没有新增 grant/revoke 后端逻辑。
+- 没有改变 `/users` owner-only。
+- 没有让 `super_admin` 默认拥有 grant/revoke。
+- 没有让 `role_default_permissions` 自动生效。
+- 没有发布 staging 或 production。
+
+operation_logs 仍由 C06B 后端记录。C06C 只传 reason、`confirm_high_risk` 和
+`confirmation_text`。
+
 ## 八、测试覆盖
 
 新增 `tests/backend/test_permission_assignments_api.py` 覆盖：
@@ -270,7 +300,6 @@ C06B 沿用现有 `backend/app/repositories/operation_logs.py` 的
 
 ## 九、下一步
 
-- C06C：前端 User Management 内的用户权限管理 UI。
 - C06D：staging 验收。
 - C06E：production 发布归档。
 - C06F：C06 权限管理封板。

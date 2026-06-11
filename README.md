@@ -244,8 +244,8 @@ Current C04 status:
 C04 remains foundation/console only. It does not connect real n8n, P-series,
 WooCommerce, MinIO, Filebrowser, products, orders, or business tasks.
 C04 is sealed. OPS01 Docker Compose v1 `ContainerConfig` cleanup is also
-sealed. C05 is sealed, and C06A has started user permission management
-planning.
+sealed. C05 is sealed, and C06C has added the frontend user permission
+management UI after C06B backend assignment APIs.
 
 ## OPS01 Docker Compose governance
 
@@ -381,11 +381,12 @@ not P-series work and not real business onboarding.
 ## C06 user permission management
 
 C06A started with `docs/C06_PERMISSION_MANAGEMENT_PLAN.md` as the read-only
-audit and design stage for owner-managed user permission assignment. C06B has
-now added the backend owner-only assignment API documented in
-`docs/C06_PERMISSION_BACKEND_ACCESS.md`. C06B does not implement a frontend
-permission assignment UI, does not add migrations, does not release staging or
-production, and does not connect real business systems.
+audit and design stage for owner-managed user permission assignment. C06B
+added the backend owner-only assignment API documented in
+`docs/C06_PERMISSION_BACKEND_ACCESS.md`. C06C has now added the frontend User
+Management permission UI documented in `docs/C06_PERMISSION_FRONTEND_UI.md`.
+C06C does not add backend APIs, does not add migrations, does not release
+staging or production, and does not connect real business systems.
 
 C06 is scoped to user permission management after the C05 permission-system
 seal:
@@ -393,6 +394,8 @@ seal:
 - owner can view a user's permission assignments.
 - owner can grant, revoke, and update permission assignments through the C06B
   backend API.
+- owner can use the C06C User Management UI to view assignments, grant,
+  update, disable/enable, and revoke explicit assignments for non-owner users.
 - assignment changes write `operation_logs`.
 - high-risk permissions require explicit secondary confirmation with
   `CONFIRM_HIGH_RISK_PERMISSION`.
@@ -410,7 +413,8 @@ Planned split:
 
 - C06B: backend owner-only assignment list/grant/revoke/update API and tests
   are implemented.
-- C06C: frontend permission management UI inside User Management and tests.
+- C06C: frontend permission management UI inside User Management and tests are
+  implemented.
 - C06D: staging permission-management acceptance.
 - C06E: production permission-management release archive.
 - C06F: C06 permission-management seal.

@@ -6,6 +6,12 @@
 
 ### Added
 
+- C06C：新增 User Management 内的前端“用户权限管理”UI；owner 可从用户行“权限”入口打开用户详情权限面板，查看 explicit assignments，给非 owner 用户 grant permission，更新 enabled/expires_at/scope/reason，撤销 assignment，并在 revoke 后刷新列表。
+- C06C：新增前端 permission management helper 和 API client，覆盖 `PermissionAssignment`、`PermissionAssignmentListResponse`、`PermissionAssignmentCreateInput`、`PermissionAssignmentUpdateInput`、`PermissionAssignmentActionResponse`、`PermissionRegistryItem`，并通过现有 `/api/backend` proxy 调用 C06B 的 list/grant/update/revoke assignment API 和 `/permissions/registry`。
+- C06C：新增 high-risk 前端识别和二次确认 UI；按 C06B 规则识别 high/critical、users/permissions/settings/system/secrets/release/production/billing/admin 类权限，high-risk grant 要求 reason、`confirm_high_risk=true` 和 `confirmation_text="CONFIRM_HIGH_RISK_PERMISSION"`，high-risk re-enable/scope change update 要求确认，high-risk revoke 要求 reason。
+- C06C：frontend proxy 精确放行 `GET/POST /permissions/users/{user_id}/assignments` 与 `PATCH/DELETE /permissions/users/{user_id}/assignments/{assignment_id}`，保留 `user_id` 正整数和 `assignment_id` UUID 校验，不开放通用 permissions proxy；frontend verifier 增加 C06B assignment proxy 防回归检查。
+- C06C：新增 `tests/frontend/permission-management.test.mjs`，使用 Node 内置 test runner 覆盖 assignment API path、proxy allowlist、high-risk 识别、wildcard grant 阻断、role defaults 不自动生效文案、owner/non-owner 入口、owner full access target、空状态、grant/update/revoke 校验、revoke refresh 和安全错误摘要。
+- C06C：新增 `docs/C06_PERMISSION_FRONTEND_UI.md`，归档 C06C 前端 UI、API client、proxy allowlist、high-risk 确认、operation_logs 分工、owner-only 边界、`role_default_permissions` 和 `super_admin` 边界，以及未发布 staging/production、未新增后端 API/migration、未接真实业务的范围。
 - C06B：新增 owner-only permission assignment 后端管理 API：
   `GET /permissions/users/{user_id}/assignments`、
   `POST /permissions/users/{user_id}/assignments`、
@@ -187,6 +193,7 @@
 
 ### Changed
 
+- C06C：README、frontend README、C06 permission management plan 和 C06 backend access 文档更新为 C06C 前端权限管理 UI 已实现；继续明确 `/users` 后端仍 owner-only，User Management 和权限管理入口仍仅 owner full access 可见，`super_admin` 不默认 grant/revoke，`role_default_permissions` 不自动生效，C06C 不新增后端 API/migration、不发布 staging/production、不接真实业务。
 - C06B：README、backend README 和 C06 permission management plan 更新为 C06B 后端
   owner-only assignment API 已实现；继续明确本阶段不新增 migration、不做前端权限分配
   UI、不发布 staging/production、不接真实业务，`/users` 仍 owner-only，

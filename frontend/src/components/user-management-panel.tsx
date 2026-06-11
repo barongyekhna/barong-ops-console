@@ -10,6 +10,7 @@ import {
   RotateCcw,
   Save,
   ShieldAlert,
+  ShieldCheck,
   UserRoundCog,
 } from "lucide-react";
 import {
@@ -21,6 +22,7 @@ import {
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { UserPermissionsPanel } from "@/components/user-permissions-panel";
 import { isOwnerFullAccess } from "@/lib/permissions";
 import {
   MANAGED_USER_ROLES,
@@ -374,6 +376,24 @@ export function UserManagementPanel() {
     clearActionMessages();
     if (expandedUser?.id === target.id) {
       setExpandedUser(null);
+      return;
+    }
+
+    setPendingAction(`detail-${target.id}`);
+    try {
+      await refreshDetail(target.id);
+    } catch (error) {
+      setActionError(
+        formatUsersApiError(error, "The user detail could not be loaded."),
+      );
+    } finally {
+      setPendingAction(null);
+    }
+  }
+
+  async function handleOpenPermissions(target: ManagedUser) {
+    clearActionMessages();
+    if (expandedUser?.id === target.id) {
       return;
     }
 
@@ -874,6 +894,25 @@ export function UserManagementPanel() {
                             )}
                           </button>
 
+                          <button
+                            className="secondary-button"
+                            disabled={isBusy}
+                            onClick={() => void handleOpenPermissions(target)}
+                            title="权限管理"
+                            type="button"
+                          >
+                            {pendingAction === `detail-${target.id}` ? (
+                              <LoaderCircle
+                                className="spin"
+                                aria-hidden="true"
+                                size={17}
+                              />
+                            ) : (
+                              <ShieldCheck aria-hidden="true" size={17} />
+                            )}
+                            权限
+                          </button>
+
                           {target.is_active ? (
                             <button
                               className="secondary-button"
@@ -1056,6 +1095,8 @@ export function UserManagementPanel() {
               agent roles.
             </p>
           )}
+
+          <UserPermissionsPanel targetUser={expandedUser} />
         </section>
       ) : null}
     </section>

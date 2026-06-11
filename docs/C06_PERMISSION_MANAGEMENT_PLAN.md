@@ -13,6 +13,11 @@ C06B 已实现后端 owner-only permission assignment 管理 API，记录文件�
 后端 API、service/repository/schema、operation_logs 和后端测试；不新增 migration，
 不实现前端 UI，不发布 staging/production，不接真实业务。
 
+C06C 已实现前端 User Management 内的用户权限管理 UI，记录文件为
+`docs/C06_PERMISSION_FRONTEND_UI.md`。C06C 新增前端 assignment/registry helper、
+API client、权限管理面板、high-risk 二次确认 UI、frontend proxy 精确 allowlist 和
+前端测试；不新增后端 API，不新增 migration，不发布 staging/production，不接真实业务。
+
 ## 一、C06A 结论
 
 - C06 可以开始。
@@ -63,8 +68,46 @@ C06B 仍不做：
 - 不执行 safe release。
 - 不接 WooCommerce、n8n 真实业务流、MinIO、Filebrowser、产品页或 P 系列。
 
-后续拆分保持不变：C06C 做前端权限管理 UI，C06D 做 staging 验收，C06E 做
-production 发布归档，C06F 做 C06 封板。
+后续拆分更新为：C06D 做 staging 验收，C06E 做 production 发布归档，C06F 做
+C06 封板。
+
+## 一点六、C06C 实现状态
+
+C06C 已完成前端实现：
+
+- User Management 用户行新增“权限”入口。
+- 用户详情区域新增“用户权限管理”面板。
+- 前端新增 `PermissionAssignment`、`PermissionAssignmentListResponse`、
+  `PermissionAssignmentCreateInput`、`PermissionAssignmentUpdateInput`、
+  `PermissionAssignmentActionResponse` 和 `PermissionRegistryItem` 等类型。
+- 前端新增 `listUserPermissionAssignments()`、`grantUserPermissionAssignment()`、
+  `updateUserPermissionAssignment()`、`revokeUserPermissionAssignment()` 和
+  `listPermissionRegistry()`。
+- 权限管理入口仍只对 owner full access 可见。
+- 非 owner 看不到 User Management，也看不到权限管理入口。
+- owner 目标用户显示 full access 提示，不渲染为普通 assignment，不显示普通 grant/
+  update/revoke 操作。
+- assignment 空列表显示“暂无显式授权”。
+- grant 表单读取 `/permissions/registry`，支持搜索 key/name/category/module/action/risk，
+  支持 scope、expires_at、reason 和 enabled 默认 true。
+- wildcard `*` 不出现在可授予选项中，helper 也会阻断 wildcard grant。
+- high-risk grant/update/revoke 有二次确认或原因要求；缺少确认时前端不发送请求。
+- revoke 使用 C06B `DELETE` API，成功后刷新 assignment 列表。
+- frontend proxy 精确放行 C06B assignment API，不开放通用 permissions proxy。
+- 新增 `tests/frontend/permission-management.test.mjs` 覆盖 C06C helper/proxy/UI 逻辑。
+- `/users` 后端仍保持 owner-only。
+- `super_admin` 仍不默认拥有 grant/revoke 能力。
+- `role_default_permissions` 仍不自动生效。
+
+C06C 仍不做：
+
+- 不新增后端 API。
+- 不新增 migration。
+- 不新增后端 grant/revoke 逻辑，C06B 已完成。
+- 不发布 staging。
+- 不发布 production。
+- 不执行 safe release。
+- 不接 WooCommerce、n8n 真实业务流、MinIO、Filebrowser、产品页或 P 系列。
 
 ## 二、C06 总目标
 
@@ -799,6 +842,8 @@ UI 边界：
 - 不接真实业务。
 
 ### C06C：前端 UI 与测试
+
+状态：已实现，待代码审核和后续 C06D staging 验收。
 
 允许：
 

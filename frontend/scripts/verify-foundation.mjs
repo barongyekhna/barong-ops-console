@@ -146,6 +146,21 @@ for (const permissionsPath of ["permissions/me", "permissions/registry"]) {
   }
 }
 
+for (const assignmentProxyCheck of [
+  'path[1] !== "users"',
+  'path[3] === "assignments"',
+  'method === "GET" || method === "POST"',
+  'method === "PATCH" || method === "DELETE"',
+  "isUuidPathSegment",
+  "export function DELETE",
+]) {
+  if (!backendProxySource.includes(assignmentProxyCheck)) {
+    throw new Error(
+      "The backend API proxy must precisely allow C06B permission assignment APIs.",
+    );
+  }
+}
+
 if (
   !backendProxySource.includes('requestedPath === "health"') ||
   !backendProxySource.includes('new URL(`/${requestedPath}`, getApiBaseUrl())')

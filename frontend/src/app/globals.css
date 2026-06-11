@@ -32,7 +32,8 @@ body {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -277,7 +278,8 @@ a {
 button:focus-visible,
 a:focus-visible,
 input:focus-visible,
-select:focus-visible {
+select:focus-visible,
+textarea:focus-visible {
   outline: 3px solid rgb(32 180 134 / 28%);
   outline-offset: 2px;
 }
@@ -586,6 +588,31 @@ select:focus-visible {
   background: transparent;
   border: 0;
   outline: 0;
+}
+
+.textarea-shell {
+  min-height: 96px;
+  display: flex;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #cfd4d1;
+  border-radius: 6px;
+}
+
+.textarea-shell:focus-within {
+  border-color: var(--signal-dark);
+  box-shadow: 0 0 0 3px rgb(32 180 134 / 12%);
+}
+
+.textarea-shell textarea {
+  width: 100%;
+  min-height: 72px;
+  padding: 0;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  outline: 0;
+  resize: vertical;
 }
 
 .form-message {
@@ -1245,6 +1272,237 @@ select:focus-visible {
   gap: 12px;
 }
 
+.permissions-panel {
+  display: grid;
+  gap: 18px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.permissions-owner-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 15px;
+  color: #16382e;
+  background: #e8f7f1;
+  border: 1px solid #bee5d7;
+  border-radius: 6px;
+}
+
+.permissions-owner-note h4,
+.permissions-section-heading h4 {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.permissions-owner-note p,
+.permissions-section-heading p {
+  max-width: 720px;
+  margin: 6px 0 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.permissions-grant-section,
+.permissions-assignment-section {
+  display: grid;
+  gap: 14px;
+}
+
+.permissions-grant-form,
+.permissions-edit-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  align-items: start;
+}
+
+.permissions-search-field,
+.permissions-reason-field,
+.permissions-risk-box,
+.permissions-submit-button {
+  grid-column: 1 / -1;
+}
+
+.permissions-enabled-field {
+  align-self: end;
+}
+
+.permissions-checkbox-line {
+  min-height: 40px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: #3f4743;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.permissions-checkbox-line input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--signal-dark);
+}
+
+.permissions-risk-box {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 13px 15px;
+  color: #76510f;
+  background: #fff8e4;
+  border: 1px solid #e9d28a;
+  border-radius: 6px;
+}
+
+.permissions-risk-box strong {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  line-height: 1.45;
+}
+
+.permissions-empty {
+  min-height: 110px;
+}
+
+.permissions-table-scroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.permissions-table {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: collapse;
+  font-size: 0.78rem;
+}
+
+.permissions-table th,
+.permissions-table td {
+  padding: 13px 14px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--line);
+}
+
+.permissions-table th {
+  color: var(--muted);
+  background: #f7f9f8;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.permissions-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.permissions-table td {
+  min-width: 150px;
+}
+
+.permissions-table td:first-child {
+  min-width: 250px;
+}
+
+.permissions-table td strong,
+.permissions-table td span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.permissions-table td strong {
+  font-size: 0.82rem;
+}
+
+.permissions-table td span {
+  margin-top: 5px;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.permissions-risk-badge,
+.permissions-effective {
+  width: fit-content;
+  min-height: 22px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 7px;
+  border-radius: 4px;
+  font-size: 0.64rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.permissions-risk-badge {
+  color: #4c5550;
+  background: #eef2f0;
+  border: 1px solid #dbe1de;
+}
+
+.permissions-risk-high {
+  color: #9f2f2f;
+  background: #fff1f1;
+  border-color: #e2bcbc;
+}
+
+.permissions-effective-on {
+  color: #087c5e;
+  background: #e5f6ef;
+  border: 1px solid #bde7d6;
+}
+
+.permissions-effective-off {
+  color: #76510f;
+  background: #fff8e4;
+  border: 1px solid #e9d28a;
+}
+
+.permissions-table td .users-status,
+.permissions-table td .permissions-risk-badge,
+.permissions-table td .permissions-effective {
+  display: inline-flex;
+}
+
+.permissions-table td .users-status-active,
+.permissions-table td .permissions-effective-on {
+  color: #087c5e;
+}
+
+.permissions-table td .users-status-disabled {
+  color: #8a3a28;
+}
+
+.permissions-table td .permissions-risk-badge {
+  color: #4c5550;
+}
+
+.permissions-table td .permissions-risk-high {
+  color: #9f2f2f;
+}
+
+.permissions-table td .permissions-effective-off {
+  color: #76510f;
+}
+
+.permissions-action-stack {
+  display: grid;
+  gap: 10px;
+}
+
+.permissions-revoke-field .input-shell {
+  height: 40px;
+}
+
+.permissions-edit-row td {
+  background: #f7f9f8;
+}
+
 @media (max-width: 900px) {
   .login-page {
     grid-template-columns: 1fr;
@@ -1304,7 +1562,9 @@ select:focus-visible {
 
   .users-form-grid,
   .users-role-catalog-grid,
-  .user-detail-grid {
+  .user-detail-grid,
+  .permissions-grant-form,
+  .permissions-edit-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1369,7 +1629,9 @@ select:focus-visible {
   .users-form-grid,
   .users-role-catalog-grid,
   .user-detail-grid,
-  .users-role-form {
+  .users-role-form,
+  .permissions-grant-form,
+  .permissions-edit-form {
     grid-template-columns: 1fr;
   }
 

@@ -164,15 +164,35 @@ not add permission grant/revoke management, and it still does not connect real
 n8n, P-series, WooCommerce, MinIO, Filebrowser, products, orders, or business
 tasks.
 
-C05 has been sealed in `docs/C05_PERMISSION_SYSTEM_SEAL.md`, and C06A has
-started user permission management planning in
-`docs/C06_PERMISSION_MANAGEMENT_PLAN.md`. C06A is documentation-only. It
-recommends adding the first permission management UI inside User Management in
-a later C06C task, using `/permissions/registry` for selectable permission
-keys and new C06B owner-only assignment APIs for per-user assignment state.
-The current frontend still has no permission grant/revoke UI, User Management
-still requires owner full access, and frontend permission checks remain UX
-only rather than the security boundary.
+C05 has been sealed in `docs/C05_PERMISSION_SYSTEM_SEAL.md`. C06A documented
+the user permission management plan in
+`docs/C06_PERMISSION_MANAGEMENT_PLAN.md`, C06B added the owner-only backend
+assignment APIs in `docs/C06_PERMISSION_BACKEND_ACCESS.md`, and C06C has added
+the frontend User Management permission UI in
+`docs/C06_PERMISSION_FRONTEND_UI.md`.
+
+C06C keeps User Management owner-only. The `/users` entry remains visible only
+when `permissions.is_owner_full_access=true`, and the permission management
+entry is only available inside that owner-only page. The user row “权限” button
+opens the user detail area, where the “用户权限管理” panel lists explicit
+assignments, shows owner full access as a note rather than a normal
+assignment, and lets owner grant, update, disable/enable, and revoke
+assignments for non-owner users.
+
+The C06C UI reads selectable permission keys from `/permissions/registry` and
+uses the C06B APIs under `/permissions/users/{user_id}/assignments`. High-risk
+grant and high-risk re-enable or scope changes require reason,
+`confirm_high_risk=true`, and
+`confirmation_text="CONFIRM_HIGH_RISK_PERMISSION"`. High-risk revoke requires
+reason. Wildcard `*` is not shown as a grant option. Role default permissions
+still do not auto-apply, and `super_admin` still does not default to
+grant/revoke.
+
+The restricted proxy now precisely allows the C06B assignment paths in
+addition to the existing `/permissions/me` and `/permissions/registry` paths.
+Frontend permission checks remain UX only; backend `require_owner()` and the
+C06B owner-only APIs are still the security boundary. C06C does not publish
+staging or production and does not connect real business systems.
 
 ## Configuration
 
