@@ -15,6 +15,13 @@ schema、registry validation、`GET /modules/registry` 和 `GET /modules/me`，�
 Module Adapter、Execution Provider、module switch、sandbox、n8n/WooCommerce/MinIO/
 Filebrowser 接入、K01、P 系列或真实业务。
 
+2026-06-11 C07C 更新：前端 module-aware navigation / route guard 已在
+`docs/C07_MODULE_FRONTEND_ISOLATION.md` 归档。C07C 新增前端 module registry 类型、
+API client、纯 helper、module access provider、module-aware sidebar 和 route guard，
+精确放行 `GET /modules/registry` 与 `GET /modules/me`，继续不实现 Module Adapter、
+Execution Provider、模块开关、sandbox、n8n/WooCommerce/MinIO/Filebrowser 接入、K01、
+P 系列或真实业务。
+
 ## 一、C07A 结论
 
 C07 可以开始。
@@ -776,8 +783,13 @@ C07B 仍不新增 migration，不新增 frontend UI，不接真实业务，不�
 - User Management / Permission Management 仍 owner-only。
 - 未注册/未启用模块不可触发动作。
 
-当前状态：未开始。C07B 只提供后端 registry 和 access-state API，不改 frontend
-runtime。
+当前状态：已完成并记录在 `docs/C07_MODULE_FRONTEND_ISOLATION.md`。C07C 已将当前
+前端导航项绑定到 C07B namespaced `module_key`，新增 `/modules/me` access state
+读取和安全降级，支持 locked/planned/adapter_pending/unavailable 展示，并让 route guard
+按 module route namespace 展示 No Permission 或 Module Unavailable。
+
+C07C 仍不新增真实业务页面，不接 K01/P 系列，不接 n8n/WooCommerce/MinIO/Filebrowser，
+不新增后端 API，不新增 migration，不发布 staging 或 production。
 
 ### C07D：模块隔离 verify/test 体系
 

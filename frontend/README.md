@@ -212,15 +212,38 @@ high-risk confirmation remains in the UI, and frontend checks remain UX only.
 The backend owner-only C06B APIs, `require_owner()`, and `require_permission()`
 remain the real security boundary.
 
-C07A has started module-isolation planning in
-`docs/C07_MODULE_ISOLATION_PLAN.md`. C07A is docs-only and does not change the
-frontend runtime. Future C07C work should make navigation and route guards
-module-aware so navigation items bind to Module Manifest metadata, business
-modules default to `show_locked`, admin/system modules default to
-`hide_when_denied`, and disabled/unavailable/adapter-pending modules cannot
-trigger real actions. C07A does not add new UI, does not add module adapter
-runtime, does not relax the restricted backend proxy, does not connect n8n,
-WooCommerce, MinIO, Filebrowser, K01, P-series work, or real business flows.
+C07A started module-isolation planning in
+`docs/C07_MODULE_ISOLATION_PLAN.md`, and C07B added the backend Module Manifest
+v1 / registry APIs documented in `docs/C07_MODULE_REGISTRY_BACKEND.md`.
+C07C has now added frontend module-aware navigation and route guards
+documented in `docs/C07_MODULE_FRONTEND_ISOLATION.md`.
+
+The frontend calls `GET /modules/registry` and `GET /modules/me` only through
+the restricted same-origin backend proxy. The proxy precisely allows those two
+C07B paths and does not open a `/modules/*` wildcard. If `/modules/me` is not
+available, the console marks module access as unknown, falls back to the
+C05/C06 permission strategy, and keeps admin/system modules hidden from
+non-owner users.
+
+Navigation items now bind to C07B namespaced module keys. User Management maps
+to `admin.users`; Permission Management remains an owner-only panel inside
+User Management and is recorded as `admin.permissions`; dashboard maps to
+`core.dashboard`; current foundation business placeholders map to
+`business.products`, `business.jobs`, `business.artifacts`, and
+`business.reviews`.
+
+The sidebar displays safe module states only: locked, planned,
+adapter_pending, and unavailable. It does not display env values, URLs,
+secrets, tokens, credentials, or internal dependency details. The route guard
+uses module route namespaces, shows no-permission notices for hidden/locked
+modules, and shows “模块暂不可用” for planned/adapter_pending/unavailable
+modules. User Management and Permission Management remain visible only to owner
+full access.
+
+C07C does not add real business pages, does not add K01 or P-series menus,
+does not connect n8n, WooCommerce, MinIO, Filebrowser, product flows, or real
+business tasks, does not implement Module Adapter or Execution Provider, and
+does not publish staging or production.
 
 ## Configuration
 

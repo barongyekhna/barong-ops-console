@@ -746,14 +746,49 @@ textarea:focus-visible {
   color: #8b938f;
 }
 
+.navigation-link.unavailable {
+  color: #858f8a;
+}
+
 .navigation-link.locked:hover {
   color: #ffffff;
   border-color: #4b4033;
 }
 
+.navigation-link.unavailable:hover {
+  color: #ffffff;
+  border-color: #3d4944;
+}
+
 .navigation-lock {
   margin-left: auto;
   color: #d5a14c;
+}
+
+.navigation-status-badge {
+  min-width: 0;
+  margin-left: auto;
+  padding: 2px 5px;
+  color: #cad2cd;
+  background: #202724;
+  border: 1px solid #35413c;
+  border-radius: 5px;
+  font-size: 0.62rem;
+  font-weight: 750;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.navigation-status-badge.locked {
+  color: #d5a14c;
+  background: #2b251b;
+  border-color: #4b4033;
+}
+
+.navigation-status-badge.planned,
+.navigation-status-badge.adapter_pending,
+.navigation-status-badge.unavailable {
+  color: #9fb0a8;
 }
 
 .sidebar-footer {
@@ -764,6 +799,7 @@ textarea:focus-visible {
   color: #76807c;
   border-top: 1px solid #2b302e;
   font-size: 0.68rem;
+  line-height: 1.35;
 }
 
 .environment-dot {
@@ -965,6 +1001,12 @@ textarea:focus-visible {
   background: #fff2d7;
   border: 1px solid #ebd19e;
   border-radius: 6px;
+}
+
+.permission-denied-icon-muted {
+  color: #355249;
+  background: #e7f3ee;
+  border-color: #b8d5c9;
 }
 
 .permission-denied h2 {

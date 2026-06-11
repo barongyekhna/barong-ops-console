@@ -4,9 +4,13 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { NoPermissionNotice } from "@/components/no-permission-notice";
-import { navigationItems } from "@/lib/navigation";
-import { getRoutePermissionDecision } from "@/lib/permissions";
+import { useModuleAccess } from "@/components/module-access-provider";
+import {
+  ModuleUnavailableNotice,
+  NoPermissionNotice,
+} from "@/components/no-permission-notice";
+import { navigationModuleRecords } from "@/lib/navigation";
+import { getModuleRouteDecision } from "@/lib/module-registry";
 
 export function PermissionRouteGuard({
   children,
@@ -15,13 +19,20 @@ export function PermissionRouteGuard({
 }) {
   const pathname = usePathname();
   const { user } = useAuth();
-  const decision = getRoutePermissionDecision(
+  const { items, moduleAccessUnknown } = useModuleAccess();
+  const decision = getModuleRouteDecision(
     user?.permissions,
     pathname,
-    navigationItems,
+    navigationModuleRecords,
+    items,
+    { moduleAccessUnknown },
   );
 
-  if (decision.isProtected && !decision.canAccess) {
+  if (decision.isProtected && !decision.canEnter) {
+    if (decision.noticeType === "module_unavailable") {
+      return <ModuleUnavailableNotice />;
+    }
+
     return <NoPermissionNotice />;
   }
 

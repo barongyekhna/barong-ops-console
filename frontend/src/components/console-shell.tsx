@@ -6,13 +6,26 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { useModuleAccess } from "@/components/module-access-provider";
 import { navigationGroups, pageTitles } from "@/lib/navigation";
-import { getPermissionAccessState } from "@/lib/permissions";
+import { getNavigationStateForModule } from "@/lib/module-registry";
+
+const MODULE_BADGE_LABELS = {
+  adapter_pending: "Adapter pending",
+  locked: "Locked",
+  planned: "Planned",
+  unavailable: "Unavailable",
+} as const;
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
+  const {
+    error: moduleAccessError,
+    items: moduleAccessItems,
+    moduleAccessUnknown,
+  } = useModuleAccess();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
   const visibleNavigationGroups = navigationGroups
@@ -21,7 +34,12 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       items: group.items
         .map((item) => ({
           ...item,
-          access: getPermissionAccessState(user?.permissions, item),
+          access: getNavigationStateForModule(
+            user?.permissions,
+            item,
+            moduleAccessItems,
+            { moduleAccessUnknown },
+          ),
         }))
         .filter((item) => item.access.isVisible),
     }))
@@ -62,22 +80,28 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                 const Icon = item.icon;
                 const active = pathname === item.href;
                 const locked = item.access.isLocked;
+                const unavailable = item.access.isUnavailable;
+                const badge = item.access.badge;
 
                 return (
                   <Link
                     aria-current={active ? "page" : undefined}
                     aria-label={
-                      locked ? `${item.label} locked` : item.label
+                      badge
+                        ? `${item.label} ${MODULE_BADGE_LABELS[badge]}`
+                        : item.label
                     }
                     className={`navigation-link ${active ? "active" : ""} ${
                       locked ? "locked" : ""
-                    }`}
+                    } ${unavailable ? "unavailable" : ""}`}
                     href={item.href}
                     key={item.href}
                     onClick={() => setIsNavigationOpen(false)}
                     title={
                       locked
                         ? "No permission for this section"
+                        : unavailable
+                          ? "Module unavailable"
                         : item.label
                     }
                   >
@@ -90,6 +114,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                         size={14}
                       />
                     ) : null}
+                    {!locked && badge ? (
+                      <span className={`navigation-status-badge ${badge}`}>
+                        {MODULE_BADGE_LABELS[badge]}
+                      </span>
+                    ) : null}
                   </Link>
                 );
               })}
@@ -99,7 +128,9 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
         <div className="sidebar-footer">
           <span className="environment-dot" />
-          Foundation environment
+          {moduleAccessUnknown
+            ? (moduleAccessError?.message ?? "Module access fallback")
+            : "Foundation environment"}
         </div>
       </aside>
 

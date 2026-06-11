@@ -11,6 +11,12 @@ C07B 不接真实业务，不实现 Module Adapter，不实现 Execution Provide
 sandbox，不实现模块开关，不实现审批门，不实现密钥规则，不接 n8n、WooCommerce、
 MinIO、Filebrowser，不接 K01，不接 P 系列，不发布 staging 或 production。
 
+2026-06-11 C07C 补充：前端 module-aware navigation / route guard 已完成并归档在
+`docs/C07_MODULE_FRONTEND_ISOLATION.md`。C07C 通过 frontend proxy 调用本文件记录的
+`GET /modules/registry` 和 `GET /modules/me`，将 sidebar、No Permission、Module
+Unavailable 和 route namespace guard 对齐到 C07B access state。C07C 没有修改本后端
+API contract，没有新增后端 API 或 migration。
+
 ## 实现范围
 
 新增后端集中模块 registry：
@@ -190,13 +196,21 @@ C07B 明确不做：
 - 不发布 staging。
 - 不发布 production。
 
+## C07C 前端接入引用
+
+C07C 已消费本文件提供的后端 contract：
+
+- `GET /modules/registry`：用于前端类型和 navigation registry 对齐测试。
+- `GET /modules/me`：用于当前用户 module access state。
+- `access_state="locked"`：business denied 时 sidebar 显示 locked，route guard 显示无权访问。
+- `access_state="hidden"`：admin/system denied 时 sidebar 隐藏，直接访问显示无权访问。
+- `access_state="planned"`、`adapter_pending`、`unavailable`：显示模块暂不可用，不触发真实动作。
+
+C07C 仍保持 User Management / Permission Management owner-only，继续不接真实业务、
+不接 K01/P 系列、不接 n8n/WooCommerce/MinIO/Filebrowser、不实现 Module Adapter 或
+Execution Provider。
+
 ## 下一步
 
-C07C 应在前端接入 module-aware navigation / route guard：
-
-- 导航项绑定后端 module metadata。
-- route guard 支持 namespace。
-- business denied 继续 `show_locked`。
-- admin/system denied 继续 `hide_when_denied`。
-- planned / adapter_pending / unavailable 不触发真实动作。
-- frontend proxy 不放开通配。
+C07D 应继续完善模块隔离 verify/test 体系，确保后续模块必须有 manifest、navigation 绑定
+`module_key`、permissions 可追踪、route/API/proxy 不漂移，并继续回归 C05/C06 行为。

@@ -146,6 +146,20 @@ for (const permissionsPath of ["permissions/me", "permissions/registry"]) {
   }
 }
 
+for (const modulesPath of ["modules/registry", "modules/me"]) {
+  if (!backendProxySource.includes(modulesPath)) {
+    throw new Error(
+      `The backend API proxy must allow GET /${modulesPath}.`,
+    );
+  }
+}
+
+if (!backendProxySource.includes("ALLOWED_MODULE_REGISTRY_PATHS")) {
+  throw new Error(
+    "The backend API proxy must keep C07 module registry paths explicitly allowlisted.",
+  );
+}
+
 for (const assignmentProxyCheck of [
   'path[1] !== "users"',
   'path[3] === "assignments"',

@@ -19,7 +19,13 @@ export type FrontendPermissions = {
   scope_summary: FrontendPermissionScopeSummary[];
 };
 
-export type PermissionCategory = "business" | "admin" | "system";
+export type PermissionCategory =
+  | "core"
+  | "business"
+  | "admin"
+  | "system"
+  | "integration"
+  | "experimental";
 
 export type PermissionDeniedBehavior =
   | "show_locked"

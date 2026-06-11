@@ -6,6 +6,31 @@
 
 ### Added
 
+- C07C：新增前端 module registry 类型、归一化 helper、module access helper 和 API client，
+  通过现有 restricted frontend backend proxy 调用 `GET /modules/registry` 与
+  `GET /modules/me`；API 失败时返回安全错误摘要并标记 `module_access_unknown`，不打印
+  token/password/Authorization header。
+- C07C：frontend proxy 精确放行 `GET /modules/registry` 和 `GET /modules/me`，不放开
+  `/modules/*` 通配；`frontend/scripts/verify-foundation.mjs` 增加 C07 module registry
+  allowlist 防回归检查。
+- C07C：前端导航切到 C07B namespaced `module_key`，覆盖 `core.dashboard`、
+  `experimental.foundation_demo`、`integration.n8n_test_bridge`、`admin.users`、
+  `admin.permissions`、`admin.modules`、`admin.agents`、`admin.workflows`、
+  `admin.settings`、`business.products`、`business.jobs`、`business.artifacts`、
+  `business.reviews`、`system.errors` 和 `system.memory_events`；Permission Management
+  仍作为 `/users` 内部 owner-only panel 记录为 `admin.permissions`，不新增独立菜单。
+- C07C：Console Shell 和 route guard 接入 `/modules/me` access state；business denied
+  继续 `show_locked`，admin/system denied 继续 `hide_when_denied`，locked/planned/
+  adapter_pending/unavailable 在 sidebar 显示安全状态，直接访问 hidden/locked/unavailable
+  module 时显示 No Permission 或 Module Unavailable。
+- C07C：新增 `tests/frontend/module-isolation.test.mjs`，覆盖 module proxy allowlist、
+  verify-foundation 检查、helper access state、navigation registry 对齐、User Management
+  / Permission Management owner-only、route guard decision、external dependency 安全过滤、
+  C05D/C06C 回归、`role_default_permissions` 不自动生效和 `super_admin` 不默认全局。
+- C07C：新增 `docs/C07_MODULE_FRONTEND_ISOLATION.md`，归档前端 module-aware navigation /
+  route guard、API 调用、安全降级、business `show_locked`、admin/system
+  `hide_when_denied`、planned/adapter_pending/unavailable 展示、C05/C06 owner-only 边界和
+  不接真实业务/K01/P 系列/n8n/WooCommerce/MinIO/Filebrowser/Adapter/Execution Provider。
 - C07B：新增后端 Module Manifest v1 和只读 Module Registry 基础，包含
   `backend/app/schemas/module.py`、`backend/app/core/modules.py`、
   `backend/app/services/module_registry.py`，采用代码内静态 registry，不新增数据库表或

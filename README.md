@@ -522,9 +522,30 @@ foundation documented in `docs/C07_MODULE_REGISTRY_BACKEND.md`:
 - C07B does not add frontend UI, does not add migration, does not connect K01,
   P-series, n8n, WooCommerce, MinIO, Filebrowser, or real business flows.
 
+C07C has added frontend module-aware navigation and route guards documented in
+`docs/C07_MODULE_FRONTEND_ISOLATION.md`:
+
+- Frontend module types, normalization helpers, and API client consume
+  `GET /modules/registry` and `GET /modules/me` through the restricted proxy.
+- The proxy precisely allows `GET /modules/registry` and `GET /modules/me`
+  without opening a `/modules/*` wildcard.
+- Sidebar navigation now uses C07B namespaced keys such as `core.dashboard`,
+  `admin.users`, `admin.permissions`, `business.jobs`, and `system.errors`.
+- Permission Management remains an owner-only panel inside User Management and
+  is recorded as `admin.permissions`.
+- business denied modules remain visible as locked, while admin/system denied
+  modules remain hidden.
+- `planned`, `adapter_pending`, and `unavailable` modules show safe
+  unavailable states and cannot enter a real workspace.
+- If `/modules/me` is unavailable, the frontend marks module access unknown and
+  falls back to the C05/C06 permission strategy without exposing admin/system
+  modules to non-owner users.
+- C07C does not add backend APIs, migrations, K01, P-series, n8n,
+  WooCommerce, MinIO, Filebrowser, Module Adapter, Execution Provider,
+  staging release, production release, or real business flows.
+
 Recommended next split:
 
-- C07C: frontend module-aware navigation / route guard.
 - C07D: module isolation verify/test system.
 - C07E: staging module isolation acceptance.
 - C07F: production module isolation release archive.
