@@ -256,6 +256,27 @@ C05D 没有做：
 
 后续如果要开放 User Management，必须先做后端任务并完成 staging 验收。
 
+## C05E staging 验收
+
+C05E 已在 staging 完成权限后端联调验收，记录见
+`docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`。
+
+验收结论：
+
+- staging backend 已通过 OPS01 safe release 使用当前 C05B/C05C 代码。
+- staging Alembic 当前版本为 `c05b_permissions_001 (head)`。
+- owner `GET /auth/me` 返回 `permissions`，且
+  `is_owner_full_access=true`、`permission_keys=["*"]`。
+- owner `GET /permissions/me` 返回 wildcard full access。
+- owner `GET /permissions/registry` 返回 200 和 list response 结构。
+- 临时 staging-only `viewer` non-owner 无 wildcard、无 assignment。
+- non-owner `GET /permissions/me` 返回 200，`is_owner_full_access=false`。
+- non-owner `GET /permissions/registry` 返回 403，因为没有 `permissions.read`。
+- non-owner `GET /users` 返回 403，确认 `/users` 仍是后端 owner-only。
+- 未登录 `/auth/me`、`/permissions/me`、`/users` 均返回 401。
+- `/auth/register` 仍返回 404。
+- 本轮未新增 grant/revoke API，未新增权限管理 UI，未发布 production，未接真实业务。
+
 ## 安全边界
 
 C05C 不做这些事：

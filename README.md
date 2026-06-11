@@ -291,7 +291,9 @@ model documented in `docs/C05_PERMISSION_DATA_MODEL.md`. C05C adds backend
 permission access enforcement and current-user permission APIs documented in
 `docs/C05_PERMISSION_BACKEND_ACCESS.md`. C05D adds frontend permission-aware
 navigation, no-permission messaging, and lightweight route protection
-documented in `docs/C05_PERMISSION_FRONTEND_ACCESS.md`.
+documented in `docs/C05_PERMISSION_FRONTEND_ACCESS.md`. C05E accepted the
+permission system on staging in
+`docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`.
 
 C05 is about authorization, not business-module onboarding. It does not connect
 real n8n, P-series, WooCommerce, MinIO, Filebrowser, product flows, orders, or
@@ -321,6 +323,16 @@ Current C05 status:
 - Current frontend navigation reads `permissions` from `/auth/me`. Business
   modules remain visible with a locked state when denied, while admin/system
   entries are hidden when denied.
+- C05E released only staging backend/frontend with the OPS01 safe release
+  flow, applied staging Alembic `c05b_permissions_001 (head)` from the staging
+  backend container, and verified owner plus non-owner permission behavior.
+- C05E verified owner wildcard full access, non-owner no-wildcard empty
+  permissions, non-owner `/users` 403, non-owner `/permissions/registry` 403,
+  unauthenticated `/auth/me` / `/permissions/me` / `/users` 401, and
+  `/auth/register` 404.
+- C05E verified the C05D frontend policy: User Management is hidden for
+  non-owner users, admin/system entries hide when denied, business entries show
+  locked when denied, and direct denied routes show the no-permission notice.
 - C05A defines Permission Registry, User Permission Assignment, Role Default
   Permissions, Permission Scope, and Module Permission Manifest concepts;
   C05B implements the first three as backend tables.
@@ -333,6 +345,11 @@ Current C05 status:
   not expose `/users` to `super_admin` or ordinary non-owner users with
   `users.manage`; changing `/users` to permission-based access must be C06 or
   a separate backend task.
+- C05E did not publish production, did not operate production containers or
+  databases, did not read real env files, did not operate staging postgres
+  directly, did not add grant/revoke UI or API, and did not connect real
+  business systems. The next step is C05F production release archive, then
+  C05G permission-system seal.
 
 ## Temporary login preview
 

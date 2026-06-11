@@ -123,9 +123,19 @@ frontend test framework。覆盖：
 
 ## C05E / C06 建议
 
-- C05E：做 staging 只读验收方案和手工账号矩阵验证，不发布 production。
-- C05E：验证 owner、无权限普通用户、有单一业务权限用户的导航和页面表现。
-- C05E：确认 `/users` 对非 owner 仍不可见，直接访问仍无权。
+- C05E 已完成 staging 联调验收，记录见
+  `docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`。
+- C05E 验证了 staging frontend proxy 可以用临时 `viewer` non-owner 登录并读取
+  `/auth/me.permissions`。
+- C05E 验证了 non-owner 前端权限决策：User Management 不可见，admin/system
+  入口无权限隐藏，business 入口无权限显示 locked，直接访问无权 route 显示
+  “无权访问此板块”。
+- C05E 同步验证后端 `/users` 对 non-owner 返回 403，确认前端只是 UX，后端
+  `require_owner()` 仍是真正安全边界。
+- C05E 未给临时 non-owner 授予 permission assignment，因此未验证“有 explicit
+  business permission 的 non-owner 可访问业务模块”。这一步应留到未来权限分配功能或
+  明确的测试 fixture。
+- C05F 下一步是 production 发布归档；C05G 下一步是 C05 权限系统封板。
 - C06 或独立后端任务：如果要开放 User Management，先把后端 `/users` 从
   `require_owner()` 正式改为合适的 permission dependency，再改前端。
 - 后续权限管理阶段：设计 owner 可用的 assignment 管理 UI 和 grant/revoke API，但必须先做

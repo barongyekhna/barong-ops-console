@@ -680,11 +680,13 @@ C05 暂不做：
   且 `/users` 仍保持 owner-only。
 - C05D：前端权限感知和访问提示。读取 `/auth/me.permissions`，业务板块可见但 locked，
   企业管理/系统板块无权限隐藏，直接访问无权页面显示无权访问；`/users` 继续 owner-only。
-- C05E：staging 前端权限验收。验证 owner、无权限普通用户、单一业务权限用户和 `/users`
-  owner-only 行为。
-- C05F：staging 权限验收。验证 owner 全局权限、普通用户无授权 403、有授权可访问、scope 预留不破坏现有功能。
-- C05G：production 发布。按 OPS01 safe release 流程发布，先 backend 再 frontend，保留 rollback tag。
-- C05H：权限系统封板。归档最终行为、风险、未做范围和后续模块接入规则。
+- C05E：staging 联调验收。验证 owner wildcard、无权限普通用户、`/auth/me.permissions`、
+  `/permissions/me`、`/permissions/registry`、前端 locked/hidden 策略和 `/users`
+  owner-only 行为。C05E 已完成，验收记录见
+  `docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`。
+- C05F：production 发布归档。按 OPS01 safe release 流程发布 production
+  backend/frontend，保留 rollback tag，并归档 production 只读验收结果。
+- C05G：权限系统封板。归档最终行为、风险、未做范围和后续模块接入规则。
 
 如果 C05B 发现 migration 风险高，可以再拆：
 

@@ -6,6 +6,18 @@
 
 ### Added
 
+- C05E：新增 `docs/C05_PERMISSION_STAGING_ACCEPTANCE.md`，归档权限系统 staging
+  联调验收；本轮使用 OPS01 safe release 只发布 staging backend/frontend，在 staging
+  backend 容器内执行 Alembic `upgrade head` 到 `c05b_permissions_001 (head)`，未发布
+  production，未读取真实 env，未操作 production 容器或数据库，未接真实业务。
+- C05E：完成 staging owner 和 non-owner 权限 API 验收；owner `/auth/me` 和
+  `/permissions/me` 返回 `is_owner_full_access=true`、`permission_keys=["*"]`，
+  临时 staging-only `viewer` 测试账号无 wildcard、无 assignment，`/users` 返回 403，
+  `/permissions/registry` 返回 403，未登录 `/auth/me`、`/permissions/me`、`/users`
+  均返回 401，`/auth/register` 仍返回 404。
+- C05E：完成前端权限 UX 决策验收；non-owner 的 User Management 不可见，admin/system
+  入口无权限隐藏，business 入口无权限显示 locked，直接访问 `/users` 或 business 无权
+  route 会进入“无权访问此板块”提示决策。
 - C05D：新增前端权限感知和基础路由保护；`/auth/me.permissions` 在前端归一化为
   `is_owner_full_access`、`permission_keys`、`assignments`、`scope_summary`，
   permissions 缺失或异常时安全降级为无权限且页面不崩溃。
@@ -108,6 +120,9 @@
 
 ### Changed
 
+- C05E：README、C05 权限系统计划、C05 后端权限文档和 C05 前端权限文档更新为
+  staging 验收已完成；C05F 下一步是 production 发布归档，C05G 下一步是 C05 权限系统
+  封板。
 - C05D：前端导航从静态显示改为权限元数据驱动；`User Management` 入口和页面挡板改为只认
   `permissions.is_owner_full_access=true`，不向 `super_admin` 或普通 `users.manage`
   非 owner 开放，因为后端 `/users` 仍是 `require_owner()`。
