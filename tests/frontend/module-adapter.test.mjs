@@ -293,6 +293,22 @@ test("verify-foundation checks C08 module adapter proxy allowlist", () => {
   assert.match(verifier, /\/module-adapters\/\*/);
 });
 
+test("verify-foundation protects C08D adapter contract files and no-live rules", () => {
+  const verifier = readFileSync(
+    "frontend/scripts/verify-foundation.mjs",
+    "utf8",
+  );
+
+  assert.match(verifier, /adapter-access-provider\.tsx/);
+  assert.match(verifier, /module-adapter-shell\.tsx/);
+  assert.match(verifier, /module-adapter-api\.ts/);
+  assert.match(verifier, /module-adapter\.ts/);
+  assert.match(verifier, /module-adapter\.test\.mjs/);
+  assert.match(verifier, /module-isolation\.test\.mjs/);
+  assert.match(verifier, /live n8n\/WooCommerce\/MinIO\/Filebrowser/);
+  assert.match(verifier, /K01 or P-series menus/);
+});
+
 test("verify-foundation keeps C07 module checks and C05 C06 permission checks", () => {
   const verifier = readFileSync(
     "frontend/scripts/verify-foundation.mjs",
@@ -305,8 +321,8 @@ test("verify-foundation keeps C07 module checks and C05 C06 permission checks", 
   assert.match(verifier, /assignments/);
 });
 
-test("adapter_pending, disabled, and deprecated adapters are not executable", () => {
-  for (const status of ["adapter_pending", "disabled", "deprecated"]) {
+test("adapter_pending, draft, disabled, and deprecated adapters are not executable", () => {
+  for (const status of ["adapter_pending", "draft", "disabled", "deprecated"]) {
     const fixture = adapter({
       adapter_status: status,
       lifecycle: status,
@@ -320,6 +336,7 @@ test("adapter_pending, disabled, and deprecated adapters are not executable", ()
 
     assert.equal(isAdapterExecutable(state), false);
     assert.equal(isAdapterUnavailable(state), true);
+    assert.equal(state.available_actions.length, 0);
   }
 });
 
@@ -339,6 +356,8 @@ test("execution required action contracts are unavailable before C09", () => {
   assert.equal(actionState.disabled, true);
   assert.equal(actionState.state, "execution_provider_required");
   assert.equal(actionState.execution_message, "等待 C09 Execution Provider");
+  assert.deepEqual(state.available_actions, []);
+  assert.deepEqual(state.unavailable_actions, ["should.not.execute"]);
 });
 
 test("approval required action contracts show pending C12 and stay non-executable", () => {
@@ -471,6 +490,16 @@ test("dependency declarations keep only safe dependency names", () => {
     "google_sheets",
   ]);
   assert.equal(adapterContainsUnsafeDependencyValue(fixture), false);
+  assert.equal(
+    fixture.dependency_declarations.every(
+      (dependency) => dependency.live_connection_allowed === false,
+    ),
+    true,
+  );
+  assert.doesNotMatch(
+    JSON.stringify(fixture.dependency_declarations),
+    /token|password|authorization|credential|env|https?:|webhook|url/i,
+  );
 });
 
 test("role defaults and super_admin do not become implicit adapter access", () => {
@@ -514,6 +543,34 @@ test("action contract state does not expose executable payload", () => {
   assert.equal(state.available_actions.length, 0);
 });
 
+test("module-adapter API client and shell do not create action execution calls", () => {
+  const apiSource = readFileSync(
+    "frontend/src/lib/module-adapter-api.ts",
+    "utf8",
+  );
+  const shellSource = readFileSync(
+    "frontend/src/components/module-adapter-shell.tsx",
+    "utf8",
+  );
+
+  assert.match(apiSource, /apiRequest<unknown>\("\/module-adapters\/registry"/);
+  assert.match(apiSource, /apiRequest<unknown>\("\/module-adapters\/me"/);
+  assert.doesNotMatch(apiSource, /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/);
+  assert.doesNotMatch(
+    apiSource,
+    /\/module-adapters\/[^"']*(?:actions?|execute|execution|run)/i,
+  );
+  assert.doesNotMatch(
+    shellSource,
+    /apiRequest|fetch\(|method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/,
+  );
+  assert.match(shellSource, /<button disabled type="button">/);
+  assert.doesNotMatch(
+    shellSource,
+    /live\s+(?:n8n|woocommerce|minio|filebrowser)\s+(?:action|provider|connected)/i,
+  );
+});
+
 test("AdapterUnavailableNotice source does not expose internal credentials", () => {
   const source = readFileSync(
     "frontend/src/components/module-adapter-shell.tsx",
@@ -538,10 +595,24 @@ test("K01 and P-series future examples are not default enabled", () => {
     lifecycle: "contract_ready",
     module_key: "k01.product_knowledge",
   });
+  const pendingP01 = adapter({
+    adapter_key: "p01.product_page.adapter",
+    adapter_status: "adapter_pending",
+    lifecycle: "adapter_pending",
+    module_key: "p01.product_page",
+  });
+  const enabledP01 = adapter({
+    adapter_key: "p01.product_page.adapter",
+    adapter_status: "test_ready",
+    lifecycle: "test_ready",
+    module_key: "p01.product_page",
+  });
   const moduleKeys = navigationItems.map((entry) => entry.module_key);
 
   assert.equal(isFutureExampleAdapterEnabled(pendingK01), false);
   assert.equal(isFutureExampleAdapterEnabled(enabledK01), true);
+  assert.equal(isFutureExampleAdapterEnabled(pendingP01), false);
+  assert.equal(isFutureExampleAdapterEnabled(enabledP01), true);
   assert.equal(moduleKeys.some((key) => /k01|p0[1-8]|p_series/i.test(key)), false);
 });
 

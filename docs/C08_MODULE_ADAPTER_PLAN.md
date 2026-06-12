@@ -25,6 +25,14 @@ dependency names。所有 action 仍不可执行，execution action 显示等待
 action 显示等待 C12；C08C 不新增后端 API，不新增 migration，不接 K01/P 系列或 live
 provider。
 
+2026-06-12 C08D 补充：Adapter contract verify/test 体系已完成，归档在
+`docs/C08_MODULE_ADAPTER_VERIFICATION.md`。C08D 强化后端 adapter registry contract
+和 access-state 测试、前端 adapter shell/helper/proxy Node 测试，以及
+`frontend/scripts/verify-foundation.mjs` 静态校验。C08D 固化 no-execute、no-provider、
+no-secret、route/API/nav namespace、dependency safe display、K01/P 系列不启用和
+C05/C06/C07 回归；不修改 runtime 功能，不新增 API，不新增 migration，不接 live
+provider，不发布 staging/production。C08E 下一步才做 staging Module Adapter 验收。
+
 ## 一、C08A 结论
 
 C08 可以开始。
@@ -885,6 +893,8 @@ C08 为这些阶段预留字段：
 
 ### C08D：Adapter contract verify/test 体系
 
+状态：已完成。实现记录见 `docs/C08_MODULE_ADAPTER_VERIFICATION.md`。
+
 目标：
 
 - 固化 adapter contract 校验。
@@ -908,6 +918,9 @@ C08 为这些阶段预留字段：
 - adapter_key 唯一测试。
 - route/nav/permission/action/dependency contract tests。
 - C05/C06/C07 回归。
+- frontend proxy 精确 allowlist 和 no wildcard 检查。
+- 前端 no-execute action contract helper 测试。
+- K01/P 系列和 live provider 不启用检查。
 
 ### C08E：staging Module Adapter 验收
 

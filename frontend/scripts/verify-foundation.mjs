@@ -147,6 +147,22 @@ const moduleRegistrySource = readFileSync(
   join(frontendRoot, "src", "lib", "module-registry.ts"),
   "utf8",
 );
+const moduleAdapterSource = readFileSync(
+  join(frontendRoot, "src", "lib", "module-adapter.ts"),
+  "utf8",
+);
+const moduleAdapterApiSource = readFileSync(
+  join(frontendRoot, "src", "lib", "module-adapter-api.ts"),
+  "utf8",
+);
+const adapterAccessProviderSource = readFileSync(
+  join(frontendRoot, "src", "components", "adapter-access-provider.tsx"),
+  "utf8",
+);
+const moduleAdapterShellSource = readFileSync(
+  join(frontendRoot, "src", "components", "module-adapter-shell.tsx"),
+  "utf8",
+);
 
 if (!backendProxySource.includes("export function PATCH")) {
   throw new Error("The backend API proxy must support PATCH for user updates.");
@@ -357,6 +373,76 @@ if (
   !source.includes("等待 C12 Approval Gate")
 ) {
   throw new Error("The C08C adapter frontend shell markers are incomplete.");
+}
+
+if (
+  !moduleAdapterSource.includes("export function isAdapterExecutable") ||
+  !/export function isAdapterExecutable[\s\S]{0,160}return false;/.test(
+    moduleAdapterSource,
+  ) ||
+  !moduleAdapterSource.includes("available_actions: []") ||
+  !moduleAdapterSource.includes("unavailable_actions: uniqueStrings")
+) {
+  throw new Error(
+    "The C08D adapter helper must force no-execute action state.",
+  );
+}
+
+if (
+  !adapterAccessProviderSource.includes("canExposeAdapterMetadata") ||
+  !adapterAccessProviderSource.includes("adapterAccessUnknown") ||
+  !adapterAccessProviderSource.includes("isOwnerFullAccess")
+) {
+  throw new Error(
+    "The C08D adapter access provider must keep safe metadata fallback checks.",
+  );
+}
+
+if (
+  !moduleAdapterShellSource.includes('<button disabled type="button">') ||
+  /apiRequest|fetch\(|method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/.test(
+    moduleAdapterShellSource,
+  )
+) {
+  throw new Error(
+    "The C08D adapter shell must display disabled action contracts only.",
+  );
+}
+
+if (
+  /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/.test(
+    moduleAdapterApiSource,
+  ) ||
+  /\/module-adapters\/[^"']*(?:actions?|execute|execution|run)/i.test(
+    moduleAdapterApiSource,
+  )
+) {
+  throw new Error(
+    "The C08D adapter API client must not create action execution calls.",
+  );
+}
+
+const adapterRuntimeSource = [
+  moduleAdapterSource,
+  moduleAdapterApiSource,
+  adapterAccessProviderSource,
+  moduleAdapterShellSource,
+].join("\n");
+
+if (
+  /live_connection_allowed\s*:\s*true/i.test(adapterRuntimeSource) ||
+  /live_provider_connected\s*:\s*true/i.test(adapterRuntimeSource) ||
+  /live_check_allowed\s*:\s*true/i.test(adapterRuntimeSource) ||
+  /provider_status\s*:\s*["'](?:connected|live_connected)["']/i.test(
+    adapterRuntimeSource,
+  ) ||
+  /["']\/module-adapters\/[^"']*(?:actions?|execute|execution|run)/i.test(
+    adapterRuntimeSource,
+  )
+) {
+  throw new Error(
+    "The C08D adapter frontend must not expose live connected providers or executable action routes.",
+  );
 }
 
 if (

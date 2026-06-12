@@ -6,6 +6,27 @@
 
 ### Added
 
+- C08D：新增 `docs/C08_MODULE_ADAPTER_VERIFICATION.md`，归档 Adapter contract
+  verify/test 体系；明确 C08D 只做测试和只读 verifier，不实现 Execution Provider、
+  Module Switch、Approval Gate、sandbox、secret rules、n8n 接入、K01/P 系列、真实业务或
+  staging/production 发布。
+- C08D：强化 `tests/backend/test_module_adapters_registry.py`，覆盖 Module Adapter v1
+  必填字段、`adapter_key` 唯一和命名、version/status/lifecycle/surface、C07 `module_key`
+  绑定、route/API/nav namespace、permission/action/operation-log bindings、execution/
+  approval no-execute、dependency/status/health/data contract safety、scope pending、
+  K01/P 系列不启用、live provider 禁止，以及 `/modules/*`、`/permissions/me`、C06B
+  assignment API、`/users` owner-only、`/auth/register` 404 回归。
+- C08D：强化 `tests/frontend/module-adapter.test.mjs`，覆盖 adapter proxy exact
+  allowlist、`/module-adapters/*` 宽通配禁止、helper/provider/shell/API client 文件存在、
+  `adapter_pending`/draft/disabled/deprecated 不可执行、`available_actions` 安全降级、
+  execution_required 等待 C09、approval_required 等待 C12、action state 不生成 payload、
+  API client 不创建 POST/PUT/PATCH/DELETE execution call、dependency safe display、
+  owner/non-owner metadata 行为和 C05/C06/C07 回归。
+- C08D：强化 `frontend/scripts/verify-foundation.mjs`，继续检查 C05/C06/C07 proxy
+  allowlist，同时新增 C08D no-execute/no-live 静态检查：adapter helper 必须强制
+  `isAdapterExecutable()` 返回 false，adapter shell 不允许 `fetch()`/`apiRequest()` action
+  调用，adapter API client 不允许 mutation method 或 action execution route，live
+  n8n/WooCommerce/MinIO/Filebrowser provider/action marker 继续禁止。
 - C08C：新增前端 Module Adapter 类型、normalizer 和 no-execute helper：
   `frontend/src/lib/module-adapter.ts`；覆盖 `ModuleAdapterContract`、
   `ModuleAdapterAccessState`、adapter status/lifecycle/surface/action/capability/

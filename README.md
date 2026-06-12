@@ -724,9 +724,33 @@ C08C has added the frontend adapter rendering shell documented in
   Provider, no Approval Gate, no Module Switch, no K01/P-series runtime, and no
   live n8n/WooCommerce/MinIO/Filebrowser integration.
 
-Current next split after C08C:
+C08D has added the Adapter contract verify/test system documented in
+`docs/C08_MODULE_ADAPTER_VERIFICATION.md`:
 
-- C08D: Adapter contract verify/test体系.
+- Backend adapter tests now cover Module Adapter v1 required fields, unique
+  and valid `adapter_key`, legal version/status/lifecycle/surfaces, C07 module
+  binding, route/API/nav namespace boundaries, action contract permission/risk/
+  operation-log requirements, execution/approval no-execute behavior, safe
+  dependency/status/health/data contracts, pending scope bindings, K01/P-series
+  no-enable boundaries, live provider bans, and C05/C06/C07 API regressions.
+- Frontend adapter tests now cover exact adapter proxy allowlisting, no broad
+  `/module-adapters/*` wildcard, adapter helper/provider/shell/API client
+  presence, no-execute helper behavior, `available_actions` safe downgrade,
+  execution-required actions waiting for C09, approval-required actions waiting
+  for C12, safe dependency display, owner/non-owner metadata behavior, and
+  C05/C06/C07 regressions.
+- `frontend/scripts/verify-foundation.mjs` now checks C08D no-mutation/no-live
+  boundaries: adapter API client cannot POST/PUT/PATCH/DELETE, adapter shell
+  cannot create fetch/action execution calls, and live n8n/WooCommerce/MinIO/
+  Filebrowser action/provider markers remain blocked.
+- C08D adds no runtime feature, no backend API, no frontend business UI, no
+  migration, no Execution Provider, no Approval Gate, no Module Switch, no
+  K01/P-series runtime, no live provider integration, and no staging/production
+  release.
+
+Current next split after C08D:
+
+- C08E: staging Module Adapter 验收.
 
 ## Temporary login preview
 

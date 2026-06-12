@@ -24,6 +24,13 @@ Module Adapter contract and static registry in
 `GET /module-adapters/registry` and `GET /module-adapters/me`, with no
 backend migration, provider connection, K01/P-series runtime, action execution,
 frontend UI, or real business integration.
+C08D has now added the backend adapter contract verification layer in
+`docs/C08_MODULE_ADAPTER_VERIFICATION.md` and
+`tests/backend/test_module_adapters_registry.py`, covering adapter contract
+shape, C07 namespace bindings, action permission/risk/operation-log fields,
+execution/approval no-execute states, safe dependencies/status/health/data
+contracts, pending scopes, no live provider, and C05/C06/C07 regressions
+without modifying runtime code or adding APIs/migrations.
 C06E has released the C06B backend API to production, and C06F has sealed C06
 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
@@ -311,8 +318,21 @@ the n8n test bridge declares only `n8n` and no live connection.
 C08B adds no migration, no frontend UI, no action execution endpoint, no
 Execution Provider, no Module Switch, no Approval Gate, no K01/P-series
 runtime, and no live n8n/WooCommerce/MinIO/Filebrowser provider integration.
-The next backend/frontend phase is C08C frontend adapter rendering shell /
-adapter surface placeholders.
+
+C08D is documented in `docs/C08_MODULE_ADAPTER_VERIFICATION.md`. The primary
+backend test entry is `tests/backend/test_module_adapters_registry.py`. It now
+verifies Module Adapter v1 required fields, unique and valid `adapter_key`,
+legal version/status/lifecycle/surfaces, C07 `module_key` binding, route/API/nav
+namespace boundaries, action contract permission/risk/operation-log
+requirements, execution-required actions waiting for C09, approval-required
+actions waiting for C12, dependency declarations as safe names only, status and
+health providers as non-live declarations, data/input/output contracts as safe
+versioned JSON, scope bindings as `adapter_pending`, no K01/P-series enabled
+runtime, no live n8n/WooCommerce/MinIO/Filebrowser provider, and C05/C06/C07
+API regressions. It also asserts `/module-adapters` exposes only read-only GET
+contract APIs and no action execution endpoint. C08D adds no migration, no
+runtime feature, no staging/production release, and no provider connection.
+The next backend/frontend phase is C08E staging Module Adapter acceptance.
 
 F12 adds the n8n test webhook bridge:
 

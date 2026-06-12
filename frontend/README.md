@@ -325,9 +325,32 @@ C08C does not add K01/P-series menus, does not add real business pages, does
 not connect live providers, does not implement Execution Provider, Module
 Switch, or Approval Gate, and does not expose executable actions.
 
+C08D has added frontend adapter verification documented in
+`docs/C08_MODULE_ADAPTER_VERIFICATION.md`. The primary frontend test entry is
+`tests/frontend/module-adapter.test.mjs`, using Node's built-in test runner
+without new dependencies. It verifies exact `GET /module-adapters/registry` and
+`GET /module-adapters/me` proxy allowlisting, rejects broad
+`/module-adapters/*`, checks adapter helper/provider/shell/API client file
+presence, keeps `adapter_pending`, draft, disabled, and deprecated adapters
+non-executable, confirms execution-required actions wait for C09 and
+approval-required actions wait for C12, ensures action state has no executable
+payload, confirms the adapter API client never creates POST/PUT/PATCH/DELETE
+execution calls, filters dependency declarations to safe names, and keeps
+C05/C06/C07 owner-only and route-guard regressions covered.
+
+`frontend/scripts/verify-foundation.mjs` now also checks C08D no-live/no-execute
+markers: `isAdapterExecutable()` must return false, `available_actions` are
+safely downgraded, `AdapterAccessProvider` keeps metadata fallback checks, the
+adapter shell cannot call `fetch()` or `apiRequest()`, and live
+n8n/WooCommerce/MinIO/Filebrowser provider/action routes remain blocked.
+C08D does not add frontend business UI, backend APIs, migrations, K01/P-series
+menus, live provider connections, action execution, staging release, or
+production release. The next frontend phase is C08E staging Module Adapter
+acceptance.
+
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier
-checks `tests/frontend/module-isolation.test.mjs` and the C08C verifier checks
+checks `tests/frontend/module-isolation.test.mjs` and the C08D verifier checks
 `tests/frontend/module-adapter.test.mjs` during image builds. The runtime image
 still only copies the built Next.js output and public assets.
 

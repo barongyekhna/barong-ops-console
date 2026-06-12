@@ -7,6 +7,15 @@ C08C 在 C08B 后端 Module Adapter Contract v1 和只读 adapter registry API
 placeholder，不执行 action，不创建任务，不连接 provider，不新增后端 API，不新增
 migration，不发布 staging 或 production。
 
+2026-06-12 C08D 补充：Adapter contract verify/test 体系已完成并归档在
+`docs/C08_MODULE_ADAPTER_VERIFICATION.md`。前端 C08D 继续强化
+`tests/frontend/module-adapter.test.mjs` 和 `frontend/scripts/verify-foundation.mjs`，
+覆盖 adapter proxy exact allowlist、no wildcard、adapter helper/provider/shell/API
+client 文件存在、no-execute helper、available_actions 安全降级、execution_required 等待
+C09、approval_required 等待 C12、dependency safe display、K01/P 系列不默认启用、
+live provider/action route 禁止，以及 C05/C06/C07 回归。C08D 未新增前端业务 UI，
+未新增后端 API，未执行 adapter action，未连接 provider。
+
 ## 实现范围
 
 新增前端 adapter 类型、helper 和 API client：
@@ -166,8 +175,13 @@ production navigation 或 live action。
 - role defaults 和 `super_admin` 不默认全局。
 - status badge / action contract state / unavailable notice / K01/P 系列默认不启用。
 - C05/C06/C07 owner-only 和 route guard 回归。
+- C08D 增强：module-adapter API client 不允许 POST/PUT/PATCH/DELETE。
+- C08D 增强：adapter shell 不允许 `fetch()` / `apiRequest()` action execution call。
+- C08D 增强：即使后端误返回 `available_actions`，前端也清空并转入 unavailable。
+- C08D 增强：verifier 检查 live provider/action route 标记不得出现。
 
 ## 下一步
 
-C08D 应进入 Adapter contract verify/test 体系，固化 adapter contract shape、no execute、
-no provider、no secret、route/API/nav binding 和 frontend/backend regression 检查。
+C08D 已完成 Adapter contract verify/test 体系。下一步应进入 C08E staging Module
+Adapter 验收，只做 staging contract runtime 验收，不接 K01/P 系列、真实业务或 live
+provider。

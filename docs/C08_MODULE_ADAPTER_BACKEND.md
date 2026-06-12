@@ -19,6 +19,15 @@ backend proxy 只读消费本文件记录的 `GET /module-adapters/registry` 和
 capabilities、action/data contracts 和安全 dependency names。C08C 未修改本后端 API
 contract，未新增后端 API，未新增 migration，未执行 action，未连接 live provider。
 
+2026-06-12 C08D 补充：Adapter contract verify/test 体系已完成并归档在
+`docs/C08_MODULE_ADAPTER_VERIFICATION.md`。后端 C08D 继续强化
+`tests/backend/test_module_adapters_registry.py`，覆盖 Module Adapter v1 必填字段、
+adapter key/version/status/lifecycle/surface、C07 module binding、route/API/nav
+namespace、permission/action/operation-log bindings、execution/approval no-execute、
+dependency/status/health/data contract safety、scope pending、K01/P 系列不启用、
+live provider 禁止，以及 C05/C06/C07 API 回归。C08D 未修改后端 runtime，未新增 API，
+未新增 migration，未执行 adapter action，未连接 provider。
+
 ## 实现范围
 
 新增后端文件：
@@ -291,9 +300,26 @@ webhook、API key 或 credential value。C08B 只声明依赖名和 `live_connec
 - K01/P 系列不能默认 enabled/executable。
 - n8n/WooCommerce/MinIO/Filebrowser 只能声明安全依赖名，不能连接 live provider。
 
+## C08D 后端测试
+
+`tests/backend/test_module_adapters_registry.py` 是 C08D 后端 adapter 验证入口。
+它在 C08B 基础上新增/强化：
+
+- contract 负例：缺少 action permission/risk/operation log、approval requirement
+  drift、execution requirement drift、scope 假装正式、sandbox network、live dependency、
+  live status/health provider 均会失败。
+- contract 正例：data/input/output contracts 必须可 JSON 序列化、可版本化、无真实
+  secret 样本；permission bindings 可追踪到 C07 manifest；scope bindings 保持
+  `adapter_pending`。
+- access-state 正例：draft/deprecated/disabled/adapter_pending 和 approval-required
+  action 均不可 executable，`available_actions` 为空。
+- router 回归：`/module-adapters` 只暴露 read-only GET contract API，不存在 action
+  execution endpoint。
+- C05/C06/C07 回归：`/modules/registry`、`/modules/me`、`/permissions/me`、
+  C06B assignment API、`/users` owner-only 和 `/auth/register` 404 保持不回退。
+
 ## 下一步
 
-C08C 已实现前端 adapter rendering shell / adapter surface placeholders，只显示安全
-placeholder 和 pending/unavailable/disabled 状态，不接真实业务 UI，不触发 action。
-下一步应进入 C08D Adapter contract verify/test 体系，继续固化 no-execute、
-no-provider、no-secret 和 C05/C06/C07 regression 检查。
+C08D 已完成 adapter contract verify/test 体系。下一步应进入 C08E staging Module
+Adapter 验收，只做 staging contract runtime 验收，不接 K01/P 系列、真实业务或 live
+provider。

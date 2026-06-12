@@ -304,6 +304,153 @@ def test_adapter_contract_rejects_invalid_shapes_and_escapes() -> None:
         validate_adapter_contracts([dependency_sensitive])
 
 
+def test_adapter_contract_rejects_c08d_runtime_regressions() -> None:
+    missing_action_permission = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[1])
+    del missing_action_permission["actions"][0]["required_permission"]
+    with pytest.raises(Exception):
+        validate_adapter_contracts([missing_action_permission])
+
+    missing_contract_risk = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[1])
+    del missing_contract_risk["action_contracts"][0]["risk_level"]
+    with pytest.raises(Exception):
+        validate_adapter_contracts([missing_contract_risk])
+
+    missing_contract_operation_log = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[1])
+    del missing_contract_operation_log["action_contracts"][0][
+        "operation_log_action"
+    ]
+    with pytest.raises(Exception):
+        validate_adapter_contracts([missing_contract_operation_log])
+
+    approval_drift = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[3])
+    approval_drift["actions"][0]["requires_approval"] = True
+    with pytest.raises(ValueError, match="approval action lacks requirement"):
+        validate_adapter_contracts([approval_drift])
+
+    contract_execution_drift = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[1])
+    contract_execution_drift["action_contracts"][0][
+        "requires_execution_provider"
+    ] = True
+    with pytest.raises(ValueError, match="contract lacks execution requirement"):
+        validate_adapter_contracts([contract_execution_drift])
+
+    live_dependency = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[4])
+    live_dependency["dependency_declarations"][0][
+        "live_connection_allowed"
+    ] = True
+    with pytest.raises(ValueError, match="dependency declares live connection"):
+        validate_adapter_contracts([live_dependency])
+
+    connected_provider = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[4])
+    connected_provider["dependency_declarations"][0][
+        "provider_status"
+    ] = "not_connected"
+    with pytest.raises(ValueError, match="live provider dependency is not safe"):
+        validate_adapter_contracts([connected_provider])
+
+    live_status_provider = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[0])
+    live_status_provider["status_provider"]["live_provider_connected"] = True
+    with pytest.raises(ValueError, match="status provider is live"):
+        validate_adapter_contracts([live_status_provider])
+
+    live_health_provider = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[0])
+    live_health_provider["health_provider"]["live_check_allowed"] = True
+    with pytest.raises(ValueError, match="health provider is live"):
+        validate_adapter_contracts([live_health_provider])
+
+    formal_scope = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[0])
+    formal_scope["scope_bindings"][0]["status"] = "declared"
+    with pytest.raises(Exception):
+        validate_adapter_contracts([formal_scope])
+
+    sandbox_network = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[0])
+    sandbox_network["sandbox_requirements"]["network_access_allowed"] = True
+    with pytest.raises(ValueError, match="sandbox allows network"):
+        validate_adapter_contracts([sandbox_network])
+
+
+def test_adapter_contracts_are_versioned_serializable_and_traceable() -> None:
+    adapters = list_adapter_contracts()
+    manifests = {manifest.module_key: manifest for manifest in list_module_manifests()}
+    blocked_runtime_fragments = (
+        ".env.production",
+        ".env.staging",
+        "auth_token_secret",
+        "owner_password",
+        "postgres_password",
+        "provider_url",
+        "webhook_secret",
+        "bearer ",
+        "authorization",
+        "http://",
+        "https://",
+        "ops.barongyekhna.com",
+        "console_postgres",
+        "live_connected",
+        "production_url",
+        "staging_url",
+    )
+
+    serialized = json.dumps(
+        [adapter.model_dump(mode="json") for adapter in adapters],
+        sort_keys=True,
+    ).lower()
+    for fragment in blocked_runtime_fragments:
+        assert fragment not in serialized
+    for value in string_values(
+        [adapter.model_dump(mode="json") for adapter in adapters]
+    ):
+        assert "api_key" not in value.lower()
+
+    for adapter in adapters:
+        json.dumps(adapter.model_dump(mode="json"), sort_keys=True)
+        manifest = manifests[adapter.module_key]
+        manifest_permissions = {
+            entry.permission_key for entry in manifest.permission_manifest
+        }
+        manifest_permissions.update(manifest.required_permissions)
+
+        for data_contract in adapter.data_contracts:
+            assert ADAPTER_VERSION_PATTERN.fullmatch(
+                data_contract.contract_version
+            )
+            assert data_contract.contract_key.endswith(".v1")
+            assert data_contract.module_key == adapter.module_key
+            assert data_contract.owner_module == adapter.module_key
+            assert data_contract.test_fixture_path is None
+            assert data_contract.version_policy
+            assert data_contract.breaking_change_policy
+
+        for input_contract in adapter.input_contracts:
+            assert input_contract.contract_key.endswith(".v1")
+            assert input_contract.sensitive_fields == []
+            assert input_contract.redaction_policy == "safe_fields_only"
+
+        for output_contract in adapter.output_contracts:
+            assert output_contract.contract_key.endswith(".v1")
+            assert output_contract.sensitive_fields == []
+            assert output_contract.redaction_policy == "safe_fields_only"
+
+        for binding in adapter.permission_bindings:
+            assert binding.module_key == adapter.module_key
+            assert binding.permission_key in manifest_permissions
+            assert binding.used_by
+            assert binding.registry_status == "registered"
+
+        for binding in adapter.scope_bindings:
+            assert binding.status == "adapter_pending"
+            assert binding.requires_c18_scope_adapter is True
+            assert binding.fallback_before_c18
+
+        for binding in adapter.feature_flag_bindings:
+            assert binding.status == "declared_only"
+            assert binding.switch_provider_state == "not_implemented_c08b"
+
+        for contract in adapter.test_contracts:
+            assert contract.required is True
+            assert contract.test_key.startswith("c08")
+
+
 def test_adapter_dependency_and_runtime_safety_metadata() -> None:
     adapters = list_adapter_contracts()
     serialized = json.dumps(
@@ -355,6 +502,67 @@ def test_adapter_dependency_and_runtime_safety_metadata() -> None:
     assert n8n_bridge.health_provider.live_check_allowed is False
     assert all(
         action.executable_before_c09 is False for action in n8n_bridge.actions
+    )
+
+
+def test_draft_deprecated_disabled_and_approval_actions_are_not_executable() -> None:
+    for status, expected_state in [
+        ("draft", "unavailable"),
+        ("deprecated", "unavailable"),
+        ("disabled", "disabled"),
+    ]:
+        raw = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[0])
+        raw["adapter_status"] = status
+        raw["lifecycle"] = status
+        adapter = validate_adapter_contracts([raw])[0]
+        access = build_adapter_access_state(adapter, owner_permission_info())
+
+        assert access.adapter_access_state == expected_state
+        assert access.unavailable is True
+        assert access.available_actions == []
+        assert access.unavailable_actions == []
+        assert access.disabled_surfaces == adapter.supported_surfaces
+
+    admin_users = next(
+        adapter
+        for adapter in list_adapter_contracts()
+        if adapter.adapter_key == "admin.users.adapter"
+    )
+    access = build_adapter_access_state(admin_users, owner_permission_info())
+
+    assert access.adapter_access_state == "available"
+    assert access.requires_approval is True
+    assert access.available_actions == []
+    assert "admin.users.manage" in access.unavailable_actions
+    assert any(
+        contract.action_key == "admin.users.manage"
+        and contract.requires_approval is True
+        and contract.executable_before_c09 is False
+        for contract in access.action_contracts
+    )
+
+
+def test_module_adapter_router_exposes_only_read_contract_apis(
+    auth_client: TestClient,
+) -> None:
+    adapter_routes = [
+        (
+            getattr(route, "path", ""),
+            set(getattr(route, "methods", set()) or set()),
+        )
+        for route in auth_client.app.routes
+        if str(getattr(route, "path", "")).startswith("/module-adapters")
+    ]
+
+    assert ("/module-adapters/registry", {"GET"}) in adapter_routes
+    assert ("/module-adapters/me", {"GET"}) in adapter_routes
+    assert not any(
+        methods & {"POST", "PUT", "PATCH", "DELETE"}
+        for _, methods in adapter_routes
+    )
+    assert not any(
+        re.search(r"/(?:actions?|execute|execution|run)\b", path)
+        for path, _ in adapter_routes
     )
 
 
