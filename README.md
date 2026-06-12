@@ -672,9 +672,33 @@ does not modify the K-series worktree. P-series workflows are n8n workflows,
 not C08; they may later enter through action/execution capability after C09
 and C15, but C08A does not read or modify P-series workflow JSON.
 
-Recommended next split:
+Current next split after C08B:
 
-- C08B: backend Module Adapter contract / static adapter registry.
+- C08C: frontend adapter rendering shell / adapter surface placeholders.
+
+C08B has added the backend Module Adapter contract and static adapter registry
+documented in `docs/C08_MODULE_ADAPTER_BACKEND.md`:
+
+- Static code-only adapter contracts in `backend/app/core/module_adapters.py`;
+  no new database table and no migration.
+- Adapter schema and access-state responses in
+  `backend/app/schemas/module_adapter.py`.
+- Central validation and current-user adapter access-state logic in
+  `backend/app/services/module_adapter_registry.py`.
+- Authenticated `GET /module-adapters/registry` for safe adapter metadata.
+- Authenticated `GET /module-adapters/me` for owner/non-owner adapter access
+  state based on C07 modules and C05/C06 effective permissions.
+- Initial adapters are `core.dashboard.adapter`, `admin.users.adapter`,
+  `admin.permissions.adapter`, `business.products.placeholder.adapter`, and
+  `integration.n8n_test_bridge.adapter`.
+- `business.products.placeholder.adapter` and
+  `integration.n8n_test_bridge.adapter` remain `adapter_pending`, unavailable,
+  and not executable.
+- Dependency declarations are safe names only; the n8n test bridge declares
+  only `n8n` with no live connection.
+- C08B adds no frontend UI, no migration, no action execution endpoint, no
+  Execution Provider, no Module Switch, no K01/P-series runtime, and no live
+  n8n/WooCommerce/MinIO/Filebrowser integration.
 
 ## Temporary login preview
 

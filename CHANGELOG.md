@@ -6,6 +6,35 @@
 
 ### Added
 
+- C08B：新增后端 Module Adapter Contract v1 和静态 adapter registry，包含
+  `backend/app/schemas/module_adapter.py`、`backend/app/core/module_adapters.py`、
+  `backend/app/services/module_adapter_registry.py` 和
+  `backend/app/api/routes/module_adapters.py`；采用代码内 registry，不新增数据库表或
+  migration。
+- C08B：新增 authenticated read-only `GET /module-adapters/registry` 和
+  `GET /module-adapters/me`；registry API 返回安全 adapter metadata，me API 基于 C07
+  module access state 和 C05/C06 effective permissions 返回当前用户 adapter visibility、
+  surfaces、action contracts、available/locked/unavailable actions、required/missing
+  permissions、execution provider state 和 approval declaration。
+- C08B：初始 adapter registry 只注册 `core.dashboard.adapter`、`admin.users.adapter`、
+  `admin.permissions.adapter`、`business.products.placeholder.adapter` 和
+  `integration.n8n_test_bridge.adapter`；business products 与 n8n test bridge 均保持
+  `adapter_pending`、unavailable、not executable，不接真实业务。
+- C08B：adapter validation 覆盖 adapter key/version/status/surface、C07 `module_key`
+  绑定、route/API/nav namespace 不越界、permission bindings 可追踪、action_contracts
+  必须声明 permission/risk/operation_log_action、execution action C09 前不可执行、
+  dependency declarations 仅允许安全依赖名且不含 secret/token/password/env/URL/credential。
+- C08B：新增 `tests/backend/test_module_adapters_registry.py`，覆盖 adapter API 鉴权、
+  owner/non-owner access state、business locked/show_locked、admin hidden、role defaults
+  不自动生效、`super_admin` 不默认全局、adapter_pending/disabled 不可执行、execution
+  provider required action unavailable、K01/P 系列不启用、n8n bridge 不 live connected，
+  以及 `/modules/registry`、`/modules/me`、`/permissions/me`、C06B assignment API、
+  `/users` owner-only 和 `/auth/register` 404 回归。
+- C08B：新增 `docs/C08_MODULE_ADAPTER_BACKEND.md`，归档后端 adapter contract/registry/API、
+  lifecycle/status、supported surfaces、pages/routes/nav/api bindings、capabilities/actions、
+  status/health/data/input/output contracts、permission/scope/operation log bindings、
+  dependency/execution/approval declarations 和明确不做 Execution Provider/Module Switch/
+  Approval Gate/K01/P 系列/live provider 的边界。
 - C08A：新增 `docs/C08_MODULE_ADAPTER_PLAN.md`，完成 Module Adapter 审计与方案设计；确认
   C07 模块隔离体系已封板，C08 可以开始，C08 目标是定义模块如何正规接入控制台的
   adapter contract，而不是执行任务、接真实业务或实现 K01/P 系列 runtime。

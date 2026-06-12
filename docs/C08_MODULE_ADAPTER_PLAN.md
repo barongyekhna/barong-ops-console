@@ -8,6 +8,13 @@ C08A 是只读审计和文档设计任务，不是功能实现任务。本轮不
 代码，不修改 frontend runtime 代码，不新增 API，不新增 UI，不新增 migration，不发布
 staging 或 production，不执行 safe release，不接真实业务，不进入 K01，不进入 P 系列。
 
+2026-06-12 C08B 补充：后端 Module Adapter contract / static adapter registry 已完成，
+归档在 `docs/C08_MODULE_ADAPTER_BACKEND.md`。C08B 新增 `ModuleAdapterContractV1`
+schema、代码内静态 adapter registry、集中 validation/access-state service，以及
+authenticated read-only `GET /module-adapters/registry` 和 `GET /module-adapters/me`。
+C08B 只返回安全 adapter metadata，不执行 action，不连接 live provider，不新增 migration，
+不新增前端 UI，不接 K01/P 系列或真实业务。
+
 ## 一、C08A 结论
 
 C08 可以开始。
@@ -790,6 +797,18 @@ C08 为这些阶段预留字段：
 - 新增静态 adapter registry 或 fixture。
 - 校验 adapter 绑定 existing `module_key`。
 - 不执行 action。
+
+状态：已完成。实现记录见 `docs/C08_MODULE_ADAPTER_BACKEND.md`。
+
+已实现：
+
+- `backend/app/schemas/module_adapter.py`
+- `backend/app/core/module_adapters.py`
+- `backend/app/services/module_adapter_registry.py`
+- `backend/app/api/routes/module_adapters.py`
+- `GET /module-adapters/registry`
+- `GET /module-adapters/me`
+- `tests/backend/test_module_adapters_registry.py`
 
 允许：
 

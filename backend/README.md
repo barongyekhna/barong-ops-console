@@ -17,10 +17,13 @@ C07F has released the C07B backend runtime to production and archived the
 result in `docs/C07_MODULE_PRODUCTION_RELEASE.md`; no Alembic upgrade was
 executed for C07F and production current/head remains `c05b_permissions_001
 (head)`. C07G has sealed the full C07 module-isolation backend state in
-`docs/C07_MODULE_ISOLATION_SEAL.md`. C08A has started docs-only Module Adapter
-planning in `docs/C08_MODULE_ADAPTER_PLAN.md`; it designs the future adapter
-contract but adds no backend runtime code, API, migration, provider
-connection, K01/P-series runtime, or real business integration.
+`docs/C07_MODULE_ISOLATION_SEAL.md`. C08A started docs-only Module Adapter
+planning in `docs/C08_MODULE_ADAPTER_PLAN.md`. C08B has now added the backend
+Module Adapter contract and static registry in
+`docs/C08_MODULE_ADAPTER_BACKEND.md`, including authenticated read-only
+`GET /module-adapters/registry` and `GET /module-adapters/me`, with no
+backend migration, provider connection, K01/P-series runtime, action execution,
+frontend UI, or real business integration.
 C06E has released the C06B backend API to production, and C06F has sealed C06
 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
@@ -277,15 +280,39 @@ no migration, no database operation, no env read, no K01/P-series/provider
 connection, and no real business task. The next backend phase is C08 Module
 Adapter.
 
-C08A is now documented in `docs/C08_MODULE_ADAPTER_PLAN.md`. It defines how a
+C08A is documented in `docs/C08_MODULE_ADAPTER_PLAN.md`. It defines how a
 future backend adapter contract should bind to an existing C07 `module_key`,
 declare adapter status, supported surfaces, route/API bindings, capabilities,
 action contracts, status/health providers, data contracts, permission
 bindings, operation-log bindings, dependency declarations, and reserved
-execution/sandbox/scope/switch fields. C08A does not implement that registry
-or any execution path. C08B is the recommended next backend step for a static
-Module Adapter contract / registry, still separate from K01, P-series, n8n,
-WooCommerce, MinIO, Filebrowser, and live provider integration.
+execution/sandbox/scope/switch fields.
+
+C08B is documented in `docs/C08_MODULE_ADAPTER_BACKEND.md`. It implements:
+
+- `backend/app/schemas/module_adapter.py` for Module Adapter Contract v1 and
+  safe API response schemas.
+- `backend/app/core/module_adapters.py` for the static code-only adapter
+  registry.
+- `backend/app/services/module_adapter_registry.py` for contract validation,
+  C07 module binding, safe dependency validation, and current-user adapter
+  access state.
+- `GET /module-adapters/registry` for authenticated safe adapter metadata.
+- `GET /module-adapters/me` for authenticated adapter access state based on
+  C07 module access and C05/C06 effective permissions.
+
+C08B initial adapters are `core.dashboard.adapter`, `admin.users.adapter`,
+`admin.permissions.adapter`, `business.products.placeholder.adapter`, and
+`integration.n8n_test_bridge.adapter`. Placeholder/integration adapters remain
+`adapter_pending`, unavailable, and not executable. Action contracts are only
+declarations; actions requiring execution provider return unavailable because
+C09 is not implemented. Dependency declarations are safe dependency names only;
+the n8n test bridge declares only `n8n` and no live connection.
+
+C08B adds no migration, no frontend UI, no action execution endpoint, no
+Execution Provider, no Module Switch, no Approval Gate, no K01/P-series
+runtime, and no live n8n/WooCommerce/MinIO/Filebrowser provider integration.
+The next backend/frontend phase is C08C frontend adapter rendering shell /
+adapter surface placeholders.
 
 F12 adds the n8n test webhook bridge:
 

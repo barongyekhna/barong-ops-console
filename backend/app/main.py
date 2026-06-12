@@ -8,6 +8,7 @@ from .api.routes.foundation_demo import router as foundation_demo_router
 from .api.routes.health import router as health_router
 from .api.routes.jobs import router as jobs_router
 from .api.routes.memory import router as memory_router
+from .api.routes.module_adapters import router as module_adapters_router
 from .api.routes.modules import router as modules_router
 from .api.routes.n8n_test import router as n8n_test_router
 from .api.routes.operation_logs import router as operation_logs_router
@@ -38,3 +39,4 @@ app.include_router(operation_logs_router)
 app.include_router(permissions_router)
 app.include_router(foundation_demo_router)
 app.include_router(n8n_test_router)
+app.include_router(module_adapters_router)
