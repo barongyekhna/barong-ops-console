@@ -6,6 +6,42 @@
 
 ### Added
 
+- C08C：新增前端 Module Adapter 类型、normalizer 和 no-execute helper：
+  `frontend/src/lib/module-adapter.ts`；覆盖 `ModuleAdapterContract`、
+  `ModuleAdapterAccessState`、adapter status/lifecycle/surface/action/capability/
+  binding/dependency/execution/approval 类型，以及 `isAdapterExecutable()`
+  永远返回 false、action contract state 不生成 executable payload。
+- C08C：新增 `frontend/src/lib/module-adapter-api.ts`，通过现有 restricted
+  frontend backend proxy 调用 authenticated read-only `GET /module-adapters/registry`
+  和 `GET /module-adapters/me`；API 失败时返回 safe unknown/unavailable 降级，不打印
+  token、password、secret 或 Authorization header。
+- C08C：新增 `AdapterAccessProvider`、`useAdapterAccess`、`useAdapterRegistry`、
+  `useAdapterState(adapterKey)` 和 `useAdapterStateForModule(moduleKey)`，与 C07C
+  `ModuleAccessProvider` 并存；C07 仍负责 module visible/locked/hidden/unavailable，
+  C08C 只展示 adapter surfaces/contracts。`/module-adapters/me` 不可用时，非 owner
+  不暴露 admin/system adapter metadata。
+- C08C：新增 `AdapterSurfaceShell`、`AdapterSurfacePlaceholder`、
+  `AdapterStatusBadge`、`AdapterCapabilitiesList`、`AdapterActionContractsList`、
+  `AdapterDependencySummary`、`AdapterDataContractsSummary` 和
+  `AdapterUnavailableNotice`；展示 adapter status、supported surfaces、pages/nav/
+  route/api bindings、capabilities、action/data/input/output contracts 和安全
+  dependency names。
+- C08C：action contracts 只显示 disabled declaration，按钮显示 `Execution Provider
+  not connected`；execution required action 显示等待 C09 Execution Provider，
+  approval required action 显示等待 C12 Approval Gate；不执行 action、不创建任务、
+  不写 operation log。
+- C08C：frontend proxy 精确 allowlist `GET /module-adapters/registry` 和
+  `GET /module-adapters/me`，并在 `frontend/scripts/verify-foundation.mjs` 中检查
+  不存在危险 `/module-adapters/*` 宽通配，同时保持 C05/C06/C07 proxy 校验不回退。
+- C08C：新增 `tests/frontend/module-adapter.test.mjs`，覆盖 adapter proxy、
+  verify-foundation、adapter_pending/disabled/deprecated 不可执行、execution/approval
+  action 不可执行、owner/non-owner admin visibility、business locked、missing access
+  safe fallback、dependency safe names、K01/P 系列默认不启用，以及 C05/C06/C07
+  owner-only 和 route guard 回归。
+- C08C：新增 `docs/C08_MODULE_ADAPTER_FRONTEND.md`，归档前端 adapter shell 设计、
+  API 调用、provider/hooks、supported surfaces、action/capability/data contract 展示、
+  dependency safety，以及不做 Execution Provider/Module Switch/Approval Gate/K01/
+  P 系列/live provider 的边界。
 - C08B：新增后端 Module Adapter Contract v1 和静态 adapter registry，包含
   `backend/app/schemas/module_adapter.py`、`backend/app/core/module_adapters.py`、
   `backend/app/services/module_adapter_registry.py` 和

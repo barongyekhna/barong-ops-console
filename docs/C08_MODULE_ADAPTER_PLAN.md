@@ -15,6 +15,16 @@ authenticated read-only `GET /module-adapters/registry` 和 `GET /module-adapter
 C08B 只返回安全 adapter metadata，不执行 action，不连接 live provider，不新增 migration，
 不新增前端 UI，不接 K01/P 系列或真实业务。
 
+2026-06-12 C08C 补充：前端 adapter rendering shell / adapter surface placeholders
+已完成，归档在 `docs/C08_MODULE_ADAPTER_FRONTEND.md`。C08C 新增前端
+Module Adapter 类型/helper/API client、`AdapterAccessProvider` 和通用
+`AdapterSurfaceShell`，通过现有 frontend backend proxy 读取
+`GET /module-adapters/registry` 与 `GET /module-adapters/me`，只展示 adapter
+status、supported surfaces、bindings、capabilities、action/data contracts 和安全
+dependency names。所有 action 仍不可执行，execution action 显示等待 C09，approval
+action 显示等待 C12；C08C 不新增后端 API，不新增 migration，不接 K01/P 系列或 live
+provider。
+
 ## 一、C08A 结论
 
 C08 可以开始。
@@ -840,6 +850,20 @@ C08 为这些阶段预留字段：
 - 显示 adapter_pending / unavailable / disabled 状态。
 - 不渲染真实业务 UI。
 
+状态：已完成。实现记录见 `docs/C08_MODULE_ADAPTER_FRONTEND.md`。
+
+已实现：
+
+- `frontend/src/lib/module-adapter.ts`
+- `frontend/src/lib/module-adapter-api.ts`
+- `frontend/src/components/adapter-access-provider.tsx`
+- `frontend/src/components/module-adapter-shell.tsx`
+- console layout 挂载 `AdapterAccessProvider`
+- console shell 展示 `AdapterSurfaceShell`
+- frontend proxy 精确 allowlist `GET /module-adapters/registry` 和
+  `GET /module-adapters/me`
+- `tests/frontend/module-adapter.test.mjs`
+
 允许：
 
 - 修改前端 adapter helper、placeholder shell、tests。
@@ -857,6 +881,7 @@ C08 为这些阶段预留字段：
 - adapter surface placeholder。
 - no-action 状态。
 - frontend tests。
+- C08C 前端归档文档。
 
 ### C08D：Adapter contract verify/test 体系
 

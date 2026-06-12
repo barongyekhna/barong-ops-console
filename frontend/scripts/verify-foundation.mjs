@@ -39,8 +39,13 @@ for (const requiredFile of [
   join(frontendRoot, "src", "components", "auth-guard.tsx"),
   join(frontendRoot, "src", "lib", "module-registry.ts"),
   join(frontendRoot, "src", "lib", "module-registry-api.ts"),
+  join(frontendRoot, "src", "lib", "module-adapter.ts"),
+  join(frontendRoot, "src", "lib", "module-adapter-api.ts"),
   join(frontendRoot, "src", "components", "module-access-provider.tsx"),
+  join(frontendRoot, "src", "components", "adapter-access-provider.tsx"),
+  join(frontendRoot, "src", "components", "module-adapter-shell.tsx"),
   join(repoRoot, "tests", "frontend", "module-isolation.test.mjs"),
+  join(repoRoot, "tests", "frontend", "module-adapter.test.mjs"),
 ]) {
   if (!existsSync(requiredFile)) {
     throw new Error(`Missing protected console file: ${requiredFile}`);
@@ -167,9 +172,26 @@ for (const modulesPath of ["modules/registry", "modules/me"]) {
   }
 }
 
+for (const adapterPath of [
+  "module-adapters/registry",
+  "module-adapters/me",
+]) {
+  if (!backendProxySource.includes(adapterPath)) {
+    throw new Error(
+      `The backend API proxy must allow GET /${adapterPath}.`,
+    );
+  }
+}
+
 if (!backendProxySource.includes("ALLOWED_MODULE_REGISTRY_PATHS")) {
   throw new Error(
     "The backend API proxy must keep C07 module registry paths explicitly allowlisted.",
+  );
+}
+
+if (!backendProxySource.includes("ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS")) {
+  throw new Error(
+    "The backend API proxy must keep C08 module adapter registry paths explicitly allowlisted.",
   );
 }
 
@@ -204,6 +226,48 @@ if (
 }
 if (!backendProxySource.includes('method === "GET" && ALLOWED_MODULE_REGISTRY_PATHS.has(requestedPath)')) {
   throw new Error("The C07 module registry proxy paths must be GET-only.");
+}
+
+const moduleAdapterAllowlistMatch = backendProxySource.match(
+  /const ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS = new Set\(\[([\s\S]*?)\]\);/,
+);
+if (!moduleAdapterAllowlistMatch) {
+  throw new Error("The C08 module adapter proxy allowlist was not found.");
+}
+const moduleAdapterAllowlist = new Set(
+  Array.from(
+    moduleAdapterAllowlistMatch[1].matchAll(/["']([^"']+)["']/g),
+  ).map((match) => match[1]),
+);
+if (
+  moduleAdapterAllowlist.size !== 2 ||
+  !moduleAdapterAllowlist.has("module-adapters/registry") ||
+  !moduleAdapterAllowlist.has("module-adapters/me")
+) {
+  throw new Error(
+    "The C08 module adapter proxy allowlist must contain only exact GET /module-adapters/registry and GET /module-adapters/me.",
+  );
+}
+if (
+  /module-adapters\/\*/.test(backendProxySource) ||
+  /path\[0\]\s*===\s*["']module-adapters["'][\s\S]{0,120}path\.length\s*[!<>]=/.test(
+    backendProxySource,
+  ) ||
+  /requestedPath\.startsWith\(["']module-adapters\//.test(backendProxySource)
+) {
+  throw new Error(
+    "The backend API proxy must not allow a broad /module-adapters/* wildcard.",
+  );
+}
+if (
+  !backendProxySource.includes(
+    'method === "GET" &&\n      ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS.has(requestedPath)',
+  ) &&
+  !backendProxySource.includes(
+    'method === "GET" && ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS.has(requestedPath)',
+  )
+) {
+  throw new Error("The C08 module adapter proxy paths must be GET-only.");
 }
 
 for (const assignmentProxyCheck of [
@@ -281,6 +345,18 @@ if (
   !moduleRegistrySource.includes("show_locked")
 ) {
   throw new Error("The C07C module registry helper is missing isolation checks.");
+}
+
+if (
+  !source.includes("AdapterAccessProvider") ||
+  !source.includes("useAdapterAccess") ||
+  !source.includes("module-adapters/registry") ||
+  !source.includes("module-adapters/me") ||
+  !source.includes("Execution Provider not connected") ||
+  !source.includes("等待 C09 Execution Provider") ||
+  !source.includes("等待 C12 Approval Gate")
+) {
+  throw new Error("The C08C adapter frontend shell markers are incomplete.");
 }
 
 if (

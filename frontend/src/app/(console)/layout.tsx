@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { AdapterAccessProvider } from "@/components/adapter-access-provider";
 import { AuthGuard } from "@/components/auth-guard";
 import { ConsoleShell } from "@/components/console-shell";
 import { ModuleAccessProvider } from "@/components/module-access-provider";
@@ -9,9 +10,11 @@ export default function ProtectedLayout({ children }: { children: ReactNode }) {
   return (
     <AuthGuard>
       <ModuleAccessProvider>
-        <ConsoleShell>
-          <PermissionRouteGuard>{children}</PermissionRouteGuard>
-        </ConsoleShell>
+        <AdapterAccessProvider>
+          <ConsoleShell>
+            <PermissionRouteGuard>{children}</PermissionRouteGuard>
+          </ConsoleShell>
+        </AdapterAccessProvider>
       </ModuleAccessProvider>
     </AuthGuard>
   );

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
+import { AdapterSurfaceShell } from "@/components/module-adapter-shell";
 import { useAuth } from "@/components/auth-provider";
 import { useModuleAccess } from "@/components/module-access-provider";
 import { navigationGroups, pageTitles } from "@/lib/navigation";
@@ -169,7 +170,10 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           </div>
         </header>
 
-        <main className="page-content">{children}</main>
+        <main className="page-content">
+          {children}
+          <AdapterSurfaceShell />
+        </main>
       </div>
     </div>
   );

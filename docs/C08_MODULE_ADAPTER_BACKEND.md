@@ -12,6 +12,13 @@ Module Switch，不实现 Approval Gate，不新增 migration，不新增前端 
 不接 P 系列，不接 n8n/WooCommerce/MinIO/Filebrowser live provider，不发布
 staging 或 production。
 
+2026-06-12 C08C 补充：前端 adapter rendering shell / adapter surface placeholders
+已完成并归档在 `docs/C08_MODULE_ADAPTER_FRONTEND.md`。C08C 通过现有 frontend
+backend proxy 只读消费本文件记录的 `GET /module-adapters/registry` 和
+`GET /module-adapters/me`，展示 adapter status、supported surfaces、bindings、
+capabilities、action/data contracts 和安全 dependency names。C08C 未修改本后端 API
+contract，未新增后端 API，未新增 migration，未执行 action，未连接 live provider。
+
 ## 实现范围
 
 新增后端文件：
@@ -286,5 +293,7 @@ webhook、API key 或 credential value。C08B 只声明依赖名和 `live_connec
 
 ## 下一步
 
-C08C 应实现前端 adapter rendering shell / adapter surface placeholders，只显示安全
+C08C 已实现前端 adapter rendering shell / adapter surface placeholders，只显示安全
 placeholder 和 pending/unavailable/disabled 状态，不接真实业务 UI，不触发 action。
+下一步应进入 C08D Adapter contract verify/test 体系，继续固化 no-execute、
+no-provider、no-secret 和 C05/C06/C07 regression 检查。

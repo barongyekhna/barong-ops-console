@@ -297,21 +297,39 @@ backend API, no migration, no staging/production release, no K01/P-series
 menu, no provider connection, and no real business task. The next frontend
 phase is C08 Module Adapter.
 
-C08A has started docs-only Module Adapter planning in
-`docs/C08_MODULE_ADAPTER_PLAN.md`. For the frontend, C08A defines future
-adapter surface contracts for navigation, dashboard cards, module pages,
-detail pages, action panels, settings panels, audit log views, status widgets,
-and future approval panels. It does not add those UI surfaces in this round.
-The future adapter renderer must stay bound to C07 `module_key`,
-route_namespace, business `show_locked`, admin/system `hide_when_denied`, and
-the current module route guard. C08B/C08C are the recommended next backend and
-frontend steps; C08A does not add K01/P-series menus, does not connect live
-providers, and does not expose executable actions.
+C08A started docs-only Module Adapter planning in
+`docs/C08_MODULE_ADAPTER_PLAN.md`, and C08B added the backend static adapter
+registry documented in `docs/C08_MODULE_ADAPTER_BACKEND.md`.
+
+C08C has added the frontend adapter rendering shell documented in
+`docs/C08_MODULE_ADAPTER_FRONTEND.md`. The frontend now calls only
+`GET /module-adapters/registry` and `GET /module-adapters/me` through the
+restricted same-origin backend proxy. The proxy precisely allowlists those two
+paths and does not expose a broad `/module-adapters/*` route.
+
+`AdapterAccessProvider` runs alongside the C07 `ModuleAccessProvider`.
+C07 still owns module visibility, locked/hidden/unavailable state, and route
+guard behavior. C08C uses adapter access only to display adapter status,
+supported surfaces, pages/nav/route/api bindings, capabilities, action
+contracts, data/input/output contracts, and safe dependency names.
+
+The adapter shell is contract-only. Action rows are disabled, never produce an
+executable payload, show `Execution Provider not connected`, wait for C09
+Execution Provider, and show C12 Approval Gate pending text when approval is
+declared. Dependency declarations display only safe names such as `n8n`,
+`woocommerce`, `minio`, `filebrowser`, `ai_provider`, `serp`, `wecom`, and
+`google_sheets`; the UI does not show URLs, env values, credentials, tokens,
+secrets, Authorization headers, or webhook values.
+
+C08C does not add K01/P-series menus, does not add real business pages, does
+not connect live providers, does not implement Execution Provider, Module
+Switch, or Approval Gate, and does not expose executable actions.
 
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier
-checks `tests/frontend/module-isolation.test.mjs` during image builds. The
-runtime image still only copies the built Next.js output and public assets.
+checks `tests/frontend/module-isolation.test.mjs` and the C08C verifier checks
+`tests/frontend/module-adapter.test.mjs` during image builds. The runtime image
+still only copies the built Next.js output and public assets.
 
 ## Configuration
 

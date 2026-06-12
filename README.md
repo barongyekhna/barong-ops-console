@@ -672,10 +672,6 @@ does not modify the K-series worktree. P-series workflows are n8n workflows,
 not C08; they may later enter through action/execution capability after C09
 and C15, but C08A does not read or modify P-series workflow JSON.
 
-Current next split after C08B:
-
-- C08C: frontend adapter rendering shell / adapter surface placeholders.
-
 C08B has added the backend Module Adapter contract and static adapter registry
 documented in `docs/C08_MODULE_ADAPTER_BACKEND.md`:
 
@@ -699,6 +695,38 @@ documented in `docs/C08_MODULE_ADAPTER_BACKEND.md`:
 - C08B adds no frontend UI, no migration, no action execution endpoint, no
   Execution Provider, no Module Switch, no K01/P-series runtime, and no live
   n8n/WooCommerce/MinIO/Filebrowser integration.
+
+C08C has added the frontend adapter rendering shell documented in
+`docs/C08_MODULE_ADAPTER_FRONTEND.md`:
+
+- Frontend Module Adapter types, normalizers, and no-execute helpers in
+  `frontend/src/lib/module-adapter.ts`.
+- Adapter registry API client in `frontend/src/lib/module-adapter-api.ts`,
+  calling only `GET /module-adapters/registry` and `GET /module-adapters/me`
+  through the restricted frontend backend proxy.
+- `AdapterAccessProvider` and hooks alongside the C07 `ModuleAccessProvider`;
+  C07 still owns module visibility, locked/hidden/unavailable state, and route
+  guard behavior.
+- `AdapterSurfaceShell` displays adapter status, supported surfaces, pages /
+  nav / route / api bindings, capabilities, action contracts, data/input/output
+  contracts, and safe dependency names.
+- Action contracts are displayed only as disabled declarations. They show
+  `Execution Provider not connected`, wait for C09 Execution Provider, and
+  approval-required actions wait for C12 Approval Gate.
+- The proxy precisely allows only `GET /module-adapters/registry` and
+  `GET /module-adapters/me`; `/module-adapters/*` broad wildcard paths remain
+  blocked.
+- `tests/frontend/module-adapter.test.mjs` and
+  `frontend/scripts/verify-foundation.mjs` cover adapter proxy, no-execute,
+  no-secret dependency display, admin/system hiding on access unknown, business
+  locked state, and C05/C06/C07 regressions.
+- C08C adds no backend API, no migration, no action execution, no Execution
+  Provider, no Approval Gate, no Module Switch, no K01/P-series runtime, and no
+  live n8n/WooCommerce/MinIO/Filebrowser integration.
+
+Current next split after C08C:
+
+- C08D: Adapter contract verify/test体系.
 
 ## Temporary login preview
 
