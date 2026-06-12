@@ -9,6 +9,15 @@ C09A 是只读审计和文档设计任务，不是功能实现任务。本轮不
 staging 或 production，不执行 safe release，不读取真实 env，不执行 adapter action，
 不连接 live provider，不创建真实业务任务。
 
+2026-06-12 C09B 补充：后端 Execution Provider contract / no-op provider
+registry 已完成，归档在 `docs/C09_EXECUTION_PROVIDER_BACKEND.md`。C09B 新增后端
+Execution Provider Contract v1 schema、Execution Request/Result/State schema 草案、
+代码内静态 no-op/mock/contract-only/future provider registry、contract validation、
+current-user provider access state，以及 authenticated read-only
+`GET /execution-providers/registry` 和 `GET /execution-providers/me`。C09B 没有新增
+execution submit API，没有新增 queue/worker/webhook/live provider，没有新增 migration，
+没有新增前端 UI，没有执行 adapter action，没有读取 env，也没有创建真实任务。
+
 ## 一、C09A 结论
 
 C09 可以开始。
@@ -506,6 +515,29 @@ Execution Provider 和 live n8n / webhook / queue 的边界：
 - 新增 static/no-op/mock provider registry。
 - 校验 provider 绑定 C08 adapter action contract。
 - 明确 no-op provider 不执行真实动作。
+
+状态：
+
+- 已完成，记录文件为 `docs/C09_EXECUTION_PROVIDER_BACKEND.md`。
+- 新增 `backend/app/schemas/execution_provider.py`，定义
+  `ExecutionProviderContractV1`、Execution Request/Result/State schema 草案、
+  registry response 和 access-state safe output schema。
+- 新增 `backend/app/core/execution_providers.py`，提供 8 个代码内静态 provider：
+  `core.no_op_provider`、`core.mock_provider`、`core.contract_only_provider`、
+  `future.local_backend_provider`、`future.queue_provider`、
+  `future.webhook_provider`、`future.scheduled_provider`、
+  `future.live_provider`。
+- 新增 `backend/app/services/execution_provider_registry.py`，集中校验 provider key、
+  version、type、status、lifecycle、execution mode、action type、C07 module binding、
+  C08 adapter/action_contract binding、permission/risk/operation_log 继承、approval /
+  execution / secret / no-live / no-write 安全边界和 schema 可序列化。
+- 新增 `backend/app/api/routes/execution_providers.py`，提供 authenticated read-only
+  `GET /execution-providers/registry` 和 `GET /execution-providers/me`。
+- 所有 provider 在 C09B 中 `executable=false`、`can_request_execution=false`。
+- `operation_log_policy` 只声明，不写 operation logs。
+- `secret_requirement` 只声明，不读取 secret，不返回 credential。
+- future local/queue/webhook/scheduled/live provider 均为 provider_pending 或 disabled，
+  不连接任何 live provider。
 
 允许：
 

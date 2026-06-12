@@ -47,6 +47,16 @@ retry, cancel, timeout, result, artifact, secret/provider dependency, and
 C09B-C09G split. It adds no backend runtime code, no submit API, no queue,
 no worker, no webhook/n8n execution, no migration, no env read, no
 staging/production release, and no adapter action execution.
+C09B has now added the backend Execution Provider contract and static no-op
+provider registry in `docs/C09_EXECUTION_PROVIDER_BACKEND.md`, including
+authenticated read-only `GET /execution-providers/registry` and
+`GET /execution-providers/me`. The registry validates C07 module binding, C08
+adapter/action_contract binding, inherited permission/risk/operation-log
+metadata, approval/secret/scope blocking, schema serialization, and no-live /
+no-write / no-execute boundaries. All providers remain `executable=false` and
+`can_request_execution=false`; C09B adds no migration, frontend UI, submit API,
+queue, worker, webhook execution, live provider, adapter action execution, or
+real business task.
 C06E has released the C06B backend API to production, and C06F has sealed C06
 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
@@ -467,8 +477,27 @@ future backend Execution Provider standard that will turn a C08
 safe result summary, artifact references, and safe error fields. C09A remains
 documentation-only: no backend route, no migration, no queue, no worker, no
 webhook/n8n execution, no secret access, no live provider, and no real business
-task were added. The next backend step is C09B: Execution Provider contract /
-no-op provider registry.
+task were added.
+
+C09B is documented in `docs/C09_EXECUTION_PROVIDER_BACKEND.md`. It implements:
+
+- `backend/app/schemas/execution_provider.py` for Execution Provider Contract
+  v1, Execution Request/Result/State schema declarations, safe registry output,
+  and current-user access state.
+- `backend/app/core/execution_providers.py` for the static no-op/mock/
+  contract-only/future provider registry.
+- `backend/app/services/execution_provider_registry.py` for provider key,
+  version, status, C07 module binding, C08 adapter/action binding,
+  permission/risk/operation-log inheritance, no-live/no-secret/no-write
+  validation, and access-state calculation.
+- `backend/app/api/routes/execution_providers.py` for authenticated read-only
+  `GET /execution-providers/registry` and `GET /execution-providers/me`.
+
+C09B does not create execution requests, does not write operation logs, does
+not create jobs/tasks/artifacts, does not add a POST execution endpoint, does
+not implement queue/worker/webhook/live provider execution, and does not add a
+migration. The next backend step is C09C frontend consumption of this read-only
+status contract, keeping action submit disabled.
 
 ## Run tests
 

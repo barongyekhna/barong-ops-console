@@ -851,8 +851,28 @@ secret requirements, scope placeholder rules, idempotency, retry, cancel,
 timeout, concurrency, rate limit, operation log, audit event, artifact,
 callback, failure, fallback, unavailable behavior, tests, and docs path.
 
-The recommended next step after C09A is C09B: backend Execution Provider
-contract / no-op provider registry.
+C09B has added the backend Execution Provider contract and static no-op
+provider registry documented in `docs/C09_EXECUTION_PROVIDER_BACKEND.md`:
+
+- Backend schema now defines `ExecutionProviderContractV1`, Execution Request /
+  Result / State contract schemas, safe registry output, and current-user
+  provider access state.
+- Static registry now declares `core.no_op_provider`, `core.mock_provider`,
+  `core.contract_only_provider`, and future local/queue/webhook/scheduled/live
+  provider placeholders.
+- New authenticated read-only APIs are `GET /execution-providers/registry` and
+  `GET /execution-providers/me`.
+- Provider action binding must match C08 `action_contract` `module_key`,
+  `adapter_key`, `action_key`, `required_permission`, `risk_level`, and
+  `operation_log_action`.
+- C09B returns permission/approval/secret/scope/provider blocking states, but
+  every provider remains `executable=false` and `can_request_execution=false`.
+- C09B adds no frontend UI, no migration, no execution submit API, no queue,
+  no worker, no webhook execution, no live provider, no adapter action
+  execution, and no real business task.
+
+The recommended next step after C09B is C09C: frontend execution status shell /
+action submit disabled state.
 
 ## Temporary login preview
 

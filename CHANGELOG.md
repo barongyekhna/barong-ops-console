@@ -6,6 +6,34 @@
 
 ### Added
 
+- C09B：新增后端 Execution Provider Contract v1、Execution Request/Result/State
+  schema 草案、静态 no-op/mock/contract-only/future provider registry 和只读 API；
+  新增文件包括 `backend/app/schemas/execution_provider.py`、
+  `backend/app/core/execution_providers.py`、
+  `backend/app/services/execution_provider_registry.py`、
+  `backend/app/api/routes/execution_providers.py` 和
+  `tests/backend/test_execution_providers_registry.py`。
+- C09B：新增 authenticated read-only `GET /execution-providers/registry` 和
+  `GET /execution-providers/me`；registry 返回安全 provider metadata，`/me` 基于 C05/C06
+  effective permissions、C07 module access、C08 adapter access 和 C08 action_contract
+  返回 provider/action visibility、locked/hidden/unavailable/blocked reason、approval /
+  secret / scope status 和 no-execute reason。
+- C09B：provider validation 覆盖 `provider_key` 唯一和命名、version/type/status/
+  lifecycle、execution mode/action type、C07 `module_key`、C08 `adapter_key` /
+  `action_key`、继承 C08 `required_permission` / `risk_level` /
+  `operation_log_action`、approval-required 和 execution-required no-execute、
+  secret requirement declared-only、schema 可序列化、no live provider、no operation log
+  write，以及 C05/C06/C07/C08 回归。
+- C09B：初始 registry 只注册 `core.no_op_provider`、`core.mock_provider`、
+  `core.contract_only_provider`、`future.local_backend_provider`、`future.queue_provider`、
+  `future.webhook_provider`、`future.scheduled_provider` 和 `future.live_provider`；
+  所有 provider 均 `executable=false`、`can_request_execution=false`，future providers
+  保持 provider_pending 或 disabled。
+- C09B：新增 `docs/C09_EXECUTION_PROVIDER_BACKEND.md`，归档 contract 字段、request/result/
+  state schema、provider lifecycle/status、C08 action binding、permission/risk/approval/
+  secret/scope 阻断、API 语义、operation_log_policy declared-only 和 no-execute 安全边界；
+  本轮没有新增 frontend UI、migration、execution submit API、queue、worker、webhook
+  execution、live provider、adapter action execution 或真实业务任务。
 - C09A：新增 `docs/C09_EXECUTION_PROVIDER_PLAN.md`，完成 Execution Provider
   审计与方案设计；确认 C08 Module Adapter 已在 `17b371a` 封板，C09 可以开始，C09
   目标是定义 adapter action 如何形成受控 execution request，而不是执行真实 action、
