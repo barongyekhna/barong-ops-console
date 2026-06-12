@@ -63,6 +63,13 @@ Edit page fields:
 - editable dynamic attributes
 - `manual_notes`
 
+K07 unit input UI note:
+
+- K07 unit input UI should use the K09 payload contracts for `dimensions_json`, `package_dimensions_json`, `weight_json`, and `package_weight_json`.
+- K07 unit UI remains hidden-by-default until its own K07 gates approve menu/API/runtime exposure.
+- K07 should show product dimensions separately from package dimensions, and product net/gross weight separately from package/shipping weight.
+- K07 must not assume K09 helper existence means frontend or API integration is already approved.
+
 Canonical review page fields:
 
 - `deepseek_structured_output_json`
@@ -135,6 +142,12 @@ Required payload concepts for K09:
 - conversion precision
 - review status
 
+K09 helper boundary:
+
+- `backend/app/modules/k_series/product_knowledge/unit_conversion.py` and `backend/app/modules/k_series/product_knowledge/unit_payloads.py` exist as K module-local helpers / contract references.
+- Their existence does not mean `service.py`, `router.py`, API, frontend, staging, production, or P-series integration is approved.
+- K09C/K09E helpers accept already provided numeric value + unit inputs and preserve `source_text`; they do not parse free text or infer missing fields.
+
 K09 rules:
 
 - Preserve original operator/supplier input.
@@ -142,6 +155,7 @@ K09 rules:
 - Do not guess missing dimensions or weight.
 - Market display should be derived from explicit market rules, `display_market`, or reviewed/resolved `target_market`.
 - K09 uses `target_market` or `display_market` for unit display decisions, but K08A does not implement runtime storage.
+- `display_market` is payload-level display context; `target_market` is readiness/request context. Either may inform display value selection, but neither rewrites original values or original units.
 - K09 does not make unreviewed values publish-ready by converting them.
 
 ## 3. K10 DeepSeek mock adapter usage
@@ -181,6 +195,8 @@ K10 mock adapter output fields:
 K10 constraints:
 
 - K10 mock must output K08 canonical field payload shape.
+- K10 mock adapter should output separated values and units into the K09 contract shape.
+- K10 mock must not rely on K09 helpers to parse free text such as `10 x 5 x 3 cm` or `weight: 2 lb`.
 - K10 mock must not mark values reviewed or approved.
 - K10 mock must not call live DeepSeek.
 
@@ -256,6 +272,7 @@ Keyword rules:
   4. Future `k_product_knowledge_research_runs.target_market`.
 - Provider-generated keywords are candidates until reviewed.
 - Operators can edit main keywords, secondary keywords, long-tail keywords and risk keywords.
+- K15/K19 should treat unit payload warnings/errors as readiness or review context when keyword, feed, content, market display, or claims depend on dimensions or weight.
 - K15 must not trigger live SERP/OpenAI/Claude/n8n calls unless future tasks and owner approval allow them.
 
 ## 6. K20 risk term usage
@@ -298,13 +315,16 @@ K20 rules:
 
 - Risk terms are not automatically blocking unless future review rules define that behavior.
 - Confirmed risk terms must be visible to readiness gates and future content/Woo/P-series consumers.
+- K20 should treat unit payload warnings/errors as review context when risk, safety, compliance, shipping, dimensions, weight, package, or product claims depend on those values.
 - K20 writes back to the K risk field model, not to P-series workflow JSON.
 
 ## 7. P-series future usage
 
 - P 系列未来通过 Barong backend API 消费 K 字段。
 - P 系列 future consumers should read reviewed canonical English fields, approved keywords, confirmed risk terms, reviewed dimensions/weight and reviewed media pointers.
+- P-series future consumption must use Barong backend API and must not directly read or write the Barong DB.
 - 不读取 Google Sheets `Product_Knowledge` 作为长期 source of truth。
+- Existing P-series Google Sheets `Product_Knowledge` dependency remains future migration work and is not solved by K08B.
 - Google Sheets may be a temporary import/source reference only if later approved, but not the master Product Knowledge store.
 - n8n 不直接写 Barong DB。
 - n8n future workflow calls must go through Barong backend API and K access/scope rules.

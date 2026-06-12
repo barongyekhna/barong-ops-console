@@ -13,6 +13,7 @@ Date: 2026-06-12.
 - AI cannot mark a gate approved.
 - Human reviewer or owner confirmation controls gate approval.
 - K08A 只定义 gate，不实现代码。
+- K08B only documents unit payload gate behavior and does not implement runtime validation.
 
 Suggested gate result shape for future K tasks:
 
@@ -26,7 +27,19 @@ Suggested gate result shape for future K tasks:
 - `approved_at`
 - `source_fields_snapshot`
 
-## 2. `ready_for_keyword_research`
+## 2. Unit payload gate behavior
+
+K08B clarifies how K09 unit payloads should affect future readiness checks:
+
+- Unit payload `errors` block dependent readiness gates when those gates rely on dimensions, package dimensions, product weight, package weight, shipping weight, display values, product facts, safety facts, or publish-facing claims.
+- Blocking unit payload errors include `unsupported_unit`, `missing_unit`, `missing_value`, `invalid_numeric_value`, `ambiguous_dimension_format`, `product_vs_package_conflict`, `net_vs_gross_weight_ambiguous`, and `ai_guessing_forbidden`.
+- `dimensions_json` cannot satisfy `package_dimensions_json`, and `package_dimensions_json` cannot satisfy `dimensions_json`.
+- Product `net_weight` / `gross_weight` in `weight_json` cannot be satisfied by package/shipping weight in `package_weight_json`.
+- Unknown or missing unit/value is not `0` and must remain unresolved until corrected or marked not applicable.
+- AI cannot mark unit gates approved.
+- Operators can correct unit payloads and rerun gate checks in a future implementation.
+
+## 3. `ready_for_keyword_research`
 
 - Gate purpose: Determine whether K15/K19 keyword research or manual keyword management has enough product identity and context.
 - Required fields: `product_key`, `product_name_en`, `product_type` or `category_hint`, `primary_use_case_en` or `short_description_en`, `target_market` or approved default market, `review_status` not blocked.
@@ -44,7 +57,7 @@ Suggested gate result shape for future K tasks:
 - Downstream task unlocked: K15 keyword research button skeleton, K19 keyword candidate management.
 - Suggested status fields: `ready_for_keyword_research`, `keyword_research_gate_errors_json`, `keyword_research_gate_warnings_json`.
 
-## 3. `ready_for_category`
+## 4. `ready_for_category`
 
 - Gate purpose: Determine whether category suggestion, category review, or marketplace classification can proceed.
 - Required fields: `product_name_en`, `product_type`, `brand_name` if branded, `materials_json` when material affects category, `primary_use_case_en`, `target_customer_en` when audience affects category, existing `category_hint` or relevant dynamic attributes.
@@ -56,7 +69,7 @@ Suggested gate result shape for future K tasks:
 - Downstream task unlocked: category approval, page blueprint, Woo draft category mapping.
 - Suggested status fields: `ready_for_category`, `category_gate_errors_json`, `category_gate_warnings_json`.
 
-## 4. `ready_for_page_blueprint`
+## 5. `ready_for_page_blueprint`
 
 - Gate purpose: Determine whether a future page-structure blueprint can be generated without relying on fabricated facts.
 - Required fields: `product_name_en`, `short_description_en`, `long_description_en` or page content source placeholder, `primary_use_case_en`, `target_customer_en`, reviewed keywords or accepted keyword placeholder, confirmed risk terms or no-risk confirmation, reviewed product facts relevant to the page.
@@ -68,48 +81,52 @@ Suggested gate result shape for future K tasks:
 - Downstream task unlocked: future page blueprint generation.
 - Suggested status fields: `ready_for_page_blueprint`, `page_blueprint_gate_errors_json`, `page_blueprint_gate_warnings_json`.
 
-## 5. `ready_for_content_generation`
+## 6. `ready_for_content_generation`
 
 - Gate purpose: Determine whether AI/template content generation can proceed using reviewed canonical inputs.
 - Required fields: canonical English fields needed for the content type, reviewed product facts, reviewed keywords, confirmed risk terms or no-risk confirmation, claims and certifications review, `category_path` or accepted category hint.
 - Blocking errors: unreviewed product facts used as claims, unconfirmed certifications, unresolved risk terms, missing approved keywords, product review status blocked, AI warnings unresolved.
 - Warnings: some optional selling points are missing, category path is accepted placeholder rather than final category, SEO title/description still draft.
+- Unit payload behavior: dimensions or weight claims cannot be generated if the related unit payload has blocking errors or lacks required human review. AI/template content must not turn ambiguous product/package dimensions or net/gross/package/shipping weight into publish-facing facts.
 - Who can approve: content reviewer, risk reviewer, operator, or owner depending on future workflow.
 - AI role: generate draft content from reviewed inputs only, flag unsupported claims, and avoid new facts.
 - Human role: review generated content and confirm claims, facts, keywords, SEO and risk status.
 - Downstream task unlocked: future K14 selling-point refinement and page/content generation.
 - Suggested status fields: `ready_for_content_generation`, `content_gate_errors_json`, `content_gate_warnings_json`.
 
-## 6. `ready_for_media_work`
+## 7. `ready_for_media_work`
 
 - Gate purpose: Determine whether media selection, visual profile work, or future image generation has enough product and visual context.
 - Required fields: `product_name_en`, `product_type`, media source pointer such as `main_image_url`, `gallery_image_urls_json`, or `selected_image_path`, `image_asset_status`, `media_notes_json` when needed, `visual_profile_path` when visual profile work is requested.
 - Blocking errors: no usable media pointer, image asset status blocked, product identity unclear, selected image unreviewed when required, media source contains unsafe or unsupported reference.
 - Warnings: gallery missing, visual profile incomplete, image resolution/metadata unknown, media notes incomplete.
+- Unit payload behavior: product/package dimension ambiguity should warn when dimensions are only advisory for media context, and should block when a media task depends on exact product scale, package scale, fit, layout, label placement, safety clearance, or generated image instructions.
 - Who can approve: media reviewer, operator, or owner.
 - AI role: suggest visual notes or detect missing media context; AI cannot select final media without human review.
 - Human role: choose or approve selected image, resolve media warnings, and confirm asset readiness.
 - Downstream task unlocked: media panel work, future image generation, Woo draft media readiness.
 - Suggested status fields: `ready_for_media_work`, `media_gate_errors_json`, `media_gate_warnings_json`.
 
-## 7. `ready_for_woo_draft`
+## 8. `ready_for_woo_draft`
 
 - Gate purpose: Determine whether a future WooCommerce draft can be generated through K API/backend integration.
 - Required fields: `product_key`, `product_name_en`, `sku`, `product_type`, `regular_price` or price policy placeholder, `price_currency`, `stock_status`, `manage_stock`, `inventory_quantity` if managed, `short_description_en`, `long_description_en` or page content source placeholder, dimensions/weight when relevant, `category_path` or approved category, media readiness status, reviewed keywords when used, risk review not blocked.
 - Blocking errors: missing SKU, missing price/currency, missing stock status, missing required descriptions, category not approved or accepted, relevant dimensions/weight missing or unreviewed, media blocked, risk review blocked, claims/certifications unresolved.
 - Warnings: sale price present and needs discount-risk check, optional feed identifiers missing, image gallery incomplete, placeholder content source still unresolved.
+- Unit payload behavior: dimensions/weight issues block only when Woo draft, shipping, display, feed fields, product facts, or selected content depend on them. Missing optional package dimensions should not block a simple draft unless the target Woo/shipping/feed context requires them.
 - Who can approve: operator, commerce reviewer, risk reviewer, or owner depending on future workflow.
 - AI role: validate completeness, surface warnings, and draft non-factual copy from reviewed inputs only.
 - Human role: confirm commercial values, category, content source, risk status, media, and dimensions/weight.
 - Downstream task unlocked: future WooCommerce draft generation.
 - Suggested status fields: `ready_for_woo_draft`, `woo_draft_gate_errors_json`, `woo_draft_gate_warnings_json`.
 
-## 8. `ready_for_publish_review`
+## 9. `ready_for_publish_review`
 
 - Gate purpose: Determine whether the product can enter a future final publish-review workflow.
 - Required fields: all Woo draft minimum fields, reviewed canonical English fields, reviewed product facts, reviewed pricing and SKU, confirmed claims/certifications, reviewed risk terms, approved keywords, approved media selection, SEO reviewed, operation/review records present.
 - Blocking errors: any Woo draft blocker still open, canonical facts unreviewed, price/SKU unreviewed, category unreviewed, unresolved risk terms, unsupported claims, media not reviewed, SEO not reviewed, missing review evidence.
 - Warnings: optional feed identifiers missing, long-tail keywords incomplete, non-critical media notes still open, non-publish-critical attributes require later cleanup.
+- Unit payload behavior: any unresolved unit payload error related to published facts, shipping, dimensions, weight, package data, safety, compliance, or claims must block publish review. Unit warnings that remain non-publish-critical can be accepted only by a human reviewer or owner.
 - Who can approve: owner or future formal reviewer after C12 approval gates are available.
 - AI role: summarize blockers and warnings; AI cannot approve publish review.
 - Human role: make final review decision, resolve or explicitly accept warnings, and record reviewer evidence.

@@ -71,7 +71,24 @@ Keyword readiness notes:
 - AI/provider keyword output remains candidate data until reviewed.
 - K15 must not call live SERP/OpenAI/Claude unless future tasks and owner approval allow it.
 
-## 4. WooCommerce draft minimum fields
+## 4. Unit payload gate clarification
+
+K08B clarifies how K09 unit payloads affect required/optional behavior:
+
+- `dimensions_json` and `package_dimensions_json` have separate gate behavior.
+- `weight_json` product net/gross weight and `package_weight_json` package/shipping weight have separate gate behavior.
+- Package dimensions cannot satisfy product dimensions.
+- Product dimensions cannot satisfy package dimensions.
+- Package weight cannot satisfy product net weight.
+- Product weight cannot satisfy package or shipping weight unless a reviewer explicitly records the correct package/shipping value.
+- Generic text such as `weight: 2 lb` must not be treated as product `net_weight` without explicit context or human correction.
+- Unknown or missing unit/value must not be treated as `0`.
+- Product creation may still happen with missing dimensions or weight, but downstream gates must block when those values are required for shipping, display, product facts, claims, media instructions, Woo draft, or publish review.
+- Unit payload `errors` block downstream stages that depend on those values.
+- Blocking unit payload error codes include `unsupported_unit`, `missing_unit`, `missing_value`, `invalid_numeric_value`, `ambiguous_dimension_format`, `product_vs_package_conflict`, `net_vs_gross_weight_ambiguous`, and `ai_guessing_forbidden`.
+- `display_market` is nested payload display context; `target_market` is readiness/request context. Either may inform display choices, but neither changes the original value or original unit.
+
+## 5. WooCommerce draft minimum fields
 
 Minimum fields before a future WooCommerce draft:
 
@@ -99,7 +116,7 @@ Woo draft notes:
 - K07/K08 must not make `google_product_category` an early hard requirement for all products.
 - K08A does not call WooCommerce and does not create WooCommerce drafts.
 
-## 5. Publish-review minimum fields
+## 6. Publish-review minimum fields
 
 Minimum conditions before publish review:
 
@@ -118,7 +135,7 @@ Publish-review notes:
 - Future operation log display waits for K21/C17 and must not modify the `operation_logs` table structure.
 - K08A only defines the field expectations for this stage.
 
-## 6. Matrix table
+## 7. Matrix table
 
 | Field / field group | Creation | Keyword research | Category | Page blueprint | Content generation | Media work | Woo draft | Publish review | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -163,10 +180,10 @@ Publish-review notes:
 | `lead_time` | optional | optional | optional | optional | conditional | optional | optional | conditional | Required only when displayed or promised. |
 | `shipping_class` | optional | optional | optional | optional | optional | optional | conditional | conditional | Depends on fulfillment rules. |
 | `tax_class` | optional | optional | optional | optional | optional | optional | conditional | conditional | Must be reviewed if used. |
-| `dimensions_json` | optional | optional | conditional | conditional | conditional | conditional | conditional | conditional | Required when relevant to shipping/display. |
-| `package_dimensions_json` | optional | optional | optional | optional | optional | conditional | conditional | conditional | Required when shipping requires it. |
-| `weight_json` | optional | optional | conditional | conditional | conditional | conditional | conditional | conditional | AI cannot guess. |
-| `package_weight_json` | optional | optional | optional | optional | optional | conditional | conditional | conditional | Required when shipping requires it. |
+| `dimensions_json` | optional | optional | conditional | conditional | conditional | conditional | conditional | conditional | Product-body dimensions only. Package dimensions cannot satisfy this field. Payload errors block dependent gates. |
+| `package_dimensions_json` | optional | optional | optional | optional | optional | conditional | conditional | conditional | Package/shipping dimensions only. Product dimensions cannot satisfy this field. Payload errors block dependent gates. |
+| `weight_json` | optional | optional | conditional | conditional | conditional | conditional | conditional | conditional | Product net/gross weight only. Package/shipping weight cannot satisfy product net weight. AI cannot guess. Payload errors block dependent gates. |
+| `package_weight_json` | optional | optional | optional | optional | optional | conditional | conditional | conditional | Package/shipping weight only. Product net/gross weight cannot satisfy this field without explicit reviewed package context. Payload errors block dependent gates. |
 | `materials_json` | optional | optional | conditional | conditional | required if content uses materials | optional | conditional | required if material claims exist | Must be reviewed before claims. |
 | `color_options_json` | optional | optional | conditional | conditional | conditional | conditional | conditional | conditional | Required for color variants. |
 | `size_options_json` | optional | optional | conditional | conditional | conditional | conditional | conditional | conditional | Required for size variants. |

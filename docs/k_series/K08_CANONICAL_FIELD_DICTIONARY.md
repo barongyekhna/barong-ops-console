@@ -15,6 +15,17 @@ Column meanings:
 - `AI can auto-write?` means AI can write without human review. For canonical business fields the answer is no.
 - `Used by downstream` names likely future consumers and does not enable those consumers in K08A.
 
+K08B unit payload boundary clarification:
+
+- Nested K09 Unit Value Payload fields are JSON contract fields, not product-table columns.
+- `dimensions_json`, `package_dimensions_json`, `weight_json`, and `package_weight_json` remain the product-level canonical JSON fields.
+- Nested fields such as `display_value`, `display_unit`, `display_market`, `conversion_source`, `conversion_precision`, `warnings`, `errors`, `reviewer_corrected`, `source_text`, `source_language`, and `parsed_from_text` live inside those JSON payloads.
+- Do not add all nested unit payload fields as top-level product table columns.
+- Product dimensions are not package dimensions, and package dimensions must not satisfy product-body dimension requirements.
+- Product `net_weight` / `gross_weight` inside `weight_json` are not package or shipping weight values inside `package_weight_json`.
+- `display_market` is payload-level display context for unit presentation; `target_market` is readiness/request context and does not rewrite original unit values.
+- Future volume and temperature payloads are dynamic / future-only contract references unless a product category or marketplace rule explicitly requires them.
+
 ## 2. System / identity
 
 | Field key | Display label | Category | Purpose | Data type | Required level | Source of truth | AI can suggest? | AI can auto-write? | Human review required? | Editable by operator? | Used by downstream | Notes |
@@ -79,10 +90,10 @@ Column meanings:
 
 | Field key | Display label | Category | Purpose | Data type | Required level | Source of truth | AI can suggest? | AI can auto-write? | Human review required? | Editable by operator? | Used by downstream | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `dimensions_json` | Product dimensions | Dimensions / weight | Product dimensions with original and normalized units | jsonb | conditional | Operator / supplier / reviewer | structure only | no | yes | yes | K09, Woo draft, media, content | Required when shipping/display needs dimensions. |
-| `package_dimensions_json` | Package dimensions | Dimensions / weight | Packaged dimensions | jsonb | conditional | Operator / supplier / reviewer | structure only | no | yes | yes | K09, Woo draft, shipping | Required when shipping requires it. |
-| `weight_json` | Product weight | Dimensions / weight | Product weight with original and normalized units | jsonb | conditional | Operator / supplier / reviewer | structure only | no | yes | yes | K09, Woo draft, shipping | AI must not guess missing values. |
-| `package_weight_json` | Package weight | Dimensions / weight | Packaged weight | jsonb | conditional | Operator / supplier / reviewer | structure only | no | yes | yes | K09, Woo draft, shipping | Preserve source and conversion precision. |
+| `dimensions_json` | Product dimensions | Dimensions / weight | Product dimensions with original and normalized units | jsonb | conditional | Operator / supplier / reviewer | structure only | no | yes | yes | K09, Woo draft, media, content | Product-body dimensions only. Nested K09 Unit Value Payload fields stay inside this JSON payload. Required when product dimensions are needed for shipping/display/product facts. |
+| `package_dimensions_json` | Package dimensions | Dimensions / weight | Packaged dimensions | jsonb | conditional | Operator / supplier / reviewer | structure only | no | yes | yes | K09, Woo draft, shipping | Package/shipping dimensions only. Must not backfill `dimensions_json` or product-body facts. Nested K09 fields stay inside this JSON payload. |
+| `weight_json` | Product weight | Dimensions / weight | Product weight with original and normalized units | jsonb | conditional | Operator / supplier / reviewer | structure only | no | yes | yes | K09, Woo draft, shipping | Product net/gross weight only. AI must not guess missing values or treat generic `weight` as net weight without context. Nested K09 fields stay inside this JSON payload. |
+| `package_weight_json` | Package weight | Dimensions / weight | Packaged weight | jsonb | conditional | Operator / supplier / reviewer | structure only | no | yes | yes | K09, Woo draft, shipping | Package/shipping weight only. Must not backfill product net/gross weight. Preserve source and conversion precision inside the JSON payload. |
 
 ## 7. Product facts
 
@@ -162,6 +173,6 @@ Target market resolution rules:
 | `attribute_key` | Attribute key | Dynamic attributes | Attribute identifier | text | conditional | Operator / reviewer / product-type rules | yes | no | yes | yes | K07, category, Woo draft | Required for each dynamic attribute row. |
 | `attribute_value_text` | Attribute text value | Dynamic attributes | Text attribute value | text | conditional | Operator / reviewer | yes from source | no | yes if used | yes | K07, category, P-series | At least one value field should exist. |
 | `attribute_value_json` | Attribute JSON value | Dynamic attributes | Structured attribute value | jsonb | conditional | Operator / reviewer | yes from source | no | yes if used | yes | K07, K09, P-series | Used for complex values or arrays. |
-| `attribute_unit` | Attribute unit | Dynamic attributes | Unit for attribute value | text | conditional | Operator / reviewer | structure only | no | yes if unit matters | yes | K09, Woo draft | Must be explicit if unit-bearing. |
+| `attribute_unit` | Attribute unit | Dynamic attributes | Unit for attribute value | text | conditional | Operator / reviewer | structure only | no | yes if unit matters | yes | K09, Woo draft | Must be explicit if unit-bearing. Future volume / temperature payloads remain dynamic or future-only contract references unless the category requires them. |
 | `attribute_group` | Attribute group | Dynamic attributes | Attribute grouping such as marketplace/category/B2B | text | conditional | Operator / reviewer / product-type rules | yes | no | yes | yes | K07, catalog | Helps avoid ultra-wide core fields. |
 | `requires_review` | Requires review | Dynamic attributes | Marks attribute as review-needed | boolean | conditional | System / reviewer | yes | no, system/reviewer only | yes when true | yes by reviewer | K12, readiness | Attribute review can block downstream gates. |

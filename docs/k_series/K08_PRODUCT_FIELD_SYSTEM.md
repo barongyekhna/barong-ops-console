@@ -167,6 +167,7 @@ Rules:
 - Include display market and conversion source where applicable.
 - AI may structure provided values, but must not guess missing dimensions or weight.
 - Reviewed unit payloads are the K09 baseline.
+- K08 top-level fields remain canonical; K09 nested unit fields are contract fields inside JSON payloads, not new product table columns.
 
 ### G. Product facts / materials / package fields
 

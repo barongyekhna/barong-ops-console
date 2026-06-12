@@ -61,3 +61,15 @@ Expected K08A answer for all field-system checks: yes.
 - K10 should create a mock adapter payload that writes draft-only K08 field shapes without live DeepSeek.
 - K12 should focus on canonical field diff review before any publish-facing use.
 - K15/K20 should wait for readiness/risk field model alignment before provider integration.
+
+## 4. K08B unit field clarification checklist
+
+- 是否已记录 product-table vs JSON contract distinction。
+- 是否已说明 nested K09 Unit Value Payload fields are not top-level product table columns。
+- 是否已说明 unit payload errors affect readiness gates。
+- 是否已说明 AI unit no-inference policy。
+- 是否已说明 K09C/K09E helpers do not provide a free-text parser。
+- 是否已说明 product/package dimensions separation。
+- 是否已说明 product net/gross weight vs package/shipping weight separation。
+- 是否已说明 K09 helper mention is contract reference, not runtime integration approval。
+- 是否没有 code/runtime/migration changes。

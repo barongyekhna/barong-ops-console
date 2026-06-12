@@ -30,6 +30,19 @@ Allowed AI draft targets:
 - draft category hints
 - draft dynamic attributes from provided source text only
 
+K08B unit-specific no-inference policy:
+
+- AI may structure unit values only from provided numeric value + unit.
+- AI must not infer missing dimensions.
+- AI must not infer length / width / height order from free text such as `10 x 5 x 3 cm`.
+- AI must not infer net weight vs gross weight.
+- AI must not infer product weight vs package/shipping weight.
+- AI must not infer package dimensions from product dimensions or product dimensions from package dimensions.
+- AI-structured unit payloads remain draft / `needs_review` until human-confirmed.
+- K09C/K09E helpers do not parse free text such as `10 x 5 x 3 cm` or `weight: 2 lb`.
+- `source_text`, `source_language`, and `parsed_from_text` may preserve source metadata, but preserving source text does not mean the helper parsed it or approved it.
+- Free-text parsing, if ever added, must be a separately approved K10/K09 parser task and still requires human review.
+
 K08A 不接 live DeepSeek、OpenAI、Claude、SERP、WooCommerce、n8n、Google Sheets 或任何 live service。
 
 ## 2. Human review policy
@@ -85,7 +98,7 @@ Field-diff handling by field type:
 - Canonical English fields: draft suggestions require human review before write.
 - Product facts: AI may only structure provided facts; review is mandatory.
 - Commercial fields: AI may not populate values as facts.
-- Dimensions / weight: AI may parse explicit values from source text but cannot guess missing values.
+- Dimensions / weight: AI may structure provided numeric value + unit into draft payloads, but cannot parse unsupported free text with K09C/K09E helpers, infer missing values, infer dimension order, or infer product/package/net/gross/shipping context.
 - Keywords: AI/provider values remain candidates until approved.
 - Risk terms: AI/provider values remain candidates until confirmed or removed.
 - Media: AI can suggest notes, but selected media must be human-reviewed.
