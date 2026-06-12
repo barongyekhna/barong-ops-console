@@ -26,6 +26,12 @@ JS bundle 命中 `ModuleAccessProvider`、`useModuleAccess`、`modules/me`、`ad
 `/api/backend/modules/not-allowed` 返回 404。C07F 未读取真实 env，未操作 postgres，未发布
 staging，未接 K01/P 系列或真实业务。
 
+2026-06-12 C07G 补充：C07 模块隔离体系已在
+`docs/C07_MODULE_ISOLATION_SEAL.md` 完成最终封板。C07G 确认本文件记录的
+ModuleAccessProvider、module-aware navigation、route guard、Module Unavailable / No
+Permission 文案和精确 frontend proxy allowlist 已形成 C07 前端最终状态；C07G 未新增 UI、
+后端 API、migration 或真实业务接入。
+
 2026-06-11 C07D 补充：模块隔离 verify/test 体系已完成并归档在
 `docs/C07_MODULE_ISOLATION_VERIFICATION.md`。C07D 强化
 `tests/frontend/module-isolation.test.mjs` 和 `frontend/scripts/verify-foundation.mjs`，
@@ -196,5 +202,6 @@ action route marker。
 
 ## 下一步
 
-C07F production 模块隔离发布归档已完成。下一步是 C07G：C07 模块隔离封板；C07G
-仍不得接 K01/P 系列或真实 n8n/WooCommerce/MinIO/Filebrowser。
+C07G 已完成 C07 模块隔离最终封板，记录在 `docs/C07_MODULE_ISOLATION_SEAL.md`。下一步应
+进入 C08 Module Adapter，但不得在 C07G 中接 K01/P 系列或真实
+n8n/WooCommerce/MinIO/Filebrowser。

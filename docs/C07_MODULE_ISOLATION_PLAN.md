@@ -50,6 +50,13 @@ production 未登录 `/modules/registry` 和 `/modules/me` 返回 401，frontend
 owner/non-owner live login 因无 approved production auth material 未执行，相关规则由
 C07D tests 和 C07E staging 验收覆盖。
 
+2026-06-12 C07G 更新：C07 模块隔离体系已在
+`docs/C07_MODULE_ISOLATION_SEAL.md` 完成最终封板。C07G 只做文档封板归档，不新增 API、
+UI、migration 或 runtime 代码，不发布 staging/production，不读取真实 env，不操作数据库或
+production/staging 容器，不接 K01/P 系列/n8n/WooCommerce/MinIO/Filebrowser 或真实业务。
+C07G 确认 C07A-F 链条完整，后端 module registry 与前端 module-aware navigation /
+route guard 已上线 production，下一步应进入 C08 Module Adapter，但不在 C07G 中启动。
+
 ## 一、C07A 结论
 
 C07 可以开始。
@@ -948,7 +955,9 @@ login 因无 approved production auth material 未执行，归档中已记录限
 - C07 final seal 文档。
 - 下一阶段进入 C08，而不是 K01/P 系列真实业务开发。
 
-当前状态：未开始。
+当前状态：已完成并封板，记录在 `docs/C07_MODULE_ISOLATION_SEAL.md`。C07G 确认 C07A-F
+全部完成，staging 和 production 验收归档完成，C07 未接 K01/P 系列或真实业务，后续应进入
+C08 Module Adapter，但不在 C07G 中启动。
 
 ## 十六、测试与验收策略
 

@@ -617,9 +617,30 @@ acceptance in `docs/C07_MODULE_PRODUCTION_RELEASE.md`:
   approved production auth material was available. The same access-state rules
   remain covered by C07D tests and C07E staging acceptance.
 
+C07G has sealed the full C07 module-isolation system in
+`docs/C07_MODULE_ISOLATION_SEAL.md`:
+
+- C07A-F are complete and traceable from plan, backend registry, frontend
+  isolation, verification, staging acceptance, production release, and final
+  seal.
+- The production backend module registry and production frontend
+  module-aware navigation / route guard are the sealed C07 runtime state.
+- `/modules/registry` and `/modules/me` require login and return 401 when
+  unauthenticated.
+- `/api/backend/modules/registry` and `/api/backend/modules/me` remain exact
+  frontend proxy allowlist entries; broad `/modules/*` proxying remains
+  prohibited.
+- Business modules remain `show_locked` / locked when denied; admin/system
+  modules remain `hide_when_denied` / hidden when denied.
+- User Management and Permission Management remain owner-only, `/users`
+  remains backend owner-only, and `/auth/register` remains 404.
+- C07 is sealed without K01, P-series, n8n, WooCommerce, MinIO, Filebrowser,
+  Module Adapter, Execution Provider, sandbox, module switch, approval gate,
+  secret rules, new APIs, new UI, new migrations, or real business tasks.
+
 Recommended next split:
 
-- C07G: C07 module isolation seal.
+- C08: Module Adapter. Do not start C08 inside C07G.
 
 ## Temporary login preview
 

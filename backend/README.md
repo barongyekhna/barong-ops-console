@@ -16,7 +16,9 @@ staging and archived the result in `docs/C07_MODULE_STAGING_ACCEPTANCE.md`.
 C07F has released the C07B backend runtime to production and archived the
 result in `docs/C07_MODULE_PRODUCTION_RELEASE.md`; no Alembic upgrade was
 executed for C07F and production current/head remains `c05b_permissions_001
-(head)`.
+(head)`. C07G has sealed the full C07 module-isolation backend state in
+`docs/C07_MODULE_ISOLATION_SEAL.md`; the next backend stage is C08 Module
+Adapter, not K01/P-series or real provider integration.
 C06E has released the C06B backend API to production, and C06F has sealed C06
 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
@@ -262,6 +264,16 @@ accounts, mutate permission assignments, or connect K01/P-series/real provider
 flows. Owner/non-owner production live module access checks were not run
 because no approved production auth material was available; the result is
 archived in `docs/C07_MODULE_PRODUCTION_RELEASE.md`.
+
+C07G has sealed C07 module isolation in
+`docs/C07_MODULE_ISOLATION_SEAL.md`. The sealed backend state is the static
+Module Manifest v1 registry, authenticated `/modules/registry` and
+`/modules/me`, owner full access for admin/system metadata, non-owner
+admin/system hidden behavior, business locked/show_locked behavior, and
+non-executable planned/adapter_pending/unavailable modules. C07G adds no API,
+no migration, no database operation, no env read, no K01/P-series/provider
+connection, and no real business task. The next backend phase is C08 Module
+Adapter.
 
 F12 adds the n8n test webhook bridge:
 

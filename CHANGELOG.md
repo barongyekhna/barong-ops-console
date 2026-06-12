@@ -6,6 +6,21 @@
 
 ### Added
 
+- C07G：新增 `docs/C07_MODULE_ISOLATION_SEAL.md`，归档 C07 模块隔离体系最终封板；确认
+  C07A 模块隔离方案、C07B 后端 Module Manifest v1 / Module Registry、C07C 前端
+  module-aware navigation / route guard、C07D verify/test 体系、C07E staging 验收和
+  C07F production 发布归档均已完成。
+- C07G：封板结论确认 production 后端 module registry 和 production 前端 module-aware
+  navigation / route guard 已上线；`/modules/registry` 与 `/modules/me` 均要求登录且未登录
+  401；frontend proxy 仅精确放行 `/api/backend/modules/registry` 与
+  `/api/backend/modules/me`，不放开危险 `/modules/*` 宽通配。
+- C07G：最终边界确认 business 模块无权限 `show_locked` / `locked`，admin/system 模块无权限
+  `hide_when_denied` / `hidden`，`planned` / `adapter_pending` / `unavailable` 不可
+  executable，User Management 和 Permission Management 仍 owner-only，`/users` 仍
+  owner-only，`/auth/register` 仍 404，C05/C06 未被破坏。
+- C07G：明确 C07 未接 K01、P 系列、n8n/WooCommerce/MinIO/Filebrowser 真实业务，未创建真实
+  业务任务，未实现 Module Adapter、Execution Provider、模块沙箱、模块开关、审批门、密钥规则
+  或 n8n 接入规范；下一步建议 C08 Module Adapter，但不在 C07G 中启动。
 - C07F：新增 `docs/C07_MODULE_PRODUCTION_RELEASE.md`，归档 production 模块隔离发布和
   验收；本轮仅执行 production backend/frontend safe release，未执行 Alembic upgrade，
   未操作 production/staging postgres，未直接 psql/SQL，未读取真实 env，未发布 staging，
@@ -312,6 +327,8 @@
 
 ### Changed
 
+- C07G：README、backend README、frontend README、C07A-F 文档更新为 C07 模块隔离体系已
+  封板；后续边界调整为 C08 Module Adapter，不进入 K01/P 系列或真实业务接入。
 - C07B：`backend/app/api/routes/modules.py` 在保留现有 F10 `/modules` foundation registry
   list/detail/demo-create API 的基础上，新增 `/modules/registry` 和 `/modules/me` 两个
   静态只读路径，并确保它们位于动态 `/{module_key}` route 之前。

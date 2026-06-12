@@ -38,6 +38,11 @@ postgres，未读取真实 env，未发布 production。发布后未登录 `/mod
 `/modules/registry` 与 `/modules/me` 返回 401，production backend 容器内 C07B 关键文件
 存在且 hash 与当前 workspace 一致。
 
+2026-06-12 C07G 补充：C07 模块隔离体系已在
+`docs/C07_MODULE_ISOLATION_SEAL.md` 完成最终封板。C07G 确认本文件记录的后端静态 module
+registry、Module Manifest v1 schema、`GET /modules/registry`、`GET /modules/me` 和 access
+state 计算已形成 C07 后端最终状态；C07G 未新增后端 API、migration 或真实业务接入。
+
 ## 实现范围
 
 新增后端集中模块 registry：
@@ -285,5 +290,5 @@ C07F 对本后端 contract 的 production 结论：
 
 ## 下一步
 
-C07F production 发布归档已完成。下一步是 C07G：C07 模块隔离封板；C07G 仍不得进入
-K01/P 系列或真实 provider 接入。
+C07G 已完成 C07 模块隔离最终封板，记录在 `docs/C07_MODULE_ISOLATION_SEAL.md`。下一步应
+进入 C08 Module Adapter，但不得在本文件或 C07G 中启动 K01/P 系列或真实 provider 接入。

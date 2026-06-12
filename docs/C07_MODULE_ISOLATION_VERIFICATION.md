@@ -26,6 +26,12 @@ frontend proxy exact allowlist、bundle marker、C05/C06 未登录回归和 Alem
 均通过；owner/non-owner live login 因无 approved production auth material 未执行，相关规则
 继续由 C07D tests 和 C07E staging 验收覆盖。
 
+2026-06-12 C07G 补充：C07 模块隔离体系已在
+`docs/C07_MODULE_ISOLATION_SEAL.md` 完成最终封板。C07G 确认本文件记录的后端
+`tests/backend/test_modules_registry.py`、前端 `tests/frontend/module-isolation.test.mjs` 和
+`frontend/scripts/verify-foundation.mjs` 已作为 C07 最终 verify/test 体系；C07G 不新增
+runtime 功能，不发布 staging/production，不接真实业务。
+
 ## 做了什么
 
 C07D 强化三类自动化检查：
@@ -159,5 +165,5 @@ C07D 不做：
 
 ## 下一步
 
-C07F production 发布归档已完成。下一步是 C07G：C07 模块隔离封板。C07G 应只做
-C07 封板归档，不进入 K01/P 系列，不接真实业务。
+C07G 已完成 C07 模块隔离最终封板，记录在 `docs/C07_MODULE_ISOLATION_SEAL.md`。下一步应
+进入 C08 Module Adapter，但不得在 C07G 中进入 K01/P 系列或真实业务。

@@ -257,3 +257,8 @@ C07F 已完成 production backend/frontend safe release 和 production 发布归
 系列或真实业务。
 
 下一步建议：C07G 模块隔离封板。
+
+2026-06-12 C07G 补充：C07 模块隔离体系已在
+`docs/C07_MODULE_ISOLATION_SEAL.md` 完成最终封板。本 production 发布归档作为 C07G 的
+production 证据来源：production backend/frontend safe release 已完成，未执行 Alembic，未读
+env，未操作 postgres，未接 K01/P 系列或真实业务。C07G 不重新发布 staging/production。

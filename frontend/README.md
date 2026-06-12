@@ -287,6 +287,16 @@ to reach backend auth 401, while `/api/backend/modules/not-allowed` remains
 K01/P-series menu, provider connection, production test account, assignment
 mutation, or real business flow was performed.
 
+C07G has sealed the full C07 module-aware frontend state in
+`docs/C07_MODULE_ISOLATION_SEAL.md`. The sealed frontend boundary is exact
+module registry proxy allowlisting, namespaced `module_key` navigation,
+ModuleAccessProvider, route-namespace guard behavior, Module Unavailable / No
+Permission notices, business `show_locked`, admin/system `hide_when_denied`,
+and owner-only User Management / Permission Management. C07G adds no UI, no
+backend API, no migration, no staging/production release, no K01/P-series
+menu, no provider connection, and no real business task. The next frontend
+phase is C08 Module Adapter.
+
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier
 checks `tests/frontend/module-isolation.test.mjs` during image builds. The

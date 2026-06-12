@@ -204,3 +204,8 @@ C07F production 模块隔离发布归档已完成，记录见
 auth material，因此 production owner/non-owner live login 仍未执行；相关规则由 C07D
 tests 和本 C07E staging 验收共同作为依据。下一步是 C07G：C07 模块隔离封板；C07G 仍不得
 接 K01/P 系列或真实业务。
+
+2026-06-12 C07G 补充：C07 模块隔离体系已在
+`docs/C07_MODULE_ISOLATION_SEAL.md` 完成最终封板。本 staging 验收作为 C07G 的 staging
+证据来源：staging backend/frontend safe release 已完成，未执行 Alembic，未读 env，未操作
+postgres，未接 K01/P 系列或真实业务。
