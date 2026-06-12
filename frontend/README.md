@@ -297,6 +297,17 @@ backend API, no migration, no staging/production release, no K01/P-series
 menu, no provider connection, and no real business task. The next frontend
 phase is C08 Module Adapter.
 
+C08A has started docs-only Module Adapter planning in
+`docs/C08_MODULE_ADAPTER_PLAN.md`. For the frontend, C08A defines future
+adapter surface contracts for navigation, dashboard cards, module pages,
+detail pages, action panels, settings panels, audit log views, status widgets,
+and future approval panels. It does not add those UI surfaces in this round.
+The future adapter renderer must stay bound to C07 `module_key`,
+route_namespace, business `show_locked`, admin/system `hide_when_denied`, and
+the current module route guard. C08B/C08C are the recommended next backend and
+frontend steps; C08A does not add K01/P-series menus, does not connect live
+providers, and does not expose executable actions.
+
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier
 checks `tests/frontend/module-isolation.test.mjs` during image builds. The

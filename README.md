@@ -638,9 +638,43 @@ C07G has sealed the full C07 module-isolation system in
   Module Adapter, Execution Provider, sandbox, module switch, approval gate,
   secret rules, new APIs, new UI, new migrations, or real business tasks.
 
+## C08 module adapter
+
+C08A has started Module Adapter planning in
+`docs/C08_MODULE_ADAPTER_PLAN.md`. C08A is a docs-only audit and contract
+design stage. It does not implement backend runtime code, frontend runtime
+code, API, UI, migration, staging release, production release, Execution
+Provider, module sandbox, module switch, approval gate, secret rules, n8n
+integration, K01, P-series, or real business workflows.
+
+C08 defines how future modules formally hand pages, routes, navigation
+bindings, capabilities, actions, status, health, data contracts, permissions,
+operation-log bindings, dependency declarations, and unavailable behavior to
+the console. C08 builds on C07 Module Manifest / Registry but does not replace
+it:
+
+- Module Manifest says who the module is, where its route/API boundary is,
+  what permissions it declares, and what status it has.
+- Module Adapter says how that module exposes console surfaces and contracts.
+- C08 declares action contracts only; C09 Execution Provider will execute
+  actions later.
+- C08 declares feature-flag/module-switch bindings only; C13 will implement
+  module enable/disable later.
+- C08 declares `scope_bindings` as pending only; C18 will define formal
+  company/factory/department/organization scope.
+- C08 declares dependency needs such as n8n, WooCommerce, MinIO, Filebrowser,
+  AI provider, SERP, WeCom, or Google Sheets by safe dependency name only. It
+  does not store or read URLs, tokens, credentials, or real env values.
+
+C08A confirms K01 is a future business module, not C08. K01 may later provide
+a Module Adapter in `adapter_pending` state, but C08A does not develop K01 and
+does not modify the K-series worktree. P-series workflows are n8n workflows,
+not C08; they may later enter through action/execution capability after C09
+and C15, but C08A does not read or modify P-series workflow JSON.
+
 Recommended next split:
 
-- C08: Module Adapter. Do not start C08 inside C07G.
+- C08B: backend Module Adapter contract / static adapter registry.
 
 ## Temporary login preview
 

@@ -6,6 +6,31 @@
 
 ### Added
 
+- C08A：新增 `docs/C08_MODULE_ADAPTER_PLAN.md`，完成 Module Adapter 审计与方案设计；确认
+  C07 模块隔离体系已封板，C08 可以开始，C08 目标是定义模块如何正规接入控制台的
+  adapter contract，而不是执行任务、接真实业务或实现 K01/P 系列 runtime。
+- C08A：定义 Module Manifest 与 Module Adapter 分工。Manifest 是模块身份证和边界声明，
+  说明模块是谁、在哪里、需要什么权限、状态是什么；Adapter 是模块接入控制台的标准接口，
+  说明模块如何交付 pages、routes、nav entries、capabilities、actions、status、health、
+  data contracts、permission bindings、operation log bindings 和 dependency declarations。
+- C08A：提出 Module Adapter v1 草案字段，包括 `adapter_key`、`adapter_version`、
+  `module_key`、`manifest_version`、`adapter_status`、`supported_surfaces`、`pages`、
+  `nav_bindings`、`route_bindings`、`api_bindings`、`capabilities`、`actions`、
+  `action_contracts`、`status_provider`、`health_provider`、`data_contracts`、
+  `permission_bindings`、`scope_bindings`、`operation_log_bindings`、
+  `dependency_declarations`、`execution_requirements`、`sandbox_requirements`、
+  `approval_requirements`、`secret_requirements`、fallback/unavailable behavior 和
+  `test_contracts`。
+- C08A：明确 Adapter lifecycle 包含 `draft`、`adapter_pending`、`contract_ready`、
+  `test_ready`、`staging_ready`、`production_ready`、`disabled`、`deprecated`、`sealed`；
+  `adapter_pending` 和 disabled-by-default 模块不可 executable，不连接 provider，不触发真实
+  action。
+- C08A：明确 C08 只声明 action contract，C09 才执行；C08 只声明 module switch/feature flag
+  bindings，C13 才实现启停；C08 只声明 `scope_bindings` pending，C18 才做正式 scope；C08
+  只声明 dependency needs，C14/C15 才处理 secret 和 n8n 接入。
+- C08A：明确 K01 是未来业务模块，不是 C08；K01 未来正式接入必须提供 Module Adapter，但
+  C08A 不开发 K01、不修改 K01 worktree。P 系列是 n8n workflow，不是 C08；未来应通过
+  action/execution capability 或 C15 n8n 规范接入，C08A 不读取或修改 P-series workflow JSON。
 - C07G：新增 `docs/C07_MODULE_ISOLATION_SEAL.md`，归档 C07 模块隔离体系最终封板；确认
   C07A 模块隔离方案、C07B 后端 Module Manifest v1 / Module Registry、C07C 前端
   module-aware navigation / route guard、C07D verify/test 体系、C07E staging 验收和
@@ -327,6 +352,11 @@
 
 ### Changed
 
+- C08A：README、backend README 和 frontend README 更新为 C08 已启动且 C08A 为 Module
+  Adapter 方案阶段；继续明确本轮没有 API、UI、migration、staging/production 发布、
+  Execution Provider、module switch、approval gate、secret rules、formal scope、K01/P 系列
+  runtime 或真实业务接入。下一步建议 C08B 后端 Module Adapter contract / static adapter
+  registry。
 - C07G：README、backend README、frontend README、C07A-F 文档更新为 C07 模块隔离体系已
   封板；后续边界调整为 C08 Module Adapter，不进入 K01/P 系列或真实业务接入。
 - C07B：`backend/app/api/routes/modules.py` 在保留现有 F10 `/modules` foundation registry
