@@ -6,6 +6,20 @@
 
 ### Added
 
+- C08F：新增 `docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`，归档 production
+  Module Adapter 发布；经批准按 OPS01 safe release 顺序发布 production backend 和
+  frontend，生产 `/module-adapters/registry`、`/module-adapters/me` 未登录均返回
+  401，frontend proxy exact allowlist 对 `/api/backend/module-adapters/registry` 和
+  `/api/backend/module-adapters/me` 返回 401，`/api/backend/module-adapters/not-allowed`
+  返回 404。
+- C08F：production frontend bundle 命中 C08C adapter shell 证据，包括
+  `AdapterAccessProvider`、adapter API paths、`Action contracts`、C09 Execution
+  Provider 等待文案、C12 Approval Gate 等待文案和 dependency safety helper；C08F
+  未执行 Alembic upgrade，production current/heads 仍为 `c05b_permissions_001 (head)`。
+- C08F：确认 production/staging smoke、dual-env status、safe-release plan、C05/C06/C07
+  未登录回归均通过；未读取真实 env，未操作 production/staging postgres，未直接查库，
+  未创建测试账号，未 grant/update/revoke 权限 assignment，未执行 adapter action，未接
+  K01/P 系列或 n8n/WooCommerce/MinIO/Filebrowser live provider。
 - C08E：新增 `docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`，归档 staging
   Module Adapter 验收；经批准执行 staging backend/frontend safe release，发布 C08B
   `/module-adapters/registry`、`/module-adapters/me` 和 C08C frontend adapter

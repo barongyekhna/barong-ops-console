@@ -191,4 +191,14 @@ Approval Gate 等待文案。frontend proxy 精确允许
 `/api/backend/module-adapters/not-allowed`。C08E 未执行 adapter action，未接
 K01/P 系列或 live provider，未发布 production。
 
-下一步应进入 C08F production Module Adapter 发布归档。
+C08F production Module Adapter 发布归档已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`。production frontend safe release
+已发布 C08C adapter shell；production `/dashboard` HTML 和 production chunk 命中
+`AdapterAccessProvider`、adapter API paths、`Action contracts`、C09 Execution
+Provider 等待文案、C12 Approval Gate 等待文案、adapter shell disabled/unavailable
+文案和 dependency safety helper。production frontend proxy 精确允许
+`/api/backend/module-adapters/registry` 和 `/api/backend/module-adapters/me`，并拒绝
+`/api/backend/module-adapters/not-allowed`。C08F 未执行 adapter action，未接
+K01/P 系列或 live provider，未发布 staging。
+
+下一步应进入 C08G Module Adapter 封板。

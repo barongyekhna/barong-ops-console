@@ -423,6 +423,15 @@ model, upload a file, connect WooCommerce, or create a real product/business
 job. Job creation accepts only `pending` or `draft`; event-driven completion
 uses the explicit `completed_demo` status.
 
+C08F has released the C08B Module Adapter static registry to production through
+OPS01 safe release. Production backend now exposes authenticated read-only
+`GET /module-adapters/registry` and `GET /module-adapters/me`; both return 401
+when unauthenticated. C08F did not execute Alembic upgrade, and production
+Alembic current/heads remain `c05b_permissions_001 (head)`. It did not operate
+production/staging postgres, read real env files, create accounts, mutate
+permission assignments, execute adapter actions, or connect K01/P-series/live
+providers. The archive is `docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`.
+
 ## Run tests
 
 Use the isolated example Docker environment from the repository root. Do not

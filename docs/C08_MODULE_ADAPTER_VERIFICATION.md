@@ -164,5 +164,24 @@ proxy exact allowlist、bundle marker、C05/C06/C07 未登录回归、`/users` o
 material 未运行；对应 access-state contract 继续由本文件描述的 backend Docker tests 和
 frontend Node tests 覆盖。
 
-下一步是 C08F production Module Adapter 发布归档。C08F 只能做 production release/archive，
-不得接 K01/P 系列、不得连接真实 provider、不得执行 adapter action。
+C08D/C08E 已承接到 C08F production Module Adapter 发布归档；C08F 仍只能做
+production release/archive，不得接 K01/P 系列、不得连接真实 provider、不得执行
+adapter action。
+
+## C08F production 验证引用
+
+C08F production Module Adapter 发布归档已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`。C08F 复核了 production smoke、
+staging smoke、dual-env status、safe-release plan、adapter backend unauth 401、
+frontend proxy exact allowlist、bundle marker、C05/C06/C07 未登录回归、`/users`
+owner-only 边界、`/auth/register` 404 和 production Alembic current/heads。
+
+owner/non-owner live API 因无 approved production auth material 未运行；对应
+access-state contract 继续由本文件描述的 backend Docker tests 和 frontend Node tests
+覆盖。
+
+C08F 没有执行 Alembic upgrade，没有操作 production/staging postgres，没有读取真实
+env，没有创建账号，没有修改权限 assignment，没有执行 adapter action，没有接 K01/P 系列或
+live provider。
+
+下一步是 C08G Module Adapter 封板。

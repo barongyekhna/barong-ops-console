@@ -770,9 +770,34 @@ shell to staging and archived the acceptance in
   approved staging auth material was provided; backend Docker tests and
   frontend Node tests cover those access-state contracts.
 
-Current next split after C08E:
+C08F has released the C08B backend adapter registry and C08C frontend adapter
+shell to production and archived the acceptance in
+`docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`:
 
-- C08F: production Module Adapter 发布归档.
+- production backend safe release completed for `console_backend`; production
+  `GET /module-adapters/registry` and `GET /module-adapters/me` now return 401
+  when unauthenticated.
+- production frontend safe release completed for `console_frontend`; the proxy
+  precisely allows `/api/backend/module-adapters/registry` and
+  `/api/backend/module-adapters/me`, both returning 401 unauthenticated, while
+  `/api/backend/module-adapters/not-allowed` returns 404.
+- the production frontend bundle contains C08C adapter shell markers including
+  `AdapterAccessProvider`, adapter API paths, `Action contracts`, C09
+  Execution Provider wait text, C12 Approval Gate wait text, and dependency
+  safety helper markers.
+- C08F did not execute Alembic upgrade; production current/heads remain
+  `c05b_permissions_001 (head)`.
+- C08F did not operate production/staging postgres, did not read real env files,
+  did not create accounts or mutate permission assignments, did not execute
+  adapter actions, did not publish staging, and did not connect K01/P-series or
+  live n8n/WooCommerce/MinIO/Filebrowser providers.
+- owner and non-owner live adapter access checks were not run because no
+  approved production auth material was provided; backend Docker tests and
+  frontend Node tests cover those access-state contracts.
+
+Current next split after C08F:
+
+- C08G: C08 Module Adapter 封板.
 
 ## Temporary login preview
 

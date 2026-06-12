@@ -1114,4 +1114,30 @@ C08E 没有执行 Alembic upgrade，没有操作 staging/production postgres，�
 env，没有发布 production，没有创建账号，没有修改权限 assignment，没有执行 adapter
 action，没有接 K01/P 系列或 n8n/WooCommerce/MinIO/Filebrowser live provider。
 
-下一步是 C08F production Module Adapter 发布归档。
+## 二十一、C08F production 发布状态
+
+C08F 已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`。
+
+C08F 经批准只执行 production backend 和 production frontend safe release：
+
+- `console_backend` 已发布 C08B `/module-adapters/registry` 和
+  `/module-adapters/me`。
+- `console_frontend` 已发布 C08C adapter shell 和 exact proxy allowlist。
+- production 未登录 `/module-adapters/registry` 和 `/module-adapters/me` 均返回
+  401。
+- production frontend proxy 未登录 `/api/backend/module-adapters/registry` 和
+  `/api/backend/module-adapters/me` 均返回 401。
+- production frontend proxy `/api/backend/module-adapters/not-allowed` 返回 404。
+- production bundle 包含 C08C adapter shell、action contract、C09 wait、C12 wait
+  和 dependency safety markers。
+
+C08F 没有执行 Alembic upgrade；production current/head 仍为
+`c05b_permissions_001 (head)`。C08F 没有操作 staging/production postgres，没有读取真实
+env，没有发布 staging，没有创建账号，没有修改权限 assignment，没有执行 adapter action，
+没有接 K01/P 系列或 n8n/WooCommerce/MinIO/Filebrowser live provider。
+
+owner/non-owner live API 因无 approved production auth material 未运行；对应
+access-state contract 继续由 C08D backend Docker tests 和 frontend Node tests 覆盖。
+
+下一步是 C08G Module Adapter 封板。

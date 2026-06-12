@@ -327,4 +327,12 @@ C08E staging Module Adapter 验收已完成，归档文档为
 staging/production postgres，未读取真实 env，未发布 production，未创建账号，未修改
 权限 assignment，未执行 adapter action，未接 K01/P 系列或 live provider。
 
-下一步应进入 C08F production Module Adapter 发布归档。
+C08F production Module Adapter 发布归档已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`。production backend safe release
+已发布 C08B static adapter registry；未登录 `GET /module-adapters/registry` 和
+`GET /module-adapters/me` 均返回 401。C08F 未执行 Alembic upgrade，production
+current/heads 仍为 `c05b_permissions_001 (head)`；未操作 production/staging
+postgres，未读取真实 env，未创建账号，未修改权限 assignment，未执行 adapter action，
+未接 K01/P 系列或 live provider。
+
+下一步应进入 C08G Module Adapter 封板。

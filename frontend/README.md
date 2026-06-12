@@ -357,8 +357,21 @@ contains adapter API paths, `AdapterAccessProvider`, `Action contracts`, C09
 Execution Provider wait text, and C12 Approval Gate wait text. C08E did not
 execute adapter actions, publish production, read real env files, create
 accounts, mutate permission assignments, or connect K01/P-series/live provider
-flows. The next frontend phase is C08F production Module Adapter release
-archive.
+flows. C08E handed off to C08F production Module Adapter release archive.
+
+C08F is documented in
+`docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`. The production frontend safe
+release published the C08C adapter shell to `console_frontend`; the production
+proxy now lets `GET /api/backend/module-adapters/registry` and
+`GET /api/backend/module-adapters/me` reach backend auth 401, while
+`GET /api/backend/module-adapters/not-allowed` returns 404. The production
+bundle contains C08C adapter shell markers including `AdapterAccessProvider`,
+adapter API paths, `Action contracts`, C09 Execution Provider wait text, C12
+Approval Gate wait text, adapter shell disabled/unavailable text, and
+dependency safety helper markers. C08F did not execute adapter actions, publish
+staging, read real env files, create accounts, mutate permission assignments,
+or connect K01/P-series/live provider flows. The next frontend phase is C08G
+Module Adapter seal.
 
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier
