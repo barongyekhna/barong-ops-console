@@ -43,6 +43,8 @@ SHAPE_MISSING_REQUIRED_FIELD = "shape_missing_required_field"
 SHAPE_INVALID_REVIEW_STATUS = "shape_invalid_review_status"
 SHAPE_LIVE_PROVIDER_CALLED = "shape_live_provider_called"
 SHAPE_FORBIDDEN_PROVIDER_FIELD = "shape_forbidden_provider_field"
+SHAPE_NOT_MOCK_RESULT = "shape_not_mock_result"
+SHAPE_REVIEWER_CORRECTED_FORBIDDEN = "shape_reviewer_corrected_forbidden"
 
 SUPPORTED_OUTPUT_SECTIONS = [
     "canonical_product_fields",
@@ -67,13 +69,19 @@ ALLOWED_REVIEW_STATUSES = {"draft", "needs_review"}
 
 FORBIDDEN_PROVIDER_OUTPUT_KEYS = {
     "api_key",
+    "authorization",
+    "bearer",
+    "deepseek_request_id",
+    "live_provider_request_id",
+    "model_call_id",
     "provider_api_key",
     "provider_model",
     "provider_request_id",
     "provider_secret",
+    "provider_url",
     "secret",
     "token",
-    "model_call_id",
+    "webhook_url",
 }
 
 MISSING_TEXT_VALUES = {"", "unknown", "none", "null", "n/a", "na"}
@@ -317,6 +325,7 @@ def build_field_diff_draft(
         "field_key": field_key,
         "path": field_key,
         "current_value": deepcopy(current_value),
+        "suggested_value": deepcopy(suggested_value),
         "draft_value": deepcopy(suggested_value),
         "reason": reason,
         "confidence": confidence,
@@ -359,20 +368,22 @@ def validate_mock_result_shape(result: dict) -> dict:
     missing_required_fields = [
         field_name for field_name in required_fields if field_name not in result
     ]
-    forbidden_fields_present = [
-        field_name
-        for field_name in FORBIDDEN_PROVIDER_OUTPUT_KEYS
-        if field_name in result
-    ]
+    forbidden_fields_present = _find_forbidden_provider_fields(result)
+    reviewer_corrected_true_fields = _find_true_reviewer_corrected_fields(result)
     errors: list[str] = []
     warnings: list[str] = []
 
     if missing_required_fields:
         errors.append(SHAPE_MISSING_REQUIRED_FIELD)
+    if result.get("is_mock") is not True:
+        errors.append(SHAPE_NOT_MOCK_RESULT)
     if result.get("live_provider_called") is not False:
         errors.append(SHAPE_LIVE_PROVIDER_CALLED)
     if result.get("review_status") not in ALLOWED_REVIEW_STATUSES:
         errors.append(SHAPE_INVALID_REVIEW_STATUS)
+    if reviewer_corrected_true_fields:
+        errors.append(SHAPE_REVIEWER_CORRECTED_FORBIDDEN)
+        forbidden_fields_present.extend(reviewer_corrected_true_fields)
     if forbidden_fields_present:
         errors.append(SHAPE_FORBIDDEN_PROVIDER_FIELD)
     if result.get("warnings") and WARNING_REVIEW_REQUIRED not in result.get(
@@ -386,7 +397,7 @@ def validate_mock_result_shape(result: dict) -> dict:
         "errors": _dedupe_codes(errors),
         "warnings": _dedupe_codes(warnings),
         "missing_required_fields": missing_required_fields,
-        "forbidden_fields_present": forbidden_fields_present,
+        "forbidden_fields_present": _dedupe_codes(forbidden_fields_present),
     }
 
 
@@ -461,6 +472,44 @@ def _is_missing_value(value: Any) -> bool:
     if isinstance(value, str):
         return value.strip().lower() in MISSING_TEXT_VALUES
     return False
+
+
+def _find_forbidden_provider_fields(value: Any, path: str = "") -> list[str]:
+    fields: list[str] = []
+    if isinstance(value, dict):
+        for raw_key, child_value in value.items():
+            key = str(raw_key)
+            child_path = _join_path(path, key)
+            if key.lower() in FORBIDDEN_PROVIDER_OUTPUT_KEYS:
+                fields.append(child_path)
+            fields.extend(_find_forbidden_provider_fields(child_value, child_path))
+    elif isinstance(value, list):
+        for index, child_value in enumerate(value):
+            child_path = f"{path}[{index}]" if path else f"[{index}]"
+            fields.extend(_find_forbidden_provider_fields(child_value, child_path))
+    return fields
+
+
+def _find_true_reviewer_corrected_fields(value: Any, path: str = "") -> list[str]:
+    fields: list[str] = []
+    if isinstance(value, dict):
+        for raw_key, child_value in value.items():
+            key = str(raw_key)
+            child_path = _join_path(path, key)
+            if key.lower() == "reviewer_corrected" and child_value is True:
+                fields.append(child_path)
+            fields.extend(_find_true_reviewer_corrected_fields(child_value, child_path))
+    elif isinstance(value, list):
+        for index, child_value in enumerate(value):
+            child_path = f"{path}[{index}]" if path else f"[{index}]"
+            fields.extend(_find_true_reviewer_corrected_fields(child_value, child_path))
+    return fields
+
+
+def _join_path(parent: str, key: str) -> str:
+    if not parent:
+        return key
+    return f"{parent}.{key}"
 
 
 def _dedupe_codes(values: list[str]) -> list[str]:
