@@ -31,6 +31,13 @@ postgres，未读取真实 env，未发布 production。发布后未登录 `/mod
 凭据和 active non-owner 测试账号未执行，相关 access-state 规则由
 `tests/backend/test_modules_registry.py` 的 Docker 回归覆盖。
 
+2026-06-12 C07F 补充：production 模块隔离发布已归档在
+`docs/C07_MODULE_PRODUCTION_RELEASE.md`。C07F 已将本文件记录的 C07B backend runtime
+通过 OPS01 safe release 发布到 production；未执行 Alembic upgrade，未操作 postgres，
+未读取真实 env，未发布 staging，未接 K01/P 系列或真实业务。production 未登录
+`/modules/registry` 与 `/modules/me` 返回 401，production backend 容器内 C07B 关键文件
+存在且 hash 与当前 workspace 一致。
+
 ## 实现范围
 
 新增后端集中模块 registry：
@@ -262,7 +269,21 @@ C07E 对本后端 contract 的 staging 结论：
 - K01/P 系列未进入 runtime registry，`integration.n8n_test_bridge` 保持
   adapter_pending/test-only，未连接真实 provider。
 
+## C07F production 发布引用
+
+C07F 对本后端 contract 的 production 结论：
+
+- production backend safe release 成功。
+- 未执行 Alembic upgrade，production current/head 仍为 `c05b_permissions_001 (head)`。
+- 未操作 production/staging postgres 容器或数据库。
+- 未登录 `GET /modules/registry` 返回 401。
+- 未登录 `GET /modules/me` 返回 401。
+- production backend 容器包含 C07B `routes/modules.py`、`services/module_registry.py`、
+  `core/modules.py` 和 `schemas/module.py`。
+- owner/non-owner live login 因无 approved production auth material 未执行，相关
+  access-state 规则由 C07D Docker tests 和 C07E staging 验收覆盖。
+
 ## 下一步
 
-C07E staging 验收已归档。下一步是 C07F production 模块隔离发布归档；C07F 仍不得进入
+C07F production 发布归档已完成。下一步是 C07G：C07 模块隔离封板；C07G 仍不得进入
 K01/P 系列或真实 provider 接入。

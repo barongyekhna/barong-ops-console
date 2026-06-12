@@ -275,6 +275,18 @@ route-guard markers, `GET /api/backend/modules/registry` and
 production release, Alembic upgrade, env read, postgres operation, K01/P-series
 menu, provider connection, or real business flow was performed.
 
+C07F has released the frontend module-aware runtime to production and archived
+the acceptance in `docs/C07_MODULE_PRODUCTION_RELEASE.md`. Production `/login`
+and `/modules` return 200 after release, the linked bundle contains C07C
+`ModuleAccessProvider`, `useModuleAccess`, namespaced module keys such as
+`admin.users`, `admin.permissions`, `business.jobs`, and the route-guard
+markers for locked and unavailable modules. Production frontend proxy precisely
+allows `GET /api/backend/modules/registry` and `GET /api/backend/modules/me`
+to reach backend auth 401, while `/api/backend/modules/not-allowed` remains
+404. No staging release, Alembic upgrade, env read, postgres operation,
+K01/P-series menu, provider connection, production test account, assignment
+mutation, or real business flow was performed.
+
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier
 checks `tests/frontend/module-isolation.test.mjs` during image builds. The

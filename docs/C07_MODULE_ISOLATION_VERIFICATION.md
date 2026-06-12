@@ -16,6 +16,16 @@ Docker 后端最小测试 `tests/backend/test_modules_registry.py`,
 通过；发布后 staging/production smoke、dual env status 和 safe release plan 通过。
 C07E 未执行 Alembic，未操作 postgres，未发布 production，未读取真实 env，未接真实业务。
 
+2026-06-12 C07F 补充：production 模块隔离发布已归档在
+`docs/C07_MODULE_PRODUCTION_RELEASE.md`。C07F 使用本文件的测试/verifier 作为 production
+发布前后检查矩阵：frontend `verify/typecheck/build` 和三组 Node tests 通过；Docker
+后端最小测试 `tests/backend/test_modules_registry.py`,
+`tests/backend/test_permissions_api.py`, `tests/backend/test_permission_assignments_api.py`,
+`tests/backend/test_user_management_api.py` 通过，结果 `47 passed`。发布后 production
+frontend proxy exact allowlist、bundle marker、C05/C06 未登录回归和 Alembic current/head
+均通过；owner/non-owner live login 因无 approved production auth material 未执行，相关规则
+继续由 C07D tests 和 C07E staging 验收覆盖。
+
 ## 做了什么
 
 C07D 强化三类自动化检查：
@@ -149,5 +159,5 @@ C07D 不做：
 
 ## 下一步
 
-C07E staging 验收已归档。下一步是 C07F：production 模块隔离发布归档。C07F 应只做
-production 发布归档，不进入 K01/P 系列，不接真实业务。
+C07F production 发布归档已完成。下一步是 C07G：C07 模块隔离封板。C07G 应只做
+C07 封板归档，不进入 K01/P 系列，不接真实业务。

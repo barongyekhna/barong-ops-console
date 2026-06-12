@@ -40,6 +40,16 @@ safe release，未执行 Alembic，未操作 staging/production postgres，未�
 owner 凭据和 active non-owner 测试账号未执行，相关 access-state 规则由 C07D Docker/
 Node tests 覆盖并在 C07E 文档中记录限制。
 
+2026-06-12 C07F 更新：production 模块隔离发布归档已在
+`docs/C07_MODULE_PRODUCTION_RELEASE.md` 完成。C07F 使用 OPS01 safe release 发布
+production backend 和 frontend，未执行 Alembic upgrade，未操作 production/staging
+postgres，未直接操作数据库，未读取真实 env，未发布 staging，未接 K01/P 系列或真实业务。
+production 未登录 `/modules/registry` 和 `/modules/me` 返回 401，frontend proxy 精确
+放行 `/api/backend/modules/registry` 与 `/api/backend/modules/me` 并拒绝
+`/api/backend/modules/not-allowed`，production bundle 命中 C07C module-aware marker。
+owner/non-owner live login 因无 approved production auth material 未执行，相关规则由
+C07D tests 和 C07E staging 验收覆盖。
+
 ## 一、C07A 结论
 
 C07 可以开始。
@@ -910,7 +920,12 @@ non-owner 测试账号未执行，已在验收文档中作为限制记录；C07D
 - owner 只读验收。
 - smoke/status 记录。
 
-当前状态：未开始。C07B 未发布 production。
+当前状态：已完成并记录在 `docs/C07_MODULE_PRODUCTION_RELEASE.md`。C07F 已将 C07B
+backend module registry runtime 和 C07C frontend module-aware navigation / route guard
+发布到 production，并完成只读 production 验收。production Alembic current/head 仍为
+`c05b_permissions_001 (head)`，未执行 upgrade；production/staging postgres 未操作；未读
+真实 env；未发布 staging；未接 K01/P 系列或真实业务。owner/non-owner production live
+login 因无 approved production auth material 未执行，归档中已记录限制。
 
 ### C07G：C07 模块隔离封板
 

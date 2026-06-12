@@ -13,6 +13,10 @@ revoke API while keeping `/users` owner-only. C07B adds authenticated
 `GET /modules/registry` and `GET /modules/me` without adding a migration or
 real business integration. C07E has released the C07B backend runtime to
 staging and archived the result in `docs/C07_MODULE_STAGING_ACCEPTANCE.md`.
+C07F has released the C07B backend runtime to production and archived the
+result in `docs/C07_MODULE_PRODUCTION_RELEASE.md`; no Alembic upgrade was
+executed for C07F and production current/head remains `c05b_permissions_001
+(head)`.
 C06E has released the C06B backend API to production, and C06F has sealed C06
 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
@@ -247,6 +251,17 @@ and non-owner live login API checks require approved staging credentials or a
 separately approved staging-only test account; this limitation is recorded in
 `docs/C07_MODULE_STAGING_ACCEPTANCE.md`, while the access-state contract remains
 covered by `tests/backend/test_modules_registry.py`.
+
+C07F has released the same backend module registry runtime to production via
+OPS01 safe release. Production unauthenticated `GET /modules/registry` and
+`GET /modules/me` return 401, production backend C07B key files are present in
+the running container, and production Alembic current/head remains
+`c05b_permissions_001 (head)`. C07F did not execute Alembic upgrade, operate
+postgres, read real env files, release staging, create production test
+accounts, mutate permission assignments, or connect K01/P-series/real provider
+flows. Owner/non-owner production live module access checks were not run
+because no approved production auth material was available; the result is
+archived in `docs/C07_MODULE_PRODUCTION_RELEASE.md`.
 
 F12 adds the n8n test webhook bridge:
 

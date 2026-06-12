@@ -591,9 +591,34 @@ in `docs/C07_MODULE_STAGING_ACCEPTANCE.md`:
   available. The same access-state rules remain covered by the C07D Docker and
   frontend test suites.
 
+C07F has released the C07B/C07C runtime to production and archived the
+acceptance in `docs/C07_MODULE_PRODUCTION_RELEASE.md`:
+
+- Production backend safe release completed for `console_backend`.
+- Production frontend safe release completed for `console_frontend`.
+- No Alembic upgrade was executed; production Alembic current/head remains
+  `c05b_permissions_001 (head)`.
+- Production postgres was not stopped, restarted, removed, rebuilt, exposed, or
+  directly accessed.
+- Production unauthenticated `GET /modules/registry` and `GET /modules/me`
+  return 401.
+- Production frontend proxy precisely forwards
+  `GET /api/backend/modules/registry` and `GET /api/backend/modules/me` to
+  backend auth, while `/api/backend/modules/not-allowed` remains 404.
+- Production frontend bundle contains C07C `ModuleAccessProvider`,
+  module-aware navigation, namespaced `module_key` values, route guard, locked
+  and unavailable module states.
+- C05/C06 unauthenticated regressions remain intact: `/auth/me`,
+  `/permissions/me`, and `/users` return 401; `/auth/register` remains 404.
+- No staging release, env read, direct DB access, production test account,
+  production assignment grant/update/revoke, K01/P-series menu, provider
+  connection, or real business flow was performed.
+- Owner/non-owner production live login requests were not executed because no
+  approved production auth material was available. The same access-state rules
+  remain covered by C07D tests and C07E staging acceptance.
+
 Recommended next split:
 
-- C07F: production module isolation release archive.
 - C07G: C07 module isolation seal.
 
 ## Temporary login preview

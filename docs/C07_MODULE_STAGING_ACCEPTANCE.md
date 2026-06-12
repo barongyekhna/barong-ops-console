@@ -199,5 +199,8 @@ staging-only 测试账号后补充。
 
 ## 下一步
 
-C07F 是 production 模块隔离发布归档。进入 C07F 前，应先确认是否需要补齐 owner /
-non-owner live 登录验收材料；C07F 仍不得接 K01/P 系列或真实业务。
+C07F production 模块隔离发布归档已完成，记录见
+`docs/C07_MODULE_PRODUCTION_RELEASE.md`。C07F 未获得 approved production owner/non-owner
+auth material，因此 production owner/non-owner live login 仍未执行；相关规则由 C07D
+tests 和本 C07E staging 验收共同作为依据。下一步是 C07G：C07 模块隔离封板；C07G 仍不得
+接 K01/P 系列或真实业务。

@@ -6,6 +6,23 @@
 
 ### Added
 
+- C07F：新增 `docs/C07_MODULE_PRODUCTION_RELEASE.md`，归档 production 模块隔离发布和
+  验收；本轮仅执行 production backend/frontend safe release，未执行 Alembic upgrade，
+  未操作 production/staging postgres，未直接 psql/SQL，未读取真实 env，未发布 staging，
+  未接 K01/P 系列或 n8n/WooCommerce/MinIO/Filebrowser 真实业务。
+- C07F：production backend safe release 成功，发布 C07B `/modules/registry` 和
+  `/modules/me` runtime；production frontend safe release 成功，发布 C07C
+  ModuleAccessProvider、module-aware navigation / route guard 和精确 module proxy
+  allowlist。
+- C07F：发布后 production backend 未登录 `/modules/registry` 与 `/modules/me` 返回 401；
+  frontend proxy 精确放行 `/api/backend/modules/registry` 与
+  `/api/backend/modules/me` 并返回 backend auth 401，危险
+  `/api/backend/modules/not-allowed` 仍 404；frontend bundle marker 命中 C07C
+  module-aware 代码。
+- C07F：production Alembic `current` 和 `heads` 均保持 `c05b_permissions_001 (head)`；
+  C05/C06 未登录回归保持 `/auth/me`、`/permissions/me`、`/users` 为 401，
+  `/auth/register` 为 404；owner/non-owner live login 因无 approved production auth
+  material 未执行，相关规则由 C07D tests 和 C07E staging 验收覆盖。
 - C07E：新增 `docs/C07_MODULE_STAGING_ACCEPTANCE.md`，归档 staging 模块隔离发布和
   验收；本轮仅执行 staging backend/frontend safe release，未执行 Alembic，未操作
   staging/production postgres，未读取真实 env，未发布 production，未接 K01/P 系列或
