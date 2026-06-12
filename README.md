@@ -795,9 +795,28 @@ shell to production and archived the acceptance in
   approved production auth material was provided; backend Docker tests and
   frontend Node tests cover those access-state contracts.
 
-Current next split after C08F:
+C08G has sealed the full C08 Module Adapter system in
+`docs/C08_MODULE_ADAPTER_SEAL.md`:
 
-- C08G: C08 Module Adapter 封板.
+- C08A-F are complete and traceable from plan, backend registry/contract,
+  frontend shell/placeholders, verification, staging acceptance, production
+  release, and final seal.
+- The sealed production runtime state is authenticated read-only
+  `/module-adapters/registry` and `/module-adapters/me`, exact frontend proxy
+  allowlisting, and a contract-only adapter shell.
+- Adapter actions remain non-executable; execution-required actions wait for
+  C09 Execution Provider and approval-required actions wait for C12 Approval
+  Gate.
+- `/users` remains owner-only, `/auth/register` remains 404,
+  `role_default_permissions` do not auto-apply, and `super_admin` is not
+  global by default.
+- C08 is sealed without K01, P-series, n8n/WooCommerce/MinIO/Filebrowser live
+  providers, real business tasks, new migrations, runtime changes, staging or
+  production release in C08G, or adapter action execution.
+
+Current next split after C08G:
+
+- C09: Execution Provider.
 
 ## Temporary login preview
 

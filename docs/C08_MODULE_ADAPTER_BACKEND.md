@@ -335,4 +335,10 @@ current/heads 仍为 `c05b_permissions_001 (head)`；未操作 production/stagin
 postgres，未读取真实 env，未创建账号，未修改权限 assignment，未执行 adapter action，
 未接 K01/P 系列或 live provider。
 
-下一步应进入 C08G Module Adapter 封板。
+C08G Module Adapter 封板已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_SEAL.md`。C08G 确认后端 C08B registry/contract 已承接到
+C08D verification、C08E staging 和 C08F production；本轮不修改 backend runtime，不新增
+API，不新增 migration，不发布 staging/production，不读取 env，不执行 adapter action，不接
+K01/P 系列或 live provider。
+
+下一步只建议 C09 Execution Provider；C08G 不启动 C09。

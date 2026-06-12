@@ -33,6 +33,13 @@ no-secret、route/API/nav namespace、dependency safe display、K01/P 系列不�
 C05/C06/C07 回归；不修改 runtime 功能，不新增 API，不新增 migration，不接 live
 provider，不发布 staging/production。C08E 下一步才做 staging Module Adapter 验收。
 
+2026-06-12 C08G 补充：C08 Module Adapter 最终封板已完成，归档在
+`docs/C08_MODULE_ADAPTER_SEAL.md`。C08G 确认 C08A-F 承接链条完整，staging 和
+production 验收归档完整，adapter contract / backend registry / frontend shell /
+verify-test 体系已封板。C08G 只做文档封板和回归检查，不发布 staging/production，不修改
+runtime，不新增 API/UI/migration，不读取或修改 env，不执行 adapter action，不接 K01/P
+系列或真实业务。下一步只建议 C09 Execution Provider，且不在 C08G 中启动。
+
 ## 一、C08A 结论
 
 C08 可以开始。
@@ -1089,7 +1096,7 @@ C08A 明确暂缓：
 - C08D 固化 no-execute/no-provider/no-secret tests。
 - C08E 已完成 staging contract runtime 验收，不接业务。
 - C08F 只做 production Module Adapter 发布归档，不接业务。
-- C08G 封板后再进入 C09 Execution Provider。
+- C08G 已完成 C08 Module Adapter 封板；下一步只建议单独进入 C09 Execution Provider。
 
 ## 二十、C08E staging 验收状态
 
@@ -1140,4 +1147,24 @@ env，没有发布 staging，没有创建账号，没有修改权限 assignment�
 owner/non-owner live API 因无 approved production auth material 未运行；对应
 access-state contract 继续由 C08D backend Docker tests 和 frontend Node tests 覆盖。
 
-下一步是 C08G Module Adapter 封板。
+## 二十二、C08G 封板状态
+
+C08G 已完成，归档文档为 `docs/C08_MODULE_ADAPTER_SEAL.md`。
+
+C08G 确认：
+
+- C08A-F commit 链条完整。
+- C08A 方案、C08B 后端 registry/contract、C08C 前端 shell/placeholders、C08D
+  verify/test、C08E staging 验收和 C08F production 发布归档均已完成。
+- C08G 不发布 staging/production。
+- C08G 不修改 runtime 代码。
+- C08G 不执行 adapter action。
+- C08G 不新增 migration、API 或 UI。
+- C08G 不读取或修改 env。
+- C08G 不接 K01/P 系列或真实业务。
+- `/users` 仍 owner-only。
+- `/auth/register` 仍 404。
+- `role_default_permissions` 不自动生效。
+- `super_admin` 不默认全局。
+
+下一步只建议 C09 Execution Provider。C08G 不启动 C09，不进入 K01，不进入 P 系列。

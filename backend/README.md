@@ -31,6 +31,14 @@ shape, C07 namespace bindings, action permission/risk/operation-log fields,
 execution/approval no-execute states, safe dependencies/status/health/data
 contracts, pending scopes, no live provider, and C05/C06/C07 regressions
 without modifying runtime code or adding APIs/migrations.
+C08E released the backend adapter registry runtime to staging and archived the
+acceptance in `docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`. C08F released
+the same backend adapter registry runtime to production and archived the
+release in `docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`. C08G has sealed
+the full C08 Module Adapter backend state in
+`docs/C08_MODULE_ADAPTER_SEAL.md`; C08G is documentation-only and adds no
+runtime change, migration, API, staging/production release, provider
+connection, K01/P-series runtime, or adapter action execution.
 C06E has released the C06B backend API to production, and C06F has sealed C06
 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
@@ -342,8 +350,8 @@ upgrade, operate staging/production postgres, read real env files, publish
 production, create accounts, mutate permission assignments, execute adapter
 actions, or connect K01/P-series/live provider flows. Owner/non-owner live
 checks require approved staging auth material and were not run in C08E; the
-contract remains covered by backend tests. The next backend/frontend phase is
-C08F production Module Adapter release archive.
+contract remains covered by backend tests. C08F later completed production
+release archival, and C08G sealed the Module Adapter stage.
 
 F12 adds the n8n test webhook bridge:
 
@@ -431,6 +439,17 @@ Alembic current/heads remain `c05b_permissions_001 (head)`. It did not operate
 production/staging postgres, read real env files, create accounts, mutate
 permission assignments, execute adapter actions, or connect K01/P-series/live
 providers. The archive is `docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`.
+
+C08G has sealed C08 Module Adapter in
+`docs/C08_MODULE_ADAPTER_SEAL.md`. The sealed backend boundary remains:
+`/module-adapters/registry` and `/module-adapters/me` are authenticated
+read-only contract APIs, no action execution endpoint exists, adapter actions
+wait for C09, approval declarations wait for C12, dependency declarations stay
+safe-name-only, `/users` remains owner-only, `/auth/register` remains 404,
+`role_default_permissions` do not auto-apply, and `super_admin` is not global
+by default. C08G did not modify backend runtime code, add migrations, release
+staging/production, read env files, operate databases, or connect K01/P-series
+or live providers.
 
 ## Run tests
 

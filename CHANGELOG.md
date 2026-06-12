@@ -6,6 +6,16 @@
 
 ### Added
 
+- C08G：新增 `docs/C08_MODULE_ADAPTER_SEAL.md`，归档 C08 Module Adapter
+  最终封板；确认 C08A 方案、C08B 后端 adapter registry/contract、C08C 前端 adapter
+  shell/placeholders、C08D verify/test、C08E staging 验收和 C08F production 发布归档
+  链条完整。
+- C08G：更新 README、CHANGELOG、backend/frontend README 和 C08A-F 文档，明确 C08
+  已封板；本轮不发布 staging/production，不修改 runtime 代码，不新增 API/UI/migration，
+  不读取或修改 env，不执行 adapter action，不接 K01/P 系列或真实业务。
+- C08G：封板边界保留 `/users` owner-only、`/auth/register` 404、
+  `role_default_permissions` 不自动生效、`super_admin` 不默认全局；下一步建议 C09
+  Execution Provider，但 C08G 不启动 C09。
 - C08F：新增 `docs/C08_MODULE_ADAPTER_PRODUCTION_RELEASE.md`，归档 production
   Module Adapter 发布；经批准按 OPS01 safe release 顺序发布 production backend 和
   frontend，生产 `/module-adapters/registry`、`/module-adapters/me` 未登录均返回

@@ -370,8 +370,18 @@ adapter API paths, `Action contracts`, C09 Execution Provider wait text, C12
 Approval Gate wait text, adapter shell disabled/unavailable text, and
 dependency safety helper markers. C08F did not execute adapter actions, publish
 staging, read real env files, create accounts, mutate permission assignments,
-or connect K01/P-series/live provider flows. The next frontend phase is C08G
-Module Adapter seal.
+or connect K01/P-series/live provider flows.
+
+C08G is documented in `docs/C08_MODULE_ADAPTER_SEAL.md`. It seals the frontend
+Module Adapter state without changing runtime code or releasing
+staging/production. The sealed frontend boundary remains exact
+`/module-adapters/registry` and `/module-adapters/me` proxy allowlisting,
+`AdapterAccessProvider`, contract-only `AdapterSurfaceShell`, disabled action
+rows, C09 Execution Provider wait state, C12 Approval Gate wait state, safe
+dependency-name display, owner-only User Management / Permission Management,
+no K01/P-series menu, no live provider connection, and no adapter action
+execution. The next frontend phase is C09 Execution Provider planning and
+implementation after separate approval.
 
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier

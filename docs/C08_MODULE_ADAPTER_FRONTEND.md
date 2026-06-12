@@ -201,4 +201,10 @@ Provider 等待文案、C12 Approval Gate 等待文案、adapter shell disabled/
 `/api/backend/module-adapters/not-allowed`。C08F 未执行 adapter action，未接
 K01/P 系列或 live provider，未发布 staging。
 
-下一步应进入 C08G Module Adapter 封板。
+C08G Module Adapter 封板已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_SEAL.md`。C08G 确认前端 C08C adapter shell 已承接到
+C08D verification、C08E staging 和 C08F production；本轮不修改 frontend runtime，不新增
+UI/API，不发布 staging/production，不读取 env，不执行 adapter action，不接 K01/P 系列、
+live provider 或真实业务。
+
+下一步只建议 C09 Execution Provider；C08G 不启动 C09。

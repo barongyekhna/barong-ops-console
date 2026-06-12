@@ -184,4 +184,10 @@ C08F 没有执行 Alembic upgrade，没有操作 production/staging postgres，�
 env，没有创建账号，没有修改权限 assignment，没有执行 adapter action，没有接 K01/P 系列或
 live provider。
 
-下一步是 C08G Module Adapter 封板。
+C08G Module Adapter 封板已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_SEAL.md`。C08G 确认 C08D verify/test 体系仍是 C08
+no-execute、no-provider、no-secret、proxy exact allowlist、C05/C06/C07 regression 的
+封板依据；本轮只做文档封板和回归检查，不新增测试 runtime，不发布 staging/production，不接
+K01/P 系列或真实业务。
+
+下一步只建议 C09 Execution Provider；C08G 不启动 C09。
