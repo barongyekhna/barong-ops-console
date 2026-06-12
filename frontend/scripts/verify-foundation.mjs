@@ -41,11 +41,15 @@ for (const requiredFile of [
   join(frontendRoot, "src", "lib", "module-registry-api.ts"),
   join(frontendRoot, "src", "lib", "module-adapter.ts"),
   join(frontendRoot, "src", "lib", "module-adapter-api.ts"),
+  join(frontendRoot, "src", "lib", "execution-provider.ts"),
+  join(frontendRoot, "src", "lib", "execution-provider-api.ts"),
   join(frontendRoot, "src", "components", "module-access-provider.tsx"),
   join(frontendRoot, "src", "components", "adapter-access-provider.tsx"),
   join(frontendRoot, "src", "components", "module-adapter-shell.tsx"),
+  join(frontendRoot, "src", "components", "execution-provider-status-shell.tsx"),
   join(repoRoot, "tests", "frontend", "module-isolation.test.mjs"),
   join(repoRoot, "tests", "frontend", "module-adapter.test.mjs"),
+  join(repoRoot, "tests", "frontend", "execution-provider.test.mjs"),
 ]) {
   if (!existsSync(requiredFile)) {
     throw new Error(`Missing protected console file: ${requiredFile}`);
@@ -155,12 +159,24 @@ const moduleAdapterApiSource = readFileSync(
   join(frontendRoot, "src", "lib", "module-adapter-api.ts"),
   "utf8",
 );
+const executionProviderSource = readFileSync(
+  join(frontendRoot, "src", "lib", "execution-provider.ts"),
+  "utf8",
+);
+const executionProviderApiSource = readFileSync(
+  join(frontendRoot, "src", "lib", "execution-provider-api.ts"),
+  "utf8",
+);
 const adapterAccessProviderSource = readFileSync(
   join(frontendRoot, "src", "components", "adapter-access-provider.tsx"),
   "utf8",
 );
 const moduleAdapterShellSource = readFileSync(
   join(frontendRoot, "src", "components", "module-adapter-shell.tsx"),
+  "utf8",
+);
+const executionProviderStatusShellSource = readFileSync(
+  join(frontendRoot, "src", "components", "execution-provider-status-shell.tsx"),
   "utf8",
 );
 
@@ -199,6 +215,17 @@ for (const adapterPath of [
   }
 }
 
+for (const executionProviderPath of [
+  "execution-providers/registry",
+  "execution-providers/me",
+]) {
+  if (!backendProxySource.includes(executionProviderPath)) {
+    throw new Error(
+      `The backend API proxy must allow GET /${executionProviderPath}.`,
+    );
+  }
+}
+
 if (!backendProxySource.includes("ALLOWED_MODULE_REGISTRY_PATHS")) {
   throw new Error(
     "The backend API proxy must keep C07 module registry paths explicitly allowlisted.",
@@ -208,6 +235,12 @@ if (!backendProxySource.includes("ALLOWED_MODULE_REGISTRY_PATHS")) {
 if (!backendProxySource.includes("ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS")) {
   throw new Error(
     "The backend API proxy must keep C08 module adapter registry paths explicitly allowlisted.",
+  );
+}
+
+if (!backendProxySource.includes("ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS")) {
+  throw new Error(
+    "The backend API proxy must keep C09 execution provider paths explicitly allowlisted.",
   );
 }
 
@@ -284,6 +317,64 @@ if (
   )
 ) {
   throw new Error("The C08 module adapter proxy paths must be GET-only.");
+}
+
+const executionProviderAllowlistMatch = backendProxySource.match(
+  /const ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS = new Set\(\[([\s\S]*?)\]\);/,
+);
+if (!executionProviderAllowlistMatch) {
+  throw new Error("The C09 execution provider proxy allowlist was not found.");
+}
+const executionProviderAllowlist = new Set(
+  Array.from(
+    executionProviderAllowlistMatch[1].matchAll(/["']([^"']+)["']/g),
+  ).map((match) => match[1]),
+);
+if (
+  executionProviderAllowlist.size !== 2 ||
+  !executionProviderAllowlist.has("execution-providers/registry") ||
+  !executionProviderAllowlist.has("execution-providers/me")
+) {
+  throw new Error(
+    "The C09 execution provider proxy allowlist must contain only exact GET registry and me paths.",
+  );
+}
+if (
+  /execution-providers\/\*/.test(backendProxySource) ||
+  /path\[0\]\s*===\s*["']execution-providers["'][\s\S]{0,120}path\.length\s*[!<>]=/.test(
+    backendProxySource,
+  ) ||
+  /requestedPath\.startsWith\(["']execution-providers\//.test(
+    backendProxySource,
+  ) ||
+  /requestedPath\.startsWith\(["']executions?\//.test(backendProxySource)
+) {
+  throw new Error(
+    "The backend API proxy must not allow broad execution provider paths.",
+  );
+}
+if (
+  !backendProxySource.includes(
+    'method === "GET" &&\n      ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS.has(requestedPath)',
+  ) &&
+  !backendProxySource.includes(
+    'method === "GET" && ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS.has(requestedPath)',
+  )
+) {
+  throw new Error("The C09 execution provider proxy paths must be GET-only.");
+}
+for (const deniedExecutionPath of [
+  ["execution-providers", "not-allowed"],
+  ["executions"],
+  ["executions", "run"],
+  ["execution", "submit"],
+]) {
+  if (
+    backendProxySource.includes(`"${deniedExecutionPath.join("/")}"`) ||
+    backendProxySource.includes(`'${deniedExecutionPath.join("/")}'`)
+  ) {
+    throw new Error("A denied execution path was added to the proxy allowlist.");
+  }
 }
 
 for (const assignmentProxyCheck of [
@@ -369,10 +460,23 @@ if (
   !source.includes("module-adapters/registry") ||
   !source.includes("module-adapters/me") ||
   !source.includes("Execution Provider not connected") ||
-  !source.includes("等待 C09 Execution Provider") ||
-  !source.includes("等待 C12 Approval Gate")
+  !source.includes("waiting for C09 Execution Provider") ||
+  !source.includes("waiting for C12 Approval Gate")
 ) {
   throw new Error("The C08C adapter frontend shell markers are incomplete.");
+}
+
+if (
+  !source.includes("ExecutionProviderStatusShell") ||
+  !source.includes("getExecutionProviderRegistry") ||
+  !source.includes("getMyExecutionProviders") ||
+  !source.includes("execution-providers/registry") ||
+  !source.includes("execution-providers/me") ||
+  !source.includes("waiting for C14 Secret Rules") ||
+  !source.includes("waiting for C18 Scope Adapter") ||
+  !source.includes("provider_pending")
+) {
+  throw new Error("The C09C execution provider frontend shell markers are incomplete.");
 }
 
 if (
@@ -389,6 +493,25 @@ if (
 }
 
 if (
+  !executionProviderSource.includes("export type ExecutionProviderContract") ||
+  !executionProviderSource.includes("export type ExecutionProviderAccessState") ||
+  !executionProviderSource.includes("safe_status_message") ||
+  !executionProviderSource.includes("no_execute_reason") ||
+  !executionProviderSource.includes("can_request_execution: false") ||
+  !executionProviderSource.includes("executable: false") ||
+  !/export function isExecutionProviderExecutable[\s\S]{0,180}return false;/.test(
+    executionProviderSource,
+  ) ||
+  !/export function canRequestExecution[\s\S]{0,180}return false;/.test(
+    executionProviderSource,
+  )
+) {
+  throw new Error(
+    "The C09C execution provider model must keep safe no-execute state.",
+  );
+}
+
+if (
   !adapterAccessProviderSource.includes("canExposeAdapterMetadata") ||
   !adapterAccessProviderSource.includes("adapterAccessUnknown") ||
   !adapterAccessProviderSource.includes("isOwnerFullAccess")
@@ -399,7 +522,8 @@ if (
 }
 
 if (
-  !moduleAdapterShellSource.includes('<button disabled type="button">') ||
+  !executionProviderStatusShellSource.includes('<button disabled type="button">') ||
+  !moduleAdapterShellSource.includes("ExecutionProviderStatusShell") ||
   /apiRequest|fetch\(|method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/.test(
     moduleAdapterShellSource,
   )
@@ -422,11 +546,28 @@ if (
   );
 }
 
+if (
+  /method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/.test(
+    executionProviderApiSource,
+  ) ||
+  /["']\/execution-providers\/[^"']*(?:actions?|execute|execution|run|submit|cancel|retry)/i.test(
+    executionProviderApiSource,
+  ) ||
+  /["']\/executions?\/[^"']*/i.test(executionProviderApiSource)
+) {
+  throw new Error(
+    "The C09C execution provider API client must remain read-only.",
+  );
+}
+
 const adapterRuntimeSource = [
   moduleAdapterSource,
   moduleAdapterApiSource,
+  executionProviderSource,
+  executionProviderApiSource,
   adapterAccessProviderSource,
   moduleAdapterShellSource,
+  executionProviderStatusShellSource,
 ].join("\n");
 
 if (
@@ -438,10 +579,26 @@ if (
   ) ||
   /["']\/module-adapters\/[^"']*(?:actions?|execute|execution|run)/i.test(
     adapterRuntimeSource,
+  ) ||
+  /["']\/execution-providers\/[^"']*(?:actions?|execute|execution|run|submit|cancel|retry)/i.test(
+    adapterRuntimeSource,
+  ) ||
+  /["']\/executions?\/[^"']*/i.test(
+    adapterRuntimeSource,
   )
 ) {
   throw new Error(
     "The C08D adapter frontend must not expose live connected providers or executable action routes.",
+  );
+}
+
+if (
+  /Authorization|Bearer|password|credential=|api[_ -]?key|provider_url|https?:\/\/|webhook_url|token=/i.test(
+    executionProviderStatusShellSource,
+  )
+) {
+  throw new Error(
+    "The C09C execution provider status shell must not render sensitive runtime values.",
   );
 }
 

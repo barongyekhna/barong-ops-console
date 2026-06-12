@@ -17,6 +17,15 @@ import {
   type ModuleAdapterApiErrorSummary,
 } from "@/lib/module-adapter-api";
 import {
+  getExecutionProviderRegistry,
+  getMyExecutionProviders,
+  type ExecutionProviderApiErrorSummary,
+} from "@/lib/execution-provider-api";
+import type {
+  ExecutionProviderAccessState,
+  ExecutionProviderContract,
+} from "@/lib/execution-provider";
+import {
   canExposeAdapterMetadata,
   findAdapterAccessState,
   findAdapterContract,
@@ -32,11 +41,17 @@ import {
 type AdapterAccessContextValue = {
   adapters: ModuleAdapterContract[];
   accessItems: ModuleAdapterAccessState[];
+  executionProviders: ExecutionProviderContract[];
+  executionProviderAccessItems: ExecutionProviderAccessState[];
   isLoading: boolean;
   adapterAccessUnknown: boolean;
   adapterMetadataUnavailable: boolean;
+  executionProviderAccessUnknown: boolean;
+  executionProviderMetadataUnavailable: boolean;
   error: ModuleAdapterApiErrorSummary | null;
   registryError: ModuleAdapterApiErrorSummary | null;
+  executionProviderError: ExecutionProviderApiErrorSummary | null;
+  executionProviderRegistryError: ExecutionProviderApiErrorSummary | null;
   refresh: () => Promise<void>;
 };
 
@@ -57,37 +72,75 @@ export function AdapterAccessProvider({
   const { user, status } = useAuth();
   const [adapters, setAdapters] = useState<ModuleAdapterContract[]>([]);
   const [accessItems, setAccessItems] = useState<ModuleAdapterAccessState[]>([]);
+  const [executionProviders, setExecutionProviders] = useState<
+    ExecutionProviderContract[]
+  >([]);
+  const [executionProviderAccessItems, setExecutionProviderAccessItems] =
+    useState<ExecutionProviderAccessState[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [adapterAccessUnknown, setAdapterAccessUnknown] = useState(true);
   const [adapterMetadataUnavailable, setAdapterMetadataUnavailable] =
     useState(true);
+  const [executionProviderAccessUnknown, setExecutionProviderAccessUnknown] =
+    useState(true);
+  const [
+    executionProviderMetadataUnavailable,
+    setExecutionProviderMetadataUnavailable,
+  ] = useState(true);
   const [error, setError] = useState<ModuleAdapterApiErrorSummary | null>(null);
   const [registryError, setRegistryError] =
     useState<ModuleAdapterApiErrorSummary | null>(null);
+  const [executionProviderError, setExecutionProviderError] =
+    useState<ExecutionProviderApiErrorSummary | null>(null);
+  const [
+    executionProviderRegistryError,
+    setExecutionProviderRegistryError,
+  ] = useState<ExecutionProviderApiErrorSummary | null>(null);
 
   const loadAdapterAccess = useCallback(async () => {
     if (status !== "authenticated" || !user) {
       setAdapters([]);
       setAccessItems([]);
+      setExecutionProviders([]);
+      setExecutionProviderAccessItems([]);
       setError(null);
       setRegistryError(null);
+      setExecutionProviderError(null);
+      setExecutionProviderRegistryError(null);
       setIsLoading(false);
       setAdapterAccessUnknown(true);
       setAdapterMetadataUnavailable(true);
+      setExecutionProviderAccessUnknown(true);
+      setExecutionProviderMetadataUnavailable(true);
       return;
     }
 
     setIsLoading(true);
-    const [registryResult, accessResult] = await Promise.all([
+    const [
+      registryResult,
+      accessResult,
+      executionRegistryResult,
+      executionAccessResult,
+    ] = await Promise.all([
       listModuleAdapterRegistry(),
       listMyModuleAdapters(),
+      getExecutionProviderRegistry(),
+      getMyExecutionProviders(),
     ]);
     setAdapters(registryResult.data.items);
     setAccessItems(accessResult.data.items);
+    setExecutionProviders(executionRegistryResult.data.items);
+    setExecutionProviderAccessItems(executionAccessResult.data.items);
     setRegistryError(registryResult.error);
     setError(accessResult.error);
+    setExecutionProviderRegistryError(executionRegistryResult.error);
+    setExecutionProviderError(executionAccessResult.error);
     setAdapterMetadataUnavailable(!registryResult.ok);
     setAdapterAccessUnknown(accessResult.adapter_access_unknown);
+    setExecutionProviderMetadataUnavailable(!executionRegistryResult.ok);
+    setExecutionProviderAccessUnknown(
+      executionAccessResult.provider_access_unknown,
+    );
     setIsLoading(false);
   }, [status, user]);
 
@@ -130,6 +183,12 @@ export function AdapterAccessProvider({
       adapterMetadataUnavailable,
       adapters: filteredAdapters,
       error,
+      executionProviderAccessItems,
+      executionProviderAccessUnknown,
+      executionProviderError,
+      executionProviderMetadataUnavailable,
+      executionProviderRegistryError,
+      executionProviders,
       isLoading,
       refresh: loadAdapterAccess,
       registryError,
@@ -139,6 +198,12 @@ export function AdapterAccessProvider({
       adapterAccessUnknown,
       adapterMetadataUnavailable,
       error,
+      executionProviderAccessItems,
+      executionProviderAccessUnknown,
+      executionProviderError,
+      executionProviderMetadataUnavailable,
+      executionProviderRegistryError,
+      executionProviders,
       filteredAdapters,
       isLoading,
       loadAdapterAccess,
@@ -171,6 +236,11 @@ export function useAdapterRegistry() {
     adapterAccessUnknown: context.adapterAccessUnknown,
     adapterMetadataUnavailable: context.adapterMetadataUnavailable,
     error: context.registryError,
+    executionProviderAccessUnknown: context.executionProviderAccessUnknown,
+    executionProviderMetadataUnavailable:
+      context.executionProviderMetadataUnavailable,
+    executionProviderRegistryError: context.executionProviderRegistryError,
+    executionProviders: context.executionProviders,
     isLoading: context.isLoading,
     items: context.adapters,
     refresh: context.refresh,
@@ -193,6 +263,11 @@ export function useAdapterState(adapterKey: string | null | undefined) {
       context.adapterAccessUnknown || Boolean(adapterKey && !accessState),
     adapterMetadataUnavailable:
       context.adapterMetadataUnavailable || Boolean(adapterKey && !adapter),
+    executionProviderAccessItems: context.executionProviderAccessItems,
+    executionProviderAccessUnknown: context.executionProviderAccessUnknown,
+    executionProviderMetadataUnavailable:
+      context.executionProviderMetadataUnavailable,
+    executionProviders: context.executionProviders,
     isExecutable: false,
     isHidden: isAdapterHidden(accessState),
     isLocked: isAdapterLocked(accessState),
@@ -217,6 +292,11 @@ export function useAdapterStateForModule(moduleKey: string | null | undefined) {
       context.adapterAccessUnknown || Boolean(adapter && !accessState),
     adapterMetadataUnavailable:
       context.adapterMetadataUnavailable || Boolean(moduleKey && !adapter),
+    executionProviderAccessItems: context.executionProviderAccessItems,
+    executionProviderAccessUnknown: context.executionProviderAccessUnknown,
+    executionProviderMetadataUnavailable:
+      context.executionProviderMetadataUnavailable,
+    executionProviders: context.executionProviders,
     isExecutable: false,
     isHidden: isAdapterHidden(accessState),
     isLocked: isAdapterLocked(accessState),

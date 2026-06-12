@@ -11,6 +11,13 @@ C09B 不是执行系统上线。本阶段不提交 execution request，不排队
 前端 UI，不实现 queue/worker/webhook execution，不实现 Module Switch、Approval Gate
 或 Secret Rules。
 
+2026-06-12 C09C 补充：前端只读接入已完成，归档在
+`docs/C09_EXECUTION_PROVIDER_FRONTEND.md`。C09C 消费本文件定义的
+`GET /execution-providers/registry` 和 `GET /execution-providers/me` safe response，
+新增前端类型、GET-only client、exact proxy allowlist、Execution Provider 状态壳层和
+C08 Module Adapter Shell 的 disabled action state。C09C 没有要求 C09B 改 schema，
+没有新增 execution submit endpoint，没有执行 adapter action，也没有连接 live provider。
+
 ## 实现范围
 
 新增后端文件：
@@ -372,6 +379,8 @@ contract。
 
 ## 下一步
 
-C09C 做前端 execution status shell / action submit disabled state。C09C 可以消费
-C09B 的 read-only provider registry 和 `/execution-providers/me` access-state，但仍不得
+C09C 已完成前端 execution status shell / action submit disabled state，记录文件为
+`docs/C09_EXECUTION_PROVIDER_FRONTEND.md`。下一步建议进入 C09D：Execution Provider
+verify/test 体系，继续验证 no-live、no-secret、no-submit、exact proxy、provider/action
+binding、permission/approval/secret/scope blocking 和 C05/C06/C07/C08 回归。C09D 仍不得
 提交真实 execution request，不得执行 adapter action，不得接 live provider。

@@ -11,6 +11,13 @@ import {
 import { usePathname } from "next/navigation";
 
 import { useAdapterStateForModule } from "@/components/adapter-access-provider";
+import { ExecutionProviderStatusShell } from "@/components/execution-provider-status-shell";
+import {
+  findExecutionProviderAccessStateForAction,
+  findExecutionProviderContractForAction,
+  type ExecutionProviderAccessState,
+  type ExecutionProviderContract,
+} from "@/lib/execution-provider";
 import {
   getActionContractState,
   getAdapterStatusLabel,
@@ -167,12 +174,38 @@ export function AdapterCapabilitiesList({
 
 function ActionContractRow({
   accessState,
+  adapter,
   contract,
+  executionProviderAccessItems,
+  executionProviders,
 }: {
   contract: AdapterActionContract;
+  adapter: ModuleAdapterContract;
   accessState: ModuleAdapterAccessState | null;
+  executionProviderAccessItems: ExecutionProviderAccessState[];
+  executionProviders: ExecutionProviderContract[];
 }) {
-  const state = getActionContractState(contract, accessState);
+  const providerAccessState = findExecutionProviderAccessStateForAction(
+    {
+      actionKey: contract.action_key,
+      adapterKey: adapter.adapter_key,
+      moduleKey: adapter.module_key,
+    },
+    executionProviderAccessItems,
+  );
+  const provider = findExecutionProviderContractForAction(
+    {
+      actionKey: contract.action_key,
+      adapterKey: adapter.adapter_key,
+      moduleKey: adapter.module_key,
+    },
+    executionProviders,
+  );
+  const state = getActionContractState(
+    contract,
+    accessState,
+    providerAccessState,
+  );
 
   return (
     <li>
@@ -181,10 +214,13 @@ function ActionContractRow({
         <span>{`${contract.input_contract} -> ${contract.output_contract}`}</span>
         <small>{state.execution_message}</small>
         {state.approval_message ? <small>{state.approval_message}</small> : null}
+        <small>{state.no_execute_reason}</small>
       </div>
-      <button disabled type="button">
-        {state.button_label}
-      </button>
+      <ExecutionProviderStatusShell
+        actionContract={contract}
+        provider={provider}
+        providerAccessState={providerAccessState}
+      />
     </li>
   );
 }
@@ -192,9 +228,13 @@ function ActionContractRow({
 export function AdapterActionContractsList({
   accessState,
   adapter,
+  executionProviderAccessItems,
+  executionProviders,
 }: {
   adapter: ModuleAdapterContract;
   accessState: ModuleAdapterAccessState | null;
+  executionProviderAccessItems: ExecutionProviderAccessState[];
+  executionProviders: ExecutionProviderContract[];
 }) {
   return (
     <div className="adapter-section">
@@ -209,7 +249,10 @@ export function AdapterActionContractsList({
           {adapter.action_contracts.map((contract) => (
             <ActionContractRow
               accessState={accessState}
+              adapter={adapter}
               contract={contract}
+              executionProviderAccessItems={executionProviderAccessItems}
+              executionProviders={executionProviders}
               key={contract.action_key}
             />
           ))}
@@ -304,6 +347,8 @@ export function AdapterSurfaceShell({
     adapter,
     adapterAccessUnknown,
     adapterMetadataUnavailable,
+    executionProviderAccessItems,
+    executionProviders,
   } = useAdapterStateForModule(targetModuleKey);
 
   if (!targetModuleKey || accessState?.hidden === true) {
@@ -350,7 +395,12 @@ export function AdapterSurfaceShell({
 
       <AdapterSurfacePlaceholder accessState={accessState} adapter={adapter} />
       <AdapterCapabilitiesList adapter={adapter} />
-      <AdapterActionContractsList accessState={accessState} adapter={adapter} />
+      <AdapterActionContractsList
+        accessState={accessState}
+        adapter={adapter}
+        executionProviderAccessItems={executionProviderAccessItems}
+        executionProviders={executionProviders}
+      />
       <AdapterDataContractsSummary adapter={adapter} />
       <AdapterDependencySummary adapter={adapter} />
     </section>

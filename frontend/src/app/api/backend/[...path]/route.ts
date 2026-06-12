@@ -32,6 +32,10 @@ const ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS = new Set([
   "module-adapters/registry",
   "module-adapters/me",
 ]);
+const ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS = new Set([
+  "execution-providers/registry",
+  "execution-providers/me",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -136,6 +140,8 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
     (method === "GET" && ALLOWED_MODULE_REGISTRY_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS.has(requestedPath)) ||
+    (method === "GET" &&
+      ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS.has(requestedPath)) ||
     isAllowedPermissionPath(method, path) ||
     (method === "POST" && requestedPath === "foundation-demo/run") ||
     (method === "GET" && requestedPath === "foundation-demo/latest") ||

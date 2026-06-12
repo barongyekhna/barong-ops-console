@@ -6,6 +6,25 @@
 
 ### Added
 
+- C09C：新增前端 Execution Provider 只读模型、GET-only API client、状态壳层和
+  disabled action submit state；新增文件包括
+  `frontend/src/lib/execution-provider.ts`、
+  `frontend/src/lib/execution-provider-api.ts`、
+  `frontend/src/components/execution-provider-status-shell.tsx`、
+  `tests/frontend/execution-provider.test.mjs` 和
+  `docs/C09_EXECUTION_PROVIDER_FRONTEND.md`。
+- C09C：frontend backend proxy 精确加入
+  `GET /api/backend/execution-providers/registry` 和
+  `GET /api/backend/execution-providers/me`；继续拒绝 execution provider wildcard、
+  `/executions`、`/execution` 以及 execute/run/submit/cancel/retry 通道。
+- C09C：`AdapterAccessProvider` 现在只读加载 C09B provider registry/access state；
+  C08 `ModuleAdapterShell` 的 `action_contract` 展示升级为 execution-aware but no-execute，
+  找不到 provider 时显示 `provider_pending` / waiting C09，approval/secret/scope required
+  分别显示 waiting C12/C14/C18。
+- C09C：所有前端 provider/action state 继续强制 `executable=false`、
+  `can_request_execution=false`，不生成 submit payload、request id、idempotency key、
+  operation log 或 artifact ref，不执行 adapter action，不连接 live provider，不创建真实任务，
+  不新增 migration，不发布 staging/production。
 - C09B：新增后端 Execution Provider Contract v1、Execution Request/Result/State
   schema 草案、静态 no-op/mock/contract-only/future provider registry 和只读 API；
   新增文件包括 `backend/app/schemas/execution_provider.py`、

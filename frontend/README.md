@@ -393,14 +393,40 @@ for C09C or a later approved phase. C09A adds no frontend UI, no proxy route,
 no action submit call, no live provider connection, and no adapter action
 execution.
 
-The recommended next frontend step is C09C after C09B: execution status shell
-and action submit disabled/no-op state, still without real business execution.
+C09B is documented in `docs/C09_EXECUTION_PROVIDER_BACKEND.md`. It adds backend
+read-only `GET /execution-providers/registry` and `GET /execution-providers/me`
+with safe provider registry and current-user access state. All providers remain
+`executable=false` and `can_request_execution=false`.
+
+C09C is documented in `docs/C09_EXECUTION_PROVIDER_FRONTEND.md`. The frontend now
+adds `frontend/src/lib/execution-provider.ts`,
+`frontend/src/lib/execution-provider-api.ts`, and
+`frontend/src/components/execution-provider-status-shell.tsx`. The API client is
+GET-only and calls only `/execution-providers/registry` and
+`/execution-providers/me` through the restricted proxy. The proxy allowlist is
+exact for those two GET paths and does not allow execution provider wildcard,
+`/executions`, `/execution`, execute, run, submit, cancel, or retry paths.
+
+`AdapterAccessProvider` reads the C09B provider state alongside C08 adapter
+state. `ModuleAdapterShell` remains a C08 action contract shell, but action rows
+are now execution-aware: missing provider shows `provider_pending` / waiting for
+C09 Execution Provider, approval-required actions wait for C12 Approval Gate,
+secret-required actions wait for C14 Secret Rules, and scope-required actions
+wait for C18 Scope Adapter. The UI renders only disabled provider status
+controls; it does not render real run/execute/submit/cancel/retry buttons and
+does not call `fetch()` or `apiRequest()` from the shell.
+
+C09C does not create submit payloads, request ids, idempotency keys, operation
+logs, artifact refs, tasks, live provider connections, migrations, staging
+release, or production release. The next frontend step is C09D verify/test
+coverage for the Execution Provider boundary.
 
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier
-checks `tests/frontend/module-isolation.test.mjs` and the C08D verifier checks
-`tests/frontend/module-adapter.test.mjs` during image builds. The runtime image
-still only copies the built Next.js output and public assets.
+checks `tests/frontend/module-isolation.test.mjs`, the C08D verifier checks
+`tests/frontend/module-adapter.test.mjs`, and the C09C verifier checks
+`tests/frontend/execution-provider.test.mjs` during image builds. The runtime
+image still only copies the built Next.js output and public assets.
 
 ## Configuration
 

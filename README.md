@@ -814,10 +814,15 @@ C08G has sealed the full C08 Module Adapter system in
   providers, real business tasks, new migrations, runtime changes, staging or
   production release in C08G, or adapter action execution.
 
-Current next split after C08G:
+Current C09 split:
 
-- C09: Execution Provider. C09A has started as docs-only audit and contract
-  planning in `docs/C09_EXECUTION_PROVIDER_PLAN.md`.
+- C09A: Execution Provider audit and plan in
+  `docs/C09_EXECUTION_PROVIDER_PLAN.md`.
+- C09B: backend contract/no-op provider registry in
+  `docs/C09_EXECUTION_PROVIDER_BACKEND.md`.
+- C09C: frontend execution status shell / disabled action state in
+  `docs/C09_EXECUTION_PROVIDER_FRONTEND.md`.
+- Next recommended step: C09D Execution Provider verify/test体系.
 
 ## C09 execution provider
 
@@ -871,8 +876,33 @@ provider registry documented in `docs/C09_EXECUTION_PROVIDER_BACKEND.md`:
   no worker, no webhook execution, no live provider, no adapter action
   execution, and no real business task.
 
-The recommended next step after C09B is C09C: frontend execution status shell /
-action submit disabled state.
+C09C has added the frontend execution status shell documented in
+`docs/C09_EXECUTION_PROVIDER_FRONTEND.md`:
+
+- New frontend types and safe normalizers live in
+  `frontend/src/lib/execution-provider.ts`.
+- New GET-only API client lives in
+  `frontend/src/lib/execution-provider-api.ts` and calls only
+  `/execution-providers/registry` and `/execution-providers/me` through the
+  restricted same-origin proxy.
+- The frontend proxy precisely allowlists only
+  `GET /api/backend/execution-providers/registry` and
+  `GET /api/backend/execution-providers/me`; it does not allow execution
+  wildcard paths or execute/run/submit/cancel/retry channels.
+- `ExecutionProviderStatusShell` displays provider status, access state,
+  `no_execute_reason`, and `safe_status_message`.
+- C08 `ModuleAdapterShell` is now execution-aware but still no-execute:
+  execution-required actions wait for C09, approval-required actions wait for
+  C12, secret-required actions wait for C14, and scope-required actions wait
+  for C18.
+- Every frontend action/provider state remains `executable=false` and
+  `can_request_execution=false`.
+- C09C adds no POST execution API, no adapter action execution, no live
+  provider connection, no real task, no migration, no staging release, and no
+  production release.
+
+The recommended next step after C09C is C09D: Execution Provider verify/test
+体系.
 
 ## Temporary login preview
 

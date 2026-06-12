@@ -18,6 +18,15 @@ current-user provider access state，以及 authenticated read-only
 execution submit API，没有新增 queue/worker/webhook/live provider，没有新增 migration，
 没有新增前端 UI，没有执行 adapter action，没有读取 env，也没有创建真实任务。
 
+2026-06-12 C09C 补充：前端 execution status shell / action submit disabled
+state 已完成，归档在 `docs/C09_EXECUTION_PROVIDER_FRONTEND.md`。C09C 新增前端
+Execution Provider 只读类型、GET-only API client、exact frontend proxy allowlist、
+`ExecutionProviderStatusShell` 和 C08 Module Adapter Shell 的 execution-aware
+no-execute 展示。所有 action 仍 `executable=false`、`can_request_execution=false`。
+C09C 没有新增 POST / execute / run / submit / cancel / retry endpoint，没有执行 adapter
+action，没有连接 live provider，没有创建真实任务，没有新增 migration，也没有发布 staging
+或 production。
+
 ## 一、C09A 结论
 
 C09 可以开始。
@@ -567,7 +576,29 @@ Execution Provider 和 live n8n / webhook / queue 的边界：
 
 - 前端识别 provider status 和 execution-required action 状态。
 - 建立 execution status shell / disabled submit placeholder。
-- 保持 action submit 不可真实执行，除非 C09B 明确提供 no-op contract submit。
+- 保持 action submit 不可真实执行；C09B 只提供 read-only registry/access state，
+  没有提供 submit API。
+
+状态：
+
+- 已完成，记录文件为 `docs/C09_EXECUTION_PROVIDER_FRONTEND.md`。
+- 新增 `frontend/src/lib/execution-provider.ts`，定义
+  `ExecutionProviderContract`、`ExecutionProviderAccessState`、registry/access response
+  normalize helpers、safe status helpers 和 no-execute action state。
+- 新增 `frontend/src/lib/execution-provider-api.ts`，只读调用
+  `GET /execution-providers/registry` 和 `GET /execution-providers/me`，401/403/404/500
+  均安全降级，不打印 Authorization、token、env、backend URL 或 raw error。
+- frontend proxy 精确加入 `execution-providers/registry` 和 `execution-providers/me`，
+  仍拒绝 execution provider wildcard、`/executions`、`/execution` 以及 execute/run/
+  submit/cancel/retry 通道。
+- 新增 `ExecutionProviderStatusShell`，展示 provider status、access state、
+  `no_execute_reason` 和 `safe_status_message`，只渲染 disabled provider unavailable
+  状态。
+- C08 `ModuleAdapterShell` 继续展示 C08 `action_contract`，但会匹配 C09B provider access
+  state；找不到 provider 显示 `provider_pending` / waiting for C09，approval/secret/
+  scope required 分别显示 waiting C12/C14/C18。
+- 新增 `tests/frontend/execution-provider.test.mjs`，并更新
+  `tests/frontend/module-adapter.test.mjs` 和 `frontend/scripts/verify-foundation.mjs`。
 
 允许：
 

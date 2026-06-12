@@ -303,6 +303,10 @@ test("verify-foundation protects C08D adapter contract files and no-live rules",
   assert.match(verifier, /module-adapter-shell\.tsx/);
   assert.match(verifier, /module-adapter-api\.ts/);
   assert.match(verifier, /module-adapter\.ts/);
+  assert.match(verifier, /execution-provider-status-shell\.tsx/);
+  assert.match(verifier, /execution-provider-api\.ts/);
+  assert.match(verifier, /execution-provider\.ts/);
+  assert.match(verifier, /execution-provider\.test\.mjs/);
   assert.match(verifier, /module-adapter\.test\.mjs/);
   assert.match(verifier, /module-isolation\.test\.mjs/);
   assert.match(verifier, /live n8n\/WooCommerce\/MinIO\/Filebrowser/);
@@ -354,8 +358,9 @@ test("execution required action contracts are unavailable before C09", () => {
 
   assert.equal(actionState.executable, false);
   assert.equal(actionState.disabled, true);
-  assert.equal(actionState.state, "execution_provider_required");
-  assert.equal(actionState.execution_message, "等待 C09 Execution Provider");
+  assert.equal(actionState.can_request_execution, false);
+  assert.equal(actionState.state, "provider_pending");
+  assert.equal(actionState.execution_message, "waiting for C09 Execution Provider");
   assert.deepEqual(state.available_actions, []);
   assert.deepEqual(state.unavailable_actions, ["should.not.execute"]);
 });
@@ -384,7 +389,8 @@ test("approval required action contracts show pending C12 and stay non-executabl
 
   assert.equal(actionState.executable, false);
   assert.equal(actionState.state, "approval_required");
-  assert.equal(actionState.approval_message, "等待 C12 Approval Gate");
+  assert.equal(actionState.can_request_execution, false);
+  assert.equal(actionState.approval_message, "waiting for C12 Approval Gate");
 });
 
 test("owner can see admin adapter metadata and non-owner admin adapters are hidden", () => {
@@ -552,6 +558,10 @@ test("module-adapter API client and shell do not create action execution calls",
     "frontend/src/components/module-adapter-shell.tsx",
     "utf8",
   );
+  const statusShellSource = readFileSync(
+    "frontend/src/components/execution-provider-status-shell.tsx",
+    "utf8",
+  );
 
   assert.match(apiSource, /apiRequest<unknown>\("\/module-adapters\/registry"/);
   assert.match(apiSource, /apiRequest<unknown>\("\/module-adapters\/me"/);
@@ -564,7 +574,8 @@ test("module-adapter API client and shell do not create action execution calls",
     shellSource,
     /apiRequest|fetch\(|method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/,
   );
-  assert.match(shellSource, /<button disabled type="button">/);
+  assert.match(shellSource, /ExecutionProviderStatusShell/);
+  assert.match(statusShellSource, /<button disabled type="button">/);
   assert.doesNotMatch(
     shellSource,
     /live\s+(?:n8n|woocommerce|minio|filebrowser)\s+(?:action|provider|connected)/i,
@@ -576,8 +587,12 @@ test("AdapterUnavailableNotice source does not expose internal credentials", () 
     "frontend/src/components/module-adapter-shell.tsx",
     "utf8",
   );
+  const statusShellSource = readFileSync(
+    "frontend/src/components/execution-provider-status-shell.tsx",
+    "utf8",
+  );
   assert.doesNotMatch(
-    source,
+    `${source}\n${statusShellSource}`,
     /Authorization|Bearer|password|credential|api[_ -]?key|provider_url|https?:\/\/|webhook/i,
   );
 });

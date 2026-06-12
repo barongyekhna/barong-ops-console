@@ -242,6 +242,7 @@ export type AdapterSurfaceState = {
 export type AdapterActionContractState = {
   action_key: string;
   executable: false;
+  can_request_execution: false;
   disabled: true;
   unavailable: true;
   requires_execution_provider: boolean;
@@ -250,12 +251,36 @@ export type AdapterActionContractState = {
     | "contract_only"
     | "execution_provider_required"
     | "approval_required"
+    | "secret_required"
+    | "scope_required"
+    | "provider_pending"
+    | "provider_hidden"
     | "locked"
     | "unavailable";
   button_label: string;
   execution_message: string;
   approval_message: string | null;
+  provider_message: string;
+  no_execute_reason: string;
   reason: string;
+};
+
+type AdapterActionProviderAccessState = {
+  provider_access_state: string;
+  provider_status: string;
+  hidden: boolean;
+  locked: boolean;
+  unavailable: boolean;
+  block_reason: string;
+  requires_approval: boolean;
+  requires_secret: boolean;
+  requires_scope: boolean;
+  secret_binding_status: string;
+  scope_status: string;
+  can_request_execution: false;
+  executable: false;
+  no_execute_reason: string;
+  safe_status_message: string;
 };
 
 const ADAPTER_STATUSES = new Set<AdapterStatus>([
@@ -1097,35 +1122,93 @@ export function getAdapterSurfaceState(
 export function getActionContractState(
   contract: AdapterActionContract,
   accessState?: ModuleAdapterAccessState | null,
+  providerAccessState?: AdapterActionProviderAccessState | null,
 ): AdapterActionContractState {
-  const locked = accessState?.locked === true;
+  const hidden = providerAccessState?.hidden === true;
+  const locked =
+    accessState?.locked === true || providerAccessState?.locked === true;
   const unavailable = !accessState || isAdapterUnavailable(accessState);
   const requiresExecution =
     contract.requires_execution_provider ||
-    accessState?.requires_execution_provider === true;
+    accessState?.requires_execution_provider === true ||
+    providerAccessState?.block_reason === "execution_provider_required";
   const requiresApproval =
-    contract.requires_approval || accessState?.requires_approval === true;
-  const state = locked
+    contract.requires_approval ||
+    accessState?.requires_approval === true ||
+    providerAccessState?.requires_approval === true ||
+    providerAccessState?.block_reason === "blocked_approval_required" ||
+    providerAccessState?.no_execute_reason.includes("approval") === true;
+  const requiresSecret =
+    providerAccessState?.requires_secret === true ||
+    providerAccessState?.secret_binding_status === "secret_rules_required" ||
+    providerAccessState?.no_execute_reason.includes("secret") === true;
+  const requiresScope =
+    providerAccessState?.requires_scope === true ||
+    providerAccessState?.scope_status === "scope_adapter_pending" ||
+    providerAccessState?.no_execute_reason.includes("scope") === true;
+  const providerPending =
+    !providerAccessState ||
+    providerAccessState.provider_access_state === "provider_pending" ||
+    providerAccessState.provider_status === "provider_pending";
+  const providerUnavailable =
+    providerAccessState?.unavailable === true ||
+    providerAccessState?.provider_access_state === "unavailable" ||
+    providerAccessState?.provider_status === "provider_unavailable" ||
+    providerAccessState?.provider_access_state === "disabled" ||
+    providerAccessState?.provider_access_state === "deprecated";
+  const state = hidden
+    ? "provider_hidden"
+    : locked
     ? "locked"
     : requiresApproval
       ? "approval_required"
-      : requiresExecution
-        ? "execution_provider_required"
-        : unavailable
-          ? "unavailable"
-          : "contract_only";
+      : requiresSecret
+        ? "secret_required"
+        : requiresScope
+          ? "scope_required"
+          : providerPending
+            ? "provider_pending"
+            : requiresExecution
+              ? "execution_provider_required"
+              : providerUnavailable || unavailable
+                ? "unavailable"
+                : "contract_only";
+  const executionMessage =
+    state === "approval_required"
+      ? "waiting for C12 Approval Gate"
+      : state === "secret_required"
+        ? "waiting for C14 Secret Rules"
+        : state === "scope_required"
+          ? "waiting for C18 Scope Adapter"
+          : "waiting for C09 Execution Provider";
+  const noExecuteReason =
+    providerAccessState?.no_execute_reason ||
+    (state === "approval_required"
+      ? "waiting_c12_approval_gate"
+      : state === "secret_required"
+        ? "waiting_c14_secret_rules"
+        : state === "scope_required"
+          ? "waiting_c18_scope_adapter"
+          : state === "provider_pending"
+            ? "provider_pending"
+            : "c09c_no_execute_provider_contract_only");
 
   return {
     action_key: contract.action_key,
-    approval_message: requiresApproval ? "等待 C12 Approval Gate" : null,
+    approval_message: requiresApproval ? "waiting for C12 Approval Gate" : null,
     button_label: "Execution Provider not connected",
+    can_request_execution: false,
     disabled: true,
     executable: false,
-    execution_message: requiresExecution
-      ? "等待 C09 Execution Provider"
-      : "This action is declared by the module adapter but cannot run until C09 Execution Provider is connected.",
+    execution_message: executionMessage,
+    no_execute_reason: noExecuteReason,
+    provider_message:
+      providerAccessState?.safe_status_message ||
+      "provider_pending: waiting for C09 Execution Provider",
     reason: locked
       ? "Current user lacks the required adapter permission."
+      : hidden
+        ? "Execution provider metadata is hidden by module or adapter access."
       : "This action is declared by the module adapter but cannot run until C09 Execution Provider is connected.",
     requires_approval: requiresApproval,
     requires_execution_provider: requiresExecution,
