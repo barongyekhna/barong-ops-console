@@ -345,8 +345,20 @@ adapter shell cannot call `fetch()` or `apiRequest()`, and live
 n8n/WooCommerce/MinIO/Filebrowser provider/action routes remain blocked.
 C08D does not add frontend business UI, backend APIs, migrations, K01/P-series
 menus, live provider connections, action execution, staging release, or
-production release. The next frontend phase is C08E staging Module Adapter
-acceptance.
+production release.
+
+C08E is documented in
+`docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`. The staging frontend safe
+release published the C08C adapter shell to `console_staging_frontend`; the
+staging proxy now lets `GET /api/backend/module-adapters/registry` and
+`GET /api/backend/module-adapters/me` reach backend auth 401, while
+`GET /api/backend/module-adapters/not-allowed` returns 404. The staging bundle
+contains adapter API paths, `AdapterAccessProvider`, `Action contracts`, C09
+Execution Provider wait text, and C12 Approval Gate wait text. C08E did not
+execute adapter actions, publish production, read real env files, create
+accounts, mutate permission assignments, or connect K01/P-series/live provider
+flows. The next frontend phase is C08F production Module Adapter release
+archive.
 
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier

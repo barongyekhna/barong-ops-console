@@ -156,5 +156,13 @@ dependency declarations 只能展示安全名称，因为 C08 不读取 env、�
 
 ## 下一步
 
-下一步是 C08E staging Module Adapter 验收。C08E 只能做 staging contract runtime 验收，
+C08E staging Module Adapter 验收已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`。C08E 发布后复核了 staging smoke、
+production smoke、dual-env status、safe-release plan、adapter unauth 401、frontend
+proxy exact allowlist、bundle marker、C05/C06/C07 未登录回归、`/users` owner-only
+边界和 `/auth/register` 404。owner/non-owner live API 因无 approved staging auth
+material 未运行；对应 access-state contract 继续由本文件描述的 backend Docker tests 和
+frontend Node tests 覆盖。
+
+下一步是 C08F production Module Adapter 发布归档。C08F 只能做 production release/archive，
 不得接 K01/P 系列、不得连接真实 provider、不得执行 adapter action。

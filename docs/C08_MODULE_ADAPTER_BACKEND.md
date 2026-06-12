@@ -320,6 +320,11 @@ webhook、API key 或 credential value。C08B 只声明依赖名和 `live_connec
 
 ## 下一步
 
-C08D 已完成 adapter contract verify/test 体系。下一步应进入 C08E staging Module
-Adapter 验收，只做 staging contract runtime 验收，不接 K01/P 系列、真实业务或 live
-provider。
+C08E staging Module Adapter 验收已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`。staging backend safe release 已
+发布 C08B static adapter registry；未登录 `GET /module-adapters/registry` 和
+`GET /module-adapters/me` 均返回 401。C08E 未执行 Alembic upgrade，未操作
+staging/production postgres，未读取真实 env，未发布 production，未创建账号，未修改
+权限 assignment，未执行 adapter action，未接 K01/P 系列或 live provider。
+
+下一步应进入 C08F production Module Adapter 发布归档。

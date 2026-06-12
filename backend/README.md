@@ -332,7 +332,18 @@ runtime, no live n8n/WooCommerce/MinIO/Filebrowser provider, and C05/C06/C07
 API regressions. It also asserts `/module-adapters` exposes only read-only GET
 contract APIs and no action execution endpoint. C08D adds no migration, no
 runtime feature, no staging/production release, and no provider connection.
-The next backend/frontend phase is C08E staging Module Adapter acceptance.
+
+C08E is documented in
+`docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`. The staging backend safe
+release published the C08B adapter registry runtime to
+`console_staging_backend`; unauthenticated `GET /module-adapters/registry` and
+`GET /module-adapters/me` return 401 on staging. C08E did not execute Alembic
+upgrade, operate staging/production postgres, read real env files, publish
+production, create accounts, mutate permission assignments, execute adapter
+actions, or connect K01/P-series/live provider flows. Owner/non-owner live
+checks require approved staging auth material and were not run in C08E; the
+contract remains covered by backend tests. The next backend/frontend phase is
+C08F production Module Adapter release archive.
 
 F12 adds the n8n test webhook bridge:
 

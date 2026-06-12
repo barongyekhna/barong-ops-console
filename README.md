@@ -748,9 +748,31 @@ C08D has added the Adapter contract verify/test system documented in
   K01/P-series runtime, no live provider integration, and no staging/production
   release.
 
-Current next split after C08D:
+C08E has released the C08B backend adapter registry and C08C frontend adapter
+shell to staging and archived the acceptance in
+`docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`:
 
-- C08E: staging Module Adapter 验收.
+- staging backend safe release completed for `console_staging_backend`; C08B
+  `/module-adapters/registry` and `/module-adapters/me` are now present in
+  staging and return 401 when unauthenticated.
+- staging frontend safe release completed for `console_staging_frontend`; the
+  frontend proxy precisely allows `/api/backend/module-adapters/registry` and
+  `/api/backend/module-adapters/me`, both returning backend auth 401, while
+  `/api/backend/module-adapters/not-allowed` returns 404.
+- the staging frontend bundle contains C08C adapter shell markers including
+  `AdapterAccessProvider`, adapter API paths, `Action contracts`, C09
+  Execution Provider wait text, and C12 Approval Gate wait text.
+- C08E did not execute Alembic upgrade, did not operate staging/production
+  postgres, did not read real env files, did not publish production, did not
+  create accounts or mutate permission assignments, and did not execute
+  adapter actions.
+- owner and non-owner live adapter access checks were not run because no
+  approved staging auth material was provided; backend Docker tests and
+  frontend Node tests cover those access-state contracts.
+
+Current next split after C08E:
+
+- C08F: production Module Adapter 发布归档.
 
 ## Temporary login preview
 

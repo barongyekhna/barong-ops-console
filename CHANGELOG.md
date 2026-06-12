@@ -6,6 +6,18 @@
 
 ### Added
 
+- C08E：新增 `docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`，归档 staging
+  Module Adapter 验收；经批准执行 staging backend/frontend safe release，发布 C08B
+  `/module-adapters/registry`、`/module-adapters/me` 和 C08C frontend adapter
+  shell。staging 未登录 adapter backend/proxy 均返回 401，proxy
+  `/api/backend/module-adapters/not-allowed` 返回 404，staging bundle 命中
+  `AdapterAccessProvider`、`Action contracts`、C09 Execution Provider 和 C12
+  Approval Gate marker。
+- C08E：确认本轮未执行 Alembic upgrade，未操作 staging/production postgres，未直接
+  查库，未读取真实 env，未发布 production，未创建测试账号，未 grant/update/revoke
+  权限 assignment，未执行 adapter action，未接 K01/P 系列或 n8n/WooCommerce/MinIO/
+  Filebrowser live provider；owner/non-owner live API 因无 approved staging auth
+  material 未运行，由 Docker backend tests 和 frontend Node tests 覆盖 contract。
 - C08D：新增 `docs/C08_MODULE_ADAPTER_VERIFICATION.md`，归档 Adapter contract
   verify/test 体系；明确 C08D 只做测试和只读 verifier，不实现 Execution Provider、
   Module Switch、Approval Gate、sandbox、secret rules、n8n 接入、K01/P 系列、真实业务或

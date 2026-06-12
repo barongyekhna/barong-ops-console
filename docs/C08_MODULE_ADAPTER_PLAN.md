@@ -1087,5 +1087,31 @@ C08A 明确暂缓：
 - C08B 只做 static adapter registry / contract validation。
 - C08C 只做 placeholder shell。
 - C08D 固化 no-execute/no-provider/no-secret tests。
-- C08E/C08F 只做 contract runtime 验收，不接业务。
+- C08E 已完成 staging contract runtime 验收，不接业务。
+- C08F 只做 production Module Adapter 发布归档，不接业务。
 - C08G 封板后再进入 C09 Execution Provider。
+
+## 二十、C08E staging 验收状态
+
+C08E 已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`。
+
+C08E 经批准只执行 staging backend 和 staging frontend safe release：
+
+- `console_staging_backend` 已发布 C08B `/module-adapters/registry` 和
+  `/module-adapters/me`。
+- `console_staging_frontend` 已发布 C08C adapter shell 和 exact proxy
+  allowlist。
+- staging 未登录 `/module-adapters/registry` 和 `/module-adapters/me` 均返回
+  401。
+- staging frontend proxy 未登录 `/api/backend/module-adapters/registry` 和
+  `/api/backend/module-adapters/me` 均返回 401。
+- staging frontend proxy `/api/backend/module-adapters/not-allowed` 返回 404。
+- staging bundle 包含 C08C adapter shell、action contract、C09 wait 和 C12 wait
+  markers。
+
+C08E 没有执行 Alembic upgrade，没有操作 staging/production postgres，没有读取真实
+env，没有发布 production，没有创建账号，没有修改权限 assignment，没有执行 adapter
+action，没有接 K01/P 系列或 n8n/WooCommerce/MinIO/Filebrowser live provider。
+
+下一步是 C08F production Module Adapter 发布归档。

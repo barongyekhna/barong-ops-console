@@ -182,6 +182,13 @@ production navigation 或 live action。
 
 ## 下一步
 
-C08D 已完成 Adapter contract verify/test 体系。下一步应进入 C08E staging Module
-Adapter 验收，只做 staging contract runtime 验收，不接 K01/P 系列、真实业务或 live
-provider。
+C08E staging Module Adapter 验收已完成，归档文档为
+`docs/C08_MODULE_ADAPTER_STAGING_ACCEPTANCE.md`。staging frontend safe release 已
+发布 C08C adapter shell；staging bundle 命中 adapter API paths、
+`AdapterAccessProvider`、`Action contracts`、C09 Execution Provider 等待文案和 C12
+Approval Gate 等待文案。frontend proxy 精确允许
+`/api/backend/module-adapters/registry` 和 `/api/backend/module-adapters/me`，并拒绝
+`/api/backend/module-adapters/not-allowed`。C08E 未执行 adapter action，未接
+K01/P 系列或 live provider，未发布 production。
+
+下一步应进入 C08F production Module Adapter 发布归档。
