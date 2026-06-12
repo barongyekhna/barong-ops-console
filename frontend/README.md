@@ -383,6 +383,19 @@ no K01/P-series menu, no live provider connection, and no adapter action
 execution. The next frontend phase is C09 Execution Provider planning and
 implementation after separate approval.
 
+C09A is documented in `docs/C09_EXECUTION_PROVIDER_PLAN.md`. It starts
+Execution Provider planning as a docs-only audit and contract design stage.
+For the frontend, C09A only defines future execution status display rules:
+execution-required actions still show waiting-for-provider states,
+approval-required actions still show waiting-for-C12 states, provider
+unavailable errors must be safe summaries, and action submit entry points wait
+for C09C or a later approved phase. C09A adds no frontend UI, no proxy route,
+no action submit call, no live provider connection, and no adapter action
+execution.
+
+The recommended next frontend step is C09C after C09B: execution status shell
+and action submit disabled/no-op state, still without real business execution.
+
 The frontend Docker verification stage now copies `tests/frontend/` to
 `/tests/frontend/` before running `npm run verify`, because the C07D verifier
 checks `tests/frontend/module-isolation.test.mjs` and the C08D verifier checks

@@ -39,6 +39,14 @@ the full C08 Module Adapter backend state in
 `docs/C08_MODULE_ADAPTER_SEAL.md`; C08G is documentation-only and adds no
 runtime change, migration, API, staging/production release, provider
 connection, K01/P-series runtime, or adapter action execution.
+C09A has started docs-only Execution Provider planning in
+`docs/C09_EXECUTION_PROVIDER_PLAN.md`. C09A defines the future backend
+Execution Provider contract, execution request schema, provider status,
+permission/approval/scope inheritance, operation log policy, idempotency,
+retry, cancel, timeout, result, artifact, secret/provider dependency, and
+C09B-C09G split. It adds no backend runtime code, no submit API, no queue,
+no worker, no webhook/n8n execution, no migration, no env read, no
+staging/production release, and no adapter action execution.
 C06E has released the C06B backend API to production, and C06F has sealed C06
 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.
@@ -450,6 +458,17 @@ safe-name-only, `/users` remains owner-only, `/auth/register` remains 404,
 by default. C08G did not modify backend runtime code, add migrations, release
 staging/production, read env files, operate databases, or connect K01/P-series
 or live providers.
+
+C09A is documented in `docs/C09_EXECUTION_PROVIDER_PLAN.md`. It plans the
+future backend Execution Provider standard that will turn a C08
+`action_contract` into an auditable execution request with `execution_id`,
+`request_id`, `idempotency_key`, provider metadata, inherited
+`required_permission`, `risk_level`, `operation_log_action`, lifecycle status,
+safe result summary, artifact references, and safe error fields. C09A remains
+documentation-only: no backend route, no migration, no queue, no worker, no
+webhook/n8n execution, no secret access, no live provider, and no real business
+task were added. The next backend step is C09B: Execution Provider contract /
+no-op provider registry.
 
 ## Run tests
 

@@ -816,7 +816,43 @@ C08G has sealed the full C08 Module Adapter system in
 
 Current next split after C08G:
 
-- C09: Execution Provider.
+- C09: Execution Provider. C09A has started as docs-only audit and contract
+  planning in `docs/C09_EXECUTION_PROVIDER_PLAN.md`.
+
+## C09 execution provider
+
+C09A has started Execution Provider planning in
+`docs/C09_EXECUTION_PROVIDER_PLAN.md`. C09A is a docs-only audit and contract
+design stage. It does not implement backend runtime code, frontend runtime
+code, API, UI, migration, queue, worker, webhook execution, n8n execution,
+Approval Gate, Module Switch, Secret Rules, formal scope, staging release,
+production release, adapter action execution, live provider integration, or
+real business workflows.
+
+C09 defines how a C08 adapter action becomes a safe execution request. C08
+answers what a module can declare; C09 answers how one action request is
+submitted, permission-checked, blocked, accepted, queued, executed, logged,
+timed out, cancelled, retried, summarized, and archived.
+
+C09A confirms:
+
+- C08 Module Adapter is sealed at `17b371a`.
+- C08 action contracts remain declaration-only.
+- C09A does not execute adapter actions.
+- high-risk and approval-required actions must wait for C12 Approval Gate.
+- secret-bearing providers must wait for C14 Secret Rules.
+- n8n live provider integration must wait for C15.
+- C18 remains responsible for formal company/factory/department scope.
+
+Execution Provider Contract v1 is planned to cover provider identity/status,
+supported execution modes, module/adapter/action binding, request/result/state
+schemas, inherited required permission/risk/operation log action, approval and
+secret requirements, scope placeholder rules, idempotency, retry, cancel,
+timeout, concurrency, rate limit, operation log, audit event, artifact,
+callback, failure, fallback, unavailable behavior, tests, and docs path.
+
+The recommended next step after C09A is C09B: backend Execution Provider
+contract / no-op provider registry.
 
 ## Temporary login preview
 

@@ -6,6 +6,30 @@
 
 ### Added
 
+- C09A：新增 `docs/C09_EXECUTION_PROVIDER_PLAN.md`，完成 Execution Provider
+  审计与方案设计；确认 C08 Module Adapter 已在 `17b371a` 封板，C09 可以开始，C09
+  目标是定义 adapter action 如何形成受控 execution request，而不是执行真实 action、
+  接 live provider 或接真实业务。
+- C09A：定义 Execution Provider Contract v1 草案字段，覆盖 `provider_key`、
+  `provider_version`、`provider_type`、`provider_status`、execution modes、module/
+  adapter/action binding、request/result/state schemas、required permissions、risk
+  level、approval/secret/scope requirements、idempotency/retry/timeout/cancel/
+  concurrency/rate-limit policies、operation log/audit/artifact/callback/failure
+  policies、fallback/unavailable behavior、tests 和 docs path。
+- C09A：定义 execution request 生命周期和 schema，包括 `draft`、`requested`、
+  `blocked_permission`、`blocked_approval_required`、
+  `blocked_provider_unavailable`、`accepted`、`queued`、`running`、`succeeded`、
+  `failed`、`cancelled`、`timed_out`、`retry_scheduled`、`skipped`、`rejected`、
+  `archived`，以及 `execution_id`、`request_id`、`idempotency_key`、actor、
+  target scope、provider、status、result summary、artifact refs、safe error 和
+  operation log ref。
+- C09A：明确 C09 与 C12 Approval Gate、C13 Module Switch、C14 Secret Rules、
+  C15 n8n 接入和 C18 formal scope 的边界；high-risk action 不直接执行，secret-bearing
+  provider 不读取 env 或 credential，future n8n provider 只作为 C15 预留。
+- C09A：规划 C09B-C09G 拆分：C09B 后端 contract/no-op provider registry、C09C
+  前端 execution status shell / disabled submit state、C09D verify/test、C09E
+  staging 验收、C09F production 发布归档、C09G 封板；本轮没有新增 API/UI/migration，
+  没有发布 staging/production，没有执行 adapter action。
 - C08G：新增 `docs/C08_MODULE_ADAPTER_SEAL.md`，归档 C08 Module Adapter
   最终封板；确认 C08A 方案、C08B 后端 adapter registry/contract、C08C 前端 adapter
   shell/placeholders、C08D verify/test、C08E staging 验收和 C08F production 发布归档
