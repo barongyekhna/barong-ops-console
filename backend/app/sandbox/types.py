@@ -11,20 +11,24 @@ from ..schemas.execution_provider import (
 )
 
 
-SandboxArchitectureStage = Literal["c10a_architecture_only"]
+SandboxArchitectureStage = Literal["c10a_architecture_only", "c10b_mock_runner"]
 SandboxBoundaryState = Literal[
     "declared",
     "contract_received",
     "blocked_no_runtime",
     "blocked_policy",
+    "mock_lifecycle_simulated",
+    "mock_blocked_by_policy",
     "future_provider_pending",
 ]
-SandboxContractMode = Literal["architecture_only", "contract_only"]
+SandboxContractMode = Literal["architecture_only", "contract_only", "mock_only"]
 SandboxResultStatus = Literal[
     "not_executed",
     "contract_accepted",
     "contract_rejected",
     "blocked_by_policy",
+    "mock_succeeded",
+    "mock_blocked",
     "future_result_pending",
 ]
 SandboxTrustZone = Literal[
@@ -109,7 +113,9 @@ class SandboxResponse(BaseModel):
     result: SandboxResult
     c09_result_contract: ExecutionResultContractV1 | None = None
     safety_notes: list[str] = Field(default_factory=list)
-    next_stage_policy: Literal["wait_for_c10b"] = "wait_for_c10b"
+    next_stage_policy: Literal["wait_for_c10b", "wait_for_c10c"] = (
+        "wait_for_c10b"
+    )
 
 
 class SandboxContractInterface(BaseModel):

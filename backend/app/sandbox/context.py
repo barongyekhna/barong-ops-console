@@ -46,10 +46,10 @@ class SandboxContext(BaseModel):
     request_metadata: dict[str, Any] = Field(default_factory=dict)
     sanitized_input_summary: dict[str, Any] = Field(default_factory=dict)
     visible_trust_zones: list[SandboxTrustZone] = Field(default_factory=list)
-    runtime_execution_policy: Literal["not_available_in_c10a"] = (
-        "not_available_in_c10a"
-    )
+    runtime_execution_policy: Literal[
+        "not_available_in_c10a",
+        "mock_simulation_only",
+    ] = "not_available_in_c10a"
     external_provider_policy: Literal["denied"] = "denied"
     db_mutation_policy: Literal["denied"] = "denied"
     filesystem_write_policy: Literal["sandbox_scope_only"] = "sandbox_scope_only"
-
