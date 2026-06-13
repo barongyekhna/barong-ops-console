@@ -1,4 +1,9 @@
-import { createReviewState, type ReviewStatus } from "./reviewState";
+import {
+  createReviewState,
+  transitionState,
+  type ReviewStateSnapshot,
+  type ReviewStatus,
+} from "./reviewState";
 
 export type ProductPrimitiveValue = string | number | boolean;
 export type ProductValueMap = Record<string, string>;
@@ -52,15 +57,12 @@ export type RawProductInput = {
   serp_data?: Record<string, unknown>;
 };
 
-export type ProductReviewRecord = {
+export type ProductReviewRecord = ReviewStateSnapshot & {
   review_id: string;
-  product_id: string;
   source: "local_mock";
-  status: ReviewStatus;
   raw_input: RawProductInput;
   ai_canonical: ProductAiCanonicalFields;
   human_edit: ProductHumanEditFields;
-  updated_at: string;
 };
 
 const mockAiCanonical: ProductAiCanonicalFields = {
@@ -96,9 +98,8 @@ const mockAiCanonical: ProductAiCanonicalFields = {
 
 const mockReview: ProductReviewRecord = {
   review_id: "k12-review-local-001",
-  product_id: "k-series-product-knowledge-001",
   source: "local_mock",
-  ...createReviewState("needs_review"),
+  ...createReviewState("draft", "k-series-product-knowledge-001"),
   raw_input: {
     original_input_text:
       "Kids bottle, stainless, straw cap, 12oz, keeps drinks cold, school safe. Maybe age 3+.",
@@ -177,41 +178,86 @@ function cloneHumanEditFields(
 }
 
 function buildMockResponse(
-  status: ReviewStatus,
+  to: ReviewStatus,
   humanEdit: ProductHumanEditFields,
+  user = "operator",
 ): ProductReviewRecord {
+  const nextState = transitionState(currentMockReview, to, user);
   return {
-    ...cloneReview(mockReview),
-    status,
+    ...cloneReview(currentMockReview),
+    ...nextState,
     human_edit: cloneHumanEditFields(humanEdit),
-    updated_at: new Date().toISOString(),
   };
 }
 
+function saveMockReview(
+  humanEdit: ProductHumanEditFields,
+): ProductReviewRecord {
+  if (currentMockReview.status !== "draft") {
+    throw new Error(
+      `Draft edits are only allowed while status is draft. Current status: ${currentMockReview.status}`,
+    );
+  }
+
+  const timestamp = new Date().toISOString();
+
+  return {
+    ...cloneReview(currentMockReview),
+    human_edit: cloneHumanEditFields(humanEdit),
+    updated_at: timestamp,
+  };
+}
+
+let currentMockReview = cloneReview(mockReview);
+
 export async function getProductReview(): Promise<ProductReviewRecord> {
-  return cloneReview(mockReview);
+  return cloneReview(currentMockReview);
 }
 
 export async function saveDraft(
   humanEdit: ProductHumanEditFields,
 ): Promise<ProductReviewRecord> {
-  return buildMockResponse("draft", humanEdit);
+  currentMockReview = saveMockReview(humanEdit);
+
+  return cloneReview(currentMockReview);
+}
+
+export async function markAiGenerated(
+  humanEdit: ProductHumanEditFields,
+): Promise<ProductReviewRecord> {
+  currentMockReview = buildMockResponse("ai_generated", humanEdit);
+
+  return cloneReview(currentMockReview);
+}
+
+export async function requestReview(
+  humanEdit: ProductHumanEditFields,
+): Promise<ProductReviewRecord> {
+  currentMockReview = buildMockResponse("needs_review", humanEdit);
+
+  return cloneReview(currentMockReview);
 }
 
 export async function markReviewed(
   humanEdit: ProductHumanEditFields,
 ): Promise<ProductReviewRecord> {
-  return buildMockResponse("reviewed", humanEdit);
+  currentMockReview = buildMockResponse("reviewed", humanEdit);
+
+  return cloneReview(currentMockReview);
 }
 
 export async function approve(
   humanEdit: ProductHumanEditFields,
 ): Promise<ProductReviewRecord> {
-  return buildMockResponse("approved", humanEdit);
+  currentMockReview = buildMockResponse("approved", humanEdit);
+
+  return cloneReview(currentMockReview);
 }
 
 export async function reject(
   humanEdit: ProductHumanEditFields,
 ): Promise<ProductReviewRecord> {
-  return buildMockResponse("rejected", humanEdit);
+  currentMockReview = buildMockResponse("rejected", humanEdit);
+
+  return cloneReview(currentMockReview);
 }

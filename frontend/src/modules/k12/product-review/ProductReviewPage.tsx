@@ -16,28 +16,50 @@ import { RawInputPanel } from "../components/RawInputPanel";
 import {
   approve,
   getProductReview,
+  markAiGenerated,
   markReviewed,
   productReviewFieldLabels,
   productReviewFields,
   reject,
+  requestReview,
   saveDraft,
   type ProductHumanEditFields,
   type ProductReviewRecord,
 } from "../services/k12Api";
 import {
+  canTransition,
   getReviewStatusIndex,
   reviewStatusFlow,
   reviewStatusLabels,
   type ReviewStatus,
 } from "../services/reviewState";
 
-type ReviewAction = "save" | "reviewed" | "approve" | "reject";
+type TransitionReviewAction =
+  | "aiGenerated"
+  | "needsReview"
+  | "reviewed"
+  | "approve"
+  | "reject";
+type ReviewAction = "save" | TransitionReviewAction;
 
 const actionLabels: Record<ReviewAction, string> = {
   save: "Save Draft",
+  aiGenerated: "Generate AI",
+  needsReview: "Send to Review",
   reviewed: "Mark as Reviewed",
   approve: "Approve",
   reject: "Reject",
+};
+
+const transitionActionTargetStatus: Record<
+  TransitionReviewAction,
+  ReviewStatus
+> = {
+  aiGenerated: "ai_generated",
+  needsReview: "needs_review",
+  reviewed: "reviewed",
+  approve: "approved",
+  reject: "rejected",
 };
 
 export default function ProductReviewPage() {
@@ -97,8 +119,12 @@ export default function ProductReviewPage() {
       const nextReview = await handler(humanEdit);
       setReview(nextReview);
       setHumanEdit(nextReview.human_edit);
-    } catch {
-      setError(`${actionLabels[action]} failed in local mock mode.`);
+    } catch (caught) {
+      setError(
+        caught instanceof Error
+          ? caught.message
+          : `${actionLabels[action]} failed in local mock mode.`,
+      );
     } finally {
       setPendingAction(null);
     }
@@ -135,7 +161,11 @@ export default function ProductReviewPage() {
         <div className="k12-review-actions" aria-label="Review actions">
           <button
             className="secondary-button"
-            disabled={Boolean(pendingAction)}
+            disabled={isReviewActionDisabled(
+              "save",
+              review.status,
+              pendingAction,
+            )}
             onClick={() => void runAction("save", saveDraft)}
             type="button"
           >
@@ -148,7 +178,45 @@ export default function ProductReviewPage() {
           </button>
           <button
             className="secondary-button"
-            disabled={Boolean(pendingAction)}
+            disabled={isReviewActionDisabled(
+              "aiGenerated",
+              review.status,
+              pendingAction,
+            )}
+            onClick={() => void runAction("aiGenerated", markAiGenerated)}
+            type="button"
+          >
+            {pendingAction === "aiGenerated" ? (
+              <Loader2 aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <FileCheck2 aria-hidden="true" size={16} />
+            )}
+            Generate AI
+          </button>
+          <button
+            className="secondary-button"
+            disabled={isReviewActionDisabled(
+              "needsReview",
+              review.status,
+              pendingAction,
+            )}
+            onClick={() => void runAction("needsReview", requestReview)}
+            type="button"
+          >
+            {pendingAction === "needsReview" ? (
+              <Loader2 aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <FileCheck2 aria-hidden="true" size={16} />
+            )}
+            Send to Review
+          </button>
+          <button
+            className="secondary-button"
+            disabled={isReviewActionDisabled(
+              "reviewed",
+              review.status,
+              pendingAction,
+            )}
             onClick={() => void runAction("reviewed", markReviewed)}
             type="button"
           >
@@ -161,7 +229,11 @@ export default function ProductReviewPage() {
           </button>
           <button
             className="primary-button"
-            disabled={Boolean(pendingAction)}
+            disabled={isReviewActionDisabled(
+              "approve",
+              review.status,
+              pendingAction,
+            )}
             onClick={() => void runAction("approve", approve)}
             type="button"
           >
@@ -174,7 +246,11 @@ export default function ProductReviewPage() {
           </button>
           <button
             className="danger-button"
-            disabled={Boolean(pendingAction)}
+            disabled={isReviewActionDisabled(
+              "reject",
+              review.status,
+              pendingAction,
+            )}
             onClick={() => void runAction("reject", reject)}
             type="button"
           >
@@ -196,6 +272,19 @@ export default function ProductReviewPage() {
         <span>{review.product_id}</span>
         <span>{new Date(review.updated_at).toLocaleString()}</span>
       </section>
+
+      {review.state_log.length > 0 ? (
+        <section className="k12-review-meta" aria-label="Review state log">
+          <strong className="k12-review-status-badge">State Log</strong>
+          {review.state_log.map((log) => (
+            <span key={`${log.product_id}-${log.timestamp}-${log.to}`}>
+              {reviewStatusLabels[log.from]} {" -> "}
+              {reviewStatusLabels[log.to]} by {log.user} at{" "}
+              {new Date(log.timestamp).toLocaleString()}
+            </span>
+          ))}
+        </section>
+      ) : null}
 
       <ol className="k12-review-status-rail" aria-label="Review state flow">
         {reviewStatusFlow.map((status) => (
@@ -246,17 +335,42 @@ export default function ProductReviewPage() {
   );
 }
 
+function isReviewActionDisabled(
+  action: ReviewAction,
+  currentStatus: ReviewStatus,
+  pendingAction: ReviewAction | null,
+) {
+  if (pendingAction) {
+    return true;
+  }
+
+  if (action === "save") {
+    return currentStatus !== "draft";
+  }
+
+  return !canTransition(currentStatus, transitionActionTargetStatus[action]);
+}
+
 function getStatusStepClass(status: ReviewStatus, currentStatus: ReviewStatus) {
+  const baseClass = "k12-review-status-step";
+
   const statusIndex = getReviewStatusIndex(status);
   const currentIndex = getReviewStatusIndex(currentStatus);
 
   if (status === currentStatus) {
-    return "k12-review-status-step k12-review-status-step-active";
+    return `${baseClass} k12-review-status-step-active`;
+  }
+
+  if (
+    (currentStatus === "approved" && status === "rejected") ||
+    (currentStatus === "rejected" && status === "approved")
+  ) {
+    return baseClass;
   }
 
   if (statusIndex < currentIndex) {
-    return "k12-review-status-step k12-review-status-step-complete";
+    return `${baseClass} k12-review-status-step-complete`;
   }
 
-  return "k12-review-status-step";
+  return baseClass;
 }
