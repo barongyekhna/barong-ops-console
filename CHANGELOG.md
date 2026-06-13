@@ -6,6 +6,16 @@
 
 ### Added
 
+- C09G：新增 `docs/C09_EXECUTION_PROVIDER_SEAL.md`，归档 C09 Execution
+  Provider 统一最终封板；覆盖 C09A-C09F 完整生命周期、Execution Provider Contract v1
+  冻结状态、no-op/mock/contract-only model、production gateway 非依赖、C08/C07/C05/C06
+  对齐、C10-C20 边界和 sealed state。
+- C09G：更新 README 与 C09A-F 文档的最终封板口径；明确 C09 是能力层和合同层，不是
+  执行系统上线；execution runtime = NO，live provider = NO，execution request system =
+  NO，queue/worker/webhook = NO，adapter action executable = NO。
+- C09G：本轮只做文档封板；未修改 backend/frontend runtime 代码，未新增 API/UI/migration，
+  未发布 staging/production，未创建 execution request，未执行 adapter action，未连接 live
+  provider，未进入 C10，未 git commit。
 - C09D：新增 `docs/C09_EXECUTION_PROVIDER_VERIFICATION.md`，归档 Execution
   Provider verify/test 体系；明确 C09D 只做自动化验证和文档，不新增 runtime、
   execution submit API、migration、staging/production 发布、adapter action execution、

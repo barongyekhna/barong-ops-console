@@ -27,6 +27,14 @@ C09C 没有新增 POST / execute / run / submit / cancel / retry endpoint，没�
 action，没有连接 live provider，没有创建真实任务，没有新增 migration，也没有发布 staging
 或 production。
 
+2026-06-13 C09G 补充：C09 Execution Provider 已最终封板，统一封板文档为
+`docs/C09_EXECUTION_PROVIDER_SEAL.md`。C09A-F 生命周期已完成，Execution Provider
+Contract v1 已冻结，C09 的 no-op / mock / contract-only model 已确认。C09 是能力层和
+合同层，不是执行系统上线；execution runtime = NO，live provider = NO，execution
+request system = NO，queue / worker / webhook = NO，production gateway dependency =
+NO。C09G 只做文档封板，没有修改 runtime 代码，没有新增 API/UI/migration，没有执行
+adapter action，没有连接 live provider，没有进入 C10。
+
 ## 一、C09A 结论
 
 C09 可以开始。
@@ -649,8 +657,14 @@ Execution Provider 和 live n8n / webhook / queue 的边界：
 
 目标：
 
-- 将 C09B/C09C/C09D 的 contract/no-op/mock runtime 发布到 staging。
+- 将 C09B/C09C/C09D 的 contract/no-op/mock metadata 与 read-only shell 验收到 staging。
 - 做 staging 只读或 no-op 验收。
+
+状态：
+
+- 已完成。C09E staging validation 已作为 C09F final seal 的完成输入归档。
+- C09E 没有把 C09 转成 execution runtime，没有创建 execution request，没有连接 live
+  provider，没有执行 adapter action。
 
 允许：
 
@@ -676,8 +690,17 @@ Execution Provider 和 live n8n / webhook / queue 的边界：
 
 目标：
 
-- 将已验收的 contract/no-op/mock Execution Provider runtime 安全发布到 production。
+- 将已验收的 contract/no-op/mock Execution Provider metadata 与 read-only shell 归档到
+  production release evidence。
 - 归档 production evidence。
+
+状态：
+
+- 已完成，记录文件为 `docs/C09_EXECUTION_PROVIDER_FINAL_SEAL.md`。
+- C09F 确认 C09 production-independent contract complete，不要求 production gateway
+  暴露 `/execution-providers/*`。
+- C09F 保持 runtime execution disabled、live provider absent、execution request system
+  absent、queue/worker/webhook absent。
 
 允许：
 
@@ -703,6 +726,18 @@ Execution Provider 和 live n8n / webhook / queue 的边界：
 目标：
 
 - 归档 C09A-F 完成范围、最终 contract、验收证据和后续边界。
+
+状态：
+
+- 已完成，统一封板文件为 `docs/C09_EXECUTION_PROVIDER_SEAL.md`。
+- C09 已进入 sealed state。
+- Execution Provider Contract v1 已冻结。
+- no-op / mock / contract-only execution model 已确认。
+- execution runtime = NO。
+- live provider = NO。
+- execution request system = NO。
+- queue / worker / webhook = NO。
+- production gateway dependency required = NO。
 
 允许：
 
@@ -799,5 +834,5 @@ C09A 明确暂缓：
 - C09B 只做 backend contract/no-op provider registry。
 - C09C 只做 frontend status shell / disabled state。
 - C09D 固化 no-live/no-secret/no-bypass tests。
-- C09E/C09F 仅验收 contract/no-op/mock runtime，不接真实业务。
+- C09E/C09F 仅验收 contract/no-op/mock metadata 与 read-only shell，不接真实业务。
 - C09G 封板后再进入后续明确阶段。

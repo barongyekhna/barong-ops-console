@@ -8,6 +8,13 @@ verify/test 体系。本阶段只做验证与文档，不实现 runtime executio
 API/UI/migration，不执行 adapter action，不连接 live provider，不发布 staging 或
 production，不进入 K01/P 系列。
 
+2026-06-13 C09G 补充：C09 已最终封板，统一封板文档为
+`docs/C09_EXECUTION_PROVIDER_SEAL.md`。本文件定义的 verify/test 体系是 C09 sealed
+state 的验证基础：Execution Provider Contract v1 冻结，no-op/mock/contract-only model
+确认，execution runtime = NO，live provider = NO，execution request system = NO，
+queue / worker / webhook = NO。C09G 没有修改 runtime 代码，没有新增测试以外的
+API/UI/migration，也没有执行 action 或连接 live provider。
+
 ## 做了什么
 
 - 强化 `tests/backend/test_execution_providers_registry.py`，新增 C09D provider
@@ -127,6 +134,9 @@ C09D 没有：
 
 ## 下一步
 
-下一步建议进入 C09E staging Execution Provider 验收。C09E 仍应保持
-no-action/no-live-provider 边界，只验证 staging 上 C09B/C09C 的 read-only API、frontend
-shell、proxy exact allowlist、no-execute 状态和 C05/C06/C07/C08 回归。
+C09E staging validation、C09F production-independent final seal 和 C09G unified final
+seal 已完成。统一封板文件为 `docs/C09_EXECUTION_PROVIDER_SEAL.md`。
+
+后续阶段不得复用 C09D 测试通过结果来暗示 execution runtime、live provider、execution
+request system、queue/worker/webhook 或 adapter action execution 已被批准。任何这些能力都
+必须进入新的明确任务并重新验收。

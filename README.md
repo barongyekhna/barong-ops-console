@@ -814,7 +814,7 @@ C08G has sealed the full C08 Module Adapter system in
   providers, real business tasks, new migrations, runtime changes, staging or
   production release in C08G, or adapter action execution.
 
-Current C09 split:
+Current C09 state:
 
 - C09A: Execution Provider audit and plan in
   `docs/C09_EXECUTION_PROVIDER_PLAN.md`.
@@ -824,7 +824,14 @@ Current C09 split:
   `docs/C09_EXECUTION_PROVIDER_FRONTEND.md`.
 - C09D: Execution Provider verify/test体系 in
   `docs/C09_EXECUTION_PROVIDER_VERIFICATION.md`.
-- Next recommended step: C09E staging Execution Provider 验收.
+- C09F: production-independent final seal in
+  `docs/C09_EXECUTION_PROVIDER_FINAL_SEAL.md`.
+- C09G: unified final seal in `docs/C09_EXECUTION_PROVIDER_SEAL.md`.
+
+C09 is sealed as a contract/ability layer. It is not an execution system
+launch, has no execution runtime, has no live provider, has no active
+execution request system, has no queue/worker/webhook runtime, and requires no
+production gateway dependency.
 
 ## C09 execution provider
 
@@ -919,7 +926,27 @@ C09D has added the Execution Provider verify/test system documented in
   adapter action execution, no live provider, no staging release, and no
   production release.
 
-The recommended next step after C09D is C09E: staging Execution Provider 验收.
+C09F has sealed the production-independent Execution Provider state documented
+in `docs/C09_EXECUTION_PROVIDER_FINAL_SEAL.md`:
+
+- C09 is contract-complete through C09A-C09E.
+- Execution Provider Contract v1 is frozen for the current C09 boundary.
+- The C09 execution model is no-op / mock / contract-only metadata.
+- Production gateway exposure is not required for C09 completion.
+- Runtime execution remains disabled.
+
+C09G has sealed the unified C09 Execution Provider record in
+`docs/C09_EXECUTION_PROVIDER_SEAL.md`:
+
+- C09 is a capability layer, not an execution system launch.
+- execution runtime: NO.
+- live provider: NO.
+- execution request system: NO.
+- queue / worker / webhook: NO.
+- production gateway dependency required: NO.
+- C09 remains aligned with C08 Module Adapter, C07 Module Isolation, C05
+  permissions, and C06 user permission management.
+- C10-C20 boundaries remain future separate stages; C09G does not enter C10.
 
 ## Temporary login preview
 

@@ -18,6 +18,13 @@ C09B 不是执行系统上线。本阶段不提交 execution request，不排队
 C08 Module Adapter Shell 的 disabled action state。C09C 没有要求 C09B 改 schema，
 没有新增 execution submit endpoint，没有执行 adapter action，也没有连接 live provider。
 
+2026-06-13 C09G 补充：C09 已最终封板，统一封板文档为
+`docs/C09_EXECUTION_PROVIDER_SEAL.md`。本文件定义的后端 Execution Provider Contract v1
+在 C09 范围内冻结。C09B registry/API 是能力层和合同层，不是 execution runtime；
+所有 provider 继续 `executable=false`、`can_request_execution=false`。C09G 没有修改
+后端 runtime 代码，没有新增 API/migration，没有创建 execution request，没有执行 action，
+没有接 live provider、queue、worker 或 webhook。
+
 ## 实现范围
 
 新增后端文件：
@@ -379,8 +386,9 @@ contract。
 
 ## 下一步
 
-C09C 已完成前端 execution status shell / action submit disabled state，记录文件为
-`docs/C09_EXECUTION_PROVIDER_FRONTEND.md`。下一步建议进入 C09D：Execution Provider
-verify/test 体系，继续验证 no-live、no-secret、no-submit、exact proxy、provider/action
-binding、permission/approval/secret/scope blocking 和 C05/C06/C07/C08 回归。C09D 仍不得
-提交真实 execution request，不得执行 adapter action，不得接 live provider。
+C09C、C09D、C09F 和 C09G 已完成。C09 统一封板文件为
+`docs/C09_EXECUTION_PROVIDER_SEAL.md`。
+
+后续任何 execution runtime、execution request persistence、queue、worker、webhook、
+live provider、gateway publication 或 adapter action execution 都不属于 C09B/C09G，
+必须作为后续独立任务重新设计、审批、实现和验收。
