@@ -8,3 +8,11 @@ export type {
   RiskSeverity,
   RiskSuggestionReason,
 } from "./risk";
+export type {
+  GenerateProductSuggestions,
+  ProductStrategyScores,
+  ProductSuggestionInput,
+  ProductSuggestionItem,
+  ProductSuggestionOutput,
+  ProductSuggestionReason,
+} from "./suggestion";
