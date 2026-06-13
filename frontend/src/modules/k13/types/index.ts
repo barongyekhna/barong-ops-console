@@ -16,3 +16,11 @@ export type {
   ProductSuggestionOutput,
   ProductSuggestionReason,
 } from "./suggestion";
+export type {
+  ComputeProductScore,
+  ProductHealthLevel,
+  ProductScoreBreakdown,
+  ProductScoreInsight,
+  ProductScoreInsightType,
+  ProductScoreOutput,
+} from "./score";
