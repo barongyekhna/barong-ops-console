@@ -3,6 +3,9 @@ import {
   transitionState,
   type ReviewStateSnapshot,
   type ReviewStatus,
+  type VersionChangedField,
+  type VersionJsonValue,
+  type VersionRecord,
 } from "./reviewState";
 
 export type ProductPrimitiveValue = string | number | boolean;
@@ -37,6 +40,9 @@ export const productReviewFields = [
 ] as const;
 
 export type ProductReviewField = (typeof productReviewFields)[number];
+
+const versionedHumanEditFields = [...productReviewFields, "warnings"] as const;
+type VersionedHumanEditField = (typeof versionedHumanEditFields)[number];
 
 export const productReviewFieldLabels: Record<ProductReviewField, string> = {
   title: "Title",
@@ -177,21 +183,294 @@ function cloneHumanEditFields(
   return JSON.parse(JSON.stringify(fields)) as ProductHumanEditFields;
 }
 
+function normalizeVersionValue(value: unknown): VersionJsonValue {
+  if (value === null || value === undefined) {
+    return null;
+  }
+
+  if (
+    typeof value === "string" ||
+    typeof value === "number" ||
+    typeof value === "boolean"
+  ) {
+    return value;
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeVersionValue(item));
+  }
+
+  if (typeof value === "object") {
+    const objectValue = value as Record<string, unknown>;
+    const normalized: Record<string, VersionJsonValue> = {};
+
+    Object.keys(objectValue)
+      .sort((leftKey, rightKey) => leftKey.localeCompare(rightKey))
+      .forEach((key) => {
+        normalized[key] = normalizeVersionValue(objectValue[key]);
+      });
+
+    return normalized;
+  }
+
+  return null;
+}
+
+function toVersionObject(value: unknown): Record<string, VersionJsonValue> {
+  return normalizeVersionValue(value) as Record<string, VersionJsonValue>;
+}
+
+function stableVersionSerialize(value: unknown) {
+  return JSON.stringify(normalizeVersionValue(value));
+}
+
+function getAiCanonicalValue(
+  field: VersionedHumanEditField,
+  aiCanonical: ProductAiCanonicalFields,
+) {
+  if (field === "warnings") {
+    return null;
+  }
+
+  return normalizeVersionValue(aiCanonical[field as ProductReviewField]);
+}
+
+function getHumanEditValue(
+  field: VersionedHumanEditField,
+  humanEdit: ProductHumanEditFields,
+) {
+  return normalizeVersionValue(humanEdit[field]);
+}
+
+function isEmptyHumanOnlyValue(value: VersionJsonValue) {
+  if (value === null) {
+    return true;
+  }
+
+  if (typeof value === "string") {
+    return value.trim().length === 0;
+  }
+
+  if (Array.isArray(value)) {
+    return value.length === 0;
+  }
+
+  if (typeof value === "object") {
+    return Object.keys(value).length === 0;
+  }
+
+  return false;
+}
+
+function buildHumanEditChangedFields(
+  beforeHumanEdit: ProductHumanEditFields,
+  afterHumanEdit: ProductHumanEditFields,
+  aiCanonical: ProductAiCanonicalFields,
+): VersionChangedField[] {
+  return versionedHumanEditFields.flatMap((field) => {
+    const beforeValue = getHumanEditValue(field, beforeHumanEdit);
+    const afterValue = getHumanEditValue(field, afterHumanEdit);
+
+    if (
+      stableVersionSerialize(beforeValue) === stableVersionSerialize(afterValue)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        field,
+        before_value: beforeValue,
+        after_value: afterValue,
+        ai_value: getAiCanonicalValue(field, aiCanonical),
+        change_type: "human_edit",
+      },
+    ];
+  });
+}
+
+function buildAiHumanDiffFields(
+  aiCanonical: ProductAiCanonicalFields,
+  humanEdit: ProductHumanEditFields,
+): VersionChangedField[] {
+  return versionedHumanEditFields.flatMap((field) => {
+    const aiValue = getAiCanonicalValue(field, aiCanonical);
+    const humanValue = getHumanEditValue(field, humanEdit);
+
+    if (field === "warnings" && isEmptyHumanOnlyValue(humanValue)) {
+      return [];
+    }
+
+    if (
+      stableVersionSerialize(aiValue) === stableVersionSerialize(humanValue)
+    ) {
+      return [];
+    }
+
+    return [
+      {
+        field,
+        before_value: aiValue,
+        after_value: humanValue,
+        ai_value: aiValue,
+        change_type: "ai_vs_human",
+      },
+    ];
+  });
+}
+
+function buildReviewStateChangedFields(
+  beforeStatus: ReviewStatus,
+  afterStatus: ReviewStatus,
+): VersionChangedField[] {
+  if (beforeStatus === afterStatus) {
+    return [];
+  }
+
+  return [
+    {
+      field: "status",
+      before_value: beforeStatus,
+      after_value: afterStatus,
+      change_type: "review_state",
+    },
+  ];
+}
+
+function buildVersionState(review: ProductReviewRecord) {
+  const aiHumanDiffFields = buildAiHumanDiffFields(
+    review.ai_canonical,
+    review.human_edit,
+  );
+
+  return toVersionObject({
+    ai_canonical: review.ai_canonical,
+    ai_human_diff_fields: aiHumanDiffFields,
+    human_edit: review.human_edit,
+    status: review.status,
+    updated_at: review.updated_at,
+  });
+}
+
+function buildVersionStateSnapshot(
+  review: ProductReviewRecord,
+  aiHumanDiffFields: VersionChangedField[],
+) {
+  return toVersionObject({
+    ai_human_diff_count: aiHumanDiffFields.length,
+    ai_human_diff_fields: aiHumanDiffFields,
+    product_id: review.product_id,
+    review_id: review.review_id,
+    state_log: review.state_log,
+    status: review.status,
+    updated_at: review.updated_at,
+  });
+}
+
+function createVersionId() {
+  const randomUUID = globalThis.crypto?.randomUUID;
+
+  if (typeof randomUUID === "function") {
+    return randomUUID.call(globalThis.crypto);
+  }
+
+  return `version-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function buildVersionRecord(
+  beforeReview: ProductReviewRecord | null,
+  afterReview: ProductReviewRecord,
+  actionChangedFields: VersionChangedField[],
+  user: string,
+  timestamp: string,
+): VersionRecord {
+  const aiHumanDiffFields = buildAiHumanDiffFields(
+    afterReview.ai_canonical,
+    afterReview.human_edit,
+  );
+
+  return {
+    version_id: createVersionId(),
+    product_id: afterReview.product_id,
+    before_state: beforeReview ? buildVersionState(beforeReview) : {},
+    after_state: buildVersionState(afterReview),
+    changed_fields: [...actionChangedFields, ...aiHumanDiffFields],
+    state_snapshot: buildVersionStateSnapshot(afterReview, aiHumanDiffFields),
+    user,
+    timestamp,
+  };
+}
+
+function appendVersionRecord(
+  beforeReview: ProductReviewRecord,
+  afterReview: ProductReviewRecord,
+  actionChangedFields: VersionChangedField[],
+  user: string,
+  timestamp: string,
+) {
+  const versionRecord = buildVersionRecord(
+    beforeReview,
+    afterReview,
+    actionChangedFields,
+    user,
+    timestamp,
+  );
+
+  return {
+    ...afterReview,
+    version_record: [...beforeReview.version_record, versionRecord],
+  };
+}
+
+function withInitialVersionRecord(review: ProductReviewRecord) {
+  const nextReview = cloneReview(review);
+  const versionRecord = buildVersionRecord(
+    null,
+    nextReview,
+    [],
+    "operator",
+    nextReview.updated_at,
+  );
+
+  return {
+    ...nextReview,
+    version_record: [versionRecord],
+  };
+}
+
 function buildMockResponse(
   to: ReviewStatus,
   humanEdit: ProductHumanEditFields,
   user = "operator",
 ): ProductReviewRecord {
-  const nextState = transitionState(currentMockReview, to, user);
-  return {
-    ...cloneReview(currentMockReview),
+  const beforeReview = cloneReview(currentMockReview);
+  const nextState = transitionState(beforeReview, to, user);
+  const afterReview = {
+    ...beforeReview,
     ...nextState,
     human_edit: cloneHumanEditFields(humanEdit),
   };
+  const changedFields = [
+    ...buildReviewStateChangedFields(beforeReview.status, afterReview.status),
+    ...buildHumanEditChangedFields(
+      beforeReview.human_edit,
+      afterReview.human_edit,
+      afterReview.ai_canonical,
+    ),
+  ];
+
+  return appendVersionRecord(
+    beforeReview,
+    afterReview,
+    changedFields,
+    user,
+    nextState.updated_at,
+  );
 }
 
 function saveMockReview(
   humanEdit: ProductHumanEditFields,
+  user = "operator",
 ): ProductReviewRecord {
   if (currentMockReview.status !== "draft") {
     throw new Error(
@@ -199,16 +478,29 @@ function saveMockReview(
     );
   }
 
+  const beforeReview = cloneReview(currentMockReview);
   const timestamp = new Date().toISOString();
-
-  return {
-    ...cloneReview(currentMockReview),
+  const afterReview = {
+    ...beforeReview,
     human_edit: cloneHumanEditFields(humanEdit),
     updated_at: timestamp,
   };
+  const changedFields = buildHumanEditChangedFields(
+    beforeReview.human_edit,
+    afterReview.human_edit,
+    afterReview.ai_canonical,
+  );
+
+  return appendVersionRecord(
+    beforeReview,
+    afterReview,
+    changedFields,
+    user,
+    timestamp,
+  );
 }
 
-let currentMockReview = cloneReview(mockReview);
+let currentMockReview = withInitialVersionRecord(mockReview);
 
 export async function getProductReview(): Promise<ProductReviewRecord> {
   return cloneReview(currentMockReview);

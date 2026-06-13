@@ -40,11 +40,47 @@ export type ReviewStateLog = {
   timestamp: string;
 };
 
-export type ReviewStateSnapshot = {
+export type VersionJsonValue =
+  | string
+  | number
+  | boolean
+  | null
+  | VersionJsonValue[]
+  | { [key: string]: VersionJsonValue };
+
+export type VersionChangeType =
+  | "ai_vs_human"
+  | "human_edit"
+  | "review_state";
+
+export type VersionChangedField = {
+  field: string;
+  before_value: VersionJsonValue;
+  after_value: VersionJsonValue;
+  change_type: VersionChangeType;
+  ai_value?: VersionJsonValue;
+};
+
+export type VersionRecord = {
+  version_id: string;
+  product_id: string;
+  before_state: Record<string, VersionJsonValue>;
+  after_state: Record<string, VersionJsonValue>;
+  changed_fields: VersionChangedField[];
+  state_snapshot: Record<string, VersionJsonValue>;
+  user: string;
+  timestamp: string;
+};
+
+export type ReviewStateSnapshotCore = {
   product_id: string;
   status: ReviewStatus;
   updated_at: string;
   state_log: ReviewStateLog[];
+};
+
+export type ReviewStateSnapshot = ReviewStateSnapshotCore & {
+  version_record: VersionRecord[];
 };
 
 export const reviewStatusLabels: Record<ReviewStatus, string> = {
@@ -74,6 +110,7 @@ export function createReviewState(
     status,
     updated_at: new Date().toISOString(),
     state_log: [],
+    version_record: [],
   };
 }
 

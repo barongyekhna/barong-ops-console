@@ -32,6 +32,7 @@ import {
   reviewStatusFlow,
   reviewStatusLabels,
   type ReviewStatus,
+  type VersionRecord,
 } from "../services/reviewState";
 
 type TransitionReviewAction =
@@ -286,6 +287,28 @@ export default function ProductReviewPage() {
         </section>
       ) : null}
 
+      {review.version_record.length > 0 ? (
+        <section
+          className="k12-review-panel"
+          aria-labelledby="k12-version-record"
+        >
+          <header className="k12-review-panel-heading">
+            <span className="eyebrow">Version Record</span>
+            <h3 id="k12-version-record">Audit History</h3>
+          </header>
+
+          <div className="k12-review-diff-stack">
+            {[...review.version_record].reverse().map((version, index) => (
+              <VersionRecordCard
+                key={version.version_id}
+                version={version}
+                versionNumber={review.version_record.length - index}
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
+
       <ol className="k12-review-status-rail" aria-label="Review state flow">
         {reviewStatusFlow.map((status) => (
           <li
@@ -333,6 +356,61 @@ export default function ProductReviewPage() {
       </div>
     </div>
   );
+}
+
+function VersionRecordCard({
+  version,
+  versionNumber,
+}: {
+  version: VersionRecord;
+  versionNumber: number;
+}) {
+  return (
+    <section
+      aria-label={`Version ${versionNumber} audit record`}
+      className="k12-review-diff k12-review-diff-changed"
+    >
+      <header className="k12-review-diff-header">
+        <strong>Version {versionNumber}</strong>
+        <span>{version.changed_fields.length} fields</span>
+      </header>
+
+      <div className="k12-review-diff-grid">
+        <div>
+          <span>Version ID</span>
+          <pre>{version.version_id}</pre>
+        </div>
+        <div>
+          <span>User / Time</span>
+          <pre>
+            {version.user}
+            {"\n"}
+            {new Date(version.timestamp).toLocaleString()}
+          </pre>
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <span>Changed Fields</span>
+          <pre>{formatVersionJson(version.changed_fields)}</pre>
+        </div>
+        <div>
+          <span>Before State</span>
+          <pre>{formatVersionJson(version.before_state)}</pre>
+        </div>
+        <div>
+          <span>After State</span>
+          <pre>{formatVersionJson(version.after_state)}</pre>
+        </div>
+        <div style={{ gridColumn: "1 / -1" }}>
+          <span>State Snapshot</span>
+          <pre>{formatVersionJson(version.state_snapshot)}</pre>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function formatVersionJson(value: unknown) {
+  return JSON.stringify(value, null, 2);
 }
 
 function isReviewActionDisabled(
