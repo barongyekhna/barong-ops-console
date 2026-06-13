@@ -9,6 +9,7 @@ from ..schemas.execution_provider import (
     ExecutionResultContractV1,
     ExecutionRiskLevel,
 )
+from .resource import ResourcePolicy, ResourceViolation
 from .execution_context import (
     ExecutionContext,
     ExecutionContextLifecycleState,
@@ -20,6 +21,7 @@ SandboxArchitectureStage = Literal[
     "c10a_architecture_only",
     "c10b_mock_runner",
     "c10c_execution_context",
+    "c10d_resource_control",
 ]
 SandboxBoundaryState = Literal[
     "declared",
@@ -66,6 +68,7 @@ class SandboxRequest(BaseModel):
     memory_scope_ref: str | None = Field(default=None, max_length=180)
     log_scope_ref: str | None = Field(default=None, max_length=180)
     state_scope_ref: str | None = Field(default=None, max_length=180)
+    resource_policy_ref: str | None = Field(default=None, max_length=180)
     isolation_level: ExecutionIsolationLevel | None = None
     context_lifecycle_state: ExecutionContextLifecycleState | None = None
     stage: SandboxArchitectureStage = "c10a_architecture_only"
@@ -108,6 +111,7 @@ class SandboxResult(BaseModel):
     memory_scope_ref: str | None = Field(default=None, max_length=180)
     log_scope_ref: str | None = Field(default=None, max_length=180)
     state_scope_ref: str | None = Field(default=None, max_length=180)
+    resource_policy_ref: str | None = Field(default=None, max_length=180)
     isolation_level: ExecutionIsolationLevel | None = None
     context_lifecycle_state: ExecutionContextLifecycleState | None = None
     stage: SandboxArchitectureStage = "c10a_architecture_only"
@@ -116,6 +120,7 @@ class SandboxResult(BaseModel):
     boundary_state: SandboxBoundaryState = "blocked_no_runtime"
     result_summary: dict[str, Any] = Field(default_factory=dict)
     artifact_refs: list[str] = Field(default_factory=list)
+    resource_violations: list[ResourceViolation] = Field(default_factory=list)
     error_code: str | None = Field(default=None, max_length=120)
     error_message_safe: str | None = Field(default=None, max_length=500)
     safe_result_only: bool = True
@@ -139,11 +144,15 @@ class SandboxResponse(BaseModel):
     target_trust_zone: Literal["c09_execution_provider"] = "c09_execution_provider"
     result: SandboxResult
     execution_context: ExecutionContext | None = None
+    resource_policy: ResourcePolicy | None = None
     c09_result_contract: ExecutionResultContractV1 | None = None
     safety_notes: list[str] = Field(default_factory=list)
-    next_stage_policy: Literal["wait_for_c10b", "wait_for_c10c", "wait_for_c10d"] = (
-        "wait_for_c10b"
-    )
+    next_stage_policy: Literal[
+        "wait_for_c10b",
+        "wait_for_c10c",
+        "wait_for_c10d",
+        "wait_for_c10e",
+    ] = "wait_for_c10b"
 
 
 class SandboxContractInterface(BaseModel):

@@ -3,6 +3,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field
 
 from ..schemas.execution_provider import ExecutionRiskLevel
+from .resource import FileAccessPolicy, NetworkPolicy, ResourcePolicy
 from .types import SandboxArchitectureStage, SandboxTrustZone
 
 
@@ -43,6 +44,12 @@ class SandboxContext(BaseModel):
     trust_boundary: SandboxTrustBoundary
     execution_context_ref: str | None = Field(default=None, max_length=180)
     sandbox_scope_ref: str | None = Field(default=None, max_length=180)
+    resource_policy_ref: str | None = Field(default=None, max_length=180)
+    resource_policy: ResourcePolicy | None = None
+    resource_control_stage: Literal[
+        "not_attached",
+        "c10d_resource_control",
+    ] = "not_attached"
     request_metadata: dict[str, Any] = Field(default_factory=dict)
     sanitized_input_summary: dict[str, Any] = Field(default_factory=dict)
     visible_trust_zones: list[SandboxTrustZone] = Field(default_factory=list)
@@ -53,3 +60,5 @@ class SandboxContext(BaseModel):
     external_provider_policy: Literal["denied"] = "denied"
     db_mutation_policy: Literal["denied"] = "denied"
     filesystem_write_policy: Literal["sandbox_scope_only"] = "sandbox_scope_only"
+    network_policy: NetworkPolicy = "DENY_ALL"
+    file_access_policy: FileAccessPolicy = "SANDBOX_ONLY"

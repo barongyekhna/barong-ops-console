@@ -20,6 +20,11 @@ from .execution_context import (
     ExecutionContextLifecycleSnapshot,
     ExecutionContextLifecycleStateMachine,
 )
+from .resource import (
+    RESOURCE_CONTROL_STAGE,
+    ResourceEnforcementReport,
+    SandboxResourceEnforcer,
+)
 from .types import (
     SandboxBoundaryState,
     SandboxRequest,
@@ -46,6 +51,12 @@ SAFETY_GUARANTEES = [
         "Execution context memory, state, and log scopes are request-bound "
         "mock refs."
     ),
+    "Resource controls are logical mock policies only.",
+    "No real CPU enforcement is performed.",
+    "No real memory control is performed.",
+    "No OS-level resource control or OS interaction is performed.",
+    "Network access remains denied.",
+    "No external API access is performed.",
     "Raw input_payload keys and values are not echoed in the response.",
 ]
 RunnerContext = SandboxContext | ExecutionContext
@@ -136,10 +147,12 @@ class SandboxRunner:
         runner_key: str = "c10b.sandbox_runner.mock.v1",
         runner_version: str = "1.0.0",
         context_factory: ExecutionContextFactory | None = None,
+        resource_enforcer: SandboxResourceEnforcer | None = None,
     ) -> None:
         self.runner_key = runner_key
         self.runner_version = runner_version
         self.context_factory = context_factory or ExecutionContextFactory()
+        self.resource_enforcer = resource_enforcer or SandboxResourceEnforcer()
 
     def handle_execution_request(
         self,
@@ -220,6 +233,7 @@ class SandboxRunner:
             memory_scope_ref=bound_execution_context.memory_scope.memory_scope_id,
             log_scope_ref=bound_execution_context.log_scope.log_scope_id,
             state_scope_ref=bound_execution_context.state_scope.state_scope_id,
+            resource_policy_ref=bound_execution_context.resource_policy_ref,
             isolation_level=bound_execution_context.isolation_level,
             context_lifecycle_state=bound_execution_context.lifecycle_state,
             stage=RUNNER_STAGE,
@@ -288,11 +302,29 @@ class SandboxRunner:
             context=sandbox_context,
             execution_context=bound_execution_context,
         )
+        (
+            sandbox_context,
+            bound_execution_context,
+            resource_report,
+        ) = self.resource_enforcer.enforce_before_run(
+            sandbox_request=normalized_request,
+            sandbox_context=sandbox_context,
+            execution_context=bound_execution_context,
+        )
+        normalized_request = self._normalize_sandbox_request(
+            normalized_request,
+            context=sandbox_context,
+            execution_context=bound_execution_context,
+        )
         violations = self._policy_violations(
             normalized_request,
             sandbox_context,
             bound_execution_context,
         )
+        violations = [
+            *self._resource_policy_violations(resource_report),
+            *violations,
+        ]
         final_execution_context, lifecycle_snapshot = self._mock_context_lifecycle(
             bound_execution_context,
             violations,
@@ -314,6 +346,7 @@ class SandboxRunner:
             lifecycle_snapshot,
             flow,
             violations,
+            resource_report,
         )
         c09_result_contract = ExecutionResultContractV1(
             execution_id=final_execution_context.execution_id,
@@ -347,14 +380,20 @@ class SandboxRunner:
             memory_scope_ref=final_execution_context.memory_scope.memory_scope_id,
             log_scope_ref=final_execution_context.log_scope.log_scope_id,
             state_scope_ref=final_execution_context.state_scope.state_scope_id,
+            resource_policy_ref=final_execution_context.resource_policy_ref,
             isolation_level=final_execution_context.isolation_level,
             context_lifecycle_state=final_execution_context.lifecycle_state,
-            stage=RUNNER_STAGE,
+            stage=RESOURCE_CONTROL_STAGE,
             status=result_status,
             execution_status=flow.terminal_status,
             boundary_state=boundary_state,
             result_summary=result_summary,
             artifact_refs=[],
+            resource_violations=[
+                violation
+                for violation in resource_report.violations
+                if violation.execution_blocked
+            ],
             error_code=error_code,
             error_message_safe=error_message_safe,
             safe_result_only=True,
@@ -379,13 +418,14 @@ class SandboxRunner:
             sandbox_request_id=normalized_request.sandbox_request_id,
             context_id=final_execution_context.context_id,
             execution_context_ref=final_execution_context.execution_context_ref,
-            stage=RUNNER_STAGE,
+            stage=RESOURCE_CONTROL_STAGE,
             contract_mode="mock_only",
             result=sandbox_result,
             execution_context=final_execution_context,
+            resource_policy=resource_report.policy,
             c09_result_contract=c09_result_contract,
             safety_notes=list(SAFETY_GUARANTEES),
-            next_stage_policy="wait_for_c10d",
+            next_stage_policy="wait_for_c10e",
         )
 
     def _normalize_execution_context(
@@ -424,6 +464,7 @@ class SandboxRunner:
             "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
             "log_scope_ref": execution_context.log_scope.log_scope_id,
             "state_scope_ref": execution_context.state_scope.state_scope_id,
+            "resource_policy_ref": execution_context.resource_policy_ref,
             "isolation_level": execution_context.isolation_level,
             "mock_only": True,
             "raw_input_payload_echoed": False,
@@ -438,6 +479,13 @@ class SandboxRunner:
                 "runtime_execution_policy": "mock_simulation_only",
                 "execution_context_ref": execution_context.execution_context_ref,
                 "sandbox_scope_ref": execution_context.sandbox_scope_ref,
+                "resource_policy_ref": (
+                    execution_context.resource_policy_ref
+                    or context.resource_policy_ref
+                ),
+                "resource_policy": (
+                    execution_context.resource_policy or context.resource_policy
+                ),
                 "request_metadata": metadata,
                 "sanitized_input_summary": request_summary,
                 "visible_trust_zones": visible_trust_zones,
@@ -509,9 +557,10 @@ class SandboxRunner:
                 "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
                 "log_scope_ref": execution_context.log_scope.log_scope_id,
                 "state_scope_ref": execution_context.state_scope.state_scope_id,
+                "resource_policy_ref": execution_context.resource_policy_ref,
                 "isolation_level": execution_context.isolation_level,
                 "context_lifecycle_state": execution_context.lifecycle_state,
-                "stage": RUNNER_STAGE,
+                "stage": context.stage,
                 "contract_mode": "mock_only",
                 "requested_capabilities": capabilities,
                 "sanitized_input_summary": self._safe_input_summary(
@@ -594,6 +643,7 @@ class SandboxRunner:
             "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
             "log_scope_ref": execution_context.log_scope.log_scope_id,
             "state_scope_ref": execution_context.state_scope.state_scope_id,
+            "resource_policy_ref": execution_context.resource_policy_ref,
             "isolation_level": execution_context.isolation_level,
         }
         for field_name, expected_value in context_ref_checks.items():
@@ -640,6 +690,19 @@ class SandboxRunner:
 
         return violations
 
+    def _resource_policy_violations(
+        self,
+        resource_report: ResourceEnforcementReport,
+    ) -> list[SandboxRunnerPolicyViolation]:
+        return [
+            SandboxRunnerPolicyViolation(
+                code=f"C10D_{violation.violation_type.upper()}",
+                message=violation.violation_reason,
+            )
+            for violation in resource_report.violations
+            if violation.execution_blocked
+        ]
+
     def _mock_context_lifecycle(
         self,
         execution_context: ExecutionContext,
@@ -672,8 +735,8 @@ class SandboxRunner:
                     status=terminal_status,
                     boundary_state="mock_blocked_by_policy",
                     description=(
-                        "Mock lifecycle stopped before any runtime could be "
-                        "created."
+                        "Mock lifecycle stopped by sandbox resource or policy "
+                        "validation before any runtime could be created."
                     ),
                 ),
             ]
@@ -690,7 +753,10 @@ class SandboxRunner:
                     step_index=1,
                     status="accepted",
                     boundary_state="mock_lifecycle_simulated",
-                    description="Sandbox context accepted for mock simulation.",
+                    description=(
+                        "C10D resource policy validated in memory for mock "
+                        "simulation."
+                    ),
                 ),
                 SandboxMockLifecycleStep(
                     step_index=2,
@@ -741,12 +807,14 @@ class SandboxRunner:
         lifecycle_snapshot: ExecutionContextLifecycleSnapshot,
         flow: SandboxMockExecutionFlow,
         violations: list[SandboxRunnerPolicyViolation],
+        resource_report: ResourceEnforcementReport,
     ) -> dict[str, Any]:
         return {
             "runner_key": self.runner_key,
             "runner_version": self.runner_version,
             "runner_mode": RUNNER_MODE,
-            "stage": RUNNER_STAGE,
+            "stage": RESOURCE_CONTROL_STAGE,
+            "runner_stage": RUNNER_STAGE,
             "mock_only": True,
             "deterministic": True,
             "execution_lifecycle_simulated": True,
@@ -757,10 +825,14 @@ class SandboxRunner:
             "context": {
                 "context_id": context.context_id,
                 "sandbox_scope_ref": context.sandbox_scope_ref,
+                "resource_policy_ref": context.resource_policy_ref,
+                "resource_control_stage": context.resource_control_stage,
                 "runtime_execution_policy": context.runtime_execution_policy,
                 "external_provider_policy": context.external_provider_policy,
                 "db_mutation_policy": context.db_mutation_policy,
                 "filesystem_write_policy": context.filesystem_write_policy,
+                "network_policy": context.network_policy,
+                "file_access_policy": context.file_access_policy,
             },
             "execution_context": {
                 "context_id": execution_context.context_id,
@@ -776,8 +848,32 @@ class SandboxRunner:
                 "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
                 "log_scope_ref": execution_context.log_scope.log_scope_id,
                 "state_scope_ref": execution_context.state_scope.state_scope_id,
+                "resource_policy_ref": execution_context.resource_policy_ref,
                 "lifecycle_state": execution_context.lifecycle_state,
                 "lifecycle_mock_only": execution_context.lifecycle_mock_only,
+            },
+            "resource_control": {
+                "stage": resource_report.stage,
+                "execution_blocked": resource_report.execution_blocked,
+                "policy": resource_report.policy.model_dump(mode="json"),
+                "control_model": (
+                    resource_report.policy.control_model.model_dump(mode="json")
+                ),
+                "violations": [
+                    violation.model_dump(mode="json")
+                    for violation in resource_report.violations
+                ],
+                "mock_only": resource_report.mock_only,
+                "deterministic": resource_report.deterministic,
+                "cpu_os_enforced": resource_report.cpu_os_enforced,
+                "memory_os_enforced": resource_report.memory_os_enforced,
+                "os_interaction_performed": (
+                    resource_report.os_interaction_performed
+                ),
+                "network_access_performed": (
+                    resource_report.network_access_performed
+                ),
+                "external_api_called": resource_report.external_api_called,
             },
             "input_summary": sandbox_request.sanitized_input_summary,
             "lifecycle": [step.model_dump(mode="json") for step in flow.steps],
@@ -797,6 +893,11 @@ class SandboxRunner:
                 "shared_execution_state": False,
                 "shared_logs": False,
                 "cross_context_mutation": False,
+                "real_cpu_enforcement": False,
+                "real_memory_control": False,
+                "os_interaction": False,
+                "network_access": False,
+                "external_api_access": False,
             },
         }
 

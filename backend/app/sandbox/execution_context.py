@@ -8,6 +8,7 @@ from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from ..schemas.execution_provider import ExecutionRequestContractV1
+from .resource import ResourcePolicy
 
 
 EXECUTION_CONTEXT_STAGE: Literal["c10c_execution_context"] = (
@@ -115,6 +116,8 @@ class ExecutionContext(BaseModel):
     memory_scope: ExecutionContextMemoryScope
     log_scope: ExecutionContextLogScope
     state_scope: ExecutionContextStateScope
+    resource_policy_ref: str | None = Field(default=None, max_length=180)
+    resource_policy: ResourcePolicy | None = None
     lifecycle_state: ExecutionContextLifecycleState = "created"
     stage: Literal["c10c_execution_context"] = EXECUTION_CONTEXT_STAGE
     factory_key: str = Field(min_length=1, max_length=180)
