@@ -134,6 +134,53 @@ def test_sandbox_runner_binds_execution_context_without_real_execution() -> None
     assert response.result.external_provider_called is False
     assert response.result.db_mutated is False
     assert response.result.filesystem_write_scope == "none"
-    assert response.next_stage_policy == "wait_for_c10d"
+    assert response.stage == "c10d_resource_control"
+    assert response.resource_policy is not None
+    assert response.resource_policy.execution_id == context.execution_id
+    assert response.resource_policy.context_id == context.context_id
+    assert response.resource_policy.network_policy == "DENY_ALL"
+    assert response.resource_policy.file_access_policy == "SANDBOX_ONLY"
+    assert response.execution_context.resource_policy_ref == (
+        response.resource_policy.policy_id
+    )
+    assert response.result.resource_policy_ref == response.resource_policy.policy_id
+    assert response.result.resource_violations == []
+    assert response.next_stage_policy == "wait_for_c10e"
     assert response.c09_result_contract is not None
     assert response.c09_result_contract.execution_id == context.execution_id
+    assert response.result.result_summary["resource_control"]["mock_only"] is True
+    assert (
+        response.result.result_summary["safety"]["real_cpu_enforcement"] is False
+    )
+    assert response.result.result_summary["safety"]["network_access"] is False
+
+
+def test_resource_enforcer_blocks_network_capability_without_real_execution() -> None:
+    request = execution_request()
+    runner = SandboxRunner()
+    sandbox_request = runner.build_sandbox_request(
+        request,
+        requested_capabilities=["network_access"],
+    )
+
+    response = runner.run(sandbox_request)
+
+    assert response.stage == "c10d_resource_control"
+    assert response.result.status == "mock_blocked"
+    assert response.result.execution_status == "rejected"
+    assert response.result.runtime_created is False
+    assert response.result.external_provider_called is False
+    assert response.result.resource_violations
+    assert {
+        violation.violation_type
+        for violation in response.result.resource_violations
+    } == {"network_access_requested"}
+    assert all(
+        violation.execution_blocked is True
+        for violation in response.result.resource_violations
+    )
+    assert response.resource_policy is not None
+    assert response.resource_policy.network_access_allowed is False
+    assert response.result.result_summary["resource_control"][
+        "network_access_performed"
+    ] is False
