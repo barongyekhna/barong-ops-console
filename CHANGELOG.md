@@ -6,6 +6,19 @@
 
 ### Added
 
+- C09D：新增 `docs/C09_EXECUTION_PROVIDER_VERIFICATION.md`，归档 Execution
+  Provider verify/test 体系；明确 C09D 只做自动化验证和文档，不新增 runtime、
+  execution submit API、migration、staging/production 发布、adapter action execution、
+  live provider 或 K01/P 系列接入。
+- C09D：强化 `tests/backend/test_execution_providers_registry.py`，新增 provider
+  rule matrix 和负例防回退，覆盖 provider key 唯一/命名、C08 action binding、
+  permission/risk/operation-log inheritance、approval C12、secret C14、scope C18、
+  no-live/no-callback/no-artifact-path/no-log-write、read-only API 和 C08/C07/C05/C06
+  regression。
+- C09D：强化 `tests/frontend/execution-provider.test.mjs`，新增 exact GET-only
+  proxy allowlist 矩阵、execution_required / approval_required / secret_required /
+  scope_required action state 矩阵，以及 `ExecutionProviderStatusShell` disabled
+  no-submit 安全展示断言。
 - C09C：新增前端 Execution Provider 只读模型、GET-only API client、状态壳层和
   disabled action submit state；新增文件包括
   `frontend/src/lib/execution-provider.ts`、

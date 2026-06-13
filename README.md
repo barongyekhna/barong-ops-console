@@ -822,7 +822,9 @@ Current C09 split:
   `docs/C09_EXECUTION_PROVIDER_BACKEND.md`.
 - C09C: frontend execution status shell / disabled action state in
   `docs/C09_EXECUTION_PROVIDER_FRONTEND.md`.
-- Next recommended step: C09D Execution Provider verify/test体系.
+- C09D: Execution Provider verify/test体系 in
+  `docs/C09_EXECUTION_PROVIDER_VERIFICATION.md`.
+- Next recommended step: C09E staging Execution Provider 验收.
 
 ## C09 execution provider
 
@@ -901,8 +903,23 @@ C09C has added the frontend execution status shell documented in
   provider connection, no real task, no migration, no staging release, and no
   production release.
 
-The recommended next step after C09C is C09D: Execution Provider verify/test
-体系.
+C09D has added the Execution Provider verify/test system documented in
+`docs/C09_EXECUTION_PROVIDER_VERIFICATION.md`:
+
+- Backend tests now explicitly verify provider uniqueness/naming, C08
+  action binding, permission/risk/operation-log inheritance, approval C12,
+  secret C14, scope C18, no-live/no-callback/no-artifact-path/no-log-write,
+  read-only API, and C08/C07/C05/C06 regression.
+- Frontend tests now explicitly verify exact GET-only proxy allowlist,
+  disabled/no-execute status shell, execution_required, approval_required,
+  secret_required, and scope_required display states.
+- C09D ran backend Docker pytest, frontend Node tests, `npm run verify`,
+  `npm run typecheck`, and `npm run build`.
+- C09D adds no runtime execution, no execution submit API, no migration, no
+  adapter action execution, no live provider, no staging release, and no
+  production release.
+
+The recommended next step after C09D is C09E: staging Execution Provider 验收.
 
 ## Temporary login preview
 

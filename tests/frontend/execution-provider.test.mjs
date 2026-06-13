@@ -239,6 +239,40 @@ test("backend proxy precisely allows C09B execution provider registry paths", ()
   );
 });
 
+test("backend proxy execution provider allowlist is exact GET-only matrix", () => {
+  const allowedPaths = [
+    ["execution-providers", "registry"],
+    ["execution-providers", "me"],
+  ];
+  const deniedPaths = [
+    ["execution-providers"],
+    ["execution-providers", "registry", "extra"],
+    ["execution-providers", "me", "extra"],
+    ["execution-providers", "core.no_op_provider"],
+    ["execution-providers", "core.no_op_provider", "run"],
+    ["execution-providers", "execute"],
+    ["execution-providers", "submit"],
+    ["execution-providers", "cancel"],
+    ["execution-providers", "retry"],
+    ["executions"],
+    ["executions", "run"],
+    ["execution", "submit"],
+  ];
+
+  for (const path of allowedPaths) {
+    assert.equal(isAllowedBackendProxyPath("GET", path), true);
+    for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
+      assert.equal(isAllowedBackendProxyPath(method, path), false);
+    }
+  }
+
+  for (const path of deniedPaths) {
+    for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE"]) {
+      assert.equal(isAllowedBackendProxyPath(method, path), false);
+    }
+  }
+});
+
 test("backend proxy rejects unsafe execution provider and execution paths", () => {
   assert.equal(
     isAllowedBackendProxyPath("POST", ["execution-providers", "registry"]),
@@ -458,6 +492,83 @@ test("secret required action shows waiting C14 and stays disabled", () => {
   assert.equal(adapterState.can_request_execution, false);
 });
 
+test("execution provider action state matrix covers C09D blocking statuses", () => {
+  const cases = [
+    {
+      expectedMessage: "waiting for C09 Execution Provider",
+      expectedNoExecute: "provider_pending",
+      expectedState: "provider_pending",
+      input: {
+        accessState: null,
+        requiresExecutionProvider: true,
+      },
+    },
+    {
+      expectedMessage: "waiting for C09 Execution Provider",
+      expectedNoExecute: "c09b_no_execute_provider_contract_only",
+      expectedState: "execution_provider_required",
+      input: {
+        accessState: access({
+          block_reason: "execution_provider_required",
+          no_execute_reason: "c09b_no_execute_provider_contract_only",
+        }),
+        requiresExecutionProvider: true,
+      },
+    },
+    {
+      expectedMessage: "waiting for C12 Approval Gate",
+      expectedNoExecute: "waiting_c12_approval_gate",
+      expectedState: "approval_required",
+      input: {
+        accessState: access({
+          approval_status: "blocked_approval_required",
+          block_reason: "blocked_approval_required",
+          no_execute_reason: "waiting_c12_approval_gate",
+          requires_approval: true,
+        }),
+      },
+    },
+    {
+      expectedMessage: "waiting for C14 Secret Rules",
+      expectedNoExecute: "waiting_c14_secret_rules",
+      expectedState: "secret_required",
+      input: {
+        accessState: access({
+          block_reason: "secret_rules_required",
+          no_execute_reason: "waiting_c14_secret_rules",
+          requires_secret: true,
+          secret_binding_status: "secret_rules_required",
+        }),
+      },
+    },
+    {
+      expectedMessage: "waiting for C18 Scope Adapter",
+      expectedNoExecute: "waiting_c18_scope_adapter",
+      expectedState: "scope_required",
+      input: {
+        accessState: access({
+          block_reason: "scope_adapter_pending",
+          no_execute_reason: "waiting_c18_scope_adapter",
+          requires_scope: true,
+          scope_status: "scope_adapter_pending",
+        }),
+      },
+    },
+  ];
+
+  for (const testCase of cases) {
+    const state = getExecutionProviderActionState(testCase.input);
+
+    assert.equal(state.state, testCase.expectedState);
+    assert.equal(state.message, testCase.expectedMessage);
+    assert.equal(state.no_execute_reason, testCase.expectedNoExecute);
+    assert.equal(state.button_label, "Provider unavailable");
+    assert.equal(state.disabled, true);
+    assert.equal(state.executable, false);
+    assert.equal(state.can_request_execution, false);
+  }
+});
+
 test("scope required action shows waiting C18 and stays disabled", () => {
   const providerAccess = access({
     block_reason: "scope_adapter_pending",
@@ -510,6 +621,22 @@ test("hidden locked and unavailable provider states never render executable stat
     assert.equal(state.can_request_execution, false);
     assert.notEqual(state.state, "no_execute");
   }
+});
+
+test("execution provider status shell renders safe status fields and no submit hook", () => {
+  const shellSource = readFileSync(
+    "frontend/src/components/execution-provider-status-shell.tsx",
+    "utf8",
+  );
+
+  assert.match(shellSource, /role="status"/);
+  assert.match(shellSource, /getExecutionProviderStatusLabel/);
+  assert.match(shellSource, /provider_access_state/);
+  assert.match(shellSource, /no_execute_reason/);
+  assert.match(shellSource, /safe_status_message/);
+  assert.match(shellSource, /actionState\.button_label/);
+  assert.match(shellSource, /<button disabled type="button">/);
+  assert.doesNotMatch(shellSource, /onClick|onSubmit|formAction/);
 });
 
 test("execution provider status shell is disabled and contains no client call", () => {

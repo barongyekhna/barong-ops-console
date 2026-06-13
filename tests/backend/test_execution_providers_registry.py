@@ -109,6 +109,16 @@ def provider_items_by_key(
     }
 
 
+def raw_provider_by_key(provider_key: str) -> dict[str, Any]:
+    return copy.deepcopy(
+        next(
+            raw
+            for raw in EXECUTION_PROVIDER_CONTRACTS_V1
+            if raw["provider_key"] == provider_key
+        )
+    )
+
+
 def string_values(value: Any):
     if isinstance(value, str):
         yield value
@@ -280,6 +290,134 @@ def test_static_execution_provider_registry_contract_rules() -> None:
         json.dumps(provider.execution_state_schema.model_dump(mode="json"))
 
 
+def test_c09d_execution_provider_rule_matrix_is_explicitly_no_execute() -> None:
+    providers = {
+        provider.provider_key: provider
+        for provider in list_execution_provider_contracts()
+    }
+    expected_access = {
+        "core.no_op_provider": (
+            "unavailable",
+            "execution_provider_required",
+            "c09b_no_execute_provider_contract_only",
+        ),
+        "core.mock_provider": (
+            "blocked",
+            "scope_adapter_pending",
+            "waiting_c18_scope_adapter",
+        ),
+        "core.contract_only_provider": (
+            "blocked",
+            "blocked_approval_required",
+            "waiting_c12_approval_gate",
+        ),
+        "future.local_backend_provider": (
+            "provider_pending",
+            "provider_pending",
+            "provider_pending",
+        ),
+        "future.queue_provider": (
+            "provider_pending",
+            "provider_pending",
+            "provider_pending",
+        ),
+        "future.webhook_provider": (
+            "disabled",
+            "disabled",
+            "disabled",
+        ),
+        "future.scheduled_provider": (
+            "unavailable",
+            "blocked_approval_required",
+            "waiting_c12_approval_gate",
+        ),
+        "future.live_provider": (
+            "unavailable",
+            "secret_rules_required",
+            "waiting_c14_secret_rules",
+        ),
+    }
+
+    assert set(providers) == set(expected_access)
+
+    for provider_key, (
+        provider_access_state,
+        block_reason,
+        no_execute_reason,
+    ) in expected_access.items():
+        provider = providers[provider_key]
+        access = build_execution_provider_access_state(
+            provider,
+            owner_permission_info(),
+        )
+
+        assert access.provider_access_state == provider_access_state
+        assert access.block_reason == block_reason
+        assert access.no_execute_reason == no_execute_reason
+        assert access.blocked is True
+        assert access.executable is False
+        assert access.can_request_execution is False
+        assert access.safe_status_message
+        assert access.required_permission == provider.required_permissions[0]
+        assert access.risk_level == provider.risk_level
+        assert access.operation_log_action == provider.operation_log_action
+
+    no_op = providers["core.no_op_provider"]
+    assert no_op.requires_execution_provider is True
+    assert no_op.approval_requirement.requires_approval is False
+    assert no_op.secret_requirement.requires_secret is False
+    assert no_op.scope_requirement.requires_scope is False
+
+    approval = providers["core.contract_only_provider"]
+    assert approval.requires_approval is True
+    assert approval.approval_requirement.requires_approval is True
+    assert approval.approval_requirement.approval_status == (
+        "blocked_approval_required"
+    )
+    assert approval.approval_requirement.approval_provider_state == "waiting_c12"
+    assert approval.approval_requirement.blocks_execution_in_c09b is True
+
+    secret = providers["future.live_provider"]
+    assert secret.secret_requirement.requires_secret is True
+    assert secret.secret_requirement.secret_binding_status == (
+        "secret_rules_required"
+    )
+    assert secret.secret_requirement.rules_provider_state == "waiting_c14"
+    assert secret.secret_requirement.blocks_execution_in_c09b is True
+    assert secret.secret_requirement.secret_value_declared is False
+    assert secret.secret_requirement.provider_credential_declared is False
+    assert secret.secret_requirement.secret_read_allowed is False
+    assert secret.credential_declared is False
+
+    scope = providers["core.mock_provider"]
+    assert scope.scope_requirement.requires_scope is True
+    assert scope.scope_requirement.scope_status == "scope_adapter_pending"
+    assert scope.scope_requirement.allowed_scope_types == ["global", "module"]
+    assert scope.scope_requirement.requires_c18_scope_adapter is True
+    assert scope.scope_requirement.blocks_execution_in_c09b is True
+
+    for provider in providers.values():
+        assert provider.fallback_behavior.permission_missing == "blocked_permission"
+        assert provider.fallback_behavior.approval_missing == (
+            "blocked_approval_required_waiting_c12"
+        )
+        assert provider.fallback_behavior.secret_missing == (
+            "secret_rules_required_waiting_c14"
+        )
+        assert provider.fallback_behavior.scope_missing == (
+            "scope_adapter_pending_waiting_c18"
+        )
+        assert provider.idempotency_policy.enabled_in_c09b is False
+        assert provider.retry_policy.enabled_in_c09b is False
+        assert provider.timeout_policy.enabled_in_c09b is False
+        assert provider.cancellation_policy.enabled_in_c09b is False
+        assert provider.concurrency_policy.enabled_in_c09b is False
+        assert provider.rate_limit_policy.enabled_in_c09b is False
+        assert provider.operation_log_policy.write_policy == "declared_only"
+        assert provider.operation_log_policy.writes_operation_logs_in_c09b is False
+        assert provider.audit_event_policy.writes_audit_events_in_c09b is False
+
+
 def test_execution_provider_contract_rejects_invalid_shapes_and_drifts() -> None:
     valid = copy.deepcopy(EXECUTION_PROVIDER_CONTRACTS_V1[0])
 
@@ -366,6 +504,78 @@ def test_execution_provider_contract_rejects_invalid_shapes_and_drifts() -> None
     unsafe_value["description"] = "http://example.invalid/provider"
     with pytest.raises(ValueError, match="unsafe runtime value"):
         validate_execution_provider_contracts([unsafe_value])
+
+
+def test_c09d_contract_rejects_permission_approval_secret_and_live_regressions() -> None:
+    invalid_permission = raw_provider_by_key("core.no_op_provider")
+    invalid_permission["required_permissions"] = ["*"]
+    with pytest.raises(ValueError, match="Permission key"):
+        validate_execution_provider_contracts([invalid_permission])
+
+    operation_policy_drift = raw_provider_by_key("core.no_op_provider")
+    operation_policy_drift["operation_log_policy"]["operation_log_action"] = (
+        "business.products.placeholder.drift"
+    )
+    with pytest.raises(ValueError, match="operation_log_policy"):
+        validate_execution_provider_contracts([operation_policy_drift])
+
+    approval_not_blocking = raw_provider_by_key("core.contract_only_provider")
+    approval_not_blocking["approval_requirement"][
+        "blocks_execution_in_c09b"
+    ] = False
+    with pytest.raises(ValueError, match="approval policy"):
+        validate_execution_provider_contracts([approval_not_blocking])
+
+    high_risk_missing_approval = raw_provider_by_key("future.scheduled_provider")
+    high_risk_missing_approval["requires_approval"] = False
+    high_risk_missing_approval["approval_requirement"]["requires_approval"] = False
+    high_risk_missing_approval["approval_requirement"][
+        "blocks_execution_in_c09b"
+    ] = False
+    high_risk_missing_approval["approval_requirement"]["approval_status"] = (
+        "not_required"
+    )
+    with pytest.raises(ValueError, match="approval requirement"):
+        validate_execution_provider_contracts([high_risk_missing_approval])
+
+    secret_not_waiting = raw_provider_by_key("future.live_provider")
+    secret_not_waiting["secret_requirement"]["rules_provider_state"] = (
+        "not_required"
+    )
+    with pytest.raises(ValueError, match="wait for C14"):
+        validate_execution_provider_contracts([secret_not_waiting])
+
+    secret_not_blocking = raw_provider_by_key("future.live_provider")
+    secret_not_blocking["secret_requirement"]["blocks_execution_in_c09b"] = False
+    with pytest.raises(ValueError, match="block C09B"):
+        validate_execution_provider_contracts([secret_not_blocking])
+
+    live_connected = raw_provider_by_key("core.no_op_provider")
+    live_connected["live_provider_connected"] = True
+    with pytest.raises(ValueError, match="live connected"):
+        validate_execution_provider_contracts([live_connected])
+
+    external_endpoint = raw_provider_by_key("core.no_op_provider")
+    external_endpoint["external_endpoint_declared"] = True
+    with pytest.raises(ValueError, match="external endpoint"):
+        validate_execution_provider_contracts([external_endpoint])
+
+    callback_connected = raw_provider_by_key("core.no_op_provider")
+    callback_connected["callback_policy"]["callback_supported"] = True
+    with pytest.raises(ValueError, match="callback support"):
+        validate_execution_provider_contracts([callback_connected])
+
+    artifact_path = raw_provider_by_key("core.no_op_provider")
+    artifact_path["artifact_policy"]["local_path_allowed"] = True
+    with pytest.raises(ValueError, match="local artifact path"):
+        validate_execution_provider_contracts([artifact_path])
+
+    operation_log_write = raw_provider_by_key("core.no_op_provider")
+    operation_log_write["operation_log_policy"][
+        "writes_operation_logs_in_c09b"
+    ] = True
+    with pytest.raises(ValueError, match="writes operation logs"):
+        validate_execution_provider_contracts([operation_log_write])
 
 
 def test_execution_request_result_state_contract_schemas_are_declared() -> None:
