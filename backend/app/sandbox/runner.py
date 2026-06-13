@@ -13,6 +13,13 @@ from ..schemas.execution_provider import (
     ExecutionResultContractV1,
 )
 from .context import SandboxContext, SandboxTrustBoundary
+from .execution_context import (
+    ExecutionContext,
+    ExecutionContextFactory,
+    ExecutionContextIsolationRules,
+    ExecutionContextLifecycleSnapshot,
+    ExecutionContextLifecycleStateMachine,
+)
 from .types import (
     SandboxBoundaryState,
     SandboxRequest,
@@ -35,8 +42,13 @@ SAFETY_GUARANTEES = [
     "No external provider, callback, or network call is made.",
     "No database mutation, operation-log write, or audit-event write occurs.",
     "No filesystem write is performed by the runner.",
+    (
+        "Execution context memory, state, and log scopes are request-bound "
+        "mock refs."
+    ),
     "Raw input_payload keys and values are not echoed in the response.",
 ]
+RunnerContext = SandboxContext | ExecutionContext
 
 
 class SandboxMockLifecycleStep(BaseModel):
@@ -123,32 +135,44 @@ class SandboxRunner:
         *,
         runner_key: str = "c10b.sandbox_runner.mock.v1",
         runner_version: str = "1.0.0",
+        context_factory: ExecutionContextFactory | None = None,
     ) -> None:
         self.runner_key = runner_key
         self.runner_version = runner_version
+        self.context_factory = context_factory or ExecutionContextFactory()
 
     def handle_execution_request(
         self,
         execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
         *,
-        context: SandboxContext | None = None,
+        context: RunnerContext | None = None,
     ) -> SandboxResponse:
         request_contract = _execution_request_from_raw(execution_request)
-        sandbox_context = self._normalize_context(context, request_contract)
+        execution_context = self._normalize_execution_context(
+            context,
+            request_contract,
+        )
+        sandbox_context = self._normalize_context(
+            context,
+            request_contract,
+            execution_context=execution_context,
+        )
         sandbox_request = self.build_sandbox_request(
             request_contract,
             context=sandbox_context,
+            execution_context=execution_context,
         )
         return self.generate_execution_response(
             sandbox_request,
             context=sandbox_context,
+            execution_context=execution_context,
         )
 
     def handle_request(
         self,
         execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
         *,
-        context: SandboxContext | None = None,
+        context: RunnerContext | None = None,
     ) -> SandboxResponse:
         return self.handle_execution_request(
             execution_request,
@@ -159,11 +183,20 @@ class SandboxRunner:
         self,
         execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
         *,
-        context: SandboxContext | None = None,
+        context: RunnerContext | None = None,
+        execution_context: ExecutionContext | None = None,
         requested_capabilities: list[str] | None = None,
     ) -> SandboxRequest:
         request_contract = _execution_request_from_raw(execution_request)
-        sandbox_context = self._normalize_context(context, request_contract)
+        bound_execution_context = self._normalize_execution_context(
+            execution_context or context,
+            request_contract,
+        )
+        sandbox_context = self._normalize_context(
+            context,
+            request_contract,
+            execution_context=bound_execution_context,
+        )
         capabilities = list(requested_capabilities or [])
         if MOCK_CAPABILITY not in capabilities:
             capabilities.append(MOCK_CAPABILITY)
@@ -181,6 +214,14 @@ class SandboxRunner:
         return SandboxRequest(
             request_id=request_id,
             sandbox_request_id=sandbox_request_id,
+            context_id=bound_execution_context.context_id,
+            execution_context_ref=bound_execution_context.execution_context_ref,
+            scope_ref=bound_execution_context.scope_ref,
+            memory_scope_ref=bound_execution_context.memory_scope.memory_scope_id,
+            log_scope_ref=bound_execution_context.log_scope.log_scope_id,
+            state_scope_ref=bound_execution_context.state_scope.state_scope_id,
+            isolation_level=bound_execution_context.isolation_level,
+            context_lifecycle_state=bound_execution_context.lifecycle_state,
             stage=RUNNER_STAGE,
             contract_mode="mock_only",
             c09_execution_request=request_contract,
@@ -194,47 +235,67 @@ class SandboxRunner:
             requested_capabilities=capabilities,
             target_scope=request_contract.target_scope,
             sanitized_input_summary=self._safe_input_summary(request_contract),
-            sandbox_scope_ref=sandbox_context.sandbox_scope_ref,
+            sandbox_scope_ref=bound_execution_context.sandbox_scope_ref,
         )
 
     def run(
         self,
         sandbox_request: SandboxRequest | Mapping[str, Any],
         *,
-        context: SandboxContext | None = None,
+        context: RunnerContext | None = None,
+        execution_context: ExecutionContext | None = None,
     ) -> SandboxResponse:
         request_contract = _sandbox_request_from_raw(sandbox_request)
+        bound_execution_context = self._normalize_execution_context(
+            execution_context or context,
+            request_contract.c09_execution_request,
+        )
         normalized_context = self._normalize_context(
             context,
             request_contract.c09_execution_request,
+            execution_context=bound_execution_context,
         )
         normalized_request = self._normalize_sandbox_request(
             request_contract,
             context=normalized_context,
+            execution_context=bound_execution_context,
         )
         return self.generate_execution_response(
             normalized_request,
             context=normalized_context,
+            execution_context=bound_execution_context,
         )
 
     def generate_execution_response(
         self,
         sandbox_request: SandboxRequest | Mapping[str, Any],
         *,
-        context: SandboxContext | None = None,
+        context: RunnerContext | None = None,
+        execution_context: ExecutionContext | None = None,
     ) -> SandboxResponse:
         request_contract = _sandbox_request_from_raw(sandbox_request)
+        bound_execution_context = self._normalize_execution_context(
+            execution_context or context,
+            request_contract.c09_execution_request,
+        )
         sandbox_context = self._normalize_context(
             context,
             request_contract.c09_execution_request,
+            execution_context=bound_execution_context,
         )
         normalized_request = self._normalize_sandbox_request(
             request_contract,
             context=sandbox_context,
+            execution_context=bound_execution_context,
         )
         violations = self._policy_violations(
             normalized_request,
             sandbox_context,
+            bound_execution_context,
+        )
+        final_execution_context, lifecycle_snapshot = self._mock_context_lifecycle(
+            bound_execution_context,
+            violations,
         )
         flow = self._mock_execution_flow(normalized_request, violations)
         blocked = bool(violations)
@@ -249,20 +310,13 @@ class SandboxRunner:
         result_summary = self._result_summary(
             normalized_request,
             sandbox_context,
+            final_execution_context,
+            lifecycle_snapshot,
             flow,
             violations,
         )
         c09_result_contract = ExecutionResultContractV1(
-            execution_id=(
-                normalized_request.c09_execution_request.execution_id
-                or _stable_id(
-                    "mock_exec",
-                    {
-                        "sandbox_request_id": normalized_request.sandbox_request_id,
-                        "runner_key": self.runner_key,
-                    },
-                )
-            ),
+            execution_id=final_execution_context.execution_id,
             provider_key=normalized_request.provider_key,
             status=flow.terminal_status,
             result_summary=result_summary,
@@ -287,6 +341,14 @@ class SandboxRunner:
             ),
             request_id=normalized_request.request_id,
             sandbox_request_id=normalized_request.sandbox_request_id,
+            context_id=final_execution_context.context_id,
+            execution_context_ref=final_execution_context.execution_context_ref,
+            scope_ref=final_execution_context.scope_ref,
+            memory_scope_ref=final_execution_context.memory_scope.memory_scope_id,
+            log_scope_ref=final_execution_context.log_scope.log_scope_id,
+            state_scope_ref=final_execution_context.state_scope.state_scope_id,
+            isolation_level=final_execution_context.isolation_level,
+            context_lifecycle_state=final_execution_context.lifecycle_state,
             stage=RUNNER_STAGE,
             status=result_status,
             execution_status=flow.terminal_status,
@@ -310,41 +372,59 @@ class SandboxRunner:
                 {
                     "result_id": sandbox_result.result_id,
                     "runner_key": self.runner_key,
+                    "context_id": final_execution_context.context_id,
                 },
             ),
             request_id=normalized_request.request_id,
             sandbox_request_id=normalized_request.sandbox_request_id,
+            context_id=final_execution_context.context_id,
+            execution_context_ref=final_execution_context.execution_context_ref,
             stage=RUNNER_STAGE,
             contract_mode="mock_only",
             result=sandbox_result,
+            execution_context=final_execution_context,
             c09_result_contract=c09_result_contract,
             safety_notes=list(SAFETY_GUARANTEES),
-            next_stage_policy="wait_for_c10c",
+            next_stage_policy="wait_for_c10d",
         )
+
+    def _normalize_execution_context(
+        self,
+        context: RunnerContext | None,
+        execution_request: ExecutionRequestContractV1,
+    ) -> ExecutionContext:
+        if isinstance(context, ExecutionContext):
+            return context
+        return self.context_factory.create_context(execution_request)
 
     def _normalize_context(
         self,
-        context: SandboxContext | None,
+        context: RunnerContext | None,
         execution_request: ExecutionRequestContractV1,
+        *,
+        execution_context: ExecutionContext,
     ) -> SandboxContext:
-        if context is None:
-            return self._context_from_execution_request(execution_request)
+        if not isinstance(context, SandboxContext):
+            return self._context_from_execution_request(
+                execution_request,
+                execution_context=execution_context,
+            )
 
         request_summary = self._safe_input_summary(execution_request)
-        request_identity = self._request_identity(execution_request)
-        context_id = context.context_id or _stable_id(
-            "sandbox_ctx",
-            {
-                "runner_key": self.runner_key,
-                "request_identity": request_identity,
-            },
-        )
         metadata = {
             **context.request_metadata,
             "source_context_stage": context.stage,
+            "source_context_id": context.context_id,
             "runner_key": self.runner_key,
             "runner_version": self.runner_version,
             "runner_mode": RUNNER_MODE,
+            "c10c_stage": execution_context.stage,
+            "c10c_context_id": execution_context.context_id,
+            "scope_ref": execution_context.scope_ref,
+            "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
+            "log_scope_ref": execution_context.log_scope.log_scope_id,
+            "state_scope_ref": execution_context.state_scope.state_scope_id,
+            "isolation_level": execution_context.isolation_level,
             "mock_only": True,
             "raw_input_payload_echoed": False,
         }
@@ -353,26 +433,11 @@ class SandboxRunner:
         )
         return context.model_copy(
             update={
-                "context_id": context_id,
+                "context_id": execution_context.context_id,
                 "stage": RUNNER_STAGE,
                 "runtime_execution_policy": "mock_simulation_only",
-                "execution_context_ref": context.execution_context_ref
-                or _stable_id(
-                    "execution_ctx",
-                    {
-                        "context_id": context_id,
-                        "runner_key": self.runner_key,
-                    },
-                ),
-                "sandbox_scope_ref": context.sandbox_scope_ref
-                or _stable_id(
-                    "sandbox_scope",
-                    {
-                        "context_id": context_id,
-                        "module_key": execution_request.module_key,
-                        "adapter_key": execution_request.adapter_key,
-                    },
-                ),
+                "execution_context_ref": execution_context.execution_context_ref,
+                "sandbox_scope_ref": execution_context.sandbox_scope_ref,
                 "request_metadata": metadata,
                 "sanitized_input_summary": request_summary,
                 "visible_trust_zones": visible_trust_zones,
@@ -382,6 +447,8 @@ class SandboxRunner:
     def _context_from_execution_request(
         self,
         execution_request: ExecutionRequestContractV1,
+        *,
+        execution_context: ExecutionContext,
     ) -> SandboxContext:
         request_identity = self._request_identity(execution_request)
         boundary_key = _stable_id(
@@ -389,17 +456,11 @@ class SandboxRunner:
             {
                 "runner_key": self.runner_key,
                 "request_identity": request_identity,
-            },
-        )
-        context_id = _stable_id(
-            "sandbox_ctx",
-            {
-                "runner_key": self.runner_key,
-                "request_identity": request_identity,
+                "context_id": execution_context.context_id,
             },
         )
         return SandboxContext(
-            context_id=context_id,
+            context_id=execution_context.context_id,
             stage=RUNNER_STAGE,
             module_key=execution_request.module_key,
             adapter_key=execution_request.adapter_key,
@@ -408,25 +469,19 @@ class SandboxRunner:
             actor_user_id=execution_request.actor_user_id,
             risk_level=execution_request.risk_level,
             trust_boundary=SandboxTrustBoundary(boundary_key=boundary_key),
-            execution_context_ref=_stable_id(
-                "execution_ctx",
-                {
-                    "context_id": context_id,
-                    "runner_key": self.runner_key,
-                },
-            ),
-            sandbox_scope_ref=_stable_id(
-                "sandbox_scope",
-                {
-                    "context_id": context_id,
-                    "module_key": execution_request.module_key,
-                    "adapter_key": execution_request.adapter_key,
-                },
-            ),
+            execution_context_ref=execution_context.execution_context_ref,
+            sandbox_scope_ref=execution_context.sandbox_scope_ref,
             request_metadata={
                 "runner_key": self.runner_key,
                 "runner_version": self.runner_version,
                 "runner_mode": RUNNER_MODE,
+                "c10c_stage": execution_context.stage,
+                "c10c_context_id": execution_context.context_id,
+                "scope_ref": execution_context.scope_ref,
+                "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
+                "log_scope_ref": execution_context.log_scope.log_scope_id,
+                "state_scope_ref": execution_context.state_scope.state_scope_id,
+                "isolation_level": execution_context.isolation_level,
                 "mock_only": True,
                 "source_execution_status": execution_request.status,
                 "raw_input_payload_echoed": False,
@@ -441,19 +496,28 @@ class SandboxRunner:
         sandbox_request: SandboxRequest,
         *,
         context: SandboxContext,
+        execution_context: ExecutionContext,
     ) -> SandboxRequest:
         capabilities = list(sandbox_request.requested_capabilities)
         if MOCK_CAPABILITY not in capabilities:
             capabilities.append(MOCK_CAPABILITY)
         return sandbox_request.model_copy(
             update={
+                "context_id": execution_context.context_id,
+                "execution_context_ref": execution_context.execution_context_ref,
+                "scope_ref": execution_context.scope_ref,
+                "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
+                "log_scope_ref": execution_context.log_scope.log_scope_id,
+                "state_scope_ref": execution_context.state_scope.state_scope_id,
+                "isolation_level": execution_context.isolation_level,
+                "context_lifecycle_state": execution_context.lifecycle_state,
                 "stage": RUNNER_STAGE,
                 "contract_mode": "mock_only",
                 "requested_capabilities": capabilities,
                 "sanitized_input_summary": self._safe_input_summary(
                     sandbox_request.c09_execution_request
                 ),
-                "sandbox_scope_ref": context.sandbox_scope_ref,
+                "sandbox_scope_ref": execution_context.sandbox_scope_ref,
             },
         )
 
@@ -461,6 +525,7 @@ class SandboxRunner:
         self,
         sandbox_request: SandboxRequest,
         context: SandboxContext,
+        execution_context: ExecutionContext,
     ) -> list[SandboxRunnerPolicyViolation]:
         violations: list[SandboxRunnerPolicyViolation] = []
         request = sandbox_request.c09_execution_request
@@ -485,6 +550,60 @@ class SandboxRunner:
                         message=(
                             "Sandbox context does not match the execution "
                             f"request field: {field_name}."
+                        ),
+                    )
+                )
+
+        for isolation_violation in (
+            self.context_factory.binding_violations(execution_context, request)
+        ):
+            violations.append(
+                SandboxRunnerPolicyViolation(
+                    code=isolation_violation.code,
+                    message=isolation_violation.message,
+                )
+            )
+
+        isolation_report = ExecutionContextIsolationRules.validate_context(
+            execution_context
+        )
+        for isolation_violation in isolation_report.violations:
+            violations.append(
+                SandboxRunnerPolicyViolation(
+                    code=isolation_violation.code,
+                    message=isolation_violation.message,
+                )
+            )
+
+        if execution_context.lifecycle_state != "created":
+            violations.append(
+                SandboxRunnerPolicyViolation(
+                    code="C10C_CONTEXT_STATE_REUSE_BLOCKED",
+                    message=(
+                        "Execution context must start from created state for "
+                        "each mock sandbox execution."
+                    ),
+                )
+            )
+
+        context_ref_checks = {
+            "context_id": execution_context.context_id,
+            "execution_context_ref": execution_context.execution_context_ref,
+            "scope_ref": execution_context.scope_ref,
+            "sandbox_scope_ref": execution_context.sandbox_scope_ref,
+            "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
+            "log_scope_ref": execution_context.log_scope.log_scope_id,
+            "state_scope_ref": execution_context.state_scope.state_scope_id,
+            "isolation_level": execution_context.isolation_level,
+        }
+        for field_name, expected_value in context_ref_checks.items():
+            if getattr(sandbox_request, field_name) != expected_value:
+                violations.append(
+                    SandboxRunnerPolicyViolation(
+                        code="C10C_REQUEST_CONTEXT_MISMATCH",
+                        message=(
+                            "Sandbox request is not bound to execution context "
+                            f"field: {field_name}."
                         ),
                     )
                 )
@@ -520,6 +639,19 @@ class SandboxRunner:
             )
 
         return violations
+
+    def _mock_context_lifecycle(
+        self,
+        execution_context: ExecutionContext,
+        violations: list[SandboxRunnerPolicyViolation],
+    ) -> tuple[ExecutionContext, ExecutionContextLifecycleSnapshot]:
+        if violations:
+            return ExecutionContextLifecycleStateMachine.run_mock_failure(
+                execution_context
+            )
+        return ExecutionContextLifecycleStateMachine.run_mock_success(
+            execution_context
+        )
 
     def _mock_execution_flow(
         self,
@@ -605,6 +737,8 @@ class SandboxRunner:
         self,
         sandbox_request: SandboxRequest,
         context: SandboxContext,
+        execution_context: ExecutionContext,
+        lifecycle_snapshot: ExecutionContextLifecycleSnapshot,
         flow: SandboxMockExecutionFlow,
         violations: list[SandboxRunnerPolicyViolation],
     ) -> dict[str, Any]:
@@ -628,8 +762,26 @@ class SandboxRunner:
                 "db_mutation_policy": context.db_mutation_policy,
                 "filesystem_write_policy": context.filesystem_write_policy,
             },
+            "execution_context": {
+                "context_id": execution_context.context_id,
+                "execution_id": execution_context.execution_id,
+                "module_key": execution_context.module_key,
+                "adapter_key": execution_context.adapter_key,
+                "action_key": execution_context.action_key,
+                "actor_user_id": execution_context.actor_user_id,
+                "scope_ref": execution_context.scope_ref,
+                "sandbox_scope_ref": execution_context.sandbox_scope_ref,
+                "execution_context_ref": execution_context.execution_context_ref,
+                "isolation_level": execution_context.isolation_level,
+                "memory_scope_ref": execution_context.memory_scope.memory_scope_id,
+                "log_scope_ref": execution_context.log_scope.log_scope_id,
+                "state_scope_ref": execution_context.state_scope.state_scope_id,
+                "lifecycle_state": execution_context.lifecycle_state,
+                "lifecycle_mock_only": execution_context.lifecycle_mock_only,
+            },
             "input_summary": sandbox_request.sanitized_input_summary,
             "lifecycle": [step.model_dump(mode="json") for step in flow.steps],
+            "context_lifecycle": lifecycle_snapshot.model_dump(mode="json"),
             "policy_violations": [
                 violation.model_dump(mode="json") for violation in violations
             ],
@@ -641,6 +793,10 @@ class SandboxRunner:
                 "staging_touched": False,
                 "filesystem_written": False,
                 "raw_input_payload_echoed": False,
+                "shared_memory": False,
+                "shared_execution_state": False,
+                "shared_logs": False,
+                "cross_context_mutation": False,
             },
         }
 
@@ -680,7 +836,7 @@ class SandboxRunner:
 def handle_execution_request(
     execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
     *,
-    context: SandboxContext | None = None,
+    context: RunnerContext | None = None,
 ) -> SandboxResponse:
     return SandboxRunner().handle_execution_request(
         execution_request,
@@ -691,7 +847,7 @@ def handle_execution_request(
 def deterministic_mock_execution_response(
     execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
     *,
-    context: SandboxContext | None = None,
+    context: RunnerContext | None = None,
 ) -> ExecutionResultContractV1:
     response = handle_execution_request(execution_request, context=context)
     if response.c09_result_contract is None:
@@ -703,6 +859,7 @@ __all__ = [
     "RUNNER_MODE",
     "RUNNER_STAGE",
     "SAFETY_GUARANTEES",
+    "RunnerContext",
     "SandboxMockExecutionFlow",
     "SandboxMockLifecycleStep",
     "SandboxRunner",

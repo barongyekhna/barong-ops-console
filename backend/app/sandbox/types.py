@@ -9,9 +9,18 @@ from ..schemas.execution_provider import (
     ExecutionResultContractV1,
     ExecutionRiskLevel,
 )
+from .execution_context import (
+    ExecutionContext,
+    ExecutionContextLifecycleState,
+    ExecutionIsolationLevel,
+)
 
 
-SandboxArchitectureStage = Literal["c10a_architecture_only", "c10b_mock_runner"]
+SandboxArchitectureStage = Literal[
+    "c10a_architecture_only",
+    "c10b_mock_runner",
+    "c10c_execution_context",
+]
 SandboxBoundaryState = Literal[
     "declared",
     "contract_received",
@@ -51,6 +60,14 @@ SandboxDeniedCapability = Literal[
 class SandboxRequest(BaseModel):
     request_id: str | None = Field(default=None, max_length=128)
     sandbox_request_id: str | None = Field(default=None, max_length=128)
+    context_id: str | None = Field(default=None, max_length=128)
+    execution_context_ref: str | None = Field(default=None, max_length=180)
+    scope_ref: str | None = Field(default=None, max_length=180)
+    memory_scope_ref: str | None = Field(default=None, max_length=180)
+    log_scope_ref: str | None = Field(default=None, max_length=180)
+    state_scope_ref: str | None = Field(default=None, max_length=180)
+    isolation_level: ExecutionIsolationLevel | None = None
+    context_lifecycle_state: ExecutionContextLifecycleState | None = None
     stage: SandboxArchitectureStage = "c10a_architecture_only"
     contract_mode: SandboxContractMode = "architecture_only"
     source_trust_zone: Literal["c09_execution_provider"] = "c09_execution_provider"
@@ -85,6 +102,14 @@ class SandboxResult(BaseModel):
     result_id: str | None = Field(default=None, max_length=128)
     request_id: str | None = Field(default=None, max_length=128)
     sandbox_request_id: str | None = Field(default=None, max_length=128)
+    context_id: str | None = Field(default=None, max_length=128)
+    execution_context_ref: str | None = Field(default=None, max_length=180)
+    scope_ref: str | None = Field(default=None, max_length=180)
+    memory_scope_ref: str | None = Field(default=None, max_length=180)
+    log_scope_ref: str | None = Field(default=None, max_length=180)
+    state_scope_ref: str | None = Field(default=None, max_length=180)
+    isolation_level: ExecutionIsolationLevel | None = None
+    context_lifecycle_state: ExecutionContextLifecycleState | None = None
     stage: SandboxArchitectureStage = "c10a_architecture_only"
     status: SandboxResultStatus = "not_executed"
     execution_status: ExecutionLifecycleStatus = "skipped"
@@ -106,14 +131,17 @@ class SandboxResponse(BaseModel):
     response_id: str | None = Field(default=None, max_length=128)
     request_id: str | None = Field(default=None, max_length=128)
     sandbox_request_id: str | None = Field(default=None, max_length=128)
+    context_id: str | None = Field(default=None, max_length=128)
+    execution_context_ref: str | None = Field(default=None, max_length=180)
     stage: SandboxArchitectureStage = "c10a_architecture_only"
     contract_mode: SandboxContractMode = "architecture_only"
     source_trust_zone: Literal["c10_sandbox"] = "c10_sandbox"
     target_trust_zone: Literal["c09_execution_provider"] = "c09_execution_provider"
     result: SandboxResult
+    execution_context: ExecutionContext | None = None
     c09_result_contract: ExecutionResultContractV1 | None = None
     safety_notes: list[str] = Field(default_factory=list)
-    next_stage_policy: Literal["wait_for_c10b", "wait_for_c10c"] = (
+    next_stage_policy: Literal["wait_for_c10b", "wait_for_c10c", "wait_for_c10d"] = (
         "wait_for_c10b"
     )
 
@@ -124,6 +152,7 @@ class SandboxContractInterface(BaseModel):
     request_schema: Literal["SandboxRequest"] = "SandboxRequest"
     response_schema: Literal["SandboxResponse"] = "SandboxResponse"
     context_schema: Literal["SandboxContext"] = "SandboxContext"
+    execution_context_schema: Literal["ExecutionContext"] = "ExecutionContext"
     result_schema: Literal["SandboxResult"] = "SandboxResult"
     upstream_contract_ref: Literal["C09 Execution Provider"] = (
         "C09 Execution Provider"
