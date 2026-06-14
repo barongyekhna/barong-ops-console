@@ -6,6 +6,11 @@ from backend.app.core.config import Settings, get_settings
 from backend.app.core.security import hash_password
 from backend.app.db.session import SessionLocal
 from backend.app.main import app
+from backend.app.models.approval import (
+    ApprovalDecisionRecord,
+    ApprovalRequestRecord,
+    ApprovalWorkflowRecord,
+)
 from backend.app.models.artifact import Artifact
 from backend.app.models.context import ContextPacket
 from backend.app.models.error import SystemError
@@ -41,6 +46,9 @@ def clear_auth_tables() -> None:
         db.execute(delete(SystemError))
         db.execute(delete(ReviewItem))
         db.execute(delete(Artifact))
+        db.execute(delete(ApprovalDecisionRecord))
+        db.execute(delete(ApprovalWorkflowRecord))
+        db.execute(delete(ApprovalRequestRecord))
         db.execute(delete(JobEvent))
         db.execute(delete(OperationLog))
         db.execute(delete(AutomationJob))

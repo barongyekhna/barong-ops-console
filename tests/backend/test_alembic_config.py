@@ -18,6 +18,9 @@ CORE_BUSINESS_TABLES = {
     "permission_registry",
     "user_permission_assignments",
     "role_default_permissions",
+    "approval_requests",
+    "approval_workflows",
+    "approval_decisions",
 }
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -40,12 +43,13 @@ def test_alembic_targets_empty_metadata() -> None:
     assert "get_settings().database_url" in env_source
 
 
-def test_versions_contain_core_and_permission_migrations() -> None:
+def test_versions_contain_core_permission_and_approval_migrations() -> None:
     migration_files = sorted(VERSIONS_ROOT.glob("*.py"))
 
-    assert len(migration_files) == 2
+    assert len(migration_files) == 3
     assert migration_files[0].name.endswith("create_core_foundation_tables.py")
     assert migration_files[1].name.endswith("create_permission_tables.py")
+    assert migration_files[2].name.endswith("create_approval_tables.py")
 
     migration_sources = [
         migration_file.read_text(encoding="utf-8").lower()

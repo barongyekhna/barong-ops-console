@@ -21,6 +21,9 @@ CORE_BUSINESS_TABLES = {
     "permission_registry",
     "user_permission_assignments",
     "role_default_permissions",
+    "approval_requests",
+    "approval_workflows",
+    "approval_decisions",
 }
 
 
