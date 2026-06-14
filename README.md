@@ -956,7 +956,7 @@ design stage only. It defines `ModuleSwitchRegistry`, the switch state model,
 `ModuleSwitchGate`, and the required integration position:
 
 ```text
-C08 -> C13A -> C12 -> C09 -> C10
+C08 -> C13A -> C12 -> C14 -> C09 -> C10
 ```
 
 C13A defines the registry record as `module_key`, `state`, `enabled`,
@@ -977,11 +977,11 @@ C13B has added the runtime enforcement layer documented in
 - `ModuleSwitchRuntimeGate.check(module_key)` returns `ON` / `OFF`.
 - OFF, missing, duplicate, or invalid switch records fail closed as `BLOCKED`.
 - C13B checks run before C08 adapter module resolution, C12 approval request
-  creation, C09 execution request contract creation, and C10 sandbox request
-  entry.
+  creation, C14 external dependency gate evaluation, C09 execution request
+  contract creation, and C10 sandbox request entry.
 - Blocked flow stops before approval/execution/sandbox objects are generated;
-  allowed flow still requires C12 and remains bound by C09 no-execute and C10
-  mock-only safety locks.
+  allowed flow still requires C12/C14 and remains bound by C09 no-execute and
+  C10 mock-only safety locks.
 
 C13B adds no API, migration, frontend UI, external provider call,
 production/staging operation, or runtime execution capability.
@@ -1006,9 +1006,31 @@ C14B has completed Secret Storage Policy in
 - C09 execution cannot directly access secrets, and C10 sandbox must not
   receive raw secrets.
 
-C14B is policy-only. It adds no real vault integration, encrypted storage
-implementation, API, migration, frontend runtime, C09 secret read path, C10
-secret injection, production/staging operation, or runtime execution capability.
+C14C has completed Secret Access Control in
+`docs/C14C_SECRET_ACCESS_CONTROL.md`. It defines who can access secrets, under
+what conditions, and at what layer. Owner/admin/system/service-layer rules are
+scoped, purpose-bound, backend-secure only, and do not permit frontend/C08/C09/C10
+raw secret access.
+
+C14D has completed External Dependency Governance in
+`docs/C14D_EXTERNAL_DEPENDENCY_GOVERNANCE.md`:
+
+- external services are dynamically registered with `ExternalService`; the
+  default registry and policy set are empty.
+- C07/C08 dependency declarations accept dynamic safe dependency keys instead
+  of a hardcoded provider list.
+- trust is evaluated dynamically from usage history, module sensitivity, risk
+  context, past violations, and approval outcomes.
+- policy decisions are default deny; explicit policy plus trust/context is
+  required for allow.
+- unknown services are quarantined and produce registration proposals for the
+  C14 External Provider Control Panel.
+- C14D is enforced before C09 through the C13E execution flow gate.
+
+C14A-C14D remain governance layers. They add no real vault integration,
+encrypted storage implementation, secret read/write runtime, provider connector,
+external API call, migration, production/staging operation, or runtime execution
+capability.
 
 ## Temporary login preview
 

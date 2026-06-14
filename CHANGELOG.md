@@ -6,6 +6,22 @@
 
 ### Added
 
+- C14D：新增 `docs/C14D_EXTERNAL_DEPENDENCY_GOVERNANCE.md`、
+  `backend/app/schemas/external_dependency.py`、
+  `backend/app/core/external_dependencies.py`、
+  `backend/app/services/external_dependency_governance.py` 和
+  `backend/app/api/routes/external_dependencies.py`，实现动态 ExternalService
+  registry 合同、Trust Evaluation Engine、External Dependency Policy Engine、
+  unknown service quarantine proposal、dependency binding read model 和 C14D gate。
+- C14D：默认 external service registry / policy 均为空，不内置 provider allowlist；
+  C07/C08 dependency declaration 改为动态安全 key 校验，frontend adapter normalizer
+  移除静态 dependency name 集合；未注册服务进入 quarantine 并通过
+  `GET /external-dependencies/proposals` 交给 C14 UI 展示。
+- C14D：C13E execution flow 更新为 `C08 -> C13 -> C12 -> C14 -> C09 -> C10`，
+  在 C09 前调用 C14D policy/trust/context gate；新增 GET-only
+  `/external-dependencies/registry`、`/external-dependencies/proposals`、
+  `/external-dependencies/bindings`。本轮未运行 runtime execution、docker/pytest，
+  未连接外部 API，未读取 secret，未修改 production/staging，未 git commit。
 - C14B：新增 `docs/C14B_SECRET_STORAGE_POLICY.md`，定义 Secret Storage
   Policy；固定允许的 policy locations 为 environment variables (`.env`)、secure
   vault（conceptual）和 encrypted storage（conceptual），并明确本轮不接真实 vault、
