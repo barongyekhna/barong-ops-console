@@ -12,6 +12,10 @@ from ..schemas.module_switch import (
     ModuleSwitchRuntimeDecision,
     ModuleSwitchRuntimeStatus,
 )
+from .emergency_kill_switch import (
+    EmergencyKillSwitchGate,
+    GLOBAL_KILL_SWITCH_BLOCK_REASON,
+)
 from .module_switch_policy_engine import build_effective_module_switch_registry
 
 
@@ -31,9 +35,15 @@ class ModuleSwitchRuntimeGate:
         self,
         registry: Sequence[ModuleSwitchRegistryRecord | Mapping[str, Any]]
         | None = None,
+        global_kill_switch: bool | None = None,
     ) -> None:
+        self._kill_switch_gate = EmergencyKillSwitchGate(
+            global_kill_switch=global_kill_switch
+        )
         self._records: dict[str, ModuleSwitchRegistryRecord] = {}
         self._invalid_reasons: dict[str, str] = {}
+        if self._kill_switch_gate.global_kill_switch:
+            return
         raw_records = (
             registry
             if registry is not None
@@ -62,6 +72,18 @@ class ModuleSwitchRuntimeGate:
         integration_point: ModuleSwitchIntegrationPoint | None = None,
     ) -> ModuleSwitchRuntimeDecision:
         evaluated_at = datetime.now(UTC)
+        kill_switch_decision = self._kill_switch_gate.decision(
+            integration_point=integration_point,
+        )
+        if kill_switch_decision.enforcement_result == "BLOCKED":
+            return self._blocked(
+                module_key=module_key or "global_kill_switch",
+                state="GLOBAL_KILL_SWITCH",
+                reason=GLOBAL_KILL_SWITCH_BLOCK_REASON,
+                evaluated_at=evaluated_at,
+                integration_point=integration_point,
+            )
+
         if not module_key:
             return self._blocked(
                 module_key="missing_module_key",

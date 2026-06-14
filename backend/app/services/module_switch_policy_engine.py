@@ -23,6 +23,7 @@ from ..schemas.module_switch import (
     ModuleSwitchPolicySource,
     ModuleSwitchRegistryRecord,
 )
+from .emergency_kill_switch import EmergencyKillSwitchGate
 
 
 class ModuleSwitchPolicyError(ValueError):
@@ -84,6 +85,9 @@ class ModuleSwitchPolicyEngine:
         ]
         | None = None,
     ) -> tuple[ModuleSwitchPolicyEvaluation, ...]:
+        EmergencyKillSwitchGate().enforce(
+            integration_point="c13c_policy_engine",
+        )
         states: dict[str, str] = {}
         reasons: dict[str, str] = {}
         sources: dict[str, ModuleSwitchPolicySource] = {}
