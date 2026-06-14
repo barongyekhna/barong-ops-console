@@ -12,6 +12,7 @@ from .emergency_kill_switch import (
     EmergencyKillSwitchGate,
     GLOBAL_KILL_SWITCH_BLOCK_REASON,
 )
+from .external_dependency_governance import C14D_GATE
 from .execution_provider_registry import get_execution_provider_contract
 from .module_adapter_registry import get_adapter_contract
 from .module_switch_runtime_gate import ModuleSwitchRuntimeGate
@@ -60,7 +61,7 @@ class ExecutionFlowGate:
     """C13E final execution entry gate.
 
     C13E does not execute work. It validates that a request can only continue
-    through the sealed C08 -> C13E -> C12 -> C09 -> C10 contract chain.
+    through the sealed C08 -> C13E -> C12 -> C14D -> C09 -> C10 contract chain.
     """
 
     def __init__(
@@ -114,6 +115,7 @@ class ExecutionFlowGate:
                 kill_switch_blocked=True,
                 c08_allowed=False,
                 c12_allowed=False,
+                c14_allowed=False,
                 c09_allowed=False,
                 c10_allowed=False,
                 c13_allowed=False,
@@ -132,6 +134,7 @@ class ExecutionFlowGate:
                 integration_point=integration_point,
                 c08_allowed=False,
                 c12_allowed=False,
+                c14_allowed=False,
                 c09_allowed=False,
                 c10_allowed=False,
                 c13_allowed=False,
@@ -149,6 +152,7 @@ class ExecutionFlowGate:
                 integration_point=integration_point,
                 c08_allowed=False,
                 c12_allowed=False,
+                c14_allowed=False,
                 c09_allowed=False,
                 c10_allowed=False,
                 c13_allowed=False,
@@ -166,6 +170,7 @@ class ExecutionFlowGate:
                 integration_point=integration_point,
                 c08_allowed=False,
                 c12_allowed=False,
+                c14_allowed=False,
                 c09_allowed=False,
                 c10_allowed=False,
                 c13_allowed=False,
@@ -183,6 +188,7 @@ class ExecutionFlowGate:
                 integration_point=integration_point,
                 c08_allowed=True,
                 c12_allowed=True,
+                c14_allowed=True,
                 c09_allowed=True,
                 c10_allowed=False,
                 c13_allowed=True,
@@ -197,20 +203,7 @@ class ExecutionFlowGate:
                 integration_point=integration_point,
                 c08_allowed=False,
                 c12_allowed=False,
-                c09_allowed=False,
-                c10_allowed=False,
-                c13_allowed=True,
-            )
-
-        c09_reason = self._c09_block_reason(request, identity)
-        if c09_reason is not None:
-            return self._blocked(
-                identity=identity,
-                reason=c09_reason,
-                evaluated_at=evaluated_at,
-                integration_point=integration_point,
-                c08_allowed=True,
-                c12_allowed=False,
+                c14_allowed=False,
                 c09_allowed=False,
                 c10_allowed=False,
                 c13_allowed=True,
@@ -225,6 +218,37 @@ class ExecutionFlowGate:
                 integration_point=integration_point,
                 c08_allowed=True,
                 c12_allowed=False,
+                c14_allowed=False,
+                c09_allowed=False,
+                c10_allowed=False,
+                c13_allowed=True,
+            )
+
+        c14_reason = self._c14_block_reason(request)
+        if c14_reason is not None:
+            return self._blocked(
+                identity=identity,
+                reason=c14_reason,
+                evaluated_at=evaluated_at,
+                integration_point=integration_point,
+                c08_allowed=True,
+                c12_allowed=True,
+                c14_allowed=False,
+                c09_allowed=False,
+                c10_allowed=False,
+                c13_allowed=True,
+            )
+
+        c09_reason = self._c09_block_reason(request, identity)
+        if c09_reason is not None:
+            return self._blocked(
+                identity=identity,
+                reason=c09_reason,
+                evaluated_at=evaluated_at,
+                integration_point=integration_point,
+                c08_allowed=True,
+                c12_allowed=True,
+                c14_allowed=True,
                 c09_allowed=False,
                 c10_allowed=False,
                 c13_allowed=True,
@@ -239,6 +263,7 @@ class ExecutionFlowGate:
                 integration_point=integration_point,
                 c08_allowed=True,
                 c12_allowed=True,
+                c14_allowed=True,
                 c09_allowed=True,
                 c10_allowed=False,
                 c13_allowed=True,
@@ -252,6 +277,7 @@ class ExecutionFlowGate:
             **identity,
             c08_allowed=True,
             c12_allowed=True,
+            c14_allowed=True,
             c09_allowed=True,
             c10_allowed=True,
             c13_allowed=True,
@@ -269,6 +295,7 @@ class ExecutionFlowGate:
     ):
         for integration_point in (
             "c12_approval_request",
+            "c14_external_dependency_gate",
             "c09_execution_request",
             "c10_sandbox_entry",
         ):
@@ -404,6 +431,12 @@ class ExecutionFlowGate:
             return "c12_approval_not_cleared"
         return None
 
+    def _c14_block_reason(self, request: Any) -> str | None:
+        decision = C14D_GATE.decision(request)
+        if decision.decision != "allow":
+            return decision.reason
+        return None
+
     def _c10_block_reason(self, request: Any) -> str | None:
         if _field(request, "status") in RUNTIME_STATUSES:
             return "c10_runtime_status_bypass"
@@ -424,6 +457,7 @@ class ExecutionFlowGate:
         kill_switch_blocked: bool = False,
         c08_allowed: bool,
         c12_allowed: bool,
+        c14_allowed: bool,
         c09_allowed: bool,
         c10_allowed: bool,
         c13_allowed: bool,
@@ -437,6 +471,7 @@ class ExecutionFlowGate:
             kill_switch_blocked=kill_switch_blocked,
             c08_allowed=c08_allowed,
             c12_allowed=c12_allowed,
+            c14_allowed=c14_allowed,
             c09_allowed=c09_allowed,
             c10_allowed=c10_allowed,
             c13_allowed=c13_allowed,

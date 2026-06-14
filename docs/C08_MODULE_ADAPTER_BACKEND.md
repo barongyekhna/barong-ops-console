@@ -118,7 +118,7 @@ C08B 第一版使用代码内静态 registry，不新增数据库表，不新增
 - `integration.n8n_test_bridge.adapter`
   - `module_key=integration.n8n_test_bridge`
   - `adapter_status=adapter_pending`
-  - 只声明 `n8n` 安全依赖名，`live_connection_allowed=false`。
+  - 只声明动态安全依赖 key `n8n`，`live_connection_allowed=false`。
   - 不连接真实 n8n，不返回 webhook URL，不触发 test bridge action。
 
 没有注册 K01 runtime adapter。没有注册 P01/P02/P03/P04/P05/P06/P07/P08。
@@ -269,19 +269,13 @@ future action 到 operation log action 的映射；C08B 不写 operation log。
 
 ## Dependency Declarations
 
-`dependency_declarations` 只允许安全依赖名：
-
-- `n8n`
-- `woocommerce`
-- `minio`
-- `filebrowser`
-- `ai_provider`
-- `serp`
-- `wecom`
-- `google_sheets`
+`dependency_declarations` 只允许动态安全依赖 key，不使用 provider allowlist。
+key 必须是小写 namespace / snake_case 格式，例如 `n8n` 或
+`unknown.ai_service`。
 
 依赖声明不得包含 secret、token、password、env、Authorization header、URL、
-webhook、API key 或 credential value。C08B 只声明依赖名和 `live_connection_allowed=false`。
+webhook、API key 或 credential value。C08B 只声明依赖 intent 和
+`live_connection_allowed=false`；unknown service 由 C14D 进入 quarantine/proposal。
 
 ## Validation
 
@@ -298,7 +292,7 @@ webhook、API key 或 credential value。C08B 只声明依赖名和 `live_connec
 - dependency declarations 不含敏感 runtime 值。
 - `adapter_pending`、`disabled`、`deprecated` 不可执行。
 - K01/P 系列不能默认 enabled/executable。
-- n8n/WooCommerce/MinIO/Filebrowser 只能声明安全依赖名，不能连接 live provider。
+- dependency declarations 只能声明动态安全依赖 key，不能连接 live provider。
 
 ## C08D 后端测试
 

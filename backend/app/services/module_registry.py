@@ -25,14 +25,8 @@ MODULE_KEY_PATTERN = re.compile(
 ALLOWED_MODULE_CATEGORIES = frozenset(get_args(ModuleCategory))
 ALLOWED_MODULE_STATUSES = frozenset(get_args(ModuleStatus))
 ALLOWED_DENIED_BEHAVIORS = frozenset(get_args(ModuleDeniedBehavior))
-ALLOWED_EXTERNAL_DEPENDENCIES = frozenset(
-    {
-        "n8n",
-        "woocommerce",
-        "minio",
-        "filebrowser",
-        "ai_provider",
-    }
+EXTERNAL_DEPENDENCY_KEY_PATTERN = re.compile(
+    r"^[a-z][a-z0-9_]*(?:[._][a-z][a-z0-9_]*)*$"
 )
 SENSITIVE_DEPENDENCY_MARKERS = (
     "secret",
@@ -95,9 +89,9 @@ def _validate_external_dependencies(manifest: ModuleManifestV1) -> None:
             raise ValueError(
                 f"{manifest.module_key} external dependency names must be normalized."
             )
-        if normalized not in ALLOWED_EXTERNAL_DEPENDENCIES:
+        if not EXTERNAL_DEPENDENCY_KEY_PATTERN.fullmatch(normalized):
             raise ValueError(
-                f"{manifest.module_key} external dependency is not allowed: {dependency}"
+                f"{manifest.module_key} external dependency key is invalid: {dependency}"
             )
         if any(marker in normalized for marker in SENSITIVE_DEPENDENCY_MARKERS):
             raise ValueError(

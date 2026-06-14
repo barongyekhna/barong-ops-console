@@ -34,9 +34,10 @@ C13E 按 fail-closed 顺序检查：
 1. C13D global kill switch
 2. C13A/B/C effective module switch gate
 3. C08 adapter/action contract binding
-4. C09 provider contract binding and no-execute state
-5. C12 approval gate requirement
-6. C10 sandbox entry state
+4. C12 approval gate requirement
+5. C14D external dependency policy/trust/context gate
+6. C09 provider contract binding and no-execute state
+7. C10 sandbox entry state
 ```
 
 最终阻断规则：
@@ -45,6 +46,7 @@ C13E 按 fail-closed 顺序检查：
 C09 execution bypass      -> BLOCKED
 C10 sandbox bypass        -> BLOCKED
 C12 approval bypass       -> BLOCKED
+C14 dependency bypass     -> BLOCKED
 C13A/B/C/D bypass         -> BLOCKED
 future/live provider path -> BLOCKED
 runtime status injection  -> BLOCKED
@@ -88,6 +90,7 @@ User Action
   -> C08 Module Adapter
   -> C13E Execution Flow Gate
   -> C12 Approval Gate
+  -> C14 External Dependency Gate
   -> C09 Execution Provider
   -> C10 Sandbox
   -> Mock Result only
@@ -98,6 +101,7 @@ User Action
 ```text
 ExecutionRequestContractV1 validation
   -> C13E_GATE.check(..., c09_execution_request)
+  -> C14D_GATE.decision(...) before C09 provider acceptance
 
 SandboxRequest validation
   -> C13E_GATE.check(..., c10_sandbox_entry)
@@ -149,10 +153,11 @@ C13E completed:
 
 - `C13E_GATE.check()` implemented.
 - C13D kill switch integrated as the first veto.
-- Final control path fixed as `C08 -> C13E -> C12 -> C09 -> C10`.
+- Final control path fixed as `C08 -> C13E -> C12 -> C14 -> C09 -> C10`.
 - C09 execution bypass blocked.
 - C10 sandbox bypass blocked at schema and service entrypoints.
 - C12 approval bypass blocked by C08/C09 approval requirement cross-check.
+- C14D external dependency bypass blocked before C09 provider acceptance.
 - C13A/B/C/D bypass blocked through C13E + C13B/C13D integration.
 - No runtime execution, external provider call, or production impact added.
 

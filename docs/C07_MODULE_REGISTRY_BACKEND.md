@@ -104,9 +104,8 @@ C07B runtime manifest 至少包含：
 - admin/system 模块默认 `hide_when_denied`。
 - `route_namespace` 非空且以 `/` 开头。
 - `api_namespace` 非空，或明确 `no_api=true`。
-- `external_dependencies` 只允许依赖名称，例如 `n8n`、`woocommerce`、`minio`、
-  `filebrowser`、`ai_provider`，不得包含 URL、secret、token、password、
-  credential、env 等运行值。
+- `external_dependencies` 允许动态安全依赖 key，不使用 provider allowlist；
+  不得包含 URL、secret、token、password、credential、env 等运行值。
 - `required_permissions` 必须出现在同模块 `permission_manifest` 中。
 - permission keys 使用可追踪的 `module.action` 格式。
 - permission manifest 的 `module_key`、`category`、`menu_policy` 必须和模块一致。
@@ -250,8 +249,8 @@ C07D 后端 contract 测试入口：
 - business `show_locked` 与 admin/system `hide_when_denied`。
 - route namespace 与 API namespace/no_api 规则。
 - permission manifest key 格式、required permission 对齐、泛名 permission key 禁止。
-- external dependencies 只能是安全依赖名，不得包含 secret/token/password/env/URL/
-  credential/API key。
+- external dependencies 只能是动态安全依赖 key，不得包含 secret/token/password/
+  env/URL/credential/API key；unknown service 交给 C14D quarantine/proposal。
 - `planned`、`adapter_pending`、`unavailable` 不可执行。
 - K01 未进入当前 runtime registry；P 系列真实业务模块未接入。
 - `integration.n8n_test_bridge` 只能保持 test/integration + adapter_pending。

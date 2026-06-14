@@ -77,10 +77,10 @@ WooCommerce 是后续受控外部目标。接入时必须经过独立模块设�
 
 ### 4.1 C13 Module Switch Gate
 
-C13A 将模块 action execution flow 的架构位置固定为：
+C13A 将模块 action execution flow 的架构位置固定为基础 gate chain；C14D 后更新为：
 
 ```text
-C08 -> C13 -> C12 -> C09 -> C10
+C08 -> C13 -> C12 -> C14 -> C09 -> C10
 ```
 
 `ModuleSwitchGate` 位于 C08 Module Adapter 之后、C12 Approval System 之前。
@@ -104,8 +104,30 @@ C13A 是架构层设计。C13B 已实现运行时 enforcement layer：
 
 被 Module Switch 阻断的请求不得创建 approval request、不得创建 C09 execution
 request、不得调用 C10 sandbox、不得触发 runtime execution。`ON` 只表示可以继续接受
-C12/C09/C10 的后续 gate，并不表示审批通过或可以执行。C13B 不新增 API、migration、
+C12/C14/C09/C10 的后续 gate，并不表示审批通过或可以执行。C13B 不新增 API、migration、
 frontend UI、external provider call、production/staging 操作或真实执行能力。
+
+### 4.2 C14 External Dependency Governance
+
+C14D 将 External Dependency Governance Layer 插在 C12 之后、C09 之前：
+
+```text
+C08 Module Adapter
+  -> C13 Module Switch / Execution Flow Guard
+  -> C12 Approval Gate
+  -> C14 External Dependency Gate
+  -> C09 Execution Provider
+  -> C10 Sandbox
+```
+
+C14D 管理动态外部服务注册、trust score、policy decision、unknown service
+quarantine proposal 和 dependency binding。它不内置 provider allowlist；模块和
+adapter 可以声明动态安全 dependency key，未注册服务进入 quarantine/proposal，已注册
+服务也必须通过 explicit policy + trust + context 才能继续。高风险或低信任场景要求
+C12 approval。
+
+C14D 不调用外部 API，不读取 secret，不连接 provider，不创建 runtime execution，不修改
+production/staging。
 
 ## 5. 架构原则
 

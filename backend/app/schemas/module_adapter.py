@@ -57,16 +57,6 @@ AdapterAccessState = Literal[
     "adapter_pending",
     "disabled",
 ]
-AdapterDependencyName = Literal[
-    "n8n",
-    "woocommerce",
-    "minio",
-    "filebrowser",
-    "ai_provider",
-    "serp",
-    "wecom",
-    "google_sheets",
-]
 ExecutionProviderState = Literal[
     "not_required",
     "required_not_implemented_c08b",
@@ -280,7 +270,7 @@ class ModuleAdapterFeatureFlagBinding(BaseModel):
 
 
 class ModuleAdapterDependencyDeclaration(BaseModel):
-    dependency_key: AdapterDependencyName
+    dependency_key: str = Field(min_length=1, max_length=180)
     dependency_type: str = Field(min_length=1, max_length=80)
     required: bool = False
     provider_status: Literal["declared_only", "not_connected"] = (

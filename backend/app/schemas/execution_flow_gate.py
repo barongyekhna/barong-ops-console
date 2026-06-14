@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 ExecutionFlowGateStage = Literal["c13e_execution_flow_gate"]
 ExecutionFlowGateIntegrationPoint = Literal[
     "c13e_execution_flow_gate",
+    "c14_external_dependency_gate",
     "c09_execution_request",
     "c10_sandbox_entry",
 ]
@@ -18,6 +19,7 @@ FINAL_EXECUTION_FLOW: tuple[str, ...] = (
     "C08 Module Adapter",
     "C13E Execution Flow Gate",
     "C12 Approval Gate",
+    "C14 External Dependency Gate",
     "C09 Execution Provider",
     "C10 Sandbox",
 )
@@ -42,6 +44,7 @@ class ExecutionFlowGateDecision(BaseModel):
     kill_switch_blocked: bool = False
     c08_checked: Literal[True] = True
     c12_checked: Literal[True] = True
+    c14_checked: Literal[True] = True
     c09_checked: Literal[True] = True
     c10_checked: Literal[True] = True
     c13a_design_checked: Literal[True] = True
@@ -51,6 +54,7 @@ class ExecutionFlowGateDecision(BaseModel):
     c13e_final_gate_checked: Literal[True] = True
     c08_allowed: bool
     c12_allowed: bool
+    c14_allowed: bool
     c09_allowed: bool
     c10_allowed: bool
     c13_allowed: bool
@@ -61,6 +65,7 @@ class ExecutionFlowGateDecision(BaseModel):
     c09_execution_bypass_blocked: Literal[True] = True
     c10_sandbox_bypass_blocked: Literal[True] = True
     c12_approval_bypass_blocked: Literal[True] = True
+    c14_external_dependency_bypass_blocked: Literal[True] = True
     c13_bypass_blocked: Literal[True] = True
     no_execution_leak: Literal[True] = True
     no_external_provider_call: Literal[True] = True
@@ -84,6 +89,7 @@ class ExecutionFlowGateDecision(BaseModel):
                 (
                     self.c08_allowed,
                     self.c12_allowed,
+                    self.c14_allowed,
                     self.c09_allowed,
                     self.c10_allowed,
                 )

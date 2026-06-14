@@ -182,6 +182,15 @@ class ModuleSwitchRuntimeGate:
             integration_point="c12_approval_request",
         )
 
+    def enforce_before_c14_external_dependency_gate(
+        self,
+        module_key: str,
+    ) -> ModuleSwitchRuntimeDecision:
+        return self.enforce(
+            module_key,
+            integration_point="c14_external_dependency_gate",
+        )
+
     def enforce_before_c09_execution_request(
         self,
         module_key: str,
@@ -264,6 +273,14 @@ def enforce_module_switch_before_c12_approval_request(
     module_key: str,
 ) -> ModuleSwitchRuntimeDecision:
     return ModuleSwitchRuntimeGate().enforce_before_c12_approval_request(module_key)
+
+
+def enforce_module_switch_before_c14_external_dependency_gate(
+    module_key: str,
+) -> ModuleSwitchRuntimeDecision:
+    return ModuleSwitchRuntimeGate().enforce_before_c14_external_dependency_gate(
+        module_key
+    )
 
 
 def enforce_module_switch_before_c09_execution_request(

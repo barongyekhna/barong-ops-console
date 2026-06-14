@@ -10,7 +10,6 @@ from ..models.user import User
 from ..schemas.module import ModuleManifestV1
 from ..schemas.module_adapter import (
     AdapterAccessState,
-    AdapterDependencyName,
     AdapterStatus,
     AdapterSurface,
     ModuleAdapterAccessRead,
@@ -37,7 +36,9 @@ ADAPTER_KEY_PATTERN = re.compile(
 ADAPTER_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 ALLOWED_ADAPTER_STATUSES = frozenset(get_args(AdapterStatus))
 ALLOWED_ADAPTER_SURFACES = frozenset(get_args(AdapterSurface))
-ALLOWED_ADAPTER_DEPENDENCIES = frozenset(get_args(AdapterDependencyName))
+ADAPTER_DEPENDENCY_KEY_PATTERN = re.compile(
+    r"^[a-z][a-z0-9_]*(?:[._][a-z][a-z0-9_]*)*$"
+)
 SAFE_ADAPTER_EXECUTION_TYPES = frozenset({"mock", "no_op"})
 NON_EXECUTABLE_ADAPTER_STATUSES = {
     "draft",
@@ -62,12 +63,6 @@ SENSITIVE_VALUE_MARKERS = (
     "://",
     "=",
 )
-LIVE_PROVIDER_DEPENDENCIES = {
-    "n8n",
-    "woocommerce",
-    "minio",
-    "filebrowser",
-}
 
 
 def _adapter_from_raw(
@@ -330,21 +325,20 @@ def _validate_actions(adapter: ModuleAdapterContractV1) -> None:
 
 def _validate_dependencies(adapter: ModuleAdapterContractV1) -> None:
     for dependency in adapter.dependency_declarations:
-        if dependency.dependency_key not in ALLOWED_ADAPTER_DEPENDENCIES:
+        if not ADAPTER_DEPENDENCY_KEY_PATTERN.fullmatch(
+            dependency.dependency_key
+        ):
             raise ValueError(
-                f"{adapter.adapter_key} dependency is not allowed: "
+                f"{adapter.adapter_key} dependency key is invalid: "
                 f"{dependency.dependency_key}"
             )
         if dependency.live_connection_allowed:
             raise ValueError(
                 f"{adapter.adapter_key} dependency declares live connection."
             )
-        if (
-            dependency.dependency_key in LIVE_PROVIDER_DEPENDENCIES
-            and dependency.provider_status != "declared_only"
-        ):
+        if dependency.provider_status != "declared_only":
             raise ValueError(
-                f"{adapter.adapter_key} live provider dependency is not safe."
+                f"{adapter.adapter_key} dependency must remain declared_only."
             )
         for value in _iter_string_values(dependency.model_dump()):
             lowered = value.lower()

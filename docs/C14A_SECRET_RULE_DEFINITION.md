@@ -86,10 +86,11 @@ Layer boundary：
 | Backend secure service layer | allowed by rule only | The only current allowed layer for future secret handling; C14A does not implement it. |
 | Future secrets manager layer | future allowed | Reserved future boundary for secret storage/binding/rotation/audit; not implemented in C14A. |
 
-C14A preserves the existing sealed flow:
+C14A preserved the pre-C14D sealed flow without moving secrets through it. C14D
+later inserts the external dependency governance layer before C09:
 
 ```text
-C08 -> C13 -> C12 -> C09 -> C10
+C08 -> C13 -> C12 -> C14 -> C09 -> C10
 ```
 
 Secrets do not travel through that flow. The flow may carry only safe metadata such as

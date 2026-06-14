@@ -226,6 +226,18 @@ for (const executionProviderPath of [
   }
 }
 
+for (const externalDependencyPath of [
+  "external-dependencies/registry",
+  "external-dependencies/proposals",
+  "external-dependencies/bindings",
+]) {
+  if (!backendProxySource.includes(externalDependencyPath)) {
+    throw new Error(
+      `The backend API proxy must allow GET /${externalDependencyPath}.`,
+    );
+  }
+}
+
 if (!backendProxySource.includes("ALLOWED_MODULE_REGISTRY_PATHS")) {
   throw new Error(
     "The backend API proxy must keep C07 module registry paths explicitly allowlisted.",
@@ -241,6 +253,12 @@ if (!backendProxySource.includes("ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS")) {
 if (!backendProxySource.includes("ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS")) {
   throw new Error(
     "The backend API proxy must keep C09 execution provider paths explicitly allowlisted.",
+  );
+}
+
+if (!backendProxySource.includes("ALLOWED_EXTERNAL_DEPENDENCY_PATHS")) {
+  throw new Error(
+    "The backend API proxy must keep C14D external dependency paths explicitly allowlisted.",
   );
 }
 
@@ -374,6 +392,66 @@ for (const deniedExecutionPath of [
     backendProxySource.includes(`'${deniedExecutionPath.join("/")}'`)
   ) {
     throw new Error("A denied execution path was added to the proxy allowlist.");
+  }
+}
+
+const externalDependencyAllowlistMatch = backendProxySource.match(
+  /const ALLOWED_EXTERNAL_DEPENDENCY_PATHS = new Set\(\[([\s\S]*?)\]\);/,
+);
+if (!externalDependencyAllowlistMatch) {
+  throw new Error("The C14D external dependency proxy allowlist was not found.");
+}
+const externalDependencyAllowlist = new Set(
+  Array.from(
+    externalDependencyAllowlistMatch[1].matchAll(/["']([^"']+)["']/g),
+  ).map((match) => match[1]),
+);
+if (
+  externalDependencyAllowlist.size !== 3 ||
+  !externalDependencyAllowlist.has("external-dependencies/registry") ||
+  !externalDependencyAllowlist.has("external-dependencies/proposals") ||
+  !externalDependencyAllowlist.has("external-dependencies/bindings")
+) {
+  throw new Error(
+    "The C14D external dependency proxy allowlist must contain only exact GET registry, proposals, and bindings paths.",
+  );
+}
+if (
+  /external-dependencies\/\*/.test(backendProxySource) ||
+  /path\[0\]\s*===\s*["']external-dependencies["'][\s\S]{0,120}path\.length\s*[!<>]=/.test(
+    backendProxySource,
+  ) ||
+  /requestedPath\.startsWith\(["']external-dependencies\//.test(
+    backendProxySource,
+  )
+) {
+  throw new Error(
+    "The backend API proxy must not allow broad external dependency paths.",
+  );
+}
+if (
+  !backendProxySource.includes(
+    'method === "GET" &&\n      ALLOWED_EXTERNAL_DEPENDENCY_PATHS.has(requestedPath)',
+  ) &&
+  !backendProxySource.includes(
+    'method === "GET" && ALLOWED_EXTERNAL_DEPENDENCY_PATHS.has(requestedPath)',
+  )
+) {
+  throw new Error("The C14D external dependency proxy paths must be GET-only.");
+}
+for (const deniedExternalDependencyPath of [
+  ["external-dependencies", "register"],
+  ["external-dependencies", "approve"],
+  ["external-dependencies", "execute"],
+  ["external-dependencies", "sync"],
+]) {
+  if (
+    backendProxySource.includes(`"${deniedExternalDependencyPath.join("/")}"`) ||
+    backendProxySource.includes(`'${deniedExternalDependencyPath.join("/")}'`)
+  ) {
+    throw new Error(
+      "A denied external dependency path was added to the proxy allowlist.",
+    );
   }
 }
 

@@ -17,8 +17,8 @@ from backend.app.schemas.module_adapter import (
 )
 from backend.app.services.module_adapter_registry import (
     ADAPTER_KEY_PATTERN,
+    ADAPTER_DEPENDENCY_KEY_PATTERN,
     ADAPTER_VERSION_PATTERN,
-    ALLOWED_ADAPTER_DEPENDENCIES,
     NON_EXECUTABLE_ADAPTER_STATUSES,
     SENSITIVE_VALUE_MARKERS,
     build_adapter_access_state,
@@ -235,7 +235,9 @@ def test_static_adapter_registry_contract_rules() -> None:
             if contract.requires_execution_provider:
                 assert adapter.execution_requirements.requires_execution_provider
         for dependency in adapter.dependency_declarations:
-            assert dependency.dependency_key in ALLOWED_ADAPTER_DEPENDENCIES
+            assert ADAPTER_DEPENDENCY_KEY_PATTERN.fullmatch(
+                dependency.dependency_key
+            )
             assert dependency.live_connection_allowed is False
             assert dependency.provider_status == "declared_only"
 
@@ -345,7 +347,7 @@ def test_adapter_contract_rejects_c08d_runtime_regressions() -> None:
     connected_provider["dependency_declarations"][0][
         "provider_status"
     ] = "not_connected"
-    with pytest.raises(ValueError, match="live provider dependency is not safe"):
+    with pytest.raises(ValueError, match="dependency must remain declared_only"):
         validate_adapter_contracts([connected_provider])
 
     live_status_provider = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[0])

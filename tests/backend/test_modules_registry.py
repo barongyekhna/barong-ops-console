@@ -15,7 +15,7 @@ from backend.app.schemas.module import (
 )
 from backend.app.services.module_registry import (
     ALLOWED_DENIED_BEHAVIORS,
-    ALLOWED_EXTERNAL_DEPENDENCIES,
+    EXTERNAL_DEPENDENCY_KEY_PATTERN,
     ALLOWED_MODULE_CATEGORIES,
     ALLOWED_MODULE_STATUSES,
     MODULE_KEY_PATTERN,
@@ -448,7 +448,7 @@ def test_module_registry_dependency_and_runtime_safety_metadata() -> None:
     for manifest in manifests:
         for dependency in manifest.external_dependencies:
             lowered_dependency = dependency.lower()
-            assert lowered_dependency in ALLOWED_EXTERNAL_DEPENDENCIES
+            assert EXTERNAL_DEPENDENCY_KEY_PATTERN.fullmatch(lowered_dependency)
             for marker in SENSITIVE_DEPENDENCY_MARKERS:
                 assert marker not in lowered_dependency
 

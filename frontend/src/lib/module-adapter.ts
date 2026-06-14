@@ -32,15 +32,7 @@ export type AdapterAccessStateName =
 
 export type AdapterRiskLevel = "low" | "medium" | "high" | "critical";
 
-export type AdapterDependencyName =
-  | "n8n"
-  | "woocommerce"
-  | "minio"
-  | "filebrowser"
-  | "ai_provider"
-  | "serp"
-  | "wecom"
-  | "google_sheets";
+export type AdapterDependencyName = string;
 
 export type AdapterExecutionProviderState =
   | "not_required"
@@ -330,16 +322,8 @@ const ADAPTER_EXECUTION_PROVIDER_STATES = new Set<AdapterExecutionProviderState>
   "disabled",
 ]);
 
-const SAFE_DEPENDENCY_NAMES = new Set<AdapterDependencyName>([
-  "n8n",
-  "woocommerce",
-  "minio",
-  "filebrowser",
-  "ai_provider",
-  "serp",
-  "wecom",
-  "google_sheets",
-]);
+const SAFE_DEPENDENCY_KEY_PATTERN =
+  /^[a-z][a-z0-9_]*(?:[._][a-z][a-z0-9_]*)*$/;
 
 const NON_EXECUTABLE_ADAPTER_STATUSES = new Set<AdapterStatus>([
   "draft",
@@ -678,7 +662,7 @@ function normalizeDependency(
   }
   const dependencyKey = value.dependency_key.trim().toLowerCase();
   if (
-    !SAFE_DEPENDENCY_NAMES.has(dependencyKey as AdapterDependencyName) ||
+    !SAFE_DEPENDENCY_KEY_PATTERN.test(dependencyKey) ||
     containsSensitiveMarker(dependencyKey)
   ) {
     return null;

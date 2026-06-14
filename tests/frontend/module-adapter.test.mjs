@@ -282,6 +282,29 @@ test("backend proxy rejects broad module adapter paths", () => {
   );
 });
 
+test("backend proxy precisely allows C14D external dependency read paths", () => {
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["external-dependencies", "registry"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["external-dependencies", "proposals"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["external-dependencies", "bindings"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("POST", ["external-dependencies", "registry"]),
+    false,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["external-dependencies", "register"]),
+    false,
+  );
+});
+
 test("verify-foundation checks C08 module adapter proxy allowlist", () => {
   const verifier = readFileSync(
     "frontend/scripts/verify-foundation.mjs",
@@ -461,18 +484,18 @@ test("missing adapter access state safely downgrades to unknown unavailable", ()
   assert.equal(surfaceState.disabled, true);
 });
 
-test("dependency declarations keep only safe dependency names", () => {
+test("dependency declarations keep only safe dynamic dependency keys", () => {
   const fixture = adapter({
     dependency_declarations: [
       {
-        dependency_key: "n8n",
+        dependency_key: "unknown.ai_service",
         dependency_type: "integration",
         live_connection_allowed: true,
         provider_status: "declared_only",
         safe_unavailable_message: "safe declaration",
       },
       {
-        dependency_key: "google_sheets",
+        dependency_key: "future_storage_provider",
         dependency_type: "integration",
         live_connection_allowed: false,
         provider_status: "declared_only",
@@ -492,8 +515,8 @@ test("dependency declarations keep only safe dependency names", () => {
   });
 
   assert.deepEqual(getSafeDependencyNames(fixture.dependency_declarations), [
-    "n8n",
-    "google_sheets",
+    "unknown.ai_service",
+    "future_storage_provider",
   ]);
   assert.equal(adapterContainsUnsafeDependencyValue(fixture), false);
   assert.equal(

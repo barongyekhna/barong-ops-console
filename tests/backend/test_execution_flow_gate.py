@@ -77,17 +77,20 @@ def test_c13e_gate_allows_sealed_no_op_flow() -> None:
         "C08 Module Adapter",
         "C13E Execution Flow Gate",
         "C12 Approval Gate",
+        "C14 External Dependency Gate",
         "C09 Execution Provider",
         "C10 Sandbox",
     )
     assert decision.kill_switch_checked is True
     assert decision.c08_allowed is True
     assert decision.c12_allowed is True
+    assert decision.c14_allowed is True
     assert decision.c09_allowed is True
     assert decision.c10_allowed is True
     assert decision.c09_execution_bypass_blocked is True
     assert decision.c10_sandbox_bypass_blocked is True
     assert decision.c12_approval_bypass_blocked is True
+    assert decision.c14_external_dependency_bypass_blocked is True
     assert decision.c13_bypass_blocked is True
     assert decision.no_execution_leak is True
     assert decision.no_external_provider_call is True
@@ -143,6 +146,23 @@ def test_c13e_gate_blocks_c09_provider_mismatch_bypass() -> None:
             bypassed_request(
                 provider_key="core.mock_provider",
                 provider_type="mock_provider",
+            )
+        )
+
+
+def test_c13e_gate_blocks_c14_unknown_external_dependency() -> None:
+    with pytest.raises(
+        ExecutionFlowGateBlockedError,
+        match="c14d_unknown_service_quarantined",
+    ):
+        C13E_GATE.check(
+            bypassed_request(
+                module_key="integration.n8n_test_bridge",
+                adapter_key="integration.n8n_test_bridge.adapter",
+                action_key="integration.n8n_test_bridge.test_run.declare",
+                provider_key="future.live_provider",
+                provider_type="future_live_provider",
+                required_permission="jobs.create",
             )
         )
 
