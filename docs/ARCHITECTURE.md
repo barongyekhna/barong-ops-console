@@ -107,7 +107,11 @@ request、不得调用 C10 sandbox、不得触发 runtime execution。`ON` 只�
 C12/C14/C09/C10 的后续 gate，并不表示审批通过或可以执行。C13B 不新增 API、migration、
 frontend UI、external provider call、production/staging 操作或真实执行能力。
 
-### 4.2 C14 External Dependency Governance
+### 4.2 C14 Sealed Secret And Dependency Governance
+
+C14G 已封板完整 C14 系统。C14 将 Secret Classification、Secret Storage Policy、
+Secret Access Control、External Dependency Governance、Dependency Binding Rules 和
+Validation Layer 固定为 sealed governance baseline。
 
 C14D 将 External Dependency Governance Layer 插在 C12 之后、C09 之前：
 
@@ -126,7 +130,16 @@ adapter 可以声明动态安全 dependency key，未注册服务进入 quaranti
 服务也必须通过 explicit policy + trust + context 才能继续。高风险或低信任场景要求
 C12 approval。
 
-C14D 不调用外部 API，不读取 secret，不连接 provider，不创建 runtime execution，不修改
+C14E 固定 dependency binding graph 为 `module -> capability -> external service`，
+能力集合为 `serp/reasoning/writing/embedding`。默认
+`integration.n8n_test_bridge -> n8n` 绑定是 disabled，没有 capability，没有 active graph
+edge。
+
+C14F 静态验证已 PASS。C14G 最终封板记录在 `docs/C14G_FINAL_SEAL.md`，概念快照在
+`docs/C14_FINAL_STATE.json`。C14 不再允许扩展，不允许新增 C14 sub-module，不允许在
+C14 下引入 runtime changes。
+
+C14 不调用外部 API，不读取 secret，不连接 provider，不创建 runtime execution，不修改
 production/staging。
 
 ## 5. 架构原则

@@ -1027,10 +1027,36 @@ C14D has completed External Dependency Governance in
   C14 External Provider Control Panel.
 - C14D is enforced before C09 through the C13E execution flow gate.
 
-C14A-C14D remain governance layers. They add no real vault integration,
-encrypted storage implementation, secret read/write runtime, provider connector,
-external API call, migration, production/staging operation, or runtime execution
-capability.
+C14E has completed Dependency Binding Rules in
+`docs/C14E_DEPENDENCY_BINDING_RULES.md`:
+
+- fixed capabilities are `serp`, `reasoning`, `writing`, and `embedding`.
+- the default binding is `integration.n8n_test_bridge -> n8n`, explicitly
+  `disabled`, with no allowed capabilities.
+- the dependency graph has no active edge by default.
+- inspection APIs are authenticated GET-only; no register/approve/sync/run/
+  execute/provider-call endpoint is added.
+
+C14F has completed static validation in `docs/C14F_VALIDATION_LAYER.md`.
+Binding consistency, dependency graph health, secret leakage, external access
+audit, and system integrity all pass under static inspection. C14F did not run
+runtime execution, Docker, pytest, external APIs, production/staging changes, or
+git commit.
+
+C14G has sealed the full C14 system in `docs/C14G_FINAL_SEAL.md`, with the
+conceptual final state snapshot in `docs/C14_FINAL_STATE.json`.
+
+C14 is now fully sealed:
+
+- C14A-C14F are frozen.
+- secret rules, storage policy, access control, dependency governance, binding
+  rules, and validation rules are locked.
+- C14 cannot be extended further.
+- no new C14 sub-modules are allowed.
+- no runtime changes are allowed under C14.
+- no real vault integration, encrypted storage implementation, secret read/write
+  runtime, provider connector, external API call, migration, production/staging
+  operation, or runtime execution capability is added.
 
 ## Temporary login preview
 

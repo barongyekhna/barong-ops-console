@@ -6,6 +6,30 @@
 
 ### Added
 
+- C14G：新增 `docs/C14G_FINAL_SEAL.md` 和 `docs/C14_FINAL_STATE.json`，完成 C14
+  Final Seal；冻结 C14A-C14F，锁定 secret rules、storage policy、access control、
+  dependency governance、binding rules 和 validation rules，并生成 system integrity
+  report。
+- C14G：明确 C14 已完全封板且不能继续扩展；禁止新增 C14 sub-module，禁止在 C14 下引入
+  runtime changes、secret read/write runtime、vault/encrypted-storage implementation、
+  live provider connector、external API call、production/staging change、docker/pytest 或
+  git commit。
+- C14F：新增 `docs/C14F_VALIDATION_LAYER.md`，完成 C14A-C14E 静态一致性验证；binding
+  consistency、dependency graph health、secret leakage、external access audit 和 system
+  integrity 均为 PASS。本轮未运行 runtime execution、docker/pytest，未调用外部 API，
+  未读取真实 secret，未修改 production/staging，未 git commit。
+- C14E：新增 `docs/C14E_DEPENDENCY_BINDING_RULES.md`、
+  `backend/app/schemas/dependency_binding.py`、
+  `backend/app/core/dependency_bindings.py` 和
+  `backend/app/services/dependency_binding_rules.py`，实现 Module -> Service binding、
+  fixed capability catalog `serp/reasoning/writing/embedding`、dependency graph、
+  validation 和 audit read model。
+- C14E：默认 `integration.n8n_test_bridge -> n8n` 为 explicit disabled binding，
+  `allowed_capabilities=[]`，不注册 n8n、不授予能力、不连接服务；新增 GET-only
+  `/external-dependencies/binding-rules`、`/external-dependencies/dependency-graph`、
+  `/external-dependencies/binding-validation`、`/external-dependencies/binding-audit`。
+  本轮未运行 runtime execution、docker/pytest，未调用外部 API，未读取 secret，
+  未修改 production/staging，未 git commit。
 - C14D：新增 `docs/C14D_EXTERNAL_DEPENDENCY_GOVERNANCE.md`、
   `backend/app/schemas/external_dependency.py`、
   `backend/app/core/external_dependencies.py`、
