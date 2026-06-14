@@ -120,6 +120,17 @@ def _execution_request_from_raw(
     return ExecutionRequestContractV1.model_validate(execution_request)
 
 
+def _enforce_execution_flow_gate(
+    execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
+) -> None:
+    from ..services.execution_flow_gate import C13E_GATE
+
+    C13E_GATE.check(
+        execution_request,
+        integration_point="c10_sandbox_entry",
+    )
+
+
 class BridgeSafetyViolation(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -542,6 +553,7 @@ class SandboxExecutionBridge:
         context: ExecutionContext | None = None,
     ) -> BridgeRequest:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         execution_context = context or self.context_factory.create_context(
             request_contract
         )
@@ -656,6 +668,7 @@ class SandboxExecutionBridge:
         bridge_mode: SandboxBridgeMode = "passthrough_mock_mode",
     ) -> ProviderRequestMapping:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         mapping_fields = {
             "execution_id": "execution_id",
             "request_id": "request_id",
@@ -701,6 +714,7 @@ class SandboxExecutionBridge:
         bridge_mode: SandboxBridgeMode = "passthrough_mock_mode",
     ) -> SandboxRequestMapping:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         mapping_fields = {
             "execution_id": "c09_execution_request.execution_id",
             "request_id": "request_id",

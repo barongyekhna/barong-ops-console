@@ -36,6 +36,17 @@ def _stable_id(prefix: str, value: Mapping[str, Any]) -> str:
     return f"{prefix}_{digest}"
 
 
+def _enforce_execution_flow_gate(
+    execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
+) -> None:
+    from ..services.execution_flow_gate import C13E_GATE
+
+    C13E_GATE.check(
+        execution_request,
+        integration_point="c10_sandbox_entry",
+    )
+
+
 class ExecutionContextMemoryScope(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -460,6 +471,7 @@ class ExecutionContextFactory:
         execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
     ) -> ExecutionContext:
         request_contract = self._execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         execution_id = self.execution_id_for_request(request_contract)
         context_id = self.context_id_for_request(request_contract)
         scope_ref = _stable_id(
@@ -601,6 +613,7 @@ class ExecutionContextFactory:
         execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
     ) -> str:
         request_contract = self._execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         if request_contract.execution_id:
             return request_contract.execution_id
         return _stable_id(
@@ -616,6 +629,7 @@ class ExecutionContextFactory:
         execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
     ) -> str:
         request_contract = self._execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         return _stable_id(
             "exec_ctx",
             {
