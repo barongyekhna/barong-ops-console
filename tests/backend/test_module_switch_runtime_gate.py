@@ -11,6 +11,10 @@ from backend.app.schemas.execution_provider import ExecutionRequestContractV1
 from backend.app.schemas.module_switch import ModuleSwitchRegistryRecord
 from backend.app.sandbox.types import SandboxRequest
 from backend.app.services.module_registry import list_module_manifests
+from backend.app.services.module_switch_policy_engine import (
+    ModuleSwitchPolicyEngine,
+    build_effective_module_switch_registry,
+)
 from backend.app.services.module_switch_runtime_gate import (
     ModuleSwitchRuntimeBlockedError,
     ModuleSwitchRuntimeGate,
@@ -26,6 +30,16 @@ def off_switch(module_key: str = "admin.users") -> dict[str, object]:
         "state": "OFF",
         "enabled": False,
         "disabled_reason": "Disabled by C13B runtime gate test.",
+        "updated_at": UPDATED_AT,
+    }
+
+
+def on_switch(module_key: str = "admin.users") -> dict[str, object]:
+    return {
+        "module_key": module_key,
+        "state": "ON",
+        "enabled": True,
+        "disabled_reason": None,
         "updated_at": UPDATED_AT,
     }
 
@@ -55,13 +69,153 @@ def execution_request(
 def test_module_switch_runtime_gate_all_registered_modules_are_explicit() -> None:
     registry_keys = {record["module_key"] for record in MODULE_SWITCH_REGISTRY_V1}
     module_keys = {manifest.module_key for manifest in list_module_manifests()}
+    effective_keys = {
+        record.module_key for record in build_effective_module_switch_registry()
+    }
 
     assert registry_keys == module_keys
+    assert effective_keys == module_keys
     for raw_record in MODULE_SWITCH_REGISTRY_V1:
         record = ModuleSwitchRegistryRecord.model_validate(raw_record)
         assert record.state == "ON"
         assert record.enabled is True
         assert record.disabled_reason is None
+
+
+def test_module_switch_policy_engine_applies_recursive_cascade() -> None:
+    engine = ModuleSwitchPolicyEngine(
+        registry=[
+            off_switch("admin.users"),
+            on_switch("admin.permissions"),
+            on_switch("admin.settings"),
+        ],
+        dependency_rules=[
+            {
+                "parent_module_key": "admin.users",
+                "child_module_key": "admin.permissions",
+                "reason": "Permission management depends on users.",
+            },
+            {
+                "parent_module_key": "admin.permissions",
+                "child_module_key": "admin.settings",
+                "reason": "Settings depend on permissions.",
+            },
+        ],
+        group_policies=[],
+        inheritance_policies=[],
+    )
+
+    decisions = {
+        decision.module_key: decision for decision in engine.evaluate()
+    }
+
+    assert decisions["admin.permissions"].state == "OFF"
+    assert decisions["admin.permissions"].policy_source == "dependency_cascade"
+    assert decisions["admin.permissions"].cascaded_from == ("admin.users",)
+    assert decisions["admin.settings"].state == "OFF"
+    assert decisions["admin.settings"].policy_source == "dependency_cascade"
+    assert decisions["admin.settings"].cascaded_from == ("admin.permissions",)
+
+    batch_on_decisions = {
+        decision.module_key: decision
+        for decision in engine.evaluate(
+            batch_switches=[
+                {
+                    "module_keys": ("admin.permissions",),
+                    "state": "ON",
+                    "disabled_reason": None,
+                }
+            ]
+        )
+    }
+
+    assert batch_on_decisions["admin.permissions"].state == "OFF"
+    assert (
+        batch_on_decisions["admin.permissions"].policy_source
+        == "dependency_cascade"
+    )
+
+
+def test_module_switch_policy_engine_group_switch_batches_members() -> None:
+    engine = ModuleSwitchPolicyEngine(
+        registry=[
+            on_switch("business.jobs"),
+            on_switch("business.artifacts"),
+        ],
+        dependency_rules=[],
+        group_policies=[
+            {
+                "group_key": "business.ops",
+                "module_keys": ("business.jobs", "business.artifacts"),
+                "default_state": "ON",
+                "disabled_reason": None,
+                "batch_control_supported": True,
+            }
+        ],
+        inheritance_policies=[],
+    )
+
+    decisions = {
+        decision.module_key: decision
+        for decision in engine.evaluate(
+            group_switches=[
+                {
+                    "group_key": "business.ops",
+                    "state": "OFF",
+                    "disabled_reason": "Disabled by group switch test.",
+                }
+            ]
+        )
+    }
+
+    assert decisions["business.jobs"].state == "OFF"
+    assert decisions["business.jobs"].policy_source == "group_switch"
+    assert decisions["business.jobs"].group_keys == ("business.ops",)
+    assert decisions["business.artifacts"].state == "OFF"
+    assert decisions["business.artifacts"].policy_source == "group_switch"
+
+
+def test_module_switch_policy_engine_inheritance_override_vs_inherit() -> None:
+    engine = ModuleSwitchPolicyEngine(
+        registry=[
+            on_switch("admin.users"),
+            on_switch("admin.permissions"),
+        ],
+        dependency_rules=[],
+        group_policies=[
+            {
+                "group_key": "admin.core",
+                "module_keys": ("admin.users", "admin.permissions"),
+                "default_state": "OFF",
+                "disabled_reason": "Disabled by inherited group policy.",
+                "batch_control_supported": True,
+            }
+        ],
+        inheritance_policies=[
+            {
+                "module_key": "admin.users",
+                "group_keys": ("admin.core",),
+                "policy_mode": "inherit",
+                "parent_off_overrides_module": True,
+            },
+            {
+                "module_key": "admin.permissions",
+                "group_keys": ("admin.core",),
+                "policy_mode": "override",
+                "parent_off_overrides_module": True,
+            },
+        ],
+    )
+
+    decisions = {
+        decision.module_key: decision for decision in engine.evaluate()
+    }
+
+    assert decisions["admin.users"].state == "OFF"
+    assert decisions["admin.users"].policy_source == "group_default"
+    assert decisions["admin.users"].inherited_from_group == "admin.core"
+    assert decisions["admin.permissions"].state == "ON"
+    assert decisions["admin.permissions"].policy_source == "module"
 
 
 def test_module_switch_runtime_gate_check_allows_on_modules() -> None:
@@ -177,4 +331,3 @@ def test_c10_sandbox_entry_is_blocked_before_sandbox_request() -> None:
             action_key="business.missing.run",
             risk_level="medium",
         )
-

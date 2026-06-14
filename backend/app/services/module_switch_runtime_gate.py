@@ -6,13 +6,13 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from ..core.module_switches import MODULE_SWITCH_REGISTRY_V1
 from ..schemas.module_switch import (
     ModuleSwitchIntegrationPoint,
     ModuleSwitchRegistryRecord,
     ModuleSwitchRuntimeDecision,
     ModuleSwitchRuntimeStatus,
 )
+from .module_switch_policy_engine import build_effective_module_switch_registry
 
 
 class ModuleSwitchRuntimeBlockedError(ValueError):
@@ -34,7 +34,11 @@ class ModuleSwitchRuntimeGate:
     ) -> None:
         self._records: dict[str, ModuleSwitchRegistryRecord] = {}
         self._invalid_reasons: dict[str, str] = {}
-        raw_records = registry if registry is not None else MODULE_SWITCH_REGISTRY_V1
+        raw_records = (
+            registry
+            if registry is not None
+            else build_effective_module_switch_registry()
+        )
         for raw_record in raw_records:
             module_key = self._raw_module_key(raw_record)
             if not module_key:
@@ -233,4 +237,3 @@ def enforce_module_switch_before_c10_sandbox_entry(
     module_key: str,
 ) -> ModuleSwitchRuntimeDecision:
     return ModuleSwitchRuntimeGate().enforce_before_c10_sandbox_entry(module_key)
-
