@@ -92,6 +92,32 @@ export const reviewStatusLabels: Record<ReviewStatus, string> = {
   rejected: "Rejected",
 };
 
+export const reviewItemStatusFlow = [
+  "draft",
+  "pending_review",
+  "approved",
+  "rejected",
+] as const;
+
+export type ReviewItemStatus = (typeof reviewItemStatusFlow)[number];
+
+export const reviewItemStatusLabels: Record<ReviewItemStatus, string> = {
+  draft: "Draft",
+  pending_review: "Pending Review",
+  approved: "Approved",
+  rejected: "Rejected",
+};
+
+export const reviewItemStatusTransitions: Record<
+  ReviewItemStatus,
+  readonly ReviewItemStatus[]
+> = {
+  draft: ["pending_review"],
+  pending_review: ["draft", "approved", "rejected"],
+  approved: [],
+  rejected: [],
+};
+
 export const diffStatusLabels: Record<DiffStatus, string> = {
   unchanged: "Same",
   changed: "Changed",
@@ -134,6 +160,17 @@ export function canTransition(from: ReviewStatus, to: ReviewStatus) {
   }
 
   return reviewStatusTransitions[from].includes(to);
+}
+
+export function getReviewItemStatusIndex(status: ReviewItemStatus) {
+  return reviewItemStatusFlow.indexOf(status);
+}
+
+export function canTransitionReviewItemStatus(
+  from: ReviewItemStatus,
+  to: ReviewItemStatus,
+) {
+  return reviewItemStatusTransitions[from].includes(to);
 }
 
 export function transitionState(

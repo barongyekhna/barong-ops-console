@@ -32,6 +32,10 @@ type FieldDiffViewerProps = {
   humanValue: DiffInputValue;
   label: string;
   field?: string;
+  leftLabel?: string;
+  overlayLabel?: string;
+  overlayValue?: DiffInputValue;
+  rightLabel?: string;
 };
 
 type ArrayEntry = {
@@ -389,6 +393,10 @@ export function FieldDiffViewer({
   humanValue,
   label,
   field,
+  leftLabel = "AI Value",
+  overlayLabel,
+  overlayValue,
+  rightLabel = "Human Value",
 }: FieldDiffViewerProps) {
   const diffItems = buildFieldDiff(field ?? label, aiValue, humanValue);
   const summaryStatus = getDiffSummaryStatus(
@@ -400,7 +408,7 @@ export function FieldDiffViewer({
 
   return (
     <section
-      aria-label={`${label} AI and human value diff`}
+      aria-label={`${label} ${leftLabel} and ${rightLabel} diff`}
       className={`k12-review-diff ${statusClass}`}
     >
       <header className="k12-review-diff-header">
@@ -410,12 +418,36 @@ export function FieldDiffViewer({
 
       <div className="k12-review-diff-grid">
         <div>
-          <span>AI Value</span>
+          <span>{leftLabel}</span>
           <pre>{formatValue(aiValue)}</pre>
         </div>
         <div>
-          <span>Human Value</span>
+          <span>{rightLabel}</span>
           <pre>{formatValue(humanValue)}</pre>
+        </div>
+        {overlayLabel && overlayValue !== undefined ? (
+          <div style={{ gridColumn: "1 / -1" }}>
+            <span>{overlayLabel}</span>
+            <pre>{formatValue(overlayValue)}</pre>
+          </div>
+        ) : null}
+        <div style={{ gridColumn: "1 / -1" }}>
+          <span>Highlighted Changes</span>
+          <ul className="k12-review-diff-items">
+            {diffItems.map((item) => (
+              <li
+                className={`k12-review-diff-item k12-review-diff-item-${item.status}`}
+                key={`${item.path}-${item.status}`}
+              >
+                <span>{diffStatusLabels[item.status]}</span>
+                <code>{item.path}</code>
+                <strong>
+                  {formatValue(item.old_value)} {" -> "}{" "}
+                  {formatValue(item.new_value)}
+                </strong>
+              </li>
+            ))}
+          </ul>
         </div>
         <div style={{ gridColumn: "1 / -1" }}>
           <span>Diff Output</span>

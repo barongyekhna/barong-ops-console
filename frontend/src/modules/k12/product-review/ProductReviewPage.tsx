@@ -4,11 +4,13 @@ import {
   CheckCircle2,
   FileCheck2,
   Loader2,
+  PencilLine,
   Save,
   XCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import styles from "./ProductReviewPage.module.css";
 import { CanonicalPanel } from "../components/CanonicalPanel";
 import { FieldDiffViewer } from "../components/FieldDiffViewer";
 import { HumanEditPanel } from "../components/HumanEditPanel";
@@ -25,12 +27,18 @@ import {
   saveDraft,
   type ProductHumanEditFields,
   type ProductReviewRecord,
+  type ReviewItem,
 } from "../services/k12Api";
 import {
   canTransition,
+  canTransitionReviewItemStatus,
+  getReviewItemStatusIndex,
   getReviewStatusIndex,
+  reviewItemStatusFlow,
+  reviewItemStatusLabels,
   reviewStatusFlow,
   reviewStatusLabels,
+  type ReviewItemStatus,
   type ReviewStatus,
   type VersionRecord,
 } from "../services/reviewState";
@@ -63,11 +71,20 @@ const transitionActionTargetStatus: Record<
   reject: "rejected",
 };
 
+const approvalActionLabels: Record<ReviewItemStatus, string> = {
+  draft: "Edit Canonical",
+  pending_review: "Save Edit",
+  approved: "Approve Canonical",
+  rejected: "Reject Canonical",
+};
+
 export default function ProductReviewPage() {
   const [review, setReview] = useState<ProductReviewRecord | null>(null);
   const [humanEdit, setHumanEdit] = useState<ProductHumanEditFields | null>(
     null,
   );
+  const [reviewItem, setReviewItem] = useState<ReviewItem | null>(null);
+  const [isEditingCanonical, setIsEditingCanonical] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [pendingAction, setPendingAction] = useState<ReviewAction | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +102,7 @@ export default function ProductReviewPage() {
 
         setReview(nextReview);
         setHumanEdit(nextReview.human_edit);
+        setReviewItem(nextReview.review_item);
       } catch {
         if (isMounted) {
           setError("Unable to load mock product review.");
@@ -131,6 +149,59 @@ export default function ProductReviewPage() {
     }
   }
 
+  function updateCanonicalPlaceholder(value: string) {
+    setReviewItem((currentItem) =>
+      currentItem
+        ? {
+            ...currentItem,
+            canonical: value,
+            status: "draft",
+          }
+        : currentItem,
+    );
+  }
+
+  function setReviewItemStatus(nextStatus: ReviewItemStatus) {
+    setReviewItem((currentItem) =>
+      currentItem
+        ? {
+            ...currentItem,
+            status: nextStatus,
+          }
+        : currentItem,
+    );
+  }
+
+  function handleEditCanonical() {
+    if (!reviewItem) {
+      return;
+    }
+
+    if (isEditingCanonical) {
+      if (canTransitionReviewItemStatus(reviewItem.status, "pending_review")) {
+        setReviewItemStatus("pending_review");
+      }
+      setIsEditingCanonical(false);
+      return;
+    }
+
+    if (canTransitionReviewItemStatus(reviewItem.status, "draft")) {
+      setReviewItemStatus("draft");
+      setIsEditingCanonical(true);
+    }
+  }
+
+  function handleApprovalDecision(nextStatus: "approved" | "rejected") {
+    if (!reviewItem) {
+      return;
+    }
+
+    if (canTransitionReviewItemStatus(reviewItem.status, nextStatus)) {
+      setReviewItemStatus(nextStatus);
+      setIsEditingCanonical(false);
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="list-state">
@@ -140,7 +211,7 @@ export default function ProductReviewPage() {
     );
   }
 
-  if (!review || !humanEdit) {
+  if (!review || !humanEdit || !reviewItem) {
     return (
       <div className="list-state list-error">
         <div>
@@ -152,7 +223,7 @@ export default function ProductReviewPage() {
   }
 
   return (
-    <div className="k12-review-workspace">
+    <div className={`${styles.scope} k12-review-workspace`}>
       <header className="k12-review-header">
         <div>
           <span className="eyebrow">K12 Product Knowledge</span>
@@ -274,6 +345,97 @@ export default function ProductReviewPage() {
         <span>{new Date(review.updated_at).toLocaleString()}</span>
       </section>
 
+      <section
+        className="k12-review-approval-panel"
+        aria-labelledby="k12-approval-layer"
+      >
+        <div className="k12-review-approval-heading">
+          <div>
+            <span className="eyebrow">Canonical Approval</span>
+            <h3 id="k12-approval-layer">Review Item State</h3>
+          </div>
+          <strong className="k12-review-status-badge">
+            {reviewItemStatusLabels[reviewItem.status]}
+          </strong>
+        </div>
+
+        <dl className="k12-review-item-summary">
+          <div>
+            <dt>Review item</dt>
+            <dd>{reviewItem.id}</dd>
+          </div>
+          <div>
+            <dt>Raw input</dt>
+            <dd>{reviewItem.raw}</dd>
+          </div>
+          <div>
+            <dt>Canonical placeholder</dt>
+            <dd>{reviewItem.canonical}</dd>
+          </div>
+          <div>
+            <dt>K13 hook</dt>
+            <dd>{reviewItem.ai_suggestion}</dd>
+          </div>
+        </dl>
+
+        <ol
+          className="k12-review-status-rail k12-review-approval-rail"
+          aria-label="Canonical approval state flow"
+        >
+          {reviewItemStatusFlow.map((status) => (
+            <li
+              className={getReviewItemStepClass(status, reviewItem.status)}
+              key={status}
+            >
+              {reviewItemStatusLabels[status]}
+            </li>
+          ))}
+        </ol>
+
+        <div className="k12-review-actions" aria-label="Canonical actions">
+          <button
+            className="secondary-button"
+            disabled={
+              reviewItem.status === "approved" ||
+              reviewItem.status === "rejected"
+            }
+            onClick={handleEditCanonical}
+            type="button"
+          >
+            {isEditingCanonical ? (
+              <Save aria-hidden="true" size={16} />
+            ) : (
+              <PencilLine aria-hidden="true" size={16} />
+            )}
+            {isEditingCanonical
+              ? approvalActionLabels.pending_review
+              : approvalActionLabels.draft}
+          </button>
+          <button
+            className="primary-button"
+            disabled={
+              !canTransitionReviewItemStatus(reviewItem.status, "approved")
+            }
+            onClick={() => handleApprovalDecision("approved")}
+            type="button"
+          >
+            <CheckCircle2 aria-hidden="true" size={16} />
+            {approvalActionLabels.approved}
+          </button>
+          <button
+            className="danger-button"
+            disabled={
+              !canTransitionReviewItemStatus(reviewItem.status, "rejected")
+            }
+            onClick={() => handleApprovalDecision("rejected")}
+            type="button"
+          >
+            <XCircle aria-hidden="true" size={16} />
+            {approvalActionLabels.rejected}
+          </button>
+        </div>
+      </section>
+
       {review.state_log.length > 0 ? (
         <section className="k12-review-meta" aria-label="Review state log">
           <strong className="k12-review-status-badge">State Log</strong>
@@ -322,9 +484,35 @@ export default function ProductReviewPage() {
 
       {error ? <p className="form-message">{error}</p> : null}
 
+      <section
+        className="k12-review-panel k12-review-raw-canonical-diff"
+        aria-labelledby="k12-raw-canonical-diff"
+      >
+        <header className="k12-review-panel-heading">
+          <span className="eyebrow">Diff Enhancement</span>
+          <h3 id="k12-raw-canonical-diff">Raw vs Canonical</h3>
+        </header>
+        <FieldDiffViewer
+          aiValue={reviewItem.raw}
+          field="raw_vs_canonical"
+          humanValue={reviewItem.canonical}
+          label="Raw vs Canonical"
+          leftLabel="Raw Input"
+          overlayLabel="Mock AI Diff Overlay"
+          overlayValue={reviewItem.ai_suggestion}
+          rightLabel="Canonical Placeholder"
+        />
+      </section>
+
       <div className="k12-review-columns">
         <RawInputPanel rawInput={review.raw_input} />
-        <CanonicalPanel canonical={review.ai_canonical} />
+        <CanonicalPanel
+          canonical={review.ai_canonical}
+          isEditingCanonical={isEditingCanonical}
+          onCanonicalChange={updateCanonicalPlaceholder}
+          rawInput={review.raw_input}
+          reviewItem={reviewItem}
+        />
 
         <section
           className="k12-review-panel k12-review-human-column"
@@ -438,6 +626,33 @@ function getStatusStepClass(status: ReviewStatus, currentStatus: ReviewStatus) {
   if (status === currentStatus) {
     return `${baseClass} k12-review-status-step-active`;
   }
+
+  if (
+    (currentStatus === "approved" && status === "rejected") ||
+    (currentStatus === "rejected" && status === "approved")
+  ) {
+    return baseClass;
+  }
+
+  if (statusIndex < currentIndex) {
+    return `${baseClass} k12-review-status-step-complete`;
+  }
+
+  return baseClass;
+}
+
+function getReviewItemStepClass(
+  status: ReviewItemStatus,
+  currentStatus: ReviewItemStatus,
+) {
+  const baseClass = "k12-review-status-step";
+
+  if (status === currentStatus) {
+    return `${baseClass} k12-review-status-step-active`;
+  }
+
+  const statusIndex = getReviewItemStatusIndex(status);
+  const currentIndex = getReviewItemStatusIndex(currentStatus);
 
   if (
     (currentStatus === "approved" && status === "rejected") ||

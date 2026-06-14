@@ -1,0 +1,397 @@
+.scope {
+  display: grid;
+}
+
+:global(.k12-review-workspace) {
+  gap: 20px;
+}
+
+:global(.k12-review-header),
+:global(.k12-review-panel),
+:global(.k12-review-approval-panel) {
+  display: grid;
+  gap: 18px;
+  padding: clamp(20px, 3vw, 28px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+:global(.k12-review-header) {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+}
+
+:global(.k12-review-header h2),
+:global(.k12-review-panel-heading h3),
+:global(.k12-review-approval-heading h3) {
+  margin: 4px 0 0;
+  font-size: 1rem;
+}
+
+:global(.k12-review-actions) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+:global(.k12-review-meta) {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  color: var(--muted);
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+:global(.k12-review-status-badge) {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  color: #087c5e;
+  background: #e5f6ef;
+  border: 1px solid #bde7d6;
+  border-radius: 4px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+:global(.k12-review-panel-heading),
+:global(.k12-review-approval-heading) {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+:global(.k12-review-item-summary),
+:global(.k12-review-map) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+:global(.k12-review-item-summary div),
+:global(.k12-review-map div),
+:global(.k12-review-field) {
+  min-width: 0;
+  padding: 12px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+:global(.k12-review-item-summary dt),
+:global(.k12-review-field > span),
+:global(.k12-review-map dt),
+:global(.k12-review-diff-grid span),
+:global(.k12-review-diff-item span) {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:global(.k12-review-item-summary dd),
+:global(.k12-review-map dd) {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+:global(.k12-review-status-rail) {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:global(.k12-review-approval-rail) {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+:global(.k12-review-status-step) {
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 10px;
+  color: var(--muted);
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.7rem;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+:global(.k12-review-status-step-complete) {
+  color: #087c5e;
+  background: #e5f6ef;
+  border-color: #bde7d6;
+}
+
+:global(.k12-review-status-step-active) {
+  color: #ffffff;
+  background: var(--signal-dark);
+  border-color: var(--signal-dark);
+}
+
+:global(.k12-review-columns) {
+  display: grid;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(320px, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+:global(.k12-review-human-column),
+:global(.k12-review-form),
+:global(.k12-canonical-panel) {
+  display: grid;
+  gap: 16px;
+}
+
+:global(.k12-review-subheading) {
+  padding-top: 4px;
+  border-top: 1px solid var(--line);
+}
+
+:global(.k12-review-subheading h4) {
+  margin: 4px 0 0;
+  font-size: 0.86rem;
+}
+
+:global(.k12-review-field) {
+  display: grid;
+  gap: 8px;
+}
+
+:global(.k12-review-field p),
+:global(.k12-review-field strong),
+:global(.k12-review-readonly-text),
+:global(.k12-review-value-list) {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.82rem;
+  line-height: 1.55;
+}
+
+:global(.k12-review-value-list) {
+  display: grid;
+  gap: 6px;
+  padding-left: 18px;
+}
+
+:global(.k12-review-ai-placeholder) {
+  color: #775b12;
+  background: #fff8e4;
+  border-color: #e9d28a;
+}
+
+:global(.k12-canonical-textarea) {
+  width: 100%;
+  min-height: 120px;
+  padding: 11px 12px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #cfd4d1;
+  border-radius: 6px;
+  outline: 0;
+  resize: vertical;
+}
+
+:global(.k12-canonical-textarea:focus) {
+  border-color: var(--signal-dark);
+  box-shadow: 0 0 0 3px rgb(32 180 134 / 12%);
+}
+
+:global(.k12-review-json),
+:global(.k12-review-diff-grid pre) {
+  max-height: 260px;
+  overflow: auto;
+  margin: 0;
+  padding: 10px;
+  color: #25302b;
+  background: #ffffff;
+  border: 1px solid #e1e6e3;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+:global(.k12-review-fieldset) {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+:global(.k12-review-fieldset legend) {
+  padding: 0 6px;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+:global(.k12-review-map-input) {
+  display: grid;
+  grid-template-columns: minmax(100px, 0.6fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+}
+
+:global(.k12-review-map-input span) {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+:global(.k12-review-map-input input) {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  padding: 0 10px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #cfd4d1;
+  border-radius: 6px;
+}
+
+:global(.k12-review-diff-stack) {
+  display: grid;
+  gap: 14px;
+}
+
+:global(.k12-review-diff) {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+:global(.k12-review-diff-same) {
+  background: #f8faf9;
+}
+
+:global(.k12-review-diff-changed) {
+  background: #fffdf7;
+  border-color: #e9d28a;
+}
+
+:global(.k12-review-diff-header) {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+:global(.k12-review-diff-header strong) {
+  font-size: 0.86rem;
+}
+
+:global(.k12-review-diff-header span) {
+  color: #775b12;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+:global(.k12-review-diff-grid) {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+:global(.k12-review-diff-grid > div) {
+  min-width: 0;
+  display: grid;
+  gap: 7px;
+}
+
+:global(.k12-review-diff-items) {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+:global(.k12-review-diff-item) {
+  display: grid;
+  grid-template-columns: 92px minmax(110px, 0.5fr) minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  padding: 10px;
+  background: #ffffff;
+  border: 1px solid #e2e7e4;
+  border-radius: 6px;
+}
+
+:global(.k12-review-diff-item code),
+:global(.k12-review-diff-item strong) {
+  overflow-wrap: anywhere;
+  font-size: 0.76rem;
+}
+
+:global(.k12-review-diff-item-added) {
+  border-color: #bde7d6;
+}
+
+:global(.k12-review-diff-item-removed) {
+  border-color: #e2bcbc;
+}
+
+:global(.k12-review-diff-item-changed),
+:global(.k12-review-diff-item-overridden),
+:global(.k12-review-diff-item-reordered) {
+  border-color: #e9d28a;
+}
+
+@media (max-width: 1100px) {
+  :global(.k12-review-header),
+  :global(.k12-review-columns),
+  :global(.k12-review-item-summary),
+  :global(.k12-review-map),
+  :global(.k12-review-diff-grid) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.k12-review-actions) {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 700px) {
+  :global(.k12-review-status-rail),
+  :global(.k12-review-approval-rail),
+  :global(.k12-review-diff-item),
+  :global(.k12-review-map-input) {
+    grid-template-columns: 1fr;
+  }
+
+  :global(.k12-review-panel-heading),
+  :global(.k12-review-approval-heading) {
+    flex-direction: column;
+  }
+}

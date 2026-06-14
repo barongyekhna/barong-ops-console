@@ -1,6 +1,7 @@
 import {
   createReviewState,
   transitionState,
+  type ReviewItemStatus,
   type ReviewStateSnapshot,
   type ReviewStatus,
   type VersionChangedField,
@@ -63,12 +64,21 @@ export type RawProductInput = {
   serp_data?: Record<string, unknown>;
 };
 
+export type ReviewItem = {
+  id: string;
+  raw: string;
+  canonical: string;
+  status: ReviewItemStatus;
+  ai_suggestion: string;
+};
+
 export type ProductReviewRecord = ReviewStateSnapshot & {
   review_id: string;
   source: "local_mock";
   raw_input: RawProductInput;
   ai_canonical: ProductAiCanonicalFields;
   human_edit: ProductHumanEditFields;
+  review_item: ReviewItem;
 };
 
 const mockAiCanonical: ProductAiCanonicalFields = {
@@ -102,13 +112,15 @@ const mockAiCanonical: ProductAiCanonicalFields = {
   dishwasher_safe: false,
 };
 
+const mockRawInputText =
+  "Kids bottle, stainless, straw cap, 12oz, keeps drinks cold, school safe. Maybe age 3+.";
+
 const mockReview: ProductReviewRecord = {
   review_id: "k12-review-local-001",
   source: "local_mock",
   ...createReviewState("draft", "k-series-product-knowledge-001"),
   raw_input: {
-    original_input_text:
-      "Kids bottle, stainless, straw cap, 12oz, keeps drinks cold, school safe. Maybe age 3+.",
+    original_input_text: mockRawInputText,
     original_language: "en",
     original_json: {
       marketplace_title: "Kids 12 oz Stainless Bottle with Straw Lid",
@@ -147,6 +159,14 @@ const mockReview: ProductReviewRecord = {
     },
   },
   ai_canonical: mockAiCanonical,
+  review_item: {
+    id: "k12-review-item-local-001",
+    raw: mockRawInputText,
+    canonical: mockAiCanonical.description,
+    status: "pending_review",
+    ai_suggestion:
+      "K13 hook placeholder: identify safety wording, age suitability, and unit normalization before final approval.",
+  },
   human_edit: {
     ...mockAiCanonical,
     title: "Kids Stainless Steel Insulated Water Bottle, 12 oz",
