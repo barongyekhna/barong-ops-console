@@ -24,6 +24,7 @@ const ALLOWED_PERMISSION_PATHS = new Set([
   "permissions/me",
   "permissions/registry",
 ]);
+const ALLOWED_K_METHODS = new Set(["GET", "POST", "PATCH"]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -118,6 +119,10 @@ function isAllowedPermissionPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedKPath(method: string, path: string[]) {
+  return path[0] === "k" && path.length > 1 && ALLOWED_K_METHODS.has(method);
+}
+
 export function isAllowedBackendProxyPath(method: string, path: string[]) {
   const requestedPath = path.join("/");
 
@@ -126,6 +131,7 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
     ALLOWED_AUTH_PATHS.has(requestedPath) ||
     (method === "GET" && ALLOWED_LIST_PATHS.has(requestedPath)) ||
     isAllowedPermissionPath(method, path) ||
+    isAllowedKPath(method, path) ||
     (method === "POST" && requestedPath === "foundation-demo/run") ||
     (method === "GET" && requestedPath === "foundation-demo/latest") ||
     (method === "POST" && requestedPath === "n8n-test/run") ||

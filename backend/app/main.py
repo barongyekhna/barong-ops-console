@@ -16,6 +16,9 @@ from .api.routes.reviews import router as reviews_router
 from .api.routes.users import router as users_router
 from .api.routes.workflows import router as workflows_router
 from .core.config import get_settings
+from .modules.k_series.product_knowledge.router import (
+    router as k_product_knowledge_router,
+)
 
 settings = get_settings()
 
@@ -38,3 +41,4 @@ app.include_router(operation_logs_router)
 app.include_router(permissions_router)
 app.include_router(foundation_demo_router)
 app.include_router(n8n_test_router)
+app.include_router(k_product_knowledge_router, prefix="/k")
