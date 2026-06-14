@@ -986,6 +986,30 @@ C13B has added the runtime enforcement layer documented in
 C13B adds no API, migration, frontend UI, external provider call,
 production/staging operation, or runtime execution capability.
 
+## C14 secret rules
+
+C14A has completed Secret Classification Rules in
+`docs/C14A_SECRET_RULE_DEFINITION.md`. It defines which values are secrets,
+which values are safe metadata, and confirms that secrets must not enter the
+frontend, C08 module layer, C09 execution layer, or C10 sandbox layer.
+
+C14B has completed Secret Storage Policy in
+`docs/C14B_SECRET_STORAGE_POLICY.md`:
+
+- allowed policy locations are environment variables (`.env`), secure vault
+  conceptual boundary, and encrypted storage conceptual boundary.
+- secrets must not be stored in frontend, C08, C09, or C10.
+- only the backend secure service layer may resolve secrets.
+- modules must not access another module's secret binding.
+- secrets must be encrypted at rest, must not be logged, and must not appear in
+  execution context snapshots.
+- C09 execution cannot directly access secrets, and C10 sandbox must not
+  receive raw secrets.
+
+C14B is policy-only. It adds no real vault integration, encrypted storage
+implementation, API, migration, frontend runtime, C09 secret read path, C10
+secret injection, production/staging operation, or runtime execution capability.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not

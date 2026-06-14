@@ -6,6 +6,15 @@
 
 ### Added
 
+- C14B：新增 `docs/C14B_SECRET_STORAGE_POLICY.md`，定义 Secret Storage
+  Policy；固定允许的 policy locations 为 environment variables (`.env`)、secure
+  vault（conceptual）和 encrypted storage（conceptual），并明确本轮不接真实 vault、
+  不实现 encrypted storage、不创建或修改真实 `.env`。
+- C14B：固定 storage/access/runtime 边界：secret 不得存储在 frontend、C08 module
+  layer、C09 execution layer 或 C10 sandbox layer；仅 backend secure service layer
+  可解析 secret；secret 必须 encrypted at rest、不得被 logging、不得出现在
+  execution context snapshot；C09 不能直接访问 secret，C10 不得接收 raw secret。本轮
+  未运行 runtime execution、docker/pytest，未修改 production/staging，未 git commit。
 - C14A：新增 `docs/C14A_SECRET_RULE_DEFINITION.md`，定义 Secret
   Classification System；明确 `API_KEY`、`ACCESS_TOKEN`、`DB_PASSWORD`、
   `JWT_SECRET` 和 `THIRD_PARTY_CREDENTIALS` 必须标记为 secret，`module_key`、
