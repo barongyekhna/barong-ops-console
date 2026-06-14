@@ -34,6 +34,7 @@ ADAPTER_VERSION_PATTERN = re.compile(r"^\d+\.\d+\.\d+$")
 ALLOWED_ADAPTER_STATUSES = frozenset(get_args(AdapterStatus))
 ALLOWED_ADAPTER_SURFACES = frozenset(get_args(AdapterSurface))
 ALLOWED_ADAPTER_DEPENDENCIES = frozenset(get_args(AdapterDependencyName))
+SAFE_ADAPTER_EXECUTION_TYPES = frozenset({"mock", "no_op"})
 NON_EXECUTABLE_ADAPTER_STATUSES = {
     "draft",
     "adapter_pending",
@@ -236,6 +237,10 @@ def _validate_actions(adapter: ModuleAdapterContractV1) -> None:
     capability_keys = {capability.capability_key for capability in adapter.capabilities}
     action_keys = [action.action_key for action in adapter.actions]
     contract_keys = [contract.action_key for contract in adapter.action_contracts]
+    contract_execution_types = {
+        contract.action_key: contract.execution_type
+        for contract in adapter.action_contracts
+    }
     operation_log_actions = {
         binding.action_key: binding.operation_log_action
         for binding in adapter.operation_log_bindings
@@ -264,6 +269,17 @@ def _validate_actions(adapter: ModuleAdapterContractV1) -> None:
             raise ValueError(
                 f"{adapter.adapter_key} action missing operation log action."
             )
+        if action.execution_type not in SAFE_ADAPTER_EXECUTION_TYPES:
+            raise ValueError(
+                f"{adapter.adapter_key} action has unsafe execution_type."
+            )
+        if (
+            contract_execution_types.get(action.action_key)
+            != action.execution_type
+        ):
+            raise ValueError(
+                f"{adapter.adapter_key} action execution_type drift."
+            )
         if action.executable_before_c09:
             raise ValueError(f"{adapter.adapter_key} action is executable.")
         if (
@@ -289,6 +305,10 @@ def _validate_actions(adapter: ModuleAdapterContractV1) -> None:
 
     for contract in adapter.action_contracts:
         validate_permission_key(contract.required_permission)
+        if contract.execution_type not in SAFE_ADAPTER_EXECUTION_TYPES:
+            raise ValueError(
+                f"{adapter.adapter_key} contract has unsafe execution_type."
+            )
         if contract.input_contract not in input_contract_keys:
             raise ValueError(f"{adapter.adapter_key} input contract missing.")
         if contract.output_contract not in output_contract_keys:
@@ -370,6 +390,13 @@ def _validate_future_runtime_boundaries(adapter: ModuleAdapterContractV1) -> Non
     if adapter.execution_requirements.executable_before_c09:
         raise ValueError(
             f"{adapter.adapter_key} execution before C09 is not allowed."
+        )
+    if (
+        adapter.execution_requirements.execution_type
+        not in SAFE_ADAPTER_EXECUTION_TYPES
+    ):
+        raise ValueError(
+            f"{adapter.adapter_key} execution requirement has unsafe execution_type."
         )
     if adapter.sandbox_requirements.network_access_allowed:
         raise ValueError(f"{adapter.adapter_key} sandbox allows network.")

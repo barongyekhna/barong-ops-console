@@ -137,6 +137,7 @@ def _action(
     risk_level: str,
     operation_log_action: str,
     status: str,
+    execution_type: str = "mock",
     requires_approval: bool = False,
     requires_execution_provider: bool = False,
 ) -> dict[str, object]:
@@ -151,6 +152,7 @@ def _action(
         "requires_approval": requires_approval,
         "requires_execution_provider": requires_execution_provider,
         "operation_log_action": operation_log_action,
+        "execution_type": execution_type,
         "executable_before_c09": False,
         "status": status,
     }
@@ -164,6 +166,7 @@ def _action_contract(
     required_permission: str,
     risk_level: str,
     operation_log_action: str,
+    execution_type: str = "mock",
     requires_approval: bool = False,
     requires_execution_provider: bool = False,
     execution_requirement_ref: str | None = None,
@@ -179,6 +182,7 @@ def _action_contract(
         "requires_execution_provider": requires_execution_provider,
         "execution_requirement_ref": execution_requirement_ref,
         "operation_log_action": operation_log_action,
+        "execution_type": execution_type,
         "audit_event_refs": list(audit_event_refs),
         "idempotency_policy": "declared_only",
         "timeout_policy": "declared_only",
@@ -350,10 +354,12 @@ def _execution_requirements(
     *,
     requires_execution_provider: bool,
     provider_contract_ref: str | None = None,
+    execution_type: str = "no_op",
 ) -> dict[str, object]:
     return {
         "requires_execution_provider": requires_execution_provider,
         "executable_before_c09": False,
+        "execution_type": execution_type,
         "execution_provider_state": (
             "required_not_implemented_c08b"
             if requires_execution_provider
@@ -427,6 +433,7 @@ def _adapter(
     dependency_declarations: tuple[dict[str, object], ...] = (),
     feature_flag_bindings: tuple[dict[str, object], ...] = (),
     audit_events: tuple[dict[str, object], ...] = (),
+    execution_type: str = "mock",
     requires_execution_provider: bool = False,
     requires_sandbox: bool = False,
     requires_approval: bool = False,
@@ -468,6 +475,7 @@ def _adapter(
                 if requires_execution_provider
                 else None
             ),
+            execution_type=execution_type,
         ),
         "sandbox_requirements": _sandbox_requirements(
             sandbox_required=requires_sandbox
@@ -568,6 +576,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
         ),
         permission_bindings=(),
         operation_log_bindings=(),
+        execution_type="no_op",
         unavailable_behavior="hide",
     ),
     _adapter(
@@ -665,6 +674,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="users.read",
                 risk_level="medium",
                 operation_log_action="user.read",
+                execution_type="mock",
                 status="sealed",
             ),
             _action(
@@ -676,6 +686,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="users.manage",
                 risk_level="high",
                 operation_log_action="user.manage",
+                execution_type="mock",
                 status="sealed",
                 requires_approval=True,
             ),
@@ -688,6 +699,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="users.read",
                 risk_level="medium",
                 operation_log_action="user.read",
+                execution_type="mock",
             ),
             _action_contract(
                 action_key="admin.users.manage",
@@ -696,6 +708,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="users.manage",
                 risk_level="high",
                 operation_log_action="user.manage",
+                execution_type="mock",
                 requires_approval=True,
             ),
         ),
@@ -760,6 +773,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 target_type="user",
             ),
         ),
+        execution_type="mock",
         requires_approval=True,
     ),
     _adapter(
@@ -869,6 +883,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="permissions.read",
                 risk_level="medium",
                 operation_log_action="permission.read",
+                execution_type="mock",
                 status="sealed",
             ),
             _action(
@@ -880,6 +895,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="permissions.manage",
                 risk_level="critical",
                 operation_log_action="permission.assignment.manage",
+                execution_type="mock",
                 status="sealed",
                 requires_approval=True,
             ),
@@ -892,6 +908,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="permissions.read",
                 risk_level="medium",
                 operation_log_action="permission.read",
+                execution_type="mock",
             ),
             _action_contract(
                 action_key="admin.permissions.manage",
@@ -900,6 +917,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="permissions.manage",
                 risk_level="critical",
                 operation_log_action="permission.assignment.manage",
+                execution_type="mock",
                 requires_approval=True,
             ),
         ),
@@ -968,6 +986,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 target_type="permission_assignment",
             ),
         ),
+        execution_type="mock",
         requires_approval=True,
     ),
     _adapter(
@@ -1054,6 +1073,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="products.read",
                 risk_level="medium",
                 operation_log_action="business.products.placeholder.prepare",
+                execution_type="mock",
                 status="adapter_pending",
                 requires_execution_provider=True,
             ),
@@ -1066,6 +1086,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="products.read",
                 risk_level="medium",
                 operation_log_action="business.products.placeholder.prepare",
+                execution_type="mock",
                 requires_execution_provider=True,
                 execution_requirement_ref="business.products.execution.v1",
             ),
@@ -1114,6 +1135,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 module_key="business.products",
             ),
         ),
+        execution_type="mock",
         requires_execution_provider=True,
         requires_sandbox=True,
         unavailable_behavior="adapter_pending",
@@ -1203,6 +1225,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="jobs.create",
                 risk_level="medium",
                 operation_log_action="n8n_test.run",
+                execution_type="no_op",
                 status="adapter_pending",
                 requires_execution_provider=True,
             ),
@@ -1215,6 +1238,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 required_permission="jobs.create",
                 risk_level="medium",
                 operation_log_action="n8n_test.run",
+                execution_type="no_op",
                 requires_execution_provider=True,
                 execution_requirement_ref="integration.n8n_test_bridge.execution.v1",
             ),
@@ -1279,6 +1303,7 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
         ),
         requires_execution_provider=True,
         requires_sandbox=True,
+        execution_type="no_op",
         unavailable_behavior="adapter_pending",
     ),
 )

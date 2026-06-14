@@ -27,6 +27,7 @@ AdapterSurface = Literal[
     "future_approval_panel",
 ]
 AdapterRiskLevel = Literal["low", "medium", "high", "critical"]
+AdapterExecutionType = Literal["mock", "no_op", "real", "async"]
 AdapterBindingStatus = Literal[
     "draft",
     "adapter_pending",
@@ -145,6 +146,7 @@ class ModuleAdapterAction(BaseModel):
     requires_approval: bool = False
     requires_execution_provider: bool = False
     operation_log_action: str = Field(min_length=1, max_length=180)
+    execution_type: AdapterExecutionType = "mock"
     executable_before_c09: bool = False
     status: AdapterBindingStatus
 
@@ -159,6 +161,7 @@ class ModuleAdapterActionContract(BaseModel):
     requires_execution_provider: bool = False
     execution_requirement_ref: str | None = Field(default=None, max_length=180)
     operation_log_action: str = Field(min_length=1, max_length=180)
+    execution_type: AdapterExecutionType = "mock"
     audit_event_refs: list[str] = Field(default_factory=list)
     idempotency_policy: str = Field(min_length=1, max_length=160)
     timeout_policy: str = Field(min_length=1, max_length=160)
@@ -292,6 +295,7 @@ class ModuleAdapterDependencyDeclaration(BaseModel):
 class ModuleAdapterExecutionRequirements(BaseModel):
     requires_execution_provider: bool = False
     executable_before_c09: bool = False
+    execution_type: AdapterExecutionType = "no_op"
     execution_provider_state: ExecutionProviderState = "not_required"
     provider_contract_ref: str | None = Field(default=None, max_length=180)
     queue_required: bool = False
