@@ -23,6 +23,7 @@ SandboxArchitectureStage = Literal[
     "c10c_execution_context",
     "c10d_resource_control",
     "c10e_execution_bridge",
+    "c10f_runtime_finalization",
 ]
 SandboxBoundaryState = Literal[
     "declared",

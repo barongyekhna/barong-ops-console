@@ -9,6 +9,8 @@ C10D adds logical mock resource policies and resource violation handling without
 OS-level enforcement.
 C10E adds the mock-only bridge from C09 execution request contracts to the C10
 sandbox runner and a C09 provider mock interface without live provider calls.
+C10F finalizes the mock sandbox runtime with a disabled-execution lifecycle,
+final safety lock, and sealed mock-only final state.
 """
 
 from .bridge import (
@@ -67,6 +69,25 @@ from .resource import (
     ResourceViolation,
     SandboxResourceEnforcer,
 )
+from .runtime import (
+    RUNTIME_EXECUTION_CAPABILITY,
+    RUNTIME_LIFECYCLE_STEPS,
+    RUNTIME_MODE,
+    RUNTIME_PIPELINE,
+    RUNTIME_SAFETY_GUARANTEES,
+    RUNTIME_STAGE,
+    FinalSafetyLock,
+    FinalSafetyLockViolation,
+    RuntimeLifecycleStepName,
+    RuntimeLifecycleStepStatus,
+    RuntimeStatus,
+    SandboxFinalState,
+    SandboxRuntime,
+    SandboxRuntimeLifecycle,
+    SandboxRuntimeLifecycleStep,
+    SandboxRuntimeResponse,
+    finalize_sandbox_runtime,
+)
 
 __all__ = [
     "BRIDGE_FLOW",
@@ -75,6 +96,12 @@ __all__ = [
     "EXECUTION_CONTEXT_STAGE",
     "PROVIDER_MOCK_INTERFACE_KEY",
     "RESOURCE_CONTROL_STAGE",
+    "RUNTIME_EXECUTION_CAPABILITY",
+    "RUNTIME_LIFECYCLE_STEPS",
+    "RUNTIME_MODE",
+    "RUNTIME_PIPELINE",
+    "RUNTIME_SAFETY_GUARANTEES",
+    "RUNTIME_STAGE",
     "RUNNER_MODE",
     "RUNNER_STAGE",
     "SAFETY_GUARANTEES",
@@ -100,13 +127,19 @@ __all__ = [
     "ExecutionContextMemoryScope",
     "ExecutionContextStateScope",
     "ExecutionIsolationLevel",
+    "FinalSafetyLock",
+    "FinalSafetyLockViolation",
     "ResourceControlModel",
     "ResourceEnforcementReport",
     "ResourcePolicy",
     "ResourceViolation",
+    "RuntimeLifecycleStepName",
+    "RuntimeLifecycleStepStatus",
+    "RuntimeStatus",
     "ProviderForwardStatus",
     "ProviderRequestMapping",
     "SandboxBridgeMode",
+    "SandboxFinalState",
     "SandboxMockExecutionFlow",
     "SandboxMockLifecycleStep",
     "SandboxExecutionBridge",
@@ -114,7 +147,12 @@ __all__ = [
     "SandboxRequestMapping",
     "SandboxRunner",
     "SandboxRunnerPolicyViolation",
+    "SandboxRuntime",
+    "SandboxRuntimeLifecycle",
+    "SandboxRuntimeLifecycleStep",
+    "SandboxRuntimeResponse",
     "bridge_execution_request",
     "deterministic_mock_execution_response",
+    "finalize_sandbox_runtime",
     "handle_execution_request",
 ]
