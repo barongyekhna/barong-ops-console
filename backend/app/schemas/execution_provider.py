@@ -142,14 +142,14 @@ class ExecutionRequestContractV1(BaseModel):
 
     @model_validator(mode="after")
     def enforce_module_switch(self) -> "ExecutionRequestContractV1":
-        from ..services.module_switch_runtime_gate import (
-            ModuleSwitchRuntimeBlockedError,
-            enforce_module_switch_before_c09_execution_request,
+        from ..services.execution_flow_gate import (
+            C13E_GATE,
+            ExecutionFlowGateBlockedError,
         )
 
         try:
-            enforce_module_switch_before_c09_execution_request(self.module_key)
-        except ModuleSwitchRuntimeBlockedError as exc:
+            C13E_GATE.check(self, integration_point="c09_execution_request")
+        except ExecutionFlowGateBlockedError as exc:
             raise ValueError(str(exc)) from None
         return self
 

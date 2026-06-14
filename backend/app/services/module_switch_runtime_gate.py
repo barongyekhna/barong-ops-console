@@ -164,6 +164,15 @@ class ModuleSwitchRuntimeGate:
             integration_point="c08_module_resolution",
         )
 
+    def enforce_before_c13e_execution_flow_gate(
+        self,
+        module_key: str,
+    ) -> ModuleSwitchRuntimeDecision:
+        return self.enforce(
+            module_key,
+            integration_point="c13e_execution_flow_gate",
+        )
+
     def enforce_before_c12_approval_request(
         self,
         module_key: str,
@@ -241,6 +250,14 @@ def enforce_module_switch_before_c08_module_resolution(
     module_key: str,
 ) -> ModuleSwitchRuntimeDecision:
     return ModuleSwitchRuntimeGate().enforce_before_c08_module_resolution(module_key)
+
+
+def enforce_module_switch_before_c13e_execution_flow_gate(
+    module_key: str,
+) -> ModuleSwitchRuntimeDecision:
+    return ModuleSwitchRuntimeGate().enforce_before_c13e_execution_flow_gate(
+        module_key
+    )
 
 
 def enforce_module_switch_before_c12_approval_request(

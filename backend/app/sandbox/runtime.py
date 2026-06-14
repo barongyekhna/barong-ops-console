@@ -95,6 +95,17 @@ def _execution_request_from_raw(
     return ExecutionRequestContractV1.model_validate(execution_request)
 
 
+def _enforce_execution_flow_gate(
+    execution_request: ExecutionRequestContractV1 | Mapping[str, Any],
+) -> None:
+    from ..services.execution_flow_gate import C13E_GATE
+
+    C13E_GATE.check(
+        execution_request,
+        integration_point="c10_sandbox_entry",
+    )
+
+
 class SandboxRuntimeLifecycleStep(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -286,6 +297,7 @@ class SandboxRuntime:
         context: ExecutionContext | None = None,
     ) -> SandboxRuntimeResponse:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         start_step = self.runtime_start(
             request_contract,
             bridge_mode=bridge_mode,
@@ -334,6 +346,7 @@ class SandboxRuntime:
         context: ExecutionContext | None = None,
     ) -> SandboxRuntimeLifecycleStep:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         refs = {
             **self._request_identity(request_contract),
             "bridge_mode": bridge_mode,
@@ -359,6 +372,7 @@ class SandboxRuntime:
         context: ExecutionContext | None = None,
     ) -> tuple[BridgeRequest, SandboxRuntimeLifecycleStep]:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         bridge_request = self.bridge.build_bridge_request(
             request_contract,
             bridge_mode=bridge_mode,
@@ -395,6 +409,7 @@ class SandboxRuntime:
         context: ExecutionContext | None = None,
     ) -> tuple[BridgeResponse, SandboxRuntimeLifecycleStep]:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         bridge_response = self.bridge.receive_execution_request(
             request_contract,
             bridge_mode=bridge_mode,

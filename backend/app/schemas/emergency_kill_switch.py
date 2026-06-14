@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 EmergencyKillSwitchIntegrationPoint = Literal[
     "c08_module_resolution",
+    "c13e_execution_flow_gate",
     "c09_execution_request",
     "c10_sandbox_entry",
     "c12_approval_request",
@@ -64,4 +65,3 @@ class EmergencyKillSwitchDecision(BaseModel):
         elif self.enforcement_result != "ALLOWED":
             raise ValueError("Disabled kill switch must allow normal gates.")
         return self
-

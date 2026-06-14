@@ -133,6 +133,17 @@ def _sandbox_request_from_raw(
     return SandboxRequest.model_validate(sandbox_request)
 
 
+def _enforce_execution_flow_gate(
+    execution_request: ExecutionRequestContractV1 | SandboxRequest | Mapping[str, Any],
+) -> None:
+    from ..services.execution_flow_gate import C13E_GATE
+
+    C13E_GATE.check(
+        execution_request,
+        integration_point="c10_sandbox_entry",
+    )
+
+
 class SandboxRunner:
     """C10B mock-only execution runner.
 
@@ -161,6 +172,7 @@ class SandboxRunner:
         context: RunnerContext | None = None,
     ) -> SandboxResponse:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         execution_context = self._normalize_execution_context(
             context,
             request_contract,
@@ -201,6 +213,7 @@ class SandboxRunner:
         requested_capabilities: list[str] | None = None,
     ) -> SandboxRequest:
         request_contract = _execution_request_from_raw(execution_request)
+        _enforce_execution_flow_gate(request_contract)
         bound_execution_context = self._normalize_execution_context(
             execution_context or context,
             request_contract,
@@ -260,6 +273,7 @@ class SandboxRunner:
         execution_context: ExecutionContext | None = None,
     ) -> SandboxResponse:
         request_contract = _sandbox_request_from_raw(sandbox_request)
+        _enforce_execution_flow_gate(request_contract)
         bound_execution_context = self._normalize_execution_context(
             execution_context or context,
             request_contract.c09_execution_request,
@@ -288,6 +302,7 @@ class SandboxRunner:
         execution_context: ExecutionContext | None = None,
     ) -> SandboxResponse:
         request_contract = _sandbox_request_from_raw(sandbox_request)
+        _enforce_execution_flow_gate(request_contract)
         bound_execution_context = self._normalize_execution_context(
             execution_context or context,
             request_contract.c09_execution_request,

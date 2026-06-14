@@ -104,17 +104,17 @@ class SandboxRequest(BaseModel):
 
     @model_validator(mode="after")
     def enforce_module_switch(self) -> "SandboxRequest":
-        from ..services.module_switch_runtime_gate import (
-            ModuleSwitchRuntimeBlockedError,
-            enforce_module_switch_before_c10_sandbox_entry,
+        from ..services.execution_flow_gate import (
+            C13E_GATE,
+            ExecutionFlowGateBlockedError,
         )
 
-        try:
-            enforce_module_switch_before_c10_sandbox_entry(self.module_key)
-        except ModuleSwitchRuntimeBlockedError as exc:
-            raise ValueError(str(exc)) from None
         if self.c09_execution_request.module_key != self.module_key:
             raise ValueError("SandboxRequest module_key must match C09 request.")
+        try:
+            C13E_GATE.check(self, integration_point="c10_sandbox_entry")
+        except ExecutionFlowGateBlockedError as exc:
+            raise ValueError(str(exc)) from None
         return self
 
 

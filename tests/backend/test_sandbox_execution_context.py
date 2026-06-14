@@ -27,7 +27,7 @@ def execution_request(
         provider_key="core.no_op_provider",
         provider_type="no_op_provider",
         status="requested",
-        risk_level="low",
+        risk_level="medium",
         required_permission="products.read",
     )
 

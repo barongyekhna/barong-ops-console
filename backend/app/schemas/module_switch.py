@@ -22,6 +22,7 @@ ModuleSwitchPolicySource = Literal[
 ]
 ModuleSwitchIntegrationPoint = Literal[
     "c08_module_resolution",
+    "c13e_execution_flow_gate",
     "c12_approval_request",
     "c09_execution_request",
     "c10_sandbox_entry",

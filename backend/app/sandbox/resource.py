@@ -43,6 +43,15 @@ def _stable_id(prefix: str, value: Mapping[str, Any]) -> str:
     return f"{prefix}_{digest}"
 
 
+def _enforce_execution_flow_gate(sandbox_request: Any) -> None:
+    from ..services.execution_flow_gate import C13E_GATE
+
+    C13E_GATE.check(
+        sandbox_request,
+        integration_point="c10_sandbox_entry",
+    )
+
+
 class ResourceControlModel(BaseModel):
     """Logical C10D resource controls.
 
@@ -190,6 +199,7 @@ class SandboxResourceEnforcer:
         sandbox_context: Any,
         execution_context: Any,
     ) -> tuple[Any, Any, ResourceEnforcementReport]:
+        _enforce_execution_flow_gate(sandbox_request)
         policy = self._select_policy(sandbox_context, execution_context)
         if policy is None:
             policy = self.build_policy(
