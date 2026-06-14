@@ -22,6 +22,7 @@ SandboxArchitectureStage = Literal[
     "c10b_mock_runner",
     "c10c_execution_context",
     "c10d_resource_control",
+    "c10e_execution_bridge",
 ]
 SandboxBoundaryState = Literal[
     "declared",
@@ -152,6 +153,7 @@ class SandboxResponse(BaseModel):
         "wait_for_c10c",
         "wait_for_c10d",
         "wait_for_c10e",
+        "wait_for_c10f",
     ] = "wait_for_c10b"
 
 
