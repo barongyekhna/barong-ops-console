@@ -3,6 +3,9 @@
 import { AlertTriangle, LoaderCircle, PackageOpen, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { generateSellingPoints } from "@/modules/k14/selling-points/api";
+import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
+
 import { createProduct, getProducts, ProductKnowledgeApiError } from "./api";
 import { ProductDetail } from "./ProductDetail";
 import { ProductForm } from "./ProductForm";
@@ -27,7 +30,11 @@ function formatDate(value: string) {
 }
 
 function formatError(error: unknown, fallback: string) {
-  return error instanceof ProductKnowledgeApiError ? error.message : fallback;
+  if (error instanceof ProductKnowledgeApiError || error instanceof Error) {
+    return error.message;
+  }
+
+  return fallback;
 }
 
 function nextSelectedId(
@@ -50,10 +57,17 @@ function nextSelectedId(
 export function ProductList() {
   const [products, setProducts] = useState<ProductKnowledgeListItem[]>([]);
   const [selectedProductId, setSelectedProductId] = useState<string | null>(null);
+  const [sellingPointsByProductId, setSellingPointsByProductId] = useState<
+    Record<string, ProductSellingPoints>
+  >({});
   const [loadError, setLoadError] = useState("");
   const [createError, setCreateError] = useState("");
+  const [sellingPointsError, setSellingPointsError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [generatingProductId, setGeneratingProductId] = useState<string | null>(
+    null,
+  );
 
   const selectedProduct = useMemo(
     () => products.find((product) => product.id === selectedProductId) ?? null,
@@ -107,6 +121,32 @@ export function ProductList() {
 
   function selectProduct(productId: string) {
     setSelectedProductId(productId);
+    setSellingPointsError("");
+  }
+
+  async function handleGenerateSellingPoints() {
+    if (!selectedProduct) {
+      return;
+    }
+
+    setGeneratingProductId(selectedProduct.id);
+    setSellingPointsError("");
+
+    try {
+      const sellingPoints = await generateSellingPoints(
+        toSellingPointsProductPayload(selectedProduct),
+      );
+      setSellingPointsByProductId((current) => ({
+        ...current,
+        [selectedProduct.id]: sellingPoints,
+      }));
+    } catch (error) {
+      setSellingPointsError(
+        formatError(error, "Selling points could not be generated."),
+      );
+    } finally {
+      setGeneratingProductId(null);
+    }
   }
 
   return (
@@ -218,8 +258,40 @@ export function ProductList() {
           ) : null}
         </section>
 
-        <ProductDetail product={selectedProduct} />
+        <ProductDetail
+          isGeneratingSellingPoints={
+            selectedProduct ? generatingProductId === selectedProduct.id : false
+          }
+          onGenerateSellingPoints={handleGenerateSellingPoints}
+          product={selectedProduct}
+          sellingPoints={
+            selectedProduct
+              ? sellingPointsByProductId[selectedProduct.id] ?? null
+              : null
+          }
+          sellingPointsError={sellingPointsError}
+        />
       </div>
     </section>
   );
+}
+
+function toSellingPointsProductPayload(
+  product: ProductKnowledgeListItem,
+): Record<string, unknown> {
+  return {
+    id: product.id,
+    product_id: product.id,
+    product_key: product.product_key,
+    sku: product.sku,
+    title: product.product_name_en ?? product.product_key,
+    product_name_en: product.product_name_en,
+    product_type: product.product_type,
+    brand_name: product.brand_name,
+    raw_input: product.product_name_en ?? product.product_key,
+    raw_input_text: product.product_name_en ?? product.product_key,
+    language: product.canonical_language,
+    canonical_language: product.canonical_language,
+    market_tags: ["general"],
+  };
 }

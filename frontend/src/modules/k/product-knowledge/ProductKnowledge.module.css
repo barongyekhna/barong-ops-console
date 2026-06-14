@@ -278,6 +278,135 @@
   font-weight: 700;
 }
 
+.sellingPointsSection {
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.sellingPointsHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sellingPointsHeading h4 {
+  margin: 4px 0 0;
+  font-size: 0.94rem;
+}
+
+.sellingPointsError,
+.sellingPointsEmpty {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.sellingPointsError {
+  color: #a32f2f;
+}
+
+.sellingPointsEmpty {
+  color: var(--muted);
+}
+
+.sellingPointsResult {
+  display: grid;
+  gap: 12px;
+}
+
+.sellingPointsMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.sellingPointsMetrics div {
+  min-width: 0;
+  padding: 10px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+.sellingPointsMetrics dt,
+.sellingPointTagGroup > span,
+.sellingPointBullets span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sellingPointsMetrics dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.sellingPointBullets {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sellingPointBullets li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(74px, 0.28fr) minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+.sellingPointBullets strong {
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.sellingPointBullets em {
+  justify-self: end;
+  color: #087c5e;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.sellingPointTagGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.sellingPointTagGroup div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sellingPointTagGroup strong {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #087c5e;
+  background: #e5f6ef;
+  border: 1px solid #bde7d6;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
 @media (max-width: 1000px) {
   .contentGrid {
     grid-template-columns: 1fr;
@@ -290,16 +419,23 @@
 
 @media (max-width: 760px) {
   .panelHeading,
-  .detailHeading {
+  .detailHeading,
+  .sellingPointsHeading {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .panelHeading button {
+  .panelHeading button,
+  .sellingPointsHeading button {
     align-self: flex-start;
   }
 
   .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sellingPointBullets li,
+  .sellingPointsMetrics {
     grid-template-columns: 1fr;
   }
 }

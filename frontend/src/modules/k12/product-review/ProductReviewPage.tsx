@@ -15,6 +15,7 @@ import { CanonicalPanel } from "../components/CanonicalPanel";
 import { FieldDiffViewer } from "../components/FieldDiffViewer";
 import { HumanEditPanel } from "../components/HumanEditPanel";
 import { RawInputPanel } from "../components/RawInputPanel";
+import { SellingPointsPanel } from "../components/SellingPointsPanel";
 import {
   approve,
   getProductReview,
@@ -483,6 +484,8 @@ export default function ProductReviewPage() {
       </ol>
 
       {error ? <p className="form-message">{error}</p> : null}
+
+      <SellingPointsPanel review={review} />
 
       <section
         className="k12-review-panel k12-review-raw-canonical-diff"
