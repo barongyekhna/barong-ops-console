@@ -1,14 +1,12 @@
 from datetime import datetime, timezone
 from hmac import compare_digest
 from typing import Any
-from urllib.parse import urlsplit
 from uuid import uuid4
 
 from pydantic import SecretStr
 from sqlalchemy.orm import Session
 
 from ..core.config import Settings
-from ..models.error import SystemError
 from ..models.job import AutomationJob
 from ..models.user import User
 from ..repositories.artifacts import create_artifact
@@ -51,18 +49,11 @@ from ..schemas.n8n_test import (
 from ..schemas.registry import AgentCreate, ModuleCreate, WorkflowCreate
 from ..schemas.reviews import ReviewCreate, ReviewResponse
 from .auth_service import AuditContext
-from .n8n_test_http_client import send_n8n_test_webhook
+from .n8n_test_http_client import build_n8n_test_mock_response
 
 ALLOWED_TERMINAL_STATUSES = {"completed_demo", "failed"}
-CALLBACK_ACTOR_ID = "n8n_test_webhook"
-
-
-class N8nTestConfigurationError(RuntimeError):
-    pass
-
-
-class N8nTestDispatchError(RuntimeError):
-    pass
+CALLBACK_ACTOR_ID = "n8n_test_callback_guard"
+MOCK_DISPATCH_ACTOR_ID = "c11b_mock_dispatcher"
 
 
 class N8nTestCallbackAuthenticationError(RuntimeError):
@@ -85,40 +76,21 @@ def _secret_value(value: SecretStr | str | None) -> str:
     return str(value)
 
 
-def _validate_test_webhook_url(url: str) -> bool:
-    try:
-        parsed = urlsplit(url)
-        location = f"{parsed.hostname or ''}{parsed.path}".lower()
-        return (
-            parsed.scheme in {"http", "https"}
-            and bool(parsed.netloc)
-            and parsed.username is None
-            and parsed.password is None
-            and not parsed.fragment
-            and any(marker in location for marker in ("test", "demo"))
-        )
-    except ValueError:
-        return False
-
-
 def _module_payload() -> ModuleCreate:
     return ModuleCreate(
         module_key=N8N_TEST_MODULE_KEY,
         name="n8n Test Bridge Module",
-        responsibilities=["Exercise Console to n8n test webhook messaging."],
+        responsibilities=["Exercise Console n8n mock bridge state."],
         non_responsibilities=[
             "Run production workflows.",
             "Process real product or commerce data.",
         ],
         risk_level="demo",
         status="demo",
-        artifact_types=["n8n_test_callback_report"],
-        review_types=["n8n_test_callback_review"],
-        error_codes=[
-            "N8N_TEST_WEBHOOK_CALL_FAILED",
-            "N8N_TEST_CALLBACK_REPORTED_FAILED",
-        ],
-        rollback_policy={"mode": "mark_test_job_failed"},
+        artifact_types=["n8n_test_mock_report"],
+        review_types=["n8n_test_mock_review"],
+        error_codes=["N8N_TEST_EXTERNAL_EXECUTION_BLOCKED"],
+        rollback_policy={"mode": "mock_only_no_external_rollback"},
     )
 
 
@@ -126,7 +98,7 @@ def _agent_payload() -> AgentCreate:
     return AgentCreate(
         agent_key=N8N_TEST_AGENT_KEY,
         name="n8n Test Agent",
-        responsibilities=["Record test webhook dispatch and callback events."],
+        responsibilities=["Record mock dispatch and blocked callback events."],
         non_responsibilities=["Run real business automations."],
         risk_level="demo",
         status="demo",
@@ -138,17 +110,20 @@ def _agent_payload() -> AgentCreate:
 def _workflow_payload(timeout_seconds: int) -> WorkflowCreate:
     return WorkflowCreate(
         workflow_key=N8N_TEST_WORKFLOW_KEY,
-        name="n8n Test Webhook Workflow",
-        responsibilities=["Describe the configured test webhook contract."],
-        non_responsibilities=["Store a network URL or callback credential."],
+        name="n8n Test Mock Workflow",
+        responsibilities=["Describe the mock-only test bridge contract."],
+        non_responsibilities=[
+            "Store a network URL, callback credential, or webhook endpoint."
+        ],
         risk_level="demo",
         status="demo",
-        engine="n8n_test_webhook",
-        endpoint_ref="demo://n8n-test/configured-webhook",
+        engine="n8n_test_mock",
+        endpoint_ref="demo://n8n-test/mock-only",
         callback_contract={
             "test_mode": True,
-            "callback_path": "/n8n-test/callback",
-            "auth_mode": "required_header",
+            "mock_only": True,
+            "callback_connected": False,
+            "external_webhook_triggered": False,
         },
         timeout_seconds=timeout_seconds,
         retry_policy={"enabled": False},
@@ -269,32 +244,6 @@ def _append_event(
     )
 
 
-def _record_preflight_failure(
-    db: Session,
-    *,
-    user: User,
-    audit: AuditContext,
-    run_id: str,
-    reason: str,
-) -> None:
-    _audit(
-        db,
-        actor_type="user",
-        actor_id=str(user.id),
-        action="n8n_test.run",
-        target_type="n8n_test_bridge",
-        target_id=run_id,
-        result="failure",
-        error_code="N8N_TEST_CONFIGURATION_UNAVAILABLE",
-        audit=audit,
-        details={
-            "reason": reason,
-            "external_http_attempted": False,
-        },
-    )
-    db.commit()
-
-
 def _ensure_registry(db: Session, *, timeout_seconds: int) -> None:
     if get_module(db, N8N_TEST_MODULE_KEY) is None:
         create_module(db, _module_payload())
@@ -310,46 +259,8 @@ def run_n8n_test(
     user: User,
     audit: AuditContext,
     settings: Settings,
-    callback_url: str,
 ) -> dict[str, Any]:
     run_id = _new_id("run")
-    webhook_url = settings.n8n_test_webhook_url.strip()
-    callback_secret = _secret_value(settings.n8n_test_callback_secret)
-
-    if not webhook_url:
-        _record_preflight_failure(
-            db,
-            user=user,
-            audit=audit,
-            run_id=run_id,
-            reason="test_webhook_url_not_configured",
-        )
-        raise N8nTestConfigurationError(
-            "The n8n test webhook is not configured; no external request was sent."
-        )
-    if not _validate_test_webhook_url(webhook_url):
-        _record_preflight_failure(
-            db,
-            user=user,
-            audit=audit,
-            run_id=run_id,
-            reason="configured_url_is_not_explicitly_test_or_demo",
-        )
-        raise N8nTestConfigurationError(
-            "The configured n8n webhook is not explicitly marked test/demo."
-        )
-    if not callback_secret:
-        _record_preflight_failure(
-            db,
-            user=user,
-            audit=audit,
-            run_id=run_id,
-            reason="callback_auth_not_configured",
-        )
-        raise N8nTestConfigurationError(
-            "The n8n test callback authentication is not configured."
-        )
-
     actor_id = str(user.id)
     _ensure_registry(
         db,
@@ -371,7 +282,9 @@ def run_n8n_test(
                 "run_type": N8N_TEST_RUN_TYPE,
                 "test_mode": True,
                 "source": "barong_ops_console",
-                "external_webhook_kind": "n8n_test_only",
+                "external_webhook_kind": "blocked_c11b_mock_only",
+                "mock_only": True,
+                "external_http_allowed": False,
                 "real_business_task": False,
             },
             correlation_id=run_id,
@@ -396,7 +309,11 @@ def run_n8n_test(
         actor_type="test_agent",
         actor_id=N8N_TEST_AGENT_KEY,
         to_status="running",
-        details={"external_http_attempted": False},
+        details={
+            "external_http_attempted": False,
+            "external_http_allowed": False,
+            "mock_only": True,
+        },
     )
     _audit(
         db,
@@ -408,118 +325,147 @@ def run_n8n_test(
         job_id=job_id,
         result="success",
         audit=audit,
-        details={"status": "running", "run_id": run_id},
+        details={
+            "status": "running",
+            "run_id": run_id,
+            "mock_only": True,
+            "external_http_attempted": False,
+        },
     )
-    db.commit()
 
-    outbound_payload = {
+    mock_payload = {
         "job_id": job_id,
-        "callback_url": callback_url,
-        "callback_secret": callback_secret,
         "test_mode": True,
         "source": "barong_ops_console",
         "run_type": N8N_TEST_RUN_TYPE,
+        "mock_only": True,
+        "external_http_attempted": False,
+        "webhook_triggered": False,
     }
+    mock_status_code = build_n8n_test_mock_response(payload=mock_payload)
 
-    try:
-        status_code = send_n8n_test_webhook(
-            url=webhook_url,
-            payload=outbound_payload,
-            timeout_seconds=settings.n8n_test_request_timeout_seconds,
-        )
-    except Exception as exc:
-        db.expire_all()
-        failed_job = get_job(db, job_id)
-        if failed_job is None:
-            raise N8nTestDispatchError(
-                "The n8n test job could not be reloaded after dispatch."
-            ) from exc
-        if failed_job.status not in ALLOWED_TERMINAL_STATUSES:
-            failed_job.finished_at = datetime.now(timezone.utc)
-            _append_event(
-                db,
-                job=failed_job,
-                event_type="dispatch_failed",
-                actor_type="test_agent",
-                actor_id=N8N_TEST_AGENT_KEY,
-                to_status="failed",
-                details={"external_http_attempted": True},
-            )
-            db.add(
-                SystemError(
-                    error_id=_new_id("error"),
-                    error_code="N8N_TEST_WEBHOOK_CALL_FAILED",
-                    severity="error_demo",
-                    status="open_demo",
-                    message="The configured n8n test webhook call failed.",
-                    details={
-                        "exception_type": type(exc).__name__,
-                        "test_mode": True,
-                        "real_business_effect": False,
-                    },
-                    job_id=job_id,
-                    module_id=N8N_TEST_MODULE_KEY,
-                    agent_id=N8N_TEST_AGENT_KEY,
-                    workflow_id=N8N_TEST_WORKFLOW_KEY,
-                    correlation_id=run_id,
-                )
-            )
-        _audit(
-            db,
-            actor_type="user",
-            actor_id=actor_id,
-            action="n8n_test.webhook_dispatch",
-            target_type="job",
-            target_id=job_id,
-            job_id=job_id,
-            result="failure",
-            error_code="N8N_TEST_WEBHOOK_CALL_FAILED",
-            audit=audit,
-            details={
-                "external_http_attempted": True,
-                "exception_type": type(exc).__name__,
+    _append_event(
+        db,
+        job=job,
+        event_type="external_dispatch_blocked",
+        actor_type="mock_dispatcher",
+        actor_id=MOCK_DISPATCH_ACTOR_ID,
+        to_status=None,
+        details={
+            "mock_status_code": mock_status_code,
+            "mock_only": True,
+            "external_http_attempted": False,
+            "webhook_triggered": False,
+            "blocked_by": "c11b_external_execution_lock",
+        },
+    )
+
+    artifact = create_artifact(
+        db,
+        ArtifactCreate(
+            artifact_id=_new_id("artifact"),
+            job_id=job.job_id,
+            module_key=N8N_TEST_MODULE_KEY,
+            artifact_type="n8n_test_mock_report",
+            name="n8n Test Mock Report",
+            storage_provider="demo_metadata",
+            storage_ref=f"demo/n8n-test/mock/{job_id}",
+            status="registered_demo",
+            metadata={
+                "test_mode": True,
+                "mock_only": True,
+                "external_storage": False,
+                "external_http_attempted": False,
             },
-        )
-        db.commit()
-        raise N8nTestDispatchError(
-            "The n8n test webhook call failed; the test job was marked failed."
-        ) from None
+        ),
+    )
+    db.flush()
+    review = create_review(
+        db,
+        payload=ReviewCreate(
+            review_id=_new_id("review"),
+            job_id=job.job_id,
+            artifact_id=artifact.artifact_id,
+            review_type="n8n_test_mock_review",
+            risk_level="demo",
+            status="pending_demo",
+        ),
+        requested_by=user.id,
+    )
+    memory_event = create_memory_event(
+        db,
+        payload=MemoryEventCreate(
+            memory_event_id=_new_id("memory"),
+            event_type="n8n_test_mock_completed",
+            subject_type="job",
+            subject_id=job.job_id,
+            job_id=job.job_id,
+            payload={
+                "summary": (
+                    "n8n test run completed in mock-only mode; external "
+                    "webhook execution was blocked by C11B."
+                ),
+                "test_mode": True,
+                "mock_only": True,
+                "model_called": False,
+                "external_http_attempted": False,
+            },
+            importance="normal_demo",
+        ),
+        created_by_id=MOCK_DISPATCH_ACTOR_ID,
+        created_by_type="mock_dispatcher",
+    )
+    _append_event(
+        db,
+        job=job,
+        event_type="mock_records_created",
+        actor_type="mock_dispatcher",
+        actor_id=MOCK_DISPATCH_ACTOR_ID,
+        to_status=None,
+        details={
+            "artifact_id": artifact.artifact_id,
+            "review_id": review.review_id,
+            "memory_event_id": memory_event.memory_event_id,
+            "mock_only": True,
+        },
+    )
 
-    db.expire_all()
-    dispatched_job = get_job(db, job_id)
-    if dispatched_job is None:
-        raise N8nTestDispatchError(
-            "The n8n test job could not be reloaded after dispatch."
-        )
-    if dispatched_job.status not in ALLOWED_TERMINAL_STATUSES:
-        _append_event(
-            db,
-            job=dispatched_job,
-            event_type="webhook_dispatched",
-            actor_type="test_agent",
-            actor_id=N8N_TEST_AGENT_KEY,
-            to_status="waiting_callback",
-            details={"http_status": status_code},
-        )
+    job.finished_at = datetime.now(timezone.utc)
+    _append_event(
+        db,
+        job=job,
+        event_type="completed_demo",
+        actor_type="mock_dispatcher",
+        actor_id=MOCK_DISPATCH_ACTOR_ID,
+        to_status="completed_demo",
+        details={
+            "terminal_demo_status": True,
+            "mock_only": True,
+            "external_http_attempted": False,
+            "webhook_triggered": False,
+        },
+    )
     _audit(
         db,
         actor_type="user",
         actor_id=actor_id,
-        action="n8n_test.webhook_dispatch",
+        action="n8n_test.mock_dispatch",
         target_type="job",
         target_id=job_id,
         job_id=job_id,
         result="success",
         audit=audit,
         details={
-            "http_status": status_code,
-            "external_http_attempted": True,
-            "test_webhook_only": True,
+            "mock_status_code": mock_status_code,
+            "external_http_attempted": False,
+            "webhook_triggered": False,
+            "mock_only": True,
+            "blocked_by": "c11b_external_execution_lock",
         },
     )
     db.commit()
-    db.refresh(dispatched_job)
-    return _snapshot(db, job=dispatched_job)
+    db.refresh(job)
+    return _snapshot(db, job=job)
 
 
 def _callback_is_authorized(
@@ -588,7 +534,7 @@ def process_n8n_test_callback(
     if not _validate_callback_job(job):
         _audit(
             db,
-            actor_type="test_webhook",
+            actor_type="mock_callback_guard",
             actor_id=CALLBACK_ACTOR_ID,
             action="n8n_test.callback",
             target_type="job",
@@ -607,7 +553,7 @@ def process_n8n_test_callback(
     if job.status in ALLOWED_TERMINAL_STATUSES:
         _audit(
             db,
-            actor_type="test_webhook",
+            actor_type="mock_callback_guard",
             actor_id=CALLBACK_ACTOR_ID,
             action="n8n_test.callback_duplicate",
             target_type="job",
@@ -623,131 +569,37 @@ def process_n8n_test_callback(
     _append_event(
         db,
         job=job,
-        event_type="callback_received",
-        actor_type="test_webhook",
+        event_type="callback_blocked_mock_only",
+        actor_type="mock_callback_guard",
         actor_id=CALLBACK_ACTOR_ID,
         to_status=None,
         details={
             "reported_status": payload.status,
             "run_type": payload.run_type,
+            "mock_only": True,
+            "external_http_attempted": False,
+            "webhook_triggered": False,
+            "blocked_by": "c11b_external_execution_lock",
         },
-    )
-
-    if payload.status == "completed_demo":
-        artifact_id = _new_id("artifact")
-        artifact = create_artifact(
-            db,
-            ArtifactCreate(
-                artifact_id=artifact_id,
-                job_id=job.job_id,
-                module_key=N8N_TEST_MODULE_KEY,
-                artifact_type="n8n_test_callback_report",
-                name="n8n Test Callback Report",
-                storage_provider="demo_metadata",
-                storage_ref=f"demo/n8n-test/{artifact_id}",
-                status="registered_demo",
-                metadata={
-                    "test_mode": True,
-                    "callback_received": True,
-                    "external_storage": False,
-                },
-            ),
-        )
-        db.flush()
-        review = create_review(
-            db,
-            payload=ReviewCreate(
-                review_id=_new_id("review"),
-                job_id=job.job_id,
-                artifact_id=artifact.artifact_id,
-                review_type="n8n_test_callback_review",
-                risk_level="demo",
-                status="pending_demo",
-            ),
-            requested_by=int(job.requested_by_user_id),
-        )
-        memory_event = create_memory_event(
-            db,
-            payload=MemoryEventCreate(
-                memory_event_id=_new_id("memory"),
-                event_type="n8n_test_callback_completed",
-                subject_type="job",
-                subject_id=job.job_id,
-                job_id=job.job_id,
-                payload={
-                    "summary": (
-                        "n8n test callback completed in demo mode; no real "
-                        "business workflow was triggered."
-                    ),
-                    "test_mode": True,
-                    "model_called": False,
-                },
-                importance="normal_demo",
-            ),
-            created_by_id=CALLBACK_ACTOR_ID,
-            created_by_type="test_webhook",
-        )
-        _append_event(
-            db,
-            job=job,
-            event_type="demo_records_created",
-            actor_type="test_webhook",
-            actor_id=CALLBACK_ACTOR_ID,
-            to_status=None,
-            details={
-                "artifact_id": artifact.artifact_id,
-                "review_id": review.review_id,
-                "memory_event_id": memory_event.memory_event_id,
-            },
-        )
-    else:
-        db.add(
-            SystemError(
-                error_id=_new_id("error"),
-                error_code="N8N_TEST_CALLBACK_REPORTED_FAILED",
-                severity="error_demo",
-                status="open_demo",
-                message="The n8n test callback reported a failed demo run.",
-                details={
-                    "test_mode": True,
-                    "real_business_effect": False,
-                },
-                job_id=job.job_id,
-                module_id=N8N_TEST_MODULE_KEY,
-                agent_id=N8N_TEST_AGENT_KEY,
-                workflow_id=N8N_TEST_WORKFLOW_KEY,
-                correlation_id=job.correlation_id,
-            )
-        )
-
-    job.finished_at = datetime.now(timezone.utc)
-    _append_event(
-        db,
-        job=job,
-        event_type=payload.status,
-        actor_type="test_webhook",
-        actor_id=CALLBACK_ACTOR_ID,
-        to_status=payload.status,
-        details={"terminal_demo_status": True},
     )
     _audit(
         db,
-        actor_type="test_webhook",
+        actor_type="mock_callback_guard",
         actor_id=CALLBACK_ACTOR_ID,
-        action="n8n_test.callback",
+        action="n8n_test.callback_blocked",
         target_type="job",
         target_id=job.job_id,
         job_id=job.job_id,
-        result="success" if payload.status == "completed_demo" else "failure",
-        error_code=(
-            None
-            if payload.status == "completed_demo"
-            else "N8N_TEST_CALLBACK_REPORTED_FAILED"
-        ),
+        result="success",
         audit=audit,
         details={
-            "terminal_status": payload.status,
+            "reported_status": payload.status,
+            "terminal_status_changed": False,
             "downstream_triggered": False,
+            "external_http_attempted": False,
+            "webhook_triggered": False,
+            "mock_only": True,
+            "blocked_by": "c11b_external_execution_lock",
         },
     )
     db.commit()

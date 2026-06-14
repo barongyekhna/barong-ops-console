@@ -6,11 +6,11 @@ import { useCallback, useEffect, useState } from "react";
 import { ApiError } from "@/lib/api";
 import {
   latestN8nTest,
-  runN8nTest,
+  requestN8nTestMock,
   type N8nTestSnapshot,
 } from "@/lib/n8n-test-api";
 
-const POLLING_STATUSES = new Set(["pending", "running", "waiting_callback"]);
+const POLLING_STATUSES = new Set(["pending", "running"]);
 
 export function N8nTestPanel() {
   const [snapshot, setSnapshot] = useState<N8nTestSnapshot | null>(null);
@@ -60,12 +60,12 @@ export function N8nTestPanel() {
     setIsRunning(true);
     setError("");
     try {
-      setSnapshot(await runN8nTest());
+      setSnapshot(await requestN8nTestMock());
     } catch (requestError) {
       setError(
         requestError instanceof ApiError
           ? requestError.message
-          : "The n8n test webhook could not be called.",
+          : "The n8n test mock request could not be created.",
       );
     } finally {
       setIsRunning(false);
@@ -78,9 +78,9 @@ export function N8nTestPanel() {
         <div className="demo-heading-copy">
           <span className="demo-badge">Test only</span>
           <div>
-            <h3 id="n8n-test-title">n8n Test Webhook Bridge</h3>
+            <h3 id="n8n-test-title">n8n Test Mock Bridge</h3>
             <p>
-              Test bridge only. Does not run real n8n production workflows. It sends no real product or commerce payloads and triggers no downstream business work.
+              Mock bridge only. It does not call n8n, send webhook traffic, or trigger downstream business work.
             </p>
           </div>
         </div>
@@ -95,7 +95,7 @@ export function N8nTestPanel() {
           ) : (
             <Play aria-hidden="true" size={17} />
           )}
-          {isRunning ? "Calling test webhook" : "Run n8n Test"}
+          {isRunning ? "Creating mock result" : "Create mock n8n result"}
         </button>
       </div>
 
@@ -109,7 +109,7 @@ export function N8nTestPanel() {
       {!isLoading && error ? (
         <div className="demo-state demo-state-error" role="alert">
           <div>
-            <strong>n8n test bridge request failed</strong>
+            <strong>n8n test mock request failed</strong>
             <span>{error}</span>
           </div>
           <button

@@ -13,7 +13,7 @@ export default function N8nTestPage() {
         <span className="section-index">F12</span>
         <div>
           <h2>n8n Test Bridge</h2>
-          <p>Verify the safe Console to n8n test callback loop.</p>
+          <p>Verify the mock-only n8n bridge safety state.</p>
         </div>
       </div>
       <N8nTestPanel />
