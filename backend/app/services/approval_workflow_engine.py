@@ -101,6 +101,17 @@ class ApprovalWorkflowEngine:
     def workflow(self) -> ApprovalWorkflow | None:
         return self._workflow
 
+    def load_workflow(
+        self,
+        workflow: ApprovalWorkflow | Mapping[str, Any],
+    ) -> ApprovalWorkflow:
+        self._workflow = (
+            workflow
+            if isinstance(workflow, ApprovalWorkflow)
+            else ApprovalWorkflow.model_validate(workflow)
+        )
+        return self._workflow
+
     def create_workflow(
         self,
         request: ApprovalRequest | Mapping[str, Any],

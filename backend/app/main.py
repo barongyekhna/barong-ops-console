@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from .api.routes.agents import router as agents_router
+from .api.routes.approval import router as approval_router
 from .api.routes.artifacts import router as artifacts_router
 from .api.routes.auth import router as auth_router
 from .api.routes.errors import router as errors_router
@@ -32,6 +33,7 @@ app.include_router(modules_router)
 app.include_router(agents_router)
 app.include_router(workflows_router)
 app.include_router(jobs_router)
+app.include_router(approval_router)
 app.include_router(artifacts_router)
 app.include_router(reviews_router)
 app.include_router(errors_router)

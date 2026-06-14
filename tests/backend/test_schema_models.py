@@ -21,6 +21,9 @@ CORE_TABLES = {
     "permission_registry",
     "user_permission_assignments",
     "role_default_permissions",
+    "approval_requests",
+    "approval_workflows",
+    "approval_decisions",
 }
 
 STABLE_ID_FIELDS = {
@@ -38,6 +41,9 @@ STABLE_ID_FIELDS = {
     "memory_summaries": "memory_summary_id",
     "agent_memory_access_logs": "access_id",
     "permission_registry": "permission_key",
+    "approval_requests": "approval_id",
+    "approval_workflows": "workflow_id",
+    "approval_decisions": "decision_id",
 }
 
 MINIMUM_FIELDS = {
@@ -303,6 +309,53 @@ MINIMUM_FIELDS = {
         "is_enabled",
         "created_at",
         "updated_at",
+    },
+    "approval_requests": {
+        "id",
+        "approval_id",
+        "execution_id",
+        "module_key",
+        "adapter_key",
+        "action_key",
+        "requester_id",
+        "request_time",
+        "risk_level",
+        "execution_type",
+        "status",
+        "reason",
+        "reviewer_id",
+        "context_snapshot",
+        "status_trace",
+        "request_payload",
+        "created_at",
+        "updated_at",
+    },
+    "approval_workflows": {
+        "id",
+        "workflow_id",
+        "approval_id",
+        "execution_id",
+        "state",
+        "workflow_created_at",
+        "workflow_updated_at",
+        "workflow_payload",
+        "created_at",
+        "updated_at",
+    },
+    "approval_decisions": {
+        "id",
+        "decision_id",
+        "approval_id",
+        "workflow_id",
+        "status",
+        "reason",
+        "decision_source",
+        "actor_type",
+        "actor_role",
+        "actor_id",
+        "decision_time",
+        "decision_payload",
+        "created_at",
     },
 }
 

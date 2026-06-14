@@ -1,4 +1,9 @@
 from .artifact import Artifact
+from .approval import (
+    ApprovalDecisionRecord,
+    ApprovalRequestRecord,
+    ApprovalWorkflowRecord,
+)
 from .context import ContextPacket
 from .error import SystemError
 from .job import AutomationJob, JobEvent
@@ -16,6 +21,9 @@ from .user import User
 __all__ = [
     "AgentMemoryAccessLog",
     "AgentRegistry",
+    "ApprovalDecisionRecord",
+    "ApprovalRequestRecord",
+    "ApprovalWorkflowRecord",
     "Artifact",
     "AutomationJob",
     "ContextPacket",

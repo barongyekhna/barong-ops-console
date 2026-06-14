@@ -27,6 +27,8 @@ ApprovalDecisionSource = Literal[
     "user",
     "global",
 ]
+ApprovalActorRole = Literal["owner", "admin", "user", "system"]
+ApprovalActorType = Literal["user", "system"]
 ApprovalContextSource = Literal[
     "c09_execution_request",
     "c10_sandbox_contract",
@@ -77,6 +79,13 @@ APPROVAL_WORKFLOW_ALLOWED_TRANSITIONS: tuple[
     tuple[ApprovalWorkflowState, ApprovalWorkflowState],
     ...,
 ] = APPROVAL_REQUEST_ALLOWED_TRANSITIONS
+C12D_APPROVAL_SAFETY_GUARANTEES = (
+    "C12D persists approval records and decisions only.",
+    "C12D does not call C09 execution provider APIs.",
+    "C12D does not call C10 sandbox runtime or bridge.",
+    "C12D does not call external providers or provider endpoints.",
+    "C12D does not execute approved actions.",
+)
 
 
 class ApprovalContextFact(BaseModel):
@@ -183,3 +192,85 @@ class ApprovalWorkflow(BaseModel):
     history: tuple[ApprovalWorkflowHistoryEntry, ...] = Field(
         default_factory=tuple
     )
+
+
+class ApprovalRequestCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    approval_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=128,
+    )
+    execution_id: str = Field(min_length=1, max_length=128)
+    module_key: str = Field(min_length=1, max_length=128)
+    adapter_key: str = Field(min_length=1, max_length=180)
+    action_key: str = Field(min_length=1, max_length=180)
+    risk_level: ApprovalRiskLevel
+    execution_type: ApprovalExecutionType
+    reason: str = Field(min_length=1, max_length=1000)
+    source_refs: tuple[str, ...] = Field(default_factory=tuple)
+    context_facts: tuple[ApprovalContextFact, ...] = Field(
+        default_factory=tuple
+    )
+
+
+class ApprovalDecisionAction(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class ApprovalDecisionRecordResponse(BaseModel):
+    decision_id: str
+    approval_id: str
+    workflow_id: str
+    status: ApprovalDecisionStatus
+    reason: str
+    decision_source: ApprovalDecisionSource
+    actor_type: ApprovalActorType
+    actor_role: ApprovalActorRole
+    actor_id: int | None
+    decision_time: datetime
+
+
+class ApprovalPermissionBoundaryResponse(BaseModel):
+    actor_role: ApprovalActorRole
+    allowed_actions: tuple[str, ...]
+    full_access: bool = False
+
+
+class ApprovalSafetyBoundaryResponse(BaseModel):
+    stage: Literal["c12d_approval_persistence_api"] = (
+        "c12d_approval_persistence_api"
+    )
+    no_execution: Literal[True] = True
+    no_sandbox_call: Literal[True] = True
+    no_external_provider: Literal[True] = True
+    no_permission_bypass: Literal[True] = True
+
+
+class ApprovalDetailResponse(BaseModel):
+    approval: ApprovalRequest
+    workflow: ApprovalWorkflow
+    decisions: list[ApprovalDecisionRecordResponse]
+    permission_boundary: ApprovalPermissionBoundaryResponse
+    safety: ApprovalSafetyBoundaryResponse = Field(
+        default_factory=ApprovalSafetyBoundaryResponse
+    )
+
+
+class ApprovalListItem(BaseModel):
+    approval_id: str
+    execution_id: str
+    module_key: str
+    adapter_key: str
+    action_key: str
+    requester_id: int
+    request_time: datetime
+    risk_level: ApprovalRiskLevel
+    execution_type: ApprovalExecutionType
+    status: ApprovalRequestStatus
+    reviewer_id: int | None
+    workflow_id: str | None = None
+    workflow_state: ApprovalWorkflowState | None = None
