@@ -41,11 +41,18 @@ ApprovalStatusTransitionEvent = Literal[
     "manual_rejected",
     "auto_approved",
 ]
+ApprovalWorkflowState = ApprovalRequestStatus
+ApprovalWorkflowEvent = Literal[
+    "execution_request_triggered",
+    "c12b_decision_recorded",
+    "workflow_state_updated",
+]
 
 APPROVAL_REQUEST_SCHEMA_VERSION = "c12.approval_request.v1"
 APPROVAL_CONTEXT_SNAPSHOT_SCHEMA_VERSION = (
     "c12.approval_context_snapshot.v1"
 )
+APPROVAL_WORKFLOW_SCHEMA_VERSION = "c12.approval_workflow.v1"
 APPROVAL_REQUEST_INITIAL_STATUS: ApprovalRequestStatus = "pending"
 APPROVAL_REQUEST_TERMINAL_STATUSES: tuple[ApprovalRequestStatus, ...] = (
     "approved",
@@ -60,6 +67,16 @@ APPROVAL_REQUEST_ALLOWED_TRANSITIONS: tuple[
     ("pending", "rejected"),
     ("pending", "auto_approved"),
 )
+APPROVAL_WORKFLOW_INITIAL_STATE: ApprovalWorkflowState = (
+    APPROVAL_REQUEST_INITIAL_STATUS
+)
+APPROVAL_WORKFLOW_TERMINAL_STATES: tuple[ApprovalWorkflowState, ...] = (
+    APPROVAL_REQUEST_TERMINAL_STATUSES
+)
+APPROVAL_WORKFLOW_ALLOWED_TRANSITIONS: tuple[
+    tuple[ApprovalWorkflowState, ApprovalWorkflowState],
+    ...,
+] = APPROVAL_REQUEST_ALLOWED_TRANSITIONS
 
 
 class ApprovalContextFact(BaseModel):
@@ -101,6 +118,7 @@ class ApprovalStatusTraceEntry(BaseModel):
     actor_id: int | None = Field(default=None, gt=0)
     transition_time: datetime
     reason: str = Field(min_length=1, max_length=1000)
+    decision_source: ApprovalDecisionSource | None = None
 
 
 class ApprovalRequest(BaseModel):
@@ -133,3 +151,35 @@ class ApprovalDecision(BaseModel):
     status: ApprovalDecisionStatus
     reason: str = Field(min_length=1, max_length=1000)
     decision_source: ApprovalDecisionSource
+
+
+class ApprovalWorkflowHistoryEntry(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    event: ApprovalWorkflowEvent
+    from_state: ApprovalWorkflowState | None = None
+    to_state: ApprovalWorkflowState
+    state_changed: bool = True
+    event_time: datetime
+    decision_status: ApprovalDecisionStatus | None = None
+    decision_source: ApprovalDecisionSource | None = None
+    actor_id: int | None = Field(default=None, gt=0)
+    reason: str = Field(min_length=1, max_length=1000)
+
+
+class ApprovalWorkflow(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    schema_version: Literal["c12.approval_workflow.v1"] = (
+        APPROVAL_WORKFLOW_SCHEMA_VERSION
+    )
+    workflow_id: str = Field(min_length=1, max_length=180)
+    approval_id: str = Field(min_length=1, max_length=128)
+    execution_id: str = Field(min_length=1, max_length=128)
+    state: ApprovalWorkflowState = APPROVAL_WORKFLOW_INITIAL_STATE
+    approval_request: ApprovalRequest
+    created_at: datetime
+    updated_at: datetime
+    history: tuple[ApprovalWorkflowHistoryEntry, ...] = Field(
+        default_factory=tuple
+    )
