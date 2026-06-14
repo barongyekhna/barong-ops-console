@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from .api.routes.agents import router as agents_router
+from .api.routes.ai_execution_bindings import router as ai_execution_bindings_router
 from .api.routes.approval import router as approval_router
 from .api.routes.artifacts import router as artifacts_router
 from .api.routes.auth import router as auth_router
@@ -46,3 +47,4 @@ app.include_router(n8n_test_router)
 app.include_router(module_adapters_router)
 app.include_router(execution_providers_router)
 app.include_router(external_dependencies_router)
+app.include_router(ai_execution_bindings_router)
