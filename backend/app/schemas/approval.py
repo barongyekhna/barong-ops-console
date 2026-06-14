@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 ApprovalRiskLevel = Literal["low", "medium", "high"]
@@ -117,6 +117,11 @@ class ApprovalContextSnapshot(BaseModel):
     audit_purpose: Literal["c12_approval_audit"] = "c12_approval_audit"
     immutable: Literal[True] = True
 
+    @model_validator(mode="after")
+    def enforce_module_switch(self) -> "ApprovalContextSnapshot":
+        _enforce_module_switch_before_c12(self.module_key)
+        return self
+
 
 class ApprovalStatusTraceEntry(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -152,6 +157,11 @@ class ApprovalRequest(BaseModel):
     status_trace: tuple[ApprovalStatusTraceEntry, ...] = Field(
         default_factory=tuple
     )
+
+    @model_validator(mode="after")
+    def enforce_module_switch(self) -> "ApprovalRequest":
+        _enforce_module_switch_before_c12(self.module_key)
+        return self
 
 
 class ApprovalDecision(BaseModel):
@@ -214,6 +224,11 @@ class ApprovalRequestCreate(BaseModel):
         default_factory=tuple
     )
 
+    @model_validator(mode="after")
+    def enforce_module_switch(self) -> "ApprovalRequestCreate":
+        _enforce_module_switch_before_c12(self.module_key)
+        return self
+
 
 class ApprovalDecisionAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -274,3 +289,15 @@ class ApprovalListItem(BaseModel):
     reviewer_id: int | None
     workflow_id: str | None = None
     workflow_state: ApprovalWorkflowState | None = None
+
+
+def _enforce_module_switch_before_c12(module_key: str) -> None:
+    from ..services.module_switch_runtime_gate import (
+        ModuleSwitchRuntimeBlockedError,
+        enforce_module_switch_before_c12_approval_request,
+    )
+
+    try:
+        enforce_module_switch_before_c12_approval_request(module_key)
+    except ModuleSwitchRuntimeBlockedError as exc:
+        raise ValueError(str(exc)) from None

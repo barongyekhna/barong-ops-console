@@ -26,7 +26,7 @@ def approval_request(
     *,
     approval_id: str = "approval-1",
     execution_id: str = "execution-1",
-    module_key: str = "business.orders",
+    module_key: str = "admin.users",
     requester_role: str = "non_owner",
     risk_level: ApprovalRiskLevel = "high",
     execution_type: ApprovalExecutionType = "real",
@@ -36,8 +36,8 @@ def approval_request(
         captured_at=NOW,
         execution_id=execution_id,
         module_key=module_key,
-        adapter_key="adapter.orders",
-        action_key="approve",
+        adapter_key="admin.users.adapter",
+        action_key="admin.users.manage",
         requester_id=1,
         risk_level=risk_level,
         execution_type=execution_type,
@@ -54,8 +54,8 @@ def approval_request(
         approval_id=approval_id,
         execution_id=execution_id,
         module_key=module_key,
-        adapter_key="adapter.orders",
-        action_key="approve",
+        adapter_key="admin.users.adapter",
+        action_key="admin.users.manage",
         requester_id=1,
         request_time=NOW,
         risk_level=risk_level,
@@ -192,7 +192,7 @@ def test_terminal_workflow_rejects_new_decision() -> None:
 def test_identity_drift_is_rejected_by_c12b_on_create() -> None:
     engine = ApprovalWorkflowEngine()
     request = approval_request(
-        module_key="business.orders",
+        module_key="admin.users",
         risk_level="low",
         execution_type="mock",
     )

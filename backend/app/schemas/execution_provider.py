@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 ExecutionProviderType = Literal[
@@ -139,6 +139,19 @@ class ExecutionRequestContractV1(BaseModel):
     error_code: str | None = Field(default=None, max_length=120)
     error_message_safe: str | None = Field(default=None, max_length=500)
     operation_log_id: str | None = Field(default=None, max_length=128)
+
+    @model_validator(mode="after")
+    def enforce_module_switch(self) -> "ExecutionRequestContractV1":
+        from ..services.module_switch_runtime_gate import (
+            ModuleSwitchRuntimeBlockedError,
+            enforce_module_switch_before_c09_execution_request,
+        )
+
+        try:
+            enforce_module_switch_before_c09_execution_request(self.module_key)
+        except ModuleSwitchRuntimeBlockedError as exc:
+            raise ValueError(str(exc)) from None
+        return self
 
 
 class ExecutionResultContractV1(BaseModel):

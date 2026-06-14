@@ -53,9 +53,9 @@ def approval_payload(
     return {
         "approval_id": approval_id,
         "execution_id": execution_id,
-        "module_key": "business.orders",
-        "adapter_key": "adapter.orders",
-        "action_key": "ship",
+        "module_key": "admin.users",
+        "adapter_key": "admin.users.adapter",
+        "action_key": "admin.users.manage",
         "risk_level": "high",
         "execution_type": "real",
         "reason": "Approval is required before execution can continue.",

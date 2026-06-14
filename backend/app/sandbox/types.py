@@ -1,6 +1,6 @@
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ..schemas.execution_provider import (
     ExecutionLifecycleStatus,
@@ -101,6 +101,21 @@ class SandboxRequest(BaseModel):
     external_provider_policy: Literal["denied"] = "denied"
     db_mutation_policy: Literal["denied"] = "denied"
     filesystem_write_policy: Literal["sandbox_scope_only"] = "sandbox_scope_only"
+
+    @model_validator(mode="after")
+    def enforce_module_switch(self) -> "SandboxRequest":
+        from ..services.module_switch_runtime_gate import (
+            ModuleSwitchRuntimeBlockedError,
+            enforce_module_switch_before_c10_sandbox_entry,
+        )
+
+        try:
+            enforce_module_switch_before_c10_sandbox_entry(self.module_key)
+        except ModuleSwitchRuntimeBlockedError as exc:
+            raise ValueError(str(exc)) from None
+        if self.c09_execution_request.module_key != self.module_key:
+            raise ValueError("SandboxRequest module_key must match C09 request.")
+        return self
 
 
 class SandboxResult(BaseModel):

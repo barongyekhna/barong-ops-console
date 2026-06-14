@@ -16,6 +16,10 @@ from ..schemas.module_adapter import (
     ModuleAdapterAccessRead,
     ModuleAdapterContractV1,
 )
+from .module_switch_runtime_gate import (
+    ModuleSwitchRuntimeBlockedError,
+    enforce_module_switch_before_c08_module_resolution,
+)
 from .module_registry import (
     MODULE_KEY_PATTERN,
     build_module_access_state,
@@ -497,17 +501,12 @@ def build_adapter_access_state(
     adapter: ModuleAdapterContractV1,
     current_user_permissions: CurrentUserPermissionInfo,
 ) -> ModuleAdapterAccessRead:
-    manifest = get_module_manifest(adapter.module_key)
-    if manifest is None:
-        raise ValueError(f"{adapter.adapter_key} module manifest is missing.")
-
-    module_access = build_module_access_state(manifest, current_user_permissions)
+    action_keys = _action_keys(adapter)
     required_permissions = _required_permission_keys(adapter)
     missing_permissions = _missing_permissions(
         required_permissions,
         current_user_permissions,
     )
-    action_keys = _action_keys(adapter)
     requires_execution_provider = (
         adapter.execution_requirements.requires_execution_provider
         or any(action.requires_execution_provider for action in adapter.actions)
@@ -516,6 +515,38 @@ def build_adapter_access_state(
         adapter.approval_requirements.requires_approval
         or any(action.requires_approval for action in adapter.actions)
     )
+    try:
+        enforce_module_switch_before_c08_module_resolution(adapter.module_key)
+    except ModuleSwitchRuntimeBlockedError as exc:
+        return ModuleAdapterAccessRead(
+            adapter_key=adapter.adapter_key,
+            module_key=adapter.module_key,
+            visible=True,
+            hidden=False,
+            locked=False,
+            unavailable=True,
+            adapter_status=adapter.adapter_status,
+            adapter_access_state="unavailable",
+            supported_surfaces=adapter.supported_surfaces,
+            available_surfaces=[],
+            disabled_surfaces=adapter.supported_surfaces,
+            action_contracts=adapter.action_contracts,
+            available_actions=[],
+            locked_actions=[],
+            unavailable_actions=action_keys,
+            required_permissions=sorted(required_permissions),
+            missing_permissions=missing_permissions,
+            requires_execution_provider=requires_execution_provider,
+            execution_provider_state="disabled",
+            requires_approval=requires_approval,
+            reason=str(exc),
+        )
+
+    manifest = get_module_manifest(adapter.module_key)
+    if manifest is None:
+        raise ValueError(f"{adapter.adapter_key} module manifest is missing.")
+
+    module_access = build_module_access_state(manifest, current_user_permissions)
 
     if module_access.hidden:
         return ModuleAdapterAccessRead(

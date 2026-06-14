@@ -22,6 +22,10 @@ from .module_adapter_registry import (
     get_adapter_contract,
     list_adapter_contracts,
 )
+from .module_switch_runtime_gate import (
+    ModuleSwitchRuntimeBlockedError,
+    enforce_module_switch_before_c09_execution_request,
+)
 from .module_registry import (
     MODULE_KEY_PATTERN,
     build_module_access_state,
@@ -388,6 +392,40 @@ def build_execution_provider_access_state(
     provider: ExecutionProviderContractV1,
     current_user_permissions: CurrentUserPermissionInfo,
 ) -> ExecutionProviderAccessRead:
+    try:
+        enforce_module_switch_before_c09_execution_request(provider.module_key)
+    except ModuleSwitchRuntimeBlockedError as exc:
+        return ExecutionProviderAccessRead(
+            provider_key=provider.provider_key,
+            provider_type=provider.provider_type,
+            provider_status=provider.provider_status,
+            provider_access_state="blocked",
+            module_key=provider.module_key,
+            adapter_key=provider.adapter_key,
+            action_key=provider.action_key,
+            visible=True,
+            hidden=False,
+            locked=False,
+            unavailable=True,
+            blocked=True,
+            block_reason=exc.decision.reason,
+            required_permission=provider.required_permissions[0],
+            missing_permissions=[],
+            risk_level=provider.risk_level,
+            requires_approval=provider.approval_requirement.requires_approval,
+            approval_status=provider.approval_requirement.approval_status,
+            requires_secret=provider.secret_requirement.requires_secret,
+            secret_binding_status=provider.secret_requirement.secret_binding_status,
+            requires_scope=provider.scope_requirement.requires_scope,
+            scope_status=provider.scope_requirement.scope_status,
+            execution_mode=provider.supported_execution_modes[0],
+            can_request_execution=False,
+            executable=False,
+            no_execute_reason="blocked_by_module_switch",
+            operation_log_action=provider.operation_log_action,
+            safe_status_message=str(exc),
+        )
+
     manifest = get_module_manifest(provider.module_key)
     if manifest is None:
         raise ValueError(f"{provider.provider_key} module manifest is missing.")

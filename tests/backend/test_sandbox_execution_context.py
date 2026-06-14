@@ -17,18 +17,18 @@ def execution_request(
     return ExecutionRequestContractV1(
         execution_id=execution_id,
         request_id=request_id,
-        module_key="products",
-        adapter_key="products.inventory_adapter",
-        action_key="inventory.mock_check",
+        module_key="business.products",
+        adapter_key="business.products.placeholder.adapter",
+        action_key="business.products.placeholder.prepare",
         actor_user_id=1001,
         target_scope={"product_ref": "demo-only"},
         input_payload={"redacted": True},
         sanitized_input_summary={"shape": "demo"},
-        provider_key="core.mock_provider",
-        provider_type="mock_provider",
+        provider_key="core.no_op_provider",
+        provider_type="no_op_provider",
         status="requested",
         risk_level="low",
-        required_permission="products.inventory.read",
+        required_permission="products.read",
     )
 
 
