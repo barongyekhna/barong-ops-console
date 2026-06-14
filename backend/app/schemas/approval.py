@@ -14,6 +14,19 @@ ApprovalRequestStatus = Literal[
     "rejected",
     "auto_approved",
 ]
+ApprovalDecisionStatus = Literal[
+    "approved",
+    "rejected",
+    "auto_approved",
+    "pending",
+]
+ApprovalDecisionSource = Literal[
+    "risk",
+    "execution",
+    "module",
+    "user",
+    "global",
+]
 ApprovalContextSource = Literal[
     "c09_execution_request",
     "c10_sandbox_contract",
@@ -112,3 +125,11 @@ class ApprovalRequest(BaseModel):
     status_trace: tuple[ApprovalStatusTraceEntry, ...] = Field(
         default_factory=tuple
     )
+
+
+class ApprovalDecision(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    status: ApprovalDecisionStatus
+    reason: str = Field(min_length=1, max_length=1000)
+    decision_source: ApprovalDecisionSource
