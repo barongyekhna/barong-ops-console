@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 
 import { ProductList } from "@/modules/k/product-knowledge/ProductList";
 import { ResearchTriggerPanel } from "@/modules/k15/research-trigger/ResearchTriggerPanel";
+import { SERPTriggerPanel } from "@/modules/k16/serp-trigger/SERPTriggerPanel";
 
 export const metadata: Metadata = {
   title: "Product Knowledge",
@@ -24,6 +25,7 @@ export default function ProductsPage() {
       </div>
 
       <ResearchTriggerPanel />
+      <SERPTriggerPanel />
 
       {K7_CONSOLE_MODE ? <ProductList /> : null}
     </div>
