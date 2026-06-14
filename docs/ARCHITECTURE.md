@@ -75,12 +75,12 @@ WooCommerce 是后续受控外部目标。接入时必须经过独立模块设�
 
 模块之间不得直接修改彼此状态，具体协作约束见 `MODULE_CONTRACT.md`。
 
-### 4.1 C13A Module Switch Gate
+### 4.1 C13 Module Switch Gate
 
 C13A 将模块 action execution flow 的架构位置固定为：
 
 ```text
-C08 -> C13A -> C12 -> C09 -> C10
+C08 -> C13 -> C12 -> C09 -> C10
 ```
 
 `ModuleSwitchGate` 位于 C08 Module Adapter 之后、C12 Approval System 之前。
@@ -95,10 +95,17 @@ C08 -> C13A -> C12 -> C09 -> C10
 - `MAINTENANCE` -> block request。
 - missing registry or invalid state -> block request。
 
-C13A 是架构层设计，不改变现有 runtime。被 Module Switch 阻断的请求不得创建
-approval request、不得创建 C09 execution request、不得调用 C10 sandbox、不得触发
-runtime execution。`ON` 只表示可以继续接受 C12/C09/C10 的后续 gate，并不表示审批通过
-或可以执行。
+C13A 是架构层设计。C13B 已实现运行时 enforcement layer：
+
+- `ModuleSwitchRuntimeGate.check(module_key)` 返回 `ON` / `OFF`。
+- C08 adapter module resolution、C12 approval request、C09 execution request 和
+  C10 sandbox request 入口前均有 C13B check。
+- OFF / missing / invalid / duplicate switch record 均 `BLOCKED`，并停止后续 chain。
+
+被 Module Switch 阻断的请求不得创建 approval request、不得创建 C09 execution
+request、不得调用 C10 sandbox、不得触发 runtime execution。`ON` 只表示可以继续接受
+C12/C09/C10 的后续 gate，并不表示审批通过或可以执行。C13B 不新增 API、migration、
+frontend UI、external provider call、production/staging 操作或真实执行能力。
 
 ## 5. 架构原则
 

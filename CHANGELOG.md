@@ -6,6 +6,19 @@
 
 ### Added
 
+- C13B：新增 `backend/app/schemas/module_switch.py`、
+  `backend/app/core/module_switches.py` 和
+  `backend/app/services/module_switch_runtime_gate.py`，实现
+  `ModuleSwitchRuntimeGate.check(module_key) -> ON | OFF`、allow/block decision
+  与 fail-closed `BLOCKED` enforcement。
+- C13B：在 C08 adapter module resolution、C12 approval request、C09 execution
+  request contract 和 C10 sandbox request entry 前加入 Module Switch pre-entry
+  checks；OFF / missing / duplicate / invalid switch record 均阻断，且不生成
+  approval / execution / sandbox request。
+- C13B：新增 `docs/C13B_MODULE_SWITCH_RUNTIME_ENFORCEMENT.md` 与
+  `tests/backend/test_module_switch_runtime_gate.py`，并将 C12/C10 旧 mock fixture
+  module keys 调整为已注册 C07 module；本轮未新增 API/UI/migration，未运行 docker，
+  未发布 staging/production，未引入 runtime execution。
 - C13A：新增 `docs/C13A_MODULE_SWITCH_SYSTEM_DESIGN.md`，完成 Module Switch
   System 架构层设计；定义 `ModuleSwitchRegistry`、`ON` / `OFF` / `DEPRECATED` /
   `MAINTENANCE` switch state model、`ModuleSwitchGate` 和 required integration

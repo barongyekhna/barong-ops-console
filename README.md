@@ -971,6 +971,21 @@ production. An allowed module switch state only means the request may continue
 to C12; it does not approve, execute, enqueue, dispatch, or unlock sandbox
 execution.
 
+C13B has added the runtime enforcement layer documented in
+`docs/C13B_MODULE_SWITCH_RUNTIME_ENFORCEMENT.md`:
+
+- `ModuleSwitchRuntimeGate.check(module_key)` returns `ON` / `OFF`.
+- OFF, missing, duplicate, or invalid switch records fail closed as `BLOCKED`.
+- C13B checks run before C08 adapter module resolution, C12 approval request
+  creation, C09 execution request contract creation, and C10 sandbox request
+  entry.
+- Blocked flow stops before approval/execution/sandbox objects are generated;
+  allowed flow still requires C12 and remains bound by C09 no-execute and C10
+  mock-only safety locks.
+
+C13B adds no API, migration, frontend UI, external provider call,
+production/staging operation, or runtime execution capability.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not
