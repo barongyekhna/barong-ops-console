@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 
 import { ProductList } from "@/modules/k/product-knowledge/ProductList";
+import { ResearchTriggerPanel } from "@/modules/k15/research-trigger/ResearchTriggerPanel";
 
 export const metadata: Metadata = {
   title: "Product Knowledge",
@@ -21,6 +22,8 @@ export default function ProductsPage() {
           </p>
         </div>
       </div>
+
+      <ResearchTriggerPanel />
 
       {K7_CONSOLE_MODE ? <ProductList /> : null}
     </div>
