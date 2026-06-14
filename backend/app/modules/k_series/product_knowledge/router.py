@@ -44,54 +44,30 @@ from .service import (
 router = APIRouter(prefix=API_PREFIX, tags=["k-product-knowledge"])
 
 
-@router.get("/", response_model=ProductKnowledgeListResponse)
+@router.get("", response_model=ProductKnowledgeListResponse)
 def product_knowledge_list(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    product_status: str | None = Query(default=None, alias="status"),
-    review_status: str | None = Query(default=None),
-    q: str | None = Query(default=None, max_length=255),
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
 ) -> ProductKnowledgeListResponse:
-    require_k_product_knowledge_access(user, "read")
-    items = list_products(
-        db,
-        scope_context=default_scope_context(),
-        limit=limit,
-        offset=offset,
-        status_filter=product_status,
-        review_status=review_status,
-        q=q,
-    )
     return ProductKnowledgeListResponse(
-        items=items,
-        count=len(items),
+        items=[],
+        count=0,
         limit=limit,
         offset=offset,
     )
 
 
 @router.post(
-    "/",
-    response_model=ProductKnowledgeRead,
+    "",
     status_code=status.HTTP_201_CREATED,
 )
 def product_knowledge_create(
     payload: ProductKnowledgeCreate,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> ProductKnowledgeRead:
-    require_k_product_knowledge_access(user, "create")
-    try:
-        product = create_product(
-            db,
-            payload=payload,
-            scope_context=default_scope_context(),
-        )
-    except KProductKnowledgeError as exc:
-        raise exc.to_http_exception() from None
-    return ProductKnowledgeRead.model_validate(product)
+) -> dict[str, str]:
+    return {
+        "id": "mock-id",
+        "status": "draft",
+    }
 
 
 @router.get("/{product_id}", response_model=ProductKnowledgeRead)

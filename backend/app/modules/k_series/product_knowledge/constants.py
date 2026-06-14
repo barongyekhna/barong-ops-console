@@ -1,7 +1,7 @@
 """Module-local constants for the unregistered K Product Knowledge skeleton."""
 
 MODULE_KEY = "k.product_knowledge"
-API_PREFIX = "/api/k/product-knowledge"
+API_PREFIX = "/products"
 
 DEFAULT_WORKSPACE_KEY = "default_independent_store"
 DEFAULT_BUSINESS_CONTEXT = "independent_store"
