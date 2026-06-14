@@ -34,7 +34,7 @@ export type N8nTestSnapshot = {
   operation_log_count: number;
 };
 
-export function runN8nTest() {
+export function requestN8nTestMock() {
   return apiRequest<N8nTestSnapshot>("/n8n-test/run", {
     accessToken: readAccessToken(),
     method: "POST",

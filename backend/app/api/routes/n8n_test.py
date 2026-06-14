@@ -20,13 +20,11 @@ from ...schemas.n8n_test import (
 from ...services.n8n_test_service import (
     N8nTestCallbackAuthenticationError,
     N8nTestCallbackJobError,
-    N8nTestConfigurationError,
-    N8nTestDispatchError,
     get_latest_n8n_test,
     process_n8n_test_callback,
     run_n8n_test,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, get_current_user, require_permission
 
 router = APIRouter(prefix="/n8n-test", tags=["n8n-test"])
 
@@ -39,28 +37,15 @@ router = APIRouter(prefix="/n8n-test", tags=["n8n-test"])
 def n8n_test_run(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_permission("jobs.create")),
     settings: Settings = Depends(get_settings),
 ) -> N8nTestRunResponse:
-    callback_url = str(request.url_for("n8n_test_callback"))
-    try:
-        result = run_n8n_test(
-            db,
-            user=user,
-            audit=get_audit_context(request),
-            settings=settings,
-            callback_url=callback_url,
-        )
-    except N8nTestConfigurationError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=str(exc),
-        ) from None
-    except N8nTestDispatchError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(exc),
-        ) from None
+    result = run_n8n_test(
+        db,
+        user=user,
+        audit=get_audit_context(request),
+        settings=settings,
+    )
     return N8nTestRunResponse.model_validate(result)
 
 

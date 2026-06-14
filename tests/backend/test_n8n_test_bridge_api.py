@@ -35,34 +35,28 @@ CALLBACK_PAYLOAD = {
 
 
 @pytest.fixture(autouse=True)
-def block_unmocked_webhook(monkeypatch):
-    def blocked_webhook(**kwargs):
-        del kwargs
-        raise AssertionError("An unmocked n8n test HTTP request was attempted.")
-
-    monkeypatch.setattr(
-        "backend.app.services.n8n_test_service.send_n8n_test_webhook",
-        blocked_webhook,
-    )
+def block_unmocked_webhook():
+    """C11B leaves no outbound webhook hook to patch."""
+    return None
 
 
 def configure_test_bridge(settings: Settings) -> None:
-    settings.n8n_test_webhook_url = TEST_WEBHOOK_URL
+    settings.n8n_test_webhook_url = ""
     settings.n8n_test_callback_secret = SecretStr(TEST_CALLBACK_SECRET)
     settings.n8n_test_request_timeout_seconds = 7
 
 
-def install_successful_webhook(
+def install_mock_dispatch_capture(
     monkeypatch,
     captured: dict[str, Any],
 ) -> None:
-    def fake_webhook(**kwargs):
+    def fake_mock_response(**kwargs):
         captured.update(kwargs)
         return 202
 
     monkeypatch.setattr(
-        "backend.app.services.n8n_test_service.send_n8n_test_webhook",
-        fake_webhook,
+        "backend.app.services.n8n_test_service.build_n8n_test_mock_response",
+        fake_mock_response,
     )
 
 
@@ -73,8 +67,8 @@ def create_waiting_test_job(
     captured: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     configure_test_bridge(test_settings)
-    outbound = captured if captured is not None else {}
-    install_successful_webhook(monkeypatch, outbound)
+    mock_dispatch = captured if captured is not None else {}
+    install_mock_dispatch_capture(monkeypatch, mock_dispatch)
     response = owner_client.post("/n8n-test/run")
     assert response.status_code == 201, response.text
     return response.json()
@@ -99,14 +93,17 @@ def test_owner_can_access_latest_n8n_test(
     )
 
 
-def test_unconfigured_webhook_fails_without_external_request_and_logs(
+def test_unconfigured_webhook_returns_mock_only_result_without_external_request(
     owner_client: TestClient,
 ) -> None:
     response = owner_client.post("/n8n-test/run")
 
-    assert response.status_code == 503
-    assert "not configured" in response.json()["detail"]
-    assert "no external request" in response.json()["detail"]
+    assert response.status_code == 201
+    payload = response.json()
+    assert payload["job"]["status"] == "completed_demo"
+    assert payload["latest_event"]["event_type"] == "completed_demo"
+    assert payload["artifact"]["artifact_type"] == "n8n_test_mock_report"
+    assert payload["memory_event"]["event_type"] == "n8n_test_mock_completed"
 
     with SessionLocal() as db:
         job_count = db.scalar(
@@ -114,20 +111,21 @@ def test_unconfigured_webhook_fails_without_external_request_and_logs(
                 AutomationJob.module_id == "n8n_test_bridge"
             )
         )
-        failure_log = db.scalar(
+        mock_log = db.scalar(
             select(OperationLog).where(
-                OperationLog.action == "n8n_test.run",
-                OperationLog.result == "failure",
+                OperationLog.action == "n8n_test.mock_dispatch",
+                OperationLog.result == "success",
             )
         )
 
-    assert job_count == 0
-    assert failure_log is not None
-    assert failure_log.error_code == "N8N_TEST_CONFIGURATION_UNAVAILABLE"
-    assert failure_log.details["external_http_attempted"] is False
+    assert job_count == 1
+    assert mock_log is not None
+    assert mock_log.details["external_http_attempted"] is False
+    assert mock_log.details["webhook_triggered"] is False
+    assert mock_log.details["mock_only"] is True
 
 
-def test_configured_run_creates_test_registry_job_and_safe_payload(
+def test_configured_run_creates_mock_registry_job_and_safe_payload(
     owner_client: TestClient,
     test_settings: Settings,
     monkeypatch,
@@ -140,25 +138,26 @@ def test_configured_run_creates_test_registry_job_and_safe_payload(
         captured,
     )
 
-    assert captured["url"] == TEST_WEBHOOK_URL
-    assert captured["timeout_seconds"] == 7
-    outbound = captured["payload"]
-    assert set(outbound) == {
+    mock_payload = captured["payload"]
+    assert set(mock_payload) == {
         "job_id",
-        "callback_url",
-        "callback_secret",
         "test_mode",
         "source",
         "run_type",
+        "mock_only",
+        "external_http_attempted",
+        "webhook_triggered",
     }
-    assert outbound["job_id"] == payload["job"]["job_id"]
-    assert outbound["callback_url"].endswith("/n8n-test/callback")
-    assert outbound["callback_secret"] == TEST_CALLBACK_SECRET
-    assert outbound["test_mode"] is True
-    assert outbound["source"] == "barong_ops_console"
-    assert outbound["run_type"] == "n8n_test_bridge"
-    serialized_outbound = json.dumps(outbound).lower()
+    assert mock_payload["job_id"] == payload["job"]["job_id"]
+    assert mock_payload["test_mode"] is True
+    assert mock_payload["source"] == "barong_ops_console"
+    assert mock_payload["run_type"] == "n8n_test_bridge"
+    assert mock_payload["mock_only"] is True
+    assert mock_payload["external_http_attempted"] is False
+    assert mock_payload["webhook_triggered"] is False
+    serialized_outbound = json.dumps(mock_payload).lower()
     for marker in (
+        "callback_secret",
         "product_id",
         "product_name",
         "woocommerce",
@@ -170,11 +169,12 @@ def test_configured_run_creates_test_registry_job_and_safe_payload(
 
     assert payload["test_mode"] is True
     assert payload["job"]["run_type"] == "n8n_test_bridge"
-    assert payload["job"]["status"] == "waiting_callback"
-    assert payload["latest_event"]["event_type"] == "webhook_dispatched"
-    assert payload["artifact"] is None
-    assert payload["review"] is None
-    assert payload["memory_event"] is None
+    assert payload["job"]["status"] == "completed_demo"
+    assert payload["latest_event"]["event_type"] == "completed_demo"
+    assert payload["artifact"]["artifact_type"] == "n8n_test_mock_report"
+    assert payload["artifact"]["title"] == "n8n Test Mock Report"
+    assert payload["review"]["status"] == "pending_demo"
+    assert payload["memory_event"]["event_type"] == "n8n_test_mock_completed"
     assert payload["error"] is None
 
     with SessionLocal() as db:
@@ -205,7 +205,9 @@ def test_configured_run_creates_test_registry_job_and_safe_payload(
     assert workflow is not None and workflow.status == "demo"
     assert workflow.endpoint_ref.startswith("demo://")
     assert TEST_WEBHOOK_URL not in workflow.endpoint_ref
-    assert job is not None and job.status == "waiting_callback"
+    assert job is not None and job.status == "completed_demo"
+    assert job.input_payload["mock_only"] is True
+    assert job.input_payload["external_http_allowed"] is False
     assert job.input_payload["real_business_task"] is False
 
 
@@ -258,7 +260,7 @@ def test_callback_rejects_missing_or_wrong_secret_without_leaking_it(
             .order_by(OperationLog.id.desc())
         )
 
-    assert job is not None and job.status == "waiting_callback"
+    assert job is not None and job.status == "completed_demo"
     assert failure_log is not None
     serialized_log = json.dumps(failure_log.details).lower()
     assert TEST_CALLBACK_SECRET.lower() not in serialized_log
@@ -268,7 +270,7 @@ def test_callback_rejects_missing_or_wrong_secret_without_leaking_it(
     assert "token" not in serialized_log
 
 
-def test_authorized_callback_completes_demo_records_and_latest(
+def test_authorized_callback_on_mock_completed_job_returns_existing_snapshot(
     owner_client: TestClient,
     test_settings: Settings,
     monkeypatch,
@@ -292,14 +294,14 @@ def test_authorized_callback_completes_demo_records_and_latest(
     assert payload["job"]["status"] == "completed_demo"
     assert payload["latest_event"]["event_type"] == "completed_demo"
     assert payload["artifact"]["artifact_type"] == (
-        "n8n_test_callback_report"
+        "n8n_test_mock_report"
     )
-    assert payload["artifact"]["title"] == "n8n Test Callback Report"
+    assert payload["artifact"]["title"] == "n8n Test Mock Report"
     assert payload["review"]["status"] == "pending_demo"
     assert payload["memory_event"]["event_type"] == (
-        "n8n_test_callback_completed"
+        "n8n_test_mock_completed"
     )
-    assert "demo mode" in payload["memory_event"]["summary"]
+    assert "mock-only mode" in payload["memory_event"]["summary"]
     assert payload["error"] is None
 
     latest = owner_client.get("/n8n-test/latest")
@@ -346,9 +348,10 @@ def test_authorized_callback_completes_demo_records_and_latest(
     assert artifact is not None
     assert artifact.storage_provider == "demo_metadata"
     assert artifact.artifact_metadata["external_storage"] is False
+    assert artifact.artifact_metadata["external_http_attempted"] is False
     assert review is not None and review.status == "pending_demo"
     assert memory_event is not None
-    assert memory_event.created_by_type == "test_webhook"
+    assert memory_event.created_by_type == "mock_dispatcher"
     serialized_logs = json.dumps(
         [operation_log.details for operation_log in operation_logs]
     ).lower()
@@ -383,7 +386,7 @@ def test_callback_accepts_only_demo_terminal_statuses(
     assert response.status_code == 422
 
 
-def test_failed_callback_uses_failed_demo_status_and_system_error(
+def test_failed_callback_on_mock_completed_job_does_not_change_terminal_status(
     owner_client: TestClient,
     test_settings: Settings,
     monkeypatch,
@@ -406,32 +409,21 @@ def test_failed_callback_uses_failed_demo_status_and_system_error(
     )
 
     assert response.status_code == 200
-    assert response.json()["job"]["status"] == "failed"
-    assert response.json()["error"]["error_code"] == (
-        "N8N_TEST_CALLBACK_REPORTED_FAILED"
-    )
+    assert response.json()["job"]["status"] == "completed_demo"
+    assert response.json()["error"] is None
 
 
-def test_webhook_http_failure_marks_job_failed_and_records_error(
+def test_external_webhook_failure_path_is_removed(
     owner_client: TestClient,
     test_settings: Settings,
     monkeypatch,
 ) -> None:
     configure_test_bridge(test_settings)
 
-    def failing_webhook(**kwargs):
-        del kwargs
-        raise TimeoutError("controlled fake timeout")
-
-    monkeypatch.setattr(
-        "backend.app.services.n8n_test_service.send_n8n_test_webhook",
-        failing_webhook,
-    )
-
     response = owner_client.post("/n8n-test/run")
 
-    assert response.status_code == 502
-    assert "marked failed" in response.json()["detail"]
+    assert response.status_code == 201
+    assert response.json()["job"]["status"] == "completed_demo"
 
     with SessionLocal() as db:
         job = db.scalar(
@@ -444,20 +436,19 @@ def test_webhook_http_failure_marks_job_failed_and_records_error(
                 SystemError.error_code == "N8N_TEST_WEBHOOK_CALL_FAILED"
             )
         )
-        failure_log = db.scalar(
+        mock_log = db.scalar(
             select(OperationLog).where(
-                OperationLog.action == "n8n_test.webhook_dispatch",
-                OperationLog.result == "failure",
+                OperationLog.action == "n8n_test.mock_dispatch",
+                OperationLog.result == "success",
             )
         )
 
-    assert job is not None and job.status == "failed"
+    assert job is not None and job.status == "completed_demo"
     assert job.finished_at is not None
-    assert system_error is not None
-    assert system_error.job_id == job.job_id
-    assert system_error.details["real_business_effect"] is False
-    assert failure_log is not None
-    assert failure_log.details["external_http_attempted"] is True
+    assert system_error is None
+    assert mock_log is not None
+    assert mock_log.details["external_http_attempted"] is False
+    assert mock_log.details["webhook_triggered"] is False
 
 
 def test_n8n_test_bridge_has_no_real_integration_or_registration_surface() -> None:
