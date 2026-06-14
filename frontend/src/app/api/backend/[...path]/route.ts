@@ -45,6 +45,14 @@ const ALLOWED_EXTERNAL_DEPENDENCY_PATHS = new Set([
   "external-dependencies/binding-validation",
   "external-dependencies/binding-audit",
 ]);
+const ALLOWED_AI_EXECUTION_BINDING_PATHS = new Set([
+  "ai-execution-bindings/registry",
+  "ai-execution-bindings/rules",
+  "ai-execution-bindings/execution-flow",
+  "ai-execution-bindings/validation",
+  "ai-execution-bindings/ui-interaction",
+  "ai-execution-bindings/completion-status",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -153,6 +161,8 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
       ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_EXTERNAL_DEPENDENCY_PATHS.has(requestedPath)) ||
+    (method === "GET" &&
+      ALLOWED_AI_EXECUTION_BINDING_PATHS.has(requestedPath)) ||
     isAllowedPermissionPath(method, path) ||
     (method === "POST" && requestedPath === "foundation-demo/run") ||
     (method === "GET" && requestedPath === "foundation-demo/latest") ||
