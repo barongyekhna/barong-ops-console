@@ -6,6 +6,16 @@
 
 ### Added
 
+- C13A：新增 `docs/C13A_MODULE_SWITCH_SYSTEM_DESIGN.md`，完成 Module Switch
+  System 架构层设计；定义 `ModuleSwitchRegistry`、`ON` / `OFF` / `DEPRECATED` /
+  `MAINTENANCE` switch state model、`ModuleSwitchGate` 和 required integration
+  position `C08 -> C13A -> C12 -> C09 -> C10`。
+- C13A：明确 gate 规则为 `ON` allow flow，`OFF` block request，并保守规定
+  `DEPRECATED`、`MAINTENANCE`、missing registry 和 invalid state 均 fail closed；
+  blocked request 不进入 C12，不创建 C09 execution request，不调用 C10 sandbox。
+- C13A：更新 README 与 ARCHITECTURE 的模块开关架构说明；本轮只做设计文档，未修改
+  backend/frontend runtime，未新增 API/UI/migration，未修改 approval logic，未修改
+  sandbox，未执行 adapter action，未引入 runtime execution。
 - C09G：新增 `docs/C09_EXECUTION_PROVIDER_SEAL.md`，归档 C09 Execution
   Provider 统一最终封板；覆盖 C09A-C09F 完整生命周期、Execution Provider Contract v1
   冻结状态、no-op/mock/contract-only model、production gateway 非依赖、C08/C07/C05/C06

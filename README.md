@@ -948,6 +948,29 @@ C09G has sealed the unified C09 Execution Provider record in
   permissions, and C06 user permission management.
 - C10-C20 boundaries remain future separate stages; C09G does not enter C10.
 
+## C13 module switch
+
+C13A has completed Module Switch System design in
+`docs/C13A_MODULE_SWITCH_SYSTEM_DESIGN.md`. C13A is an architecture-layer
+design stage only. It defines `ModuleSwitchRegistry`, the switch state model,
+`ModuleSwitchGate`, and the required integration position:
+
+```text
+C08 -> C13A -> C12 -> C09 -> C10
+```
+
+C13A defines the registry record as `module_key`, `state`, `enabled`,
+`disabled_reason`, and `updated_at`. The switch states are `ON`, `OFF`,
+`DEPRECATED`, and `MAINTENANCE`; only `ON` allows flow to continue. `OFF`,
+`DEPRECATED`, `MAINTENANCE`, missing registry records, and invalid states block
+the request before C12.
+
+C13A does not change approval logic, execution provider contracts, sandbox
+runtime, frontend runtime, database schema, API surface, staging, or
+production. An allowed module switch state only means the request may continue
+to C12; it does not approve, execute, enqueue, dispatch, or unlock sandbox
+execution.
+
 ## Temporary login preview
 
 Use a distinct example-only Compose project and shell-provided values. Do not
