@@ -6,6 +6,16 @@
 
 ### Added
 
+- C14A：新增 `docs/C14A_SECRET_RULE_DEFINITION.md`，定义 Secret
+  Classification System；明确 `API_KEY`、`ACCESS_TOKEN`、`DB_PASSWORD`、
+  `JWT_SECRET` 和 `THIRD_PARTY_CREDENTIALS` 必须标记为 secret，`module_key`、
+  `action_key`、`execution_id`、`approval_id` 和 non-sensitive logs 明确不是
+  secret。
+- C14A：固定 secret flow 边界：secret 不得进入 C08 module layer、C09 execution
+  layer、C10 sandbox layer 或 frontend；允许访问层仅为 backend secure service
+  layer 和 future secrets manager layer。本轮只做规则定义，未实现 secret
+  storage/encryption/runtime logic/API integration，未修改 production/staging，
+  未运行 docker/pytest，未 git commit。
 - C13B：新增 `backend/app/schemas/module_switch.py`、
   `backend/app/core/module_switches.py` 和
   `backend/app/services/module_switch_runtime_gate.py`，实现
