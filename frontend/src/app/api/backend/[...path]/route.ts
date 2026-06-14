@@ -40,6 +40,10 @@ const ALLOWED_EXTERNAL_DEPENDENCY_PATHS = new Set([
   "external-dependencies/registry",
   "external-dependencies/proposals",
   "external-dependencies/bindings",
+  "external-dependencies/binding-rules",
+  "external-dependencies/dependency-graph",
+  "external-dependencies/binding-validation",
+  "external-dependencies/binding-audit",
 ]);
 
 type RouteContext = {

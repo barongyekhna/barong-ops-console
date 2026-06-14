@@ -1,10 +1,22 @@
 from fastapi import APIRouter, Depends
 
 from ...models.user import User
+from ...schemas.dependency_binding import (
+    DependencyBindingAuditResponse,
+    DependencyBindingRuleSetResponse,
+    DependencyBindingValidationResult,
+    DependencyGraphResponse,
+)
 from ...schemas.external_dependency import (
     ExternalDependencyBindingListResponse,
     ExternalServiceProposalListResponse,
     ExternalServiceRegistryResponse,
+)
+from ...services.dependency_binding_rules import (
+    build_dependency_binding_audit_response,
+    build_dependency_graph_response,
+    list_dependency_binding_rules,
+    validate_dependency_binding_rules,
 )
 from ...services.external_dependency_governance import (
     build_dependency_binding_decisions,
@@ -47,3 +59,38 @@ def external_dependency_bindings(
         items=bindings,
         count=len(bindings),
     )
+
+
+@router.get("/binding-rules", response_model=DependencyBindingRuleSetResponse)
+def external_dependency_binding_rules(
+    user: User = Depends(get_current_user),
+) -> DependencyBindingRuleSetResponse:
+    del user
+    return list_dependency_binding_rules()
+
+
+@router.get("/dependency-graph", response_model=DependencyGraphResponse)
+def external_dependency_graph(
+    user: User = Depends(get_current_user),
+) -> DependencyGraphResponse:
+    del user
+    return build_dependency_graph_response()
+
+
+@router.get(
+    "/binding-validation",
+    response_model=DependencyBindingValidationResult,
+)
+def external_dependency_binding_validation(
+    user: User = Depends(get_current_user),
+) -> DependencyBindingValidationResult:
+    del user
+    return validate_dependency_binding_rules()
+
+
+@router.get("/binding-audit", response_model=DependencyBindingAuditResponse)
+def external_dependency_binding_audit(
+    user: User = Depends(get_current_user),
+) -> DependencyBindingAuditResponse:
+    del user
+    return build_dependency_binding_audit_response()

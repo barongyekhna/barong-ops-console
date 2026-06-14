@@ -282,7 +282,7 @@ test("backend proxy rejects broad module adapter paths", () => {
   );
 });
 
-test("backend proxy precisely allows C14D external dependency read paths", () => {
+test("backend proxy precisely allows C14 external dependency read paths", () => {
   assert.equal(
     isAllowedBackendProxyPath("GET", ["external-dependencies", "registry"]),
     true,
@@ -293,6 +293,34 @@ test("backend proxy precisely allows C14D external dependency read paths", () =>
   );
   assert.equal(
     isAllowedBackendProxyPath("GET", ["external-dependencies", "bindings"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", [
+      "external-dependencies",
+      "binding-rules",
+    ]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", [
+      "external-dependencies",
+      "dependency-graph",
+    ]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", [
+      "external-dependencies",
+      "binding-validation",
+    ]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", [
+      "external-dependencies",
+      "binding-audit",
+    ]),
     true,
   );
   assert.equal(

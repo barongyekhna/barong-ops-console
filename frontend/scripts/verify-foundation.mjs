@@ -230,6 +230,10 @@ for (const externalDependencyPath of [
   "external-dependencies/registry",
   "external-dependencies/proposals",
   "external-dependencies/bindings",
+  "external-dependencies/binding-rules",
+  "external-dependencies/dependency-graph",
+  "external-dependencies/binding-validation",
+  "external-dependencies/binding-audit",
 ]) {
   if (!backendProxySource.includes(externalDependencyPath)) {
     throw new Error(
@@ -399,7 +403,7 @@ const externalDependencyAllowlistMatch = backendProxySource.match(
   /const ALLOWED_EXTERNAL_DEPENDENCY_PATHS = new Set\(\[([\s\S]*?)\]\);/,
 );
 if (!externalDependencyAllowlistMatch) {
-  throw new Error("The C14D external dependency proxy allowlist was not found.");
+  throw new Error("The C14 external dependency proxy allowlist was not found.");
 }
 const externalDependencyAllowlist = new Set(
   Array.from(
@@ -407,13 +411,17 @@ const externalDependencyAllowlist = new Set(
   ).map((match) => match[1]),
 );
 if (
-  externalDependencyAllowlist.size !== 3 ||
+  externalDependencyAllowlist.size !== 7 ||
   !externalDependencyAllowlist.has("external-dependencies/registry") ||
   !externalDependencyAllowlist.has("external-dependencies/proposals") ||
-  !externalDependencyAllowlist.has("external-dependencies/bindings")
+  !externalDependencyAllowlist.has("external-dependencies/bindings") ||
+  !externalDependencyAllowlist.has("external-dependencies/binding-rules") ||
+  !externalDependencyAllowlist.has("external-dependencies/dependency-graph") ||
+  !externalDependencyAllowlist.has("external-dependencies/binding-validation") ||
+  !externalDependencyAllowlist.has("external-dependencies/binding-audit")
 ) {
   throw new Error(
-    "The C14D external dependency proxy allowlist must contain only exact GET registry, proposals, and bindings paths.",
+    "The C14 external dependency proxy allowlist must contain only exact GET registry, proposals, bindings, and C14E binding inspection paths.",
   );
 }
 if (
@@ -437,7 +445,7 @@ if (
     'method === "GET" && ALLOWED_EXTERNAL_DEPENDENCY_PATHS.has(requestedPath)',
   )
 ) {
-  throw new Error("The C14D external dependency proxy paths must be GET-only.");
+  throw new Error("The C14 external dependency proxy paths must be GET-only.");
 }
 for (const deniedExternalDependencyPath of [
   ["external-dependencies", "register"],
