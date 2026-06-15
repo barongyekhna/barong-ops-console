@@ -83,6 +83,15 @@ const ALLOWED_MODULE_ALLOCATION_PATHS = new Set([
   "module-allocations/request-validation",
   "module-allocations/completion-status",
 ]);
+const ALLOWED_EXECUTION_PROMPT_PATHS = new Set([
+  "execution-prompts/template-engine",
+  "execution-prompts/binding-injection",
+  "execution-prompts/context-assembly",
+  "execution-prompts/security-constraints",
+  "execution-prompts/payload",
+  "execution-prompts/validation",
+  "execution-prompts/completion-status",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -198,6 +207,8 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
       ALLOWED_CAPABILITY_BINDING_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_MODULE_ALLOCATION_PATHS.has(requestedPath)) ||
+    (method === "GET" &&
+      ALLOWED_EXECUTION_PROMPT_PATHS.has(requestedPath)) ||
     isAllowedPermissionPath(method, path) ||
     (method === "POST" && requestedPath === "foundation-demo/run") ||
     (method === "GET" && requestedPath === "foundation-demo/latest") ||

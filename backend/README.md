@@ -57,6 +57,15 @@ no-write / no-execute boundaries. All providers remain `executable=false` and
 `can_request_execution=false`; C09B adds no migration, frontend UI, submit API,
 queue, worker, webhook execution, live provider, adapter action execution, or
 real business task.
+C14X-E has now added the backend Execution Prompt Generator in
+`docs/C14X_E_EXECUTION_PROMPT_GENERATOR.md`, including authenticated read-only
+`GET /execution-prompts/template-engine`, `/binding-injection`,
+`/context-assembly`, `/security-constraints`, `/payload`, `/validation`, and
+`/completion-status`. It generates deterministic contract-only prompt text,
+structured input context, and a C09-compatible draft payload after injecting
+C14X-A/B/C/D bindings. It does not submit to C09, invoke a model, call an
+external API, execute runtime work, write logs/artifacts, change
+production/staging, run Docker/pytest, or commit git changes.
 C06E has released the C06B backend API to production, and C06F has sealed C06
 in `docs/C06_PERMISSION_MANAGEMENT_SEAL.md`; real business integration remains
 out of scope.

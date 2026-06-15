@@ -151,3 +151,40 @@ test("backend proxy denies C14X-D module allocation wildcard and action paths", 
     assert.equal(isAllowedBackendProxyPath("POST", path), false);
   }
 });
+
+test("backend proxy precisely allows C14X-E execution prompt read paths", () => {
+  const allowedPaths = [
+    ["execution-prompts", "template-engine"],
+    ["execution-prompts", "binding-injection"],
+    ["execution-prompts", "context-assembly"],
+    ["execution-prompts", "security-constraints"],
+    ["execution-prompts", "payload"],
+    ["execution-prompts", "validation"],
+    ["execution-prompts", "completion-status"],
+  ];
+
+  for (const path of allowedPaths) {
+    assert.equal(isAllowedBackendProxyPath("GET", path), true);
+    assert.equal(isAllowedBackendProxyPath("POST", path), false);
+    assert.equal(isAllowedBackendProxyPath("PATCH", path), false);
+    assert.equal(isAllowedBackendProxyPath("DELETE", path), false);
+  }
+});
+
+test("backend proxy denies C14X-E execution prompt wildcard and action paths", () => {
+  const deniedPaths = [
+    ["execution-prompts"],
+    ["execution-prompts", "payload", "extra"],
+    ["execution-prompts", "run"],
+    ["execution-prompts", "execute"],
+    ["execution-prompts", "invoke"],
+    ["execution-prompts", "sync"],
+    ["execution-prompts", "submit"],
+    ["execution-prompts", "models", "invoke"],
+  ];
+
+  for (const path of deniedPaths) {
+    assert.equal(isAllowedBackendProxyPath("GET", path), false);
+    assert.equal(isAllowedBackendProxyPath("POST", path), false);
+  }
+});

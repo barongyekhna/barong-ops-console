@@ -9,6 +9,7 @@ from .api.routes.capability_bindings import router as capability_bindings_router
 from .api.routes.errors import router as errors_router
 from .api.routes.external_dependencies import router as external_dependencies_router
 from .api.routes.execution_providers import router as execution_providers_router
+from .api.routes.execution_prompts import router as execution_prompts_router
 from .api.routes.foundation_demo import router as foundation_demo_router
 from .api.routes.health import router as health_router
 from .api.routes.jobs import router as jobs_router
@@ -49,6 +50,7 @@ app.include_router(foundation_demo_router)
 app.include_router(n8n_test_router)
 app.include_router(module_adapters_router)
 app.include_router(execution_providers_router)
+app.include_router(execution_prompts_router)
 app.include_router(external_dependencies_router)
 app.include_router(ai_execution_bindings_router)
 app.include_router(model_locks_router)
