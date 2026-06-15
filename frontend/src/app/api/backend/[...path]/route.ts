@@ -121,6 +121,13 @@ const ALLOWED_RESULT_NORMALIZATION_GET_PATHS = new Set([
 const ALLOWED_RESULT_NORMALIZATION_POST_PATHS = new Set([
   "result-normalization/normalize",
 ]);
+const BLOCKED_SECURITY_ISOLATION_FIRST_SEGMENTS = new Set([
+  "webhook",
+  "n8n",
+]);
+const BLOCKED_SECURITY_ISOLATION_PATHS = new Set([
+  "webhook-gateway/ingress",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -143,7 +150,42 @@ function getApiBaseUrl() {
     throw new Error("Backend API URL must not contain credentials.");
   }
 
+  if (
+    parsedUrl.hostname.toLowerCase().includes("n8n") ||
+    /\/(?:webhook|n8n)(?:\/|$)/i.test(parsedUrl.pathname)
+  ) {
+    throw new Error("Backend API URL must point to the Console backend.");
+  }
+
   return parsedUrl;
+}
+
+function decodePathSegment(segment: string) {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return segment;
+  }
+}
+
+export function isBlockedSecurityIsolationPath(path: string[]) {
+  const requestedPath = path.join("/");
+  const firstSegment = path[0]?.toLowerCase();
+
+  if (
+    firstSegment &&
+    BLOCKED_SECURITY_ISOLATION_FIRST_SEGMENTS.has(firstSegment)
+  ) {
+    return true;
+  }
+
+  if (BLOCKED_SECURITY_ISOLATION_PATHS.has(requestedPath)) {
+    return true;
+  }
+
+  return path.some((segment) =>
+    /^(?:https?:|n8n-webhook-ref:)/i.test(decodePathSegment(segment)),
+  );
 }
 
 function isIntegerPathSegment(segment: string) {
@@ -218,6 +260,10 @@ function isAllowedPermissionPath(method: string, path: string[]) {
 export function isAllowedBackendProxyPath(method: string, path: string[]) {
   const requestedPath = path.join("/");
 
+  if (isBlockedSecurityIsolationPath(path)) {
+    return false;
+  }
+
   return (
     (method === "GET" && requestedPath === "health") ||
     ALLOWED_AUTH_PATHS.has(requestedPath) ||
@@ -263,6 +309,10 @@ async function proxyRequest(
 ) {
   const { path } = await context.params;
   const requestedPath = path.join("/");
+
+  if (isBlockedSecurityIsolationPath(path)) {
+    return Response.json({ detail: "Forbidden." }, { status: 403 });
+  }
 
   if (!isAllowedBackendProxyPath(request.method, path)) {
     return Response.json({ detail: "Not found." }, { status: 404 });

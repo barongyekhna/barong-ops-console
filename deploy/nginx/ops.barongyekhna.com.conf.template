@@ -37,6 +37,21 @@ server {
 
     client_max_body_size 10m;
 
+    # C15G Security & Isolation Layer.
+    # These deny rules are template-only; review before installing. They block
+    # public webhook/n8n bypass paths before the request reaches Next.js.
+    location ~* ^/(webhook|n8n)(/|$) {
+        return 403;
+    }
+
+    location ~* ^/api/backend/(webhook|n8n)(/|$) {
+        return 403;
+    }
+
+    location = /api/backend/webhook-gateway/ingress {
+        return 403;
+    }
+
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;

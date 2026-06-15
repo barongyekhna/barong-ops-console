@@ -16,6 +16,7 @@ from ..core.roles import is_owner_role
 from ..db.session import get_db
 from ..models.user import User
 from ..repositories.users import get_user_by_id
+from ..schemas.common import contains_runtime_address_data
 from ..services.auth_service import AuditContext
 from ..services.permission_service import user_has_permission
 
@@ -35,6 +36,8 @@ def _safe_header(value: str | None, max_length: int) -> str | None:
         return None
     lowered = value.lower()
     if any(marker in lowered for marker in SENSITIVE_HEADER_MARKERS):
+        return None
+    if contains_runtime_address_data(value):
         return None
     return value
 

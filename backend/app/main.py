@@ -30,6 +30,7 @@ from .api.routes.payload_standardization import (
 from .api.routes.permissions import router as permissions_router
 from .api.routes.reviews import router as reviews_router
 from .api.routes.result_normalization import router as result_normalization_router
+from .api.routes.security_firewall import router as security_firewall_router
 from .api.routes.users import router as users_router
 from .api.routes.webhook_gateway import router as webhook_gateway_router
 from .api.routes.workflow_registry import router as workflow_registry_router
@@ -43,6 +44,7 @@ app = FastAPI(
     version=settings.app_version,
 )
 app.include_router(health_router)
+app.include_router(security_firewall_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(modules_router)
