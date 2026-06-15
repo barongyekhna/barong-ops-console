@@ -28,6 +28,12 @@ class Settings(BaseSettings):
         gt=0,
         le=60,
     )
+    webhook_gateway_signing_secret: SecretStr | None = None
+    webhook_gateway_signature_tolerance_seconds: int = Field(
+        default=300,
+        gt=0,
+        le=900,
+    )
 
 
 @lru_cache
