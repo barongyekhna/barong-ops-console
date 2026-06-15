@@ -20,6 +20,9 @@ from .api.routes.module_adapters import router as module_adapters_router
 from .api.routes.modules import router as modules_router
 from .api.routes.n8n_test import router as n8n_test_router
 from .api.routes.operation_logs import router as operation_logs_router
+from .api.routes.payload_standardization import (
+    router as payload_standardization_router,
+)
 from .api.routes.permissions import router as permissions_router
 from .api.routes.reviews import router as reviews_router
 from .api.routes.users import router as users_router
@@ -60,3 +63,4 @@ app.include_router(capability_bindings_router)
 app.include_router(module_allocations_router)
 app.include_router(workflow_registry_router)
 app.include_router(webhook_gateway_router)
+app.include_router(payload_standardization_router)
