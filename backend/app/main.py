@@ -26,6 +26,7 @@ from .api.routes.payload_standardization import (
 )
 from .api.routes.permissions import router as permissions_router
 from .api.routes.reviews import router as reviews_router
+from .api.routes.result_normalization import router as result_normalization_router
 from .api.routes.users import router as users_router
 from .api.routes.webhook_gateway import router as webhook_gateway_router
 from .api.routes.workflow_registry import router as workflow_registry_router
@@ -66,3 +67,4 @@ app.include_router(workflow_registry_router)
 app.include_router(webhook_gateway_router)
 app.include_router(payload_standardization_router)
 app.include_router(callback_handler_router)
+app.include_router(result_normalization_router)

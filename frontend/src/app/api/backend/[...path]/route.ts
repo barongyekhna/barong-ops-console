@@ -102,6 +102,16 @@ const ALLOWED_PAYLOAD_STANDARDIZATION_GET_PATHS = new Set([
 const ALLOWED_PAYLOAD_STANDARDIZATION_POST_PATHS = new Set([
   "payload-standardization/normalize",
 ]);
+const ALLOWED_RESULT_NORMALIZATION_GET_PATHS = new Set([
+  "result-normalization/normalization-engine",
+  "result-normalization/schema-mapping",
+  "result-normalization/module-adapters",
+  "result-normalization/ui-output-structure",
+  "result-normalization/completion-status",
+]);
+const ALLOWED_RESULT_NORMALIZATION_POST_PATHS = new Set([
+  "result-normalization/normalize",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -223,6 +233,10 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
       ALLOWED_PAYLOAD_STANDARDIZATION_GET_PATHS.has(requestedPath)) ||
     (method === "POST" &&
       ALLOWED_PAYLOAD_STANDARDIZATION_POST_PATHS.has(requestedPath)) ||
+    (method === "GET" &&
+      ALLOWED_RESULT_NORMALIZATION_GET_PATHS.has(requestedPath)) ||
+    (method === "POST" &&
+      ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath)) ||
     isAllowedPermissionPath(method, path) ||
     (method === "POST" && requestedPath === "foundation-demo/run") ||
     (method === "GET" && requestedPath === "foundation-demo/latest") ||
