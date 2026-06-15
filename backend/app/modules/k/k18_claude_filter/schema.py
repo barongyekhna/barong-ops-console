@@ -29,6 +29,7 @@ K18_DATA_FLOW = (
 )
 
 K17_TO_K18_MAPPING = {
+    "product_id": "product_id",
     "selected_keywords": "keywords",
     "filtered_competitors": "competitors",
     "market_signals": "market_signals",
@@ -38,6 +39,7 @@ K17_TO_K18_MAPPING = {
 }
 
 K17_F_TO_K18_MAPPING = {
+    "product_id": "product_id",
     "keywords": "keywords",
     "competitors": "competitors",
     "market_signals": "market_signals",
@@ -59,6 +61,7 @@ class ClaudeFilterContext(BaseModel):
 class ClaudeFilterInput(BaseModel):
     """K17-to-K18 input contract for future Claude validation."""
 
+    product_id: str = Field(min_length=1)
     keywords: list[str] = Field(default_factory=list)
     competitors: list[str] = Field(default_factory=list)
     market_signals: list[str] = Field(default_factory=list)

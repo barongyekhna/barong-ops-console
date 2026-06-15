@@ -59,24 +59,57 @@ class KeywordImportService:
             KeywordService() if keyword_service is None else keyword_service
         )
 
-    def import_from_k15(self, research_run: object) -> list[KeywordEntry]:
-        return self._convert_to_keyword_entries(research_run, source="K15")
+    def import_from_k15(
+        self,
+        research_run: object,
+        product_id: str | None = None,
+    ) -> list[KeywordEntry]:
+        return self._convert_to_keyword_entries(
+            research_run,
+            source="K15",
+            fallback_product_id=product_id,
+        )
 
-    def import_from_k16(self, serp_result: object) -> list[KeywordEntry]:
-        return self._convert_to_keyword_entries(serp_result, source="K16")
+    def import_from_k16(
+        self,
+        serp_result: object,
+        product_id: str | None = None,
+    ) -> list[KeywordEntry]:
+        return self._convert_to_keyword_entries(
+            serp_result,
+            source="K16",
+            fallback_product_id=product_id,
+        )
 
-    def import_from_k17(self, k17_output: object) -> list[KeywordEntry]:
-        return self._convert_to_keyword_entries(k17_output, source="K17")
+    def import_from_k17(
+        self,
+        k17_output: object,
+        product_id: str | None = None,
+    ) -> list[KeywordEntry]:
+        return self._convert_to_keyword_entries(
+            k17_output,
+            source="K17",
+            fallback_product_id=product_id,
+        )
 
-    def import_from_k18(self, k18_output: object) -> list[KeywordEntry]:
-        return self._convert_to_keyword_entries(k18_output, source="K18")
+    def import_from_k18(
+        self,
+        k18_output: object,
+        product_id: str | None = None,
+    ) -> list[KeywordEntry]:
+        return self._convert_to_keyword_entries(
+            k18_output,
+            source="K18",
+            fallback_product_id=product_id,
+        )
 
     def _convert_to_keyword_entries(
         self,
         source_payload: object,
         source: KeywordEntrySource,
+        fallback_product_id: str | None = None,
     ) -> list[KeywordEntry]:
-        product_id = self._extract_product_id(source_payload)
+        product_id = self._extract_product_id(source_payload, fallback_product_id)
         if not product_id:
             raise ValueError(f"product_id is required to import {source} keywords")
 
@@ -104,7 +137,11 @@ class KeywordImportService:
                 return keywords
         return []
 
-    def _extract_product_id(self, source_payload: object) -> str:
+    def _extract_product_id(
+        self,
+        source_payload: object,
+        fallback_product_id: str | None = None,
+    ) -> str:
         for field_name in _PRODUCT_ID_FIELDS:
             product_id = self._clean_text(
                 self._get_value(source_payload, field_name, ""),
@@ -123,7 +160,7 @@ class KeywordImportService:
         if serp_bundle is not None:
             return self._extract_product_id(serp_bundle)
 
-        return ""
+        return self._clean_text(fallback_product_id or "")
 
     def _normalize_keywords(self, value: object) -> list[str]:
         if self._is_blank(value):

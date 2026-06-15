@@ -58,6 +58,7 @@ class K18C14RequestBuilder:
             "model": "claude-filter-v1",
             "task": "second_pass_filter",
             "input": {
+                "product_id": self._get_text(k17_output, "product_id"),
                 "keywords": self._get_list(k17_output, "selected_keywords"),
                 "competitors": self._get_list(k17_output, "filtered_competitors"),
                 "market_signals": self._get_list(k17_output, "market_signals"),
@@ -91,6 +92,9 @@ class K18C14RequestBuilder:
                 "source": "K18-C",
             },
         }
+
+    def _get_text(self, value: object, field_name: str) -> str:
+        return " ".join(str(self._get_value(value, field_name, "")).strip().split())
 
     def _context_from_k17_output(self, k17_output: object) -> dict[str, object]:
         return {

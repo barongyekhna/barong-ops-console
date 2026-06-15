@@ -48,6 +48,7 @@ class K18FinalOutput:
         market_signals = self._normalize_signals(k18_output)
 
         return {
+            "product_id": self._product_id_for(k18_input, k18_output),
             "keywords": keywords,
             "competitors": competitors,
             "market_signals": market_signals,
@@ -68,6 +69,12 @@ class K18FinalOutput:
             "source": "K18_FINAL",
             "pipeline_status": "sealed",
         }
+
+    def _product_id_for(self, k18_input: object, k18_output: object) -> str:
+        product_id = self._first_present(k18_input, "product_id", "productId")
+        if not product_id:
+            product_id = self._first_present(k18_output, "product_id", "productId")
+        return self._clean_text(product_id or "")
 
     def _normalize_keywords(self, k18_output: object) -> list[str]:
         keywords = self._first_present(k18_output, "final_keywords", "keywords")

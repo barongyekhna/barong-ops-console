@@ -44,6 +44,7 @@ class ChatGPTFilterInput(BaseModel):
 class ChatGPTFilterOutput(BaseModel):
     """Structured K17 output contract for K18 consumption."""
 
+    product_id: str = ""
     selected_keywords: list[str] = Field(default_factory=list)
     filtered_competitors: list[str] = Field(default_factory=list)
     market_signals: list[str] = Field(default_factory=list)

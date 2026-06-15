@@ -17,8 +17,13 @@ K17_EXTERNAL_ACCESS = False
 class K17BridgeOutput:
     """Build K18-ready input from normalized K17 results."""
 
-    def build_k18_input(self, k17_result: ChatGPTFilterOutput) -> dict[str, object]:
+    def build_k18_input(
+        self,
+        k17_result: ChatGPTFilterOutput,
+        product_id: str | None = None,
+    ) -> dict[str, object]:
         output = {
+            "product_id": self._product_id_for(k17_result, product_id),
             "keywords": self._normalize_keywords(k17_result.selected_keywords),
             "competitors": self._dedupe_text(k17_result.filtered_competitors),
             "market_signals": self._normalize_market_signals(
@@ -29,6 +34,16 @@ class K17BridgeOutput:
             "source": "K17_FINAL_OUTPUT",
         }
         return self._remove_null_fields(output)
+
+    def _product_id_for(
+        self,
+        k17_result: ChatGPTFilterOutput,
+        fallback_product_id: str | None,
+    ) -> str:
+        product_id = getattr(k17_result, "product_id", "")
+        if not product_id and isinstance(k17_result, dict):
+            product_id = k17_result.get("product_id", "")
+        return self._clean_text(product_id or fallback_product_id or "")
 
     def _context_for(self, k17_result: ChatGPTFilterOutput) -> dict[str, object]:
         context = {

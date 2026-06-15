@@ -32,6 +32,7 @@ class K18PipelineAdapter:
         flattened_output = self._flatten_k17_output(k17_output)
 
         return ClaudeFilterInput(
+            product_id=self._clean_text(flattened_output.get("product_id", "")),
             keywords=self._normalize_text_list(flattened_output.get("keywords")),
             competitors=self._normalize_text_list(
                 flattened_output.get("competitors"),
@@ -53,8 +54,21 @@ class K18PipelineAdapter:
 
     def _flatten_k17_output(self, k17_output: object) -> dict[str, object]:
         context = self._get_mapping(k17_output, "context")
+        product_context = self._get_mapping(k17_output, "product_context")
         return self._remove_null_fields(
             {
+                "product_id": self._first_present(
+                    k17_output,
+                    "product_id",
+                    "productId",
+                    context=context,
+                )
+                or self._first_present(
+                    k17_output,
+                    "product_id",
+                    "productId",
+                    context=product_context,
+                ),
                 "keywords": self._first_present(
                     k17_output,
                     "keywords",

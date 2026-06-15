@@ -105,6 +105,7 @@ class K17FilterRuleEngine:
         selected_keywords = list(rule_output["filtered_keywords"])
         filtered_competitors = list(rule_output["filtered_competitors"])
         return ChatGPTFilterOutput(
+            product_id=self._product_id_for(filter_input),
             selected_keywords=selected_keywords,
             filtered_competitors=filtered_competitors,
             market_signals=list(rule_output["market_signals"]),
@@ -118,6 +119,13 @@ class K17FilterRuleEngine:
                 filtered_competitors,
             ),
         )
+
+    @staticmethod
+    def _product_id_for(filter_input: ChatGPTFilterInput) -> str:
+        product_id = filter_input.product_context.get("product_id", "")
+        if not product_id:
+            product_id = getattr(filter_input.serp_bundle, "product_id", "")
+        return " ".join(str(product_id).strip().split())
 
     def build_market_signals(
         self,
