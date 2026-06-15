@@ -12,6 +12,7 @@ from .api.routes.foundation_demo import router as foundation_demo_router
 from .api.routes.health import router as health_router
 from .api.routes.jobs import router as jobs_router
 from .api.routes.memory import router as memory_router
+from .api.routes.model_locks import router as model_locks_router
 from .api.routes.module_adapters import router as module_adapters_router
 from .api.routes.modules import router as modules_router
 from .api.routes.n8n_test import router as n8n_test_router
@@ -48,3 +49,4 @@ app.include_router(module_adapters_router)
 app.include_router(execution_providers_router)
 app.include_router(external_dependencies_router)
 app.include_router(ai_execution_bindings_router)
+app.include_router(model_locks_router)
