@@ -72,6 +72,17 @@ const ALLOWED_CAPABILITY_BINDING_PATHS = new Set([
   "capability-bindings/integration",
   "capability-bindings/completion-status",
 ]);
+const ALLOWED_MODULE_ALLOCATION_PATHS = new Set([
+  "module-allocations/registry",
+  "module-allocations/assignment-model",
+  "module-allocations/categories",
+  "module-allocations/budget-system",
+  "module-allocations/enforcement",
+  "module-allocations/integration-flow",
+  "module-allocations/validation",
+  "module-allocations/request-validation",
+  "module-allocations/completion-status",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -185,6 +196,8 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
     (method === "GET" && ALLOWED_MODEL_LOCK_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_CAPABILITY_BINDING_PATHS.has(requestedPath)) ||
+    (method === "GET" &&
+      ALLOWED_MODULE_ALLOCATION_PATHS.has(requestedPath)) ||
     isAllowedPermissionPath(method, path) ||
     (method === "POST" && requestedPath === "foundation-demo/run") ||
     (method === "GET" && requestedPath === "foundation-demo/latest") ||
