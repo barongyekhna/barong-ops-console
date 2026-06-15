@@ -18,6 +18,7 @@ from ..schemas.webhook_gateway import (
     WebhookGatewayRequest,
     WebhookGatewaySignatureModel,
 )
+from .module_workflow_binding_engine import evaluate_module_workflow_access
 from .workflow_registry_system import evaluate_workflow_invocation
 
 SIGNATURE_PREFIX = "sha256="
@@ -122,6 +123,28 @@ def build_webhook_gateway_decision(
         module=payload.module,
         workflow_id=payload.workflow_id,
     )
+    binding_decision = evaluate_module_workflow_access(
+        module_id=payload.module,
+        workflow_id=payload.workflow_id,
+    )
+    if not binding_decision.binding_validation_passed:
+        return WebhookGatewayDecision(
+            gateway_status="rejected",
+            reason=(
+                "C15G gateway enforcement rejected the request before the "
+                f"n8n boundary: {binding_decision.reason}"
+            ),
+            module=payload.module,
+            workflow_id=payload.workflow_id,
+            context_id=payload.context_id,
+            standardized_payload=payload,
+            c15a_registered=registry_decision.registered,
+            c15a_bound_to_module=registry_decision.bound_to_module,
+            c15a_workflow_status=registry_decision.status,
+            c15a_execution_allowed=False,
+            hidden_webhook_reference_resolved=False,
+        )
+
     hidden_ref_resolved = (
         registry_decision.execution_allowed
         and registry_decision.hidden_webhook_ref is not None

@@ -14,9 +14,71 @@ SENSITIVE_KEY_MARKERS = (
     "private_key",
     "credential",
 )
+RUNTIME_ADDRESS_KEY_MARKERS = (
+    "n8n_webhook",
+    "webhook_url",
+    "provider_url",
+    "endpoint_url",
+    "callback_url",
+    "target_url",
+)
+RUNTIME_ADDRESS_KEY_EXACT = frozenset(
+    (
+        "url",
+        "endpoint",
+        "endpoint_ref",
+        "webhook",
+    )
+)
+RUNTIME_ADDRESS_VALUE_MARKERS = (
+    "http://",
+    "https://",
+    "n8n-webhook-ref://",
+)
+RUNTIME_ADDRESS_REDACTION = "[redacted-runtime-address]"
 FOUNDATION_ID_PATTERN = (
     r"^(?:foundation|demo|n8n_test)[._-][A-Za-z0-9._-]+$"
 )
+
+
+def is_runtime_address_key(key: object) -> bool:
+    normalized_key = str(key).lower()
+    return normalized_key in RUNTIME_ADDRESS_KEY_EXACT or any(
+        marker in normalized_key for marker in RUNTIME_ADDRESS_KEY_MARKERS
+    )
+
+
+def contains_runtime_address_data(value: Any) -> bool:
+    if isinstance(value, Mapping):
+        for key, item in value.items():
+            if is_runtime_address_key(key) or contains_runtime_address_data(item):
+                return True
+    elif isinstance(value, list):
+        return any(contains_runtime_address_data(item) for item in value)
+    elif isinstance(value, str):
+        lowered_value = value.lower()
+        return any(marker in lowered_value for marker in RUNTIME_ADDRESS_VALUE_MARKERS)
+    return False
+
+
+def sanitize_runtime_address_data(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {
+            str(key): sanitize_runtime_address_data(item)
+            for key, item in value.items()
+            if not is_runtime_address_key(key)
+        }
+    if isinstance(value, list):
+        return [sanitize_runtime_address_data(item) for item in value]
+    if isinstance(value, str) and contains_runtime_address_data(value):
+        return RUNTIME_ADDRESS_REDACTION
+    return value
+
+
+def reject_runtime_address_data(value: Any) -> Any:
+    if contains_runtime_address_data(value):
+        raise ValueError("Runtime URL or webhook reference data is not allowed.")
+    return value
 
 
 def reject_sensitive_data(value: Any) -> Any:

@@ -1,7 +1,9 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
+
+from .common import sanitize_runtime_address_data
 
 
 class OperationLogResponse(BaseModel):
@@ -22,3 +24,14 @@ class OperationLogResponse(BaseModel):
     user_agent: str | None
     details: dict[str, Any] | None
     created_at: datetime
+
+    @field_validator("details")
+    @classmethod
+    def sanitize_details(
+        cls,
+        value: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if value is None:
+            return None
+        sanitized = sanitize_runtime_address_data(value)
+        return sanitized if isinstance(sanitized, dict) else {}

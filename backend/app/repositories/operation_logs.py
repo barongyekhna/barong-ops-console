@@ -5,6 +5,7 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from ..models.operation_log import OperationLog
+from ..schemas.common import is_runtime_address_key, sanitize_runtime_address_data
 
 SENSITIVE_KEY_MARKERS = (
     "password",
@@ -15,22 +16,24 @@ SENSITIVE_KEY_MARKERS = (
     "authorization",
     "api_key",
     "private_key",
+    "credential",
 )
 
 
 def _sanitize_details(value: Any) -> Any:
     if isinstance(value, Mapping):
-        return {
-            str(key): _sanitize_details(item)
-            for key, item in value.items()
-            if not any(
-                marker in str(key).lower()
-                for marker in SENSITIVE_KEY_MARKERS
-            )
-        }
+        sanitized = {}
+        for key, item in value.items():
+            normalized_key = str(key).lower()
+            if any(marker in normalized_key for marker in SENSITIVE_KEY_MARKERS):
+                continue
+            if is_runtime_address_key(key):
+                continue
+            sanitized[str(key)] = _sanitize_details(item)
+        return sanitized
     if isinstance(value, list):
         return [_sanitize_details(item) for item in value]
-    return value
+    return sanitize_runtime_address_data(value)
 
 
 def create_operation_log(
