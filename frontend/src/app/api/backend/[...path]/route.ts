@@ -72,6 +72,15 @@ const ALLOWED_CAPABILITY_BINDING_PATHS = new Set([
   "capability-bindings/integration",
   "capability-bindings/completion-status",
 ]);
+const ALLOWED_MODULE_WORKFLOW_BINDING_PATHS = new Set([
+  "module-workflow-bindings/model",
+  "module-workflow-bindings/enforcement",
+  "module-workflow-bindings/access-control",
+  "module-workflow-bindings/isolation-rules",
+  "module-workflow-bindings/decision",
+  "module-workflow-bindings/validation",
+  "module-workflow-bindings/completion-status",
+]);
 const ALLOWED_MODULE_ALLOCATION_PATHS = new Set([
   "module-allocations/registry",
   "module-allocations/assignment-model",
@@ -225,6 +234,8 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
     (method === "GET" && ALLOWED_MODEL_LOCK_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_CAPABILITY_BINDING_PATHS.has(requestedPath)) ||
+    (method === "GET" &&
+      ALLOWED_MODULE_WORKFLOW_BINDING_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_MODULE_ALLOCATION_PATHS.has(requestedPath)) ||
     (method === "GET" &&

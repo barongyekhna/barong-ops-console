@@ -19,6 +19,9 @@ from .api.routes.model_locks import router as model_locks_router
 from .api.routes.module_allocations import router as module_allocations_router
 from .api.routes.module_adapters import router as module_adapters_router
 from .api.routes.modules import router as modules_router
+from .api.routes.module_workflow_bindings import (
+    router as module_workflow_bindings_router,
+)
 from .api.routes.n8n_test import router as n8n_test_router
 from .api.routes.operation_logs import router as operation_logs_router
 from .api.routes.payload_standardization import (
@@ -56,6 +59,7 @@ app.include_router(permissions_router)
 app.include_router(foundation_demo_router)
 app.include_router(n8n_test_router)
 app.include_router(module_adapters_router)
+app.include_router(module_workflow_bindings_router)
 app.include_router(execution_providers_router)
 app.include_router(execution_prompts_router)
 app.include_router(external_dependencies_router)
