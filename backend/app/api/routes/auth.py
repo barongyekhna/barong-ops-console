@@ -1,8 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
-from ...core.security import SecurityConfigurationError
+from ...core.rbac import check_permission
+from ...core.session_cookies import clear_session_cookie, set_session_cookie
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.auth import (
@@ -15,8 +16,10 @@ from ...schemas.auth import (
 from ...schemas.permission import CurrentUserPermissionsRead
 from ...services.auth_service import (
     InvalidCredentialsError,
+    InvalidSessionError,
     login as login_user,
     logout as logout_user,
+    validate_session,
 )
 from ...services.permission_service import resolve_current_user_permission_info
 from ..deps import get_audit_context, require_rbac
@@ -28,6 +31,7 @@ router = APIRouter(prefix="/auth", tags=["authentication"])
 def login(
     payload: LoginRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> LoginResponse:
@@ -44,17 +48,14 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
-            headers={"WWW-Authenticate": "Bearer"},
-        ) from None
-    except SecurityConfigurationError:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Authentication service is unavailable.",
         ) from None
 
+    set_session_cookie(
+        response,
+        session_id=result.session_id,
+        settings=settings,
+    )
     return LoginResponse(
-        access_token=result.access_token,
-        token_type="bearer",
         user=AuthenticatedUser.model_validate(result.user),
     )
 
@@ -80,8 +81,37 @@ def me(
 @router.post("/logout", response_model=LogoutResponse)
 def logout(
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
-    user: User = Depends(require_rbac("AUTH", "read")),
+    settings: Settings = Depends(get_settings),
 ) -> LogoutResponse:
-    logout_user(db, user=user, audit=get_audit_context(request))
+    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    current_session = None
+    audit = get_audit_context(request)
+
+    if session_id is not None:
+        try:
+            current_session = validate_session(
+                db,
+                session_id=session_id,
+                audit=audit,
+            )
+        except InvalidSessionError:
+            current_session = None
+
+    if current_session is not None:
+        user = current_session.user
+        if not check_permission(user, "AUTH", "read"):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="RBAC permission denied.",
+            )
+        logout_user(
+            db,
+            user=user,
+            auth_session=current_session.auth_session,
+            audit=audit,
+        )
+
+    clear_session_cookie(response, settings=settings)
     return LogoutResponse(message="Logged out.")

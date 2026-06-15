@@ -1,27 +1,23 @@
 from uuid import uuid4
 
 from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from ..core.config import Settings, get_settings
 from ..core.permissions import SCOPE_GLOBAL
 from ..core.rbac import check_internal_permission, check_permission
-from ..core.security import (
-    InvalidAccessTokenError,
-    SecurityConfigurationError,
-    decode_access_token,
-    require_token_secret,
-)
 from ..core.roles import is_owner_role
 from ..db.session import get_db
 from ..models.user import User
-from ..repositories.users import get_user_by_id
 from ..schemas.common import contains_runtime_address_data
-from ..services.auth_service import AuditContext
+from ..services.auth_service import (
+    AuditContext,
+    AuthenticatedSession,
+    InvalidSessionError,
+    validate_session,
+)
 from ..services.permission_service import user_has_permission
 
-bearer_scheme = HTTPBearer(auto_error=False)
 SENSITIVE_HEADER_MARKERS = (
     "bearer",
     "token",
@@ -63,38 +59,32 @@ def unauthorized() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Not authenticated.",
-        headers={"WWW-Authenticate": "Bearer"},
     )
 
 
-def get_current_user(
-    credentials: HTTPAuthorizationCredentials | None = Depends(
-        bearer_scheme
-    ),
+def get_current_session(
+    request: Request,
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
-) -> User:
-    if credentials is None or credentials.scheme.lower() != "bearer":
+) -> AuthenticatedSession:
+    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    if session_id is None:
         raise unauthorized()
 
     try:
-        secret = require_token_secret(settings.auth_token_secret)
-        payload = decode_access_token(credentials.credentials, secret)
-        user_id = int(payload["sub"])
-        token_role = payload["role"]
-    except (
-        InvalidAccessTokenError,
-        SecurityConfigurationError,
-        KeyError,
-        TypeError,
-        ValueError,
-    ):
+        return validate_session(
+            db,
+            session_id=session_id,
+            audit=get_audit_context(request),
+        )
+    except InvalidSessionError:
         raise unauthorized() from None
 
-    user = get_user_by_id(db, user_id)
-    if user is None or not user.is_active or token_role != user.role:
-        raise unauthorized()
-    return user
+
+def get_current_user(
+    current_session: AuthenticatedSession = Depends(get_current_session),
+) -> User:
+    return current_session.user
 
 
 def require_owner(
