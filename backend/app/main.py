@@ -5,6 +5,7 @@ from .api.routes.ai_execution_bindings import router as ai_execution_bindings_ro
 from .api.routes.approval import router as approval_router
 from .api.routes.artifacts import router as artifacts_router
 from .api.routes.auth import router as auth_router
+from .api.routes.callback_handler import router as callback_handler_router
 from .api.routes.capability_bindings import router as capability_bindings_router
 from .api.routes.errors import router as errors_router
 from .api.routes.external_dependencies import router as external_dependencies_router
@@ -64,3 +65,4 @@ app.include_router(module_allocations_router)
 app.include_router(workflow_registry_router)
 app.include_router(webhook_gateway_router)
 app.include_router(payload_standardization_router)
+app.include_router(callback_handler_router)
