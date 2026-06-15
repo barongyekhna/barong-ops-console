@@ -11,6 +11,7 @@ from .api.routes.errors import router as errors_router
 from .api.routes.external_dependencies import router as external_dependencies_router
 from .api.routes.execution_providers import router as execution_providers_router
 from .api.routes.execution_prompts import router as execution_prompts_router
+from .api.routes.failure_handling import router as failure_handling_router
 from .api.routes.foundation_demo import router as foundation_demo_router
 from .api.routes.health import router as health_router
 from .api.routes.jobs import router as jobs_router
@@ -74,3 +75,4 @@ app.include_router(webhook_gateway_router)
 app.include_router(payload_standardization_router)
 app.include_router(callback_handler_router)
 app.include_router(result_normalization_router)
+app.include_router(failure_handling_router)
