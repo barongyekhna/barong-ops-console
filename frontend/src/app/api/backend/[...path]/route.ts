@@ -53,6 +53,15 @@ const ALLOWED_AI_EXECUTION_BINDING_PATHS = new Set([
   "ai-execution-bindings/ui-interaction",
   "ai-execution-bindings/completion-status",
 ]);
+const ALLOWED_MODEL_LOCK_PATHS = new Set([
+  "model-locks/registry",
+  "model-locks/rules",
+  "model-locks/enforcement",
+  "model-locks/validation",
+  "model-locks/request-validation",
+  "model-locks/integration",
+  "model-locks/completion-status",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -163,6 +172,7 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
       ALLOWED_EXTERNAL_DEPENDENCY_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_AI_EXECUTION_BINDING_PATHS.has(requestedPath)) ||
+    (method === "GET" && ALLOWED_MODEL_LOCK_PATHS.has(requestedPath)) ||
     isAllowedPermissionPath(method, path) ||
     (method === "POST" && requestedPath === "foundation-demo/run") ||
     (method === "GET" && requestedPath === "foundation-demo/latest") ||
