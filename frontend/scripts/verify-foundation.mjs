@@ -242,6 +242,23 @@ for (const externalDependencyPath of [
   }
 }
 
+for (const capabilityBindingPath of [
+  "capability-bindings/routing-model",
+  "capability-bindings/model-mapping",
+  "capability-bindings/module-bindings",
+  "capability-bindings/enforcement",
+  "capability-bindings/validation",
+  "capability-bindings/request-validation",
+  "capability-bindings/integration",
+  "capability-bindings/completion-status",
+]) {
+  if (!backendProxySource.includes(capabilityBindingPath)) {
+    throw new Error(
+      `The backend API proxy must allow GET /${capabilityBindingPath}.`,
+    );
+  }
+}
+
 if (!backendProxySource.includes("ALLOWED_MODULE_REGISTRY_PATHS")) {
   throw new Error(
     "The backend API proxy must keep C07 module registry paths explicitly allowlisted.",
@@ -263,6 +280,12 @@ if (!backendProxySource.includes("ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS")) {
 if (!backendProxySource.includes("ALLOWED_EXTERNAL_DEPENDENCY_PATHS")) {
   throw new Error(
     "The backend API proxy must keep C14D external dependency paths explicitly allowlisted.",
+  );
+}
+
+if (!backendProxySource.includes("ALLOWED_CAPABILITY_BINDING_PATHS")) {
+  throw new Error(
+    "The backend API proxy must keep C14X-C capability binding paths explicitly allowlisted.",
   );
 }
 
@@ -459,6 +482,73 @@ for (const deniedExternalDependencyPath of [
   ) {
     throw new Error(
       "A denied external dependency path was added to the proxy allowlist.",
+    );
+  }
+}
+
+const capabilityBindingAllowlistMatch = backendProxySource.match(
+  /const ALLOWED_CAPABILITY_BINDING_PATHS = new Set\(\[([\s\S]*?)\]\);/,
+);
+if (!capabilityBindingAllowlistMatch) {
+  throw new Error("The C14X-C capability binding proxy allowlist was not found.");
+}
+const capabilityBindingAllowlist = new Set(
+  Array.from(
+    capabilityBindingAllowlistMatch[1].matchAll(/["']([^"']+)["']/g),
+  ).map((match) => match[1]),
+);
+if (
+  capabilityBindingAllowlist.size !== 8 ||
+  !capabilityBindingAllowlist.has("capability-bindings/routing-model") ||
+  !capabilityBindingAllowlist.has("capability-bindings/model-mapping") ||
+  !capabilityBindingAllowlist.has("capability-bindings/module-bindings") ||
+  !capabilityBindingAllowlist.has("capability-bindings/enforcement") ||
+  !capabilityBindingAllowlist.has("capability-bindings/validation") ||
+  !capabilityBindingAllowlist.has("capability-bindings/request-validation") ||
+  !capabilityBindingAllowlist.has("capability-bindings/integration") ||
+  !capabilityBindingAllowlist.has("capability-bindings/completion-status")
+) {
+  throw new Error(
+    "The C14X-C capability binding proxy allowlist must contain only exact GET inspection paths.",
+  );
+}
+if (
+  /capability-bindings\/\*/.test(backendProxySource) ||
+  /path\[0\]\s*===\s*["']capability-bindings["'][\s\S]{0,120}path\.length\s*[!<>]=/.test(
+    backendProxySource,
+  ) ||
+  /requestedPath\.startsWith\(["']capability-bindings\//.test(
+    backendProxySource,
+  )
+) {
+  throw new Error(
+    "The backend API proxy must not allow broad capability binding paths.",
+  );
+}
+if (
+  !backendProxySource.includes(
+    'method === "GET" &&\n      ALLOWED_CAPABILITY_BINDING_PATHS.has(requestedPath)',
+  ) &&
+  !backendProxySource.includes(
+    'method === "GET" && ALLOWED_CAPABILITY_BINDING_PATHS.has(requestedPath)',
+  )
+) {
+  throw new Error("The C14X-C capability binding proxy paths must be GET-only.");
+}
+for (const deniedCapabilityBindingPath of [
+  ["capability-bindings", "run"],
+  ["capability-bindings", "execute"],
+  ["capability-bindings", "invoke"],
+  ["capability-bindings", "sync"],
+  ["capability-bindings", "models", "fallback"],
+  ["capability-bindings", "capabilities", "auto-route"],
+]) {
+  if (
+    backendProxySource.includes(`"${deniedCapabilityBindingPath.join("/")}"`) ||
+    backendProxySource.includes(`'${deniedCapabilityBindingPath.join("/")}'`)
+  ) {
+    throw new Error(
+      "A denied capability binding path was added to the proxy allowlist.",
     );
   }
 }

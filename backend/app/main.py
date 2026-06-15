@@ -5,6 +5,7 @@ from .api.routes.ai_execution_bindings import router as ai_execution_bindings_ro
 from .api.routes.approval import router as approval_router
 from .api.routes.artifacts import router as artifacts_router
 from .api.routes.auth import router as auth_router
+from .api.routes.capability_bindings import router as capability_bindings_router
 from .api.routes.errors import router as errors_router
 from .api.routes.external_dependencies import router as external_dependencies_router
 from .api.routes.execution_providers import router as execution_providers_router
@@ -50,3 +51,4 @@ app.include_router(execution_providers_router)
 app.include_router(external_dependencies_router)
 app.include_router(ai_execution_bindings_router)
 app.include_router(model_locks_router)
+app.include_router(capability_bindings_router)

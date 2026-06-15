@@ -74,3 +74,41 @@ test("backend proxy denies C14X-B model lock wildcard and action paths", () => {
     assert.equal(isAllowedBackendProxyPath("POST", path), false);
   }
 });
+
+test("backend proxy precisely allows C14X-C capability binding read paths", () => {
+  const allowedPaths = [
+    ["capability-bindings", "routing-model"],
+    ["capability-bindings", "model-mapping"],
+    ["capability-bindings", "module-bindings"],
+    ["capability-bindings", "enforcement"],
+    ["capability-bindings", "validation"],
+    ["capability-bindings", "request-validation"],
+    ["capability-bindings", "integration"],
+    ["capability-bindings", "completion-status"],
+  ];
+
+  for (const path of allowedPaths) {
+    assert.equal(isAllowedBackendProxyPath("GET", path), true);
+    assert.equal(isAllowedBackendProxyPath("POST", path), false);
+    assert.equal(isAllowedBackendProxyPath("PATCH", path), false);
+    assert.equal(isAllowedBackendProxyPath("DELETE", path), false);
+  }
+});
+
+test("backend proxy denies C14X-C capability binding wildcard and action paths", () => {
+  const deniedPaths = [
+    ["capability-bindings"],
+    ["capability-bindings", "routing-model", "extra"],
+    ["capability-bindings", "run"],
+    ["capability-bindings", "execute"],
+    ["capability-bindings", "invoke"],
+    ["capability-bindings", "sync"],
+    ["capability-bindings", "models", "fallback"],
+    ["capability-bindings", "capabilities", "auto-route"],
+  ];
+
+  for (const path of deniedPaths) {
+    assert.equal(isAllowedBackendProxyPath("GET", path), false);
+    assert.equal(isAllowedBackendProxyPath("POST", path), false);
+  }
+});
