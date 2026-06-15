@@ -23,6 +23,7 @@ from .api.routes.operation_logs import router as operation_logs_router
 from .api.routes.permissions import router as permissions_router
 from .api.routes.reviews import router as reviews_router
 from .api.routes.users import router as users_router
+from .api.routes.workflow_registry import router as workflow_registry_router
 from .api.routes.workflows import router as workflows_router
 from .core.config import get_settings
 
@@ -56,3 +57,4 @@ app.include_router(ai_execution_bindings_router)
 app.include_router(model_locks_router)
 app.include_router(capability_bindings_router)
 app.include_router(module_allocations_router)
+app.include_router(workflow_registry_router)
