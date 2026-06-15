@@ -202,15 +202,15 @@ def test_c14x_a_router_exposes_only_read_contract_apis() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/ai-execution-bindings")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/ai-execution-bindings")
     ]
 
-    assert ("/ai-execution-bindings/registry", {"GET"}) in routes
-    assert ("/ai-execution-bindings/rules", {"GET"}) in routes
-    assert ("/ai-execution-bindings/execution-flow", {"GET"}) in routes
-    assert ("/ai-execution-bindings/validation", {"GET"}) in routes
-    assert ("/ai-execution-bindings/ui-interaction", {"GET"}) in routes
-    assert ("/ai-execution-bindings/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/ai-execution-bindings/registry", {"GET"}) in routes
+    assert ("/api/control-plane/ai-execution-bindings/rules", {"GET"}) in routes
+    assert ("/api/control-plane/ai-execution-bindings/execution-flow", {"GET"}) in routes
+    assert ("/api/control-plane/ai-execution-bindings/validation", {"GET"}) in routes
+    assert ("/api/control-plane/ai-execution-bindings/ui-interaction", {"GET"}) in routes
+    assert ("/api/control-plane/ai-execution-bindings/completion-status", {"GET"}) in routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in routes

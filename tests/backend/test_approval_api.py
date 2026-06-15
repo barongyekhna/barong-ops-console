@@ -38,7 +38,7 @@ def auth_headers(
     password: str = TEST_PASSWORD,
 ) -> dict[str, str]:
     response = client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
@@ -68,7 +68,7 @@ def test_owner_request_persists_workflow_and_decision(
     owner_client: TestClient,
 ) -> None:
     response = owner_client.post(
-        "/approval/request",
+        "/api/app/approval/request",
         json=approval_payload(),
     )
 
@@ -116,7 +116,7 @@ def test_admin_can_approve_pending_approval(
     admin_headers = auth_headers(auth_client, username="c12d_admin")
 
     created = auth_client.post(
-        "/approval/request",
+        "/api/app/approval/request",
         json=approval_payload(
             approval_id="approval-api-admin",
             execution_id="execution-api-admin",
@@ -124,7 +124,7 @@ def test_admin_can_approve_pending_approval(
         headers=owner_headers,
     )
     approved = auth_client.post(
-        "/approval/approval-api-admin/approve",
+        "/api/app/approval/approval-api-admin/approve",
         json={"reason": "Admin approved the pending approval request."},
         headers=admin_headers,
     )
@@ -168,16 +168,16 @@ def test_user_role_can_request_but_cannot_list_or_approve(
     user_headers = auth_headers(auth_client, username="c12d_user")
 
     created = auth_client.post(
-        "/approval/request",
+        "/api/app/approval/request",
         json=approval_payload(
             approval_id="approval-api-user",
             execution_id="execution-api-user",
         ),
         headers=user_headers,
     )
-    listed = auth_client.get("/approval/list", headers=user_headers)
+    listed = auth_client.get("/api/app/approval/list", headers=user_headers)
     approved = auth_client.post(
-        "/approval/approval-api-user/approve",
+        "/api/app/approval/approval-api-user/approve",
         json={"reason": "User should not be allowed to approve."},
         headers=user_headers,
     )

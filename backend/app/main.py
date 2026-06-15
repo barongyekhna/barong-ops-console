@@ -1,5 +1,7 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, status
+from fastapi.responses import JSONResponse
 
+from .api.deps import get_audit_context
 from .api.routes.agents import router as agents_router
 from .api.routes.ai_execution_bindings import router as ai_execution_bindings_router
 from .api.routes.approval import router as approval_router
@@ -37,42 +39,96 @@ from .api.routes.webhook_gateway import router as webhook_gateway_router
 from .api.routes.workflow_registry import router as workflow_registry_router
 from .api.routes.workflows import router as workflows_router
 from .core.config import get_settings
+from .core.rbac import normalize_rbac_role
+from .db.session import SessionLocal
+from .services.auth_service import InvalidSessionError, validate_session
 
 settings = get_settings()
+
+PUBLIC_API_PREFIX = "/api/public"
+APPLICATION_API_PREFIX = "/api/app"
+CONTROL_PLANE_API_PREFIX = "/api/control-plane"
+CONTROL_PLANE_ROLES = frozenset(("admin", "system", "owner"))
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
 )
-app.include_router(health_router)
-app.include_router(security_firewall_router)
-app.include_router(auth_router)
-app.include_router(users_router)
-app.include_router(modules_router)
-app.include_router(agents_router)
-app.include_router(workflows_router)
-app.include_router(jobs_router)
-app.include_router(approval_router)
-app.include_router(artifacts_router)
-app.include_router(reviews_router)
-app.include_router(errors_router)
-app.include_router(memory_router)
-app.include_router(operation_logs_router)
-app.include_router(permissions_router)
-app.include_router(foundation_demo_router)
-app.include_router(n8n_test_router)
-app.include_router(module_adapters_router)
-app.include_router(module_workflow_bindings_router)
-app.include_router(execution_providers_router)
-app.include_router(execution_prompts_router)
-app.include_router(external_dependencies_router)
-app.include_router(ai_execution_bindings_router)
-app.include_router(model_locks_router)
-app.include_router(capability_bindings_router)
-app.include_router(module_allocations_router)
-app.include_router(workflow_registry_router)
-app.include_router(webhook_gateway_router)
-app.include_router(payload_standardization_router)
-app.include_router(callback_handler_router)
-app.include_router(result_normalization_router)
-app.include_router(failure_handling_router)
+
+
+def _is_control_plane_path(path: str) -> bool:
+    return (
+        path == CONTROL_PLANE_API_PREFIX
+        or path.startswith(f"{CONTROL_PLANE_API_PREFIX}/")
+    )
+
+
+@app.middleware("http")
+async def enforce_control_plane_isolation(request: Request, call_next):
+    if not _is_control_plane_path(request.url.path):
+        return await call_next(request)
+
+    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    if session_id is None:
+        return JSONResponse(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            content={"detail": "Not authenticated."},
+        )
+
+    with SessionLocal() as db:
+        try:
+            current_session = validate_session(
+                db,
+                session_id=session_id,
+                audit=get_audit_context(request),
+            )
+        except InvalidSessionError:
+            return JSONResponse(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                content={"detail": "Not authenticated."},
+            )
+
+        role = normalize_rbac_role(current_session.user.role)
+        if role not in CONTROL_PLANE_ROLES:
+            return JSONResponse(
+                status_code=status.HTTP_403_FORBIDDEN,
+                content={"detail": "Control plane role required."},
+            )
+
+    return await call_next(request)
+
+
+app.include_router(health_router, prefix=PUBLIC_API_PREFIX)
+app.include_router(security_firewall_router, prefix=PUBLIC_API_PREFIX)
+app.include_router(auth_router, prefix=PUBLIC_API_PREFIX)
+
+app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(jobs_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(approval_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(artifacts_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(reviews_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(errors_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(memory_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(operation_logs_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(permissions_router, prefix=APPLICATION_API_PREFIX)
+
+app.include_router(modules_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(workflows_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(foundation_demo_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(n8n_test_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(module_adapters_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(module_workflow_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(execution_providers_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(execution_prompts_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(external_dependencies_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(ai_execution_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(model_locks_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(capability_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(module_allocations_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(workflow_registry_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(webhook_gateway_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(payload_standardization_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(callback_handler_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(result_normalization_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(failure_handling_router, prefix=CONTROL_PLANE_API_PREFIX)

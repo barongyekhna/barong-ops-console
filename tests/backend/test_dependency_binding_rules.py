@@ -173,13 +173,13 @@ def test_c14e_router_exposes_only_read_contract_apis() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/external-dependencies")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/external-dependencies")
     ]
 
-    assert ("/external-dependencies/binding-rules", {"GET"}) in routes
-    assert ("/external-dependencies/dependency-graph", {"GET"}) in routes
-    assert ("/external-dependencies/binding-validation", {"GET"}) in routes
-    assert ("/external-dependencies/binding-audit", {"GET"}) in routes
+    assert ("/api/control-plane/external-dependencies/binding-rules", {"GET"}) in routes
+    assert ("/api/control-plane/external-dependencies/dependency-graph", {"GET"}) in routes
+    assert ("/api/control-plane/external-dependencies/binding-validation", {"GET"}) in routes
+    assert ("/api/control-plane/external-dependencies/binding-audit", {"GET"}) in routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in routes

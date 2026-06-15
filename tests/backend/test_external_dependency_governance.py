@@ -64,7 +64,7 @@ def login_token(
     password: str = TEST_PASSWORD,
 ) -> str:
     response = client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
@@ -151,22 +151,22 @@ def n8n_request() -> ExecutionRequestContractV1:
 def test_c14d_read_only_registry_api_requires_login(
     auth_client: TestClient,
 ) -> None:
-    unauth_registry = auth_client.get("/external-dependencies/registry")
-    unauth_proposals = auth_client.get("/external-dependencies/proposals")
-    unauth_bindings = auth_client.get("/external-dependencies/bindings")
+    unauth_registry = auth_client.get("/api/control-plane/external-dependencies/registry")
+    unauth_proposals = auth_client.get("/api/control-plane/external-dependencies/proposals")
+    unauth_bindings = auth_client.get("/api/control-plane/external-dependencies/bindings")
     create_external_dependency_user(username="c14d_owner_api", role="owner")
     owner_token = login_token(auth_client, username="c14d_owner_api")
 
     registry = auth_client.get(
-        "/external-dependencies/registry",
+        "/api/control-plane/external-dependencies/registry",
         headers=auth_headers(owner_token),
     )
     proposals = auth_client.get(
-        "/external-dependencies/proposals",
+        "/api/control-plane/external-dependencies/proposals",
         headers=auth_headers(owner_token),
     )
     bindings = auth_client.get(
-        "/external-dependencies/bindings",
+        "/api/control-plane/external-dependencies/bindings",
         headers=auth_headers(owner_token),
     )
 

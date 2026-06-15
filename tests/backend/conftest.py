@@ -104,7 +104,7 @@ def owner_client(auth_client: TestClient) -> TestClient:
         db.commit()
 
     response = auth_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": username, "password": password},
     )
     assert response.status_code == 200

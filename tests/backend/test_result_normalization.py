@@ -229,7 +229,7 @@ def test_c15e_result_normalization_api_routes(
     owner_client: TestClient,
 ) -> None:
     response = owner_client.post(
-        "/result-normalization/normalize",
+        "/api/control-plane/result-normalization/normalize",
         json=c15d_storage_result(),
     )
 
@@ -245,19 +245,19 @@ def test_c15e_result_normalization_api_routes(
     assert response.json()["metadata"]["raw_n8n_structure_exposed"] is False
 
     assert owner_client.get(
-        "/result-normalization/normalization-engine"
+        "/api/control-plane/result-normalization/normalization-engine"
     ).status_code == 200
     assert owner_client.get(
-        "/result-normalization/schema-mapping"
+        "/api/control-plane/result-normalization/schema-mapping"
     ).status_code == 200
     assert owner_client.get(
-        "/result-normalization/module-adapters"
+        "/api/control-plane/result-normalization/module-adapters"
     ).status_code == 200
     assert owner_client.get(
-        "/result-normalization/ui-output-structure"
+        "/api/control-plane/result-normalization/ui-output-structure"
     ).status_code == 200
     assert owner_client.get(
-        "/result-normalization/completion-status"
+        "/api/control-plane/result-normalization/completion-status"
     ).status_code == 200
 
     serialized = json.dumps(response.json()).lower()
@@ -276,19 +276,19 @@ def test_c15e_router_exposes_only_normalization_contract_paths() -> None:
         )
         for route in app.routes
         if str(getattr(route, "path", "")).startswith(
-            "/result-normalization"
+            "/api/control-plane/result-normalization"
         )
     ]
 
-    assert ("/result-normalization/normalize", {"POST"}) in routes
-    assert ("/result-normalization/normalization-engine", {"GET"}) in routes
-    assert ("/result-normalization/schema-mapping", {"GET"}) in routes
-    assert ("/result-normalization/module-adapters", {"GET"}) in routes
-    assert ("/result-normalization/ui-output-structure", {"GET"}) in routes
-    assert ("/result-normalization/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/result-normalization/normalize", {"POST"}) in routes
+    assert ("/api/control-plane/result-normalization/normalization-engine", {"GET"}) in routes
+    assert ("/api/control-plane/result-normalization/schema-mapping", {"GET"}) in routes
+    assert ("/api/control-plane/result-normalization/module-adapters", {"GET"}) in routes
+    assert ("/api/control-plane/result-normalization/ui-output-structure", {"GET"}) in routes
+    assert ("/api/control-plane/result-normalization/completion-status", {"GET"}) in routes
     assert not any(methods & {"PUT", "PATCH", "DELETE"} for _, methods in routes)
     assert not any(
-        methods & {"POST"} and path != "/result-normalization/normalize"
+        methods & {"POST"} and path != "/api/control-plane/result-normalization/normalize"
         for path, methods in routes
     )
     assert not any(

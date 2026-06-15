@@ -20,7 +20,7 @@ def test_memory_event_and_context_packet_do_not_call_models(
     prepare_job(owner_client)
 
     memory_event = owner_client.post(
-        "/memory-events",
+        "/api/app/memory-events",
         json={
             "memory_event_id": "demo.memory-event",
             "event_type": "foundation_note",
@@ -31,7 +31,7 @@ def test_memory_event_and_context_packet_do_not_call_models(
         },
     )
     context_packet = owner_client.post(
-        "/context-packets",
+        "/api/app/context-packets",
         json={
             "context_packet_id": "demo.context-packet",
             "source_job_id": "demo.job",
@@ -48,7 +48,7 @@ def test_memory_event_and_context_packet_do_not_call_models(
     assert memory_event.json()["created_by_type"] == "user"
     assert context_packet.status_code == 201
 
-    operation_logs = owner_client.get("/operation-logs").json()["items"]
+    operation_logs = owner_client.get("/api/app/operation-logs").json()["items"]
     relevant_logs = {
         item["action"]: item
         for item in operation_logs
@@ -68,11 +68,11 @@ def test_operation_logs_are_read_only_and_responses_exclude_secrets(
 ) -> None:
     create_module(owner_client)
 
-    listed = owner_client.get("/operation-logs")
+    listed = owner_client.get("/api/app/operation-logs")
     operation_id = listed.json()["items"][0]["operation_id"]
-    detail = owner_client.get(f"/operation-logs/{operation_id}")
-    post = owner_client.post("/operation-logs", json={})
-    delete = owner_client.delete(f"/operation-logs/{operation_id}")
+    detail = owner_client.get(f"/api/app/operation-logs/{operation_id}")
+    post = owner_client.post("/api/app/operation-logs", json={})
+    delete = owner_client.delete(f"/api/app/operation-logs/{operation_id}")
 
     assert listed.status_code == 200
     assert detail.status_code == 200

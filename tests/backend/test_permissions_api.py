@@ -25,21 +25,21 @@ permission_test_router = APIRouter(
 )
 
 
-@permission_test_router.get("/users-manage")
+@permission_test_router.get("/api/app/users-manage")
 def permissions_test_users_manage(
     user: User = Depends(require_permission("users.manage")),
 ) -> dict[str, int]:
     return {"user_id": user.id}
 
 
-@permission_test_router.get("/jobs-read-global")
+@permission_test_router.get("/api/app/jobs-read-global")
 def permissions_test_jobs_read_global(
     user: User = Depends(require_permission("jobs.read")),
 ) -> dict[str, int]:
     return {"user_id": user.id}
 
 
-@permission_test_router.get("/jobs-read-company-independent-site")
+@permission_test_router.get("/api/app/jobs-read-company-independent-site")
 def permissions_test_jobs_read_company_independent_site(
     user: User = Depends(
         require_permission(
@@ -52,14 +52,14 @@ def permissions_test_jobs_read_company_independent_site(
     return {"user_id": user.id}
 
 
-@permission_test_router.get("/permissions-manage-global")
+@permission_test_router.get("/api/app/permissions-manage-global")
 def permissions_test_permissions_manage_global(
     user: User = Depends(require_permission("permissions.manage")),
 ) -> dict[str, int]:
     return {"user_id": user.id}
 
 
-@permission_test_router.get("/permissions-manage-company-independent-site")
+@permission_test_router.get("/api/app/permissions-manage-company-independent-site")
 def permissions_test_permissions_manage_company_independent_site(
     user: User = Depends(
         require_permission(
@@ -107,7 +107,7 @@ def login_token(
     password: str = TEST_PASSWORD,
 ) -> str:
     response = client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
@@ -281,7 +281,7 @@ def test_auth_me_returns_owner_wildcard_permissions_without_secrets(
     )
     token = login_token(auth_client, username="c05c_owner_auth_me")
 
-    response = auth_client.get("/auth/me", headers=auth_headers(token))
+    response = auth_client.get("/api/public/auth/me", headers=auth_headers(token))
 
     assert response.status_code == 200
     payload = response.json()
@@ -312,7 +312,7 @@ def test_auth_me_returns_explicit_assignments_only_for_non_owner(
         )
     token = login_token(auth_client, username="c05c_viewer_auth_me")
 
-    response = auth_client.get("/auth/me", headers=auth_headers(token))
+    response = auth_client.get("/api/public/auth/me", headers=auth_headers(token))
 
     assert response.status_code == 200
     permissions = response.json()["permissions"]
@@ -348,7 +348,7 @@ def test_auth_me_role_defaults_do_not_grant_permissions(
         )
     token = login_token(auth_client, username="c05c_viewer_role_default_only")
 
-    response = auth_client.get("/auth/me", headers=auth_headers(token))
+    response = auth_client.get("/api/public/auth/me", headers=auth_headers(token))
 
     assert response.status_code == 200
     assert response.json()["permissions"]["permission_keys"] == []
@@ -366,7 +366,7 @@ def test_permissions_me_returns_current_user_effective_permissions(
     token = login_token(auth_client, username="c05c_operator_permissions_me")
 
     response = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(token),
     )
 
@@ -388,7 +388,7 @@ def test_permissions_me_returns_owner_full_access(
     token = login_token(auth_client, username="c05c_owner_permissions_me")
 
     response = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(token),
     )
 
@@ -424,15 +424,15 @@ def test_permissions_registry_requires_permissions_read_or_owner(
     reader_token = login_token(auth_client, username="c05c_reader_registry")
 
     owner_response = auth_client.get(
-        "/permissions/registry",
+        "/api/app/permissions/registry",
         headers=auth_headers(owner_token),
     )
     forbidden_response = auth_client.get(
-        "/permissions/registry",
+        "/api/app/permissions/registry",
         headers=auth_headers(viewer_token),
     )
     reader_response = auth_client.get(
-        "/permissions/registry",
+        "/api/app/permissions/registry",
         headers=auth_headers(reader_token),
     )
 

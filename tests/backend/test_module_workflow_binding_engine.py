@@ -223,17 +223,17 @@ def test_c15f_router_exposes_only_read_contract_apis() -> None:
         )
         for route in app.routes
         if str(getattr(route, "path", "")).startswith(
-            "/module-workflow-bindings"
+            "/api/control-plane/module-workflow-bindings"
         )
     ]
 
-    assert ("/module-workflow-bindings/model", {"GET"}) in routes
-    assert ("/module-workflow-bindings/enforcement", {"GET"}) in routes
-    assert ("/module-workflow-bindings/access-control", {"GET"}) in routes
-    assert ("/module-workflow-bindings/isolation-rules", {"GET"}) in routes
-    assert ("/module-workflow-bindings/decision", {"GET"}) in routes
-    assert ("/module-workflow-bindings/validation", {"GET"}) in routes
-    assert ("/module-workflow-bindings/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/module-workflow-bindings/model", {"GET"}) in routes
+    assert ("/api/control-plane/module-workflow-bindings/enforcement", {"GET"}) in routes
+    assert ("/api/control-plane/module-workflow-bindings/access-control", {"GET"}) in routes
+    assert ("/api/control-plane/module-workflow-bindings/isolation-rules", {"GET"}) in routes
+    assert ("/api/control-plane/module-workflow-bindings/decision", {"GET"}) in routes
+    assert ("/api/control-plane/module-workflow-bindings/validation", {"GET"}) in routes
+    assert ("/api/control-plane/module-workflow-bindings/completion-status", {"GET"}) in routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in routes

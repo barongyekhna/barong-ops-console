@@ -31,7 +31,7 @@ EXPECTED_EVENTS = [
 def test_foundation_demo_run_requires_owner_token(
     auth_client: TestClient,
 ) -> None:
-    response = auth_client.post("/foundation-demo/run")
+    response = auth_client.post("/api/control-plane/foundation-demo/run")
 
     assert response.status_code == 401
 
@@ -39,7 +39,7 @@ def test_foundation_demo_run_requires_owner_token(
 def test_owner_runs_complete_safe_foundation_demo(
     owner_client: TestClient,
 ) -> None:
-    response = owner_client.post("/foundation-demo/run")
+    response = owner_client.post("/api/control-plane/foundation-demo/run")
 
     assert response.status_code == 201
     payload = response.json()
@@ -135,12 +135,12 @@ def test_owner_runs_complete_safe_foundation_demo(
 def test_latest_returns_most_recent_foundation_demo(
     owner_client: TestClient,
 ) -> None:
-    first = owner_client.post("/foundation-demo/run")
-    second = owner_client.post("/foundation-demo/run")
+    first = owner_client.post("/api/control-plane/foundation-demo/run")
+    second = owner_client.post("/api/control-plane/foundation-demo/run")
 
     assert first.status_code == 201
     assert second.status_code == 201
-    latest = owner_client.get("/foundation-demo/latest")
+    latest = owner_client.get("/api/control-plane/foundation-demo/latest")
 
     assert latest.status_code == 200
     payload = latest.json()
@@ -183,8 +183,8 @@ def test_latest_returns_most_recent_foundation_demo(
 def test_foundation_demo_responses_exclude_credentials(
     owner_client: TestClient,
 ) -> None:
-    run = owner_client.post("/foundation-demo/run")
-    latest = owner_client.get("/foundation-demo/latest")
+    run = owner_client.post("/api/control-plane/foundation-demo/run")
+    latest = owner_client.get("/api/control-plane/foundation-demo/latest")
 
     assert run.status_code == 201
     assert latest.status_code == 200
@@ -216,7 +216,7 @@ def test_failed_foundation_demo_rolls_back_and_records_failure(
         fail_artifact_creation,
     )
 
-    response = owner_client.post("/foundation-demo/run")
+    response = owner_client.post("/api/control-plane/foundation-demo/run")
 
     assert response.status_code == 500
     with SessionLocal() as db:

@@ -12,17 +12,17 @@ from tests.backend.foundation_helpers import (
 )
 
 F10_LIST_PATHS = (
-    "/modules",
-    "/agents",
-    "/workflows",
-    "/jobs",
-    "/artifacts",
-    "/reviews",
-    "/errors",
-    "/memory-events",
-    "/context-packets",
-    "/memory-summaries",
-    "/operation-logs",
+    "/api/control-plane/modules",
+    "/api/control-plane/agents",
+    "/api/control-plane/workflows",
+    "/api/app/jobs",
+    "/api/app/artifacts",
+    "/api/app/reviews",
+    "/api/app/errors",
+    "/api/app/memory-events",
+    "/api/app/context-packets",
+    "/api/app/memory-summaries",
+    "/api/app/operation-logs",
 )
 
 
@@ -44,7 +44,7 @@ def test_owner_can_access_f10_lists(
     response = owner_client.get(path)
 
     assert response.status_code == 200
-    if path == "/operation-logs":
+    if path == "/api/app/operation-logs":
         assert response.json()["items"][0]["action"] == "auth.login"
     else:
         assert response.json()["items"] == []
@@ -55,8 +55,8 @@ def test_create_module_and_duplicate_conflict(
 ) -> None:
     payload = module_payload()
 
-    created = owner_client.post("/modules", json=payload)
-    duplicate = owner_client.post("/modules", json=payload)
+    created = owner_client.post("/api/control-plane/modules", json=payload)
+    duplicate = owner_client.post("/api/control-plane/modules", json=payload)
 
     assert created.status_code == 201
     assert created.json()["module_key"] == payload["module_key"]
@@ -80,7 +80,7 @@ def test_create_demo_agent_and_workflow_metadata(
     create_module(owner_client)
 
     agent = owner_client.post(
-        "/agents",
+        "/api/control-plane/agents",
         json={
             "agent_key": "demo.agent",
             "name": "Demo agent",
@@ -89,7 +89,7 @@ def test_create_demo_agent_and_workflow_metadata(
         },
     )
     workflow = owner_client.post(
-        "/workflows",
+        "/api/control-plane/workflows",
         json={
             "workflow_key": "demo.workflow",
             "name": "Demo workflow",
@@ -115,7 +115,7 @@ def test_workflow_rejects_network_endpoint_and_sensitive_contract(
     owner_client: TestClient,
 ) -> None:
     network_endpoint = owner_client.post(
-        "/workflows",
+        "/api/control-plane/workflows",
         json={
             "workflow_key": "demo.network-workflow",
             "name": "Blocked network workflow",
@@ -123,7 +123,7 @@ def test_workflow_rejects_network_endpoint_and_sensitive_contract(
         },
     )
     credential_contract = owner_client.post(
-        "/workflows",
+        "/api/control-plane/workflows",
         json={
             "workflow_key": "demo.credential-workflow",
             "name": "Blocked credential workflow",

@@ -1,19 +1,28 @@
 import type { NextRequest } from "next/server";
 
-const ALLOWED_AUTH_PATHS = new Set([
-  "auth/login",
-  "auth/logout",
+const PUBLIC_API_PREFIX = "/api/public";
+const APPLICATION_API_PREFIX = "/api/app";
+const CONTROL_PLANE_API_PREFIX = "/api/control-plane";
+
+const ALLOWED_PUBLIC_GET_PATHS = new Set([
+  "health",
   "auth/me",
 ]);
-const ALLOWED_LIST_PATHS = new Set([
-  "modules",
-  "agents",
-  "workflows",
+const ALLOWED_PUBLIC_POST_PATHS = new Set([
+  "auth/login",
+  "auth/logout",
+]);
+const ALLOWED_APP_LIST_PATHS = new Set([
   "jobs",
   "artifacts",
   "reviews",
   "errors",
   "memory-events",
+]);
+const ALLOWED_CONTROL_PLANE_LIST_PATHS = new Set([
+  "modules",
+  "agents",
+  "workflows",
 ]);
 const ALLOWED_USER_ACTIONS = new Set([
   "disable",
@@ -261,17 +270,46 @@ function isAllowedPermissionPath(method: string, path: string[]) {
   return false;
 }
 
-export function isAllowedBackendProxyPath(method: string, path: string[]) {
+type BackendApiLayer = "public" | "app" | "control-plane";
+
+function apiLayerPrefix(layer: BackendApiLayer) {
+  if (layer === "public") {
+    return PUBLIC_API_PREFIX;
+  }
+  if (layer === "app") {
+    return APPLICATION_API_PREFIX;
+  }
+  return CONTROL_PLANE_API_PREFIX;
+}
+
+function withApiLayer(layer: BackendApiLayer, requestedPath: string) {
+  return `${apiLayerPrefix(layer)}/${requestedPath}`;
+}
+
+export function getBackendApiPath(method: string, path: string[]) {
   const requestedPath = path.join("/");
 
   if (isBlockedSecurityIsolationPath(path)) {
-    return false;
+    return null;
   }
 
-  return (
-    (method === "GET" && requestedPath === "health") ||
-    ALLOWED_AUTH_PATHS.has(requestedPath) ||
-    (method === "GET" && ALLOWED_LIST_PATHS.has(requestedPath)) ||
+  if (
+    (method === "GET" && ALLOWED_PUBLIC_GET_PATHS.has(requestedPath)) ||
+    (method === "POST" && ALLOWED_PUBLIC_POST_PATHS.has(requestedPath))
+  ) {
+    return withApiLayer("public", requestedPath);
+  }
+
+  if (
+    (method === "GET" && ALLOWED_APP_LIST_PATHS.has(requestedPath)) ||
+    isAllowedPermissionPath(method, path) ||
+    isAllowedUsersPath(method, path)
+  ) {
+    return withApiLayer("app", requestedPath);
+  }
+
+  if (
+    (method === "GET" && ALLOWED_CONTROL_PLANE_LIST_PATHS.has(requestedPath)) ||
     (method === "GET" && ALLOWED_MODULE_REGISTRY_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS.has(requestedPath)) ||
@@ -298,13 +336,19 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
       ALLOWED_RESULT_NORMALIZATION_GET_PATHS.has(requestedPath)) ||
     (method === "POST" &&
       ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath)) ||
-    isAllowedPermissionPath(method, path) ||
     (method === "POST" && requestedPath === "foundation-demo/run") ||
     (method === "GET" && requestedPath === "foundation-demo/latest") ||
     (method === "POST" && requestedPath === "n8n-test/run") ||
-    (method === "GET" && requestedPath === "n8n-test/latest") ||
-    isAllowedUsersPath(method, path)
-  );
+    (method === "GET" && requestedPath === "n8n-test/latest")
+  ) {
+    return withApiLayer("control-plane", requestedPath);
+  }
+
+  return null;
+}
+
+export function isAllowedBackendProxyPath(method: string, path: string[]) {
+  return getBackendApiPath(method, path) !== null;
 }
 
 function getSetCookieHeaders(headers: Headers) {
@@ -322,18 +366,18 @@ async function proxyRequest(
   context: RouteContext,
 ) {
   const { path } = await context.params;
-  const requestedPath = path.join("/");
+  const backendApiPath = getBackendApiPath(request.method, path);
 
   if (isBlockedSecurityIsolationPath(path)) {
     return Response.json({ detail: "Forbidden." }, { status: 403 });
   }
 
-  if (!isAllowedBackendProxyPath(request.method, path)) {
+  if (backendApiPath === null) {
     return Response.json({ detail: "Not found." }, { status: 404 });
   }
 
   try {
-    const targetUrl = new URL(`/${requestedPath}`, getApiBaseUrl());
+    const targetUrl = new URL(backendApiPath, getApiBaseUrl());
     targetUrl.search = request.nextUrl.search;
     const headers = new Headers({
       Accept: "application/json",

@@ -58,7 +58,7 @@ def login_token(
     password: str = TEST_PASSWORD,
 ) -> str:
     response = client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
@@ -182,16 +182,16 @@ def owner_permission_info() -> CurrentUserPermissionInfo:
 def test_modules_registry_api_requires_login_and_owner_can_read(
     auth_client: TestClient,
 ) -> None:
-    unauth_registry = auth_client.get("/modules/registry")
-    unauth_me = auth_client.get("/modules/me")
+    unauth_registry = auth_client.get("/api/control-plane/modules/registry")
+    unauth_me = auth_client.get("/api/control-plane/modules/me")
     create_module_registry_user(username="c07b_owner_api", role="owner")
     owner_token = login_token(auth_client, username="c07b_owner_api")
 
     registry = auth_client.get(
-        "/modules/registry",
+        "/api/control-plane/modules/registry",
         headers=auth_headers(owner_token),
     )
-    me = auth_client.get("/modules/me", headers=auth_headers(owner_token))
+    me = auth_client.get("/api/control-plane/modules/me", headers=auth_headers(owner_token))
 
     assert unauth_registry.status_code == 401
     assert unauth_me.status_code == 401
@@ -519,11 +519,11 @@ def test_owner_and_non_owner_module_access_states(
     viewer_token = login_token(auth_client, username="c07b_viewer_access")
 
     owner_response = auth_client.get(
-        "/modules/me",
+        "/api/control-plane/modules/me",
         headers=auth_headers(owner_token),
     )
     viewer_response = auth_client.get(
-        "/modules/me",
+        "/api/control-plane/modules/me",
         headers=auth_headers(viewer_token),
     )
 
@@ -561,7 +561,7 @@ def test_planned_adapter_pending_and_unavailable_modules_are_not_executable(
     create_module_registry_user(username="c07b_owner_nonexec", role="owner")
     owner_token = login_token(auth_client, username="c07b_owner_nonexec")
 
-    response = auth_client.get("/modules/me", headers=auth_headers(owner_token))
+    response = auth_client.get("/api/control-plane/modules/me", headers=auth_headers(owner_token))
 
     assert response.status_code == 200
     items = access_items_by_key(response.json())
@@ -606,11 +606,11 @@ def test_role_defaults_and_super_admin_do_not_grant_module_access(
     )
 
     viewer_response = auth_client.get(
-        "/modules/me",
+        "/api/control-plane/modules/me",
         headers=auth_headers(viewer_token),
     )
     super_admin_response = auth_client.get(
-        "/modules/me",
+        "/api/control-plane/modules/me",
         headers=auth_headers(super_admin_token),
     )
 
@@ -639,26 +639,26 @@ def test_c07b_regressions_users_register_assignments_and_permissions_me(
     owner_token = login_token(auth_client, username="c07b_owner_regression")
     viewer_token = login_token(auth_client, username="c07b_viewer_regression")
 
-    viewer_users = auth_client.get("/users", headers=auth_headers(viewer_token))
+    viewer_users = auth_client.get("/api/app/users", headers=auth_headers(viewer_token))
     missing_register = auth_client.post(
-        "/auth/register",
+        "/api/public/auth/register",
         json={"username": "blocked", "password": "blocked"},
     )
     grant_response = auth_client.post(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
         json={"permission_key": "jobs.read", "reason": "C07B regression."},
     )
     assignments_response = auth_client.get(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
     )
     permissions_me = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(viewer_token),
     )
     modules_me = auth_client.get(
-        "/modules/me",
+        "/api/control-plane/modules/me",
         headers=auth_headers(viewer_token),
     )
 

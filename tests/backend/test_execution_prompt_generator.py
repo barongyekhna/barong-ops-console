@@ -258,16 +258,16 @@ def test_c14x_e_router_exposes_only_read_contract_apis() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/execution-prompts")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/execution-prompts")
     ]
 
-    assert ("/execution-prompts/template-engine", {"GET"}) in routes
-    assert ("/execution-prompts/binding-injection", {"GET"}) in routes
-    assert ("/execution-prompts/context-assembly", {"GET"}) in routes
-    assert ("/execution-prompts/security-constraints", {"GET"}) in routes
-    assert ("/execution-prompts/payload", {"GET"}) in routes
-    assert ("/execution-prompts/validation", {"GET"}) in routes
-    assert ("/execution-prompts/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/execution-prompts/template-engine", {"GET"}) in routes
+    assert ("/api/control-plane/execution-prompts/binding-injection", {"GET"}) in routes
+    assert ("/api/control-plane/execution-prompts/context-assembly", {"GET"}) in routes
+    assert ("/api/control-plane/execution-prompts/security-constraints", {"GET"}) in routes
+    assert ("/api/control-plane/execution-prompts/payload", {"GET"}) in routes
+    assert ("/api/control-plane/execution-prompts/validation", {"GET"}) in routes
+    assert ("/api/control-plane/execution-prompts/completion-status", {"GET"}) in routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in routes

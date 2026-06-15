@@ -273,18 +273,18 @@ def test_c14x_d_router_exposes_only_read_contract_apis() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/module-allocations")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/module-allocations")
     ]
 
-    assert ("/module-allocations/registry", {"GET"}) in routes
-    assert ("/module-allocations/assignment-model", {"GET"}) in routes
-    assert ("/module-allocations/categories", {"GET"}) in routes
-    assert ("/module-allocations/budget-system", {"GET"}) in routes
-    assert ("/module-allocations/enforcement", {"GET"}) in routes
-    assert ("/module-allocations/integration-flow", {"GET"}) in routes
-    assert ("/module-allocations/validation", {"GET"}) in routes
-    assert ("/module-allocations/request-validation", {"GET"}) in routes
-    assert ("/module-allocations/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/registry", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/assignment-model", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/categories", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/budget-system", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/enforcement", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/integration-flow", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/validation", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/request-validation", {"GET"}) in routes
+    assert ("/api/control-plane/module-allocations/completion-status", {"GET"}) in routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in routes

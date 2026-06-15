@@ -13,7 +13,7 @@ def test_create_demo_job_without_real_completion(
     create_module(owner_client)
 
     created = owner_client.post(
-        "/jobs",
+        "/api/app/jobs",
         json={
             "job_id": "demo.job",
             "module_key": "demo.module",
@@ -22,7 +22,7 @@ def test_create_demo_job_without_real_completion(
         },
     )
     blocked_completed = owner_client.post(
-        "/jobs",
+        "/api/app/jobs",
         json={
             "job_id": "demo.completed-job",
             "module_key": "demo.module",
@@ -51,15 +51,15 @@ def test_job_events_append_and_update_only_safe_demo_status(
     create_job(owner_client)
 
     note = owner_client.post(
-        "/jobs/demo.job/events",
+        "/api/app/jobs/demo.job/events",
         json={"event_type": "note", "details": {"message": "demo only"}},
     )
     status_change = owner_client.post(
-        "/jobs/demo.job/events",
+        "/api/app/jobs/demo.job/events",
         json={"event_type": "status_change", "to_status": "completed_demo"},
     )
     blocked_status = owner_client.post(
-        "/jobs/demo.job/events",
+        "/api/app/jobs/demo.job/events",
         json={"event_type": "status_change", "to_status": "completed"},
     )
 
@@ -69,7 +69,7 @@ def test_job_events_append_and_update_only_safe_demo_status(
     assert status_change.json()["to_status"] == "completed_demo"
     assert blocked_status.status_code == 422
 
-    events = owner_client.get("/jobs/demo.job/events")
+    events = owner_client.get("/api/app/jobs/demo.job/events")
     assert events.status_code == 200
     assert [item["event_type"] for item in events.json()["items"]] == [
         "note",

@@ -60,7 +60,7 @@ def login_token(
     password: str = TEST_PASSWORD,
 ) -> str:
     response = client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
@@ -112,17 +112,17 @@ def string_values(value: Any):
 def test_module_adapter_registry_api_requires_login_and_owner_can_read(
     auth_client: TestClient,
 ) -> None:
-    unauth_registry = auth_client.get("/module-adapters/registry")
-    unauth_me = auth_client.get("/module-adapters/me")
+    unauth_registry = auth_client.get("/api/control-plane/module-adapters/registry")
+    unauth_me = auth_client.get("/api/control-plane/module-adapters/me")
     create_adapter_registry_user(username="c08b_owner_api", role="owner")
     owner_token = login_token(auth_client, username="c08b_owner_api")
 
     registry = auth_client.get(
-        "/module-adapters/registry",
+        "/api/control-plane/module-adapters/registry",
         headers=auth_headers(owner_token),
     )
     me = auth_client.get(
-        "/module-adapters/me",
+        "/api/control-plane/module-adapters/me",
         headers=auth_headers(owner_token),
     )
 
@@ -271,12 +271,12 @@ def test_adapter_contract_rejects_invalid_shapes_and_escapes() -> None:
         validate_adapter_contracts([invalid_module])
 
     route_escape = copy.deepcopy(valid)
-    route_escape["route_bindings"][0]["path"] = "/users"
+    route_escape["route_bindings"][0]["path"] = "/api/app/users"
     with pytest.raises(ValueError, match="route escapes"):
         validate_adapter_contracts([route_escape])
 
     api_escape = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[1])
-    api_escape["api_bindings"][0]["path"] = "/permissions/me"
+    api_escape["api_bindings"][0]["path"] = "/api/app/permissions/me"
     with pytest.raises(ValueError, match="api escapes"):
         validate_adapter_contracts([api_escape])
 
@@ -555,11 +555,11 @@ def test_module_adapter_router_exposes_only_read_contract_apis(
             set(getattr(route, "methods", set()) or set()),
         )
         for route in auth_client.app.routes
-        if str(getattr(route, "path", "")).startswith("/module-adapters")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/module-adapters")
     ]
 
-    assert ("/module-adapters/registry", {"GET"}) in adapter_routes
-    assert ("/module-adapters/me", {"GET"}) in adapter_routes
+    assert ("/api/control-plane/module-adapters/registry", {"GET"}) in adapter_routes
+    assert ("/api/control-plane/module-adapters/me", {"GET"}) in adapter_routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in adapter_routes
@@ -579,11 +579,11 @@ def test_owner_and_non_owner_adapter_access_states(
     viewer_token = login_token(auth_client, username="c08b_viewer_access")
 
     owner_response = auth_client.get(
-        "/module-adapters/me",
+        "/api/control-plane/module-adapters/me",
         headers=auth_headers(owner_token),
     )
     viewer_response = auth_client.get(
-        "/module-adapters/me",
+        "/api/control-plane/module-adapters/me",
         headers=auth_headers(viewer_token),
     )
 
@@ -662,11 +662,11 @@ def test_role_defaults_super_admin_and_pending_disabled_adapter_access(
     )
 
     viewer_response = auth_client.get(
-        "/module-adapters/me",
+        "/api/control-plane/module-adapters/me",
         headers=auth_headers(viewer_token),
     )
     super_admin_response = auth_client.get(
-        "/module-adapters/me",
+        "/api/control-plane/module-adapters/me",
         headers=auth_headers(super_admin_token),
     )
 
@@ -757,33 +757,33 @@ def test_c08b_regressions_modules_permissions_assignments_users_register(
     viewer_token = login_token(auth_client, username="c08b_viewer_regression")
 
     modules_registry = auth_client.get(
-        "/modules/registry",
+        "/api/control-plane/modules/registry",
         headers=auth_headers(owner_token),
     )
     modules_me = auth_client.get(
-        "/modules/me",
+        "/api/control-plane/modules/me",
         headers=auth_headers(viewer_token),
     )
     permissions_me_before = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(viewer_token),
     )
-    viewer_users = auth_client.get("/users", headers=auth_headers(viewer_token))
+    viewer_users = auth_client.get("/api/app/users", headers=auth_headers(viewer_token))
     missing_register = auth_client.post(
-        "/auth/register",
+        "/api/public/auth/register",
         json={"username": "blocked", "password": "blocked"},
     )
     grant_response = auth_client.post(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
         json={"permission_key": "jobs.read", "reason": "C08B regression."},
     )
     assignments_response = auth_client.get(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
     )
     permissions_me_after = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(viewer_token),
     )
 

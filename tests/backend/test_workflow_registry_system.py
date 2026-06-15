@@ -212,19 +212,19 @@ def test_c15a_router_exposes_read_only_registry_apis() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/workflow-registry")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/workflow-registry")
     ]
 
-    assert ("/workflow-registry/registry", {"GET"}) in routes
-    assert ("/workflow-registry/workflows/{workflow_id}", {"GET"}) in routes
-    assert ("/workflow-registry/module-bindings", {"GET"}) in routes
-    assert ("/workflow-registry/modules/{module}/workflows", {"GET"}) in routes
-    assert ("/workflow-registry/status-management", {"GET"}) in routes
-    assert ("/workflow-registry/rules", {"GET"}) in routes
-    assert ("/workflow-registry/decision", {"GET"}) in routes
-    assert ("/workflow-registry/validation", {"GET"}) in routes
-    assert ("/workflow-registry/system-flow", {"GET"}) in routes
-    assert ("/workflow-registry/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/registry", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/workflows/{workflow_id}", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/module-bindings", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/modules/{module}/workflows", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/status-management", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/rules", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/decision", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/validation", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/system-flow", {"GET"}) in routes
+    assert ("/api/control-plane/workflow-registry/completion-status", {"GET"}) in routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in routes

@@ -220,8 +220,8 @@ class CallbackHandlerDesign(BaseModel):
     design_id: Literal["c15d_callback_handler_design_v1"] = (
         "c15d_callback_handler_design_v1"
     )
-    entrypoint: Literal["POST /callback-handler/receiver"] = (
-        "POST /callback-handler/receiver"
+    entrypoint: Literal["POST /api/control-plane/callback-handler/receiver"] = (
+        "POST /api/control-plane/callback-handler/receiver"
     )
     route: tuple[str, ...] = (
         "n8n webhook callback",

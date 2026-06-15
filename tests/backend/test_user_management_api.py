@@ -55,7 +55,7 @@ def create_user_via_api(
     is_active: bool = True,
 ) -> dict:
     response = client.post(
-        "/users",
+        "/api/app/users",
         json={
             "username": username,
             "password": password,
@@ -80,7 +80,7 @@ def test_users_requires_owner_auth(
         role="operator",
     )
     login_response = auth_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={
             "username": "managed_operator",
             "password": "example-only-operator-password",
@@ -92,18 +92,18 @@ def test_users_requires_owner_auth(
     assert session_id
 
     auth_client.cookies.clear()
-    unauthenticated = auth_client.get("/users")
+    unauthenticated = auth_client.get("/api/app/users")
     forbidden = auth_client.get(
-        "/users",
+        "/api/app/users",
         headers={"Cookie": f"barong_ops_session={session_id}"},
     )
 
     assert unauthenticated.status_code == 401
     assert forbidden.status_code == 403
 
-    unauthenticated_roles = auth_client.get("/users/roles")
+    unauthenticated_roles = auth_client.get("/api/app/users/roles")
     forbidden_roles = auth_client.get(
-        "/users/roles",
+        "/api/app/users/roles",
         headers={"Cookie": f"barong_ops_session={session_id}"},
     )
 
@@ -137,7 +137,7 @@ def test_owner_cannot_create_unassignable_user_roles(
     role: str,
 ) -> None:
     response = owner_client.post(
-        "/users",
+        "/api/app/users",
         json={
             "username": f"blocked_{role}",
             "password": OWNER_ROLE_PASSWORD,
@@ -149,7 +149,7 @@ def test_owner_cannot_create_unassignable_user_roles(
 
 
 def test_owner_reads_user_role_catalog(owner_client: TestClient) -> None:
-    response = owner_client.get("/users/roles")
+    response = owner_client.get("/api/app/users/roles")
 
     assert response.status_code == 200
     payload = response.json()
@@ -193,7 +193,7 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
     assert create_log.target_id == str(created["id"])
 
     duplicate = owner_client.post(
-        "/users",
+        "/api/app/users",
         json={
             "username": VIEWER_USERNAME,
             "password": "example-only-duplicate-password",
@@ -201,7 +201,7 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
         },
     )
     owner_role = owner_client.post(
-        "/users",
+        "/api/app/users",
         json={
             "username": "blocked_owner_role",
             "password": OWNER_ROLE_PASSWORD,
@@ -209,7 +209,7 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
         },
     )
     weak_password = owner_client.post(
-        "/users",
+        "/api/app/users",
         json={
             "username": "weak_password_user",
             "password": "short",
@@ -224,7 +224,7 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
 
 def test_auth_register_remains_absent(auth_client: TestClient) -> None:
     response = auth_client.post(
-        "/auth/register",
+        "/api/public/auth/register",
         json={
             "username": "blocked_register",
             "password": "example-only-register-password",
@@ -239,8 +239,8 @@ def test_user_list_and_detail_exclude_password_hash(
 ) -> None:
     created = create_user_via_api(owner_client)
 
-    listed = owner_client.get("/users")
-    detail = owner_client.get(f"/users/{created['id']}")
+    listed = owner_client.get("/api/app/users")
+    detail = owner_client.get(f"/api/app/users/{created['id']}")
 
     assert listed.status_code == 200
     assert detail.status_code == 200
@@ -251,7 +251,7 @@ def test_user_list_and_detail_exclude_password_hash(
 
 
 def test_user_detail_not_found_returns_404(owner_client: TestClient) -> None:
-    response = owner_client.get("/users/999999")
+    response = owner_client.get("/api/app/users/999999")
 
     assert response.status_code == 404
 
@@ -263,48 +263,48 @@ def test_owner_updates_disables_enables_and_resets_user_password(
     user_id = created["id"]
 
     updated = owner_client.patch(
-        f"/users/{user_id}",
+        f"/api/app/users/{user_id}",
         json={"role": "reviewer", "is_active": True},
     )
     patch_to_viewer = owner_client.patch(
-        f"/users/{user_id}",
+        f"/api/app/users/{user_id}",
         json={"role": " Viewer "},
     )
     patch_to_operator = owner_client.patch(
-        f"/users/{user_id}",
+        f"/api/app/users/{user_id}",
         json={"role": ROLE_OPERATOR},
     )
     patch_to_reviewer = owner_client.patch(
-        f"/users/{user_id}",
+        f"/api/app/users/{user_id}",
         json={"role": ROLE_REVIEWER},
     )
-    disabled = owner_client.post(f"/users/{user_id}/disable")
+    disabled = owner_client.post(f"/api/app/users/{user_id}/disable")
     disabled_login = owner_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": VIEWER_USERNAME, "password": VIEWER_PASSWORD},
     )
-    enabled = owner_client.post(f"/users/{user_id}/enable")
+    enabled = owner_client.post(f"/api/app/users/{user_id}/enable")
     old_login_before_reset = owner_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": VIEWER_USERNAME, "password": VIEWER_PASSWORD},
     )
     reset = owner_client.post(
-        f"/users/{user_id}/reset-password",
+        f"/api/app/users/{user_id}/reset-password",
         json={"new_password": RESET_PASSWORD},
     )
     old_login_after_reset = owner_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": VIEWER_USERNAME, "password": VIEWER_PASSWORD},
     )
     new_login_after_reset = owner_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": VIEWER_USERNAME, "password": RESET_PASSWORD},
     )
 
-    owner_id = owner_client.get("/auth/me").json()["id"]
-    self_disable = owner_client.post(f"/users/{owner_id}/disable")
+    owner_id = owner_client.get("/api/public/auth/me").json()["id"]
+    self_disable = owner_client.post(f"/api/app/users/{owner_id}/disable")
     self_reset = owner_client.post(
-        f"/users/{owner_id}/reset-password",
+        f"/api/app/users/{owner_id}/reset-password",
         json={"new_password": "example-only-owner-reset-password"},
     )
 
@@ -367,7 +367,7 @@ def test_owner_cannot_update_user_to_unassignable_roles(
     created = create_user_via_api(owner_client)
 
     response = owner_client.patch(
-        f"/users/{created['id']}",
+        f"/api/app/users/{created['id']}",
         json={"role": role},
     )
 

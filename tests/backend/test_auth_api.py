@@ -52,7 +52,7 @@ def create_test_user(
 
 def login(client: TestClient):
     response = client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": USERNAME, "password": PASSWORD},
     )
     assert response.status_code == 200
@@ -115,11 +115,11 @@ def test_login_failure_is_uniform_and_audited_without_secrets(
 
     wrong_password = "example-only-wrong-password"
     wrong_password_response = auth_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": USERNAME, "password": wrong_password},
     )
     unknown_user_response = auth_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": "unknown_owner", "password": wrong_password},
     )
 
@@ -154,7 +154,7 @@ def test_inactive_user_cannot_login(auth_client: TestClient) -> None:
     create_test_owner(is_active=False)
 
     response = auth_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": USERNAME, "password": PASSWORD},
     )
 
@@ -166,7 +166,7 @@ def test_active_non_owner_user_can_login(auth_client: TestClient) -> None:
     user_id = create_test_user()
 
     response = auth_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": OPERATOR_USERNAME, "password": OPERATOR_PASSWORD},
     )
 
@@ -183,7 +183,7 @@ def test_auth_me_returns_current_user(auth_client: TestClient) -> None:
     owner_id = create_test_owner()
     login(auth_client)
 
-    response = auth_client.get("/auth/me")
+    response = auth_client.get("/api/public/auth/me")
 
     assert response.status_code == 200
     assert response.json()["id"] == owner_id
@@ -196,12 +196,12 @@ def test_auth_me_allows_active_non_owner_user(
 ) -> None:
     user_id = create_test_user(role="viewer")
     login_response = auth_client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": OPERATOR_USERNAME, "password": OPERATOR_PASSWORD},
     )
     assert login_response.status_code == 200
 
-    response = auth_client.get("/auth/me")
+    response = auth_client.get("/api/public/auth/me")
 
     assert response.status_code == 200
     assert response.json()["id"] == user_id
@@ -216,7 +216,7 @@ def test_logout_invalidates_session_and_writes_audit_log(
     login_response = login(auth_client)
     raw_session_id = session_cookie(login_response)
 
-    response = auth_client.post("/auth/logout")
+    response = auth_client.post("/api/public/auth/logout")
 
     assert response.status_code == 200
     assert response.json() == {"message": "Logged out."}
@@ -242,7 +242,7 @@ def test_logout_invalidates_session_and_writes_audit_log(
 
     auth_client.cookies.clear()
     invalidated_response = auth_client.get(
-        "/auth/me",
+        "/api/public/auth/me",
         headers={"Cookie": f"barong_ops_session={raw_session_id}"},
     )
     assert invalidated_response.status_code == 401
@@ -250,7 +250,7 @@ def test_logout_invalidates_session_and_writes_audit_log(
 
 def test_auth_register_does_not_exist(auth_client: TestClient) -> None:
     response = auth_client.post(
-        "/auth/register",
+        "/api/public/auth/register",
         json={"username": "blocked", "password": "not-used"},
     )
 

@@ -172,13 +172,13 @@
   },
   "read_surface_final_snapshot": {
     "backend_get_paths": [
-      "/external-dependencies/registry",
-      "/external-dependencies/proposals",
-      "/external-dependencies/bindings",
-      "/external-dependencies/binding-rules",
-      "/external-dependencies/dependency-graph",
-      "/external-dependencies/binding-validation",
-      "/external-dependencies/binding-audit"
+      "/api/control-plane/external-dependencies/registry",
+      "/api/control-plane/external-dependencies/proposals",
+      "/api/control-plane/external-dependencies/bindings",
+      "/api/control-plane/external-dependencies/binding-rules",
+      "/api/control-plane/external-dependencies/dependency-graph",
+      "/api/control-plane/external-dependencies/binding-validation",
+      "/api/control-plane/external-dependencies/binding-audit"
     ],
     "frontend_proxy_exact_get_paths": [
       "external-dependencies/registry",

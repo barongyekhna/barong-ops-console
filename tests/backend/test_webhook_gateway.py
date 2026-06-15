@@ -67,7 +67,7 @@ def test_c15b_gateway_design_signature_payload_lookup_and_status() -> None:
     lookup = get_webhook_gateway_lookup_flow()
     completion = get_webhook_gateway_completion_status()
 
-    assert design.entrypoint == "POST /webhook-gateway/ingress"
+    assert design.entrypoint == "POST /api/control-plane/webhook-gateway/ingress"
     assert design.route == (
         "requester",
         "C15B Webhook Gateway",
@@ -238,12 +238,12 @@ def test_c15b_gateway_api_routes_and_signature_enforcement(
     try:
         payload = gateway_payload()
         accepted = owner_client.post(
-            "/webhook-gateway/ingress",
+            "/api/control-plane/webhook-gateway/ingress",
             json=payload.model_dump(mode="json"),
             headers=signed_headers(payload),
         )
         invalid_signature = owner_client.post(
-            "/webhook-gateway/ingress",
+            "/api/control-plane/webhook-gateway/ingress",
             json=payload.model_dump(mode="json"),
             headers={"X-Barong-Gateway-Signature": "wrong"},
         )
@@ -253,12 +253,12 @@ def test_c15b_gateway_api_routes_and_signature_enforcement(
             )
         )
         rejected = owner_client.post(
-            "/webhook-gateway/ingress",
+            "/api/control-plane/webhook-gateway/ingress",
             json=deprecated_payload.model_dump(mode="json"),
             headers=signed_headers(deprecated_payload),
         )
         unsafe = owner_client.post(
-            "/webhook-gateway/ingress",
+            "/api/control-plane/webhook-gateway/ingress",
             json={
                 **payload.model_dump(mode="json"),
                 "payload": {
@@ -279,21 +279,21 @@ def test_c15b_gateway_api_routes_and_signature_enforcement(
         assert unsafe.status_code == 422
         assert unsafe.json()["detail"] == "Invalid C15B webhook gateway payload."
 
-        assert owner_client.get("/webhook-gateway/design").status_code == 200
+        assert owner_client.get("/api/control-plane/webhook-gateway/design").status_code == 200
         assert (
-            owner_client.get("/webhook-gateway/signature-model").status_code
+            owner_client.get("/api/control-plane/webhook-gateway/signature-model").status_code
             == 200
         )
         assert (
-            owner_client.get("/webhook-gateway/payload-format").status_code
+            owner_client.get("/api/control-plane/webhook-gateway/payload-format").status_code
             == 200
         )
         assert (
-            owner_client.get("/webhook-gateway/workflow-lookup-flow").status_code
+            owner_client.get("/api/control-plane/webhook-gateway/workflow-lookup-flow").status_code
             == 200
         )
         assert (
-            owner_client.get("/webhook-gateway/completion-status").status_code
+            owner_client.get("/api/control-plane/webhook-gateway/completion-status").status_code
             == 200
         )
 
@@ -319,20 +319,20 @@ def test_c15b_gateway_router_exposes_no_direct_n8n_or_workflow_call() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/webhook-gateway")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/webhook-gateway")
     ]
 
-    assert ("/webhook-gateway/ingress", {"POST"}) in routes
-    assert ("/webhook-gateway/design", {"GET"}) in routes
-    assert ("/webhook-gateway/signature-model", {"GET"}) in routes
-    assert ("/webhook-gateway/payload-format", {"GET"}) in routes
-    assert ("/webhook-gateway/workflow-lookup-flow", {"GET"}) in routes
-    assert ("/webhook-gateway/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/webhook-gateway/ingress", {"POST"}) in routes
+    assert ("/api/control-plane/webhook-gateway/design", {"GET"}) in routes
+    assert ("/api/control-plane/webhook-gateway/signature-model", {"GET"}) in routes
+    assert ("/api/control-plane/webhook-gateway/payload-format", {"GET"}) in routes
+    assert ("/api/control-plane/webhook-gateway/workflow-lookup-flow", {"GET"}) in routes
+    assert ("/api/control-plane/webhook-gateway/completion-status", {"GET"}) in routes
     assert not any(
         path.endswith("/n8n") or "/n8n/" in path for path, _ in routes
     )
     assert not any(
-        "/workflows/" in path and methods & {"POST", "PUT", "PATCH", "DELETE"}
+        "/api/control-plane/workflows/" in path and methods & {"POST", "PUT", "PATCH", "DELETE"}
         for path, methods in routes
     )
 

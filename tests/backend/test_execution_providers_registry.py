@@ -75,7 +75,7 @@ def login_token(
     password: str = TEST_PASSWORD,
 ) -> str:
     response = client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
@@ -142,17 +142,17 @@ def table_count(model: type[object]) -> int:
 def test_execution_provider_registry_api_requires_login_and_owner_can_read(
     auth_client: TestClient,
 ) -> None:
-    unauth_registry = auth_client.get("/execution-providers/registry")
-    unauth_me = auth_client.get("/execution-providers/me")
+    unauth_registry = auth_client.get("/api/control-plane/execution-providers/registry")
+    unauth_me = auth_client.get("/api/control-plane/execution-providers/me")
     create_execution_provider_user(username="c09b_owner_api", role="owner")
     owner_token = login_token(auth_client, username="c09b_owner_api")
 
     registry = auth_client.get(
-        "/execution-providers/registry",
+        "/api/control-plane/execution-providers/registry",
         headers=auth_headers(owner_token),
     )
     me = auth_client.get(
-        "/execution-providers/me",
+        "/api/control-plane/execution-providers/me",
         headers=auth_headers(owner_token),
     )
 
@@ -675,11 +675,11 @@ def test_execution_provider_access_states_are_safe_for_owner_and_non_owner(
     viewer_token = login_token(auth_client, username="c09b_viewer_access")
 
     owner_response = auth_client.get(
-        "/execution-providers/me",
+        "/api/control-plane/execution-providers/me",
         headers=auth_headers(owner_token),
     )
     viewer_response = auth_client.get(
-        "/execution-providers/me",
+        "/api/control-plane/execution-providers/me",
         headers=auth_headers(viewer_token),
     )
 
@@ -773,11 +773,11 @@ def test_role_defaults_super_admin_and_direct_access_state_do_not_grant_executio
     )
 
     viewer_response = auth_client.get(
-        "/execution-providers/me",
+        "/api/control-plane/execution-providers/me",
         headers=auth_headers(viewer_token),
     )
     super_admin_response = auth_client.get(
-        "/execution-providers/me",
+        "/api/control-plane/execution-providers/me",
         headers=auth_headers(super_admin_token),
     )
 
@@ -826,11 +826,11 @@ def test_execution_provider_router_exposes_only_read_contract_apis(
             set(getattr(route, "methods", set()) or set()),
         )
         for route in auth_client.app.routes
-        if str(getattr(route, "path", "")).startswith("/execution-providers")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/execution-providers")
     ]
 
-    assert ("/execution-providers/registry", {"GET"}) in provider_routes
-    assert ("/execution-providers/me", {"GET"}) in provider_routes
+    assert ("/api/control-plane/execution-providers/registry", {"GET"}) in provider_routes
+    assert ("/api/control-plane/execution-providers/me", {"GET"}) in provider_routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in provider_routes
@@ -838,17 +838,17 @@ def test_execution_provider_router_exposes_only_read_contract_apis(
     assert not any(
         re.search(
             r"/(?:actions?|execute|execution|run|submit)\b",
-            str(path).removeprefix("/execution-providers"),
+            str(path).removeprefix("/api/control-plane/execution-providers"),
         )
         for path, _ in provider_routes
     )
 
     for path in [
-        "/execution-providers/registry",
-        "/execution-providers/me",
-        "/execution-providers/run",
-        "/execution-providers/execute",
-        "/execution-providers/core.no_op_provider/run",
+        "/api/control-plane/execution-providers/registry",
+        "/api/control-plane/execution-providers/me",
+        "/api/control-plane/execution-providers/run",
+        "/api/control-plane/execution-providers/execute",
+        "/api/control-plane/execution-providers/core.no_op_provider/run",
         "/executions",
     ]:
         response = auth_client.post(path, json={"blocked": True})
@@ -865,8 +865,8 @@ def test_execution_provider_read_only_calls_do_not_write_logs_tasks_or_artifacts
     before_jobs = table_count(AutomationJob)
     before_artifacts = table_count(Artifact)
 
-    registry = auth_client.get("/execution-providers/registry", headers=headers)
-    me = auth_client.get("/execution-providers/me", headers=headers)
+    registry = auth_client.get("/api/control-plane/execution-providers/registry", headers=headers)
+    me = auth_client.get("/api/control-plane/execution-providers/me", headers=headers)
 
     assert registry.status_code == 200
     assert me.status_code == 200
@@ -893,42 +893,42 @@ def test_c09b_regressions_c08_c07_c05_c06_users_and_register(
     viewer_headers = auth_headers(viewer_token)
 
     assert auth_client.get(
-        "/module-adapters/registry",
+        "/api/control-plane/module-adapters/registry",
         headers=owner_headers,
     ).status_code == 200
     assert auth_client.get(
-        "/module-adapters/me",
+        "/api/control-plane/module-adapters/me",
         headers=viewer_headers,
     ).status_code == 200
     assert auth_client.get(
-        "/modules/registry",
+        "/api/control-plane/modules/registry",
         headers=owner_headers,
     ).status_code == 200
     assert auth_client.get(
-        "/modules/me",
+        "/api/control-plane/modules/me",
         headers=viewer_headers,
     ).status_code == 200
 
     permissions_me_before = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=viewer_headers,
     )
     grant_response = auth_client.post(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=owner_headers,
         json={"permission_key": "jobs.read", "reason": "C09B regression."},
     )
     assignments_response = auth_client.get(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=owner_headers,
     )
     permissions_me_after = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=viewer_headers,
     )
-    viewer_users = auth_client.get("/users", headers=viewer_headers)
+    viewer_users = auth_client.get("/api/app/users", headers=viewer_headers)
     missing_register = auth_client.post(
-        "/auth/register",
+        "/api/public/auth/register",
         json={"username": "blocked", "password": "blocked"},
     )
 

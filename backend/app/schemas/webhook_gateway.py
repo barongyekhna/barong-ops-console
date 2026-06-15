@@ -112,8 +112,8 @@ class WebhookGatewayDesign(BaseModel):
     design_id: Literal["c15b_webhook_gateway_design_v1"] = (
         "c15b_webhook_gateway_design_v1"
     )
-    entrypoint: Literal["POST /webhook-gateway/ingress"] = (
-        "POST /webhook-gateway/ingress"
+    entrypoint: Literal["POST /api/control-plane/webhook-gateway/ingress"] = (
+        "POST /api/control-plane/webhook-gateway/ingress"
     )
     route: tuple[WebhookGatewayRouteNode, ...] = (
         "requester",

@@ -12,7 +12,7 @@ def module_payload(module_key: str = "demo.module") -> dict:
 def create_module(
     client: TestClient, module_key: str = "demo.module"
 ) -> dict:
-    response = client.post("/modules", json=module_payload(module_key))
+    response = client.post("/api/control-plane/modules", json=module_payload(module_key))
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -23,7 +23,7 @@ def create_agent(
     module_key: str = "demo.module",
 ) -> dict:
     response = client.post(
-        "/agents",
+        "/api/control-plane/agents",
         json={
             "agent_key": agent_key,
             "name": "Demo agent",
@@ -40,7 +40,7 @@ def create_workflow(
     workflow_key: str = "demo.workflow",
 ) -> dict:
     response = client.post(
-        "/workflows",
+        "/api/control-plane/workflows",
         json={
             "workflow_key": workflow_key,
             "name": "Demo workflow metadata",
@@ -59,7 +59,7 @@ def create_job(
     module_key: str = "demo.module",
 ) -> dict:
     response = client.post(
-        "/jobs",
+        "/api/app/jobs",
         json={
             "job_id": job_id,
             "module_key": module_key,

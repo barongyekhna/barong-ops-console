@@ -179,12 +179,12 @@ class AIExecutionBindingUIInteractionModel(BaseModel):
     )
     allowed_methods: tuple[Literal["GET"], ...] = ("GET",)
     allowed_paths: tuple[str, ...] = (
-        "/ai-execution-bindings/registry",
-        "/ai-execution-bindings/rules",
-        "/ai-execution-bindings/execution-flow",
-        "/ai-execution-bindings/validation",
-        "/ai-execution-bindings/ui-interaction",
-        "/ai-execution-bindings/completion-status",
+        "/api/control-plane/ai-execution-bindings/registry",
+        "/api/control-plane/ai-execution-bindings/rules",
+        "/api/control-plane/ai-execution-bindings/execution-flow",
+        "/api/control-plane/ai-execution-bindings/validation",
+        "/api/control-plane/ai-execution-bindings/ui-interaction",
+        "/api/control-plane/ai-execution-bindings/completion-status",
     )
     lookup_mode: Literal["exact_binding_key_only"] = "exact_binding_key_only"
     create_update_delete_surface: Literal["not_exposed_in_ui"] = (

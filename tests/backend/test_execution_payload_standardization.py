@@ -255,21 +255,21 @@ def test_c15c_router_exposes_only_standardization_and_normalization_apis() -> No
         )
         for route in app.routes
         if str(getattr(route, "path", "")).startswith(
-            "/payload-standardization"
+            "/api/control-plane/payload-standardization"
         )
     ]
 
-    assert ("/payload-standardization/normalize", {"POST"}) in routes
-    assert ("/payload-standardization/model", {"GET"}) in routes
-    assert ("/payload-standardization/normalization-engine", {"GET"}) in routes
-    assert ("/payload-standardization/context-rules", {"GET"}) in routes
-    assert ("/payload-standardization/workflow-mapping", {"GET"}) in routes
-    assert ("/payload-standardization/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/payload-standardization/normalize", {"POST"}) in routes
+    assert ("/api/control-plane/payload-standardization/model", {"GET"}) in routes
+    assert ("/api/control-plane/payload-standardization/normalization-engine", {"GET"}) in routes
+    assert ("/api/control-plane/payload-standardization/context-rules", {"GET"}) in routes
+    assert ("/api/control-plane/payload-standardization/workflow-mapping", {"GET"}) in routes
+    assert ("/api/control-plane/payload-standardization/completion-status", {"GET"}) in routes
     assert not any(
         methods & {"PUT", "PATCH", "DELETE"} for _, methods in routes
     )
     assert not any(
-        methods & {"POST"} and path != "/payload-standardization/normalize"
+        methods & {"POST"} and path != "/api/control-plane/payload-standardization/normalize"
         for path, methods in routes
     )
     assert not any(

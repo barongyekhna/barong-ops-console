@@ -17,7 +17,7 @@ def test_artifact_registers_metadata_without_file_upload(
     prepare_job(owner_client)
 
     response = owner_client.post(
-        "/artifacts",
+        "/api/app/artifacts",
         json={
             "artifact_id": "demo.artifact",
             "job_id": "demo.job",
@@ -30,7 +30,7 @@ def test_artifact_registers_metadata_without_file_upload(
         },
     )
     blocked_network_ref = owner_client.post(
-        "/artifacts",
+        "/api/app/artifacts",
         json={
             "artifact_id": "demo.network-artifact",
             "job_id": "demo.job",
@@ -53,7 +53,7 @@ def test_review_creation_and_demo_decision_are_audited(
     prepare_job(owner_client)
 
     created = owner_client.post(
-        "/reviews",
+        "/api/app/reviews",
         json={
             "review_id": "demo.review",
             "job_id": "demo.job",
@@ -61,7 +61,7 @@ def test_review_creation_and_demo_decision_are_audited(
         },
     )
     decided = owner_client.post(
-        "/reviews/demo.review/decision",
+        "/api/app/reviews/demo.review/decision",
         json={
             "decision": "approve_demo",
             "comment": "Demo approval only.",
@@ -97,7 +97,7 @@ def test_system_error_records_only_demo_error_metadata(
     prepare_job(owner_client)
 
     response = owner_client.post(
-        "/errors",
+        "/api/app/errors",
         json={
             "error_id": "demo.error",
             "error_code": "FOUNDATION_TEST_ERROR",

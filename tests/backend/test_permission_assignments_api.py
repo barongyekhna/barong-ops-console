@@ -48,7 +48,7 @@ def login_token(
     password: str = TEST_PASSWORD,
 ) -> str:
     response = client.post(
-        "/auth/login",
+        "/api/public/auth/login",
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
@@ -87,7 +87,7 @@ def grant_assignment(
     }
     payload.update(extra)
     response = client.post(
-        f"/permissions/users/{user_id}/assignments",
+        f"/api/app/permissions/users/{user_id}/assignments",
         headers=auth_headers(owner_token),
         json=payload,
     )
@@ -115,11 +115,11 @@ def test_owner_lists_assignments_and_owner_target_full_access(
     )
 
     response = auth_client.get(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
     )
     owner_response = auth_client.get(
-        f"/permissions/users/{owner_id}/assignments",
+        f"/api/app/permissions/users/{owner_id}/assignments",
         headers=auth_headers(owner_token),
     )
 
@@ -177,22 +177,22 @@ def test_non_owner_and_super_admin_cannot_manage_assignments(
 
     for token in (viewer_token, super_admin_token):
         list_response = auth_client.get(
-            f"/permissions/users/{viewer_id}/assignments",
+            f"/api/app/permissions/users/{viewer_id}/assignments",
             headers=auth_headers(token),
         )
         grant_response = auth_client.post(
-            f"/permissions/users/{viewer_id}/assignments",
+            f"/api/app/permissions/users/{viewer_id}/assignments",
             headers=auth_headers(token),
             json={"permission_key": "jobs.create", "reason": "blocked"},
         )
         update_response = auth_client.patch(
-            f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+            f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
             headers=auth_headers(token),
             json={"enabled": False, "reason": "blocked"},
         )
         revoke_response = auth_client.request(
             "DELETE",
-            f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+            f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
             headers=auth_headers(token),
             json={"reason": "blocked"},
         )
@@ -228,26 +228,26 @@ def test_owner_grant_validation_and_permissions_me_effect(
     )
     assignment = granted["assignment"]
     me_response = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(viewer_token),
     )
     duplicate = auth_client.post(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
         json={"permission_key": "jobs.read", "reason": "duplicate"},
     )
     missing_permission = auth_client.post(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
         json={"permission_key": "jobs.archive", "reason": "missing"},
     )
     wildcard = auth_client.post(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
         json={"permission_key": "*", "reason": "wildcard"},
     )
     owner_target = auth_client.post(
-        f"/permissions/users/{owner_id}/assignments",
+        f"/api/app/permissions/users/{owner_id}/assignments",
         headers=auth_headers(owner_token),
         json={"permission_key": "jobs.read", "reason": "owner target"},
     )
@@ -277,7 +277,7 @@ def test_high_risk_grant_update_revoke_require_reason_confirmation_and_log(
     owner_token = login_token(auth_client, username="c06b_owner_high_risk")
 
     missing_confirmation = auth_client.post(
-        f"/permissions/users/{viewer_id}/assignments",
+        f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
         json={"permission_key": "permissions.manage"},
     )
@@ -292,7 +292,7 @@ def test_high_risk_grant_update_revoke_require_reason_confirmation_and_log(
     )
     assignment_id = granted["assignment"]["id"]
     disabled = auth_client.patch(
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={
             "enabled": False,
@@ -300,12 +300,12 @@ def test_high_risk_grant_update_revoke_require_reason_confirmation_and_log(
         },
     )
     enable_without_confirmation = auth_client.patch(
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={"enabled": True, "reason": "Resume high-risk access."},
     )
     enabled = auth_client.patch(
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={
             "enabled": True,
@@ -316,13 +316,13 @@ def test_high_risk_grant_update_revoke_require_reason_confirmation_and_log(
     )
     revoke_without_reason = auth_client.request(
         "DELETE",
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={},
     )
     revoked = auth_client.request(
         "DELETE",
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={"reason": "High-risk access no longer needed."},
     )
@@ -391,16 +391,16 @@ def test_owner_updates_assignment_and_effective_permissions(
     assignment_id = granted["assignment"]["id"]
 
     disabled = auth_client.patch(
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={"enabled": False, "reason": "Disable for C06B test."},
     )
     disabled_me = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(viewer_token),
     )
     enabled_scoped = auth_client.patch(
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={
             "enabled": True,
@@ -411,7 +411,7 @@ def test_owner_updates_assignment_and_effective_permissions(
     )
     expired_at = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
     expired = auth_client.patch(
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={
             "expires_at": expired_at,
@@ -419,16 +419,16 @@ def test_owner_updates_assignment_and_effective_permissions(
         },
     )
     expired_me = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(viewer_token),
     )
     mismatched_user = auth_client.patch(
-        f"/permissions/users/{other_user_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{other_user_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={"enabled": False, "reason": "wrong user"},
     )
     permission_key_update = auth_client.patch(
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={"permission_key": "jobs.create", "reason": "not allowed"},
     )
@@ -470,12 +470,12 @@ def test_revoke_soft_disables_assignment_removes_effective_permission_and_logs(
 
     revoked = auth_client.request(
         "DELETE",
-        f"/permissions/users/{viewer_id}/assignments/{assignment_id}",
+        f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
         json={"reason": "C06B revoke test."},
     )
     me_response = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(viewer_token),
     )
 
@@ -523,26 +523,26 @@ def test_security_boundaries_remain_owner_only_without_role_default_grants(
         username="c06b_super_admin_security",
     )
     super_admin_me = auth_client.get(
-        "/permissions/me",
+        "/api/app/permissions/me",
         headers=auth_headers(super_admin_token),
     )
     super_admin_grant = auth_client.post(
-        f"/permissions/users/{super_admin_id}/assignments",
+        f"/api/app/permissions/users/{super_admin_id}/assignments",
         headers=auth_headers(super_admin_token),
         json={"permission_key": "jobs.read", "reason": "blocked"},
     )
     super_admin_users = auth_client.get(
-        "/users",
+        "/api/app/users",
         headers=auth_headers(super_admin_token),
     )
     auth_register = auth_client.post(
-        "/auth/register",
+        "/api/public/auth/register",
         json={
             "username": "blocked_c06b_register",
             "password": "example-only-register-password",
         },
     )
-    owner_users = auth_client.get("/users", headers=auth_headers(owner_token))
+    owner_users = auth_client.get("/api/app/users", headers=auth_headers(owner_token))
 
     assert super_admin_me.status_code == 200
     assert super_admin_me.json()["permissions"]["permission_keys"] == []

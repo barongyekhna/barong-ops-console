@@ -209,16 +209,16 @@ def test_c14x_b_router_exposes_only_read_contract_apis() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/model-locks")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/model-locks")
     ]
 
-    assert ("/model-locks/registry", {"GET"}) in routes
-    assert ("/model-locks/rules", {"GET"}) in routes
-    assert ("/model-locks/enforcement", {"GET"}) in routes
-    assert ("/model-locks/validation", {"GET"}) in routes
-    assert ("/model-locks/request-validation", {"GET"}) in routes
-    assert ("/model-locks/integration", {"GET"}) in routes
-    assert ("/model-locks/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/model-locks/registry", {"GET"}) in routes
+    assert ("/api/control-plane/model-locks/rules", {"GET"}) in routes
+    assert ("/api/control-plane/model-locks/enforcement", {"GET"}) in routes
+    assert ("/api/control-plane/model-locks/validation", {"GET"}) in routes
+    assert ("/api/control-plane/model-locks/request-validation", {"GET"}) in routes
+    assert ("/api/control-plane/model-locks/integration", {"GET"}) in routes
+    assert ("/api/control-plane/model-locks/completion-status", {"GET"}) in routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in routes

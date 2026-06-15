@@ -96,7 +96,7 @@ def test_c15d_design_context_status_storage_notification_and_completion() -> Non
     notification = get_module_notification_model()
     completion = get_callback_handler_completion_status()
 
-    assert design.entrypoint == "POST /callback-handler/receiver"
+    assert design.entrypoint == "POST /api/control-plane/callback-handler/receiver"
     assert design.signature_source == "C15B HMAC-SHA256 verification model"
     assert design.no_execution_trigger is True
     assert binding.lookup_key == "context_id"
@@ -276,28 +276,28 @@ def test_c15d_callback_handler_api_routes(
     try:
         request = c15c_request()
         bind_response = owner_client.post(
-            "/callback-handler/context-bindings",
+            "/api/control-plane/callback-handler/context-bindings",
             json=request.model_dump(mode="json"),
         )
         payload = callback_payload()
         accepted = owner_client.post(
-            "/callback-handler/receiver",
+            "/api/control-plane/callback-handler/receiver",
             json=payload.model_dump(mode="json"),
             headers=signed_headers(payload),
         )
         invalid_signature = owner_client.post(
-            "/callback-handler/receiver",
+            "/api/control-plane/callback-handler/receiver",
             json=payload.model_dump(mode="json"),
             headers={"X-Barong-Gateway-Signature": "wrong"},
         )
         unknown = callback_payload(context_id="ctx.c15c.ffffffffffffffff")
         unknown_response = owner_client.post(
-            "/callback-handler/receiver",
+            "/api/control-plane/callback-handler/receiver",
             json=unknown.model_dump(mode="json"),
             headers=signed_headers(unknown),
         )
         stored = owner_client.get(
-            "/callback-handler/results/ctx.c15c.0123456789abcdef"
+            "/api/control-plane/callback-handler/results/ctx.c15c.0123456789abcdef"
         )
 
         assert bind_response.status_code == 201
@@ -310,25 +310,25 @@ def test_c15d_callback_handler_api_routes(
         assert stored.status_code == 200
         assert stored.json()["status"] == "success"
 
-        assert owner_client.get("/callback-handler/design").status_code == 200
+        assert owner_client.get("/api/control-plane/callback-handler/design").status_code == 200
         assert (
-            owner_client.get("/callback-handler/context-binding").status_code
+            owner_client.get("/api/control-plane/callback-handler/context-binding").status_code
             == 200
         )
         assert (
-            owner_client.get("/callback-handler/status-management").status_code
+            owner_client.get("/api/control-plane/callback-handler/status-management").status_code
             == 200
         )
         assert (
-            owner_client.get("/callback-handler/result-storage").status_code
+            owner_client.get("/api/control-plane/callback-handler/result-storage").status_code
             == 200
         )
         assert (
-            owner_client.get("/callback-handler/module-notifications").status_code
+            owner_client.get("/api/control-plane/callback-handler/module-notifications").status_code
             == 200
         )
         assert (
-            owner_client.get("/callback-handler/completion-status").status_code
+            owner_client.get("/api/control-plane/callback-handler/completion-status").status_code
             == 200
         )
 
@@ -355,17 +355,17 @@ def test_c15d_router_exposes_no_execution_trigger_or_direct_n8n_call() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/callback-handler")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/callback-handler")
     ]
 
-    assert ("/callback-handler/receiver", {"POST"}) in routes
-    assert ("/callback-handler/context-bindings", {"POST"}) in routes
-    assert ("/callback-handler/design", {"GET"}) in routes
-    assert ("/callback-handler/context-binding", {"GET"}) in routes
-    assert ("/callback-handler/status-management", {"GET"}) in routes
-    assert ("/callback-handler/result-storage", {"GET"}) in routes
-    assert ("/callback-handler/module-notifications", {"GET"}) in routes
-    assert ("/callback-handler/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/callback-handler/receiver", {"POST"}) in routes
+    assert ("/api/control-plane/callback-handler/context-bindings", {"POST"}) in routes
+    assert ("/api/control-plane/callback-handler/design", {"GET"}) in routes
+    assert ("/api/control-plane/callback-handler/context-binding", {"GET"}) in routes
+    assert ("/api/control-plane/callback-handler/status-management", {"GET"}) in routes
+    assert ("/api/control-plane/callback-handler/result-storage", {"GET"}) in routes
+    assert ("/api/control-plane/callback-handler/module-notifications", {"GET"}) in routes
+    assert ("/api/control-plane/callback-handler/completion-status", {"GET"}) in routes
     assert not any(methods & {"PUT", "PATCH", "DELETE"} for _, methods in routes)
     assert not any(
         re.search(r"/(?:actions?|execute|run|sync|invoke|n8n)\b", path)

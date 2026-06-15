@@ -69,7 +69,7 @@ def create_waiting_test_job(
     configure_test_bridge(test_settings)
     mock_dispatch = captured if captured is not None else {}
     install_mock_dispatch_capture(monkeypatch, mock_dispatch)
-    response = owner_client.post("/n8n-test/run")
+    response = owner_client.post("/api/control-plane/n8n-test/run")
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -77,7 +77,7 @@ def create_waiting_test_job(
 def test_n8n_test_run_requires_owner_token(
     auth_client: TestClient,
 ) -> None:
-    response = auth_client.post("/n8n-test/run")
+    response = auth_client.post("/api/control-plane/n8n-test/run")
 
     assert response.status_code == 401
 
@@ -85,7 +85,7 @@ def test_n8n_test_run_requires_owner_token(
 def test_owner_can_access_latest_n8n_test(
     owner_client: TestClient,
 ) -> None:
-    response = owner_client.get("/n8n-test/latest")
+    response = owner_client.get("/api/control-plane/n8n-test/latest")
 
     assert response.status_code == 404
     assert response.json()["detail"] == (
@@ -96,7 +96,7 @@ def test_owner_can_access_latest_n8n_test(
 def test_unconfigured_webhook_returns_mock_only_result_without_external_request(
     owner_client: TestClient,
 ) -> None:
-    response = owner_client.post("/n8n-test/run")
+    response = owner_client.post("/api/control-plane/n8n-test/run")
 
     assert response.status_code == 201
     payload = response.json()
@@ -234,7 +234,7 @@ def test_callback_rejects_missing_or_wrong_secret_without_leaking_it(
     )
 
     response = owner_client.post(
-        "/n8n-test/callback",
+        "/api/control-plane/n8n-test/callback",
         json=callback,
         headers=headers,
     )
@@ -283,7 +283,7 @@ def test_authorized_callback_on_mock_completed_job_returns_existing_snapshot(
     job_id = run["job"]["job_id"]
 
     response = owner_client.post(
-        "/n8n-test/callback",
+        "/api/control-plane/n8n-test/callback",
         json={**CALLBACK_PAYLOAD, "job_id": job_id},
         headers={"X-Barong-Callback-Secret": TEST_CALLBACK_SECRET},
     )
@@ -304,7 +304,7 @@ def test_authorized_callback_on_mock_completed_job_returns_existing_snapshot(
     assert "mock-only mode" in payload["memory_event"]["summary"]
     assert payload["error"] is None
 
-    latest = owner_client.get("/n8n-test/latest")
+    latest = owner_client.get("/api/control-plane/n8n-test/latest")
     assert latest.status_code == 200
     assert latest.json()["job"]["job_id"] == job_id
     assert latest.json()["job"]["status"] == "completed_demo"
@@ -374,7 +374,7 @@ def test_callback_accepts_only_demo_terminal_statuses(
     )
 
     response = owner_client.post(
-        "/n8n-test/callback",
+        "/api/control-plane/n8n-test/callback",
         json={
             **CALLBACK_PAYLOAD,
             "job_id": run["job"]["job_id"],
@@ -399,7 +399,7 @@ def test_failed_callback_on_mock_completed_job_does_not_change_terminal_status(
     job_id = run["job"]["job_id"]
 
     response = owner_client.post(
-        "/n8n-test/callback",
+        "/api/control-plane/n8n-test/callback",
         json={
             **CALLBACK_PAYLOAD,
             "job_id": job_id,
@@ -420,7 +420,7 @@ def test_external_webhook_failure_path_is_removed(
 ) -> None:
     configure_test_bridge(test_settings)
 
-    response = owner_client.post("/n8n-test/run")
+    response = owner_client.post("/api/control-plane/n8n-test/run")
 
     assert response.status_code == 201
     assert response.json()["job"]["status"] == "completed_demo"
@@ -488,7 +488,7 @@ def test_n8n_test_bridge_has_no_real_integration_or_registration_surface() -> No
     assert "http://" not in source
     assert "https://" not in source
     assert all(
-        getattr(route, "path", "") != "/auth/register"
+        getattr(route, "path", "") != "/api/public/auth/register"
         for route in app.routes
     )
     assert not (

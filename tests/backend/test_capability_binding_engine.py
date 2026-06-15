@@ -322,17 +322,17 @@ def test_c14x_c_router_exposes_only_read_contract_apis() -> None:
             set(getattr(route, "methods", set()) or set()),
         )
         for route in app.routes
-        if str(getattr(route, "path", "")).startswith("/capability-bindings")
+        if str(getattr(route, "path", "")).startswith("/api/control-plane/capability-bindings")
     ]
 
-    assert ("/capability-bindings/routing-model", {"GET"}) in routes
-    assert ("/capability-bindings/model-mapping", {"GET"}) in routes
-    assert ("/capability-bindings/module-bindings", {"GET"}) in routes
-    assert ("/capability-bindings/enforcement", {"GET"}) in routes
-    assert ("/capability-bindings/validation", {"GET"}) in routes
-    assert ("/capability-bindings/request-validation", {"GET"}) in routes
-    assert ("/capability-bindings/integration", {"GET"}) in routes
-    assert ("/capability-bindings/completion-status", {"GET"}) in routes
+    assert ("/api/control-plane/capability-bindings/routing-model", {"GET"}) in routes
+    assert ("/api/control-plane/capability-bindings/model-mapping", {"GET"}) in routes
+    assert ("/api/control-plane/capability-bindings/module-bindings", {"GET"}) in routes
+    assert ("/api/control-plane/capability-bindings/enforcement", {"GET"}) in routes
+    assert ("/api/control-plane/capability-bindings/validation", {"GET"}) in routes
+    assert ("/api/control-plane/capability-bindings/request-validation", {"GET"}) in routes
+    assert ("/api/control-plane/capability-bindings/integration", {"GET"}) in routes
+    assert ("/api/control-plane/capability-bindings/completion-status", {"GET"}) in routes
     assert not any(
         methods & {"POST", "PUT", "PATCH", "DELETE"}
         for _, methods in routes
