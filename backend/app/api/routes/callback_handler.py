@@ -2,8 +2,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
+from ...db.session import get_db
 from ...models.user import User
 from ...schemas.callback_handler import (
     CallbackContextBinding,
@@ -56,6 +58,7 @@ def callback_handler_receiver(
         alias="X-Barong-Gateway-Signature",
     ),
     settings: Settings = Depends(get_settings),
+    db: Session = Depends(get_db),
 ) -> CallbackHandlerResult:
     try:
         callback_payload = CallbackHandlerPayload.model_validate(payload)
@@ -72,6 +75,7 @@ def callback_handler_receiver(
             callback_payload,
             provided_signature=signature,
             settings=settings,
+            db=db,
         )
     except CallbackHandlerConfigurationError as exc:
         raise HTTPException(

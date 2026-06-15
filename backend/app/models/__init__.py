@@ -17,6 +17,7 @@ from .permission import (
 )
 from .registry import AgentRegistry, ModuleRegistry, WorkflowRegistry
 from .review import ReviewItem
+from .security import SecurityRateLimitBucket, SecurityReplayNonce
 from .user import User
 
 __all__ = [
@@ -37,6 +38,8 @@ __all__ = [
     "PermissionRegistry",
     "ReviewItem",
     "RoleDefaultPermission",
+    "SecurityRateLimitBucket",
+    "SecurityReplayNonce",
     "SystemError",
     "User",
     "UserPermissionAssignment",

@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import SecretStr
+from sqlalchemy.orm import Session
 
 from ..core.config import Settings
 from ..schemas.callback_handler import (
@@ -132,6 +133,7 @@ def verify_callback_signature(
     *,
     provided_signature: str | None,
     settings: Settings,
+    db: Session | None = None,
 ) -> None:
     secret = _secret_value(settings.webhook_gateway_signing_secret)
     if not secret:
@@ -165,12 +167,14 @@ def verify_callback_signature(
             key=_callback_nonce_key(payload),
             payload_digest=_payload_digest(payload),
             ttl_seconds=settings.webhook_replay_nonce_ttl_seconds,
+            db=db,
         )
         register_replay_key(
             scope="c15d.callback_idempotency",
             key=_callback_idempotency_key(payload),
             payload_digest=_payload_digest(payload),
             ttl_seconds=settings.webhook_replay_nonce_ttl_seconds,
+            db=db,
         )
     except ReplayProtectionError as exc:
         raise CallbackHandlerReplayError(str(exc)) from None
@@ -357,12 +361,14 @@ def handle_callback(
     *,
     provided_signature: str | None,
     settings: Settings,
+    db: Session | None = None,
     store: CallbackExecutionStore | None = None,
 ) -> CallbackHandlerResult:
     verify_callback_signature(
         payload,
         provided_signature=provided_signature,
         settings=settings,
+        db=db,
     )
     target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
     binding, record = target_store.update_status_from_callback(payload)

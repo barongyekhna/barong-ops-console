@@ -1,3 +1,4 @@
+import re
 from collections.abc import Mapping
 from typing import Any
 from uuid import uuid4
@@ -13,11 +14,29 @@ SENSITIVE_KEY_MARKERS = (
     "password_hash",
     "token",
     "secret",
+    "session_id",
+    "cookie",
+    "set-cookie",
+    "signature",
+    "nonce",
+    "idempotency",
     "authorization",
     "api_key",
     "private_key",
     "credential",
 )
+INTERNAL_PATH_PATTERN = re.compile(
+    r"/api/(?:backend|public|app|control-plane)(?:/[A-Za-z0-9._~:/?#\[\]@!$&'()*+,;=%-]*)?"
+)
+INTERNAL_STAGE_PATTERN = re.compile(r"\bC(?:09|10|13|14|15|16)[A-Z]?\b")
+INTERNAL_ROUTE_REDACTION = "[redacted-api-surface]"
+INTERNAL_STAGE_REDACTION = "[redacted-internal-stage]"
+
+
+def _sanitize_observability_string(value: str) -> str:
+    sanitized = INTERNAL_PATH_PATTERN.sub(INTERNAL_ROUTE_REDACTION, value)
+    sanitized = INTERNAL_STAGE_PATTERN.sub(INTERNAL_STAGE_REDACTION, sanitized)
+    return sanitized
 
 
 def _sanitize_details(value: Any) -> Any:
@@ -33,6 +52,10 @@ def _sanitize_details(value: Any) -> Any:
         return sanitized
     if isinstance(value, list):
         return [_sanitize_details(item) for item in value]
+    if isinstance(value, str):
+        return sanitize_runtime_address_data(
+            _sanitize_observability_string(value)
+        )
     return sanitize_runtime_address_data(value)
 
 

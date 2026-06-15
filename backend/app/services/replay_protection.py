@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from threading import Lock
+from typing import TYPE_CHECKING
+
+from sqlalchemy.exc import IntegrityError
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class ReplayProtectionError(RuntimeError):
@@ -63,8 +69,29 @@ def register_replay_key(
     key: str,
     payload_digest: str,
     ttl_seconds: int,
+    db: Session | None = None,
     store: ReplayProtectionStore | None = None,
 ) -> None:
+    if db is not None:
+        from ..repositories.security import (
+            DuplicateReplayKeyError,
+            register_replay_nonce,
+        )
+
+        try:
+            register_replay_nonce(
+                db,
+                scope=scope,
+                key=key,
+                payload_digest=payload_digest,
+                ttl_seconds=ttl_seconds,
+            )
+            db.commit()
+        except (DuplicateReplayKeyError, IntegrityError) as exc:
+            db.rollback()
+            raise ReplayProtectionError("Duplicate replay protection key.") from exc
+        return
+
     target_store = store or DEFAULT_REPLAY_PROTECTION_STORE
     target_store.register(
         scope=scope,

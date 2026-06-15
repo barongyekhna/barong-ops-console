@@ -16,11 +16,8 @@ _BLOCKED_METHODS = (
 
 def _blocked_direct_access() -> None:
     raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail=(
-            "C15G security isolation blocks direct webhook or n8n access. "
-            "Use the C15B gateway boundary."
-        ),
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Not found.",
     )
 
 

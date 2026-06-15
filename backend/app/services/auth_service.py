@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from math import ceil
-from threading import Lock
 
 from sqlalchemy.orm import Session
 
@@ -29,6 +28,7 @@ from ..repositories.users import (
     reset_login_failures,
     update_last_login,
 )
+from .rate_limiter import register_login_rate_limit_attempt
 
 
 class InvalidCredentialsError(ValueError):
@@ -48,10 +48,6 @@ class LoginRateLimitError(ValueError):
     ) -> None:
         super().__init__(message)
         self.retry_after_seconds = retry_after_seconds
-
-
-_IP_LOGIN_ATTEMPTS: dict[str, list[datetime]] = {}
-_IP_LOGIN_ATTEMPTS_LOCK = Lock()
 
 
 @dataclass(frozen=True)
@@ -92,32 +88,6 @@ def _as_aware(value: datetime) -> datetime:
 
 def _retry_after_seconds(until: datetime, now: datetime) -> int:
     return max(1, ceil((_as_aware(until) - now).total_seconds()))
-
-
-def _ip_key(audit: AuditContext) -> str:
-    return audit.ip_address or "unknown"
-
-
-def _register_ip_login_attempt(
-    *,
-    audit: AuditContext,
-    settings: Settings,
-    now: datetime,
-) -> int | None:
-    key = _ip_key(audit)
-    window = timedelta(seconds=settings.login_ip_rate_limit_window_seconds)
-    with _IP_LOGIN_ATTEMPTS_LOCK:
-        attempts = [
-            attempted_at
-            for attempted_at in _IP_LOGIN_ATTEMPTS.get(key, [])
-            if now - attempted_at < window
-        ]
-        attempts.append(now)
-        _IP_LOGIN_ATTEMPTS[key] = attempts
-        if len(attempts) <= settings.login_ip_rate_limit_attempts:
-            return None
-        retry_until = attempts[0] + window
-        return _retry_after_seconds(retry_until, now)
 
 
 def _failed_login_delay_seconds(
@@ -237,19 +207,23 @@ def login(
     audit: AuditContext,
 ) -> LoginResult:
     attempted_at = _now()
-    retry_after = _register_ip_login_attempt(
+    rate_limit_decision = register_login_rate_limit_attempt(
+        db,
+        username=username,
         audit=audit,
         settings=settings,
         now=attempted_at,
     )
-    if retry_after is not None:
+    if not rate_limit_decision.allowed:
         _record_login_rate_limit(
             db,
             audit=audit,
-            reason="ip_rate_limit",
-            retry_after_seconds=retry_after,
+            reason=rate_limit_decision.reason or "distributed_rate_limit",
+            retry_after_seconds=rate_limit_decision.retry_after_seconds or 1,
         )
-        raise LoginRateLimitError(retry_after_seconds=retry_after)
+        raise LoginRateLimitError(
+            retry_after_seconds=rate_limit_decision.retry_after_seconds or 1
+        )
 
     user = get_user_by_username(db, username)
     password_matches = False

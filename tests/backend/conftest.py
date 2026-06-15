@@ -33,6 +33,7 @@ from backend.app.models.registry import (
     WorkflowRegistry,
 )
 from backend.app.models.review import ReviewItem
+from backend.app.models.security import SecurityRateLimitBucket, SecurityReplayNonce
 from backend.app.models.user import User
 
 def clear_auth_tables() -> None:
@@ -51,6 +52,8 @@ def clear_auth_tables() -> None:
         db.execute(delete(OperationLog))
         db.execute(delete(AutomationJob))
         db.execute(delete(AuthSession))
+        db.execute(delete(SecurityRateLimitBucket))
+        db.execute(delete(SecurityReplayNonce))
         db.execute(delete(UserPermissionAssignment))
         db.execute(delete(RoleDefaultPermission))
         db.execute(delete(PermissionRegistry))

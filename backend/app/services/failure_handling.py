@@ -7,6 +7,7 @@ from typing import Any
 from uuid import uuid4
 
 from pydantic import SecretStr
+from sqlalchemy.orm import Session
 
 from ..core.config import Settings
 from ..schemas.failure_handling import (
@@ -471,6 +472,7 @@ def manual_replay_context(
     request: ManualReplayRequest,
     *,
     settings: Settings,
+    db: Session | None = None,
     store: DeadLetterQueueStore | None = None,
 ) -> RecoveryPlan:
     target_store = store or DEFAULT_DEAD_LETTER_QUEUE
@@ -533,6 +535,7 @@ def manual_replay_context(
             replay_payload,
             provided_signature=signature,
             settings=settings,
+            db=db,
         )
     except (WebhookGatewayConfigurationError, WebhookGatewaySignatureError) as exc:
         raise FailureRecoveryError(str(exc)) from exc

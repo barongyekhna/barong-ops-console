@@ -1,5 +1,7 @@
 from fastapi import FastAPI, Request, status
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .api.deps import get_audit_context
 from .api.routes.agents import router as agents_router
@@ -50,20 +52,72 @@ PUBLIC_API_PREFIX = "/api/public"
 APPLICATION_API_PREFIX = "/api/app"
 CONTROL_PLANE_API_PREFIX = "/api/control-plane"
 CONTROL_PLANE_ROLES = frozenset(("admin", "system", "owner"))
-PRODUCTION_DOCS_DISABLED_ENVS = frozenset(("production", "prod"))
+PRODUCTION_LIKE_ENVS = frozenset(("production", "prod", "staging"))
 
 
-def _production_docs_disabled() -> bool:
-    return settings.app_env.lower() in PRODUCTION_DOCS_DISABLED_ENVS
+def _production_like() -> bool:
+    return settings.app_env.lower() in PRODUCTION_LIKE_ENVS
+
+
+def _docs_enabled() -> bool:
+    if settings.app_docs_enabled is not None:
+        return settings.app_docs_enabled
+    return not _production_like()
+
+
+def _control_plane_stealth_mode() -> bool:
+    if settings.control_plane_stealth_mode is not None:
+        return settings.control_plane_stealth_mode
+    return _production_like()
+
+
+def _json_security_response(
+    *,
+    status_code: int,
+    detail: object,
+    headers: dict[str, str] | None = None,
+) -> JSONResponse:
+    response = JSONResponse(
+        status_code=status_code,
+        content={"detail": detail},
+        headers=headers,
+    )
+    apply_security_headers(response, settings=settings)
+    return response
+
+
+def _production_error_detail(request: Request, status_code: int) -> str:
+    if _is_control_plane_path(request.url.path):
+        return "Not found."
+    if status_code == status.HTTP_401_UNAUTHORIZED:
+        return "Not authenticated."
+    if status_code == status.HTTP_403_FORBIDDEN:
+        return "Forbidden."
+    if status_code in {
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_405_METHOD_NOT_ALLOWED,
+    }:
+        return "Not found."
+    if status_code == status.HTTP_409_CONFLICT:
+        return "Request conflict."
+    if status_code == status.HTTP_422_UNPROCESSABLE_ENTITY:
+        return "Invalid request."
+    if status_code == status.HTTP_429_TOO_MANY_REQUESTS:
+        return "Too many requests."
+    if status_code == status.HTTP_503_SERVICE_UNAVAILABLE:
+        return "Service unavailable."
+    if status_code >= 500:
+        return "Internal server error."
+    return "Request failed."
 
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
-    debug=False if _production_docs_disabled() else settings.app_debug,
-    docs_url=None if _production_docs_disabled() else "/docs",
-    redoc_url=None if _production_docs_disabled() else "/redoc",
-    openapi_url=None if _production_docs_disabled() else "/openapi.json",
+    debug=False if _production_like() else settings.app_debug,
+    docs_url="/docs" if _docs_enabled() else None,
+    redoc_url="/redoc" if _docs_enabled() else None,
+    openapi_url="/openapi.json" if _docs_enabled() else None,
 )
 
 
@@ -74,6 +128,75 @@ def _is_control_plane_path(path: str) -> bool:
     )
 
 
+def _control_plane_denied_response(
+    *,
+    status_code: int,
+    detail: str,
+) -> JSONResponse:
+    if _control_plane_stealth_mode():
+        return _json_security_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found.",
+        )
+    return _json_security_response(status_code=status_code, detail=detail)
+
+
+@app.exception_handler(StarletteHTTPException)
+async def sanitized_http_exception_handler(
+    request: Request,
+    exc: StarletteHTTPException,
+):
+    detail = (
+        _production_error_detail(request, exc.status_code)
+        if _production_like()
+        else exc.detail
+    )
+    return _json_security_response(
+        status_code=exc.status_code,
+        detail=detail,
+        headers=exc.headers,
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def sanitized_validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError,
+):
+    detail: object = (
+        _production_error_detail(
+            request,
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+        )
+        if _production_like()
+        else exc.errors()
+    )
+    return _json_security_response(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        detail=detail,
+    )
+
+
+@app.exception_handler(Exception)
+async def sanitized_unhandled_exception_handler(
+    request: Request,
+    exc: Exception,
+):
+    del exc
+    detail = (
+        _production_error_detail(
+            request,
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+        if _production_like()
+        else "Internal server error."
+    )
+    return _json_security_response(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=detail,
+    )
+
+
 @app.middleware("http")
 async def enforce_control_plane_isolation(request: Request, call_next):
     if not _is_control_plane_path(request.url.path):
@@ -81,12 +204,10 @@ async def enforce_control_plane_isolation(request: Request, call_next):
 
     session_id = request.cookies.get(settings.auth_session_cookie_name)
     if session_id is None:
-        response = JSONResponse(
+        return _control_plane_denied_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            content={"detail": "Not authenticated."},
+            detail="Not authenticated.",
         )
-        apply_security_headers(response, settings=settings)
-        return response
 
     with SessionLocal() as db:
         try:
@@ -96,21 +217,17 @@ async def enforce_control_plane_isolation(request: Request, call_next):
                 audit=get_audit_context(request),
             )
         except InvalidSessionError:
-            response = JSONResponse(
+            return _control_plane_denied_response(
                 status_code=status.HTTP_401_UNAUTHORIZED,
-                content={"detail": "Not authenticated."},
+                detail="Not authenticated.",
             )
-            apply_security_headers(response, settings=settings)
-            return response
 
         role = normalize_rbac_role(current_session.user.role)
         if role not in CONTROL_PLANE_ROLES:
-            response = JSONResponse(
+            return _control_plane_denied_response(
                 status_code=status.HTTP_403_FORBIDDEN,
-                content={"detail": "Control plane role required."},
+                detail="Forbidden.",
             )
-            apply_security_headers(response, settings=settings)
-            return response
 
     return await call_next(request)
 

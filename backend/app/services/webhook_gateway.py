@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import SecretStr
+from sqlalchemy.orm import Session
 
 from ..core.config import Settings
 from ..schemas.webhook_gateway import (
@@ -93,6 +94,7 @@ def verify_webhook_gateway_signature(
     *,
     provided_signature: str | None,
     settings: Settings,
+    db: Session | None = None,
 ) -> None:
     secret = _secret_value(settings.webhook_gateway_signing_secret)
     if not secret:
@@ -129,6 +131,7 @@ def verify_webhook_gateway_signature(
             key=_gateway_nonce_key(payload),
             payload_digest=_payload_digest(payload),
             ttl_seconds=settings.webhook_replay_nonce_ttl_seconds,
+            db=db,
         )
     except ReplayProtectionError as exc:
         raise WebhookGatewayReplayError(str(exc)) from None
@@ -139,11 +142,13 @@ def build_webhook_gateway_decision(
     *,
     provided_signature: str | None,
     settings: Settings,
+    db: Session | None = None,
 ) -> WebhookGatewayDecision:
     verify_webhook_gateway_signature(
         payload,
         provided_signature=provided_signature,
         settings=settings,
+        db=db,
     )
     registry_decision = evaluate_workflow_invocation(
         module=payload.module,

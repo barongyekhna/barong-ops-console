@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_name: str = "barong-ops-console-backend"
     app_env: str = "development"
     app_debug: bool = False
+    app_docs_enabled: bool | None = None
     app_version: str = "0.1.0"
     database_url: str = EXAMPLE_DATABASE_URL
     auth_session_expire_minutes: int = Field(default=60, gt=0, le=1440)
@@ -48,7 +49,10 @@ class Settings(BaseSettings):
         le=900,
     )
     webhook_replay_nonce_ttl_seconds: int = Field(default=900, gt=0, le=3600)
+    control_plane_stealth_mode: bool | None = None
     login_ip_rate_limit_attempts: int = Field(default=20, gt=0, le=1000)
+    login_user_rate_limit_attempts: int = Field(default=10, gt=0, le=1000)
+    login_endpoint_rate_limit_attempts: int = Field(default=200, gt=0, le=10000)
     login_ip_rate_limit_window_seconds: int = Field(default=900, gt=0, le=86400)
     login_failed_attempt_lockout_threshold: int = Field(default=5, gt=0, le=100)
     login_failed_attempt_base_delay_seconds: int = Field(
@@ -96,6 +100,17 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator(
+        "app_docs_enabled",
+        "control_plane_stealth_mode",
+        mode="before",
+    )
+    @classmethod
+    def default_empty_optional_bools(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
+
     @field_validator("auth_session_expire_minutes", mode="before")
     @classmethod
     def default_empty_session_expiry(cls, value: Any) -> Any:
@@ -106,6 +121,8 @@ class Settings(BaseSettings):
     @field_validator(
         "webhook_replay_nonce_ttl_seconds",
         "login_ip_rate_limit_attempts",
+        "login_user_rate_limit_attempts",
+        "login_endpoint_rate_limit_attempts",
         "login_ip_rate_limit_window_seconds",
         "login_failed_attempt_lockout_threshold",
         "login_failed_attempt_base_delay_seconds",
@@ -124,6 +141,8 @@ class Settings(BaseSettings):
         defaults = {
             "webhook_replay_nonce_ttl_seconds": 900,
             "login_ip_rate_limit_attempts": 20,
+            "login_user_rate_limit_attempts": 10,
+            "login_endpoint_rate_limit_attempts": 200,
             "login_ip_rate_limit_window_seconds": 900,
             "login_failed_attempt_lockout_threshold": 5,
             "login_failed_attempt_base_delay_seconds": 2,

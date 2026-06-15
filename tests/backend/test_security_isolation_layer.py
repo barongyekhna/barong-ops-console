@@ -80,10 +80,8 @@ def test_c15g_backend_firewall_blocks_direct_webhook_and_n8n_paths(
         ("post", "/n8n/webhook"),
     ):
         response = getattr(owner_client, method)(path)
-        assert response.status_code == 403
-        assert response.json()["detail"].startswith(
-            "C15G security isolation blocks"
-        )
+        assert response.status_code == 404
+        assert response.json()["detail"] == "Not found."
 
 
 def test_c15g_gateway_enforces_c15f_before_hidden_ref_resolution() -> None:

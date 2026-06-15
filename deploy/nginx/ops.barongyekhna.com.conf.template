@@ -45,18 +45,18 @@ server {
     add_header Permissions-Policy "accelerometer=(), camera=(), geolocation=(), gyroscope=(), magnetometer=(), microphone=(), payment=(), usb=()" always;
 
     # C15G Security & Isolation Layer.
-    # These deny rules are template-only; review before installing. They block
-    # public webhook/n8n bypass paths before the request reaches Next.js.
+    # These stealth-deny rules are template-only; review before installing.
+    # They hide public webhook/n8n bypass paths before the request reaches Next.js.
     location ~* ^/(webhook|n8n)(/|$) {
-        return 403;
+        return 404;
     }
 
     location ~* ^/api/backend/(webhook|n8n)(/|$) {
-        return 403;
+        return 404;
     }
 
     location = /api/backend/webhook-gateway/ingress {
-        return 403;
+        return 404;
     }
 
     location / {

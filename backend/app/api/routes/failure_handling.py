@@ -2,8 +2,10 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import ValidationError
+from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
+from ...db.session import get_db
 from ...models.user import User
 from ...schemas.failure_handling import (
     DeadLetterQueueArchitecture,
@@ -113,11 +115,12 @@ def failure_handling_manual_replay(
     payload: dict[str, Any],
     user: User = Depends(require_rbac("C15H", "execute")),
     settings: Settings = Depends(get_settings),
+    db: Session = Depends(get_db),
 ) -> RecoveryPlan:
     del user
     try:
         request = ManualReplayRequest.model_validate(payload)
-        plan = manual_replay_context(request, settings=settings)
+        plan = manual_replay_context(request, settings=settings, db=db)
     except ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

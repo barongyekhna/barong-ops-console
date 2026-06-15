@@ -369,7 +369,7 @@ async function proxyRequest(
   const backendApiPath = getBackendApiPath(request.method, path);
 
   if (isBlockedSecurityIsolationPath(path)) {
-    return Response.json({ detail: "Forbidden." }, { status: 403 });
+    return Response.json({ detail: "Not found." }, { status: 404 });
   }
 
   if (backendApiPath === null) {

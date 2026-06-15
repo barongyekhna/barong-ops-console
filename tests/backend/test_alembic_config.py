@@ -21,6 +21,17 @@ CORE_BUSINESS_TABLES = {
     "approval_requests",
     "approval_workflows",
     "approval_decisions",
+    "auth_sessions",
+    "security_rate_limit_buckets",
+    "security_replay_nonces",
+}
+REQUIRED_MIGRATION_SUFFIXES = {
+    "create_core_foundation_tables.py",
+    "create_permission_tables.py",
+    "create_approval_tables.py",
+    "create_auth_sessions.py",
+    "add_login_lockout_fields.py",
+    "c16_adv_security_hardening.py",
 }
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
@@ -45,11 +56,13 @@ def test_alembic_targets_empty_metadata() -> None:
 
 def test_versions_contain_core_permission_and_approval_migrations() -> None:
     migration_files = sorted(VERSIONS_ROOT.glob("*.py"))
+    migration_names = {migration_file.name for migration_file in migration_files}
 
-    assert len(migration_files) == 3
-    assert migration_files[0].name.endswith("create_core_foundation_tables.py")
-    assert migration_files[1].name.endswith("create_permission_tables.py")
-    assert migration_files[2].name.endswith("create_approval_tables.py")
+    assert len(migration_files) >= len(REQUIRED_MIGRATION_SUFFIXES)
+    assert all(
+        any(name.endswith(suffix) for name in migration_names)
+        for suffix in REQUIRED_MIGRATION_SUFFIXES
+    )
 
     migration_sources = [
         migration_file.read_text(encoding="utf-8").lower()
