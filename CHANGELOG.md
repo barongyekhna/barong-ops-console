@@ -6,6 +6,19 @@
 
 ### Added
 
+- C14X-E：新增 `docs/C14X_E_EXECUTION_PROMPT_GENERATOR.md`、
+  `backend/app/schemas/execution_prompt.py`、
+  `backend/app/services/execution_prompt_generator.py` 和
+  `backend/app/api/routes/execution_prompts.py`，实现 Execution Prompt Generator：
+  deterministic prompt template engine、C14X-A/B/C/D binding injection、
+  structured context assembly、C14 security constraints 注入和 C09-compatible
+  draft payload builder。
+- C14X-E：新增 authenticated read-only `GET /execution-prompts/template-engine`、
+  `/binding-injection`、`/context-assembly`、`/security-constraints`、`/payload`、
+  `/validation` 和 `/completion-status`；frontend proxy 只精确放行这些 GET path，
+  继续拒绝 wildcard、POST/PATCH/DELETE、execute/run/invoke/sync/submit。本轮未运行
+  runtime execution、docker/pytest，未调用外部 API，未调用模型，未修改
+  production/staging，未 git commit。C14X system fully complete: YES。
 - C14G：新增 `docs/C14G_FINAL_SEAL.md` 和 `docs/C14_FINAL_STATE.json`，完成 C14
   Final Seal；冻结 C14A-C14F，锁定 secret rules、storage policy、access control、
   dependency governance、binding rules 和 validation rules，并生成 system integrity

@@ -9,6 +9,23 @@ Core rule:
 - Add business modules one by one.
 - Every module must be registered, isolated, testable, and removable.
 
+## C14X AI execution governance
+
+C14X-A through C14X-E are complete as a static AI execution governance chain:
+
+- C14X-A defines the AI execution binding registry.
+- C14X-B defines immutable key-to-model locks.
+- C14X-C defines capability routing.
+- C14X-D defines module allocation and finite capability budgets.
+- C14X-E defines the Execution Prompt Generator.
+
+C14X-E adds read-only `/execution-prompts/*` inspection APIs for template
+engine metadata, binding injection, context assembly, C14 security constraints,
+contract-only prompt payload generation, validation, and completion status.
+The generated C09-compatible payload is a draft inspection artifact only:
+it cannot submit to C09, invoke a model, call an external API, execute runtime
+work, or change production/staging.
+
 ## F13 foundation acceptance
 
 F05 through F12 are complete and accepted as the first-generation empty
