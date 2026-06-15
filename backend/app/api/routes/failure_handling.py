@@ -35,7 +35,7 @@ from ...services.failure_handling import (
     list_dead_letter_records,
     manual_replay_context,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(
     prefix="/failure-handling",
@@ -46,7 +46,7 @@ router = APIRouter(
 @router.post("/failures", response_model=FailureHandlingOutcome)
 def failure_handling_submit_failure(
     payload: dict[str, Any],
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> FailureHandlingOutcome:
     del user
     try:
@@ -67,7 +67,7 @@ def failure_handling_submit_failure(
 @router.post("/timeouts/evaluate", response_model=TimeoutHandlingDecision)
 def failure_handling_evaluate_timeout(
     payload: dict[str, Any],
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> TimeoutHandlingDecision:
     del user
     try:
@@ -87,7 +87,7 @@ def failure_handling_evaluate_timeout(
 
 @router.get("/dlq", response_model=DeadLetterQueueResponse)
 def failure_handling_dlq(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> DeadLetterQueueResponse:
     del user
     return list_dead_letter_records()
@@ -96,7 +96,7 @@ def failure_handling_dlq(
 @router.get("/dlq/{context_id}", response_model=DeadLetterRecord)
 def failure_handling_dlq_record(
     context_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> DeadLetterRecord:
     del user
     record = get_dead_letter_record(context_id)
@@ -111,7 +111,7 @@ def failure_handling_dlq_record(
 @router.post("/recovery/replay", response_model=RecoveryPlan)
 def failure_handling_manual_replay(
     payload: dict[str, Any],
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
     settings: Settings = Depends(get_settings),
 ) -> RecoveryPlan:
     del user
@@ -139,7 +139,7 @@ def failure_handling_manual_replay(
 
 @router.get("/retry-system-design", response_model=RetrySystemDesign)
 def failure_handling_retry_system_design(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> RetrySystemDesign:
     del user
     return get_retry_system_design()
@@ -147,7 +147,7 @@ def failure_handling_retry_system_design(
 
 @router.get("/timeout-handling", response_model=TimeoutHandlingModel)
 def failure_handling_timeout_model(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> TimeoutHandlingModel:
     del user
     return get_timeout_handling_model()
@@ -158,7 +158,7 @@ def failure_handling_timeout_model(
     response_model=DeadLetterQueueArchitecture,
 )
 def failure_handling_dead_letter_queue(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> DeadLetterQueueArchitecture:
     del user
     return get_dead_letter_queue_architecture()
@@ -166,7 +166,7 @@ def failure_handling_dead_letter_queue(
 
 @router.get("/fallback-strategy", response_model=FallbackStrategy)
 def failure_handling_fallback_strategy(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> FallbackStrategy:
     del user
     return get_fallback_strategy()
@@ -174,7 +174,7 @@ def failure_handling_fallback_strategy(
 
 @router.get("/recovery-flow", response_model=RecoveryFlow)
 def failure_handling_recovery_flow(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> RecoveryFlow:
     del user
     return get_recovery_flow()
@@ -185,7 +185,7 @@ def failure_handling_recovery_flow(
     response_model=FailureHandlingCompletionStatus,
 )
 def failure_handling_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15H", "execute")),
 ) -> FailureHandlingCompletionStatus:
     del user
     return get_failure_handling_completion_status()

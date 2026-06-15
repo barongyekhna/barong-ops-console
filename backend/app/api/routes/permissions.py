@@ -36,7 +36,7 @@ from ...services.permission_service import (
     revoke_user_assignment,
     update_user_assignment,
 )
-from ..deps import get_audit_context, get_current_user, require_owner, require_permission
+from ..deps import get_audit_context, require_owner, require_rbac
 
 router = APIRouter(prefix="/permissions", tags=["permissions"])
 
@@ -90,7 +90,7 @@ def _assignment_action_response(
 @router.get("/me", response_model=CurrentUserPermissionResponse)
 def permissions_me(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUTH", "read")),
 ) -> CurrentUserPermissionResponse:
     return CurrentUserPermissionResponse(
         user_id=user.id,
@@ -106,7 +106,7 @@ def permissions_registry(
     limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(require_permission("permissions.read")),
+    user: User = Depends(require_rbac("C16", "admin")),
 ) -> ListResponse[PermissionRegistryRead]:
     del user
     permissions = list_enabled_permissions(db)

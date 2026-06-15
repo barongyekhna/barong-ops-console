@@ -20,7 +20,7 @@ from ...services.module_registry import (
     list_module_manifests,
     list_modules_for_user,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/modules", tags=["modules"])
 
@@ -30,7 +30,7 @@ def modules(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ListResponse[ModuleResponse]:
     del user
     items = list_modules(db, limit=limit, offset=offset)
@@ -39,7 +39,7 @@ def modules(
 
 @router.get("/registry", response_model=ModuleRegistryResponse)
 def module_registry(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ModuleRegistryResponse:
     del user
     manifests = list_module_manifests()
@@ -53,7 +53,7 @@ def module_registry(
 @router.get("/me", response_model=ModuleAccessListResponse)
 def modules_me(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ModuleAccessListResponse:
     permission_info, items = list_modules_for_user(db, user)
     return ModuleAccessListResponse(
@@ -69,7 +69,7 @@ def modules_me(
 def module_detail(
     module_key: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ModuleResponse:
     del user
     module = get_module(db, module_key)
@@ -87,7 +87,7 @@ def module_create(
     payload: ModuleCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ModuleResponse:
     if get_module(db, payload.module_key) is not None:
         raise conflict("Module", payload.module_key)

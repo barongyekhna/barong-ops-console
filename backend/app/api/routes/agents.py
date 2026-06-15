@@ -18,7 +18,7 @@ from ...services.foundation_service import (
     invalid_reference,
     not_found,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -28,7 +28,7 @@ def agents(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ListResponse[AgentResponse]:
     del user
     items = list_agents(db, limit=limit, offset=offset)
@@ -39,7 +39,7 @@ def agents(
 def agent_detail(
     agent_key: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> AgentResponse:
     del user
     agent = get_agent(db, agent_key)
@@ -53,7 +53,7 @@ def agent_create(
     payload: AgentCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> AgentResponse:
     if get_agent(db, payload.agent_key) is not None:
         raise conflict("Agent", payload.agent_key)

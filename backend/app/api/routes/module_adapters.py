@@ -12,14 +12,14 @@ from ...services.module_adapter_registry import (
     list_adapter_contracts,
     list_adapters_for_user,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(prefix="/module-adapters", tags=["module-adapters"])
 
 
 @router.get("/registry", response_model=ModuleAdapterRegistryResponse)
 def module_adapter_registry(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> ModuleAdapterRegistryResponse:
     del user
     adapters = list_adapter_contracts()
@@ -33,7 +33,7 @@ def module_adapter_registry(
 @router.get("/me", response_model=ModuleAdapterAccessListResponse)
 def module_adapters_me(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> ModuleAdapterAccessListResponse:
     permission_info, items = list_adapters_for_user(db, user)
     return ModuleAdapterAccessListResponse(

@@ -10,7 +10,7 @@ from ...repositories.operation_logs import (
 from ...schemas.common import ListResponse
 from ...schemas.operation_logs import OperationLogResponse
 from ...services.foundation_service import not_found
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(prefix="/operation-logs", tags=["operation-logs"])
 
@@ -20,7 +20,7 @@ def operation_logs(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> ListResponse[OperationLogResponse]:
     del user
     items = list_operation_logs(db, limit=limit, offset=offset)
@@ -31,7 +31,7 @@ def operation_logs(
 def operation_log_detail(
     operation_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> OperationLogResponse:
     del user
     operation_log = get_operation_log(db, operation_id)

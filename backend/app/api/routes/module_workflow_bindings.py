@@ -19,7 +19,7 @@ from ...services.module_workflow_binding_engine import (
     get_module_workflow_enforcement_rules,
     get_module_workflow_isolation_rules,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(
     prefix="/module-workflow-bindings",
@@ -29,7 +29,7 @@ router = APIRouter(
 
 @router.get("/model", response_model=ModuleWorkflowBindingModel)
 def module_workflow_binding_model(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15F", "execute")),
 ) -> ModuleWorkflowBindingModel:
     del user
     return build_module_workflow_binding_model()
@@ -37,7 +37,7 @@ def module_workflow_binding_model(
 
 @router.get("/enforcement", response_model=ModuleWorkflowEnforcementRules)
 def module_workflow_binding_enforcement(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15F", "execute")),
 ) -> ModuleWorkflowEnforcementRules:
     del user
     return get_module_workflow_enforcement_rules()
@@ -48,7 +48,7 @@ def module_workflow_binding_enforcement(
     response_model=ModuleWorkflowAccessControlSystem,
 )
 def module_workflow_binding_access_control(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15F", "execute")),
 ) -> ModuleWorkflowAccessControlSystem:
     del user
     return get_module_workflow_access_control_system()
@@ -56,7 +56,7 @@ def module_workflow_binding_access_control(
 
 @router.get("/isolation-rules", response_model=ModuleWorkflowIsolationRules)
 def module_workflow_binding_isolation_rules(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15F", "execute")),
 ) -> ModuleWorkflowIsolationRules:
     del user
     return get_module_workflow_isolation_rules()
@@ -66,7 +66,7 @@ def module_workflow_binding_isolation_rules(
 def module_workflow_binding_decision(
     module_id: str = Query(min_length=1, max_length=128),
     workflow_id: str = Query(min_length=1, max_length=180),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15F", "execute")),
 ) -> ModuleWorkflowBindingDecision:
     del user
     return evaluate_module_workflow_access(
@@ -80,7 +80,7 @@ def module_workflow_binding_decision(
     response_model=ModuleWorkflowBindingValidationResult,
 )
 def module_workflow_binding_validation(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15F", "execute")),
 ) -> ModuleWorkflowBindingValidationResult:
     del user
     return build_module_workflow_binding_validation_result()
@@ -91,7 +91,7 @@ def module_workflow_binding_validation(
     response_model=ModuleWorkflowBindingCompletionStatus,
 )
 def module_workflow_binding_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15F", "execute")),
 ) -> ModuleWorkflowBindingCompletionStatus:
     del user
     return get_module_workflow_binding_completion_status()

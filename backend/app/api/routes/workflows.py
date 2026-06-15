@@ -15,7 +15,7 @@ from ...services.foundation_service import (
     conflict,
     not_found,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -25,7 +25,7 @@ def workflows(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ListResponse[WorkflowResponse]:
     del user
     items = list_workflows(db, limit=limit, offset=offset)
@@ -36,7 +36,7 @@ def workflows(
 def workflow_detail(
     workflow_key: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> WorkflowResponse:
     del user
     workflow = get_workflow(db, workflow_key)
@@ -54,7 +54,7 @@ def workflow_create(
     payload: WorkflowCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> WorkflowResponse:
     if get_workflow(db, payload.workflow_key) is not None:
         raise conflict("Workflow", payload.workflow_key)

@@ -21,7 +21,7 @@ from ...services.capability_binding_engine import (
     list_module_capability_binding_rules,
     validate_capability_binding_request,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(
     prefix="/capability-bindings",
@@ -31,7 +31,7 @@ router = APIRouter(
 
 @router.get("/routing-model", response_model=CapabilityRoutingModel)
 def capability_binding_routing_model(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> CapabilityRoutingModel:
     del user
     return build_capability_routing_model()
@@ -39,7 +39,7 @@ def capability_binding_routing_model(
 
 @router.get("/model-mapping", response_model=CapabilityModelMappingResponse)
 def capability_binding_model_mapping(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> CapabilityModelMappingResponse:
     del user
     return build_capability_model_mapping()
@@ -50,7 +50,7 @@ def capability_binding_model_mapping(
     response_model=ModuleCapabilityBindingRulesResponse,
 )
 def capability_binding_module_bindings(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> ModuleCapabilityBindingRulesResponse:
     del user
     return list_module_capability_binding_rules()
@@ -58,7 +58,7 @@ def capability_binding_module_bindings(
 
 @router.get("/enforcement", response_model=CapabilityBindingEnforcementStrategy)
 def capability_binding_enforcement(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> CapabilityBindingEnforcementStrategy:
     del user
     return get_capability_binding_enforcement_strategy()
@@ -66,7 +66,7 @@ def capability_binding_enforcement(
 
 @router.get("/validation", response_model=CapabilityBindingValidationResult)
 def capability_binding_validation(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> CapabilityBindingValidationResult:
     del user
     return build_capability_binding_validation_result()
@@ -81,7 +81,7 @@ def capability_binding_request_validation(
     key: str = Query(..., min_length=1, max_length=180),
     requested_model_id: str = Query(..., min_length=1, max_length=180),
     module: str = Query(..., min_length=1, max_length=128),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> CapabilityBindingRequestValidationResult:
     del user
     return validate_capability_binding_request(
@@ -94,7 +94,7 @@ def capability_binding_request_validation(
 
 @router.get("/integration", response_model=CapabilityBindingIntegrationModel)
 def capability_binding_integration(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> CapabilityBindingIntegrationModel:
     del user
     return get_capability_binding_integration_model()
@@ -105,7 +105,7 @@ def capability_binding_integration(
     response_model=CapabilityBindingCompletionStatus,
 )
 def capability_binding_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> CapabilityBindingCompletionStatus:
     del user
     return get_capability_binding_completion_status()

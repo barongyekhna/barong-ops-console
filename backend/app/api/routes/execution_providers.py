@@ -12,14 +12,14 @@ from ...services.execution_provider_registry import (
     list_execution_provider_contracts,
     list_execution_providers_for_user,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(prefix="/execution-providers", tags=["execution-providers"])
 
 
 @router.get("/registry", response_model=ExecutionProviderRegistryResponse)
 def execution_provider_registry(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C09", "execute")),
 ) -> ExecutionProviderRegistryResponse:
     del user
     providers = list_execution_provider_contracts()
@@ -33,7 +33,7 @@ def execution_provider_registry(
 @router.get("/me", response_model=ExecutionProviderAccessListResponse)
 def execution_providers_me(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C09", "execute")),
 ) -> ExecutionProviderAccessListResponse:
     permission_info, items = list_execution_providers_for_user(db, user)
     return ExecutionProviderAccessListResponse(

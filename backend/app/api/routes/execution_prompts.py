@@ -19,7 +19,7 @@ from ...services.execution_prompt_generator import (
     get_execution_prompt_security_constraints,
     get_execution_prompt_template_engine_design,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(
     prefix="/execution-prompts",
@@ -29,7 +29,7 @@ router = APIRouter(
 
 @router.get("/template-engine", response_model=ExecutionPromptTemplateEngineDesign)
 def execution_prompt_template_engine(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> ExecutionPromptTemplateEngineDesign:
     del user
     return get_execution_prompt_template_engine_design()
@@ -40,7 +40,7 @@ def execution_prompt_template_engine(
     response_model=ExecutionPromptBindingInjectionModel,
 )
 def execution_prompt_binding_injection(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> ExecutionPromptBindingInjectionModel:
     del user
     return get_execution_prompt_binding_injection_model()
@@ -51,7 +51,7 @@ def execution_prompt_binding_injection(
     response_model=ExecutionPromptContextAssemblyRules,
 )
 def execution_prompt_context_assembly(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> ExecutionPromptContextAssemblyRules:
     del user
     return get_execution_prompt_context_assembly_rules()
@@ -62,7 +62,7 @@ def execution_prompt_context_assembly(
     response_model=ExecutionPromptSecurityConstraints,
 )
 def execution_prompt_security_constraints(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> ExecutionPromptSecurityConstraints:
     del user
     return get_execution_prompt_security_constraints()
@@ -77,7 +77,7 @@ def execution_prompt_payload(
     context: str = Query("", max_length=5000),
     requested_units: int = Query(1, ge=1),
     current_window_units: int = Query(0, ge=0),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> ExecutionPromptGenerationResult:
     del user
     return build_execution_prompt_payload(
@@ -93,7 +93,7 @@ def execution_prompt_payload(
 
 @router.get("/validation", response_model=ExecutionPromptValidationResult)
 def execution_prompt_validation(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> ExecutionPromptValidationResult:
     del user
     return build_execution_prompt_validation_result()
@@ -104,7 +104,7 @@ def execution_prompt_validation(
     response_model=ExecutionPromptCompletionStatus,
 )
 def execution_prompt_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> ExecutionPromptCompletionStatus:
     del user
     return get_execution_prompt_completion_status()

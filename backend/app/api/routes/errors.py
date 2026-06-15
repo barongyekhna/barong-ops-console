@@ -14,7 +14,7 @@ from ...services.foundation_service import (
     invalid_reference,
     not_found,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/errors", tags=["errors"])
 
@@ -24,7 +24,7 @@ def errors(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> ListResponse[SystemErrorResponse]:
     del user
     items = list_errors(db, limit=limit, offset=offset)
@@ -35,7 +35,7 @@ def errors(
 def error_detail(
     error_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> SystemErrorResponse:
     del user
     error = get_error(db, error_id)
@@ -53,7 +53,7 @@ def error_create(
     payload: SystemErrorCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> SystemErrorResponse:
     if get_error(db, payload.error_id) is not None:
         raise conflict("Error", payload.error_id)

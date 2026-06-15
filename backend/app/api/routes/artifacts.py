@@ -18,7 +18,7 @@ from ...services.foundation_service import (
     invalid_reference,
     not_found,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/artifacts", tags=["artifacts"])
 
@@ -28,7 +28,7 @@ def artifacts(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("OPERATIONS", "read")),
 ) -> ListResponse[ArtifactResponse]:
     del user
     items = list_artifacts(db, limit=limit, offset=offset)
@@ -39,7 +39,7 @@ def artifacts(
 def artifact_detail(
     artifact_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("OPERATIONS", "read")),
 ) -> ArtifactResponse:
     del user
     artifact = get_artifact(db, artifact_id)
@@ -57,7 +57,7 @@ def artifact_create(
     payload: ArtifactCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("OPERATIONS", "write")),
 ) -> ArtifactResponse:
     if get_artifact(db, payload.artifact_id) is not None:
         raise conflict("Artifact", payload.artifact_id)

@@ -31,7 +31,7 @@ from ...services.foundation_service import (
     invalid_reference,
     not_found,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(tags=["memory"])
 
@@ -44,7 +44,7 @@ def memory_events(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> ListResponse[MemoryEventResponse]:
     del user
     items = list_memory_events(db, limit=limit, offset=offset)
@@ -55,7 +55,7 @@ def memory_events(
 def memory_event_detail(
     memory_event_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> MemoryEventResponse:
     del user
     event = get_memory_event(db, memory_event_id)
@@ -73,7 +73,7 @@ def memory_event_create(
     payload: MemoryEventCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> MemoryEventResponse:
     if get_memory_event(db, payload.memory_event_id) is not None:
         raise conflict("Memory event", payload.memory_event_id)
@@ -106,7 +106,7 @@ def context_packets(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> ListResponse[ContextPacketResponse]:
     del user
     items = list_context_packets(db, limit=limit, offset=offset)
@@ -120,7 +120,7 @@ def context_packets(
 def context_packet_detail(
     context_packet_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> ContextPacketResponse:
     del user
     packet = get_context_packet(db, context_packet_id)
@@ -138,7 +138,7 @@ def context_packet_create(
     payload: ContextPacketCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> ContextPacketResponse:
     if get_context_packet(db, payload.context_packet_id) is not None:
         raise conflict("Context packet", payload.context_packet_id)
@@ -187,7 +187,7 @@ def memory_summaries(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> ListResponse[MemorySummaryResponse]:
     del user
     items = list_memory_summaries(db, limit=limit, offset=offset)
@@ -201,7 +201,7 @@ def memory_summaries(
 def memory_summary_detail(
     summary_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> MemorySummaryResponse:
     del user
     summary = get_memory_summary(db, summary_id)

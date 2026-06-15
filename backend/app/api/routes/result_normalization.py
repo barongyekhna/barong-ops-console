@@ -20,7 +20,7 @@ from ...services.result_normalization import (
     get_result_ui_output_structure,
     normalize_workflow_result,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(
     prefix="/result-normalization",
@@ -31,7 +31,7 @@ router = APIRouter(
 @router.post("/normalize", response_model=NormalizedWorkflowResult)
 def result_normalization_normalize(
     payload: Any,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15E", "execute")),
 ) -> NormalizedWorkflowResult:
     del user
     try:
@@ -48,7 +48,7 @@ def result_normalization_normalize(
     response_model=ResultNormalizationEngineDesign,
 )
 def result_normalization_engine(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15E", "execute")),
 ) -> ResultNormalizationEngineDesign:
     del user
     return get_result_normalization_engine_design()
@@ -56,7 +56,7 @@ def result_normalization_engine(
 
 @router.get("/schema-mapping", response_model=ResultSchemaMappingModel)
 def result_normalization_schema_mapping(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15E", "execute")),
 ) -> ResultSchemaMappingModel:
     del user
     return get_result_schema_mapping_model()
@@ -64,7 +64,7 @@ def result_normalization_schema_mapping(
 
 @router.get("/module-adapters", response_model=ResultModuleAdapterRules)
 def result_normalization_module_adapters(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15E", "execute")),
 ) -> ResultModuleAdapterRules:
     del user
     return get_result_module_adapter_rules()
@@ -72,7 +72,7 @@ def result_normalization_module_adapters(
 
 @router.get("/ui-output-structure", response_model=ResultUIOutputStructure)
 def result_normalization_ui_output_structure(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15E", "execute")),
 ) -> ResultUIOutputStructure:
     del user
     return get_result_ui_output_structure()
@@ -83,7 +83,7 @@ def result_normalization_ui_output_structure(
     response_model=ResultNormalizationCompletionStatus,
 )
 def result_normalization_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15E", "execute")),
 ) -> ResultNormalizationCompletionStatus:
     del user
     return get_result_normalization_completion_status()

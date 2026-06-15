@@ -19,7 +19,7 @@ from ...services.execution_payload_standardization import (
     get_workflow_mapping_integration,
     normalize_execution_payload_request,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(
     prefix="/payload-standardization",
@@ -33,7 +33,7 @@ router = APIRouter(
 )
 def payload_standardization_normalize(
     payload: dict[str, Any],
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15C", "execute")),
 ) -> ExecutionPayloadNormalizationResult:
     del user
     return normalize_execution_payload_request(payload)
@@ -41,7 +41,7 @@ def payload_standardization_normalize(
 
 @router.get("/model", response_model=ExecutionPayloadStandardizationModel)
 def payload_standardization_model(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15C", "execute")),
 ) -> ExecutionPayloadStandardizationModel:
     del user
     return get_payload_standardization_model()
@@ -52,7 +52,7 @@ def payload_standardization_model(
     response_model=ExecutionPayloadNormalizationEngineDesign,
 )
 def payload_standardization_engine(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15C", "execute")),
 ) -> ExecutionPayloadNormalizationEngineDesign:
     del user
     return get_normalization_engine_design()
@@ -60,7 +60,7 @@ def payload_standardization_engine(
 
 @router.get("/context-rules", response_model=ExecutionPayloadContextRules)
 def payload_standardization_context_rules(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15C", "execute")),
 ) -> ExecutionPayloadContextRules:
     del user
     return get_context_standardization_rules()
@@ -71,7 +71,7 @@ def payload_standardization_context_rules(
     response_model=ExecutionPayloadWorkflowMappingIntegration,
 )
 def payload_standardization_workflow_mapping(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15C", "execute")),
 ) -> ExecutionPayloadWorkflowMappingIntegration:
     del user
     return get_workflow_mapping_integration()
@@ -82,7 +82,7 @@ def payload_standardization_workflow_mapping(
     response_model=ExecutionPayloadCompletionStatus,
 )
 def payload_standardization_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15C", "execute")),
 ) -> ExecutionPayloadCompletionStatus:
     del user
     return get_execution_payload_completion_status()

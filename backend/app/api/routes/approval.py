@@ -26,7 +26,7 @@ from ...services.approval_service import (
     ApprovalService,
     ApprovalServiceError,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(prefix="/approval", tags=["approval"])
 ResultT = TypeVar("ResultT")
@@ -95,7 +95,7 @@ def _run_write(db: Session, operation: Callable[[], ResultT]) -> ResultT:
 def approval_request_create(
     payload: ApprovalRequestCreate,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("GOVERNANCE", "write")),
 ) -> ApprovalDetailResponse:
     service = ApprovalService(db)
     return _run_write(
@@ -113,7 +113,7 @@ def approval_list(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("GOVERNANCE", "read")),
 ) -> ListResponse[ApprovalListItem]:
     service = ApprovalService(db)
     items = _run_read(
@@ -136,7 +136,7 @@ def approval_list(
 def approval_detail(
     approval_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("GOVERNANCE", "read")),
 ) -> ApprovalDetailResponse:
     service = ApprovalService(db)
     return _run_read(lambda: service.get_approval(approval_id, user=user))
@@ -147,7 +147,7 @@ def approval_approve(
     approval_id: str,
     payload: ApprovalDecisionAction,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("GOVERNANCE", "admin")),
 ) -> ApprovalDetailResponse:
     service = ApprovalService(db)
     return _run_write(
@@ -161,7 +161,7 @@ def approval_reject(
     approval_id: str,
     payload: ApprovalDecisionAction,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("GOVERNANCE", "admin")),
 ) -> ApprovalDetailResponse:
     service = ApprovalService(db)
     return _run_write(

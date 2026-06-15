@@ -2,24 +2,29 @@ from types import MappingProxyType
 from typing import Any
 
 ROLE_OWNER = "owner"
+ROLE_ADMIN = "admin"
 ROLE_SUPER_ADMIN = "super_admin"
 ROLE_MODULE_ADMIN = "module_admin"
 ROLE_OPERATOR = "operator"
 ROLE_REVIEWER = "reviewer"
 ROLE_VIEWER = "viewer"
+ROLE_SYSTEM = "system"
 ROLE_BOT_AGENT = "bot_agent"
 
 STANDARD_ROLES = (
     ROLE_OWNER,
+    ROLE_ADMIN,
     ROLE_SUPER_ADMIN,
     ROLE_MODULE_ADMIN,
     ROLE_OPERATOR,
     ROLE_REVIEWER,
     ROLE_VIEWER,
+    ROLE_SYSTEM,
     ROLE_BOT_AGENT,
 )
 
 ASSIGNABLE_USER_ROLES = (
+    ROLE_ADMIN,
     ROLE_VIEWER,
     ROLE_OPERATOR,
     ROLE_REVIEWER,
@@ -29,6 +34,7 @@ UNASSIGNABLE_USER_ROLES = (
     ROLE_OWNER,
     ROLE_SUPER_ADMIN,
     ROLE_MODULE_ADMIN,
+    ROLE_SYSTEM,
     ROLE_BOT_AGENT,
 )
 
@@ -40,17 +46,23 @@ ROLE_DISPLAY_METADATA = MappingProxyType(
             "human_or_agent": "human",
             "c04_status": "bootstrap_only",
         },
+        ROLE_ADMIN: {
+            "label": "Admin",
+            "description": "Module-level RBAC administrator.",
+            "human_or_agent": "human",
+            "c04_status": "assignable_admin_role",
+        },
         ROLE_SUPER_ADMIN: {
             "label": "Super Admin",
-            "description": "Reserved standard role; no C04B permissions.",
+            "description": "Legacy admin role; mapped to admin by RBAC.",
             "human_or_agent": "human",
-            "c04_status": "reserved_no_permissions",
+            "c04_status": "legacy_admin_alias",
         },
         ROLE_MODULE_ADMIN: {
             "label": "Module Admin",
-            "description": "Reserved until module scope is defined.",
+            "description": "Legacy module admin role; mapped to admin by RBAC.",
             "human_or_agent": "human",
-            "c04_status": "reserved_until_c05_c07",
+            "c04_status": "legacy_admin_alias",
         },
         ROLE_OPERATOR: {
             "label": "Operator",
@@ -70,11 +82,17 @@ ROLE_DISPLAY_METADATA = MappingProxyType(
             "human_or_agent": "human",
             "c04_status": "assignable_user_role",
         },
+        ROLE_SYSTEM: {
+            "label": "System",
+            "description": "Internal system principal for signed callbacks and service boundaries.",
+            "human_or_agent": "agent",
+            "c04_status": "internal_only",
+        },
         ROLE_BOT_AGENT: {
             "label": "Bot Agent",
-            "description": "Reserved for future robot accounts.",
+            "description": "Legacy agent role; mapped to system by RBAC.",
             "human_or_agent": "agent",
-            "c04_status": "reserved_no_login_flow",
+            "c04_status": "legacy_system_alias",
         },
     }
 )

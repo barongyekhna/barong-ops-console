@@ -12,7 +12,7 @@ from ...services.foundation_demo_service import (
     get_latest_foundation_demo,
     run_foundation_demo,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/foundation-demo", tags=["foundation-demo"])
 
@@ -25,7 +25,7 @@ router = APIRouter(prefix="/foundation-demo", tags=["foundation-demo"])
 def foundation_demo_run(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15", "execute")),
 ) -> FoundationDemoRunResponse:
     try:
         result = run_foundation_demo(
@@ -47,7 +47,7 @@ def foundation_demo_run(
 @router.get("/latest", response_model=FoundationDemoLatestResponse)
 def foundation_demo_latest(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15", "execute")),
 ) -> FoundationDemoLatestResponse:
     del user
     result = get_latest_foundation_demo(db)

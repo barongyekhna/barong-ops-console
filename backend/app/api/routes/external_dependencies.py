@@ -23,14 +23,14 @@ from ...services.external_dependency_governance import (
     list_external_services,
     list_registration_proposals,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(prefix="/external-dependencies", tags=["external-dependencies"])
 
 
 @router.get("/registry", response_model=ExternalServiceRegistryResponse)
 def external_service_registry(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> ExternalServiceRegistryResponse:
     del user
     services = list_external_services()
@@ -39,7 +39,7 @@ def external_service_registry(
 
 @router.get("/proposals", response_model=ExternalServiceProposalListResponse)
 def external_service_registration_proposals(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> ExternalServiceProposalListResponse:
     del user
     proposals = list_registration_proposals()
@@ -51,7 +51,7 @@ def external_service_registration_proposals(
 
 @router.get("/bindings", response_model=ExternalDependencyBindingListResponse)
 def external_dependency_bindings(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> ExternalDependencyBindingListResponse:
     del user
     bindings = build_dependency_binding_decisions()
@@ -63,7 +63,7 @@ def external_dependency_bindings(
 
 @router.get("/binding-rules", response_model=DependencyBindingRuleSetResponse)
 def external_dependency_binding_rules(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> DependencyBindingRuleSetResponse:
     del user
     return list_dependency_binding_rules()
@@ -71,7 +71,7 @@ def external_dependency_binding_rules(
 
 @router.get("/dependency-graph", response_model=DependencyGraphResponse)
 def external_dependency_graph(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> DependencyGraphResponse:
     del user
     return build_dependency_graph_response()
@@ -82,7 +82,7 @@ def external_dependency_graph(
     response_model=DependencyBindingValidationResult,
 )
 def external_dependency_binding_validation(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> DependencyBindingValidationResult:
     del user
     return validate_dependency_binding_rules()
@@ -90,7 +90,7 @@ def external_dependency_binding_validation(
 
 @router.get("/binding-audit", response_model=DependencyBindingAuditResponse)
 def external_dependency_binding_audit(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14", "admin")),
 ) -> DependencyBindingAuditResponse:
     del user
     return build_dependency_binding_audit_response()

@@ -24,7 +24,7 @@ from ...services.n8n_test_service import (
     process_n8n_test_callback,
     run_n8n_test,
 )
-from ..deps import get_audit_context, get_current_user, require_permission
+from ..deps import get_audit_context, require_internal_rbac, require_rbac
 
 router = APIRouter(prefix="/n8n-test", tags=["n8n-test"])
 
@@ -37,7 +37,7 @@ router = APIRouter(prefix="/n8n-test", tags=["n8n-test"])
 def n8n_test_run(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_permission("jobs.create")),
+    user: User = Depends(require_rbac("C15", "execute")),
     settings: Settings = Depends(get_settings),
 ) -> N8nTestRunResponse:
     result = run_n8n_test(
@@ -64,6 +64,7 @@ def n8n_test_callback(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> N8nTestCallbackResponse:
+    require_internal_rbac("C15D")
     try:
         result = process_n8n_test_callback(
             db,
@@ -88,7 +89,7 @@ def n8n_test_callback(
 @router.get("/latest", response_model=N8nTestLatestResponse)
 def n8n_test_latest(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15", "execute")),
 ) -> N8nTestLatestResponse:
     del user
     result = get_latest_n8n_test(db)

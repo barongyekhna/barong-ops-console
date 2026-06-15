@@ -24,7 +24,7 @@ from ...services.foundation_service import (
     invalid_reference,
     not_found,
 )
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
@@ -34,7 +34,7 @@ def jobs(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("OPERATIONS", "read")),
 ) -> ListResponse[JobResponse]:
     del user
     items = list_jobs(db, limit=limit, offset=offset)
@@ -45,7 +45,7 @@ def jobs(
 def job_detail(
     job_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("OPERATIONS", "read")),
 ) -> JobResponse:
     del user
     job = get_job(db, job_id)
@@ -59,7 +59,7 @@ def job_create(
     payload: JobCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("OPERATIONS", "write")),
 ) -> JobResponse:
     if get_job(db, payload.job_id) is not None:
         raise conflict("Job", payload.job_id)
@@ -99,7 +99,7 @@ def job_events(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("OPERATIONS", "read")),
 ) -> ListResponse[JobEventResponse]:
     del user
     if get_job(db, job_id) is None:
@@ -123,7 +123,7 @@ def job_event_create(
     payload: JobEventCreate,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("OPERATIONS", "write")),
 ) -> JobEventResponse:
     job = get_job(db, job_id)
     if job is None:

@@ -24,7 +24,7 @@ from ...services.webhook_gateway import (
     get_webhook_gateway_payload_format,
     get_webhook_gateway_signature_model,
 )
-from ..deps import get_current_user
+from ..deps import require_internal_rbac, require_rbac
 
 router = APIRouter(
     prefix="/webhook-gateway",
@@ -53,6 +53,8 @@ def webhook_gateway_ingress(
             detail="Invalid C15B webhook gateway payload.",
         ) from None
 
+    require_internal_rbac("C15B")
+
     try:
         decision = build_webhook_gateway_decision(
             gateway_payload,
@@ -80,7 +82,7 @@ def webhook_gateway_ingress(
 
 @router.get("/design", response_model=WebhookGatewayDesign)
 def webhook_gateway_design(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15B", "execute")),
 ) -> WebhookGatewayDesign:
     del user
     return get_webhook_gateway_design()
@@ -88,7 +90,7 @@ def webhook_gateway_design(
 
 @router.get("/signature-model", response_model=WebhookGatewaySignatureModel)
 def webhook_gateway_signature_model(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15B", "execute")),
     settings: Settings = Depends(get_settings),
 ) -> WebhookGatewaySignatureModel:
     del user
@@ -97,7 +99,7 @@ def webhook_gateway_signature_model(
 
 @router.get("/payload-format", response_model=WebhookGatewayPayloadFormat)
 def webhook_gateway_payload_format(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15B", "execute")),
 ) -> WebhookGatewayPayloadFormat:
     del user
     return get_webhook_gateway_payload_format()
@@ -105,7 +107,7 @@ def webhook_gateway_payload_format(
 
 @router.get("/workflow-lookup-flow", response_model=WebhookGatewayLookupFlow)
 def webhook_gateway_workflow_lookup_flow(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15B", "execute")),
 ) -> WebhookGatewayLookupFlow:
     del user
     return get_webhook_gateway_lookup_flow()
@@ -116,7 +118,7 @@ def webhook_gateway_workflow_lookup_flow(
     response_model=WebhookGatewayCompletionStatus,
 )
 def webhook_gateway_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15B", "execute")),
 ) -> WebhookGatewayCompletionStatus:
     del user
     return get_webhook_gateway_completion_status()

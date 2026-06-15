@@ -35,7 +35,7 @@ from ...services.callback_handler import (
     get_status_management_model,
     handle_callback,
 )
-from ..deps import get_current_user
+from ..deps import require_internal_rbac, require_rbac
 
 router = APIRouter(
     prefix="/callback-handler",
@@ -63,6 +63,8 @@ def callback_handler_receiver(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="Invalid C15D callback payload.",
         ) from None
+
+    require_internal_rbac("C15D")
 
     try:
         return handle_callback(
@@ -99,7 +101,7 @@ def callback_handler_receiver(
 )
 def callback_handler_bind_context(
     payload: dict[str, Any],
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackContextBinding:
     del user
     try:
@@ -123,7 +125,7 @@ def callback_handler_bind_context(
 )
 def callback_handler_result(
     context_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackResultStorageRecord:
     del user
     result = get_callback_result(context_id)
@@ -137,7 +139,7 @@ def callback_handler_result(
 
 @router.get("/design", response_model=CallbackHandlerDesign)
 def callback_handler_design(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackHandlerDesign:
     del user
     return get_callback_handler_design()
@@ -145,7 +147,7 @@ def callback_handler_design(
 
 @router.get("/context-binding", response_model=CallbackContextBindingModel)
 def callback_handler_context_binding(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackContextBindingModel:
     del user
     return get_context_binding_model()
@@ -153,7 +155,7 @@ def callback_handler_context_binding(
 
 @router.get("/status-management", response_model=CallbackStatusManagementModel)
 def callback_handler_status_management(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackStatusManagementModel:
     del user
     return get_status_management_model()
@@ -161,7 +163,7 @@ def callback_handler_status_management(
 
 @router.get("/result-storage", response_model=CallbackResultStorageModel)
 def callback_handler_result_storage(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackResultStorageModel:
     del user
     return get_result_storage_model()
@@ -172,7 +174,7 @@ def callback_handler_result_storage(
     response_model=CallbackModuleNotificationModel,
 )
 def callback_handler_module_notifications(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackModuleNotificationModel:
     del user
     return get_module_notification_model()
@@ -183,7 +185,7 @@ def callback_handler_module_notifications(
     response_model=CallbackHandlerCompletionStatus,
 )
 def callback_handler_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackHandlerCompletionStatus:
     del user
     return get_callback_handler_completion_status()

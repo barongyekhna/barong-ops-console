@@ -17,7 +17,7 @@ from ...services.ai_execution_binding_registry import (
     get_ai_execution_binding_ui_interaction_model,
     list_ai_execution_binding_registry,
 )
-from ..deps import get_current_user
+from ..deps import require_rbac
 
 router = APIRouter(
     prefix="/ai-execution-bindings",
@@ -27,7 +27,7 @@ router = APIRouter(
 
 @router.get("/registry", response_model=AIExecutionBindingRegistryResponse)
 def ai_execution_binding_registry(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> AIExecutionBindingRegistryResponse:
     del user
     return list_ai_execution_binding_registry()
@@ -35,7 +35,7 @@ def ai_execution_binding_registry(
 
 @router.get("/rules", response_model=AIExecutionBindingRuleModel)
 def ai_execution_binding_rules(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> AIExecutionBindingRuleModel:
     del user
     return get_ai_execution_binding_rule_model()
@@ -43,7 +43,7 @@ def ai_execution_binding_rules(
 
 @router.get("/execution-flow", response_model=AIExecutionFlowMapping)
 def ai_execution_binding_execution_flow(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> AIExecutionFlowMapping:
     del user
     return build_ai_execution_flow_mapping()
@@ -51,7 +51,7 @@ def ai_execution_binding_execution_flow(
 
 @router.get("/validation", response_model=AIExecutionBindingValidationResult)
 def ai_execution_binding_validation(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> AIExecutionBindingValidationResult:
     del user
     return build_ai_execution_binding_validation_result()
@@ -62,7 +62,7 @@ def ai_execution_binding_validation(
     response_model=AIExecutionBindingUIInteractionModel,
 )
 def ai_execution_binding_ui_interaction(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> AIExecutionBindingUIInteractionModel:
     del user
     return get_ai_execution_binding_ui_interaction_model()
@@ -73,7 +73,7 @@ def ai_execution_binding_ui_interaction(
     response_model=AIExecutionBindingCompletionStatus,
 )
 def ai_execution_binding_completion_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("C14X", "admin")),
 ) -> AIExecutionBindingCompletionStatus:
     del user
     return get_ai_execution_binding_completion_status()

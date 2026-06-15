@@ -19,7 +19,7 @@ from ...services.auth_service import (
     logout as logout_user,
 )
 from ...services.permission_service import resolve_current_user_permission_info
-from ..deps import get_audit_context, get_current_user
+from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -62,7 +62,7 @@ def login(
 @router.get("/me", response_model=AuthenticatedUserWithPermissions)
 def me(
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUTH", "read")),
 ) -> AuthenticatedUserWithPermissions:
     permissions = CurrentUserPermissionsRead.model_validate(
         resolve_current_user_permission_info(db, user)
@@ -81,7 +81,7 @@ def me(
 def logout(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_rbac("AUTH", "read")),
 ) -> LogoutResponse:
     logout_user(db, user=user, audit=get_audit_context(request))
     return LogoutResponse(message="Logged out.")
