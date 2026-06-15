@@ -28,6 +28,7 @@ from ..schemas.callback_handler import (
 from ..schemas.execution_payload_standardization import (
     ExecutionPayloadStandardRequest,
 )
+from .replay_protection import ReplayProtectionError, register_replay_key
 from .webhook_gateway import SIGNATURE_PREFIX
 
 
@@ -48,6 +49,10 @@ class CallbackHandlerConfigurationError(RuntimeError):
 
 
 class CallbackHandlerSignatureError(RuntimeError):
+    pass
+
+
+class CallbackHandlerReplayError(RuntimeError):
     pass
 
 
@@ -85,11 +90,27 @@ def _parse_timestamp(value: str) -> datetime:
 
 def canonical_callback_payload(payload: CallbackHandlerPayload) -> str:
     return json.dumps(
-        payload.model_dump(mode="json"),
+        payload.model_dump(mode="json", exclude_none=True),
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,
     )
+
+
+def _payload_digest(payload: CallbackHandlerPayload) -> str:
+    return hashlib.sha256(
+        canonical_callback_payload(payload).encode("utf-8")
+    ).hexdigest()
+
+
+def _callback_nonce_key(payload: CallbackHandlerPayload) -> str:
+    nonce = payload.nonce or f"legacy-sha256:{_payload_digest(payload)}"
+    return f"{payload.module}:{payload.workflow_id}:{payload.context_id}:{nonce}"
+
+
+def _callback_idempotency_key(payload: CallbackHandlerPayload) -> str:
+    key = payload.idempotency_key or f"legacy-sha256:{_payload_digest(payload)}"
+    return f"{payload.module}:{payload.workflow_id}:{payload.context_id}:{key}"
 
 
 def sign_callback_payload(
@@ -137,6 +158,22 @@ def verify_callback_signature(
         raise CallbackHandlerSignatureError(
             "C15D callback timestamp is outside the accepted window."
         )
+
+    try:
+        register_replay_key(
+            scope="c15d.callback_nonce",
+            key=_callback_nonce_key(payload),
+            payload_digest=_payload_digest(payload),
+            ttl_seconds=settings.webhook_replay_nonce_ttl_seconds,
+        )
+        register_replay_key(
+            scope="c15d.callback_idempotency",
+            key=_callback_idempotency_key(payload),
+            payload_digest=_payload_digest(payload),
+            ttl_seconds=settings.webhook_replay_nonce_ttl_seconds,
+        )
+    except ReplayProtectionError as exc:
+        raise CallbackHandlerReplayError(str(exc)) from None
 
 
 def _module_family(module: str) -> CallbackModuleFamily:

@@ -40,6 +40,7 @@ from .api.routes.workflow_registry import router as workflow_registry_router
 from .api.routes.workflows import router as workflows_router
 from .core.config import get_settings
 from .core.rbac import normalize_rbac_role
+from .core.security_headers import apply_security_headers
 from .db.session import SessionLocal
 from .services.auth_service import InvalidSessionError, validate_session
 
@@ -49,10 +50,20 @@ PUBLIC_API_PREFIX = "/api/public"
 APPLICATION_API_PREFIX = "/api/app"
 CONTROL_PLANE_API_PREFIX = "/api/control-plane"
 CONTROL_PLANE_ROLES = frozenset(("admin", "system", "owner"))
+PRODUCTION_DOCS_DISABLED_ENVS = frozenset(("production", "prod"))
+
+
+def _production_docs_disabled() -> bool:
+    return settings.app_env.lower() in PRODUCTION_DOCS_DISABLED_ENVS
+
 
 app = FastAPI(
     title=settings.app_name,
     version=settings.app_version,
+    debug=False if _production_docs_disabled() else settings.app_debug,
+    docs_url=None if _production_docs_disabled() else "/docs",
+    redoc_url=None if _production_docs_disabled() else "/redoc",
+    openapi_url=None if _production_docs_disabled() else "/openapi.json",
 )
 
 
@@ -70,10 +81,12 @@ async def enforce_control_plane_isolation(request: Request, call_next):
 
     session_id = request.cookies.get(settings.auth_session_cookie_name)
     if session_id is None:
-        return JSONResponse(
+        response = JSONResponse(
             status_code=status.HTTP_401_UNAUTHORIZED,
             content={"detail": "Not authenticated."},
         )
+        apply_security_headers(response, settings=settings)
+        return response
 
     with SessionLocal() as db:
         try:
@@ -83,19 +96,30 @@ async def enforce_control_plane_isolation(request: Request, call_next):
                 audit=get_audit_context(request),
             )
         except InvalidSessionError:
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 content={"detail": "Not authenticated."},
             )
+            apply_security_headers(response, settings=settings)
+            return response
 
         role = normalize_rbac_role(current_session.user.role)
         if role not in CONTROL_PLANE_ROLES:
-            return JSONResponse(
+            response = JSONResponse(
                 status_code=status.HTTP_403_FORBIDDEN,
                 content={"detail": "Control plane role required."},
             )
+            apply_security_headers(response, settings=settings)
+            return response
 
     return await call_next(request)
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    apply_security_headers(response, settings=settings)
+    return response
 
 
 app.include_router(health_router, prefix=PUBLIC_API_PREFIX)

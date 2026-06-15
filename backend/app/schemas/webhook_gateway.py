@@ -64,6 +64,12 @@ class WebhookGatewayRequest(BaseModel):
     context_id: str = Field(min_length=1, max_length=180)
     payload: dict[str, Any] = Field(default_factory=dict)
     timestamp: str = Field(min_length=1, max_length=40)
+    nonce: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
 
     @field_validator("timestamp")
     @classmethod
@@ -170,9 +176,11 @@ class WebhookGatewayPayloadFormat(BaseModel):
         Literal["payload"],
         Literal["timestamp"],
     ] = ("module", "workflow_id", "context_id", "payload", "timestamp")
+    optional_fields: tuple[Literal["nonce"], ...] = ("nonce",)
     extra_fields_allowed: Literal[False] = False
     payload_may_contain_direct_n8n_access: Literal[False] = False
     payload_may_contain_credentials: Literal[False] = False
+    nonce_replay_protection_required: Literal[True] = True
     standardized_shape: dict[str, str] = Field(
         default_factory=lambda: {
             "module": "registered module key",
@@ -180,6 +188,7 @@ class WebhookGatewayPayloadFormat(BaseModel):
             "context_id": "caller context correlation id",
             "payload": "credential-free JSON object",
             "timestamp": "ISO-8601 signing timestamp",
+            "nonce": "optional explicit replay nonce; legacy payload hash used when absent",
         }
     )
 
@@ -216,6 +225,7 @@ class WebhookGatewayCompletionStatus(BaseModel):
     gateway_design_defined: Literal[True] = True
     signature_verification_defined: Literal[True] = True
     invalid_request_rejected: Literal[True] = True
+    replay_protection_defined: Literal[True] = True
     payload_standardization_defined: Literal[True] = True
     c15a_lookup_integrated: Literal[True] = True
     hardcoded_webhook_url_allowed: Literal[False] = False

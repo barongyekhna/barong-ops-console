@@ -23,6 +23,7 @@ from ...schemas.execution_payload_standardization import (
 from ...services.callback_handler import (
     CallbackContextBindingError,
     CallbackHandlerConfigurationError,
+    CallbackHandlerReplayError,
     CallbackHandlerSignatureError,
     CallbackStatusTransitionError,
     bind_callback_context,
@@ -81,6 +82,11 @@ def callback_handler_receiver(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid C15D callback signature.",
+        ) from None
+    except CallbackHandlerReplayError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Duplicate C15D callback nonce or idempotency key.",
         ) from None
     except CallbackContextBindingError as exc:
         raise HTTPException(

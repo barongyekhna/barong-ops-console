@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from ..models.auth_session import AuthSession
@@ -62,3 +62,24 @@ def invalidate_auth_session(
     auth_session.invalidation_reason = reason
     db.add(auth_session)
     return auth_session
+
+
+def invalidate_active_sessions_for_user(
+    db: Session,
+    *,
+    user_id: int,
+    invalidated_at: datetime,
+    reason: str,
+) -> int:
+    result = db.execute(
+        update(AuthSession)
+        .where(
+            AuthSession.user_id == user_id,
+            AuthSession.invalidated_at.is_(None),
+        )
+        .values(
+            invalidated_at=invalidated_at,
+            invalidation_reason=reason,
+        )
+    )
+    return int(result.rowcount or 0)

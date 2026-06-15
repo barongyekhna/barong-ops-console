@@ -19,6 +19,7 @@ from ..schemas.webhook_gateway import (
     WebhookGatewaySignatureModel,
 )
 from .module_workflow_binding_engine import evaluate_module_workflow_access
+from .replay_protection import ReplayProtectionError, register_replay_key
 from .workflow_registry_system import evaluate_workflow_invocation
 
 SIGNATURE_PREFIX = "sha256="
@@ -29,6 +30,10 @@ class WebhookGatewayConfigurationError(RuntimeError):
 
 
 class WebhookGatewaySignatureError(RuntimeError):
+    pass
+
+
+class WebhookGatewayReplayError(RuntimeError):
     pass
 
 
@@ -51,11 +56,22 @@ def canonical_webhook_gateway_payload(
     payload: WebhookGatewayRequest,
 ) -> str:
     return json.dumps(
-        payload.model_dump(mode="json"),
+        payload.model_dump(mode="json", exclude_none=True),
         ensure_ascii=True,
         separators=(",", ":"),
         sort_keys=True,
     )
+
+
+def _payload_digest(payload: WebhookGatewayRequest) -> str:
+    return hashlib.sha256(
+        canonical_webhook_gateway_payload(payload).encode("utf-8")
+    ).hexdigest()
+
+
+def _gateway_nonce_key(payload: WebhookGatewayRequest) -> str:
+    nonce = payload.nonce or f"legacy-sha256:{_payload_digest(payload)}"
+    return f"{payload.module}:{payload.workflow_id}:{payload.context_id}:{nonce}"
 
 
 def sign_webhook_gateway_payload(
@@ -106,6 +122,16 @@ def verify_webhook_gateway_signature(
         raise WebhookGatewaySignatureError(
             "C15B webhook gateway timestamp is outside the accepted window."
         )
+
+    try:
+        register_replay_key(
+            scope="c15b.webhook_gateway",
+            key=_gateway_nonce_key(payload),
+            payload_digest=_payload_digest(payload),
+            ttl_seconds=settings.webhook_replay_nonce_ttl_seconds,
+        )
+    except ReplayProtectionError as exc:
+        raise WebhookGatewayReplayError(str(exc)) from None
 
 
 def build_webhook_gateway_decision(

@@ -4,6 +4,7 @@ import hashlib
 import json
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from uuid import uuid4
 
 from pydantic import SecretStr
 
@@ -521,6 +522,7 @@ def manual_replay_context(
         context_id=record.context_id,
         payload=payload_value if isinstance(payload_value, dict) else {},
         timestamp=_utc_now_timestamp(),
+        nonce=f"c15h.{uuid4().hex}",
     )
     signature = sign_webhook_gateway_payload(
         replay_payload,

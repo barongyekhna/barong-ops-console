@@ -16,6 +16,7 @@ from ...schemas.webhook_gateway import (
 )
 from ...services.webhook_gateway import (
     WebhookGatewayConfigurationError,
+    WebhookGatewayReplayError,
     WebhookGatewaySignatureError,
     build_webhook_gateway_decision,
     get_webhook_gateway_completion_status,
@@ -70,6 +71,11 @@ def webhook_gateway_ingress(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid C15B webhook gateway signature.",
+        ) from None
+    except WebhookGatewayReplayError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Duplicate C15B webhook gateway nonce.",
         ) from None
 
     if decision.gateway_status == "rejected":

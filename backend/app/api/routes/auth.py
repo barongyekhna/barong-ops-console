@@ -17,6 +17,7 @@ from ...schemas.permission import CurrentUserPermissionsRead
 from ...services.auth_service import (
     InvalidCredentialsError,
     InvalidSessionError,
+    LoginRateLimitError,
     login as login_user,
     logout as logout_user,
     validate_session,
@@ -48,6 +49,12 @@ def login(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=str(exc),
+        ) from None
+    except LoginRateLimitError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after_seconds)},
         ) from None
 
     set_session_cookie(

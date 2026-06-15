@@ -100,3 +100,27 @@ def update_password_hash(
 def update_last_login(db: Session, user: User, logged_in_at: datetime) -> None:
     user.last_login_at = logged_in_at
     db.add(user)
+
+
+def record_failed_login(
+    db: Session,
+    user: User,
+    *,
+    failed_at: datetime,
+    locked_until: datetime | None,
+) -> User:
+    user.failed_login_count += 1
+    user.last_failed_login_at = failed_at
+    user.locked_until = locked_until
+    db.add(user)
+    db.flush()
+    return user
+
+
+def reset_login_failures(db: Session, user: User) -> User:
+    user.failed_login_count = 0
+    user.last_failed_login_at = None
+    user.locked_until = None
+    db.add(user)
+    db.flush()
+    return user

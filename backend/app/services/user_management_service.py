@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -6,6 +7,7 @@ from sqlalchemy.orm import Session
 from ..core.roles import validate_assignable_user_role
 from ..core.security import hash_password
 from ..models.user import User
+from ..repositories.auth_sessions import invalidate_active_sessions_for_user
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.users import (
     create_user as create_user_record,
@@ -47,6 +49,10 @@ class SelfPasswordResetNotAllowedError(UserManagementError):
 class UserListResult:
     items: list[User]
     count: int
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _log_user_operation(
@@ -192,13 +198,23 @@ def reset_managed_user_password(
         )
 
     user = update_password_hash(db, user, hash_password(new_password))
+    invalidated_session_count = invalidate_active_sessions_for_user(
+        db,
+        user_id=user.id,
+        invalidated_at=_now(),
+        reason="password_reset",
+    )
     _log_user_operation(
         db,
         actor=actor,
         action="user.reset_password",
         target=user,
         audit=audit,
-        details={"username": user.username, "role": user.role},
+        details={
+            "username": user.username,
+            "role": user.role,
+            "invalidated_session_count": invalidated_session_count,
+        },
     )
     db.commit()
     db.refresh(user)

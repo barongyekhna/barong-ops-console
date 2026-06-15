@@ -77,6 +77,18 @@ class CallbackHandlerPayload(BaseModel):
     output: dict[str, Any] = Field(default_factory=dict)
     execution_metadata: dict[str, Any] = Field(default_factory=dict)
     timestamp: str = Field(min_length=1, max_length=40)
+    nonce: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
+    idempotency_key: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=180,
+        pattern=r"^[A-Za-z0-9._:-]+$",
+    )
 
     @field_validator("timestamp")
     @classmethod
@@ -249,6 +261,10 @@ class CallbackHandlerDesign(BaseModel):
         "execution_metadata",
         "timestamp",
     )
+    optional_callback_fields: tuple[
+        Literal["nonce"],
+        Literal["idempotency_key"],
+    ] = ("nonce", "idempotency_key")
     signature_header: Literal["X-Barong-Gateway-Signature"] = (
         "X-Barong-Gateway-Signature"
     )
@@ -258,6 +274,8 @@ class CallbackHandlerDesign(BaseModel):
     no_execution_trigger: Literal[True] = True
     no_external_api_call: Literal[True] = True
     no_production_or_staging_change: Literal[True] = True
+    replay_nonce_required: Literal[True] = True
+    idempotency_key_required: Literal[True] = True
 
 
 class CallbackContextBindingModel(BaseModel):
@@ -373,6 +391,8 @@ class CallbackHandlerCompletionStatus(BaseModel):
     payload_validation_defined: Literal[True] = True
     c15b_signature_verification_reused: Literal[True] = True
     context_binding_defined: Literal[True] = True
+    replay_protection_defined: Literal[True] = True
+    idempotency_enforced: Literal[True] = True
     status_management_defined: Literal[True] = True
     result_storage_defined: Literal[True] = True
     module_notification_defined: Literal[True] = True
