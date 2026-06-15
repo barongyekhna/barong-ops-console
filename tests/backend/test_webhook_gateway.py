@@ -29,7 +29,6 @@ TEST_GATEWAY_SECRET = "c15b-test-signing-value-not-for-production-use"
 
 def gateway_settings() -> Settings:
     return Settings(
-        auth_token_secret="f08-test-signing-value-not-for-production-use",
         webhook_gateway_signing_secret=SecretStr(TEST_GATEWAY_SECRET),
         webhook_gateway_signature_tolerance_seconds=300,
     )
@@ -233,10 +232,8 @@ def test_c15b_standard_payload_rejects_direct_access_data(
 
 def test_c15b_gateway_api_routes_and_signature_enforcement(
     owner_client: TestClient,
-    test_settings: Settings,
 ) -> None:
     settings = gateway_settings()
-    settings.auth_token_secret = test_settings.auth_token_secret
     app.dependency_overrides[get_settings] = lambda: settings
     try:
         payload = gateway_payload()

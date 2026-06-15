@@ -42,7 +42,9 @@ def auth_headers(
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+    session_id = response.cookies.get("barong_ops_session")
+    assert session_id
+    return {"Cookie": f"barong_ops_session={session_id}"}
 
 
 def approval_payload(

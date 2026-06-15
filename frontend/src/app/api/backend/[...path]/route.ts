@@ -133,6 +133,10 @@ type RouteContext = {
   params: Promise<{ path: string[] }>;
 };
 
+type HeadersWithSetCookie = Headers & {
+  getSetCookie?: () => string[];
+};
+
 function getApiBaseUrl() {
   const configuredUrl =
     process.env.BACKEND_API_URL ?? process.env.NEXT_PUBLIC_API_BASE_URL;
@@ -303,6 +307,16 @@ export function isAllowedBackendProxyPath(method: string, path: string[]) {
   );
 }
 
+function getSetCookieHeaders(headers: Headers) {
+  const getSetCookie = (headers as HeadersWithSetCookie).getSetCookie;
+  if (typeof getSetCookie === "function") {
+    return getSetCookie.call(headers);
+  }
+
+  const setCookie = headers.get("set-cookie");
+  return setCookie ? [setCookie] : [];
+}
+
 async function proxyRequest(
   request: NextRequest,
   context: RouteContext,
@@ -324,11 +338,11 @@ async function proxyRequest(
     const headers = new Headers({
       Accept: "application/json",
     });
-    const authorization = request.headers.get("authorization");
+    const cookie = request.headers.get("cookie");
     const contentType = request.headers.get("content-type");
 
-    if (authorization) {
-      headers.set("Authorization", authorization);
+    if (cookie) {
+      headers.set("Cookie", cookie);
     }
     if (contentType) {
       headers.set("Content-Type", contentType);
@@ -345,12 +359,16 @@ async function proxyRequest(
     const responseHeaders = new Headers();
     const backendContentType = backendResponse.headers.get("content-type");
     const authenticate = backendResponse.headers.get("www-authenticate");
+    const setCookies = getSetCookieHeaders(backendResponse.headers);
 
     if (backendContentType) {
       responseHeaders.set("Content-Type", backendContentType);
     }
     if (authenticate) {
       responseHeaders.set("WWW-Authenticate", authenticate);
+    }
+    for (const setCookie of setCookies) {
+      responseHeaders.append("Set-Cookie", setCookie);
     }
 
     return new Response(backendResponse.body, {

@@ -12,6 +12,7 @@ from backend.app.models.approval import (
     ApprovalWorkflowRecord,
 )
 from backend.app.models.artifact import Artifact
+from backend.app.models.auth_session import AuthSession
 from backend.app.models.context import ContextPacket
 from backend.app.models.error import SystemError
 from backend.app.models.job import AutomationJob, JobEvent
@@ -34,9 +35,6 @@ from backend.app.models.registry import (
 from backend.app.models.review import ReviewItem
 from backend.app.models.user import User
 
-TEST_AUTH_SECRET = "f08-test-signing-value-not-for-production-use"
-
-
 def clear_auth_tables() -> None:
     with SessionLocal() as db:
         db.execute(delete(AgentMemoryAccessLog))
@@ -52,6 +50,7 @@ def clear_auth_tables() -> None:
         db.execute(delete(JobEvent))
         db.execute(delete(OperationLog))
         db.execute(delete(AutomationJob))
+        db.execute(delete(AuthSession))
         db.execute(delete(UserPermissionAssignment))
         db.execute(delete(RoleDefaultPermission))
         db.execute(delete(PermissionRegistry))
@@ -72,8 +71,9 @@ def clean_auth_tables() -> None:
 @pytest.fixture
 def test_settings() -> Settings:
     return Settings(
-        auth_token_secret=TEST_AUTH_SECRET,
-        auth_token_expire_minutes=30,
+        auth_session_expire_minutes=30,
+        auth_session_cookie_path="/",
+        auth_session_cookie_secure=False,
     )
 
 
@@ -108,7 +108,4 @@ def owner_client(auth_client: TestClient) -> TestClient:
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
-    auth_client.headers.update(
-        {"Authorization": f"Bearer {response.json()['access_token']}"}
-    )
     return auth_client

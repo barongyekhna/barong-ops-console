@@ -88,15 +88,14 @@ def test_users_requires_owner_auth(
     )
     assert login_response.status_code == 200
     assert login_response.json()["user"]["id"] == user_id
+    session_id = login_response.cookies.get("barong_ops_session")
+    assert session_id
 
+    auth_client.cookies.clear()
     unauthenticated = auth_client.get("/users")
     forbidden = auth_client.get(
         "/users",
-        headers={
-            "Authorization": (
-                f"Bearer {login_response.json()['access_token']}"
-            )
-        },
+        headers={"Cookie": f"barong_ops_session={session_id}"},
     )
 
     assert unauthenticated.status_code == 401
@@ -105,11 +104,7 @@ def test_users_requires_owner_auth(
     unauthenticated_roles = auth_client.get("/users/roles")
     forbidden_roles = auth_client.get(
         "/users/roles",
-        headers={
-            "Authorization": (
-                f"Bearer {login_response.json()['access_token']}"
-            )
-        },
+        headers={"Cookie": f"barong_ops_session={session_id}"},
     )
 
     assert unauthenticated_roles.status_code == 401

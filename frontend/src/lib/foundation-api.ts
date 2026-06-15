@@ -1,5 +1,4 @@
 import { apiRequest } from "@/lib/api";
-import { readAccessToken } from "@/lib/auth";
 
 export type FoundationListResponse = {
   items: Record<string, unknown>[];
@@ -10,7 +9,6 @@ export type FoundationListResponse = {
 
 export function foundationListRequest(path: string) {
   return apiRequest<FoundationListResponse>(path, {
-    accessToken: readAccessToken(),
     method: "GET",
   });
 }

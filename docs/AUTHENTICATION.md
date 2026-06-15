@@ -31,20 +31,20 @@
 
 - 接收受控的用户名和密码。
 - 验证用户存在、`is_active` 为真且密码匹配。
-- 登录成功后建立受控会话或令牌状态，并更新 `last_login_at`。
-- 返回最低必要用户信息，不返回 `password_hash`。
+- 登录成功后创建 server-side session，返回 `Set-Cookie`，并更新 `last_login_at`。
+- 返回最低必要用户信息，不返回 `password_hash`、`access_token`、`token_type` 或 session id。
 - 登录成功和失败都必须审计；失败响应不得泄露用户是否存在。
 
 ### `/auth/logout`
 
-- 使当前登录状态失效。
-- 重复退出应有明确且安全的处理。
+- 使当前 server-side session 失效，并清除浏览器 cookie。
+- 重复退出或已失效 session 应清除 cookie，并返回安全的统一结果。
 - 记录退出结果，不能只由前端删除本地状态。
 
 ### `/auth/me`
 
 - 返回当前已认证用户的 `id`、`username`、`role`、`is_active` 等最低必要信息。
-- 未认证或会话失效时返回统一的未认证结果。
+- 未认证、会话过期或会话失效时返回统一的未认证结果。
 - 不返回认证秘密。
 
 ## 4. 页面保护
@@ -53,7 +53,7 @@
 - 未登录访问任何控制台页面必须跳转 `/login`。
 - 登录后访问 `/login` 的行为由前端任务统一定义，不能形成循环跳转。
 - 前端路由保护用于用户体验，后端 API 仍必须独立执行认证和授权。
-- 用户被停用后不能建立新登录状态；已有状态必须按后续实现策略及时失效。
+- 用户被停用后不能建立新登录状态；已有 session 在下一次后端校验时失效。
 
 `/health` 可以匿名访问，但不得泄露敏感配置。其他公共端点必须明确列入白名单，默认拒绝匿名访问。
 
@@ -90,7 +90,26 @@
 - 禁止公开注册。
 - 禁止硬编码默认生产凭证。
 - 禁止在 URL、日志或错误信息中传递认证秘密。
+- 禁止把认证 token 或 session secret 暴露给前端 JavaScript。
+- 浏览器认证状态只能通过 HttpOnly session cookie 承载。
 - 禁止仅依赖前端隐藏页面实现授权。
 - 禁止停用用户继续建立有效登录状态。
 - 认证相关重要动作在日志落库失败时不得报告成功。
 
+## 8. C16-FIX-2 Session 模式
+
+C16-FIX-2 后，系统不再使用 localStorage JWT 作为浏览器认证载体。登录成功时后端创建 `auth_sessions` 记录，只把高熵 session id 写入 HttpOnly cookie；数据库只保存 session id 的 SHA-256 哈希。
+
+`get_current_user()` 通过 `get_current_session()` 校验 cookie 中的 session id，检查 session 是否存在、是否过期、是否已吊销、用户是否仍存在且 `is_active=true`，然后再交给 RBAC/permission dependency。
+
+默认 cookie 策略：
+
+| 属性 | 默认值 |
+| --- | --- |
+| `HttpOnly` | `true` |
+| `Secure` | `production` / `staging` 默认 `true`，开发默认 `false` |
+| `SameSite` | `strict` |
+| `Path` | `/api/backend` |
+| `Max-Age` | `AUTH_SESSION_EXPIRE_MINUTES * 60` |
+
+本地或直连后端测试可将 `AUTH_SESSION_COOKIE_PATH=/`，生产前端代理模式应保持 API path scope。

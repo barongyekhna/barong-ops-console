@@ -4,16 +4,6 @@ import {
   type FrontendPermissions,
 } from "@/lib/permissions";
 
-export const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
-
-export function readAccessToken() {
-  if (typeof window === "undefined") {
-    return null;
-  }
-
-  return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
-}
-
 export type AuthenticatedUser = {
   id: number;
   username: string;
@@ -28,14 +18,10 @@ type AuthenticatedUserPayload = Omit<AuthenticatedUser, "permissions"> & {
 };
 
 type LoginResponsePayload = {
-  access_token: string;
-  token_type: string;
   user: AuthenticatedUserPayload;
 };
 
 type LoginResponse = {
-  access_token: string;
-  token_type: string;
   user: AuthenticatedUser;
 };
 
@@ -60,18 +46,16 @@ export async function loginRequest(username: string, password: string) {
   };
 }
 
-export async function currentUserRequest(accessToken: string) {
+export async function currentUserRequest() {
   const user = await apiRequest<AuthenticatedUserPayload>("/auth/me", {
-    accessToken,
     method: "GET",
   });
 
   return normalizeAuthenticatedUser(user);
 }
 
-export function logoutRequest(accessToken: string) {
+export function logoutRequest() {
   return apiRequest<{ message: string }>("/auth/logout", {
-    accessToken,
     method: "POST",
   });
 }

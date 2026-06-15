@@ -12,11 +12,9 @@ import {
 
 import { ApiError, AUTH_UNAUTHORIZED_EVENT } from "@/lib/api";
 import {
-  ACCESS_TOKEN_STORAGE_KEY,
   currentUserRequest,
   loginRequest,
   logoutRequest,
-  readAccessToken,
   type AuthenticatedUser,
 } from "@/lib/auth";
 
@@ -32,31 +30,19 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function clearStoredSession() {
-  window.localStorage.removeItem(ACCESS_TOKEN_STORAGE_KEY);
-}
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("checking");
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
 
   const clearSession = useCallback(() => {
-    clearStoredSession();
     setUser(null);
     setStatus("unauthenticated");
   }, []);
 
   const refresh = useCallback(async () => {
-    const accessToken = readAccessToken();
-    if (!accessToken) {
-      setUser(null);
-      setStatus("unauthenticated");
-      return;
-    }
-
     setStatus("checking");
     try {
-      const currentUser = await currentUserRequest(accessToken);
+      const currentUser = await currentUserRequest();
       setUser(currentUser);
       setStatus("authenticated");
     } catch (error) {
@@ -76,32 +62,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleUnauthorized = () => clearSession();
-    const handleStorage = (event: StorageEvent) => {
-      if (event.key === ACCESS_TOKEN_STORAGE_KEY) {
-        void refresh();
-      }
-    };
 
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
-    window.addEventListener("storage", handleStorage);
 
     return () => {
       window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
-      window.removeEventListener("storage", handleStorage);
     };
-  }, [clearSession, refresh]);
+  }, [clearSession]);
 
   const login = useCallback(
     async (username: string, password: string) => {
       const result = await loginRequest(username, password);
-      window.localStorage.setItem(
-        ACCESS_TOKEN_STORAGE_KEY,
-        result.access_token,
-      );
 
       let sessionUser = result.user;
       try {
-        sessionUser = await currentUserRequest(result.access_token);
+        sessionUser = await currentUserRequest();
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
           clearSession();
@@ -116,12 +91,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    const accessToken = readAccessToken();
-
     try {
-      if (accessToken) {
-        await logoutRequest(accessToken);
-      }
+      await logoutRequest();
     } finally {
       clearSession();
     }

@@ -459,13 +459,11 @@ Run the full repository acceptance with:
 
 ## Temporary login preview
 
-From the repository root, set example-only owner and token values, bootstrap
-the named example project, and start the example backend/frontend:
+From the repository root, set an example-only owner, bootstrap the named
+example project, and start the example backend/frontend:
 
 ```bash
 export COMPOSE_PROJECT_NAME=barong-ops-console-preview
-read -r -s -p "Preview token signing value (32+ bytes): " AUTH_TOKEN_SECRET
-export AUTH_TOKEN_SECRET
 export OWNER_USERNAME="preview_owner"
 read -r -s -p "Preview owner password (12+ characters): " OWNER_PASSWORD
 export OWNER_PASSWORD
@@ -475,7 +473,8 @@ docker-compose -p "$COMPOSE_PROJECT_NAME" \
 ```
 
 Open `http://127.0.0.1:3000/login`. Leave `N8N_TEST_WEBHOOK_URL` and
-`N8N_TEST_CALLBACK_SECRET` empty for a login-only preview. These settings and
-`AUTH_TOKEN_SECRET` are environment variables; real values must not be
-committed. This preview uses only `docker-compose.example.yml` and does not
+`N8N_TEST_CALLBACK_SECRET` empty for a login-only preview. Browser auth uses
+the HttpOnly session cookie defaults from `docker-compose.example.yml`; real
+environment values must not be committed. This preview uses only
+`docker-compose.example.yml` and does not
 connect production n8n, P-series, WooCommerce, MinIO, or Filebrowser services.

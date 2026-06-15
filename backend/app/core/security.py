@@ -1,10 +1,8 @@
-from datetime import datetime, timedelta, timezone
-from typing import Any
+import hashlib
+import secrets
 
-import jwt
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from pydantic import SecretStr
 
 PASSWORD_HASHER = PasswordHasher(
     time_cost=2,
@@ -13,15 +11,10 @@ PASSWORD_HASHER = PasswordHasher(
     hash_len=32,
     salt_len=16,
 )
-JWT_ALGORITHM = "HS256"
-MINIMUM_TOKEN_SECRET_LENGTH = 32
+SESSION_ID_BYTES = 32
 
 
-class SecurityConfigurationError(RuntimeError):
-    pass
-
-
-class InvalidAccessTokenError(ValueError):
+class InvalidSessionIdError(ValueError):
     pass
 
 
@@ -40,50 +33,11 @@ def verify_password(password: str, password_hash: str) -> bool:
         return False
 
 
-def require_token_secret(secret: SecretStr | None) -> str:
-    if secret is None:
-        raise SecurityConfigurationError(
-            "Authentication token configuration is unavailable."
-        )
-
-    value = secret.get_secret_value()
-    if len(value.encode("utf-8")) < MINIMUM_TOKEN_SECRET_LENGTH:
-        raise SecurityConfigurationError(
-            "Authentication token configuration is unavailable."
-        )
-    return value
+def generate_session_id() -> str:
+    return secrets.token_urlsafe(SESSION_ID_BYTES)
 
 
-def create_access_token(
-    *,
-    subject: str,
-    role: str,
-    secret: str,
-    expire_minutes: int,
-) -> str:
-    issued_at = datetime.now(timezone.utc)
-    payload = {
-        "sub": subject,
-        "role": role,
-        "iat": issued_at,
-        "exp": issued_at + timedelta(minutes=expire_minutes),
-    }
-    return jwt.encode(payload, secret, algorithm=JWT_ALGORITHM)
-
-
-def decode_access_token(token: str, secret: str) -> dict[str, Any]:
-    try:
-        payload = jwt.decode(
-            token,
-            secret,
-            algorithms=[JWT_ALGORITHM],
-            options={"require": ["sub", "role", "exp"]},
-        )
-    except jwt.PyJWTError as exc:
-        raise InvalidAccessTokenError("Invalid access token.") from exc
-
-    if not isinstance(payload.get("sub"), str):
-        raise InvalidAccessTokenError("Invalid access token.")
-    if not isinstance(payload.get("role"), str):
-        raise InvalidAccessTokenError("Invalid access token.")
-    return payload
+def hash_session_id(session_id: str) -> str:
+    if not session_id or len(session_id) > 512:
+        raise InvalidSessionIdError("Invalid session id.")
+    return hashlib.sha256(session_id.encode("utf-8")).hexdigest()

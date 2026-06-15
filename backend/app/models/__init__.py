@@ -1,4 +1,5 @@
 from .artifact import Artifact
+from .auth_session import AuthSession
 from .approval import (
     ApprovalDecisionRecord,
     ApprovalRequestRecord,
@@ -25,6 +26,7 @@ __all__ = [
     "ApprovalRequestRecord",
     "ApprovalWorkflowRecord",
     "Artifact",
+    "AuthSession",
     "AutomationJob",
     "ContextPacket",
     "JobEvent",

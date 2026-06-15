@@ -59,8 +59,8 @@ live provider/action route 禁止，以及 C05/C06/C07 回归。C08D 未新增�
 - `GET /module-adapters/registry`
 - `GET /module-adapters/me`
 
-API client 使用 `readAccessToken()` 将 Bearer token 交给 `apiRequest()`，不打印 token、
-password、secret 或 Authorization header。请求失败时返回空集合、safe error summary 和
+API client 使用同源 backend proxy 和 HttpOnly session cookie，不在前端读取或拼接
+auth secret，不打印 token、password、secret 或 Authorization header。请求失败时返回空集合、safe error summary 和
 `adapter_access_unknown=true`，不会让页面崩溃。
 
 如果 `/module-adapters/me` 暂不可用，前端将 adapter access 视为 unknown。非 owner 不会因

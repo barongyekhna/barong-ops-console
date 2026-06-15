@@ -39,7 +39,6 @@ TEST_CALLBACK_SECRET = "c15d-test-signing-value-not-for-production-use"
 
 def callback_settings() -> Settings:
     return Settings(
-        auth_token_secret="f08-test-signing-value-not-for-production-use",
         webhook_gateway_signing_secret=SecretStr(TEST_CALLBACK_SECRET),
         webhook_gateway_signature_tolerance_seconds=300,
     )
@@ -270,11 +269,9 @@ def test_c15d_rejects_callback_payload_runtime_or_credential_data(
 
 def test_c15d_callback_handler_api_routes(
     owner_client: TestClient,
-    test_settings: Settings,
 ) -> None:
     reset_callback_execution_store()
     settings = callback_settings()
-    settings.auth_token_secret = test_settings.auth_token_secret
     app.dependency_overrides[get_settings] = lambda: settings
     try:
         request = c15c_request()

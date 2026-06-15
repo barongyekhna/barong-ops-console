@@ -129,11 +129,11 @@ permissions + scope` 表达。
 
 它依赖 `get_current_user()`。`get_current_user()` 做登录态校验：
 
-- Bearer token 存在。
-- token 可解码。
-- token `sub` 对应的用户存在。
+- HttpOnly session cookie 存在。
+- cookie 中的 session id 对应 server-side `auth_sessions` 记录。
+- session 未过期且未被吊销。
+- session 对应的用户存在。
 - 用户 `is_active = true`。
-- token 里的 role 和数据库当前 role 一致。
 
 然后 `require_owner()` 再判断当前用户是否为 owner。不是 owner 就返回 403。
 

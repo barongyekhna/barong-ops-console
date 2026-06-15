@@ -35,8 +35,9 @@ C05C 适合在 `/auth/me` 上追加 `permissions`，因为旧字段保持原样�
 
 ### 当前 dependency
 
-`get_current_user()` 在 `backend/app/api/deps.py` 中校验 Bearer token、token secret、
-token `sub`、token role 与数据库 role 一致、用户存在且 `is_active=true`。
+`get_current_user()` 在 `backend/app/api/deps.py` 中通过 HttpOnly cookie 校验
+server-side session，要求 session 存在、未过期、未吊销，且用户存在并
+`is_active=true`。
 
 `require_owner()` 依赖 `get_current_user()`，然后用 `is_owner_role(user.role)` 判断 owner。
 不是 owner 时返回 403：`Owner role required.`

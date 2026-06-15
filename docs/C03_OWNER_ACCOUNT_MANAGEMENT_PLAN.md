@@ -677,7 +677,7 @@ C03C 已新增 `/users` 页面，并在左侧 System 分组下增加：
 - 支持 `POST /users/{id}/disable`。
 - 支持 `POST /users/{id}/enable`。
 - route 文件已新增 PATCH export。
-- proxy 仍只转发 `Accept`、`Authorization` 和 `Content-Type`，不转发浏览器 `Host` 等危险 headers。
+- proxy 只转发 `Accept`、`Cookie` 和 `Content-Type`，不转发浏览器 `Host` 等危险 headers。
 
 `/settings` 可以继续保留为系统设置空状态。用户管理建议使用独立 `/users`，避免 settings 页面变成多个职责混合的页面。
 

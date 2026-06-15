@@ -1,5 +1,4 @@
 import { apiRequest } from "@/lib/api";
-import { readAccessToken } from "@/lib/auth";
 import {
   createGrantRequestBody,
   getPermissionRegistryPath,
@@ -17,7 +16,6 @@ export * from "@/lib/permission-management";
 
 export async function listPermissionRegistry() {
   const response = await apiRequest<unknown>(getPermissionRegistryPath(), {
-    accessToken: readAccessToken(),
     method: "GET",
   });
 
@@ -28,7 +26,6 @@ export async function listUserPermissionAssignments(userId: number) {
   const response = await apiRequest<unknown>(
     getUserPermissionAssignmentsPath(userId),
     {
-      accessToken: readAccessToken(),
       method: "GET",
     },
   );
@@ -43,7 +40,6 @@ export async function grantUserPermissionAssignment(
   const response = await apiRequest<unknown>(
     getUserPermissionAssignmentsPath(userId),
     {
-      accessToken: readAccessToken(),
       body: createGrantRequestBody(payload),
       method: "POST",
     },
@@ -60,7 +56,6 @@ export async function updateUserPermissionAssignment(
   const response = await apiRequest<unknown>(
     getUserPermissionAssignmentPath(userId, assignmentId),
     {
-      accessToken: readAccessToken(),
       body: payload,
       method: "PATCH",
     },
@@ -77,7 +72,6 @@ export async function revokeUserPermissionAssignment(
   const response = await apiRequest<unknown>(
     getUserPermissionAssignmentPath(userId, assignmentId),
     {
-      accessToken: readAccessToken(),
       body: payload,
       method: "DELETE",
     },

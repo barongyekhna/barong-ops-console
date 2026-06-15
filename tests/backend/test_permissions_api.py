@@ -111,11 +111,13 @@ def login_token(
         json={"username": username, "password": password},
     )
     assert response.status_code == 200
-    return response.json()["access_token"]
+    session_id = response.cookies.get("barong_ops_session")
+    assert session_id
+    return session_id
 
 
 def auth_headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+    return {"Cookie": f"barong_ops_session={token}"}
 
 
 def seed_permission_registry() -> None:

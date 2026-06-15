@@ -1082,8 +1082,6 @@ write or commit a real `.env`:
 
 ```bash
 export COMPOSE_PROJECT_NAME=barong-ops-console-preview
-read -r -s -p "Preview token signing value (32+ bytes): " AUTH_TOKEN_SECRET
-export AUTH_TOKEN_SECRET
 export OWNER_USERNAME="preview_owner"
 read -r -s -p "Preview owner password (12+ characters): " OWNER_PASSWORD
 export OWNER_PASSWORD
@@ -1099,12 +1097,13 @@ stop the foreground process and remove only that named example project:
 ```bash
 docker-compose -p "$COMPOSE_PROJECT_NAME" \
   -f docker-compose.example.yml down --volumes --remove-orphans
-unset OWNER_PASSWORD AUTH_TOKEN_SECRET OWNER_USERNAME COMPOSE_PROJECT_NAME
+unset OWNER_PASSWORD OWNER_USERNAME COMPOSE_PROJECT_NAME
 ```
 
-`AUTH_TOKEN_SECRET`, `N8N_TEST_WEBHOOK_URL`, and
-`N8N_TEST_CALLBACK_SECRET` are environment variables. Never commit real
-values. Leave the n8n test variables empty for a login-only preview.
+Browser auth uses the HttpOnly session cookie defaults from
+`docker-compose.example.yml`. `N8N_TEST_WEBHOOK_URL` and
+`N8N_TEST_CALLBACK_SECRET` are environment variables. Never commit real values.
+Leave the n8n test variables empty for a login-only preview.
 
 ## F12 n8n test webhook bridge
 
@@ -1141,9 +1140,9 @@ webhook.
 
 F12 APIs:
 
-- `POST /n8n-test/run` (owner Bearer token)
+- `POST /n8n-test/run` (owner session)
 - `POST /n8n-test/callback` (callback header authentication)
-- `GET /n8n-test/latest` (owner Bearer token)
+- `GET /n8n-test/latest` (owner session)
 
 Run the complete isolated verification:
 
@@ -1183,7 +1182,7 @@ F11 APIs:
 - `POST /foundation-demo/run`
 - `GET /foundation-demo/latest`
 
-Both require an owner Bearer token. Run all isolated checks with:
+Both require an authenticated owner session. Run all isolated checks with:
 
 ```bash
 ./scripts/test_backend_docker.sh
@@ -1194,7 +1193,7 @@ docker-compose -f docker-compose.example.yml config
 
 ## F10 foundation operations APIs
 
-F10 adds owner-only, Bearer-authenticated foundation APIs over the existing
+F10 adds owner-only, session-authenticated foundation APIs over the existing
 F07 tables:
 
 - Module, Agent, and Workflow registry list/detail/demo-create endpoints.
@@ -1276,7 +1275,6 @@ packages on the host.
 Start the example frontend, backend, and example-only database with:
 
 ```bash
-export AUTH_TOKEN_SECRET="replace-with-an-example-only-value-at-least-32-bytes"
 docker-compose -f docker-compose.example.yml up --build db backend frontend
 ```
 
@@ -1292,7 +1290,7 @@ F08 adds the minimum backend authentication foundation:
 
 - Argon2id password hashing and verification.
 - Controlled, idempotent initialization of the first active `owner`.
-- JWT login tokens with configured expiration.
+- Server-side login sessions with HttpOnly cookies and configured expiration.
 - `POST /auth/login`, `POST /auth/logout`, and `GET /auth/me`.
 - Authentication operation logs for owner initialization, login, and logout.
 
@@ -1338,16 +1336,13 @@ The script builds and uses only `docker-compose.example.yml`, migrates the
 example PostgreSQL database, and creates at most one active `owner`. Running
 it again safely records a skipped bootstrap. It never prints the password.
 
-`AUTH_TOKEN_SECRET` must be at least 32 bytes before the authentication API
-can issue or validate tokens. Pass it into an example backend container
-without committing it:
+The authentication API issues server-side sessions. Override session cookie
+defaults only when the direct backend URL needs a different cookie path:
 
 ```bash
-read -r -s -p "Token signing value: " AUTH_TOKEN_SECRET
-export AUTH_TOKEN_SECRET
 docker compose -p barong-ops-console-example \
   -f docker-compose.example.yml run --rm --service-ports \
-  -e AUTH_TOKEN_SECRET backend \
+  -e AUTH_SESSION_COOKIE_PATH=/ \
   python -m uvicorn backend.app.main:app --host 0.0.0.0 --port 8000
 ```
 

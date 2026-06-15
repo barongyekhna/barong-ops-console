@@ -16,7 +16,6 @@ export class ApiError extends Error {
 
 type ApiRequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
-  accessToken?: string | null;
 };
 
 export async function apiRequest<T>(
@@ -30,15 +29,12 @@ export async function apiRequest<T>(
     headers.set("Content-Type", "application/json");
   }
 
-  if (options.accessToken) {
-    headers.set("Authorization", `Bearer ${options.accessToken}`);
-  }
-
   const response = await fetch(`${API_PROXY_BASE}${path}`, {
     ...options,
     body:
       options.body === undefined ? undefined : JSON.stringify(options.body),
     cache: "no-store",
+    credentials: "include",
     headers,
   });
 

@@ -1,7 +1,6 @@
 "use client";
 
 import { ApiError, apiRequest } from "@/lib/api";
-import { readAccessToken } from "@/lib/auth";
 import {
   normalizeExecutionProviderRegistryResponse,
   normalizeUserExecutionProvidersResponse,
@@ -88,7 +87,6 @@ export async function getExecutionProviderRegistry(): Promise<
 > {
   try {
     const response = await apiRequest<unknown>("/execution-providers/registry", {
-      accessToken: readAccessToken(),
       method: "GET",
     });
     return {
@@ -112,7 +110,6 @@ export async function getMyExecutionProviders(): Promise<
 > {
   try {
     const response = await apiRequest<unknown>("/execution-providers/me", {
-      accessToken: readAccessToken(),
       method: "GET",
     });
     return {

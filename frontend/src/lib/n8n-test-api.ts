@@ -1,5 +1,4 @@
 import { apiRequest } from "@/lib/api";
-import { readAccessToken } from "@/lib/auth";
 
 export type N8nTestSnapshot = {
   test_mode: true;
@@ -36,14 +35,12 @@ export type N8nTestSnapshot = {
 
 export function requestN8nTestMock() {
   return apiRequest<N8nTestSnapshot>("/n8n-test/run", {
-    accessToken: readAccessToken(),
     method: "POST",
   });
 }
 
 export function latestN8nTest() {
   return apiRequest<N8nTestSnapshot>("/n8n-test/latest", {
-    accessToken: readAccessToken(),
     method: "GET",
   });
 }

@@ -1,5 +1,4 @@
 import { apiRequest } from "@/lib/api";
-import { readAccessToken } from "@/lib/auth";
 
 export type FoundationDemoSnapshot = {
   job: {
@@ -22,14 +21,12 @@ export type FoundationDemoSnapshot = {
 
 export function runFoundationDemo() {
   return apiRequest<FoundationDemoSnapshot>("/foundation-demo/run", {
-    accessToken: readAccessToken(),
     method: "POST",
   });
 }
 
 export function latestFoundationDemo() {
   return apiRequest<FoundationDemoSnapshot>("/foundation-demo/latest", {
-    accessToken: readAccessToken(),
     method: "GET",
   });
 }

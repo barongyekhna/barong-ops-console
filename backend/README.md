@@ -85,8 +85,8 @@ C02C has started the staging/test backend on `127.0.0.1:8100` with
 `console_staging_backend`, `console_staging_postgres`,
 `barong-ops-console-staging`, `console_staging_postgres_data`, and server-local
 `.env.staging`. Its `DATABASE_URL` must point at
-`console_staging_postgres:5432`, `AUTH_TOKEN_SECRET` and `POSTGRES_PASSWORD`
-must be different from production, and the staging owner must be a test
+`console_staging_postgres:5432`, session cookie settings and `POSTGRES_PASSWORD`
+must be isolated from production, and the staging owner must be a test
 account. C02D added read-only dual-environment checks, C02E completed final
 production/staging acceptance, and C02F sealed the environment isolation
 system. Both environments are usable and isolated. C02F did not read real env
@@ -386,8 +386,8 @@ F12 adds the n8n test webhook bridge:
 - `POST /n8n-test/callback`
 - `GET /n8n-test/latest`
 
-Run and latest require the owner Bearer token. Run creates or reuses only the
-`n8n_test_bridge`, `n8n_test_agent`, and `n8n_test_webhook_workflow` demo
+Run and latest require an authenticated owner session. Run creates or reuses
+only the `n8n_test_bridge`, `n8n_test_agent`, and `n8n_test_webhook_workflow` demo
 registry records, creates a test Job, and sends the minimal test payload
 through the standard-library HTTP client. The configured URL must use HTTP(S)
 and contain an explicit test/demo marker. Redirects are rejected.
@@ -435,8 +435,9 @@ F07 adds:
   timestamps, and the core tracing foreign keys.
 - One Alembic revision that creates and removes the empty tables.
 
-F08 adds Argon2id password hashing, controlled owner initialization, JWT
-authentication, and authentication operation logs. C03B later split active-user
+F08 added Argon2id password hashing, controlled owner initialization, and
+authentication operation logs. C16-FIX-2 moved browser authentication to
+server-side sessions with HttpOnly cookies. C03B split active-user
 authentication from owner-only authorization. Auth exposes:
 
 - `POST /auth/login`
@@ -565,8 +566,9 @@ unset OWNER_PASSWORD
 ```
 
 The example placeholders in `.env.example` are not production credentials.
-`AUTH_TOKEN_SECRET` must be supplied separately and must contain at least 32
-bytes before login tokens can be issued.
+Browser login uses server-side sessions and HttpOnly cookies; configure
+`AUTH_SESSION_EXPIRE_MINUTES` and cookie policy values through the environment
+when defaults are not appropriate.
 `N8N_TEST_WEBHOOK_URL` and `N8N_TEST_CALLBACK_SECRET` must also be supplied
 through the environment only when intentionally exercising a test/demo
 webhook. Never commit real values or point them at a production workflow.

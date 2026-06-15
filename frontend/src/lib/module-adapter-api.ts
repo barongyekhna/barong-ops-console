@@ -1,7 +1,6 @@
 "use client";
 
 import { ApiError, apiRequest } from "@/lib/api";
-import { readAccessToken } from "@/lib/auth";
 import {
   normalizeModuleAdapterRegistryResponse,
   normalizeUserModuleAdaptersResponse,
@@ -86,7 +85,6 @@ export async function listModuleAdapterRegistry(): Promise<
 > {
   try {
     const response = await apiRequest<unknown>("/module-adapters/registry", {
-      accessToken: readAccessToken(),
       method: "GET",
     });
     return {
@@ -110,7 +108,6 @@ export async function listMyModuleAdapters(): Promise<
 > {
   try {
     const response = await apiRequest<unknown>("/module-adapters/me", {
-      accessToken: readAccessToken(),
       method: "GET",
     });
     return {

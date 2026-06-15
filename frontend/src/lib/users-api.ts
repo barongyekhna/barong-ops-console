@@ -1,5 +1,4 @@
 import { ApiError, apiRequest } from "@/lib/api";
-import { readAccessToken } from "@/lib/auth";
 
 export const MANAGED_USER_ROLES = [
   "viewer",
@@ -62,21 +61,18 @@ export function listUsers(limit = 50, offset = 0) {
   });
 
   return apiRequest<UserListResponse>(`/users?${params.toString()}`, {
-    accessToken: readAccessToken(),
     method: "GET",
   });
 }
 
 export function listUserRoles() {
   return apiRequest<UserRolesResponse>("/users/roles", {
-    accessToken: readAccessToken(),
     method: "GET",
   });
 }
 
 export function createUser(payload: CreateUserPayload) {
   return apiRequest<ManagedUser>("/users", {
-    accessToken: readAccessToken(),
     body: payload,
     method: "POST",
   });
@@ -84,7 +80,6 @@ export function createUser(payload: CreateUserPayload) {
 
 export function getUser(userId: number) {
   return apiRequest<ManagedUser>(`/users/${userId}`, {
-    accessToken: readAccessToken(),
     method: "GET",
   });
 }
@@ -94,7 +89,6 @@ export function updateUser(
   payload: UpdateUserPayload,
 ) {
   return apiRequest<ManagedUser>(`/users/${userId}`, {
-    accessToken: readAccessToken(),
     body: payload,
     method: "PATCH",
   });
@@ -102,14 +96,12 @@ export function updateUser(
 
 export function disableUser(userId: number) {
   return apiRequest<ManagedUser>(`/users/${userId}/disable`, {
-    accessToken: readAccessToken(),
     method: "POST",
   });
 }
 
 export function enableUser(userId: number) {
   return apiRequest<ManagedUser>(`/users/${userId}/enable`, {
-    accessToken: readAccessToken(),
     method: "POST",
   });
 }
@@ -119,7 +111,6 @@ export function resetUserPassword(
   newPassword: string,
 ) {
   return apiRequest<ManagedUser>(`/users/${userId}/reset-password`, {
-    accessToken: readAccessToken(),
     body: { new_password: newPassword },
     method: "POST",
   });

@@ -28,7 +28,6 @@ TEST_GATEWAY_SECRET = "c15g-test-signing-value-not-for-production-use"
 
 def gateway_settings() -> Settings:
     return Settings(
-        auth_token_secret="f08-test-signing-value-not-for-production-use",
         webhook_gateway_signing_secret=SecretStr(TEST_GATEWAY_SECRET),
         webhook_gateway_signature_tolerance_seconds=300,
     )
