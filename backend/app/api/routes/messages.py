@@ -12,12 +12,20 @@ from ...schemas.message import (
     MessageReadRequest,
     MessageSendRequest,
 )
+from ...schemas.messaging_permission import (
+    MessagingPermissionCheckRequest,
+    MessagingPermissionDecision,
+)
 from ...services.conversation_service import (
     ConversationAccessDeniedError,
     ConversationNotFoundError,
     ConversationParticipantNotFoundError,
 )
 from ...services.cross_org_communication import send_message_after_cross_org_check
+from ...services.messaging_permission import (
+    can_send_message,
+    check_message_permission,
+)
 from ..deps import get_audit_context, get_current_user
 
 router = APIRouter(prefix="/messages", tags=["messages"])
@@ -46,12 +54,27 @@ def send_message(
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ) -> CrossOrgMessageSendDecision:
+    audit = get_audit_context(request)
+    permission_decision = can_send_message(
+        db,
+        sender_user_id=payload.from_user_id,
+        receiver_user_id=payload.to_user_id,
+        content_type=payload.content_type,
+        actor=actor,
+        audit=audit,
+    )
+    if permission_decision.denied:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=permission_decision.model_dump(mode="json"),
+        )
+
     try:
         decision = send_message_after_cross_org_check(
             db,
             payload=payload,
             actor=actor,
-            audit=get_audit_context(request),
+            audit=audit,
         )
     except ConversationNotFoundError:
         raise HTTPException(
@@ -75,6 +98,21 @@ def send_message(
             detail=decision.model_dump(mode="json"),
         )
     return decision
+
+
+@router.post("/permission/check", response_model=MessagingPermissionDecision)
+def check_permission_for_message(
+    payload: MessagingPermissionCheckRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> MessagingPermissionDecision:
+    return check_message_permission(
+        db,
+        payload=payload,
+        actor=actor,
+        audit=get_audit_context(request),
+    )
 
 
 @router.get(

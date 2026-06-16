@@ -22,6 +22,7 @@ from .api.routes.execution_providers import router as execution_providers_router
 from .api.routes.execution_prompts import router as execution_prompts_router
 from .api.routes.failure_handling import router as failure_handling_router
 from .api.routes.foundation_demo import router as foundation_demo_router
+from .api.routes.friends import router as friends_router
 from .api.routes.health import router as health_router
 from .api.routes.jobs import router as jobs_router
 from .api.routes.memory import router as memory_router
@@ -344,6 +345,7 @@ app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(contacts_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(conversations_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(cross_org_communication_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(friends_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(messages_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
