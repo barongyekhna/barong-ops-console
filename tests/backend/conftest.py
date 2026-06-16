@@ -22,6 +22,8 @@ from backend.app.models.memory import (
     MemorySummary,
 )
 from backend.app.models.operation_log import OperationLog
+from backend.app.models.org_membership import OrgMembershipRecord
+from backend.app.models.organization import OrganizationRecord
 from backend.app.models.permission import (
     PermissionRegistry,
     RoleDefaultPermission,
@@ -54,6 +56,8 @@ def clear_auth_tables() -> None:
         db.execute(delete(AuthSession))
         db.execute(delete(SecurityRateLimitBucket))
         db.execute(delete(SecurityReplayNonce))
+        db.execute(delete(OrgMembershipRecord))
+        db.execute(delete(OrganizationRecord))
         db.execute(delete(UserPermissionAssignment))
         db.execute(delete(RoleDefaultPermission))
         db.execute(delete(PermissionRegistry))

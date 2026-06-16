@@ -40,6 +40,16 @@ def set_request_context_id(request: Request, context_id: str) -> str:
     return normalized
 
 
+def request_trace_root_id(request: Request, fallback_context_id: str) -> str:
+    root_request_id = getattr(request.state, "request_id", None)
+    if root_request_id:
+        return normalize_context_id(str(root_request_id))
+    trace_id = getattr(request.state, "trace_id", None)
+    if trace_id:
+        return normalize_context_id(str(trace_id))
+    return fallback_context_id
+
+
 async def capture_audit_events(request: Request, call_next):
     context_id = ensure_request_context_id(request)
     tokens = set_current_event_context(context_id=context_id)
@@ -65,13 +75,14 @@ async def capture_audit_events(request: Request, call_next):
         response = await call_next(request)
     except Exception:
         final_context_id = ensure_request_context_id(request)
+        trace_root_id = request_trace_root_id(request, final_context_id)
         emit_event(
             event_type="api.response.completed",
             module=module,
             action=f"{request.method} {request.url.path}",
             source="backend",
             status="failed",
-            context_id=final_context_id,
+            context_id=trace_root_id,
             user_id=getattr(request.state, "user_id", None),
             workflow_id=getattr(request.state, "workflow_id", None),
             latency_ms=(perf_counter() - started_at) * 1000,
@@ -86,15 +97,16 @@ async def capture_audit_events(request: Request, call_next):
         raise
 
     final_context_id = ensure_request_context_id(request)
-    response.headers[REQUEST_ID_HEADER] = final_context_id
-    response.headers[TRACE_ID_HEADER] = final_context_id
+    trace_root_id = request_trace_root_id(request, final_context_id)
+    response.headers[REQUEST_ID_HEADER] = trace_root_id
+    response.headers[TRACE_ID_HEADER] = trace_root_id
     emit_event(
         event_type="api.response.completed",
         module=module,
         action=f"{request.method} {request.url.path}",
         source="backend",
         status="success" if response.status_code < 400 else "failed",
-        context_id=final_context_id,
+        context_id=trace_root_id,
         user_id=getattr(request.state, "user_id", None),
         product_key=getattr(request.state, "product_key", None),
         workflow_id=getattr(request.state, "workflow_id", None),
@@ -107,4 +119,3 @@ async def capture_audit_events(request: Request, call_next):
     )
     reset_current_event_context(tokens)
     return response
-

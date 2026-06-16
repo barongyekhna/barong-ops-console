@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.session import SessionLocal
+from ..middleware.org_context import get_org_context
 from ..schemas.permission import PermissionAction
 from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
 from ..services.event_collector import emit_event, set_current_event_context
@@ -162,7 +163,8 @@ def resolve_permission_request_context(
     if not path.startswith(API_PATH_PREFIXES):
         return None
 
-    org_id = _first_context_value(request, "org_id", "active_org_id")
+    org_context = get_org_context(request)
+    org_id = org_context.org_id if org_context is not None else None
     if org_id is None:
         org_id = _org_id_from_path(path)
     if org_id is None:

@@ -218,7 +218,7 @@ def test_c18f_check_permission_enforces_owner_org_module_and_action_rules() -> N
     assert global_read.allowed is True
 
 
-def test_c18f_api_middleware_allows_bound_member_read_and_denies_cross_org(
+def test_c18f_api_middleware_uses_injected_org_context_and_rejects_frontend_org(
     auth_client: TestClient,
 ) -> None:
     _set_c18d_bindings(
@@ -248,10 +248,12 @@ def test_c18f_api_middleware_allows_bound_member_read_and_denies_cross_org(
     )
     assert login.status_code == 200
 
-    allowed = auth_client.get("/api/app/module/K-series/bindings?org_id=org_1")
+    allowed = auth_client.get("/api/app/module/K-series/bindings")
     denied = auth_client.get("/api/app/module/K-series/bindings?org_id=org_2")
 
     assert allowed.status_code == 200
     assert allowed.json()["module_id"] == "K-series"
-    assert denied.status_code == 403
-    assert denied.json()["detail"] == "C18F permission denied."
+    assert denied.status_code == 400
+    assert denied.json()["detail"] == (
+        "org_id must come from the authenticated server context."
+    )

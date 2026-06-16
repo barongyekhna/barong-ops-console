@@ -10,6 +10,7 @@ from fastapi.responses import JSONResponse
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.session import SessionLocal
+from ..middleware.org_context import get_org_context
 from ..schemas.organization import ORG_ID_PATTERN
 from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
 from ..services.data_isolation import (
@@ -25,6 +26,7 @@ settings = get_settings()
 API_PATH_PREFIXES = ("/api/app", "/api/control-plane")
 ORG_PATH_PATTERN = re.compile(r"/org/(?P<org_id>org_[0-9a-f]{32})(?:/|$)")
 MUTATING_METHODS = frozenset(("POST", "PUT", "PATCH", "DELETE"))
+C18D_TARGET_ORG_PAYLOAD_PATHS = frozenset(("/api/app/module/bind",))
 
 
 def _security_response(status_code: int, detail: str) -> JSONResponse:
@@ -79,16 +81,22 @@ def _org_id_from_path(request: Request) -> str | None:
     return match.group("org_id")
 
 
-def _org_id_from_request_context(request: Request) -> str | None:
-    for key in ("active_org_id", "org_id"):
-        value = _valid_org_id(request.query_params.get(key))
-        if value is not None:
-            return value
-    for key in ("x-active-org-id", "x-org-id"):
-        value = _valid_org_id(request.headers.get(key))
-        if value is not None:
-            return value
-    return None
+def _org_id_from_org_context(request: Request) -> str | None:
+    context = get_org_context(request)
+    if context is None:
+        return None
+    return _valid_org_id(context.org_id)
+
+
+def _role_from_org_context(request: Request) -> str | None:
+    context = get_org_context(request)
+    if context is None:
+        return None
+    return context.role
+
+
+def _target_org_payload_allowed(request: Request) -> bool:
+    return request.url.path in C18D_TARGET_ORG_PAYLOAD_PATHS
 
 
 def _resolve_org_id(request: Request) -> tuple[str | None, str]:
@@ -96,13 +104,13 @@ def _resolve_org_id(request: Request) -> tuple[str | None, str]:
     if c18f_org_id is not None:
         return c18f_org_id, "c18f_permission_decision"
 
+    context_org_id = _org_id_from_org_context(request)
+    if context_org_id is not None:
+        return context_org_id, "c18h_org_context"
+
     path_org_id = _org_id_from_path(request)
     if path_org_id is not None:
         return path_org_id, "c18c_path_context"
-
-    fallback_org_id = _org_id_from_request_context(request)
-    if fallback_org_id is not None:
-        return fallback_org_id, "validated_request_context"
 
     return None, "missing"
 
@@ -146,6 +154,7 @@ async def enforce_org_data_isolation(request: Request, call_next):
 
     if (
         request.method.upper() in MUTATING_METHODS
+        and not _target_org_payload_allowed(request)
         and await _request_body_contains_org_id(request)
     ):
         emit_event(
@@ -189,7 +198,7 @@ async def enforce_org_data_isolation(request: Request, call_next):
     context = OrgDataIsolationUserContext(
         org_id=org_id,
         user_id=str(current_session.user.id),
-        role=current_session.user.role,
+        role=_role_from_org_context(request) or current_session.user.role,
         source=source,
         strict=True,
     )
@@ -224,7 +233,7 @@ async def enforce_org_data_isolation(request: Request, call_next):
         payload={
             "org_id": org_id,
             "context_source": source,
-            "role": current_session.user.role,
+            "role": context.role,
             "status_code": response.status_code,
         },
     )
