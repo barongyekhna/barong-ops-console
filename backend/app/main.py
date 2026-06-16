@@ -13,6 +13,9 @@ from .api.routes.callback_handler import router as callback_handler_router
 from .api.routes.capability_bindings import router as capability_bindings_router
 from .api.routes.contacts import router as contacts_router
 from .api.routes.conversations import router as conversations_router
+from .api.routes.cross_org_communication import (
+    router as cross_org_communication_router,
+)
 from .api.routes.errors import router as errors_router
 from .api.routes.external_dependencies import router as external_dependencies_router
 from .api.routes.execution_providers import router as execution_providers_router
@@ -340,6 +343,7 @@ app.include_router(org_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(contacts_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(conversations_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(cross_org_communication_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(messages_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)

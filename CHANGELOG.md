@@ -6,6 +6,13 @@
 
 ### Added
 
+- C19E：新增 Cross-Org Communication Layer：`CrossOrgPolicy` 默认
+  `mode=open`，新增 C19E schema/service/API/doc/test，提供
+  `POST /comm/cross-org/check` 和增强后的 `POST /messages/send` 发送前检查；
+  跨 org 通信先验证 C19A identity、C18C active membership，再通过 C18F
+  `C19E/read` 边界，C18G message envelope 记录 sender/receiver org scope，
+  C17 event trace 记录 allow/deny。本轮未实现 UI、websocket、group chat、migration，
+  未修改 C19A-D schema/service 或 C18 系统代码。
 - C14X-E：新增 `docs/C14X_E_EXECUTION_PROMPT_GENERATOR.md`、
   `backend/app/schemas/execution_prompt.py`、
   `backend/app/services/execution_prompt_generator.py` 和
