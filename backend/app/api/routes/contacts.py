@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.contact_identity import ContactIdentity, ContactIdentityUpdate
+from ...schemas.global_contact import GlobalContactDirectory
 from ...services.contact_identity_service import (
     ContactIdentityConflictError,
     ContactIdentityMembershipRequiredError,
@@ -14,6 +15,10 @@ from ...services.contact_identity_service import (
     ContactIdentityPermissionDeniedError,
     get_contact_identity_for_actor,
     update_contact_identity,
+)
+from ...services.global_contact_directory import (
+    GlobalContactDirectoryAccessDeniedError,
+    build_global_directory,
 )
 from ..deps import get_audit_context, get_current_user
 
@@ -44,7 +49,23 @@ def _raise_contact_identity_error(exc: Exception) -> NoReturn:
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from None
+    if isinstance(exc, GlobalContactDirectoryAccessDeniedError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Global contact directory access denied.",
+        ) from None
     raise exc
+
+
+@router.get("/directory", response_model=GlobalContactDirectory)
+def global_contact_directory(
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> GlobalContactDirectory:
+    try:
+        return GlobalContactDirectory(root=build_global_directory(db, actor=actor))
+    except Exception as exc:
+        _raise_contact_identity_error(exc)
 
 
 @router.get("/{user_id}", response_model=ContactIdentity)
