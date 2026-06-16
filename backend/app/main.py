@@ -44,6 +44,7 @@ from .api.module_binding import router as module_binding_router
 from .api.module_visibility import router as module_visibility_router
 from .api.org import router as org_router
 from .api.org_membership import router as org_membership_router
+from .api.shared_module import router as shared_module_router
 from .core.config import get_settings
 from .core.rbac import normalize_rbac_role
 from .core.security_headers import apply_security_headers
@@ -336,6 +337,7 @@ app.include_router(org_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)
 
 app.include_router(modules_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)
