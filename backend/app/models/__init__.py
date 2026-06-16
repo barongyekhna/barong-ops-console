@@ -10,6 +10,7 @@ from .error import SystemError
 from .job import AutomationJob, JobEvent
 from .memory import AgentMemoryAccessLog, MemoryEvent, MemorySummary
 from .operation_log import OperationLog
+from .org_membership import OrgMembershipRecord
 from .permission import (
     PermissionRegistry,
     RoleDefaultPermission,
@@ -35,6 +36,7 @@ __all__ = [
     "MemorySummary",
     "ModuleRegistry",
     "OperationLog",
+    "OrgMembershipRecord",
     "PermissionRegistry",
     "ReviewItem",
     "RoleDefaultPermission",
