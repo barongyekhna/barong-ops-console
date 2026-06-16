@@ -1,6 +1,6 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
@@ -38,6 +38,8 @@ from ...services.callback_handler import (
     get_status_management_model,
     handle_callback,
 )
+from ...middleware.event_collector import set_request_context_id
+from ...services.event_collector import emit_event
 from ..deps import require_internal_rbac, require_rbac
 
 router = APIRouter(
@@ -53,6 +55,7 @@ router = APIRouter(
 )
 def callback_handler_receiver(
     payload: dict[str, Any],
+    request: Request,
     signature: str | None = Header(
         default=None,
         alias="X-Barong-Gateway-Signature",
@@ -68,40 +71,120 @@ def callback_handler_receiver(
             detail="Invalid C15D callback payload.",
         ) from None
 
+    set_request_context_id(request, callback_payload.context_id)
+    request.state.workflow_id = callback_payload.workflow_id
+    emit_event(
+        event_type="webhook.callback.ingress",
+        module="C15",
+        action="callback.receiver.ingress",
+        source="n8n",
+        status="pending",
+        context_id=callback_payload.context_id,
+        workflow_id=callback_payload.workflow_id,
+        payload={
+            "module": callback_payload.module,
+            "workflow_id": callback_payload.workflow_id,
+            "callback_status": callback_payload.status,
+        },
+    )
     require_internal_rbac("C15D")
 
     try:
-        return handle_callback(
+        result = handle_callback(
             callback_payload,
             provided_signature=signature,
             settings=settings,
             db=db,
         )
     except CallbackHandlerConfigurationError as exc:
+        emit_event(
+            event_type="webhook.callback.egress",
+            module="C15",
+            action="callback.receiver.egress",
+            source="n8n",
+            status="failed",
+            context_id=callback_payload.context_id,
+            workflow_id=callback_payload.workflow_id,
+            payload={"reason": "configuration_error"},
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(exc),
         ) from None
     except CallbackHandlerSignatureError:
+        emit_event(
+            event_type="webhook.callback.egress",
+            module="C15",
+            action="callback.receiver.egress",
+            source="n8n",
+            status="failed",
+            context_id=callback_payload.context_id,
+            workflow_id=callback_payload.workflow_id,
+            payload={"reason": "signature_error"},
+        )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid C15D callback signature.",
         ) from None
     except CallbackHandlerReplayError:
+        emit_event(
+            event_type="webhook.callback.egress",
+            module="C15",
+            action="callback.receiver.egress",
+            source="n8n",
+            status="failed",
+            context_id=callback_payload.context_id,
+            workflow_id=callback_payload.workflow_id,
+            payload={"reason": "replay_error"},
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="Duplicate C15D callback nonce or idempotency key.",
         ) from None
     except CallbackContextBindingError as exc:
+        emit_event(
+            event_type="webhook.callback.egress",
+            module="C15",
+            action="callback.receiver.egress",
+            source="n8n",
+            status="failed",
+            context_id=callback_payload.context_id,
+            workflow_id=callback_payload.workflow_id,
+            payload={"reason": "context_binding_error"},
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from None
     except CallbackStatusTransitionError as exc:
+        emit_event(
+            event_type="webhook.callback.egress",
+            module="C15",
+            action="callback.receiver.egress",
+            source="n8n",
+            status="failed",
+            context_id=callback_payload.context_id,
+            workflow_id=callback_payload.workflow_id,
+            payload={"reason": "status_transition_error"},
+        )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=str(exc),
         ) from None
+    emit_event(
+        event_type="webhook.callback.egress",
+        module="C15",
+        action="callback.receiver.egress",
+        source="n8n",
+        status="success",
+        context_id=callback_payload.context_id,
+        workflow_id=callback_payload.workflow_id,
+        payload={
+            "processing_status": result.processing_status,
+            "execution_status": result.status,
+        },
+    )
+    return result
 
 
 @router.post(

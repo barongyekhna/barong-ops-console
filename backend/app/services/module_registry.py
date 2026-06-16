@@ -14,6 +14,7 @@ from ..schemas.module import (
     ModuleManifestV1,
     ModuleStatus,
 )
+from .event_collector import emit_event
 from .permission_service import (
     CurrentUserPermissionInfo,
     resolve_current_user_permission_info,
@@ -177,7 +178,19 @@ def validate_module_manifests(
 
 
 def list_module_manifests() -> list[ModuleManifestV1]:
-    return validate_module_manifests()
+    manifests = validate_module_manifests()
+    emit_event(
+        event_type="category_tree.read",
+        module="system",
+        action="category_tree.read",
+        source="system",
+        status="success",
+        payload={
+            "operation": "list_module_manifests",
+            "count": len(manifests),
+        },
+    )
+    return manifests
 
 
 def get_module_manifest(module_key: str) -> ModuleManifestV1 | None:
@@ -335,10 +348,24 @@ def list_modules_for_user(
     user: User,
 ) -> tuple[CurrentUserPermissionInfo, list[ModuleAccessRead]]:
     current_user_permissions = resolve_current_user_permission_info(db, user)
+    items = [
+        build_module_access_state(manifest, current_user_permissions)
+        for manifest in list_module_manifests()
+    ]
+    emit_event(
+        event_type="category_tree.read",
+        module="system",
+        action="category_tree.read",
+        source="system",
+        status="success",
+        user_id=str(user.id),
+        payload={
+            "operation": "list_modules_for_user",
+            "count": len(items),
+            "role": user.role,
+        },
+    )
     return (
         current_user_permissions,
-        [
-            build_module_access_state(manifest, current_user_permissions)
-            for manifest in list_module_manifests()
-        ],
+        items,
     )

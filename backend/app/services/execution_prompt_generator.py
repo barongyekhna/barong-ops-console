@@ -49,6 +49,7 @@ from .capability_binding_engine import (
     validate_capability_binding_engine,
     validate_capability_binding_request,
 )
+from .event_collector import record_llm_request, record_llm_response
 from .model_lock_registry import (
     validate_model_lock_registry,
     validate_model_lock_request,
@@ -642,6 +643,31 @@ def build_execution_prompt_payload(
         payload_id=payload_id,
         prompt=prompt,
         context=structured_context,
+    )
+    record_llm_request(
+        provider="contract-only",
+        model=model,
+        context_id=structured_context.context_id,
+        prompt_input=safe_context,
+        module="C14",
+        metadata={
+            "capability": safe_capability,
+            "key": key,
+            "runtime_invocation": False,
+        },
+    )
+    record_llm_response(
+        provider="contract-only",
+        model=model,
+        status="success",
+        context_id=structured_context.context_id,
+        prompt_output=prompt.prompt_text,
+        token_usage={},
+        module="C14",
+        metadata={
+            "prompt_id": prompt.prompt_id,
+            "runtime_invocation": False,
+        },
     )
 
     return ExecutionPromptGenerationResult(

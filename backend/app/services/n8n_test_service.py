@@ -49,6 +49,7 @@ from ..schemas.n8n_test import (
 from ..schemas.registry import AgentCreate, ModuleCreate, WorkflowCreate
 from ..schemas.reviews import ReviewCreate, ReviewResponse
 from .auth_service import AuditContext
+from .event_collector import record_workflow_event
 from .n8n_test_http_client import build_n8n_test_mock_response
 
 ALLOWED_TERMINAL_STATUSES = {"completed_demo", "failed"}
@@ -292,6 +293,16 @@ def run_n8n_test(
         requested_by_user_id=user.id,
     )
     db.flush()
+    record_workflow_event(
+        event_type="n8n.workflow.trigger",
+        action="n8n.workflow.trigger",
+        context_id=audit.request_id,
+        workflow_id=N8N_TEST_WORKFLOW_KEY,
+        module_key=N8N_TEST_MODULE_KEY,
+        status="pending",
+        source="backend",
+        payload={"run_id": run_id, "mock_only": True},
+    )
     _append_event(
         db,
         job=job,
@@ -302,6 +313,16 @@ def run_n8n_test(
         details={"run_type": N8N_TEST_RUN_TYPE},
     )
     job.started_at = datetime.now(timezone.utc)
+    record_workflow_event(
+        event_type="workflow.execution.start",
+        action="workflow.execution.start",
+        context_id=audit.request_id,
+        workflow_id=N8N_TEST_WORKFLOW_KEY,
+        module_key=N8N_TEST_MODULE_KEY,
+        status="pending",
+        source="n8n",
+        payload={"job_id": job_id, "mock_only": True},
+    )
     _append_event(
         db,
         job=job,
@@ -343,6 +364,20 @@ def run_n8n_test(
         "webhook_triggered": False,
     }
     mock_status_code = build_n8n_test_mock_response(payload=mock_payload)
+    record_workflow_event(
+        event_type="n8n.workflow.dispatch",
+        action="n8n.workflow.dispatch",
+        context_id=audit.request_id,
+        workflow_id=N8N_TEST_WORKFLOW_KEY,
+        module_key=N8N_TEST_MODULE_KEY,
+        status="success",
+        source="n8n",
+        payload={
+            "job_id": job_id,
+            "mock_status_code": mock_status_code,
+            "external_dispatch_blocked": True,
+        },
+    )
 
     _append_event(
         db,
@@ -431,6 +466,16 @@ def run_n8n_test(
     )
 
     job.finished_at = datetime.now(timezone.utc)
+    record_workflow_event(
+        event_type="workflow.execution.end",
+        action="workflow.execution.end",
+        context_id=audit.request_id,
+        workflow_id=N8N_TEST_WORKFLOW_KEY,
+        module_key=N8N_TEST_MODULE_KEY,
+        status="success",
+        source="n8n",
+        payload={"job_id": job_id, "terminal_status": "completed_demo"},
+    )
     _append_event(
         db,
         job=job,
@@ -526,6 +571,16 @@ def process_n8n_test_callback(
             payload=payload,
             audit=audit,
         )
+        record_workflow_event(
+            event_type="webhook.callback.ingress",
+            action="n8n_test.callback",
+            context_id=audit.request_id,
+            workflow_id=N8N_TEST_WORKFLOW_KEY,
+            module_key=N8N_TEST_MODULE_KEY,
+            status="failed",
+            source="n8n",
+            payload={"job_id": payload.job_id, "reason": "unauthorized"},
+        )
         raise N8nTestCallbackAuthenticationError(
             "Invalid n8n test callback authentication."
         )
@@ -545,6 +600,16 @@ def process_n8n_test_callback(
             details={"reason": "job_is_not_an_n8n_test_run"},
         )
         db.commit()
+        record_workflow_event(
+            event_type="webhook.callback.ingress",
+            action="n8n_test.callback",
+            context_id=audit.request_id,
+            workflow_id=N8N_TEST_WORKFLOW_KEY,
+            module_key=N8N_TEST_MODULE_KEY,
+            status="failed",
+            source="n8n",
+            payload={"job_id": payload.job_id, "reason": "job_rejected"},
+        )
         raise N8nTestCallbackJobError(
             "The callback job is not an active n8n test bridge run."
         )
@@ -564,6 +629,16 @@ def process_n8n_test_callback(
             details={"status": job.status},
         )
         db.commit()
+        record_workflow_event(
+            event_type="webhook.callback.ingress",
+            action="n8n_test.callback_duplicate",
+            context_id=audit.request_id,
+            workflow_id=N8N_TEST_WORKFLOW_KEY,
+            module_key=N8N_TEST_MODULE_KEY,
+            status="success",
+            source="n8n",
+            payload={"job_id": job.job_id, "status": job.status},
+        )
         return _snapshot(db, job=job)
 
     _append_event(
@@ -600,6 +675,20 @@ def process_n8n_test_callback(
             "webhook_triggered": False,
             "mock_only": True,
             "blocked_by": "c11b_external_execution_lock",
+        },
+    )
+    record_workflow_event(
+        event_type="webhook.callback.ingress",
+        action="n8n_test.callback",
+        context_id=audit.request_id,
+        workflow_id=N8N_TEST_WORKFLOW_KEY,
+        module_key=N8N_TEST_MODULE_KEY,
+        status="success",
+        source="n8n",
+        payload={
+            "job_id": job.job_id,
+            "reported_status": payload.status,
+            "callback_blocked_mock_only": True,
         },
     )
     db.commit()

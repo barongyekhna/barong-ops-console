@@ -3,12 +3,13 @@ from sqlalchemy.orm import Session
 
 from ..models.registry import AgentRegistry, ModuleRegistry, WorkflowRegistry
 from ..schemas.registry import AgentCreate, ModuleCreate, WorkflowCreate
+from ..services.event_collector import emit_event
 
 
 def list_modules(
     db: Session, *, limit: int, offset: int
 ) -> list[ModuleRegistry]:
-    return list(
+    modules = list(
         db.scalars(
             select(ModuleRegistry)
             .order_by(ModuleRegistry.id.desc())
@@ -16,6 +17,15 @@ def list_modules(
             .offset(offset)
         )
     )
+    emit_event(
+        event_type="category_tree.read",
+        module="system",
+        action="category_tree.read",
+        source="system",
+        status="success",
+        payload={"operation": "list_modules", "count": len(modules)},
+    )
+    return modules
 
 
 def get_module(db: Session, module_key: str) -> ModuleRegistry | None:
@@ -28,6 +38,18 @@ def create_module(db: Session, payload: ModuleCreate) -> ModuleRegistry:
     values = payload.model_dump(exclude={"module_key"})
     module = ModuleRegistry(module_id=payload.module_key, **values)
     db.add(module)
+    emit_event(
+        event_type="category_tree.update",
+        module="system",
+        action="category_tree.update",
+        source="system",
+        status="success",
+        payload={
+            "operation": "create_module",
+            "module_key": payload.module_key,
+            "status": payload.status,
+        },
+    )
     return module
 
 

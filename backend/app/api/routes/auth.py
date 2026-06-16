@@ -57,6 +57,7 @@ def login(
             headers={"Retry-After": str(exc.retry_after_seconds)},
         ) from None
 
+    request.state.user_id = str(result.user.id)
     set_session_cookie(
         response,
         session_id=result.session_id,

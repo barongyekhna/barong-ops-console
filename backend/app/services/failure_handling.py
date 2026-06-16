@@ -37,6 +37,7 @@ from .callback_handler import (
     CallbackStatusTransitionError,
     update_execution_status,
 )
+from .event_collector import record_workflow_event
 from .result_normalization import normalize_workflow_result
 from .webhook_gateway import (
     WebhookGatewayConfigurationError,
@@ -359,6 +360,35 @@ def handle_failure(
         if retry_decision.retry_status == "retry_scheduled"
         else "dead_lettered"
     )
+    record_workflow_event(
+        event_type="workflow.failure",
+        action="workflow.failure",
+        context_id=request.context_id,
+        workflow_id=request.workflow_id,
+        module_key=request.module,
+        status="failed",
+        source="backend",
+        payload={
+            "failure_type": request.failure_type,
+            "attempt": request.attempt,
+            "handling_status": handling_status,
+            "dlq_id": dlq_record.dlq_id,
+        },
+    )
+    record_workflow_event(
+        event_type="workflow.retry",
+        action="workflow.retry",
+        context_id=request.context_id,
+        workflow_id=request.workflow_id,
+        module_key=request.module,
+        status=(
+            "pending"
+            if retry_decision.retry_status == "retry_scheduled"
+            else "failed"
+        ),
+        source="backend",
+        payload=retry_decision.model_dump(mode="json"),
+    )
     return FailureHandlingOutcome(
         handling_status=handling_status,
         reason=(
@@ -390,6 +420,20 @@ def evaluate_timeout(
     elapsed_seconds = max((checked_at - started_at).total_seconds(), 0.0)
     checked_timestamp = _timestamp(checked_at)
     if elapsed_seconds < request.timeout_seconds:
+        record_workflow_event(
+            event_type="workflow.timeout",
+            action="workflow.timeout.evaluate",
+            context_id=request.context_id,
+            workflow_id=request.workflow_id,
+            module_key=request.module,
+            status="success",
+            source="backend",
+            payload={
+                "timeout_status": "within_timeout",
+                "elapsed_seconds": elapsed_seconds,
+                "timeout_seconds": request.timeout_seconds,
+            },
+        )
         return TimeoutHandlingDecision(
             timeout_status="within_timeout",
             context_id=request.context_id,
@@ -423,6 +467,20 @@ def evaluate_timeout(
         ),
         store=store,
         now=checked_at,
+    )
+    record_workflow_event(
+        event_type="workflow.timeout",
+        action="workflow.timeout.evaluate",
+        context_id=request.context_id,
+        workflow_id=request.workflow_id,
+        module_key=request.module,
+        status="failed",
+        source="backend",
+        payload={
+            "timeout_status": "timed_out",
+            "elapsed_seconds": elapsed_seconds,
+            "timeout_seconds": request.timeout_seconds,
+        },
     )
     return TimeoutHandlingDecision(
         timeout_status="timed_out",
@@ -478,6 +536,16 @@ def manual_replay_context(
     target_store = store or DEFAULT_DEAD_LETTER_QUEUE
     record = target_store.get(request.context_id)
     if record is None:
+        record_workflow_event(
+            event_type="workflow.retry",
+            action="workflow.manual_replay",
+            context_id=request.context_id,
+            workflow_id=None,
+            module_key=None,
+            status="failed",
+            source="backend",
+            payload={"recovery_status": "not_found"},
+        )
         return RecoveryPlan(
             recovery_status="not_found",
             context_id=request.context_id,
@@ -499,6 +567,16 @@ def manual_replay_context(
     if record.status == "closed" or (
         record.status == "replayed" and not request.force_replay
     ):
+        record_workflow_event(
+            event_type="workflow.retry",
+            action="workflow.manual_replay",
+            context_id=request.context_id,
+            workflow_id=record.workflow_id,
+            module_key=record.module,
+            status="failed",
+            source="backend",
+            payload={"recovery_status": "replay_rejected"},
+        )
         return RecoveryPlan(
             recovery_status="replay_rejected",
             context_id=request.context_id,
@@ -541,6 +619,16 @@ def manual_replay_context(
         raise FailureRecoveryError(str(exc)) from exc
 
     if gateway_decision.gateway_status != "accepted":
+        record_workflow_event(
+            event_type="workflow.retry",
+            action="workflow.manual_replay",
+            context_id=request.context_id,
+            workflow_id=record.workflow_id,
+            module_key=record.module,
+            status="failed",
+            source="backend",
+            payload={"recovery_status": "replay_rejected"},
+        )
         return RecoveryPlan(
             recovery_status="replay_rejected",
             context_id=request.context_id,
@@ -558,6 +646,16 @@ def manual_replay_context(
     updated_record = target_store.mark_replayed(
         record,
         replayed_at=_utc_now_timestamp(),
+    )
+    record_workflow_event(
+        event_type="workflow.retry",
+        action="workflow.manual_replay",
+        context_id=request.context_id,
+        workflow_id=record.workflow_id,
+        module_key=record.module,
+        status="pending",
+        source="backend",
+        payload={"recovery_status": "replay_prepared"},
     )
     return RecoveryPlan(
         recovery_status="replay_prepared",

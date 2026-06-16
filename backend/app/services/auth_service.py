@@ -28,6 +28,7 @@ from ..repositories.users import (
     reset_login_failures,
     update_last_login,
 )
+from .event_collector import emit_event
 from .rate_limiter import register_login_rate_limit_attempt
 
 
@@ -221,6 +222,18 @@ def login(
             reason=rate_limit_decision.reason or "distributed_rate_limit",
             retry_after_seconds=rate_limit_decision.retry_after_seconds or 1,
         )
+        emit_event(
+            event_type="auth.login",
+            module="system",
+            action="auth.login",
+            source="backend",
+            status="failed",
+            context_id=audit.request_id,
+            payload={
+                "outcome": "rate_limited",
+                "reason": rate_limit_decision.reason,
+            },
+        )
         raise LoginRateLimitError(
             retry_after_seconds=rate_limit_decision.retry_after_seconds or 1
         )
@@ -241,6 +254,16 @@ def login(
                 reason="user_backoff_or_lockout",
                 retry_after_seconds=retry_after,
                 user=user,
+            )
+            emit_event(
+                event_type="auth.login",
+                module="system",
+                action="auth.login",
+                source="backend",
+                status="failed",
+                context_id=audit.request_id,
+                user_id=str(user.id),
+                payload={"outcome": "rate_limited", "reason": "user_backoff"},
             )
             raise LoginRateLimitError(retry_after_seconds=retry_after)
 
@@ -276,6 +299,16 @@ def login(
             details={"outcome": "invalid_credentials"},
         )
         db.commit()
+        emit_event(
+            event_type="auth.login",
+            module="system",
+            action="auth.login",
+            source="backend",
+            status="failed",
+            context_id=audit.request_id,
+            user_id=str(user.id) if user is not None else None,
+            payload={"outcome": "invalid_credentials"},
+        )
         raise InvalidCredentialsError("Invalid username or password.")
 
     logged_in_at = _now()
@@ -302,6 +335,16 @@ def login(
         details={"outcome": "session_created", "role": user.role},
     )
     db.commit()
+    emit_event(
+        event_type="auth.login",
+        module="system",
+        action="auth.login",
+        source="backend",
+        status="success",
+        context_id=audit.request_id,
+        user_id=str(user.id),
+        payload={"outcome": "session_created", "role": user.role},
+    )
     return LoginResult(
         session_id=session_id,
         user=user,
@@ -437,3 +480,13 @@ def logout(
         details={"outcome": "session_invalidated"},
     )
     db.commit()
+    emit_event(
+        event_type="auth.logout",
+        module="system",
+        action="auth.logout",
+        source="backend",
+        status="success",
+        context_id=audit.request_id,
+        user_id=str(user.id),
+        payload={"outcome": "session_invalidated"},
+    )

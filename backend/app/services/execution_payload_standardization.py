@@ -36,6 +36,7 @@ from .capability_binding_engine import (
     build_capability_routing_model,
     validate_capability_binding_request,
 )
+from .event_collector import record_workflow_event
 from .module_registry import MODULE_KEY_PATTERN, get_module_manifest
 from .workflow_registry_system import (
     evaluate_workflow_invocation,
@@ -553,7 +554,7 @@ def normalize_execution_payload_request(
             execution_metadata_attached=True,
         )
 
-    return ExecutionPayloadNormalizationResult(
+    result = ExecutionPayloadNormalizationResult(
         normalization_status="accepted",
         reason=(
             "C15C normalized the module request, attached C15A workflow_id, "
@@ -581,6 +582,17 @@ def normalize_execution_payload_request(
         execution_metadata_attached=True,
         standardized_request_schema_valid=True,
     )
+    record_workflow_event(
+        event_type="n8n.workflow.trigger",
+        action="n8n.workflow.trigger",
+        context_id=context_id,
+        workflow_id=workflow_id,
+        module_key=module,
+        status="pending",
+        source="backend",
+        payload={"task": task, "execution_metadata_attached": True},
+    )
+    return result
 
 
 def get_payload_standardization_model() -> ExecutionPayloadStandardizationModel:

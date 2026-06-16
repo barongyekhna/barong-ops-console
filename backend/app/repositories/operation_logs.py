@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from ..models.operation_log import OperationLog
 from ..schemas.common import is_runtime_address_key, sanitize_runtime_address_data
+from ..services.event_collector import emit_event
 
 SENSITIVE_KEY_MARKERS = (
     "password",
@@ -91,6 +92,24 @@ def create_operation_log(
         details=_sanitize_details(details) if details is not None else None,
     )
     db.add(operation_log)
+    emit_event(
+        event_type="log.write",
+        module="system",
+        action="log.write",
+        source="system",
+        status="success",
+        context_id=request_id,
+        user_id=actor_id if actor_type == "user" else None,
+        payload={
+            "operation_log_id": operation_log.operation_id,
+            "actor_type": actor_type,
+            "action": action,
+            "target_type": target_type,
+            "target_id": target_id,
+            "result": result,
+            "error_code": error_code,
+        },
+    )
     return operation_log
 
 
@@ -102,7 +121,7 @@ def list_operation_logs(
 ) -> list[OperationLog]:
     from sqlalchemy import select
 
-    return list(
+    logs = list(
         db.scalars(
             select(OperationLog)
             .order_by(OperationLog.id.desc())
@@ -110,6 +129,15 @@ def list_operation_logs(
             .offset(offset)
         )
     )
+    emit_event(
+        event_type="log.read",
+        module="system",
+        action="log.read",
+        source="system",
+        status="success",
+        payload={"operation": "list_operation_logs", "count": len(logs)},
+    )
+    return logs
 
 
 def get_operation_log(
@@ -118,8 +146,17 @@ def get_operation_log(
 ) -> OperationLog | None:
     from sqlalchemy import select
 
-    return db.scalar(
+    operation_log = db.scalar(
         select(OperationLog).where(
             OperationLog.operation_id == operation_id
         )
     )
+    emit_event(
+        event_type="log.read",
+        module="system",
+        action="log.read",
+        source="system",
+        status="success" if operation_log is not None else "failed",
+        payload={"operation": "get_operation_log", "operation_id": operation_id},
+    )
+    return operation_log

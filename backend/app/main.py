@@ -44,6 +44,8 @@ from .core.config import get_settings
 from .core.rbac import normalize_rbac_role
 from .core.security_headers import apply_security_headers
 from .db.session import SessionLocal
+from .middleware.event_collector import capture_audit_events
+from .services.event_collector import emit_event
 from .services.auth_service import InvalidSessionError, validate_session
 
 settings = get_settings()
@@ -202,8 +204,27 @@ async def enforce_control_plane_isolation(request: Request, call_next):
     if not _is_control_plane_path(request.url.path):
         return await call_next(request)
 
+    audit = get_audit_context(request)
+    emit_event(
+        event_type="control_plane.entry",
+        module="C16",
+        action=f"{request.method} {request.url.path}",
+        source="backend",
+        status="pending",
+        context_id=audit.request_id,
+        payload={"path": request.url.path, "method": request.method},
+    )
     session_id = request.cookies.get(settings.auth_session_cookie_name)
     if session_id is None:
+        emit_event(
+            event_type="control_plane.exit",
+            module="C16",
+            action=f"{request.method} {request.url.path}",
+            source="backend",
+            status="failed",
+            context_id=audit.request_id,
+            payload={"reason": "missing_session"},
+        )
         return _control_plane_denied_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated.",
@@ -217,6 +238,15 @@ async def enforce_control_plane_isolation(request: Request, call_next):
                 audit=get_audit_context(request),
             )
         except InvalidSessionError:
+            emit_event(
+                event_type="control_plane.exit",
+                module="C16",
+                action=f"{request.method} {request.url.path}",
+                source="backend",
+                status="failed",
+                context_id=audit.request_id,
+                payload={"reason": "invalid_session"},
+            )
             return _control_plane_denied_response(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Not authenticated.",
@@ -224,12 +254,35 @@ async def enforce_control_plane_isolation(request: Request, call_next):
 
         role = normalize_rbac_role(current_session.user.role)
         if role not in CONTROL_PLANE_ROLES:
+            request.state.user_id = str(current_session.user.id)
+            emit_event(
+                event_type="control_plane.exit",
+                module="C16",
+                action=f"{request.method} {request.url.path}",
+                source="backend",
+                status="failed",
+                context_id=audit.request_id,
+                user_id=str(current_session.user.id),
+                payload={"reason": "role_denied", "role": role},
+            )
             return _control_plane_denied_response(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Forbidden.",
             )
+        request.state.user_id = str(current_session.user.id)
 
-    return await call_next(request)
+    response = await call_next(request)
+    emit_event(
+        event_type="control_plane.exit",
+        module="C16",
+        action=f"{request.method} {request.url.path}",
+        source="backend",
+        status="success" if response.status_code < 400 else "failed",
+        context_id=audit.request_id,
+        user_id=getattr(request.state, "user_id", None),
+        payload={"status_code": response.status_code},
+    )
+    return response
 
 
 @app.middleware("http")
@@ -237,6 +290,11 @@ async def add_security_headers(request: Request, call_next):
     response = await call_next(request)
     apply_security_headers(response, settings=settings)
     return response
+
+
+@app.middleware("http")
+async def collect_audit_events(request: Request, call_next):
+    return await capture_audit_events(request, call_next)
 
 
 app.include_router(health_router, prefix=PUBLIC_API_PREFIX)

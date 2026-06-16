@@ -4,12 +4,13 @@ from sqlalchemy.orm import Session
 from ..models.context import ContextPacket
 from ..models.memory import MemoryEvent, MemorySummary
 from ..schemas.memory import ContextPacketCreate, MemoryEventCreate
+from ..services.event_collector import record_product_knowledge_event
 
 
 def list_memory_events(
     db: Session, *, limit: int, offset: int
 ) -> list[MemoryEvent]:
-    return list(
+    events = list(
         db.scalars(
             select(MemoryEvent)
             .order_by(MemoryEvent.id.desc())
@@ -17,16 +18,30 @@ def list_memory_events(
             .offset(offset)
         )
     )
+    record_product_knowledge_event(
+        action="read",
+        payload={"operation": "list_memory_events", "count": len(events)},
+    )
+    return events
 
 
 def get_memory_event(
     db: Session, memory_event_id: str
 ) -> MemoryEvent | None:
-    return db.scalar(
+    event = db.scalar(
         select(MemoryEvent).where(
             MemoryEvent.memory_event_id == memory_event_id
         )
     )
+    record_product_knowledge_event(
+        action="read",
+        status="success" if event is not None else "failed",
+        payload={
+            "operation": "get_memory_event",
+            "memory_event_id": memory_event_id,
+        },
+    )
+    return event
 
 
 def create_memory_event(
@@ -42,13 +57,23 @@ def create_memory_event(
         created_by_id=created_by_id,
     )
     db.add(event)
+    record_product_knowledge_event(
+        action="write",
+        payload={
+            "operation": "create_memory_event",
+            "memory_event_id": payload.memory_event_id,
+            "subject_type": payload.subject_type,
+            "subject_id": payload.subject_id,
+            "job_id": payload.job_id,
+        },
+    )
     return event
 
 
 def list_context_packets(
     db: Session, *, limit: int, offset: int
 ) -> list[ContextPacket]:
-    return list(
+    packets = list(
         db.scalars(
             select(ContextPacket)
             .order_by(ContextPacket.id.desc())
@@ -56,16 +81,30 @@ def list_context_packets(
             .offset(offset)
         )
     )
+    record_product_knowledge_event(
+        action="read",
+        payload={"operation": "list_context_packets", "count": len(packets)},
+    )
+    return packets
 
 
 def get_context_packet(
     db: Session, context_packet_id: str
 ) -> ContextPacket | None:
-    return db.scalar(
+    packet = db.scalar(
         select(ContextPacket).where(
             ContextPacket.context_packet_id == context_packet_id
         )
     )
+    record_product_knowledge_event(
+        action="read",
+        status="success" if packet is not None else "failed",
+        payload={
+            "operation": "get_context_packet",
+            "context_packet_id": context_packet_id,
+        },
+    )
+    return packet
 
 
 def create_context_packet(
@@ -84,13 +123,23 @@ def create_context_packet(
         expires_at=payload.expires_at,
     )
     db.add(packet)
+    record_product_knowledge_event(
+        action="write",
+        payload={
+            "operation": "create_context_packet",
+            "context_packet_id": payload.context_packet_id,
+            "source_job_id": payload.source_job_id,
+            "source_module_key": payload.source_module_key,
+            "target_module_key": payload.target_module_key,
+        },
+    )
     return packet
 
 
 def list_memory_summaries(
     db: Session, *, limit: int, offset: int
 ) -> list[MemorySummary]:
-    return list(
+    summaries = list(
         db.scalars(
             select(MemorySummary)
             .order_by(MemorySummary.id.desc())
@@ -98,13 +147,24 @@ def list_memory_summaries(
             .offset(offset)
         )
     )
+    record_product_knowledge_event(
+        action="read",
+        payload={"operation": "list_memory_summaries", "count": len(summaries)},
+    )
+    return summaries
 
 
 def get_memory_summary(
     db: Session, summary_id: str
 ) -> MemorySummary | None:
-    return db.scalar(
+    summary = db.scalar(
         select(MemorySummary).where(
             MemorySummary.memory_summary_id == summary_id
         )
     )
+    record_product_knowledge_event(
+        action="read",
+        status="success" if summary is not None else "failed",
+        payload={"operation": "get_memory_summary", "summary_id": summary_id},
+    )
+    return summary

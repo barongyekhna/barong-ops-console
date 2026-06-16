@@ -29,6 +29,7 @@ from ..schemas.callback_handler import (
 from ..schemas.execution_payload_standardization import (
     ExecutionPayloadStandardRequest,
 )
+from .event_collector import record_workflow_event
 from .replay_protection import ReplayProtectionError, register_replay_key
 from .webhook_gateway import SIGNATURE_PREFIX
 
@@ -322,7 +323,18 @@ def bind_callback_context(
     store: CallbackExecutionStore | None = None,
 ) -> CallbackContextBinding:
     target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
-    return target_store.bind_execution_request(request)
+    binding = target_store.bind_execution_request(request)
+    record_workflow_event(
+        event_type="workflow.execution.start",
+        action="workflow.execution.start",
+        context_id=binding.context_id,
+        workflow_id=binding.workflow_id,
+        module_key=binding.module,
+        status="pending",
+        source="backend",
+        payload={"task": binding.task},
+    )
+    return binding
 
 
 def get_callback_result(
@@ -373,6 +385,23 @@ def handle_callback(
     target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
     binding, record = target_store.update_status_from_callback(payload)
     notification = _build_module_notification(record)
+    record_workflow_event(
+        event_type=(
+            "workflow.execution.end"
+            if record.status in TERMINAL_STATUSES
+            else "workflow.execution.status"
+        ),
+        action="workflow.execution.status",
+        context_id=record.context_id,
+        workflow_id=record.workflow_id,
+        module_key=record.module,
+        status="failed" if record.status == "failed" else "success",
+        source="n8n",
+        payload={
+            "execution_status": record.status,
+            "callbacks_received": record.callbacks_received,
+        },
+    )
     return CallbackHandlerResult(
         processing_status="accepted",
         reason=(
@@ -411,6 +440,20 @@ def update_execution_status(
         timestamp=_utc_now_timestamp(),
     )
     _, updated_record = target_store.update_status_from_callback(payload)
+    record_workflow_event(
+        event_type=(
+            "workflow.execution.end"
+            if updated_record.status in TERMINAL_STATUSES
+            else "workflow.execution.status"
+        ),
+        action="workflow.execution.status",
+        context_id=updated_record.context_id,
+        workflow_id=updated_record.workflow_id,
+        module_key=updated_record.module,
+        status="failed" if updated_record.status == "failed" else "success",
+        source="backend",
+        payload={"execution_status": updated_record.status},
+    )
     return updated_record
 
 
