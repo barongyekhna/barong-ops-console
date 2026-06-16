@@ -5,6 +5,7 @@ from .approval import (
     ApprovalRequestRecord,
     ApprovalWorkflowRecord,
 )
+from .contact_identity import ContactIdentityRecord
 from .context import ContextPacket
 from .error import SystemError
 from .job import AutomationJob, JobEvent
@@ -30,6 +31,7 @@ __all__ = [
     "Artifact",
     "AuthSession",
     "AutomationJob",
+    "ContactIdentityRecord",
     "ContextPacket",
     "JobEvent",
     "MemoryEvent",

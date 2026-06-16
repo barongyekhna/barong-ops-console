@@ -154,7 +154,17 @@ PostgreSQL 是 Barong Ops Console 的状态真相源。本文定义逻辑设计�
 
 **空地基必需：** 预留，Agent 实际获得 Memory 读取能力前必须落表。
 
-## 16. 关系与一致性底线
+## 16. `contact_identities`
+
+**用途：** 保存企业内部通讯的不可变联系人身份快照。身份用于目录和消息显示，不等于认证账号。
+
+**关键字段草案：** `user_id`、`name`、`org_id`、`org_name`、`title`、`role`、`created_at`、`updated_at`。
+
+**最低约束：** `user_id` 主键；`role` 仅允许 `owner`、`org_admin`、`member`；`name`、`org_name`、`title` 仅允许 owner 或同 org 的 org_admin 通过受控服务更新；普通 member 不能修改任何身份字段。
+
+**空地基必需：** C19A 设计已定义；本阶段不执行 migration。
+
+## 17. 关系与一致性底线
 
 - Registry 记录是 Job 创建的前置条件。
 - `automation_jobs` 是执行实例主记录，`job_events` 是其追加式状态历史。
@@ -162,4 +172,3 @@ PostgreSQL 是 Barong Ops Console 的状态真相源。本文定义逻辑设计�
 - n8n execution id 只能作为外部引用，不能替代 `job_id`。
 - 日志、错误和审核历史不能因 Registry 停用或 Job 归档而丢失。
 - 具体外键删除策略、索引和状态枚举由 F06/F07 在 migration 设计中确认。
-
