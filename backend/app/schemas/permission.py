@@ -1,11 +1,241 @@
 from datetime import datetime
+from enum import StrEnum
+from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from ..core.permissions import (
     validate_scope,
 )
+
+
+class PermissionAction(StrEnum):
+    READ = "read"
+    WRITE = "write"
+    DELETE = "delete"
+    EXECUTE = "execute"
+    ADMIN = "admin"
+
+
+class PermissionRole(StrEnum):
+    OWNER = "owner"
+    ADMIN = "admin"
+    MEMBER = "member"
+
+
+class Permission(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    user_id: str = Field(min_length=1, max_length=255)
+    org_id: str = Field(min_length=1, max_length=68)
+    module_id: str = Field(min_length=1, max_length=128)
+    actions: list[PermissionAction] = Field(min_length=1)
+    role: PermissionRole
+
+    @field_validator("user_id", "org_id", "module_id")
+    @classmethod
+    def normalize_identity(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Permission identity fields must not be empty.")
+        return normalized
+
+    @field_validator("actions")
+    @classmethod
+    def deduplicate_actions(
+        cls,
+        actions: list[PermissionAction],
+    ) -> list[PermissionAction]:
+        seen: set[PermissionAction] = set()
+        unique: list[PermissionAction] = []
+        for action in actions:
+            if action not in seen:
+                seen.add(action)
+                unique.append(action)
+        return unique
+
+
+class PermissionDecision(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    user_id: str = Field(min_length=1, max_length=255)
+    org_id: str = Field(min_length=1, max_length=68)
+    module_id: str = Field(min_length=1, max_length=128)
+    action: PermissionAction
+    role: PermissionRole | None = None
+    allowed: bool
+    denied: bool
+    denial_code: str | None = Field(default=None, max_length=120)
+    reason: str = Field(min_length=1, max_length=500)
+    owner_override_applied: bool = False
+    permission: Permission | None = None
+    c18c_org_membership_checked: bool
+    c18d_module_binding_checked: bool
+    c18e_visibility_grants_permission: Literal[False] = False
+    data_access_granted: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_decision_shape(self) -> "PermissionDecision":
+        if self.denied == self.allowed:
+            raise ValueError("PermissionDecision denied must be the inverse of allowed.")
+        if self.allowed and self.denial_code is not None:
+            raise ValueError("Allowed permission decisions must not include denial_code.")
+        if self.denied and self.denial_code is None:
+            raise ValueError("Denied permission decisions must include denial_code.")
+        return self
+
+
+class PermissionOrgIsolationRules(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rule_id: Literal["c18f_org_isolation_rules_v1"] = (
+        "c18f_org_isolation_rules_v1"
+    )
+    permission_scope: Literal["org"] = "org"
+    rule: Literal["user.org_id != target.org_id -> DENY"] = (
+        "user.org_id != target.org_id -> DENY"
+    )
+    active_c18c_membership_required: Literal[True] = True
+    cross_org_permission_inheritance_allowed: Literal[False] = False
+    cross_org_module_operation_allowed: Literal[False] = False
+
+
+class PermissionModuleIsolationRules(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    rule_id: Literal["c18f_module_isolation_rules_v1"] = (
+        "c18f_module_isolation_rules_v1"
+    )
+    c18d_binding_required: Literal[True] = True
+    rule_unbound_module: Literal["module not bound to org -> DENY"] = (
+        "module not bound to org -> DENY"
+    )
+    rule_bound_without_role: Literal["module bound but user lacks role -> DENY"] = (
+        "module bound but user lacks role -> DENY"
+    )
+    module_visibility_is_not_execution_permission: Literal[True] = True
+
+
+class PermissionOwnerOverrideLogic(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    logic_id: Literal["c18f_owner_override_v1"] = "c18f_owner_override_v1"
+    owner_role_source: Literal["users.role"] = "users.role"
+    rule: Literal["if user.role == 'owner': RETURN ALLOW"] = (
+        "if user.role == 'owner': RETURN ALLOW"
+    )
+    owner_can_access_all_orgs: Literal[True] = True
+    owner_can_access_all_modules: Literal[True] = True
+    owner_can_execute_all_actions: Literal[True] = True
+    owner_bypasses_permission_check: Literal[True] = True
+
+
+class PermissionGranularityModel(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    model_id: Literal["c18f_permission_granularity_v1"] = (
+        "c18f_permission_granularity_v1"
+    )
+    supported_actions: tuple[
+        Literal["read"],
+        Literal["write"],
+        Literal["delete"],
+        Literal["execute"],
+        Literal["admin"],
+    ] = ("read", "write", "delete", "execute", "admin")
+    admin_role_actions: tuple[
+        Literal["read"],
+        Literal["write"],
+        Literal["execute"],
+    ] = ("read", "write", "execute")
+    member_role_actions: tuple[Literal["read"]] = ("read",)
+    k_series_actions: tuple[
+        Literal["read"],
+        Literal["write"],
+        Literal["execute"],
+    ] = ("read", "write", "execute")
+    c_series_actions: tuple[Literal["admin"]] = ("admin",)
+    p_series_actions: tuple[Literal["write"]] = ("write",)
+
+
+class PermissionApiMiddlewareDesign(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    design_id: Literal["c18f_api_permission_middleware_v1"] = (
+        "c18f_api_permission_middleware_v1"
+    )
+    implementation_path: Literal["backend/app/middleware/permission.py"] = (
+        "backend/app/middleware/permission.py"
+    )
+    intercepts: tuple[
+        Literal["api_request"],
+        Literal["module_access"],
+        Literal["workflow_execution_c15"],
+        Literal["ai_execution_c14"],
+        Literal["logs_access_c17"],
+    ] = (
+        "api_request",
+        "module_access",
+        "workflow_execution_c15",
+        "ai_execution_c14",
+        "logs_access_c17",
+    )
+    requires_org_context_for_enforcement: Literal[True] = True
+    requires_module_context_for_enforcement: Literal[True] = True
+    owner_override_first: Literal[True] = True
+
+
+class PermissionC18Integration(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    integration_id: Literal["c18f_c18c_c18d_c18e_integration_v1"] = (
+        "c18f_c18c_c18d_c18e_integration_v1"
+    )
+    c18c_source: Literal["org_memberships"] = "org_memberships"
+    c18d_source: Literal["module_bindings"] = "module_bindings"
+    c18e_source: Literal["module visibility is advisory only"] = (
+        "module visibility is advisory only"
+    )
+    uses_c18c_org_membership: Literal[True] = True
+    uses_c18d_module_binding: Literal[True] = True
+    c18e_grants_permission: Literal[False] = False
+    modifies_c18a_to_c18e: Literal[False] = False
+
+
+class PermissionSecurityBoundary(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    boundary_id: Literal["c18f_security_boundary_v1"] = "c18f_security_boundary_v1"
+    permission_equals_visibility: Literal[False] = False
+    permission_equals_data_access: Literal[False] = False
+    module_visibility_equals_module_execution_permission: Literal[False] = False
+    data_access_controlled_by: Literal["C17"] = "C17"
+    c18f_controls: Literal["what action a user may execute in org + module"] = (
+        "what action a user may execute in org + module"
+    )
+    storage_changes_added: Literal[False] = False
+    db_migration_executed: Literal[False] = False
+    frontend_logic_added: Literal[False] = False
+
+
+class PermissionIsolationCompletionStatus(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    stage: Literal["C18F"] = "C18F"
+    component: Literal["Permission Isolation Layer"] = "Permission Isolation Layer"
+    completion_status: Literal["complete"] = "complete"
+    permission_data_model_defined: Literal[True] = True
+    check_permission_implemented: Literal[True] = True
+    org_isolation_rules_defined: Literal[True] = True
+    module_isolation_rules_defined: Literal[True] = True
+    owner_override_logic_defined: Literal[True] = True
+    api_middleware_design_defined: Literal[True] = True
+    c18c_c18d_c18e_integrated: Literal[True] = True
+    security_boundary_defined: Literal[True] = True
+    migration_executed: Literal[False] = False
+    ui_implemented: Literal[False] = False
+    data_storage_changed: Literal[False] = False
 
 
 class PermissionRegistryRead(BaseModel):
@@ -226,3 +456,35 @@ class CurrentUserPermissionResponse(BaseModel):
     user_id: int
     role: str
     permissions: CurrentUserPermissionsRead
+
+
+def get_permission_org_isolation_rules() -> PermissionOrgIsolationRules:
+    return PermissionOrgIsolationRules()
+
+
+def get_permission_module_isolation_rules() -> PermissionModuleIsolationRules:
+    return PermissionModuleIsolationRules()
+
+
+def get_permission_owner_override_logic() -> PermissionOwnerOverrideLogic:
+    return PermissionOwnerOverrideLogic()
+
+
+def get_permission_granularity_model() -> PermissionGranularityModel:
+    return PermissionGranularityModel()
+
+
+def get_permission_api_middleware_design() -> PermissionApiMiddlewareDesign:
+    return PermissionApiMiddlewareDesign()
+
+
+def get_permission_c18_integration() -> PermissionC18Integration:
+    return PermissionC18Integration()
+
+
+def get_permission_security_boundary() -> PermissionSecurityBoundary:
+    return PermissionSecurityBoundary()
+
+
+def get_permission_isolation_completion_status() -> PermissionIsolationCompletionStatus:
+    return PermissionIsolationCompletionStatus()
