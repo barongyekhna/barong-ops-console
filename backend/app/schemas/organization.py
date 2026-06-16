@@ -27,9 +27,12 @@ class OrganizationStatus(StrEnum):
 
 class OrganizationLifecycleOperation(StrEnum):
     CREATE = "create"
+    UPDATE = "update"
     DELETE = "delete"
     RENAME = "rename"
     UPDATE_CORE_FIELDS = "update_core_fields"
+    ACTIVATE = "activate"
+    SUSPEND = "suspend"
 
 
 def generate_org_id() -> str:
@@ -153,6 +156,26 @@ class OrganizationUpdate(BaseModel):
         return self
 
 
+class OrganizationLifecycleUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    org_name: str | None = Field(default=None, min_length=1, max_length=255)
+    org_type: OrganizationType | None = None
+    metadata: OrganizationMetadata | None = None
+
+    @model_validator(mode="after")
+    def require_lifecycle_update_field(self) -> "OrganizationLifecycleUpdate":
+        if not self.model_fields_set or (
+            self.org_name is None and self.org_type is None and self.metadata is None
+        ):
+            raise ValueError("At least one organization lifecycle field is required.")
+        if self.org_name is not None:
+            self.org_name = self.org_name.strip()
+            if not self.org_name:
+                raise ValueError("Organization name must not be empty.")
+        return self
+
+
 class OrganizationTypeRule(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -265,6 +288,10 @@ class OrganizationLifecyclePermissionError(PermissionError):
     pass
 
 
+class OrganizationStatusTransitionError(ValueError):
+    pass
+
+
 def _normalize_user_id(value: str | int) -> str:
     return str(value).strip()
 
@@ -334,6 +361,224 @@ def enforce_owner_can_create_organization(
         owner_user_id=payload.owner_user_id,
         operation=OrganizationLifecycleOperation.CREATE,
     )
+
+
+class OrganizationStatusTransitionDecision(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    operation: OrganizationLifecycleOperation
+    from_status: OrganizationStatus
+    to_status: OrganizationStatus
+    allowed: bool
+    denied: bool
+    denial_code: str | None = Field(default=None, max_length=120)
+    reason: str = Field(min_length=1, max_length=500)
+    deleted_is_terminal: Literal[True] = True
+
+
+def evaluate_organization_status_transition(
+    *,
+    from_status: OrganizationStatus | str,
+    to_status: OrganizationStatus | str,
+    operation: OrganizationLifecycleOperation | str,
+) -> OrganizationStatusTransitionDecision:
+    current_status = OrganizationStatus(from_status)
+    target_status = OrganizationStatus(to_status)
+    lifecycle_operation = OrganizationLifecycleOperation(operation)
+
+    def denied(code: str, reason: str) -> OrganizationStatusTransitionDecision:
+        return OrganizationStatusTransitionDecision(
+            operation=lifecycle_operation,
+            from_status=current_status,
+            to_status=target_status,
+            allowed=False,
+            denied=True,
+            denial_code=code,
+            reason=reason,
+        )
+
+    if current_status == OrganizationStatus.DELETED:
+        return denied(
+            "c18b_deleted_org_terminal",
+            "Deleted organizations are terminal and cannot be reactivated, "
+            "suspended, updated, or deleted again.",
+        )
+
+    expected_target_by_operation = {
+        OrganizationLifecycleOperation.ACTIVATE: OrganizationStatus.ACTIVE,
+        OrganizationLifecycleOperation.SUSPEND: OrganizationStatus.SUSPENDED,
+        OrganizationLifecycleOperation.DELETE: OrganizationStatus.DELETED,
+    }
+    expected_target = expected_target_by_operation.get(lifecycle_operation)
+    if expected_target is not None and target_status != expected_target:
+        return denied(
+            "c18b_status_target_mismatch",
+            "Organization lifecycle operation target status is invalid.",
+        )
+
+    if lifecycle_operation == OrganizationLifecycleOperation.DELETE and (
+        current_status in {OrganizationStatus.ACTIVE, OrganizationStatus.SUSPENDED}
+        and target_status == OrganizationStatus.DELETED
+    ):
+        return OrganizationStatusTransitionDecision(
+            operation=lifecycle_operation,
+            from_status=current_status,
+            to_status=target_status,
+            allowed=True,
+            denied=False,
+            reason="Owner can soft-delete active or suspended organizations.",
+        )
+
+    if lifecycle_operation == OrganizationLifecycleOperation.SUSPEND and (
+        current_status in {OrganizationStatus.ACTIVE, OrganizationStatus.SUSPENDED}
+        and target_status == OrganizationStatus.SUSPENDED
+    ):
+        return OrganizationStatusTransitionDecision(
+            operation=lifecycle_operation,
+            from_status=current_status,
+            to_status=target_status,
+            allowed=True,
+            denied=False,
+            reason="Owner can suspend an active organization; repeated suspend is idempotent.",
+        )
+
+    if lifecycle_operation == OrganizationLifecycleOperation.ACTIVATE and (
+        current_status in {OrganizationStatus.ACTIVE, OrganizationStatus.SUSPENDED}
+        and target_status == OrganizationStatus.ACTIVE
+    ):
+        return OrganizationStatusTransitionDecision(
+            operation=lifecycle_operation,
+            from_status=current_status,
+            to_status=target_status,
+            allowed=True,
+            denied=False,
+            reason="Owner can activate a suspended organization; repeated activate is idempotent.",
+        )
+
+    if lifecycle_operation in {
+        OrganizationLifecycleOperation.UPDATE,
+        OrganizationLifecycleOperation.RENAME,
+        OrganizationLifecycleOperation.UPDATE_CORE_FIELDS,
+    } and target_status == current_status:
+        return OrganizationStatusTransitionDecision(
+            operation=lifecycle_operation,
+            from_status=current_status,
+            to_status=target_status,
+            allowed=True,
+            denied=False,
+            reason="Owner can update organization information without changing status.",
+        )
+
+    return denied(
+        "c18b_illegal_status_transition",
+        "Organization lifecycle status transition is not allowed.",
+    )
+
+
+def enforce_organization_status_transition(
+    *,
+    from_status: OrganizationStatus | str,
+    to_status: OrganizationStatus | str,
+    operation: OrganizationLifecycleOperation | str,
+) -> OrganizationStatusTransitionDecision:
+    decision = evaluate_organization_status_transition(
+        from_status=from_status,
+        to_status=to_status,
+        operation=operation,
+    )
+    if decision.denied:
+        raise OrganizationStatusTransitionError(decision.reason)
+    return decision
+
+
+class OrganizationLifecycleStateMachine(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    machine_id: Literal["c18b_org_lifecycle_state_machine_v1"] = (
+        "c18b_org_lifecycle_state_machine_v1"
+    )
+    statuses: tuple[OrganizationStatus, OrganizationStatus, OrganizationStatus] = (
+        OrganizationStatus.ACTIVE,
+        OrganizationStatus.SUSPENDED,
+        OrganizationStatus.DELETED,
+    )
+    default_status: Literal[OrganizationStatus.ACTIVE] = OrganizationStatus.ACTIVE
+    allowed_transitions: tuple[str, ...] = (
+        "active -> suspended",
+        "suspended -> active",
+        "active -> deleted",
+        "suspended -> deleted",
+    )
+    idempotent_transitions: tuple[str, ...] = (
+        "active -> active",
+        "suspended -> suspended",
+    )
+    forbidden_transitions: tuple[str, ...] = (
+        "deleted -> active",
+        "deleted -> suspended",
+        "deleted -> deleted",
+        "active -> deleted without owner_user_id match",
+        "suspended -> deleted without owner_user_id match",
+    )
+    deleted_is_terminal: Literal[True] = True
+    soft_delete_only: Literal[True] = True
+    physical_delete_allowed: Literal[False] = False
+
+
+class OrganizationLifecycleApiEndpointDesign(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    method: Literal["POST", "PATCH", "DELETE"]
+    path: str = Field(min_length=1, max_length=120)
+    operation: OrganizationLifecycleOperation
+    owner_only_required: Literal[True] = True
+    status_effect: str = Field(min_length=1, max_length=200)
+    audit_log_required: Literal[True] = True
+
+
+class OrganizationLifecycleApiDesign(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    design_id: Literal["c18b_org_lifecycle_api_design_v1"] = (
+        "c18b_org_lifecycle_api_design_v1"
+    )
+    endpoints: tuple[OrganizationLifecycleApiEndpointDesign, ...] = (
+        OrganizationLifecycleApiEndpointDesign(
+            method="POST",
+            path="/org/create",
+            operation=OrganizationLifecycleOperation.CREATE,
+            status_effect="creates org_id internally and sets status=active",
+        ),
+        OrganizationLifecycleApiEndpointDesign(
+            method="PATCH",
+            path="/org/{org_id}",
+            operation=OrganizationLifecycleOperation.UPDATE,
+            status_effect="updates org_name, org_type, and metadata only",
+        ),
+        OrganizationLifecycleApiEndpointDesign(
+            method="DELETE",
+            path="/org/{org_id}",
+            operation=OrganizationLifecycleOperation.DELETE,
+            status_effect="soft delete only: status=deleted",
+        ),
+        OrganizationLifecycleApiEndpointDesign(
+            method="POST",
+            path="/org/{org_id}/activate",
+            operation=OrganizationLifecycleOperation.ACTIVATE,
+            status_effect="sets status=active unless the organization is deleted",
+        ),
+        OrganizationLifecycleApiEndpointDesign(
+            method="POST",
+            path="/org/{org_id}/suspend",
+            operation=OrganizationLifecycleOperation.SUSPEND,
+            status_effect="sets status=suspended unless the organization is deleted",
+        ),
+    )
+    owner_only_enforced_for_all_operations: Literal[True] = True
+    module_binding_implemented: Literal[False] = False
+    permission_system_implemented: Literal[False] = False
+    cross_org_query_implemented: Literal[False] = False
+    runtime_migration_executed: Literal[False] = False
 
 
 class OrganizationDataIsolationDesign(BaseModel):
@@ -416,6 +661,14 @@ def get_organization_type_constraints() -> OrganizationTypeConstraintSystem:
 
 def get_organization_api_design() -> OrganizationApiDesign:
     return OrganizationApiDesign()
+
+
+def get_organization_lifecycle_state_machine() -> OrganizationLifecycleStateMachine:
+    return OrganizationLifecycleStateMachine()
+
+
+def get_organization_lifecycle_api_design() -> OrganizationLifecycleApiDesign:
+    return OrganizationLifecycleApiDesign()
 
 
 def get_organization_data_isolation_design() -> OrganizationDataIsolationDesign:

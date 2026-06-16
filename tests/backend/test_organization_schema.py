@@ -18,13 +18,19 @@ from backend.app.schemas.organization import (
     OrganizationType,
     OrganizationUpdate,
     OrgScopedModelMixin,
+    OrganizationStatus,
+    OrganizationStatusTransitionError,
     enforce_owner_can_create_organization,
+    enforce_organization_status_transition,
     enforce_owner_only_org_lifecycle,
     evaluate_owner_only_org_lifecycle_access,
+    evaluate_organization_status_transition,
     generate_org_id,
     get_organization_api_design,
     get_organization_core_schema_completion_status,
     get_organization_data_isolation_design,
+    get_organization_lifecycle_api_design,
+    get_organization_lifecycle_state_machine,
     get_organization_security_boundary,
     get_organization_type_constraints,
 )
@@ -234,3 +240,57 @@ def test_c18a_data_isolation_and_security_boundaries_are_explicit() -> None:
     assert completion.owner_only_enforcement_defined is True
     assert completion.runtime_migration_executed is False
     assert completion.c17_system_modified is False
+
+
+def test_c18b_lifecycle_state_machine_allows_only_defined_transitions() -> None:
+    machine = get_organization_lifecycle_state_machine()
+
+    assert machine.default_status == OrganizationStatus.ACTIVE
+    assert "active -> suspended" in machine.allowed_transitions
+    assert "suspended -> active" in machine.allowed_transitions
+    assert "suspended -> deleted" in machine.allowed_transitions
+    assert "deleted -> active" in machine.forbidden_transitions
+    assert machine.deleted_is_terminal is True
+    assert machine.soft_delete_only is True
+    assert machine.physical_delete_allowed is False
+
+    suspended_to_deleted = enforce_organization_status_transition(
+        from_status="suspended",
+        to_status="deleted",
+        operation="delete",
+    )
+    assert suspended_to_deleted.allowed is True
+
+    deleted_to_active = evaluate_organization_status_transition(
+        from_status="deleted",
+        to_status="active",
+        operation="activate",
+    )
+    assert deleted_to_active.denied is True
+    assert deleted_to_active.denial_code == "c18b_deleted_org_terminal"
+
+    with pytest.raises(OrganizationStatusTransitionError):
+        enforce_organization_status_transition(
+            from_status="deleted",
+            to_status="active",
+            operation="activate",
+        )
+
+
+def test_c18b_lifecycle_api_design_adds_state_operations_without_scope_creep() -> None:
+    design = get_organization_lifecycle_api_design()
+    routes = {(endpoint.method, endpoint.path) for endpoint in design.endpoints}
+
+    assert routes == {
+        ("POST", "/org/create"),
+        ("PATCH", "/org/{org_id}"),
+        ("DELETE", "/org/{org_id}"),
+        ("POST", "/org/{org_id}/activate"),
+        ("POST", "/org/{org_id}/suspend"),
+    }
+    assert design.owner_only_enforced_for_all_operations is True
+    assert all(endpoint.audit_log_required for endpoint in design.endpoints)
+    assert design.module_binding_implemented is False
+    assert design.permission_system_implemented is False
+    assert design.cross_org_query_implemented is False
+    assert design.runtime_migration_executed is False

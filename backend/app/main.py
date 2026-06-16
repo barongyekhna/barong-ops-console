@@ -40,6 +40,7 @@ from .api.routes.users import router as users_router
 from .api.routes.webhook_gateway import router as webhook_gateway_router
 from .api.routes.workflow_registry import router as workflow_registry_router
 from .api.routes.workflows import router as workflows_router
+from .api.org import router as org_router
 from .core.config import get_settings
 from .core.rbac import normalize_rbac_role
 from .core.security_headers import apply_security_headers
@@ -310,6 +311,7 @@ app.include_router(errors_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(memory_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(operation_logs_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(permissions_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(org_router, prefix=APPLICATION_API_PREFIX)
 
 app.include_router(modules_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)
