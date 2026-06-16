@@ -7,6 +7,7 @@ from .api.deps import get_audit_context
 from .api.routes.agents import router as agents_router
 from .api.routes.ai_execution_bindings import router as ai_execution_bindings_router
 from .api.routes.approval import router as approval_router
+from .api.routes.attachments import router as attachments_router
 from .api.routes.artifacts import router as artifacts_router
 from .api.routes.auth import router as auth_router
 from .api.routes.callback_handler import router as callback_handler_router
@@ -347,6 +348,7 @@ app.include_router(conversations_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(cross_org_communication_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(friends_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(messages_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(attachments_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)

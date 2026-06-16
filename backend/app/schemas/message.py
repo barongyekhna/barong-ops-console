@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .attachment import Attachment
+
 
 MESSAGE_ID_PATTERN = re.compile(r"^msg_[0-9a-f]{32}$")
 CONVERSATION_ID_PATTERN = re.compile(r"^conv_[0-9a-f]{32}$")
@@ -94,7 +96,7 @@ class Message(BaseModel):
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
     updated_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
-    attachments: list[dict[str, object]] = Field(default_factory=list, max_length=0)
+    attachments: list[Attachment] = Field(default_factory=list)
     media_type: MessageContentType | None = None
 
     @model_validator(mode="before")
@@ -136,8 +138,6 @@ class Message(BaseModel):
             object.__setattr__(self, "media_type", self.content_type)
         elif self.media_type != self.content_type:
             raise ValueError("media_type is reserved and must match content_type.")
-        if self.attachments:
-            raise ValueError("C19C does not allow message attachments.")
         if self.updated_at < self.created_at:
             raise ValueError("Message updated_at must not be before created_at.")
         return self
@@ -151,7 +151,7 @@ class MessageSendRequest(BaseModel):
     conversation_id: str = Field(min_length=1, max_length=64)
     content_type: MessageContentType
     content: str = Field(min_length=1, max_length=4000)
-    attachments: list[dict[str, object]] = Field(default_factory=list, max_length=0)
+    attachments: list[Attachment] = Field(default_factory=list, max_length=0)
     media_type: MessageContentType | None = None
 
     @field_validator("from_user_id", "to_user_id", "content")
