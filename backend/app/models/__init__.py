@@ -10,6 +10,7 @@ from .context import ContextPacket
 from .error import SystemError
 from .job import AutomationJob, JobEvent
 from .memory import AgentMemoryAccessLog, MemoryEvent, MemorySummary
+from .message import MessageRecord
 from .operation_log import OperationLog
 from .org_membership import OrgMembershipRecord
 from .permission import (
@@ -36,6 +37,7 @@ __all__ = [
     "JobEvent",
     "MemoryEvent",
     "MemorySummary",
+    "MessageRecord",
     "ModuleRegistry",
     "OperationLog",
     "OrgMembershipRecord",

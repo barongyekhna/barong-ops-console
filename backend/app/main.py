@@ -21,6 +21,7 @@ from .api.routes.foundation_demo import router as foundation_demo_router
 from .api.routes.health import router as health_router
 from .api.routes.jobs import router as jobs_router
 from .api.routes.memory import router as memory_router
+from .api.routes.messages import router as messages_router
 from .api.routes.model_locks import router as model_locks_router
 from .api.routes.module_allocations import router as module_allocations_router
 from .api.routes.module_adapters import router as module_adapters_router
@@ -337,6 +338,7 @@ app.include_router(permissions_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(contacts_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(messages_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)
