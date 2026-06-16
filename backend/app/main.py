@@ -49,6 +49,7 @@ from .core.rbac import normalize_rbac_role
 from .core.security_headers import apply_security_headers
 from .db.session import SessionLocal
 from .middleware.event_collector import capture_audit_events
+from .middleware.data_isolation import enforce_org_data_isolation
 from .middleware.permission import enforce_permission_isolation
 from .services.event_collector import emit_event
 from .services.auth_service import InvalidSessionError, validate_session
@@ -305,6 +306,11 @@ async def collect_audit_events(request: Request, call_next):
 @app.middleware("http")
 async def enforce_c18f_permission_isolation(request: Request, call_next):
     return await enforce_permission_isolation(request, call_next)
+
+
+@app.middleware("http")
+async def enforce_c18g_org_data_isolation(request: Request, call_next):
+    return await enforce_org_data_isolation(request, call_next)
 
 
 app.include_router(health_router, prefix=PUBLIC_API_PREFIX)

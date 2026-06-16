@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import BigInteger, DateTime, JSON, func
+from sqlalchemy import BigInteger, DateTime, JSON, String, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -31,4 +31,12 @@ class TimestampMixin(CreatedAtMixin):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+
+class OrgScopedMixin:
+    org_id: Mapped[str] = mapped_column(
+        String(40),
+        nullable=False,
+        index=True,
     )
