@@ -1,0 +1,217 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  NEXT_TELEMETRY_DISABLED: "1"
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+  PYTHONUNBUFFERED: "1"
+
+jobs:
+  backend-unit:
+    name: backend-unit
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install backend dev requirements
+        run: |
+          mkdir -p test-logs
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements-dev.txt
+      - name: Run backend unit tests
+        run: |
+          set -o pipefail
+          python -m pytest -c backend/pytest.ini tests/backend -m "unit" 2>&1 | tee test-logs/backend-unit.log
+      - name: Upload backend unit logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-unit-logs
+          path: test-logs/
+
+  backend-integration:
+    name: backend-integration
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: ["3.12"]
+    services:
+      postgres:
+        image: postgres:17.5-alpine
+        env:
+          POSTGRES_DB: barong_test_ci
+          POSTGRES_USER: barong_test_ci
+          POSTGRES_PASSWORD: barong_test_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U barong_test_ci -d barong_test_ci"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 30
+    env:
+      BARONG_TEST_DB_READY: "1"
+      DATABASE_URL: postgresql+psycopg://barong_test_ci:barong_test_ci@localhost:5432/barong_test_ci
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install backend dev requirements
+        run: |
+          mkdir -p test-logs
+          python -m pip install --upgrade pip
+          python -m pip install -r backend/requirements-dev.txt
+      - name: Run Alembic migrations
+        run: |
+          set -o pipefail
+          python -m alembic -c backend/alembic.ini upgrade head 2>&1 | tee test-logs/backend-integration-alembic.log
+      - name: Run backend integration tests
+        run: |
+          set -o pipefail
+          python -m pytest -c backend/pytest.ini tests/backend -m "integration" 2>&1 | tee test-logs/backend-integration.log
+      - name: Upload backend integration logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-integration-logs
+          path: test-logs/
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        node-version: ["24"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: |
+          mkdir -p ../test-logs
+          set -o pipefail
+          npm ci 2>&1 | tee ../test-logs/frontend-npm-ci.log
+      - name: Run frontend tests
+        working-directory: frontend
+        run: |
+          set -o pipefail
+          created_tests_link=0
+          created_frontend_link=0
+          cleanup() {
+            if [[ "$created_tests_link" == "1" ]]; then rm -f tests; fi
+            if [[ "$created_frontend_link" == "1" ]]; then rm -f frontend; fi
+          }
+          trap cleanup EXIT
+          if [[ ! -e tests ]]; then ln -s ../tests tests; created_tests_link=1; fi
+          if [[ ! -e frontend ]]; then ln -s . frontend; created_frontend_link=1; fi
+          npm run test 2>&1 | tee ../test-logs/frontend-test.log
+      - name: Run frontend verify
+        working-directory: frontend
+        run: |
+          set -o pipefail
+          npm run verify 2>&1 | tee ../test-logs/frontend-verify.log
+      - name: Run frontend typecheck
+        working-directory: frontend
+        run: |
+          set -o pipefail
+          npm run typecheck 2>&1 | tee ../test-logs/frontend-typecheck.log
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          set -o pipefail
+          npm run build 2>&1 | tee ../test-logs/frontend-build.log
+      - name: Upload frontend logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-logs
+          path: test-logs/
+
+  system-smoke:
+    name: system-smoke
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        compose_file: ["docker-compose.example.yml"]
+    env:
+      COMPOSE_PROJECT_NAME: barong-ci-smoke
+      SMOKE_OWNER_USERNAME: ci_smoke_owner
+      SMOKE_OWNER_PASSWORD: ci-smoke-owner-password
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare logs
+        run: mkdir -p test-logs
+      - name: Build compose services
+        run: |
+          set -o pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "${{ matrix.compose_file }}" build 2>&1 | tee test-logs/system-smoke-build.log
+      - name: Start database
+        run: |
+          set -o pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "${{ matrix.compose_file }}" up --detach --wait db 2>&1 | tee test-logs/system-smoke-db.log
+      - name: Run migrations
+        run: |
+          set -o pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "${{ matrix.compose_file }}" run --rm backend python -m alembic -c backend/alembic.ini upgrade head 2>&1 | tee test-logs/system-smoke-alembic.log
+      - name: Bootstrap smoke owner
+        run: |
+          set -o pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "${{ matrix.compose_file }}" run --rm -e OWNER_USERNAME="$SMOKE_OWNER_USERNAME" -e OWNER_PASSWORD="$SMOKE_OWNER_PASSWORD" backend python -m backend.app.cli.bootstrap_owner 2>&1 | tee test-logs/system-smoke-bootstrap-owner.log
+      - name: Start application stack
+        run: |
+          set -o pipefail
+          docker compose -p "$COMPOSE_PROJECT_NAME" -f "${{ matrix.compose_file }}" up --detach --wait backend frontend 2>&1 | tee test-logs/system-smoke-up.log
+      - name: Health checks
+        run: |
+          set -o pipefail
+          curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:8000/api/public/health 2>&1 | tee test-logs/system-smoke-backend-health.json
+          curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/login 2>&1 | tee test-logs/system-smoke-login-page.html
+          curl --fail --silent --show-error --retry 30 --retry-all-errors --retry-delay 2 http://127.0.0.1:3000/api/backend/health 2>&1 | tee test-logs/system-smoke-proxy-health.json
+      - name: Login smoke test
+        run: |
+          set -o pipefail
+          curl --fail --silent --show-error \
+            --cookie-jar test-logs/system-smoke-cookies.txt \
+            --header "Content-Type: application/json" \
+            --data "{\"username\":\"$SMOKE_OWNER_USERNAME\",\"password\":\"$SMOKE_OWNER_PASSWORD\"}" \
+            http://127.0.0.1:3000/api/backend/auth/login 2>&1 | tee test-logs/system-smoke-login.json
+          curl --fail --silent --show-error \
+            --cookie test-logs/system-smoke-cookies.txt \
+            http://127.0.0.1:3000/api/backend/auth/me 2>&1 | tee test-logs/system-smoke-auth-me.json
+      - name: Collect compose logs
+        if: always()
+        run: docker compose -p "$COMPOSE_PROJECT_NAME" -f "${{ matrix.compose_file }}" logs --no-color > test-logs/system-smoke-compose.log 2>&1 || true
+      - name: Stop compose services
+        if: always()
+        run: docker compose -p "$COMPOSE_PROJECT_NAME" -f "${{ matrix.compose_file }}" down --volumes --remove-orphans
+      - name: Upload system smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: system-smoke-logs
+          path: test-logs/

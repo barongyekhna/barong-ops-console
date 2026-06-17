@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import delete
@@ -52,8 +55,169 @@ from backend.app.models.security import SecurityRateLimitBucket, SecurityReplayN
 from backend.app.models.shared_module import SharedModuleRecord
 from backend.app.models.user import User
 
+
+UNIT_TEST_FILE_NAMES = frozenset(
+    {
+        "test_permission_migration.py",
+    }
+)
+SYSTEM_TEST_FILE_NAMES = frozenset(
+    {
+        "test_alembic_config.py",
+        "test_approval_workflow_engine.py",
+        "test_db_config.py",
+        "test_event_collector.py",
+        "test_execution_flow_gate.py",
+        "test_health.py",
+        "test_sandbox_execution_bridge.py",
+        "test_sandbox_execution_context.py",
+        "test_sandbox_runtime_finalization.py",
+        "test_schema_models.py",
+        "test_workflow_registry_system.py",
+    }
+)
+SCHEMA_BOOTSTRAP_SIGNALS = (
+    "Base.metadata.create_all",
+    "__table__.create(",
+)
+SYSTEM_SIGNALS = (
+    "TestClient",
+    "auth_client",
+    "owner_client",
+    "clear_event_buffer",
+    "capture_audit_events",
+)
+INTEGRATION_SIGNALS = (
+    "SessionLocal",
+    "backend.app.db.session",
+    "clean_auth_tables",
+)
+CATEGORY_MARKERS = frozenset(("unit", "integration", "system"))
+SOURCE_CACHE: dict[Path, str] = {}
+
+
+def _source_for_path(path: Path) -> str:
+    if path not in SOURCE_CACHE:
+        SOURCE_CACHE[path] = path.read_text(encoding="utf-8")
+    return SOURCE_CACHE[path]
+
+
+def _is_alembic_managed_test_db() -> bool:
+    return os.environ.get("BARONG_TEST_DB_READY") == "1"
+
+
+def _assert_safe_test_database_url() -> None:
+    database_url = os.environ.get("DATABASE_URL", "")
+    lowered = database_url.lower()
+
+    if any(
+        blocked in lowered
+        for blocked in ("production", "prod", "ops.barongyekhna.com")
+    ):
+        pytest.exit(
+            "Refusing to run integration tests against a production-like "
+            "DATABASE_URL.",
+            returncode=2,
+        )
+
+    if not any(
+        allowed in lowered
+        for allowed in ("barong_test", "localhost", "127.0.0.1")
+    ):
+        pytest.exit(
+            "Integration tests require an isolated test DATABASE_URL. "
+            "Use scripts/run_backend_tests.sh integration.",
+            returncode=2,
+        )
+
+
+def pytest_configure(config: pytest.Config) -> None:
+    config.addinivalue_line(
+        "markers",
+        "unit: backend unit tests that do not require a live database service",
+    )
+    config.addinivalue_line(
+        "markers",
+        "integration: backend tests requiring an Alembic-managed test database",
+    )
+    config.addinivalue_line(
+        "markers",
+        "system: broader system or legacy DB tests outside unit/integration CI lanes",
+    )
+    config.addinivalue_line(
+        "markers",
+        "slow: tests that are expected to take materially longer",
+    )
+
+
+def pytest_sessionstart(session: pytest.Session) -> None:
+    marker_expression = session.config.option.markexpr or ""
+    if "integration" not in marker_expression:
+        return
+    if not _is_alembic_managed_test_db():
+        pytest.exit(
+            "Integration tests require BARONG_TEST_DB_READY=1 after "
+            "alembic upgrade head.",
+            returncode=2,
+        )
+    _assert_safe_test_database_url()
+
+
+def pytest_collection_modifyitems(
+    config: pytest.Config,
+    items: list[pytest.Item],
+) -> None:
+    del config
+    for item in items:
+        if any(item.get_closest_marker(marker) for marker in CATEGORY_MARKERS):
+            continue
+
+        path = Path(str(item.fspath))
+        if path.name in UNIT_TEST_FILE_NAMES:
+            item.add_marker(pytest.mark.unit)
+            continue
+
+        if path.name in SYSTEM_TEST_FILE_NAMES:
+            item.add_marker(pytest.mark.system)
+            continue
+
+        source = _source_for_path(path)
+        if any(signal in source for signal in SCHEMA_BOOTSTRAP_SIGNALS):
+            item.add_marker(pytest.mark.system)
+            continue
+
+        if any(signal in source for signal in SYSTEM_SIGNALS):
+            item.add_marker(pytest.mark.system)
+            continue
+
+        if any(signal in source for signal in INTEGRATION_SIGNALS):
+            item.add_marker(pytest.mark.integration)
+            continue
+
+        item.add_marker(pytest.mark.unit)
+
+
+def pytest_runtest_setup(item: pytest.Item) -> None:
+    if not item.get_closest_marker("integration"):
+        return
+
+    if not _is_alembic_managed_test_db():
+        pytest.fail(
+            "Integration tests require BARONG_TEST_DB_READY=1 after "
+            "alembic upgrade head."
+        )
+    _assert_safe_test_database_url()
+
+    source = _source_for_path(Path(str(item.fspath)))
+    if any(signal in source for signal in SCHEMA_BOOTSTRAP_SIGNALS):
+        pytest.fail("Integration tests must use Alembic schema, not create_all.")
+
+
 def clear_auth_tables() -> None:
-    Base.metadata.create_all(bind=engine, checkfirst=True)
+    if _is_alembic_managed_test_db():
+        _assert_safe_test_database_url()
+    else:
+        Base.metadata.create_all(bind=engine, checkfirst=True)
     with SessionLocal() as db:
         db.execute(delete(AgentMemoryAccessLog))
         db.execute(delete(ContextPacket))

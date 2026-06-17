@@ -6,6 +6,8 @@
     "dev": "next dev --hostname 0.0.0.0",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0",
+    "test": "node --test tests/frontend/*.test.mjs",
+    "test:unit": "node --test tests/frontend/*.test.mjs",
     "typecheck": "tsc --noEmit",
     "verify": "node scripts/verify-foundation.mjs"
   },

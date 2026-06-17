@@ -1,0 +1,2 @@
+# Compatibility shim for backend/requirements-dev.txt.
+-r ../requirements.txt

@@ -568,10 +568,13 @@ for (const assignmentProxyCheck of [
   }
 }
 
-if (
-  !backendProxySource.includes('requestedPath === "health"') ||
-  !backendProxySource.includes('new URL(`/${requestedPath}`, getApiBaseUrl())')
-) {
+const healthRouteIsSafelyMapped =
+  backendProxySource.includes('"health"') &&
+  backendProxySource.includes("ALLOWED_PUBLIC_GET_PATHS.has(requestedPath)") &&
+  backendProxySource.includes('withApiLayer("public", requestedPath)') &&
+  backendProxySource.includes("new URL(backendApiPath, getApiBaseUrl())");
+
+if (!healthRouteIsSafelyMapped) {
   throw new Error("The backend API proxy health path is not safely routed.");
 }
 
@@ -786,13 +789,19 @@ if (
   throw new Error("The Foundation Demo safety panel is incomplete.");
 }
 
-if (
-  !source.includes("Run n8n Test") ||
-  !source.includes(
+const n8nTestSafetyPanelIsComplete =
+  (source.includes("Run n8n Test") ||
+    source.includes("Create mock n8n result")) &&
+  (source.includes(
     "Test bridge only. Does not run real n8n production workflows.",
   ) ||
-  !source.includes("triggers no downstream business work")
-) {
+    source.includes(
+      "Mock bridge only. It does not call n8n, send webhook traffic, or trigger downstream business work.",
+    )) &&
+  (source.includes("triggers no downstream business work") ||
+    source.includes("trigger downstream business work"));
+
+if (!n8nTestSafetyPanelIsComplete) {
   throw new Error("The n8n Test Bridge safety panel is incomplete.");
 }
 
