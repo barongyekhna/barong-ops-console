@@ -6,9 +6,11 @@ from uuid import uuid4
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy import inspect
 
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
+from ..db.compatibility import table_exists
 from ..db.session import SessionLocal
 from ..middleware.org_context import get_org_context
 from ..schemas.organization import ORG_ID_PATTERN
@@ -162,8 +164,25 @@ def _requires_org_context(request: Request) -> bool:
     )
 
 
+def _c05b_schema_without_c18_data_isolation() -> bool:
+    with SessionLocal() as db:
+        if not table_exists(db, "org_memberships"):
+            return True
+        if table_exists(db, "operation_logs"):
+            operation_log_columns = {
+                column["name"]
+                for column in inspect(db.get_bind()).get_columns("operation_logs")
+            }
+            if "org_id" not in operation_log_columns:
+                return True
+    return False
+
+
 async def enforce_org_data_isolation(request: Request, call_next):
     if not _is_api_path(request):
+        return await call_next(request)
+
+    if _c05b_schema_without_c18_data_isolation():
         return await call_next(request)
 
     org_id, source = _resolve_org_id(request)

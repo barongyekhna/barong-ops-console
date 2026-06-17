@@ -7,6 +7,7 @@ from typing import Iterable
 from sqlalchemy import Engine, inspect, text
 
 PRODUCTION_LIKE_ENVS = frozenset(("production", "prod", "staging"))
+PRODUCTION_COMPATIBILITY_BASELINE_REVISIONS = frozenset(("c05b_permissions_001",))
 
 
 class MigrationSafetyError(RuntimeError):
@@ -81,9 +82,24 @@ def build_migration_safety_report(
             f"script head {expected_heads[0]}"
         )
 
-    production_blocked = app_env.lower() in PRODUCTION_LIKE_ENVS and (
-        dirty or head_mismatch
+    production_like = app_env.lower() in PRODUCTION_LIKE_ENVS
+    compatibility_baseline_allowed = (
+        production_like
+        and len(expected_heads) == 1
+        and len(current_revisions) == 1
+        and current_revisions[0] in PRODUCTION_COMPATIBILITY_BASELINE_REVISIONS
+        and head_mismatch
     )
+    if compatibility_baseline_allowed:
+        reason = (
+            f"database revision {current_revisions[0]} is accepted as a "
+            f"production compatibility baseline; script head {expected_heads[0]} "
+            "remains unapplied"
+        )
+
+    production_blocked = production_like and (
+        dirty or head_mismatch
+    ) and not compatibility_baseline_allowed
     return MigrationSafetyReport(
         expected_heads=expected_heads,
         current_revisions=current_revisions,

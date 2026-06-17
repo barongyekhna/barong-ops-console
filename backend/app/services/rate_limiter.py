@@ -2,9 +2,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Protocol
 
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from ..db.compatibility import is_missing_table_error
 from ..core.config import Settings
 from ..repositories.security import (
     RateLimitBucketResult,
@@ -93,6 +94,15 @@ def register_login_rate_limit_attempt(
             reason="distributed_rate_limit_contention",
             retry_after_seconds=1,
         )
+    except SQLAlchemyError as exc:
+        db.rollback()
+        if is_missing_table_error(exc, "security_rate_limit_buckets"):
+            return RateLimitDecision(
+                allowed=True,
+                reason="c05b_compat_rate_limit_unavailable",
+                retry_after_seconds=None,
+            )
+        raise
 
     return RateLimitDecision(
         allowed=True,

@@ -6,9 +6,11 @@ from uuid import uuid4
 
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
+from ..db.compatibility import table_exists
 from ..db.session import SessionLocal
 from ..middleware.org_context import get_org_context
 from ..schemas.permission import PermissionAction
@@ -182,6 +184,13 @@ def resolve_permission_request_context(
     )
 
 
+def _c18_permission_tables_available(db: Session) -> bool:
+    return table_exists(db, "org_memberships") and table_exists(
+        db,
+        "module_bindings",
+    )
+
+
 async def enforce_permission_isolation(request: Request, call_next):
     context = resolve_permission_request_context(request)
     if context is None:
@@ -212,6 +221,7 @@ async def enforce_permission_isolation(request: Request, call_next):
             "Not authenticated.",
         )
 
+    skipped_c05b_compat = False
     with SessionLocal() as db:
         try:
             current_session = validate_session(
@@ -241,14 +251,47 @@ async def enforce_permission_isolation(request: Request, call_next):
 
         request.state.user_id = str(current_session.user.id)
         set_current_event_context(user_id=str(current_session.user.id))
-        decision = check_permission(
-            db,
-            current_session.user.id,
-            context.org_id,
-            context.module_id,
-            context.action,
+        if not _c18_permission_tables_available(db):
+            skipped_c05b_compat = True
+            decision = None
+            request.state.c18f_permission_decision = {
+                "allowed": True,
+                "denied": False,
+                "denial_code": None,
+                "reason": "C18 permission tables unavailable on c05b baseline.",
+            }
+        else:
+            decision = check_permission(
+                db,
+                current_session.user.id,
+                context.org_id,
+                context.module_id,
+                context.action,
+            )
+            request.state.c18f_permission_decision = decision.model_dump(mode="json")
+
+    if skipped_c05b_compat:
+        emit_event(
+            event_type="permission_isolation.check",
+            module="system",
+            action="c18f.permission_check",
+            source="backend",
+            status="success",
+            context_id=audit.request_id,
+            user_id=getattr(request.state, "user_id", None),
+            payload={
+                "org_id": context.org_id,
+                "module_id": context.module_id,
+                "permission_action": context.action,
+                "context_source": "c05b_compat_no_c18_tables",
+                "allowed": True,
+                "denial_code": None,
+                "owner_override": False,
+                "permission_equals_visibility": False,
+                "permission_equals_data_access": False,
+            },
         )
-        request.state.c18f_permission_decision = decision.model_dump(mode="json")
+        return await call_next(request)
 
     emit_event(
         event_type="permission_isolation.check",

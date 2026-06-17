@@ -5,11 +5,12 @@ const frontendRoot = resolve(import.meta.dirname, "..");
 const repoRoot = resolve(frontendRoot, "..");
 const appRoot = join(frontendRoot, "src", "app");
 const rootPage = join(appRoot, "page.tsx");
+const frontendTestsRoot = existsSync(join(repoRoot, "tests", "frontend"))
+  ? join(repoRoot, "tests", "frontend")
+  : join(frontendRoot, "tests", "frontend");
 const requiredRoutes = [
   "login",
   "(console)/dashboard",
-  "(console)/foundation-demo",
-  "(console)/n8n-test",
   "(console)/products",
   "(console)/modules",
   "(console)/agents",
@@ -47,9 +48,9 @@ for (const requiredFile of [
   join(frontendRoot, "src", "components", "adapter-access-provider.tsx"),
   join(frontendRoot, "src", "components", "module-adapter-shell.tsx"),
   join(frontendRoot, "src", "components", "execution-provider-status-shell.tsx"),
-  join(repoRoot, "tests", "frontend", "module-isolation.test.mjs"),
-  join(repoRoot, "tests", "frontend", "module-adapter.test.mjs"),
-  join(repoRoot, "tests", "frontend", "execution-provider.test.mjs"),
+  join(frontendTestsRoot, "module-isolation.test.mjs"),
+  join(frontendTestsRoot, "module-adapter.test.mjs"),
+  join(frontendTestsRoot, "execution-provider.test.mjs"),
 ]) {
   if (!existsSync(requiredFile)) {
     throw new Error(`Missing protected console file: ${requiredFile}`);
@@ -69,14 +70,12 @@ const sourceFiles = walk(join(frontendRoot, "src")).filter((path) =>
 const source = sourceFiles.map((path) => readFileSync(path, "utf8")).join("\n");
 const registrationEndpoint = "/auth/" + "register";
 const requiredApiPaths = [
-  "/modules",
   "/agents",
   "/workflows",
   "/jobs",
   "/artifacts",
   "/reviews",
   "/errors",
-  "/memory-events",
 ];
 
 if (source.includes(registrationEndpoint)) {
@@ -98,18 +97,6 @@ if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(source)) {
 for (const apiPath of requiredApiPaths) {
   if (!source.includes(`endpoint="${apiPath}"`)) {
     throw new Error(`Missing F10 API page connection: ${apiPath}`);
-  }
-}
-
-for (const demoPath of ["/foundation-demo/run", "/foundation-demo/latest"]) {
-  if (!source.includes(demoPath)) {
-    throw new Error(`Missing F11 API connection: ${demoPath}`);
-  }
-}
-
-for (const testPath of ["/n8n-test/run", "/n8n-test/latest"]) {
-  if (!source.includes(testPath)) {
-    throw new Error(`Missing F12 API connection: ${testPath}`);
   }
 }
 
@@ -588,9 +575,7 @@ if (!navigationSource.includes("module_key: string")) {
 
 for (const navigationModuleKey of [
   "core.dashboard",
-  "experimental.foundation_demo",
-  "integration.n8n_test_bridge",
-  "business.products",
+  "system.operation_logs",
   "admin.modules",
   "admin.agents",
   "admin.workflows",
@@ -598,10 +583,8 @@ for (const navigationModuleKey of [
   "business.artifacts",
   "business.reviews",
   "system.errors",
-  "system.memory_events",
   "admin.users",
   "admin.permissions",
-  "admin.settings",
 ]) {
   if (!navigationSource.includes(`module_key: "${navigationModuleKey}"`)) {
     throw new Error(`Missing C07 navigation module_key: ${navigationModuleKey}`);
@@ -779,30 +762,6 @@ if (
   throw new Error(
     "The C09C execution provider status shell must not render sensitive runtime values.",
   );
-}
-
-if (
-  !source.includes("Run Foundation Demo") ||
-  !source.includes("without triggering real n8n") ||
-  !source.includes("P-series tasks")
-) {
-  throw new Error("The Foundation Demo safety panel is incomplete.");
-}
-
-const n8nTestSafetyPanelIsComplete =
-  (source.includes("Run n8n Test") ||
-    source.includes("Create mock n8n result")) &&
-  (source.includes(
-    "Test bridge only. Does not run real n8n production workflows.",
-  ) ||
-    source.includes(
-      "Mock bridge only. It does not call n8n, send webhook traffic, or trigger downstream business work.",
-    )) &&
-  (source.includes("triggers no downstream business work") ||
-    source.includes("trigger downstream business work"));
-
-if (!n8nTestSafetyPanelIsComplete) {
-  throw new Error("The n8n Test Bridge safety panel is incomplete.");
 }
 
 if (

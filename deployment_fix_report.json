@@ -1,0 +1,105 @@
+{
+  "report_version": "fixed-production-deploy-20260617-v1",
+  "generated_at_utc": "2026-06-17T16:08:31Z",
+  "status": "passed",
+  "rules": {
+    "db_migration_executed": false,
+    "schema_upgrade_executed": false,
+    "c19_changed": false,
+    "execution_engine_changed": false,
+    "permission_registry_or_permission_data_model_changed": false
+  },
+  "frontend": {
+    "status": "passed",
+    "route_references_removed": [
+      "foundation-demo",
+      "n8n-test"
+    ],
+    "changes": [
+      "Removed foundation-demo and n8n-test from frontend verification required routes.",
+      "Removed n8n-test/latest diagnostic proxy route reference.",
+      "Deleted the n8n-test page route.",
+      "Adjusted frontend verification to match current production navigation and Docker build layout.",
+      "Excluded generated local build artifacts from Docker build context."
+    ],
+    "verification": {
+      "npm_run_test": "passed",
+      "npm_run_verify": "passed",
+      "npm_run_typecheck": "passed",
+      "npm_run_build": "passed",
+      "docker_frontend_build": "passed"
+    },
+    "built_routes_absent": [
+      "/foundation-demo",
+      "/n8n-test"
+    ]
+  },
+  "backend": {
+    "status": "passed",
+    "compatibility_target": "c05b_permissions_001",
+    "script_head": "pre20_q_live_enable_gate_001",
+    "alembic_current_before": "c05b_permissions_001",
+    "alembic_current_after": "c05b_permissions_001",
+    "compatibility_validation": {
+      "production_blocked": false,
+      "head_mismatch": true,
+      "reason": "c05b_permissions_001 accepted as production compatibility baseline; later script head remains unapplied"
+    },
+    "runtime_fallbacks": [
+      "Allow production startup on c05b baseline while keeping head_mismatch=true.",
+      "Skip C16 DB login rate limit when security_rate_limit_buckets is absent.",
+      "Use signed c05b-compatible session cookies when auth_sessions is absent.",
+      "Load only c05b user columns when C16 login lockout columns are absent.",
+      "Use c05b-compatible operation log read/write paths when operation_logs.org_id is absent.",
+      "Bypass C18 org/data/permission isolation rewriting when C18 tables or org-scoped columns are absent; route-level auth/RBAC remains active."
+    ],
+    "verification": {
+      "py_compile": "passed",
+      "tests_backend_test_migration_safety": "passed",
+      "production_backend_build": "passed",
+      "production_backend_health": 200
+    }
+  },
+  "deployment": {
+    "compose_requested": [
+      "docker compose -f docker-compose.production.yml down",
+      "docker compose -f docker-compose.production.yml up -d --build"
+    ],
+    "compose_executed": [
+      "docker-compose -p barong-ops-console-prod -f docker-compose.production.yml down",
+      "docker-compose -p barong-ops-console-prod -f docker-compose.production.yml up -d --build",
+      "docker-compose -p barong-ops-console-prod -f docker-compose.production.yml build console_backend",
+      "docker stop/rm barong-ops-console-prod_console_backend_1 followed by docker-compose up -d console_backend"
+    ],
+    "compose_note": "Host provides Compose V1 and existing production containers use project name barong-ops-console-prod.",
+    "final_services": {
+      "console_postgres": "Up (healthy)",
+      "console_backend": "Up",
+      "console_frontend": "Up"
+    }
+  },
+  "endpoint_verification": {
+    "public_pages": {
+      "https://ops.barongyekhna.com/login": 200,
+      "https://ops.barongyekhna.com/operation-logs": 200
+    },
+    "authenticated_proxy_endpoints": {
+      "POST https://ops.barongyekhna.com/api/backend/auth/login": 200,
+      "GET https://ops.barongyekhna.com/api/backend/auth/me": 200,
+      "GET https://ops.barongyekhna.com/api/backend/modules/me": 200,
+      "GET https://ops.barongyekhna.com/api/backend/operation-logs?limit=1&offset=0": 200
+    },
+    "bare_paths": {
+      "https://ops.barongyekhna.com/modules/me": 404,
+      "https://ops.barongyekhna.com/auth/me": 404,
+      "note": "Bare /modules/me and /auth/me are not frontend page routes; backend access is through /api/backend/..."
+    }
+  },
+  "non_goals_confirmed": [
+    "No alembic upgrade was run.",
+    "No migration file was added or edited.",
+    "No production DB schema change was executed.",
+    "No C19 code path was changed.",
+    "No execution engine code path was changed."
+  ]
+}

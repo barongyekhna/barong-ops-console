@@ -343,11 +343,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     (method === "GET" &&
       ALLOWED_RESULT_NORMALIZATION_GET_PATHS.has(requestedPath)) ||
     (method === "POST" &&
-      ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath)) ||
-    (process.env.NODE_ENV !== "production" &&
-      process.env.NEXT_PUBLIC_ENABLE_INTERNAL_DIAGNOSTICS === "true" &&
-      method === "GET" &&
-      requestedPath === "n8n-test/latest")
+      ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath))
   ) {
     return withApiLayer("control-plane", requestedPath);
   }

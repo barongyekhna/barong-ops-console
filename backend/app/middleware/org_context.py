@@ -11,12 +11,14 @@ from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
+from ..db.compatibility import table_exists
 from ..db.session import SessionLocal
 from ..models.auth_session import AuthSession
 from ..models.org_membership import OrgMembershipRecord
 from ..models.organization import OrganizationRecord
 from ..models.user import User
 from ..schemas.module_binding import GLOBAL_MODULE_BOUND_ORG
+from ..repositories.tenant import ROLLOUT_BACKFILL_ORG_ID
 from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
 from ..services.event_collector import emit_event, set_current_event_context
 from ..services.module_binding_service import list_module_bindings
@@ -171,6 +173,13 @@ def _active_memberships_for_user(
     )
 
 
+def _c18_org_tables_available(db: Session) -> bool:
+    return table_exists(db, "org_memberships") and table_exists(
+        db,
+        "organizations",
+    )
+
+
 def _owner_org_for_user(
     db: Session,
     *,
@@ -206,6 +215,13 @@ def _resolve_org(
     auth_session: AuthSession,
 ) -> OrgResolution | None:
     user_id = str(user.id)
+    if not _c18_org_tables_available(db):
+        return OrgResolution(
+            org_id=ROLLOUT_BACKFILL_ORG_ID,
+            role="owner" if user.role == "owner" else "member",
+            source="c05b_compat_no_c18_tables",
+        )
+
     memberships = _active_memberships_for_user(db, user_id=user_id)
     memberships_by_org = {membership.org_id: membership for membership in memberships}
 
@@ -249,6 +265,8 @@ def _resolve_org(
 
 
 def _module_scope_for_org(db: Session, org_id: str) -> list[str]:
+    if not table_exists(db, "module_bindings"):
+        return []
     module_ids: list[str] = []
     for binding in list_module_bindings(db):
         if not binding.enabled:

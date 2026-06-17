@@ -1,17 +1,49 @@
 from datetime import datetime
 
-from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy import inspect, select
+from sqlalchemy.orm import Session, load_only
 
+from ..db.compatibility import table_exists
 from ..models.user import User
 
 
+C05B_USER_COLUMNS = (
+    User.id,
+    User.username,
+    User.password_hash,
+    User.role,
+    User.is_active,
+    User.last_login_at,
+    User.created_at,
+    User.updated_at,
+)
+LOGIN_LOCKOUT_COLUMNS = (
+    "failed_login_count",
+    "last_failed_login_at",
+    "locked_until",
+)
+
+
+def _user_select():
+    return select(User).options(load_only(*C05B_USER_COLUMNS))
+
+
+def login_lockout_columns_available(db: Session) -> bool:
+    if not table_exists(db, "users"):
+        return False
+    columns = {
+        column["name"]
+        for column in inspect(db.get_bind()).get_columns("users")
+    }
+    return set(LOGIN_LOCKOUT_COLUMNS).issubset(columns)
+
+
 def get_user_by_id(db: Session, user_id: int) -> User | None:
-    return db.get(User, user_id)
+    return db.scalar(_user_select().where(User.id == user_id))
 
 
 def get_user_by_username(db: Session, username: str) -> User | None:
-    return db.scalar(select(User).where(User.username == username))
+    return db.scalar(_user_select().where(User.username == username))
 
 
 def list_users(
@@ -20,13 +52,13 @@ def list_users(
     limit: int,
     offset: int,
 ) -> list[User]:
-    rows = list(db.scalars(select(User).order_by(User.id).limit(limit + offset)))
+    rows = list(db.scalars(_user_select().order_by(User.id).limit(limit + offset)))
     return rows[offset : offset + limit]
 
 
 def get_owner(db: Session) -> User | None:
     return db.scalar(
-        select(User)
+        _user_select()
         .where(User.role == "owner")
         .order_by(User.id)
         .limit(1)
@@ -108,6 +140,8 @@ def record_failed_login(
     failed_at: datetime,
     locked_until: datetime | None,
 ) -> User:
+    if not login_lockout_columns_available(db):
+        return user
     user.failed_login_count += 1
     user.last_failed_login_at = failed_at
     user.locked_until = locked_until
@@ -117,6 +151,8 @@ def record_failed_login(
 
 
 def reset_login_failures(db: Session, user: User) -> User:
+    if not login_lockout_columns_available(db):
+        return user
     user.failed_login_count = 0
     user.last_failed_login_at = None
     user.locked_until = None
