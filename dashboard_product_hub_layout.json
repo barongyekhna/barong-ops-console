@@ -1,0 +1,48 @@
+{
+  "fix_id": "FIX-R03",
+  "layout": "Operations Hub",
+  "product_sections": [
+    {
+      "id": "system_health_card",
+      "visible_title": "System Health Card",
+      "fallback_safe": true
+    },
+    {
+      "id": "users_overview",
+      "visible_title": "Users Overview",
+      "fallback_safe": true
+    },
+    {
+      "id": "organizations_overview",
+      "visible_title": "Organizations Overview",
+      "fallback_safe": true
+    },
+    {
+      "id": "approvals_queue",
+      "visible_title": "Approvals Queue",
+      "fallback_safe": true
+    },
+    {
+      "id": "logs",
+      "visible_title": "Logs",
+      "fallback_safe": true
+    },
+    {
+      "id": "execution_status",
+      "visible_title": "Execution Status",
+      "allowed_modes": ["mock", "staging", "live"],
+      "fallback_mode": "mock"
+    }
+  ],
+  "metric_defaults": {
+    "users": 0,
+    "orgs": 0,
+    "approvals": 0,
+    "logs": []
+  },
+  "forbidden_ui_labels": {
+    "replaced_logs_label": "Logs",
+    "replaced_organizations_label": "Organizations",
+    "replaced_approvals_label": "Approvals"
+  }
+}

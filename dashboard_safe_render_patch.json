@@ -1,0 +1,31 @@
+{
+  "fix_id": "FIX-R03",
+  "scope": "frontend dashboard rendering safety",
+  "backend_changed": false,
+  "database_changed": false,
+  "execution_engine_changed": false,
+  "permission_system_changed": false,
+  "c19_touched": false,
+  "changed_files": [
+    "frontend/src/app/(console)/dashboard/page.tsx",
+    "frontend/src/components/operations-dashboard.tsx",
+    "frontend/src/app/globals.css"
+  ],
+  "safe_render_guards": [
+    "Dashboard data is stored as nullable state and rendered through const safeState = state ?? {}.",
+    "Metrics default to users = 0, orgs = 0, approvals = 0, logs = [].",
+    "List payloads are read through safeItems and optional chaining.",
+    "Unknown strings, errors, dates, counts, organization context, and execution mode are normalized before render.",
+    "All data fetches use Promise.allSettled plus try/finally so failed endpoints cannot leave the dashboard blank or stuck."
+  ],
+  "fallback_ui": {
+    "no_data": "No data available",
+    "initializing": "System initializing",
+    "retry": "Try refreshing"
+  },
+  "verification": {
+    "typecheck": "npm run typecheck",
+    "test": "npm test",
+    "build": "npm run build"
+  }
+}

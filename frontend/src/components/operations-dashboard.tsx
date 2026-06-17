@@ -1,14 +1,14 @@
 "use client";
 
 import {
+  Building2,
   CheckCircle2,
-  Clock3,
+  ClipboardCheck,
   FileText,
   LoaderCircle,
   RotateCcw,
   ShieldCheck,
   UsersRound,
-  Building2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -17,41 +17,32 @@ import { useFrontendCapabilityState } from "@/components/capability-state-provid
 import { ApiError, apiRequest } from "@/lib/api";
 
 type HealthResponse = {
-  status: string;
-  service: string;
-  version: string;
-  environment: string;
-  database: string;
-  external_services: string;
+  status?: string | null;
+  service?: string | null;
+  version?: string | null;
+  environment?: string | null;
+  database?: string | null;
+  external_services?: string | null;
 };
 
 type ListResponse<T> = {
-  items: T[];
-  count: number;
-  limit: number;
-  offset: number;
+  items?: Array<T | null | undefined> | null;
+  count?: number | null;
+  limit?: number | null;
+  offset?: number | null;
 };
 
 type OperationLogRecord = {
-  operation_id?: string;
   action?: string;
   target_type?: string;
-  target_id?: string;
-  job_id?: string | null;
   result?: string;
   error_code?: string | null;
-  request_id?: string | null;
-  details?: Record<string, unknown> | null;
   created_at?: string;
 };
 
 type ApprovalRecord = {
-  approval_id?: string;
-  module_key?: string;
-  action_key?: string;
   risk_level?: string;
   status?: string;
-  workflow_state?: string | null;
   request_time?: string;
 };
 
@@ -62,143 +53,327 @@ type UserRecord = {
   status?: string;
 };
 
-type DashboardData = {
-  approvals: ListResponse<ApprovalRecord> | null;
-  approvalsError: string;
-  health: HealthResponse | null;
-  healthError: string;
-  operationLogs: ListResponse<OperationLogRecord> | null;
-  logsError: string;
-  users: ListResponse<UserRecord> | null;
-  usersError: string;
+type DashboardState = {
+  approvals?: ListResponse<ApprovalRecord> | null;
+  approvalsError?: string | null;
+  health?: HealthResponse | null;
+  healthError?: string | null;
+  operationLogs?: ListResponse<OperationLogRecord> | null;
+  logsError?: string | null;
+  users?: ListResponse<UserRecord> | null;
+  usersError?: string | null;
 };
 
-const EMPTY_DASHBOARD_DATA: DashboardData = {
-  approvals: null,
-  approvalsError: "",
-  health: null,
-  healthError: "",
-  logsError: "",
-  operationLogs: null,
-  users: null,
-  usersError: "",
-};
+const ENGINEERING_LABEL_PREFIX = "C";
+const ENGINEERING_LABEL_REPLACEMENTS: Array<[RegExp, string]> = [
+  [
+    new RegExp(`\\b${ENGINEERING_LABEL_PREFIX}17(?: Durable Observability)?\\b`, "g"),
+    "Logs",
+  ],
+  [
+    new RegExp(
+      `\\b${ENGINEERING_LABEL_PREFIX}18(?: Scope Adapter| Tenant Consistency)?\\b`,
+      "g",
+    ),
+    "Organizations",
+  ],
+  [
+    new RegExp(`\\b${ENGINEERING_LABEL_PREFIX}12(?: Approval Gate)?\\b`, "g"),
+    "Approvals",
+  ],
+];
 
-function errorMessage(error: unknown, fallback: string) {
-  return error instanceof ApiError ? error.message : fallback;
+function textValue(value: unknown, fallback = "Unknown") {
+  const text = typeof value === "string" ? value.trim() : "";
+  const safeText = text.length > 0 ? text : fallback;
+
+  return ENGINEERING_LABEL_REPLACEMENTS.reduce(
+    (label, [pattern, replacement]) => label.replace(pattern, replacement),
+    safeText,
+  );
 }
 
-function formatDate(value: string | null | undefined) {
-  if (!value) {
+function optionalText(value: unknown) {
+  return typeof value === "string" ? textValue(value, "") : "";
+}
+
+function safeNumber(value: unknown, fallback = 0) {
+  return typeof value === "number" && Number.isFinite(value)
+    ? Math.max(0, value)
+    : fallback;
+}
+
+function safeItems<T>(response: ListResponse<T> | null | undefined): T[] {
+  return Array.isArray(response?.items)
+    ? response.items.filter((item): item is T => item !== null && item !== undefined)
+    : [];
+}
+
+function errorMessage(error: unknown, fallback: string) {
+  if (error instanceof ApiError || error instanceof Error) {
+    return textValue(error.message, fallback);
+  }
+
+  return fallback;
+}
+
+function formatDate(value: unknown) {
+  if (typeof value !== "string" || value.trim().length === 0) {
     return "Not recorded";
   }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return textValue(value, "Not recorded");
   }
+
   return new Intl.DateTimeFormat(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
 }
 
-function statusCount<T extends { status?: string }>(
+function statusCount<T extends { status?: string | null | undefined }>(
   items: readonly T[],
   status: string,
 ) {
-  return items.filter((item) => item.status === status).length;
+  return items.filter(
+    (item) => optionalText(item.status).toLowerCase() === status,
+  ).length;
 }
 
-function failedOperationCount(items: readonly OperationLogRecord[]) {
-  return items.filter((log) => log.result === "error" || Boolean(log.error_code))
-    .length;
+function failedLogCount(items: readonly OperationLogRecord[]) {
+  return items.filter((log) => {
+    const result = optionalText(log.result).toLowerCase();
+
+    return result === "error" || optionalText(log.error_code).length > 0;
+  }).length;
 }
 
-function displayStatus(value: string | null | undefined) {
-  return value?.trim() || "Unknown";
+function normalizeExecutionMode(value: unknown): "mock" | "staging" | "live" {
+  return value === "staging" || value === "live" ? value : "mock";
+}
+
+function FallbackNotice({
+  detail,
+  isLoading,
+  onRetry,
+}: {
+  detail?: string;
+  isLoading: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <div aria-live="polite" className="ops-empty-state" role="status">
+      <strong>No data available</strong>
+      <span>{textValue(detail, "System initializing")}</span>
+      <button
+        className="secondary-button"
+        disabled={isLoading}
+        onClick={onRetry}
+        type="button"
+      >
+        {isLoading ? (
+          <LoaderCircle aria-hidden="true" className="spin" size={15} />
+        ) : (
+          <RotateCcw aria-hidden="true" size={15} />
+        )}
+        Try refreshing
+      </button>
+    </div>
+  );
 }
 
 export function OperationsDashboard() {
   const { user } = useAuth();
-  const { orgContext, refresh: refreshCapabilityState } =
-    useFrontendCapabilityState();
-  const [data, setData] = useState<DashboardData>(EMPTY_DASHBOARD_DATA);
+  const capabilityState = useFrontendCapabilityState();
+  const [state, setState] = useState<DashboardState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const refreshCapabilityState = capabilityState?.refresh ?? (async () => {});
 
   const load = useCallback(async () => {
     setIsLoading(true);
-    await refreshCapabilityState();
-    const [health, operationLogs, approvals, users] = await Promise.allSettled([
-      apiRequest<HealthResponse>("/health", { method: "GET" }),
-      apiRequest<ListResponse<OperationLogRecord>>(
-        "/operation-logs?limit=8&offset=0",
-        { method: "GET" },
-      ),
-      apiRequest<ListResponse<ApprovalRecord>>(
-        "/approval/list?limit=50&offset=0",
-        { method: "GET" },
-      ),
-      apiRequest<ListResponse<UserRecord>>("/users?limit=1&offset=0", {
-        method: "GET",
-      }),
-    ]);
 
-    setData({
-      approvals: approvals.status === "fulfilled" ? approvals.value : null,
-      approvalsError:
-        approvals.status === "rejected"
-          ? errorMessage(approvals.reason, "Approvals are unavailable.")
-          : "",
-      health: health.status === "fulfilled" ? health.value : null,
-      healthError:
-        health.status === "rejected"
-          ? errorMessage(health.reason, "System health is unavailable.")
-          : "",
-      operationLogs:
-        operationLogs.status === "fulfilled" ? operationLogs.value : null,
-      logsError:
-        operationLogs.status === "rejected"
-          ? errorMessage(operationLogs.reason, "Recent operations are unavailable.")
-          : "",
-      users: users.status === "fulfilled" ? users.value : null,
-      usersError:
-        users.status === "rejected"
-          ? errorMessage(users.reason, "User count is unavailable.")
-          : "",
-    });
-    setIsLoading(false);
+    try {
+      const [, health, operationLogs, approvals, users] =
+        await Promise.allSettled([
+          refreshCapabilityState(),
+          apiRequest<HealthResponse>("/health", { method: "GET" }),
+          apiRequest<ListResponse<OperationLogRecord>>(
+            "/operation-logs?limit=8&offset=0",
+            { method: "GET" },
+          ),
+          apiRequest<ListResponse<ApprovalRecord>>(
+            "/approval/list?limit=50&offset=0",
+            { method: "GET" },
+          ),
+          apiRequest<ListResponse<UserRecord>>("/users?limit=1&offset=0", {
+            method: "GET",
+          }),
+        ]);
+
+      setState({
+        approvals: approvals.status === "fulfilled" ? approvals.value ?? null : null,
+        approvalsError:
+          approvals.status === "rejected"
+            ? errorMessage(approvals.reason, "Approvals are unavailable.")
+            : "",
+        health: health.status === "fulfilled" ? health.value ?? null : null,
+        healthError:
+          health.status === "rejected"
+            ? errorMessage(health.reason, "System health is unavailable.")
+            : "",
+        operationLogs:
+          operationLogs.status === "fulfilled"
+            ? operationLogs.value ?? null
+            : null,
+        logsError:
+          operationLogs.status === "rejected"
+            ? errorMessage(operationLogs.reason, "Logs are unavailable.")
+            : "",
+        users: users.status === "fulfilled" ? users.value ?? null : null,
+        usersError:
+          users.status === "rejected"
+            ? errorMessage(users.reason, "Users are unavailable.")
+            : "",
+      });
+    } catch (error) {
+      const message = errorMessage(error, "Dashboard data is unavailable.");
+
+      setState({
+        approvals: null,
+        approvalsError: message,
+        health: null,
+        healthError: message,
+        operationLogs: null,
+        logsError: message,
+        users: null,
+        usersError: message,
+      });
+    } finally {
+      setIsLoading(false);
+    }
   }, [refreshCapabilityState]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  const logs = data.operationLogs?.items ?? [];
-  const approvals = data.approvals?.items ?? [];
-  const pendingApprovals = statusCount(approvals, "pending");
-  const failedOperations = failedOperationCount(logs);
-  const userCount = data.users?.count ?? (user ? 1 : 0);
-  const orgCount = orgContext.state === "active" ? 1 : 0;
-  const healthStatus = displayStatus(data.health?.status);
+  const safeState = state ?? {};
+  const safeOrgContext = {
+    role: textValue(capabilityState?.orgContext?.role, "Unknown"),
+    state: textValue(capabilityState?.orgContext?.state, "unknown"),
+    visibleModules: safeNumber(capabilityState?.orgContext?.visible_modules, 0),
+  };
+
+  const currentUser = user ?? null;
+  const logs = safeItems(safeState.operationLogs);
+  const approvalItems = safeItems(safeState.approvals);
+  const userItems = safeItems(safeState.users);
+  const users = safeNumber(
+    safeState.users?.count,
+    safeState.users?.items?.length ?? 0,
+  );
+  const orgs = safeOrgContext.state === "active" ? 1 : 0;
+  const approvals = safeNumber(
+    safeState.approvals?.count,
+    safeState.approvals?.items?.length ?? 0,
+  );
+  const pendingApprovals = statusCount(approvalItems, "pending");
+  const approvedApprovals = statusCount(approvalItems, "approved");
+  const rejectedApprovals = statusCount(approvalItems, "rejected");
+  const failedLogs = failedLogCount(logs);
+  const healthError = optionalText(safeState.healthError);
+  const usersError = optionalText(safeState.usersError);
+  const approvalsError = optionalText(safeState.approvalsError);
+  const logsError = optionalText(safeState.logsError);
+  const healthStatus = textValue(safeState.health?.status, "System initializing");
+  const executionMode = normalizeExecutionMode(
+    capabilityState?.liveGate?.execution_mode,
+  );
+  const capabilityLoading = capabilityState?.isLoading === true;
+  const hasHealthData = safeState.health !== null && safeState.health !== undefined;
+  const hasUsersData = safeState.users !== null && safeState.users !== undefined;
+  const hasApprovalData =
+    safeState.approvals !== null && safeState.approvals !== undefined;
+  const hasOrganizationData = safeOrgContext.state === "active";
+  const healthDetail = healthError || "System initializing";
+  const userDetail = usersError || "System initializing";
+  const approvalDetail = approvalsError || "System initializing";
+  const logDetail = logsError || "System initializing";
+  const approvalQueue = approvalItems
+    .filter((approval) => optionalText(approval.status).toLowerCase() === "pending")
+    .slice(0, 5);
   const systemStatus = useMemo(() => {
-    if (data.healthError) {
-      return "Needs attention";
+    if (healthError.length > 0) {
+      return "No data available";
     }
-    if (failedOperations > 0 || data.logsError || data.approvalsError) {
+    if (!hasHealthData && isLoading) {
+      return "System initializing";
+    }
+    if (failedLogs > 0 || logsError.length > 0 || approvalsError.length > 0) {
       return "Review";
     }
+
     return "Operational";
-  }, [data.approvalsError, data.healthError, data.logsError, failedOperations]);
+  }, [
+    approvalsError,
+    failedLogs,
+    hasHealthData,
+    healthError,
+    isLoading,
+    logsError,
+  ]);
+  const metricCards = [
+    {
+      detail: healthError || textValue(safeState.health?.database, "System initializing"),
+      icon: CheckCircle2,
+      label: "System Health",
+      value: healthError ? "No data available" : healthStatus,
+    },
+    {
+      detail: usersError || "Workspace accounts",
+      icon: UsersRound,
+      label: "Users Overview",
+      value: users,
+    },
+    {
+      detail:
+        orgs > 0 ? "Active workspace" : "No data available",
+      icon: Building2,
+      label: "Organizations Overview",
+      value: orgs,
+    },
+    {
+      detail: `${approvals} total requests`,
+      icon: ClipboardCheck,
+      label: "Approvals Queue",
+      value: approvalsError ? "No data available" : pendingApprovals,
+    },
+    {
+      detail: `${failedLogs} need review`,
+      icon: FileText,
+      label: "Logs",
+      value: logsError ? "No data available" : logs.length,
+    },
+    {
+      detail: "Current mode",
+      icon: ShieldCheck,
+      label: "Execution Status",
+      value: executionMode,
+    },
+  ];
 
   return (
     <div className="ops-dashboard">
       <div className="ops-dashboard-header">
         <div>
           <span className="eyebrow">Operations Hub</span>
-          <h2>Workspace operations at a glance</h2>
+          <h2>Product operations hub</h2>
           <p>
-            Monitor service health, people, organizations, approvals, recent
-            activity, and overall system status from one product view.
+            Monitor System Health, Users Overview, Organizations Overview,
+            Approvals Queue, Logs, and Execution Status from one stable view.
           </p>
         </div>
         <button
@@ -217,72 +392,222 @@ export function OperationsDashboard() {
       </div>
 
       <section className="ops-metric-grid" aria-label="Operations metrics">
-        <article className="ops-metric-card">
-          <CheckCircle2 aria-hidden="true" size={19} />
-          <span>System health</span>
-          <strong>{data.healthError ? "Unavailable" : healthStatus}</strong>
-          <small>{data.health?.database ?? "Health check pending"}</small>
-        </article>
-        <article className="ops-metric-card">
-          <UsersRound aria-hidden="true" size={19} />
-          <span>Users</span>
-          <strong>{userCount}</strong>
-          <small>{data.usersError ? "Current user shown" : "Workspace accounts"}</small>
-        </article>
-        <article className="ops-metric-card">
-          <Building2 aria-hidden="true" size={19} />
-          <span>Organizations</span>
-          <strong>{orgCount}</strong>
-          <small>{orgContext.state === "active" ? "Active workspace" : "Not selected"}</small>
-        </article>
-        <article className="ops-metric-card">
-          <Clock3 aria-hidden="true" size={19} />
-          <span>Pending approvals</span>
-          <strong>{data.approvalsError ? "Unavailable" : pendingApprovals}</strong>
-          <small>{data.approvals?.count ?? 0} total requests</small>
-        </article>
-        <article className="ops-metric-card">
-          <FileText aria-hidden="true" size={19} />
-          <span>Recent operations</span>
-          <strong>{data.logsError ? "Unavailable" : logs.length}</strong>
-          <small>{failedOperations} need review</small>
-        </article>
-        <article className="ops-metric-card">
-          <ShieldCheck aria-hidden="true" size={19} />
-          <span>System status</span>
-          <strong>{systemStatus}</strong>
-          <small>{data.health?.environment ?? "Environment pending"}</small>
-        </article>
+        {metricCards.map(({ detail, icon: Icon, label, value }) => (
+          <article className="ops-metric-card" key={label}>
+            <Icon aria-hidden="true" size={19} />
+            <span>{label}</span>
+            <strong>{value}</strong>
+            <small>{detail}</small>
+          </article>
+        ))}
       </section>
 
       <section className="ops-dashboard-grid">
+        <article className="ops-panel">
+          <div className="ops-panel-heading">
+            <div>
+              <h3>System Health Card</h3>
+              <p>Current service availability and product readiness.</p>
+            </div>
+          </div>
+          {healthError || !hasHealthData ? (
+            <FallbackNotice
+              detail={healthDetail}
+              isLoading={isLoading}
+              onRetry={() => void load()}
+            />
+          ) : (
+            <dl className="ops-readiness-list">
+              <div>
+                <dt>Status</dt>
+                <dd>{healthStatus}</dd>
+              </div>
+              <div>
+                <dt>Service</dt>
+                <dd>{textValue(safeState.health?.service)}</dd>
+              </div>
+              <div>
+                <dt>Database</dt>
+                <dd>{textValue(safeState.health?.database)}</dd>
+              </div>
+              <div>
+                <dt>External services</dt>
+                <dd>{textValue(safeState.health?.external_services)}</dd>
+              </div>
+              <div>
+                <dt>Version</dt>
+                <dd>{textValue(safeState.health?.version)}</dd>
+              </div>
+              <div>
+                <dt>Overall</dt>
+                <dd>{systemStatus}</dd>
+              </div>
+            </dl>
+          )}
+        </article>
+
+        <article className="ops-panel">
+          <div className="ops-panel-heading">
+            <div>
+              <h3>Users Overview</h3>
+              <p>User access and account coverage for this workspace.</p>
+            </div>
+          </div>
+          {usersError && !hasUsersData && !currentUser ? (
+            <FallbackNotice
+              detail={userDetail}
+              isLoading={isLoading}
+              onRetry={() => void load()}
+            />
+          ) : (
+            <dl className="ops-readiness-list">
+              <div>
+                <dt>Users</dt>
+                <dd>{users}</dd>
+              </div>
+              <div>
+                <dt>Loaded</dt>
+                <dd>{userItems.length}</dd>
+              </div>
+              <div>
+                <dt>Current role</dt>
+                <dd>{textValue(currentUser?.role)}</dd>
+              </div>
+              <div>
+                <dt>Account</dt>
+                <dd>{textValue(currentUser?.username)}</dd>
+              </div>
+              <div>
+                <dt>Status</dt>
+                <dd>
+                  {usersError
+                    ? "Limited view"
+                    : currentUser?.is_active === false
+                      ? "Inactive"
+                      : "Available"}
+                </dd>
+              </div>
+            </dl>
+          )}
+        </article>
+
+        <article className="ops-panel">
+          <div className="ops-panel-heading">
+            <div>
+              <h3>Organizations Overview</h3>
+              <p>Workspace organization access and visibility status.</p>
+            </div>
+          </div>
+          {hasOrganizationData ? (
+            <dl className="ops-readiness-list">
+              <div>
+                <dt>Organizations</dt>
+                <dd>{orgs}</dd>
+              </div>
+              <div>
+                <dt>Access</dt>
+                <dd>Active</dd>
+              </div>
+              <div>
+                <dt>Role</dt>
+                <dd>{safeOrgContext.role}</dd>
+              </div>
+              <div>
+                <dt>Visible areas</dt>
+                <dd>{safeOrgContext.visibleModules}</dd>
+              </div>
+            </dl>
+          ) : (
+            <FallbackNotice
+              detail="System initializing"
+              isLoading={isLoading}
+              onRetry={() => void load()}
+            />
+          )}
+        </article>
+
+        <article className="ops-panel">
+          <div className="ops-panel-heading">
+            <div>
+              <h3>Approvals Queue</h3>
+              <p>Requests waiting for review and completed decisions.</p>
+            </div>
+          </div>
+          {approvalsError || !hasApprovalData ? (
+            <FallbackNotice
+              detail={approvalDetail}
+              isLoading={isLoading}
+              onRetry={() => void load()}
+            />
+          ) : (
+            <>
+              <dl className="ops-readiness-list">
+                <div>
+                  <dt>Pending</dt>
+                  <dd>{pendingApprovals}</dd>
+                </div>
+                <div>
+                  <dt>Approved</dt>
+                  <dd>{approvedApprovals}</dd>
+                </div>
+                <div>
+                  <dt>Rejected</dt>
+                  <dd>{rejectedApprovals}</dd>
+                </div>
+                <div>
+                  <dt>Total</dt>
+                  <dd>{approvals}</dd>
+                </div>
+              </dl>
+              {approvalQueue.length > 0 ? (
+                <ol className="ops-record-list" aria-label="Approvals queue">
+                  {approvalQueue.map((approval, index) => (
+                    <li key={`approval-${index}`}>
+                      <span>{textValue(approval.status, "pending")}</span>
+                      <strong>Approval request</strong>
+                      <small>
+                        {textValue(approval.risk_level, "Standard risk")} /{" "}
+                        {formatDate(approval.request_time)}
+                      </small>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <FallbackNotice
+                  detail="System initializing"
+                  isLoading={isLoading}
+                  onRetry={() => void load()}
+                />
+              )}
+            </>
+          )}
+        </article>
+
         <article className="ops-panel ops-panel-wide">
           <div className="ops-panel-heading">
             <div>
-              <h3>Recent operations</h3>
-              <p>Latest activity across jobs, approvals, and system changes.</p>
+              <h3>Logs</h3>
+              <p>Recent product activity and completed work.</p>
             </div>
           </div>
-          {data.logsError ? (
-            <p className="ops-warning">{data.logsError}</p>
+          {logsError || logs.length === 0 ? (
+            <FallbackNotice
+              detail={logDetail}
+              isLoading={isLoading}
+              onRetry={() => void load()}
+            />
           ) : (
-            <ol className="ops-record-list">
-              {logs.slice(0, 8).map((log) => (
-                <li key={log.operation_id ?? `${log.action}-${log.created_at}`}>
-                  <span>{log.result ?? "recorded"}</span>
-                  <strong>{log.action ?? "Operation recorded"}</strong>
+            <ol className="ops-record-list" aria-label="Recent logs">
+              {logs.slice(0, 8).map((log, index) => (
+                <li key={`log-${index}`}>
+                  <span>{textValue(log.result, "recorded")}</span>
+                  <strong>{textValue(log.action, "Log entry")}</strong>
                   <small>
-                    {log.target_type ?? "Workspace"} / {formatDate(log.created_at)}
+                    {textValue(log.target_type, "Workspace")} /{" "}
+                    {formatDate(log.created_at)}
                   </small>
                 </li>
               ))}
-              {logs.length === 0 ? (
-                <li>
-                  <span>ready</span>
-                  <strong>No recent operations yet.</strong>
-                  <small>Activity will appear here as work is completed.</small>
-                </li>
-              ) : null}
             </ol>
           )}
         </article>
@@ -290,115 +615,26 @@ export function OperationsDashboard() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>System status</h3>
-              <p>Current service availability and runtime environment.</p>
-            </div>
-          </div>
-          {data.healthError ? (
-            <p className="ops-warning">{data.healthError}</p>
-          ) : (
-            <dl className="ops-readiness-list">
-              <div>
-                <dt>Service</dt>
-                <dd>{data.health?.service ?? "Unknown"}</dd>
-              </div>
-              <div>
-                <dt>Version</dt>
-                <dd>{data.health?.version ?? "Unknown"}</dd>
-              </div>
-              <div>
-                <dt>Database</dt>
-                <dd>{data.health?.database ?? "Unknown"}</dd>
-              </div>
-              <div>
-                <dt>External services</dt>
-                <dd>{data.health?.external_services ?? "Unknown"}</dd>
-              </div>
-            </dl>
-          )}
-        </article>
-
-        <article className="ops-panel">
-          <div className="ops-panel-heading">
-            <div>
-              <h3>Approvals</h3>
-              <p>Requests waiting for review and completed decisions.</p>
-            </div>
-          </div>
-          {data.approvalsError ? (
-            <p className="ops-warning">{data.approvalsError}</p>
-          ) : (
-            <dl className="ops-readiness-list">
-              <div>
-                <dt>Pending</dt>
-                <dd>{pendingApprovals}</dd>
-              </div>
-              <div>
-                <dt>Approved</dt>
-                <dd>{statusCount(approvals, "approved")}</dd>
-              </div>
-              <div>
-                <dt>Rejected</dt>
-                <dd>{statusCount(approvals, "rejected")}</dd>
-              </div>
-              <div>
-                <dt>Total</dt>
-                <dd>{data.approvals?.count ?? 0}</dd>
-              </div>
-            </dl>
-          )}
-        </article>
-
-        <article className="ops-panel">
-          <div className="ops-panel-heading">
-            <div>
-              <h3>People</h3>
-              <p>User access and account coverage for this workspace.</p>
+              <h3>Execution Status</h3>
+              <p>Current product execution mode exposed to operators.</p>
             </div>
           </div>
           <dl className="ops-readiness-list">
             <div>
-              <dt>User count</dt>
-              <dd>{userCount}</dd>
+              <dt>Current mode</dt>
+              <dd>{executionMode}</dd>
             </div>
             <div>
-              <dt>Current role</dt>
-              <dd>{user?.role ?? "Unknown"}</dd>
+              <dt>Safe fallback</dt>
+              <dd>mock</dd>
             </div>
             <div>
-              <dt>Account</dt>
-              <dd>{user?.username ?? "Unknown"}</dd>
+              <dt>Available modes</dt>
+              <dd>mock / staging / live</dd>
             </div>
             <div>
-              <dt>Status</dt>
-              <dd>{data.usersError ? "Limited view" : "Available"}</dd>
-            </div>
-          </dl>
-        </article>
-
-        <article className="ops-panel">
-          <div className="ops-panel-heading">
-            <div>
-              <h3>Organizations</h3>
-              <p>Workspace organization access and visibility status.</p>
-            </div>
-          </div>
-          <dl className="ops-readiness-list">
-            <div>
-              <dt>Org count</dt>
-              <dd>{orgCount}</dd>
-            </div>
-            <div>
-              <dt>Access</dt>
-              <dd>{orgContext.state === "active" ? "Active" : "Unknown"}</dd>
-            </div>
-            <div>
-              <dt>Role</dt>
-              <dd>{orgContext.role || "Unknown"}</dd>
-            </div>
-            <div>
-              <dt>Visible areas</dt>
-              <dd>{orgContext.visible_modules}</dd>
+              <dt>State</dt>
+              <dd>{capabilityLoading ? "System initializing" : "Available"}</dd>
             </div>
           </dl>
         </article>

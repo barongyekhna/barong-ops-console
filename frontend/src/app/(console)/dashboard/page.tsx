@@ -13,7 +13,10 @@ export default function DashboardPage() {
         <span className="section-index">Hub</span>
         <div>
           <h2>Operations Hub</h2>
-          <p>Health, users, organizations, approvals, recent operations, and system status.</p>
+          <p>
+            System Health Card, Users Overview, Organizations Overview,
+            Approvals Queue, Logs, and Execution Status.
+          </p>
         </div>
       </div>
       <OperationsDashboard />
