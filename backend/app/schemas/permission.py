@@ -120,15 +120,15 @@ class PermissionModuleIsolationRules(BaseModel):
 class PermissionOwnerOverrideLogic(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    logic_id: Literal["c18f_owner_override_v1"] = "c18f_owner_override_v1"
-    owner_role_source: Literal["users.role"] = "users.role"
-    rule: Literal["if user.role == 'owner': RETURN ALLOW"] = (
-        "if user.role == 'owner': RETURN ALLOW"
+    logic_id: Literal["c18f_owner_scope_v2"] = "c18f_owner_scope_v2"
+    owner_role_source: Literal["org_memberships.role"] = "org_memberships.role"
+    rule: Literal["owner must pass active org membership and module binding checks"] = (
+        "owner must pass active org membership and module binding checks"
     )
-    owner_can_access_all_orgs: Literal[True] = True
-    owner_can_access_all_modules: Literal[True] = True
-    owner_can_execute_all_actions: Literal[True] = True
-    owner_bypasses_permission_check: Literal[True] = True
+    owner_can_access_all_orgs: Literal[False] = False
+    owner_can_access_all_modules: Literal[False] = False
+    owner_can_execute_all_actions: Literal[False] = False
+    owner_bypasses_permission_check: Literal[False] = False
 
 
 class PermissionGranularityModel(BaseModel):
@@ -183,7 +183,7 @@ class PermissionApiMiddlewareDesign(BaseModel):
     )
     requires_org_context_for_enforcement: Literal[True] = True
     requires_module_context_for_enforcement: Literal[True] = True
-    owner_override_first: Literal[True] = True
+    owner_override_first: Literal[False] = False
 
 
 class PermissionC18Integration(BaseModel):

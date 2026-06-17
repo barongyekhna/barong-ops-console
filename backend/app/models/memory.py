@@ -1,15 +1,18 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from .base_mixins import CreatedAtMixin, PrimaryKeyMixin, json_type
+from .base_mixins import CreatedAtMixin, OrgScopedMixin, PrimaryKeyMixin, json_type
 
 
-class MemoryEvent(PrimaryKeyMixin, CreatedAtMixin, Base):
+class MemoryEvent(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "memory_events"
+    __table_args__ = (
+        Index("ix_memory_events_org_id_created_at", "org_id", "created_at"),
+    )
 
     memory_event_id: Mapped[str] = mapped_column(
         String(128),
@@ -30,8 +33,11 @@ class MemoryEvent(PrimaryKeyMixin, CreatedAtMixin, Base):
     created_by_id: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
-class MemorySummary(PrimaryKeyMixin, CreatedAtMixin, Base):
+class MemorySummary(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "memory_summaries"
+    __table_args__ = (
+        Index("ix_memory_summaries_org_id_created_at", "org_id", "created_at"),
+    )
 
     memory_summary_id: Mapped[str] = mapped_column(
         String(128),
@@ -58,8 +64,15 @@ class MemorySummary(PrimaryKeyMixin, CreatedAtMixin, Base):
     )
 
 
-class AgentMemoryAccessLog(PrimaryKeyMixin, CreatedAtMixin, Base):
+class AgentMemoryAccessLog(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "agent_memory_access_logs"
+    __table_args__ = (
+        Index(
+            "ix_agent_memory_access_logs_org_id_created_at",
+            "org_id",
+            "created_at",
+        ),
+    )
 
     access_id: Mapped[str] = mapped_column(
         String(128),

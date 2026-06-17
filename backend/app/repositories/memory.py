@@ -5,14 +5,17 @@ from ..models.context import ContextPacket
 from ..models.memory import MemoryEvent, MemorySummary
 from ..schemas.memory import ContextPacketCreate, MemoryEventCreate
 from ..services.event_collector import record_product_knowledge_event
+from .tenant import current_tenant_org_id, tenant_org_id_for_create
 
 
 def list_memory_events(
     db: Session, *, limit: int, offset: int
 ) -> list[MemoryEvent]:
+    org_id = current_tenant_org_id()
     events = list(
         db.scalars(
             select(MemoryEvent)
+            .where(MemoryEvent.org_id == org_id)
             .order_by(MemoryEvent.id.desc())
             .limit(limit)
             .offset(offset)
@@ -28,9 +31,11 @@ def list_memory_events(
 def get_memory_event(
     db: Session, memory_event_id: str
 ) -> MemoryEvent | None:
+    org_id = current_tenant_org_id()
     event = db.scalar(
         select(MemoryEvent).where(
-            MemoryEvent.memory_event_id == memory_event_id
+            MemoryEvent.memory_event_id == memory_event_id,
+            MemoryEvent.org_id == org_id,
         )
     )
     record_product_knowledge_event(
@@ -52,6 +57,7 @@ def create_memory_event(
     created_by_type: str = "user",
 ) -> MemoryEvent:
     event = MemoryEvent(
+        org_id=tenant_org_id_for_create(),
         **payload.model_dump(),
         created_by_type=created_by_type,
         created_by_id=created_by_id,
@@ -73,9 +79,11 @@ def create_memory_event(
 def list_context_packets(
     db: Session, *, limit: int, offset: int
 ) -> list[ContextPacket]:
+    org_id = current_tenant_org_id()
     packets = list(
         db.scalars(
             select(ContextPacket)
+            .where(ContextPacket.org_id == org_id)
             .order_by(ContextPacket.id.desc())
             .limit(limit)
             .offset(offset)
@@ -91,9 +99,11 @@ def list_context_packets(
 def get_context_packet(
     db: Session, context_packet_id: str
 ) -> ContextPacket | None:
+    org_id = current_tenant_org_id()
     packet = db.scalar(
         select(ContextPacket).where(
-            ContextPacket.context_packet_id == context_packet_id
+            ContextPacket.context_packet_id == context_packet_id,
+            ContextPacket.org_id == org_id,
         )
     )
     record_product_knowledge_event(
@@ -111,6 +121,7 @@ def create_context_packet(
     db: Session, payload: ContextPacketCreate
 ) -> ContextPacket:
     packet = ContextPacket(
+        org_id=tenant_org_id_for_create(),
         context_packet_id=payload.context_packet_id,
         source_job_id=payload.source_job_id,
         source_module_id=payload.source_module_key,
@@ -139,9 +150,11 @@ def create_context_packet(
 def list_memory_summaries(
     db: Session, *, limit: int, offset: int
 ) -> list[MemorySummary]:
+    org_id = current_tenant_org_id()
     summaries = list(
         db.scalars(
             select(MemorySummary)
+            .where(MemorySummary.org_id == org_id)
             .order_by(MemorySummary.id.desc())
             .limit(limit)
             .offset(offset)
@@ -157,9 +170,11 @@ def list_memory_summaries(
 def get_memory_summary(
     db: Session, summary_id: str
 ) -> MemorySummary | None:
+    org_id = current_tenant_org_id()
     summary = db.scalar(
         select(MemorySummary).where(
-            MemorySummary.memory_summary_id == summary_id
+            MemorySummary.memory_summary_id == summary_id,
+            MemorySummary.org_id == org_id,
         )
     )
     record_product_knowledge_event(

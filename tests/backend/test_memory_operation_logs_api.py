@@ -67,6 +67,7 @@ def test_operation_logs_are_read_only_and_responses_exclude_secrets(
     owner_client: TestClient,
 ) -> None:
     create_module(owner_client)
+    create_job(owner_client)
 
     listed = owner_client.get("/api/app/operation-logs")
     operation_id = listed.json()["items"][0]["operation_id"]

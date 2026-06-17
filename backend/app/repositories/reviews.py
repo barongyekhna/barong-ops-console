@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..models.review import ReviewItem
 from ..schemas.reviews import ReviewCreate, ReviewDecisionCreate
+from .tenant import current_tenant_org_id, tenant_org_id_for_create
 
 DECISION_STATUSES = {
     "approve_demo": "approved_demo",
@@ -16,9 +17,11 @@ DECISION_STATUSES = {
 def list_reviews(
     db: Session, *, limit: int, offset: int
 ) -> list[ReviewItem]:
+    org_id = current_tenant_org_id()
     return list(
         db.scalars(
             select(ReviewItem)
+            .where(ReviewItem.org_id == org_id)
             .order_by(ReviewItem.id.desc())
             .limit(limit)
             .offset(offset)
@@ -27,8 +30,12 @@ def list_reviews(
 
 
 def get_review(db: Session, review_id: str) -> ReviewItem | None:
+    org_id = current_tenant_org_id()
     return db.scalar(
-        select(ReviewItem).where(ReviewItem.review_id == review_id)
+        select(ReviewItem).where(
+            ReviewItem.review_id == review_id,
+            ReviewItem.org_id == org_id,
+        )
     )
 
 
@@ -39,6 +46,7 @@ def create_review(
     requested_by: int,
 ) -> ReviewItem:
     review = ReviewItem(
+        org_id=tenant_org_id_for_create(),
         review_id=payload.review_id,
         job_id=payload.job_id,
         artifact_id=payload.artifact_id,

@@ -1,20 +1,26 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String
+from sqlalchemy import DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
 from .base_mixins import (
     CreatedAtMixin,
+    OrgScopedMixin,
     PrimaryKeyMixin,
     TimestampMixin,
     json_type,
 )
 
 
-class AutomationJob(PrimaryKeyMixin, TimestampMixin, Base):
+class AutomationJob(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "automation_jobs"
+    __table_args__ = (
+        Index("ix_automation_jobs_org_id_created_at", "org_id", "created_at"),
+        Index("ix_automation_jobs_org_id_status", "org_id", "status"),
+        Index("ix_automation_jobs_org_id_module_id", "org_id", "module_id"),
+    )
 
     job_id: Mapped[str] = mapped_column(
         String(128),
@@ -69,8 +75,11 @@ class AutomationJob(PrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
-class JobEvent(PrimaryKeyMixin, CreatedAtMixin, Base):
+class JobEvent(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "job_events"
+    __table_args__ = (
+        Index("ix_job_events_org_id_created_at", "org_id", "created_at"),
+    )
 
     job_id: Mapped[str] = mapped_column(
         ForeignKey("automation_jobs.job_id"),

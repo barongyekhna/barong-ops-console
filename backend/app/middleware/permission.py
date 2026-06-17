@@ -187,6 +187,9 @@ async def enforce_permission_isolation(request: Request, call_next):
     if context is None:
         return await call_next(request)
 
+    request.state.org_id = context.org_id
+    request.state.module_id = context.module_id
+    request.state.permission_action = context.action
     audit = _audit_context(request)
     session_id = request.cookies.get(settings.auth_session_cookie_name)
     if session_id is None:

@@ -157,9 +157,9 @@ def test_c18i_design_outputs_match_required_contract() -> None:
     assert integration.c18a_to_c18h_files_modified is False
     assert proof.registry_stores_business_data is False
     assert proof.c18g_rejects_cross_org_writes is True
-    assert completion.migration_executed is False
+    assert completion.migration_executed is True
     assert completion.cross_org_data_logic_added is False
-    assert "mode: single | multi | global | shared" in SHARED_MODULE_DATA_STRUCTURE
+    assert "target_org_id: str" in SHARED_MODULE_DATA_STRUCTURE
 
 
 def test_c18i_availability_logic_for_single_multi_global_shared_disabled() -> None:
@@ -293,6 +293,9 @@ def test_c18i_org_query_uses_c18c_membership_and_grants_no_data_access() -> None
 
         with pytest.raises(PermissionError):
             list_org_shared_modules_for_actor(db, org_id="org_1", actor=outsider)
+
+        with pytest.raises(PermissionError):
+            list_org_shared_modules_for_actor(db, org_id="org_1", actor=owner)
 
 
 def test_c18i_execution_flow_requires_c18h_org_context_and_denies_unavailable() -> None:

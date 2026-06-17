@@ -144,7 +144,7 @@ def get_visible_modules(
         )
         raise
 
-    bindings = list_module_bindings()
+    bindings = list_module_bindings(db)
     visible_modules = build_visible_modules_for_org(
         org_id=org_id,
         bindings=bindings,

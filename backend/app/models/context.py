@@ -1,20 +1,22 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from .base_mixins import CreatedAtMixin, PrimaryKeyMixin, json_type
+from .base_mixins import CreatedAtMixin, OrgScopedMixin, PrimaryKeyMixin, json_type
 
 
-class ContextPacket(PrimaryKeyMixin, CreatedAtMixin, Base):
+class ContextPacket(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "context_packets"
     __table_args__ = (
         CheckConstraint(
             "target_module_id IS NOT NULL OR target_agent_id IS NOT NULL",
             name="has_context_target",
         ),
+        Index("ix_context_packets_org_id_created_at", "org_id", "created_at"),
+        Index("ix_context_packets_org_id_source_module_id", "org_id", "source_module_id"),
     )
 
     context_packet_id: Mapped[str] = mapped_column(

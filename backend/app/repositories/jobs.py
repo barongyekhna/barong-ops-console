@@ -3,14 +3,17 @@ from sqlalchemy.orm import Session
 
 from ..models.job import AutomationJob, JobEvent
 from ..schemas.jobs import JobCreate, JobEventCreate
+from .tenant import current_tenant_org_id, tenant_org_id_for_create
 
 
 def list_jobs(
     db: Session, *, limit: int, offset: int
 ) -> list[AutomationJob]:
+    org_id = current_tenant_org_id()
     return list(
         db.scalars(
             select(AutomationJob)
+            .where(AutomationJob.org_id == org_id)
             .order_by(AutomationJob.id.desc())
             .limit(limit)
             .offset(offset)
@@ -19,8 +22,12 @@ def list_jobs(
 
 
 def get_job(db: Session, job_id: str) -> AutomationJob | None:
+    org_id = current_tenant_org_id()
     return db.scalar(
-        select(AutomationJob).where(AutomationJob.job_id == job_id)
+        select(AutomationJob).where(
+            AutomationJob.job_id == job_id,
+            AutomationJob.org_id == org_id,
+        )
     )
 
 
@@ -31,6 +38,7 @@ def create_job(
     requested_by_user_id: int,
 ) -> AutomationJob:
     job = AutomationJob(
+        org_id=tenant_org_id_for_create(),
         job_id=payload.job_id,
         module_id=payload.module_key,
         agent_id=payload.agent_key,
@@ -55,10 +63,11 @@ def list_job_events(
     limit: int,
     offset: int,
 ) -> list[JobEvent]:
+    org_id = current_tenant_org_id()
     return list(
         db.scalars(
             select(JobEvent)
-            .where(JobEvent.job_id == job_id)
+            .where(JobEvent.job_id == job_id, JobEvent.org_id == org_id)
             .order_by(JobEvent.id.asc())
             .limit(limit)
             .offset(offset)
@@ -75,6 +84,7 @@ def create_job_event(
 ) -> JobEvent:
     from_status = job.status if payload.to_status is not None else None
     event = JobEvent(
+        org_id=job.org_id,
         job_id=job.job_id,
         event_type=payload.event_type,
         from_status=from_status,

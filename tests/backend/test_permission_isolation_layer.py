@@ -11,6 +11,7 @@ from backend.app.db.base import Base
 from backend.app.db.session import SessionLocal, engine
 from backend.app.models.org_membership import OrgMembershipRecord
 from backend.app.models.user import User
+from backend.app.repositories import module_bindings as binding_repo
 from backend.app.schemas.module_binding import GLOBAL_MODULE_BOUND_ORG, ModuleBinding
 from backend.app.schemas.permission import (
     Permission,
@@ -75,10 +76,15 @@ def _add_membership(
 
 
 def _set_c18d_bindings(*bindings: ModuleBinding) -> None:
-    with c18d_binding._MODULE_BINDINGS_LOCK:
-        c18d_binding._MODULE_BINDINGS.clear()
+    with SessionLocal() as db:
+        binding_repo.clear_module_bindings(db)
         for binding in bindings:
-            c18d_binding._MODULE_BINDINGS[binding.module_id] = binding
+            binding_repo.replace_module_binding(
+                db,
+                module_id=binding.module_id,
+                bound_orgs=binding.bound_orgs,
+            )
+        db.commit()
 
 
 def test_c18f_design_outputs_define_required_permission_boundary() -> None:
@@ -113,7 +119,7 @@ def test_c18f_design_outputs_define_required_permission_boundary() -> None:
     assert org_rules.cross_org_permission_inheritance_allowed is False
     assert module_rules.c18d_binding_required is True
     assert module_rules.module_visibility_is_not_execution_permission is True
-    assert owner_override.owner_bypasses_permission_check is True
+    assert owner_override.owner_bypasses_permission_check is False
     assert granularity.k_series_actions == ("read", "write", "execute")
     assert granularity.c_series_actions == ("admin",)
     assert granularity.p_series_actions == ("write",)
@@ -165,7 +171,7 @@ def test_c18f_check_permission_enforces_owner_org_module_and_action_rules() -> N
         _add_membership(db, user=org_owner, org_id="org_1", role="owner")
         db.commit()
 
-        owner_decision = check_permission(
+        platform_owner_cross_org = check_permission(
             db,
             owner.id,
             "org_any",
@@ -190,10 +196,8 @@ def test_c18f_check_permission_enforces_owner_org_module_and_action_rules() -> N
         p_series_write = check_permission(db, admin.id, "org_1", "P-series", "write")
         global_read = check_permission(db, member.id, "org_1", "global-module", "read")
 
-    assert owner_decision.allowed is True
-    assert owner_decision.owner_override_applied is True
-    assert owner_decision.c18c_org_membership_checked is False
-    assert owner_decision.c18d_module_binding_checked is False
+    assert platform_owner_cross_org.denial_code == "c18f_user_not_in_org"
+    assert platform_owner_cross_org.owner_override_applied is False
 
     assert admin_write.allowed is True
     assert admin_write.permission is not None

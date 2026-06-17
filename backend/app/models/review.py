@@ -1,19 +1,21 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, String
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from .base_mixins import PrimaryKeyMixin, TimestampMixin
+from .base_mixins import OrgScopedMixin, PrimaryKeyMixin, TimestampMixin
 
 
-class ReviewItem(PrimaryKeyMixin, TimestampMixin, Base):
+class ReviewItem(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "review_items"
     __table_args__ = (
         CheckConstraint(
             "job_id IS NOT NULL OR artifact_id IS NOT NULL",
             name="has_review_subject",
         ),
+        Index("ix_review_items_org_id_created_at", "org_id", "created_at"),
+        Index("ix_review_items_org_id_status", "org_id", "status"),
     )
 
     review_id: Mapped[str] = mapped_column(

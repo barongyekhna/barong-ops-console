@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session, ORMExecuteState, with_loader_criteria
 from sqlalchemy.sql.dml import Delete, Update
 from sqlalchemy.sql.elements import TextClause
 
-from ..core.roles import is_owner_role
 from ..db.base import Base
 from ..schemas.organization import ORG_ID_PATTERN
 from .event_collector import emit_event
@@ -53,7 +52,7 @@ class OrgDataIsolationUserContext:
 
     @property
     def is_owner(self) -> bool:
-        return is_owner_role(self.role)
+        return self.role == "owner"
 
 
 _current_user_context: ContextVar[OrgDataIsolationUserContext | None] = ContextVar(
@@ -160,7 +159,7 @@ def _is_skip_enabled(execution_options: Any) -> bool:
 
 
 def _context_requires_scope(context: OrgDataIsolationUserContext | None) -> bool:
-    return context is not None and context.strict and not context.is_owner
+    return context is not None and context.strict
 
 
 def _context_requires_write_org(context: OrgDataIsolationUserContext | None) -> bool:
@@ -343,9 +342,6 @@ class OrgDataIsolationLayer:
         query: Select[Any],
         user_context: OrgDataIsolationUserContext,
     ) -> Select[Any]:
-        if user_context.is_owner:
-            return query
-
         org_id = _ensure_context_org_id(user_context)
         scoped_query = query
         for mapped_class in _org_scoped_classes():

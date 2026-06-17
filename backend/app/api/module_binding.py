@@ -62,10 +62,11 @@ def _raise_module_binding_error(exc: Exception) -> NoReturn:
 )
 def module_bind(
     payload: ModuleBindRequest,
+    db: Session = Depends(get_db),
     owner: User = Depends(require_owner),
 ) -> ModuleBinding:
     try:
-        return bind_module_to_org(payload, actor=owner)
+        return bind_module_to_org(payload, actor=owner, db=db)
     except Exception as exc:
         _raise_module_binding_error(exc)
 

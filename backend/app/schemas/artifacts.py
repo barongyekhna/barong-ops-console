@@ -57,6 +57,7 @@ class ArtifactResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    org_id: str = Field(exclude=True)
     artifact_id: str
     job_id: str
     module_key: str = Field(validation_alias="module_id")

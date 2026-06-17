@@ -4,7 +4,19 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-EventModule = Literal["C13", "C14", "C15", "C16", "Pxx", "system"]
+EventModule = Literal[
+    "C13",
+    "C14",
+    "C15",
+    "C16",
+    "C18D",
+    "C18F",
+    "C18G",
+    "C18H",
+    "C18I",
+    "Pxx",
+    "system",
+]
 EventSource = Literal["frontend", "backend", "n8n", "ai", "system"]
 EventStatus = Literal["success", "failed", "pending"]
 
@@ -30,4 +42,3 @@ class AuditEvent(BaseModel):
     latency_ms: float = Field(default=0, ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
-

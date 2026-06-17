@@ -10,6 +10,7 @@ from .context import ContextPacket
 from .error import SystemError
 from .job import AutomationJob, JobEvent
 from .memory import AgentMemoryAccessLog, MemoryEvent, MemorySummary
+from .module_binding import ModuleBindingRecord
 from .message import MessageRecord
 from .operation_log import OperationLog
 from .org_membership import OrgMembershipRecord
@@ -21,6 +22,7 @@ from .permission import (
 from .registry import AgentRegistry, ModuleRegistry, WorkflowRegistry
 from .review import ReviewItem
 from .security import SecurityRateLimitBucket, SecurityReplayNonce
+from .shared_module import SharedModuleRecord
 from .user import User
 
 __all__ = [
@@ -38,6 +40,7 @@ __all__ = [
     "MemoryEvent",
     "MemorySummary",
     "MessageRecord",
+    "ModuleBindingRecord",
     "ModuleRegistry",
     "OperationLog",
     "OrgMembershipRecord",
@@ -46,6 +49,7 @@ __all__ = [
     "RoleDefaultPermission",
     "SecurityRateLimitBucket",
     "SecurityReplayNonce",
+    "SharedModuleRecord",
     "SystemError",
     "User",
     "UserPermissionAssignment",

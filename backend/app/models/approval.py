@@ -3,15 +3,26 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from .base_mixins import CreatedAtMixin, PrimaryKeyMixin, TimestampMixin, json_type
+from .base_mixins import (
+    CreatedAtMixin,
+    OrgScopedMixin,
+    PrimaryKeyMixin,
+    TimestampMixin,
+    json_type,
+)
 
 
-class ApprovalRequestRecord(PrimaryKeyMixin, TimestampMixin, Base):
+class ApprovalRequestRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "approval_requests"
+    __table_args__ = (
+        Index("ix_approval_requests_org_id_created_at", "org_id", "created_at"),
+        Index("ix_approval_requests_org_id_status", "org_id", "status"),
+        Index("ix_approval_requests_org_id_module_key", "org_id", "module_key"),
+    )
 
     approval_id: Mapped[str] = mapped_column(
         String(128),
@@ -52,8 +63,12 @@ class ApprovalRequestRecord(PrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
-class ApprovalWorkflowRecord(PrimaryKeyMixin, TimestampMixin, Base):
+class ApprovalWorkflowRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "approval_workflows"
+    __table_args__ = (
+        Index("ix_approval_workflows_org_id_created_at", "org_id", "created_at"),
+        Index("ix_approval_workflows_org_id_state", "org_id", "state"),
+    )
 
     workflow_id: Mapped[str] = mapped_column(
         String(180),
@@ -81,8 +96,12 @@ class ApprovalWorkflowRecord(PrimaryKeyMixin, TimestampMixin, Base):
     )
 
 
-class ApprovalDecisionRecord(PrimaryKeyMixin, CreatedAtMixin, Base):
+class ApprovalDecisionRecord(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "approval_decisions"
+    __table_args__ = (
+        Index("ix_approval_decisions_org_id_created_at", "org_id", "created_at"),
+        Index("ix_approval_decisions_org_id_status", "org_id", "status"),
+    )
 
     decision_id: Mapped[str] = mapped_column(
         String(128),

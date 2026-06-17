@@ -4,7 +4,8 @@ from sqlalchemy import delete
 
 from backend.app.core.config import Settings, get_settings
 from backend.app.core.security import hash_password
-from backend.app.db.session import SessionLocal
+from backend.app.db.base import Base
+from backend.app.db.session import SessionLocal, engine
 from backend.app.main import app
 from backend.app.models.approval import (
     ApprovalDecisionRecord,
@@ -21,6 +22,7 @@ from backend.app.models.memory import (
     MemoryEvent,
     MemorySummary,
 )
+from backend.app.models.module_binding import ModuleBindingRecord
 from backend.app.models.operation_log import OperationLog
 from backend.app.models.org_membership import OrgMembershipRecord
 from backend.app.models.organization import OrganizationRecord
@@ -36,9 +38,11 @@ from backend.app.models.registry import (
 )
 from backend.app.models.review import ReviewItem
 from backend.app.models.security import SecurityRateLimitBucket, SecurityReplayNonce
+from backend.app.models.shared_module import SharedModuleRecord
 from backend.app.models.user import User
 
 def clear_auth_tables() -> None:
+    Base.metadata.create_all(bind=engine, checkfirst=True)
     with SessionLocal() as db:
         db.execute(delete(AgentMemoryAccessLog))
         db.execute(delete(ContextPacket))
@@ -50,6 +54,8 @@ def clear_auth_tables() -> None:
         db.execute(delete(ApprovalDecisionRecord))
         db.execute(delete(ApprovalWorkflowRecord))
         db.execute(delete(ApprovalRequestRecord))
+        db.execute(delete(SharedModuleRecord))
+        db.execute(delete(ModuleBindingRecord))
         db.execute(delete(JobEvent))
         db.execute(delete(OperationLog))
         db.execute(delete(AutomationJob))
@@ -100,12 +106,31 @@ def owner_client(auth_client: TestClient) -> TestClient:
     username = "f10_api_owner"
     password = "f10-example-only-owner-password"
     with SessionLocal() as db:
+        user = User(
+            username=username,
+            password_hash=hash_password(password),
+            role="owner",
+            is_active=True,
+        )
+        db.add(user)
+        db.flush()
         db.add(
-            User(
-                username=username,
-                password_hash=hash_password(password),
+            OrganizationRecord(
+                org_id="org_11111111111111111111111111111111",
+                org_name="Default Test Org",
+                org_type="store",
+                owner_user_id=str(user.id),
+                status="active",
+                metadata_json={},
+            )
+        )
+        db.add(
+            OrgMembershipRecord(
+                membership_id="mem_11111111111111111111111111111111",
+                user_id=str(user.id),
+                org_id="org_11111111111111111111111111111111",
                 role="owner",
-                is_active=True,
+                status="active",
             )
         )
         db.commit()

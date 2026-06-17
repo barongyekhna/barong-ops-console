@@ -99,7 +99,7 @@ def test_c18g_design_outputs_define_data_isolation_contract() -> None:
     assert design.all_data_requires_org_id is True
     assert design.all_queries_org_scoped is True
     assert design.cross_org_access_allowed is False
-    assert design.owner_read_scope_bypass_allowed is True
+    assert design.owner_read_scope_bypass_allowed is False
     assert design.migration_executed is False
     assert injection.if_query_missing_org_id == "auto_inject_current_org_id"
     assert injection.if_query_contains_other_org_id == "override_with_current_org_id"
@@ -162,7 +162,7 @@ def test_c18g_auto_injects_org_filter_and_overrides_manual_cross_org_filter() ->
     assert attempted_cross_org == []
 
 
-def test_c18g_owner_read_bypass_keeps_query_unrestricted() -> None:
+def test_c18g_owner_read_scope_is_limited_to_current_org() -> None:
     org_a = generate_org_id()
     org_b = generate_org_id()
     owner_context = _context(org_a, role="owner")
@@ -186,12 +186,12 @@ def test_c18g_owner_read_bypass_keeps_query_unrestricted() -> None:
         db.commit()
 
     statement = select(C18GScopedRecord).order_by(C18GScopedRecord.payload)
-    assert OrgDataIsolationLayer.apply_scope(statement, owner_context) is statement
+    assert OrgDataIsolationLayer.apply_scope(statement, owner_context) is not statement
 
     with SessionLocal() as db, org_data_isolation_context(owner_context):
         records = list(db.scalars(statement))
 
-    assert [record.payload for record in records] == ["org-a", "org-b"]
+    assert [record.payload for record in records] == ["org-a"]
 
 
 def test_c18g_write_protection_attaches_org_id_and_rejects_cross_org_insert() -> None:

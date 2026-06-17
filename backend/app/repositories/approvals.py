@@ -20,11 +20,13 @@ from ..schemas.approval import (
     ApprovalWorkflow,
     ApprovalWorkflowState,
 )
+from .tenant import current_tenant_org_id, tenant_org_id_for_create
 
 
 def _request_values(request: ApprovalRequest) -> dict[str, object]:
     payload = request.model_dump(mode="json")
     return {
+        "org_id": tenant_org_id_for_create(),
         "approval_id": request.approval_id,
         "execution_id": request.execution_id,
         "module_key": request.module_key,
@@ -47,6 +49,7 @@ def _request_values(request: ApprovalRequest) -> dict[str, object]:
 
 def _workflow_values(workflow: ApprovalWorkflow) -> dict[str, object]:
     return {
+        "org_id": tenant_org_id_for_create(),
         "workflow_id": workflow.workflow_id,
         "approval_id": workflow.approval_id,
         "execution_id": workflow.execution_id,
@@ -91,9 +94,11 @@ class ApprovalRepository:
         return approval_request_from_record(record)
 
     def load_record(self, approval_id: str) -> ApprovalRequestRecord | None:
+        org_id = current_tenant_org_id()
         return self.db.scalar(
             select(ApprovalRequestRecord).where(
-                ApprovalRequestRecord.approval_id == approval_id
+                ApprovalRequestRecord.approval_id == approval_id,
+                ApprovalRequestRecord.org_id == org_id,
             )
         )
 
@@ -101,9 +106,13 @@ class ApprovalRepository:
         self,
         execution_id: str,
     ) -> ApprovalRequestRecord | None:
+        org_id = current_tenant_org_id()
         return self.db.scalar(
             select(ApprovalRequestRecord)
-            .where(ApprovalRequestRecord.execution_id == execution_id)
+            .where(
+                ApprovalRequestRecord.execution_id == execution_id,
+                ApprovalRequestRecord.org_id == org_id,
+            )
             .where(ApprovalRequestRecord.status == "pending")
             .order_by(ApprovalRequestRecord.id.desc())
         )
@@ -134,7 +143,9 @@ class ApprovalRepository:
         limit: int,
         offset: int,
     ) -> list[ApprovalRequestRecord]:
-        statement = select(ApprovalRequestRecord)
+        statement = select(ApprovalRequestRecord).where(
+            ApprovalRequestRecord.org_id == current_tenant_org_id()
+        )
         if statuses:
             statement = statement.where(ApprovalRequestRecord.status.in_(statuses))
         if requester_id is not None:
@@ -171,9 +182,11 @@ class WorkflowRepository:
         return approval_workflow_from_record(record)
 
     def load_record(self, workflow_id: str) -> ApprovalWorkflowRecord | None:
+        org_id = current_tenant_org_id()
         return self.db.scalar(
             select(ApprovalWorkflowRecord).where(
-                ApprovalWorkflowRecord.workflow_id == workflow_id
+                ApprovalWorkflowRecord.workflow_id == workflow_id,
+                ApprovalWorkflowRecord.org_id == org_id,
             )
         )
 
@@ -187,9 +200,11 @@ class WorkflowRepository:
         self,
         approval_id: str,
     ) -> ApprovalWorkflowRecord | None:
+        org_id = current_tenant_org_id()
         return self.db.scalar(
             select(ApprovalWorkflowRecord).where(
-                ApprovalWorkflowRecord.approval_id == approval_id
+                ApprovalWorkflowRecord.approval_id == approval_id,
+                ApprovalWorkflowRecord.org_id == org_id,
             )
         )
 
@@ -219,7 +234,9 @@ class WorkflowRepository:
         limit: int,
         offset: int,
     ) -> list[ApprovalWorkflowRecord]:
-        statement = select(ApprovalWorkflowRecord)
+        statement = select(ApprovalWorkflowRecord).where(
+            ApprovalWorkflowRecord.org_id == current_tenant_org_id()
+        )
         if states:
             statement = statement.where(ApprovalWorkflowRecord.state.in_(states))
         if approval_id is not None:
@@ -252,6 +269,7 @@ class DecisionRepository:
     ) -> ApprovalDecisionRecord:
         record = self.load_record(decision_id)
         values = {
+            "org_id": tenant_org_id_for_create(),
             "decision_id": decision_id,
             "approval_id": approval_id,
             "workflow_id": workflow_id,
@@ -279,9 +297,11 @@ class DecisionRepository:
         return ApprovalDecision.model_validate(record.decision_payload)
 
     def load_record(self, decision_id: str) -> ApprovalDecisionRecord | None:
+        org_id = current_tenant_org_id()
         return self.db.scalar(
             select(ApprovalDecisionRecord).where(
-                ApprovalDecisionRecord.decision_id == decision_id
+                ApprovalDecisionRecord.decision_id == decision_id,
+                ApprovalDecisionRecord.org_id == org_id,
             )
         )
 
@@ -295,7 +315,9 @@ class DecisionRepository:
         limit: int,
         offset: int,
     ) -> list[ApprovalDecisionRecord]:
-        statement = select(ApprovalDecisionRecord)
+        statement = select(ApprovalDecisionRecord).where(
+            ApprovalDecisionRecord.org_id == current_tenant_org_id()
+        )
         if approval_id is not None:
             statement = statement.where(
                 ApprovalDecisionRecord.approval_id == approval_id

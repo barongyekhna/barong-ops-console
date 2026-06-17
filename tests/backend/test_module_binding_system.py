@@ -57,6 +57,7 @@ def _membership(*, user_id: int, org_id: str, role: str) -> OrgMembershipRecord:
 
 @pytest.fixture(autouse=True)
 def c18d_registry() -> None:
+    Base.metadata.create_all(bind=engine, checkfirst=True)
     reset_module_binding_registry()
     yield
     reset_module_binding_registry()
@@ -128,13 +129,14 @@ def test_c18d_design_outputs_match_required_contract() -> None:
     integration = get_module_binding_c18_integration()
     completion = get_module_binding_completion_status()
 
-    assert data_structure.primary_key == "module_id"
-    assert data_structure.module_id_unique is True
-    assert data_structure.bound_orgs_type == "list[str]"
+    assert data_structure.primary_key == "id"
+    assert data_structure.module_id_unique is False
+    assert data_structure.org_id_module_id_pair_is_unique is True
+    assert data_structure.bound_orgs_type == "derived_from_rows"
     assert data_structure.allowed_modes == ("single", "multi", "global")
-    assert data_structure.migration_executed is False
+    assert data_structure.migration_executed is True
     assert data_structure.grants_data_access is False
-    assert "module_id: str unique primary key" in MODULE_BINDING_DATA_STRUCTURE
+    assert "org_id: str" in MODULE_BINDING_DATA_STRUCTURE
 
     assert {rule.mode for rule in mode_model.rules} == {
         "single",
@@ -242,6 +244,16 @@ def test_c18d_non_owner_views_require_active_c18c_membership(
 
         with pytest.raises(ModuleBindingPermissionDeniedError):
             list_org_visible_modules_for_actor(db, org_id="org_1", actor=outsider)
+
+        with pytest.raises(ModuleBindingPermissionDeniedError):
+            list_org_visible_modules_for_actor(db, org_id="org_1", actor=owner)
+
+        with pytest.raises(ModuleBindingPermissionDeniedError):
+            get_module_binding_for_actor(
+                db,
+                module_id="seo-engine",
+                actor=owner,
+            )
 
         with pytest.raises(ModuleBindingPermissionDeniedError):
             get_module_binding_for_actor(

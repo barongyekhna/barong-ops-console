@@ -9,7 +9,9 @@ from sqlalchemy import delete
 from backend.app.db.base import Base
 from backend.app.db.session import SessionLocal, engine
 from backend.app.main import app
+from backend.app.models.module_binding import ModuleBindingRecord
 from backend.app.models.org_membership import OrgMembershipRecord
+from backend.app.repositories import module_bindings as binding_repo
 from backend.app.schemas.module_binding import GLOBAL_MODULE_BOUND_ORG, ModuleBinding
 from backend.app.schemas.module_visibility import (
     get_module_visibility_algorithm,
@@ -44,10 +46,20 @@ def _membership(
 
 
 def _set_c18d_bindings(*bindings: ModuleBinding) -> None:
-    with c18d_binding._MODULE_BINDINGS_LOCK:
-        c18d_binding._MODULE_BINDINGS.clear()
+    with SessionLocal() as db:
+        binding_repo.clear_module_bindings(db)
         for binding in bindings:
-            c18d_binding._MODULE_BINDINGS[binding.module_id] = binding
+            for org_id in binding.bound_orgs:
+                db.add(
+                    ModuleBindingRecord(
+                        org_id=org_id,
+                        module_id=binding.module_id,
+                        status="enabled" if binding.enabled else "disabled",
+                        created_at=binding.created_at,
+                        updated_at=binding.updated_at,
+                    )
+                )
+        db.commit()
 
 
 @pytest.fixture(autouse=True)

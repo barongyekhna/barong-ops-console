@@ -68,10 +68,11 @@ def _raise_shared_module_error(exc: Exception) -> NoReturn:
 )
 def shared_module_create(
     payload: SharedModuleCreateRequest,
+    db: Session = Depends(get_db),
     owner: User = Depends(require_owner),
 ) -> SharedModule:
     try:
-        return create_shared_module(payload, actor=owner)
+        return create_shared_module(payload, actor=owner, db=db)
     except Exception as exc:
         _raise_shared_module_error(exc)
 
@@ -79,20 +80,22 @@ def shared_module_create(
 @router.post("/module/shared/update-orgs", response_model=SharedModule)
 def shared_module_update_orgs(
     payload: SharedModuleUpdateOrgsRequest,
+    db: Session = Depends(get_db),
     owner: User = Depends(require_owner),
 ) -> SharedModule:
     try:
-        return update_shared_module_orgs(payload, actor=owner)
+        return update_shared_module_orgs(payload, actor=owner, db=db)
     except Exception as exc:
         _raise_shared_module_error(exc)
 
 
 @router.get("/module/shared/list", response_model=SharedModuleListResponse)
 def shared_module_list(
+    db: Session = Depends(get_db),
     owner: User = Depends(require_owner),
 ) -> SharedModuleListResponse:
     try:
-        return list_shared_modules(actor=owner)
+        return list_shared_modules(actor=owner, db=db)
     except Exception as exc:
         _raise_shared_module_error(exc)
 

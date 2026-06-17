@@ -15,7 +15,7 @@ class OrgDataIsolationLayerDesign(BaseModel):
     all_data_requires_org_id: Literal[True] = True
     all_queries_org_scoped: Literal[True] = True
     cross_org_access_allowed: Literal[False] = False
-    owner_read_scope_bypass_allowed: Literal[True] = True
+    owner_read_scope_bypass_allowed: Literal[False] = False
     write_scope_bypass_allowed: Literal[False] = False
     migration_executed: Literal[False] = False
     schema_refactor_executed: Literal[False] = False
@@ -32,9 +32,7 @@ class OrgDataIsolationInjectionLogic(BaseModel):
         "override_with_current_org_id"
     )
     if_context_missing_for_org_data: Literal["block"] = "block"
-    if_role_owner_reads: Literal["return_query_without_org_restriction"] = (
-        "return_query_without_org_restriction"
-    )
+    if_role_owner_reads: Literal["inject_current_org_id"] = "inject_current_org_id"
     implemented_by: tuple[
         Literal["OrgDataIsolationLayer.apply_scope"],
         Literal["SQLAlchemy do_orm_execute hook"],

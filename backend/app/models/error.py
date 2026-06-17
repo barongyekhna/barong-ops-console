@@ -1,15 +1,20 @@
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, String, func
+from sqlalchemy import DateTime, ForeignKey, Index, String, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from .base_mixins import PrimaryKeyMixin, json_type
+from .base_mixins import CreatedAtMixin, OrgScopedMixin, PrimaryKeyMixin, json_type
 
 
-class SystemError(PrimaryKeyMixin, Base):
+class SystemError(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "system_errors"
+    __table_args__ = (
+        Index("ix_system_errors_org_id_created_at", "org_id", "created_at"),
+        Index("ix_system_errors_org_id_status", "org_id", "status"),
+        Index("ix_system_errors_org_id_module_id", "org_id", "module_id"),
+    )
 
     error_id: Mapped[str] = mapped_column(
         String(128),

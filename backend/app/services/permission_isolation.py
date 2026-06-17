@@ -5,7 +5,6 @@ from collections.abc import Iterable
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..core.roles import is_owner_role
 from ..models.org_membership import OrgMembershipRecord
 from ..models.user import User
 from ..schemas.module_binding import GLOBAL_MODULE_BOUND_ORG
@@ -221,9 +220,14 @@ def _module_actions(module_id: str) -> frozenset[PermissionAction]:
     return MODULE_ACTION_RULES.get(module_id, DEFAULT_MODULE_ACTIONS)
 
 
-def _module_bound_to_org(*, module_id: str, org_id: str) -> bool:
+def _module_bound_to_org_in_db(
+    db: Session,
+    *,
+    module_id: str,
+    org_id: str,
+) -> bool:
     try:
-        binding = get_module_binding(module_id)
+        binding = get_module_binding(module_id, db=db)
     except ModuleBindingNotFoundError:
         return False
     if not binding.enabled:
@@ -279,18 +283,6 @@ def check_permission(
             reason="Inactive users cannot execute org/module permissions.",
         )
 
-    if is_owner_role(user.role):
-        return _allow(
-            user_id=scoped_user_id,
-            org_id=scoped_org_id,
-            module_id=scoped_module_id,
-            action=requested_action,
-            role=PermissionRole.OWNER,
-            actions=OWNER_ACTIONS,
-            reason="Owner role bypasses all C18F permission checks.",
-            owner_override_applied=True,
-        )
-
     membership = _active_membership(db, user_id=scoped_user_id, org_id=scoped_org_id)
     if membership is None:
         return _deny(
@@ -304,7 +296,11 @@ def check_permission(
         )
 
     role = _role_from_membership(membership)
-    if not _module_bound_to_org(module_id=scoped_module_id, org_id=scoped_org_id):
+    if not _module_bound_to_org_in_db(
+        db,
+        module_id=scoped_module_id,
+        org_id=scoped_org_id,
+    ):
         return _deny(
             user_id=scoped_user_id,
             org_id=scoped_org_id,

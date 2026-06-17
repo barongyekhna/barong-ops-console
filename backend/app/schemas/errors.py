@@ -51,6 +51,7 @@ class SystemErrorResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    org_id: str = Field(exclude=True)
     error_id: str
     error_code: str
     severity: str

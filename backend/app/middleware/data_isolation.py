@@ -24,6 +24,16 @@ from ..services.event_collector import emit_event, set_current_event_context
 settings = get_settings()
 
 API_PATH_PREFIXES = ("/api/app", "/api/control-plane")
+TENANT_API_PATH_PREFIXES = ("/api/app",)
+ORG_CONTEXT_EXEMPT_PATHS = frozenset(
+    (
+        "/api/app/org/create",
+        "/api/app/module/bind",
+        "/api/app/module/shared/create",
+        "/api/app/module/shared/update-orgs",
+        "/api/app/module/shared/list",
+    )
+)
 ORG_PATH_PATTERN = re.compile(r"/org/(?P<org_id>org_[0-9a-f]{32})(?:/|$)")
 MUTATING_METHODS = frozenset(("POST", "PUT", "PATCH", "DELETE"))
 C18D_TARGET_ORG_PAYLOAD_PATHS = frozenset(("/api/app/module/bind",))
@@ -62,7 +72,7 @@ def _valid_org_id(value: str | None) -> str | None:
     if value is None:
         return None
     candidate = value.strip()
-    if ORG_ID_PATTERN.fullmatch(candidate):
+    if ORG_ID_PATTERN.fullmatch(candidate) or candidate.startswith("org_"):
         return candidate
     return None
 
@@ -144,12 +154,25 @@ def _is_api_path(request: Request) -> bool:
     return request.url.path.startswith(API_PATH_PREFIXES)
 
 
+def _requires_org_context(request: Request) -> bool:
+    path = request.url.path
+    return (
+        path.startswith(TENANT_API_PATH_PREFIXES)
+        and path not in ORG_CONTEXT_EXEMPT_PATHS
+    )
+
+
 async def enforce_org_data_isolation(request: Request, call_next):
     if not _is_api_path(request):
         return await call_next(request)
 
     org_id, source = _resolve_org_id(request)
     if org_id is None:
+        if _requires_org_context(request):
+            return _security_response(
+                status.HTTP_403_FORBIDDEN,
+                "C18H org context is required.",
+            )
         return await call_next(request)
 
     if (

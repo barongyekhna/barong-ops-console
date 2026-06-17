@@ -48,6 +48,7 @@ class JobResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    org_id: str = Field(exclude=True)
     job_id: str
     module_key: str = Field(validation_alias="module_id")
     agent_key: str | None = Field(validation_alias="agent_id")
@@ -89,6 +90,7 @@ class JobEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    org_id: str = Field(exclude=True)
     job_id: str
     event_type: str
     from_status: str | None

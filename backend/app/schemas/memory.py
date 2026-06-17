@@ -34,6 +34,7 @@ class MemoryEventResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    org_id: str = Field(exclude=True)
     memory_event_id: str
     event_type: str
     subject_type: str
@@ -92,6 +93,7 @@ class ContextPacketResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    org_id: str = Field(exclude=True)
     context_packet_id: str
     source_job_id: str
     source_module_key: str = Field(validation_alias="source_module_id")
@@ -111,6 +113,7 @@ class MemorySummaryResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    org_id: str = Field(exclude=True)
     summary_id: str = Field(validation_alias="memory_summary_id")
     subject_type: str
     subject_id: str

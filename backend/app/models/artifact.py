@@ -1,14 +1,19 @@
 from typing import Any
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from .base_mixins import PrimaryKeyMixin, TimestampMixin, json_type
+from .base_mixins import OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, json_type
 
 
-class Artifact(PrimaryKeyMixin, TimestampMixin, Base):
+class Artifact(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "artifacts"
+    __table_args__ = (
+        Index("ix_artifacts_org_id_created_at", "org_id", "created_at"),
+        Index("ix_artifacts_org_id_status", "org_id", "status"),
+        Index("ix_artifacts_org_id_module_id", "org_id", "module_id"),
+    )
 
     artifact_id: Mapped[str] = mapped_column(
         String(128),

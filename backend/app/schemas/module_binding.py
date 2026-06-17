@@ -119,32 +119,33 @@ class ModuleBindingDataStructureDesign(BaseModel):
         "c18d_module_binding_data_structure_v1"
     )
     logical_store: Literal["module_bindings"] = "module_bindings"
-    primary_key: Literal["module_id"] = "module_id"
+    primary_key: Literal["id"] = "id"
     fields: tuple[
+        Literal["id"],
+        Literal["org_id"],
         Literal["module_id"],
-        Literal["bound_orgs"],
-        Literal["mode"],
-        Literal["enabled"],
+        Literal["status"],
         Literal["created_at"],
         Literal["updated_at"],
     ] = (
+        "id",
+        "org_id",
         "module_id",
-        "bound_orgs",
-        "mode",
-        "enabled",
+        "status",
         "created_at",
         "updated_at",
     )
-    module_id_unique: Literal[True] = True
-    bound_orgs_type: Literal["list[str]"] = "list[str]"
+    module_id_unique: Literal[False] = False
+    org_id_module_id_pair_is_unique: Literal[True] = True
+    bound_orgs_type: Literal["derived_from_rows"] = "derived_from_rows"
     allowed_modes: tuple[
         Literal["single"],
         Literal["multi"],
         Literal["global"],
     ] = ("single", "multi", "global")
     global_bound_org_sentinel: Literal["ALL"] = GLOBAL_MODULE_BOUND_ORG
-    runtime_storage: Literal["process_memory_registry"] = "process_memory_registry"
-    migration_executed: Literal[False] = False
+    runtime_storage: Literal["db_backed_repository"] = "db_backed_repository"
+    migration_executed: Literal[True] = True
     stores_business_data: Literal[False] = False
     grants_data_access: Literal[False] = False
 
@@ -264,7 +265,7 @@ class ModuleBindingApiDesign(BaseModel):
     )
     ui_implemented: Literal[False] = False
     frontend_implemented: Literal[False] = False
-    migration_executed: Literal[False] = False
+    migration_executed: Literal[True] = True
 
 
 class ModuleBindingPermissionModel(BaseModel):
@@ -330,7 +331,7 @@ class ModuleBindingCompletionStatus(BaseModel):
     api_design_defined: Literal[True] = True
     permission_model_defined: Literal[True] = True
     c18c_c18e_relationship_defined: Literal[True] = True
-    migration_executed: Literal[False] = False
+    migration_executed: Literal[True] = True
     ui_implemented: Literal[False] = False
     frontend_implemented: Literal[False] = False
     cross_org_data_logic_added: Literal[False] = False
@@ -338,10 +339,10 @@ class ModuleBindingCompletionStatus(BaseModel):
 
 MODULE_BINDING_DATA_STRUCTURE = """
 module_bindings:
-  module_id: str unique primary key
-  bound_orgs: list[str]
-  mode: single | multi | global
-  enabled: bool
+  id: int
+  org_id: str
+  module_id: str
+  status: enabled | disabled
   created_at: datetime
   updated_at: datetime
 """.strip()

@@ -311,7 +311,7 @@ class SharedModuleApiDesign(BaseModel):
             ),
         ),
     )
-    migration_executed: Literal[False] = False
+    migration_executed: Literal[True] = True
     frontend_implemented: Literal[False] = False
     ui_implemented: Literal[False] = False
 
@@ -381,7 +381,7 @@ class SharedModuleCompletionStatus(BaseModel):
     security_boundaries_defined: Literal[True] = True
     c18c_to_c18h_integrated: Literal[True] = True
     data_isolation_proof_defined: Literal[True] = True
-    migration_executed: Literal[False] = False
+    migration_executed: Literal[True] = True
     ui_implemented: Literal[False] = False
     frontend_implemented: Literal[False] = False
     cross_org_data_logic_added: Literal[False] = False
@@ -389,10 +389,12 @@ class SharedModuleCompletionStatus(BaseModel):
 
 SHARED_MODULE_DATA_STRUCTURE = """
 shared_modules:
+  id: int
+  source_org_id: str
+  target_org_id: str
   module_id: str
   mode: single | multi | global | shared
-  allowed_orgs: list[str]
-  enabled: bool
+  status: enabled | disabled
   created_at: datetime
   updated_at: datetime
 """.strip()

@@ -41,6 +41,7 @@ class ReviewResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    org_id: str = Field(exclude=True)
     review_id: str
     job_id: str | None
     artifact_id: str | None

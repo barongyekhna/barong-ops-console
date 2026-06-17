@@ -10,7 +10,6 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
-from ..core.roles import is_owner_role
 from ..core.security_headers import apply_security_headers
 from ..db.session import SessionLocal
 from ..models.auth_session import AuthSession
@@ -25,6 +24,16 @@ from ..services.module_binding_service import list_module_bindings
 settings = get_settings()
 
 API_PATH_PREFIXES = ("/api/app", "/api/control-plane")
+TENANT_API_PATH_PREFIXES = ("/api/app",)
+ORG_CONTEXT_EXEMPT_PATHS = frozenset(
+    (
+        "/api/app/org/create",
+        "/api/app/module/bind",
+        "/api/app/module/shared/create",
+        "/api/app/module/shared/update-orgs",
+        "/api/app/module/shared/list",
+    )
+)
 FRONTEND_ORG_QUERY_KEYS = ("org_id", "active_org_id")
 FRONTEND_ORG_HEADER_KEYS = ("x-org-id", "x-active-org-id")
 ORG_CONTEXT_ROLE = Literal["owner", "admin", "member"]
@@ -76,6 +85,11 @@ def get_request_id(request: Request) -> str | None:
 
 def _is_api_path(request: Request) -> bool:
     return request.url.path.startswith(API_PATH_PREFIXES)
+
+
+def _requires_org_context(request: Request) -> bool:
+    path = request.url.path
+    return path.startswith(TENANT_API_PATH_PREFIXES) and path not in ORG_CONTEXT_EXEMPT_PATHS
 
 
 def _security_response(status_code: int, detail: str) -> JSONResponse:
@@ -172,12 +186,9 @@ def _owner_org_for_user(
     )
 
 
-def _role_for_user(
-    user: User,
+def _role_for_membership(
     membership: OrgMembershipRecord | None,
 ) -> ORG_CONTEXT_ROLE:
-    if is_owner_role(user.role):
-        return "owner"
     if membership is None:
         return "owner"
     if membership.role == "admin":
@@ -204,14 +215,13 @@ def _resolve_org(
         if membership is not None:
             return OrgResolution(
                 org_id=session_org_id,
-                role=_role_for_user(user, membership),
+                role=_role_for_membership(membership),
                 source="session_or_jwt",
             )
         owner_org = _owner_org_for_user(db, user_id=user_id)
         if (
             owner_org is not None
             and owner_org.org_id == session_org_id
-            and is_owner_role(user.role)
         ):
             return OrgResolution(
                 org_id=owner_org.org_id,
@@ -223,12 +233,12 @@ def _resolve_org(
         membership = memberships[0]
         return OrgResolution(
             org_id=membership.org_id,
-            role=_role_for_user(user, membership),
+            role=_role_for_membership(membership),
             source="c18c_active_membership",
         )
 
     owner_org = _owner_org_for_user(db, user_id=user_id)
-    if owner_org is not None and is_owner_role(user.role):
+    if owner_org is not None:
         return OrgResolution(
             org_id=owner_org.org_id,
             role="owner",
@@ -238,9 +248,9 @@ def _resolve_org(
     return None
 
 
-def _module_scope_for_org(org_id: str) -> list[str]:
+def _module_scope_for_org(db: Session, org_id: str) -> list[str]:
     module_ids: list[str] = []
-    for binding in list_module_bindings():
+    for binding in list_module_bindings(db):
         if not binding.enabled:
             continue
         if (
@@ -274,7 +284,7 @@ def build_org_context(
             user_id=str(user.id),
             org_id=resolution.org_id,
             role=resolution.role,
-            module_scope=_module_scope_for_org(resolution.org_id),
+            module_scope=_module_scope_for_org(db, resolution.org_id),
             request_id=request_id,
         ),
         resolution.source,
@@ -323,6 +333,11 @@ async def org_context_middleware(request: Request, call_next):
 
     session_id = request.cookies.get(settings.auth_session_cookie_name)
     if session_id is None:
+        if _requires_org_context(request):
+            return _security_response(
+                status.HTTP_401_UNAUTHORIZED,
+                "Not authenticated.",
+            )
         return await call_next(request)
 
     audit = _audit_context(request, request_id)
@@ -377,5 +392,10 @@ async def org_context_middleware(request: Request, call_next):
             user_id=request.state.user_id,
             payload={"reason": resolution_source},
         )
+        if _requires_org_context(request):
+            return _security_response(
+                status.HTTP_403_FORBIDDEN,
+                "C18H org context is required.",
+            )
 
     return await call_next(request)

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from ..models.operation_log import OperationLog
 from ..schemas.common import is_runtime_address_key, sanitize_runtime_address_data
 from ..services.event_collector import emit_event
+from .tenant import current_tenant_org_id, tenant_org_id_for_create
 
 SENSITIVE_KEY_MARKERS = (
     "password",
@@ -77,6 +78,7 @@ def create_operation_log(
     details: Mapping[str, Any] | None = None,
 ) -> OperationLog:
     operation_log = OperationLog(
+        org_id=tenant_org_id_for_create(),
         operation_id=str(uuid4()),
         actor_type=actor_type,
         actor_id=actor_id,
@@ -121,9 +123,11 @@ def list_operation_logs(
 ) -> list[OperationLog]:
     from sqlalchemy import select
 
+    org_id = current_tenant_org_id()
     logs = list(
         db.scalars(
             select(OperationLog)
+            .where(OperationLog.org_id == org_id)
             .order_by(OperationLog.id.desc())
             .limit(limit)
             .offset(offset)
@@ -146,9 +150,11 @@ def get_operation_log(
 ) -> OperationLog | None:
     from sqlalchemy import select
 
+    org_id = current_tenant_org_id()
     operation_log = db.scalar(
         select(OperationLog).where(
-            OperationLog.operation_id == operation_id
+            OperationLog.operation_id == operation_id,
+            OperationLog.org_id == org_id,
         )
     )
     emit_event(

@@ -185,24 +185,6 @@ def require_permission(
         user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> User:
-        if is_owner_role(user.role):
-            emit_event(
-                event_type="rbac.permission_check",
-                module="system",
-                action=f"permission.{permission_key}",
-                source="backend",
-                status="success",
-                context_id=get_audit_context(request).request_id,
-                user_id=str(user.id),
-                payload={
-                    "permission_key": permission_key,
-                    "scope_type": scope_type,
-                    "scope_key": scope_key,
-                    "owner_bypass": True,
-                },
-            )
-            return user
-
         try:
             has_permission = user_has_permission(
                 db,

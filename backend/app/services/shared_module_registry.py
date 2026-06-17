@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from contextlib import contextmanager
 from threading import RLock
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import inspect, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..core.roles import is_owner_role
 from ..models.org_membership import OrgMembershipRecord
 from ..models.user import User
-from ..schemas.module_binding import ModuleBinding
 from ..schemas.permission import PermissionAction
 from ..schemas.shared_module import (
     OrgSharedModulesResponse,
@@ -18,12 +18,13 @@ from ..schemas.shared_module import (
     SharedModuleCreateRequest,
     SharedModuleExecutionDecision,
     SharedModuleListResponse,
-    SharedModuleMode,
     SharedModuleUpdateOrgsRequest,
 )
 from . import module_binding_service as c18d_module_binding
 from .event_collector import emit_event
 from .permission_isolation import check_permission
+from ..repositories import module_bindings as module_binding_repo
+from ..repositories import shared_modules as shared_module_repo
 
 
 class SharedModuleError(ValueError):
@@ -48,10 +49,6 @@ class SharedModuleOrgContextRequiredError(SharedModulePermissionDeniedError):
 
 _SHARED_MODULES: dict[str, SharedModule] = {}
 _SHARED_MODULES_LOCK = RLock()
-
-
-def _now() -> datetime:
-    return datetime.now(UTC)
 
 
 def _actor_user_id(actor: User) -> str:
@@ -85,8 +82,6 @@ def _active_membership(
 
 
 def _ensure_can_view_org_modules(db: Session, *, org_id: str, actor: User) -> None:
-    if _is_owner(actor):
-        return
     if (
         _active_membership(
             db,
@@ -100,53 +95,59 @@ def _ensure_can_view_org_modules(db: Session, *, org_id: str, actor: User) -> No
         )
 
 
-def _c18d_mode_for(mode: SharedModuleMode) -> str:
-    if mode == "shared":
-        return "multi"
-    return mode
-
-
 def _c18d_bound_orgs_for(module: SharedModule) -> list[str]:
     if module.mode == "global":
         return [c18d_module_binding.GLOBAL_MODULE_BOUND_ORG]
     return list(module.allowed_orgs)
 
 
-def _sync_c18d_binding(module: SharedModule) -> None:
-    binding = ModuleBinding(
+def _sync_c18d_binding(db: Session, module: SharedModule) -> None:
+    module_binding_repo.replace_module_binding(
+        db,
         module_id=module.module_id,
         bound_orgs=_c18d_bound_orgs_for(module),
-        mode=_c18d_mode_for(module.mode),
-        enabled=module.enabled,
-        created_at=module.created_at,
-        updated_at=module.updated_at,
     )
-    with c18d_module_binding._MODULE_BINDINGS_LOCK:
-        c18d_module_binding._MODULE_BINDINGS[module.module_id] = binding
 
 
 def reset_shared_module_registry() -> None:
     with _SHARED_MODULES_LOCK:
         _SHARED_MODULES.clear()
+    with _managed_session() as (db, _):
+        if not _shared_module_table_exists(db):
+            return
+        try:
+            shared_module_repo.clear_shared_modules(db)
+            db.commit()
+        except SQLAlchemyError:
+            db.rollback()
+            raise
 
 
-def list_shared_module_records() -> list[SharedModule]:
-    with _SHARED_MODULES_LOCK:
-        return list(_SHARED_MODULES.values())
+def list_shared_module_records(db: Session | None = None) -> list[SharedModule]:
+    with _managed_session(db) as (session, _):
+        if not _shared_module_table_exists(session):
+            return []
+        return shared_module_repo.list_shared_modules(session)
 
 
-def get_module(module_id: str) -> SharedModule | None:
+def get_module(module_id: str, *, db: Session | None = None) -> SharedModule | None:
     lookup = SharedModuleCreateRequest(
         module_id=module_id,
         mode="single",
         allowed_orgs=["org_lookup"],
     ).module_id
-    with _SHARED_MODULES_LOCK:
-        return _SHARED_MODULES.get(lookup)
+    with _managed_session(db) as (session, _):
+        if not _shared_module_table_exists(session):
+            return None
+        return shared_module_repo.get_shared_module(session, lookup)
 
 
-def get_shared_module(module_id: str) -> SharedModule:
-    module = get_module(module_id)
+def get_shared_module(
+    module_id: str,
+    *,
+    db: Session | None = None,
+) -> SharedModule:
+    module = get_module(module_id, db=db)
     if module is None:
         raise SharedModuleNotFoundError("Shared module not found.")
     return module
@@ -172,24 +173,30 @@ def create_shared_module(
     payload: SharedModuleCreateRequest,
     *,
     actor: User,
+    db: Session | None = None,
 ) -> SharedModule:
     _ensure_owner(actor)
 
-    now = _now()
-    module = SharedModule(
-        module_id=payload.module_id,
-        mode=payload.mode,
-        allowed_orgs=payload.allowed_orgs,
-        enabled=payload.enabled,
-        created_at=now,
-        updated_at=now,
-    )
-    with _SHARED_MODULES_LOCK:
-        if module.module_id in _SHARED_MODULES:
+    with _managed_session(db) as (session, _):
+        try:
+            if shared_module_repo.get_shared_module(session, payload.module_id) is not None:
+                raise SharedModuleAlreadyExistsError("Shared module already exists.")
+            module = shared_module_repo.replace_shared_module(
+                session,
+                module_id=payload.module_id,
+                mode=payload.mode,
+                allowed_orgs=payload.allowed_orgs,
+                enabled=payload.enabled,
+            )
+            _sync_c18d_binding(session, module)
+            session.commit()
+        except SharedModuleAlreadyExistsError:
+            session.rollback()
             raise SharedModuleAlreadyExistsError("Shared module already exists.")
-        _SHARED_MODULES[module.module_id] = module
+        except Exception:
+            session.rollback()
+            raise
 
-    _sync_c18d_binding(module)
     emit_event(
         event_type="shared_module.create",
         module="C18I",
@@ -213,25 +220,28 @@ def update_shared_module_orgs(
     payload: SharedModuleUpdateOrgsRequest,
     *,
     actor: User,
+    db: Session | None = None,
 ) -> SharedModule:
     _ensure_owner(actor)
 
-    with _SHARED_MODULES_LOCK:
-        existing = _SHARED_MODULES.get(payload.module_id)
-        if existing is None:
-            raise SharedModuleNotFoundError("Shared module not found.")
+    with _managed_session(db) as (session, _):
+        try:
+            existing = shared_module_repo.get_shared_module(session, payload.module_id)
+            if existing is None:
+                raise SharedModuleNotFoundError("Shared module not found.")
+            updated = shared_module_repo.replace_shared_module(
+                session,
+                module_id=existing.module_id,
+                mode=existing.mode,
+                allowed_orgs=payload.allowed_orgs,
+                enabled=existing.enabled,
+            )
+            _sync_c18d_binding(session, updated)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
 
-        updated = SharedModule(
-            module_id=existing.module_id,
-            mode=existing.mode,
-            allowed_orgs=payload.allowed_orgs,
-            enabled=existing.enabled,
-            created_at=existing.created_at,
-            updated_at=_now(),
-        )
-        _SHARED_MODULES[updated.module_id] = updated
-
-    _sync_c18d_binding(updated)
     emit_event(
         event_type="shared_module.update_orgs",
         module="C18I",
@@ -250,9 +260,13 @@ def update_shared_module_orgs(
     return updated
 
 
-def list_shared_modules(*, actor: User) -> SharedModuleListResponse:
+def list_shared_modules(
+    *,
+    actor: User,
+    db: Session | None = None,
+) -> SharedModuleListResponse:
     _ensure_owner(actor)
-    items = list_shared_module_records()
+    items = list_shared_module_records(db)
     emit_event(
         event_type="shared_module.list",
         module="C18I",
@@ -283,7 +297,7 @@ def list_org_shared_modules_for_actor(
     _ensure_can_view_org_modules(db, org_id=scoped_org_id, actor=actor)
     available_modules = [
         module
-        for module in list_shared_module_records()
+        for module in list_shared_module_records(db)
         if is_module_available(scoped_org_id, module)
     ]
     emit_event(
@@ -327,7 +341,7 @@ def execute_module(
     *,
     db: Session | None = None,
 ) -> SharedModuleExecutionDecision:
-    module = get_shared_module(module_id)
+    module = get_shared_module(module_id, db=db)
     org_id = _org_id_from_user(user)
     if org_id is None:
         raise SharedModuleOrgContextRequiredError(
@@ -390,3 +404,20 @@ def execute_module(
         denied=False,
         reason="Module logic may execute inside the active org context.",
     )
+
+
+@contextmanager
+def _managed_session(db: Session | None = None):
+    if db is not None:
+        yield db, False
+        return
+
+    from ..db.session import SessionLocal
+
+    with SessionLocal() as session:
+        yield session, True
+
+
+def _shared_module_table_exists(db: Session) -> bool:
+    bind = db.get_bind()
+    return inspect(bind).has_table("shared_modules")

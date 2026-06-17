@@ -1,14 +1,17 @@
 from typing import Any
 
-from sqlalchemy import ForeignKey, String
+from sqlalchemy import ForeignKey, Index, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
-from .base_mixins import CreatedAtMixin, PrimaryKeyMixin, json_type
+from .base_mixins import CreatedAtMixin, OrgScopedMixin, PrimaryKeyMixin, json_type
 
 
-class OperationLog(PrimaryKeyMixin, CreatedAtMixin, Base):
+class OperationLog(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "operation_logs"
+    __table_args__ = (
+        Index("ix_operation_logs_org_id_created_at", "org_id", "created_at"),
+    )
 
     operation_id: Mapped[str] = mapped_column(
         String(128),

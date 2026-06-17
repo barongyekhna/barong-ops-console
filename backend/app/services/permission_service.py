@@ -1414,9 +1414,6 @@ def user_has_permission(
         scope_type,
         scope_key,
     )
-    if is_owner_role(user.role):
-        return True
-
     permission = get_permission(db, normalized_key)
     if permission is None or not permission.is_enabled:
         return False

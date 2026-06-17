@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..models.organization import OrganizationRecord
 from ..models.user import User
 from ..repositories.operation_logs import create_operation_log
+from ..repositories.org_memberships import create_org_membership_record
 from ..repositories.organizations import (
     create_organization_record,
     get_organization,
@@ -25,6 +26,7 @@ from ..schemas.organization import (
     enforce_owner_only_org_lifecycle,
     generate_org_id,
 )
+from ..schemas.org_membership import generate_membership_id
 from .auth_service import AuditContext
 
 
@@ -235,6 +237,15 @@ def create_organization(
             org_type=payload.org_type.value,
             owner_user_id=payload.owner_user_id,
             metadata=_metadata_dict(payload.metadata),
+        )
+        create_org_membership_record(
+            db,
+            membership_id=generate_membership_id(),
+            user_id=organization.owner_user_id,
+            org_id=organization.org_id,
+            role="owner",
+            status="active",
+            joined_at=organization.created_at,
         )
         _log_org_operation(
             db,

@@ -3,14 +3,17 @@ from sqlalchemy.orm import Session
 
 from ..models.error import SystemError
 from ..schemas.errors import SystemErrorCreate
+from .tenant import current_tenant_org_id, tenant_org_id_for_create
 
 
 def list_errors(
     db: Session, *, limit: int, offset: int
 ) -> list[SystemError]:
+    org_id = current_tenant_org_id()
     return list(
         db.scalars(
             select(SystemError)
+            .where(SystemError.org_id == org_id)
             .order_by(SystemError.id.desc())
             .limit(limit)
             .offset(offset)
@@ -19,13 +22,18 @@ def list_errors(
 
 
 def get_error(db: Session, error_id: str) -> SystemError | None:
+    org_id = current_tenant_org_id()
     return db.scalar(
-        select(SystemError).where(SystemError.error_id == error_id)
+        select(SystemError).where(
+            SystemError.error_id == error_id,
+            SystemError.org_id == org_id,
+        )
     )
 
 
 def create_error(db: Session, payload: SystemErrorCreate) -> SystemError:
     error = SystemError(
+        org_id=tenant_org_id_for_create(),
         error_id=payload.error_id,
         error_code=payload.error_code,
         severity=payload.severity,
