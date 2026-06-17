@@ -47,6 +47,11 @@ const ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS = new Set([
   "execution-providers/registry",
   "execution-providers/me",
 ]);
+const ALLOWED_LIVE_GATE_GET_PATHS = new Set([
+  "live-gate/readiness",
+  "live-gate/production-readiness",
+  "live-gate/policies",
+]);
 const ALLOWED_EXTERNAL_DEPENDENCY_PATHS = new Set([
   "external-dependencies/registry",
   "external-dependencies/proposals",
@@ -317,6 +322,7 @@ export function getBackendApiPath(method: string, path: string[]) {
       ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_EXECUTION_PROVIDER_REGISTRY_PATHS.has(requestedPath)) ||
+    (method === "GET" && ALLOWED_LIVE_GATE_GET_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_EXTERNAL_DEPENDENCY_PATHS.has(requestedPath)) ||
     (method === "GET" &&

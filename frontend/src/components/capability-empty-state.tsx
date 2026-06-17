@@ -53,7 +53,7 @@ const STATE_LABEL: Record<CapabilityEmptyStateName, string> = {
   partial: "Partial",
 };
 
-export function CapabilityEmptyState({
+export function CapabilityEmptyStateEngine({
   action,
   icon,
   reason,
@@ -106,3 +106,5 @@ export function CapabilityEmptyState({
     </section>
   );
 }
+
+export const CapabilityEmptyState = CapabilityEmptyStateEngine;

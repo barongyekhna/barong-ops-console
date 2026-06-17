@@ -18,6 +18,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAdapterAccess } from "@/components/adapter-access-provider";
 import { useAuth } from "@/components/auth-provider";
 import { CapabilityEmptyState } from "@/components/capability-empty-state";
+import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import { useModuleAccess } from "@/components/module-access-provider";
 import { ApiError, apiRequest } from "@/lib/api";
 
@@ -125,6 +126,13 @@ function metricState(error: string, value: string) {
 export function OperationsDashboard() {
   const { status: authStatus, user } = useAuth();
   const {
+    executionState,
+    liveGateErrors,
+    liveGateReports,
+    orgContext,
+    refresh: refreshCapabilityState,
+  } = useFrontendCapabilityState();
+  const {
     error: moduleAccessError,
     items: moduleAccessItems,
     moduleAccessUnknown,
@@ -142,6 +150,7 @@ export function OperationsDashboard() {
 
   const load = useCallback(async () => {
     setIsLoading(true);
+    await refreshCapabilityState();
     const [health, operationLogs, approvals] = await Promise.allSettled([
       apiRequest<HealthResponse>("/health", { method: "GET" }),
       apiRequest<ListResponse<OperationLogRecord>>(
@@ -174,7 +183,7 @@ export function OperationsDashboard() {
           : "",
     });
     setIsLoading(false);
-  }, []);
+  }, [refreshCapabilityState]);
 
   useEffect(() => {
     void load();
@@ -189,6 +198,17 @@ export function OperationsDashboard() {
   const failedLogs = logs.filter(
     (log) => log.result === "error" || Boolean(log.error_code),
   ).length;
+  const actionAnomalySignals = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const log of logs) {
+      const key = log.action ?? log.target_type ?? "unknown";
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .filter(([, count]) => count >= 3)
+      .sort((left, right) => right[1] - left[1]);
+  }, [logs]);
+  const missingTraceCount = logs.filter((log) => !traceKey(log)).length;
   const moduleCounts = useMemo(
     () => ({
       allowed: moduleAccessItems.filter(
@@ -224,7 +244,8 @@ export function OperationsDashboard() {
           <h2>Operational capability status</h2>
           <p>
             Backend health, C17 observability, C12 approvals, C18 module
-            readiness, C05 permission snapshot, and execution readiness.
+            readiness, C05 permission snapshot, PRE20-Q live gate, and
+            execution readiness.
           </p>
         </div>
         <button
@@ -282,6 +303,12 @@ export function OperationsDashboard() {
               : `${executionCounts.providers}/${executionCounts.adapters}`}
           </strong>
           <small>{executionCounts.noExecute} no-execute providers</small>
+        </article>
+        <article className="ops-metric-card">
+          <ShieldCheck aria-hidden="true" size={19} />
+          <span>PRE20-Q gate</span>
+          <strong>{executionState.live_gate_status}</strong>
+          <small>{executionState.execution_mode} mode</small>
         </article>
         <article className="ops-metric-card">
           <ShieldCheck aria-hidden="true" size={19} />
@@ -373,6 +400,52 @@ export function OperationsDashboard() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
+              <h3>PRE20-Q execution gate</h3>
+              <p>Live gate, canary, approval, execution mode, and block reason.</p>
+            </div>
+            <span className="ops-source">/live-gate/*</span>
+          </div>
+          <dl className="ops-readiness-list">
+            <div>
+              <dt>Live gate</dt>
+              <dd>{executionState.live_gate_status}</dd>
+            </div>
+            <div>
+              <dt>Canary</dt>
+              <dd>{executionState.canary_state}</dd>
+            </div>
+            <div>
+              <dt>Approval</dt>
+              <dd>{executionState.approval_state}</dd>
+            </div>
+            <div>
+              <dt>Mode</dt>
+              <dd>{executionState.execution_mode}</dd>
+            </div>
+            <div>
+              <dt>Policies</dt>
+              <dd>{liveGateReports.policies.length}</dd>
+            </div>
+            <div>
+              <dt>Rollout</dt>
+              <dd>{executionState.rollout_percentage}%</dd>
+            </div>
+          </dl>
+          <p className="ops-warning">{executionState.blocked_reason}</p>
+          {liveGateErrors.readiness ||
+          liveGateErrors.productionReadiness ||
+          liveGateErrors.policies ? (
+            <p className="ops-warning">
+              {liveGateErrors.readiness?.message ??
+                liveGateErrors.productionReadiness?.message ??
+                liveGateErrors.policies?.message}
+            </p>
+          ) : null}
+        </article>
+
+        <article className="ops-panel">
+          <div className="ops-panel-heading">
+            <div>
               <h3>C12 approvals</h3>
               <p>Approval requests are governance records, not execution success.</p>
             </div>
@@ -435,6 +508,14 @@ export function OperationsDashboard() {
             <div>
               <dt>Partial</dt>
               <dd>{moduleCounts.partial}</dd>
+            </div>
+            <div>
+              <dt>Org state</dt>
+              <dd>{orgContext.state}</dd>
+            </div>
+            <div>
+              <dt>Org role</dt>
+              <dd>{orgContext.role || "Unknown"}</dd>
             </div>
           </dl>
           {moduleAccessError ? (
@@ -509,6 +590,34 @@ export function OperationsDashboard() {
               </div>
             </dl>
           )}
+        </article>
+
+        <article className="ops-panel">
+          <div className="ops-panel-heading">
+            <div>
+              <h3>C17 alerts and anomalies</h3>
+              <p>Derived from recent operation logs without inventing backend state.</p>
+            </div>
+            <span className="ops-source">C17 projection</span>
+          </div>
+          <dl className="ops-readiness-list">
+            <div>
+              <dt>Alert candidates</dt>
+              <dd>{failedLogs}</dd>
+            </div>
+            <div>
+              <dt>Repeated actions</dt>
+              <dd>{actionAnomalySignals.length}</dd>
+            </div>
+            <div>
+              <dt>Missing trace keys</dt>
+              <dd>{missingTraceCount}</dd>
+            </div>
+            <div>
+              <dt>Signals</dt>
+              <dd>{actionAnomalySignals.length + (missingTraceCount > 0 ? 1 : 0)}</dd>
+            </div>
+          </dl>
         </article>
 
         <article className="ops-panel ops-panel-wide">

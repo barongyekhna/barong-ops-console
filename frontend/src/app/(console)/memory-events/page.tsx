@@ -1,24 +1,24 @@
+import { Database } from "lucide-react";
 import type { Metadata } from "next";
 
-import { CapabilityRecordList } from "@/components/capability-record-list";
+import { CapabilityEmptyState } from "@/components/capability-empty-state";
 
 export const metadata: Metadata = {
-  title: "Memory Audit Events",
+  title: "Hidden Capability",
 };
 
 export default function MemoryEventsPage() {
   return (
-    <CapabilityRecordList
-      emptyDescription="No audit memory records match the current backend result set."
-      emptyTitle="No memory audit events recorded."
-      endpoint="/memory-events"
-      fields={[
-        { key: "memory_event_id", label: "Memory event ID" },
-        { key: "event_type", label: "Type" },
-        { key: "importance", label: "Importance" },
-      ]}
-      requiredPermission="operation_logs.read"
-      title="Memory audit events"
+    <CapabilityEmptyState
+      icon={Database}
+      reason="This memory event route is excluded from the production capability graph."
+      required_execution_mode="No execution mode unlocks this placeholder route."
+      required_module_state="system.memory_events must be replaced by durable C17 observability surfaces."
+      required_org_state="Not available through organization module visibility."
+      required_permission="operation_logs.read"
+      state="hidden"
+      title="Capability hidden"
+      unlock_condition="Use the C17 observability center backed by operation logs and trace correlation."
     />
   );
 }

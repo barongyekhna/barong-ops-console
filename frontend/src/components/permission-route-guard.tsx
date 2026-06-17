@@ -3,6 +3,8 @@
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+import { CapabilityEmptyStateEngine } from "@/components/capability-empty-state";
+import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import { useAuth } from "@/components/auth-provider";
 import { useModuleAccess } from "@/components/module-access-provider";
 import {
@@ -18,8 +20,26 @@ export function PermissionRouteGuard({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const { getCapabilityForPath } = useFrontendCapabilityState();
   const { user } = useAuth();
   const { items, moduleAccessUnknown } = useModuleAccess();
+  const capability = getCapabilityForPath(pathname);
+
+  if (capability && !capability.can_enter) {
+    return (
+      <CapabilityEmptyStateEngine
+        reason={capability.reason}
+        required_execution_mode={capability.required_execution_mode}
+        required_module_state={capability.required_module_state}
+        required_org_state={capability.required_org_state}
+        required_permission={capability.required_permission}
+        state={capability.state}
+        title={`${capability.label} is not available`}
+        unlock_condition={capability.unlock_condition}
+      />
+    );
+  }
+
   const decision = getModuleRouteDecision(
     user?.permissions,
     pathname,

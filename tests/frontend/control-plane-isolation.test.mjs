@@ -44,6 +44,12 @@ test("backend proxy maps C14 C15 and execution paths to control-plane only", () 
       ["execution-providers", "registry"],
       "/api/control-plane/execution-providers/registry",
     ],
+    [["live-gate", "readiness"], "/api/control-plane/live-gate/readiness"],
+    [
+      ["live-gate", "production-readiness"],
+      "/api/control-plane/live-gate/production-readiness",
+    ],
+    [["live-gate", "policies"], "/api/control-plane/live-gate/policies"],
   ];
 
   for (const [path, expectedBackendPath] of controlPlanePaths) {

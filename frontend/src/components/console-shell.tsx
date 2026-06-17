@@ -1,33 +1,20 @@
 "use client";
 
-import { Blocks, LockKeyhole, LogOut, Menu } from "lucide-react";
-import Link from "next/link";
+import { Blocks, LogOut, Menu } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { AdapterSurfaceShell } from "@/components/module-adapter-shell";
 import { useAuth } from "@/components/auth-provider";
-import { useCapabilitySidebar } from "@/components/capability-sidebar-provider";
+import { CapabilitySidebarEngine } from "@/components/capability-sidebar-engine";
+import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import { pageTitles } from "@/lib/navigation";
-
-const MODULE_BADGE_LABELS = {
-  adapter_pending: "Adapter pending",
-  locked: "Locked",
-  mock: "Mock",
-  read_only: "Read-only",
-} as const;
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const {
-    error: sidebarError,
-    groups: visibleNavigationGroups,
-    isLoading: isSidebarLoading,
-    items: sidebarItems,
-    registryUnavailable,
-  } = useCapabilitySidebar();
+  const { getCapabilityForPath } = useFrontendCapabilityState();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
 
@@ -41,7 +28,8 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     }
   }
 
-  const title = pageTitles[pathname] ?? "Console";
+  const currentCapability = getCapabilityForPath(pathname);
+  const title = currentCapability?.label ?? pageTitles[pathname] ?? "Console";
 
   return (
     <div className="console-layout">
@@ -58,71 +46,10 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           </span>
         </div>
 
-        <nav aria-label="Console navigation" className="sidebar-navigation">
-          {visibleNavigationGroups.map((group) => (
-            <div className="navigation-group" key={group.label}>
-              <span className="navigation-label">{group.label}</span>
-              {group.items.map((item) => {
-                const Icon = item.icon;
-                const active = pathname === item.href;
-                const locked = item.state === "forbidden";
-                const unavailable =
-                  item.state === "partial" ||
-                  item.state === "adapter_pending" ||
-                  item.state === "mock";
-                const badge = item.badge;
-
-                return (
-                  <Link
-                    aria-current={active ? "page" : undefined}
-                    aria-label={
-                      badge
-                        ? `${item.label} ${MODULE_BADGE_LABELS[badge]}`
-                        : item.label
-                    }
-                    className={`navigation-link ${active ? "active" : ""} ${
-                      locked ? "locked" : ""
-                    } ${unavailable ? "unavailable" : ""}`}
-                    href={item.href}
-                    key={item.href}
-                    onClick={() => setIsNavigationOpen(false)}
-                    title={
-                      locked
-                        ? item.reason
-                        : unavailable
-                          ? item.reason
-                        : item.label
-                    }
-                  >
-                    <Icon aria-hidden="true" size={18} />
-                    <span>{item.label}</span>
-                    {locked ? (
-                      <LockKeyhole
-                        aria-hidden="true"
-                        className="navigation-lock"
-                        size={14}
-                      />
-                    ) : null}
-                    {!locked && badge ? (
-                      <span className={`navigation-status-badge ${badge}`}>
-                        {MODULE_BADGE_LABELS[badge]}
-                      </span>
-                    ) : null}
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
-        </nav>
-
-        <div className="sidebar-footer">
-          <span className="environment-dot" />
-          {isSidebarLoading
-            ? "Resolving capability graph"
-            : registryUnavailable
-              ? (sidebarError?.message ?? "Capability registry unavailable")
-              : `${sidebarItems.length} product capabilities`}
-        </div>
+        <CapabilitySidebarEngine
+          onNavigate={() => setIsNavigationOpen(false)}
+          pathname={pathname}
+        />
       </aside>
 
       <div className="console-main">
