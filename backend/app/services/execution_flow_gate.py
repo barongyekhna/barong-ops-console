@@ -8,6 +8,10 @@ from ..schemas.execution_flow_gate import (
     ExecutionFlowGateDecision,
     ExecutionFlowGateIntegrationPoint,
 )
+from ..schemas.execution_router import (
+    ExecutionModeAwareGateDecision,
+    ExecutionRuntimeMode,
+)
 from .emergency_kill_switch import (
     EmergencyKillSwitchGate,
     GLOBAL_KILL_SWITCH_BLOCK_REASON,
@@ -389,9 +393,14 @@ class ExecutionFlowGate:
             return "c09_provider_risk_mismatch"
         if provider.provider_status in BLOCKED_PROVIDER_STATUSES:
             return "c09_provider_unavailable"
-        if provider.provider_type in FUTURE_PROVIDER_TYPES:
+        if provider.provider_readiness == "live_ready":
+            return "c09_live_provider_future_gated"
+        if (
+            provider.provider_type in FUTURE_PROVIDER_TYPES
+            and provider.provider_readiness != "staging_ready"
+        ):
             return "c09_future_provider_blocked"
-        if provider.executable or provider.can_request_execution:
+        if provider.executable:
             return "c09_execution_bypass"
         if provider.live_provider_connected or provider.external_endpoint_declared:
             return "c09_external_provider_bypass"
@@ -516,6 +525,188 @@ def _request_identity(request: Any) -> dict[str, str]:
 
 
 C13E_GATE = ExecutionFlowGate()
+
+
+class ExecutionModeAwareGate(ExecutionFlowGate):
+    """C13 mode-aware execution gate used by ExecutionRouter.
+
+    Legacy C13E request validation remains available through check/decision on
+    ExecutionFlowGate. The new evaluate_mode method gates router-selected
+    mock/staging/live execution modes with C18F, C05, org context, provider
+    readiness, and module policy inputs.
+    """
+
+    def evaluate_mode(
+        self,
+        *,
+        c18f_permission_decision: Any,
+        c05_permission_result: Any,
+        org_context: Any,
+        provider_readiness: str,
+        requested_mode: ExecutionRuntimeMode,
+        selected_mode: ExecutionRuntimeMode | None,
+        module_policy: str = "router_default",
+    ) -> ExecutionModeAwareGateDecision:
+        c18f_state = _permission_state(c18f_permission_decision)
+        c05_state = _permission_state(c05_permission_result)
+        if org_context is None:
+            return self._mode_decision(
+                decision="deny",
+                reason="C18 org context is required before execution routing.",
+                requested_mode=requested_mode,
+                selected_mode=selected_mode,
+                c18f_state=c18f_state,
+                c05_state=c05_state,
+                provider_readiness=provider_readiness,
+                module_policy=module_policy,
+                mode_allowed=False,
+            )
+
+        if c18f_state == "deny":
+            return self._mode_decision(
+                decision="deny",
+                reason="C18F permission isolation denied execution routing.",
+                requested_mode=requested_mode,
+                selected_mode=selected_mode,
+                c18f_state=c18f_state,
+                c05_state=c05_state,
+                provider_readiness=provider_readiness,
+                module_policy=module_policy,
+                mode_allowed=False,
+            )
+        if c05_state == "deny":
+            return self._mode_decision(
+                decision="deny",
+                reason="C05 unified permission engine denied action permission.",
+                requested_mode=requested_mode,
+                selected_mode=selected_mode,
+                c18f_state=c18f_state,
+                c05_state=c05_state,
+                provider_readiness=provider_readiness,
+                module_policy=module_policy,
+                mode_allowed=False,
+            )
+        if c18f_state == "partial" or c05_state == "partial":
+            return self._mode_decision(
+                decision="partial",
+                reason="Permission evaluation returned partial scope coverage.",
+                requested_mode=requested_mode,
+                selected_mode=selected_mode,
+                c18f_state=c18f_state,
+                c05_state=c05_state,
+                provider_readiness=provider_readiness,
+                module_policy=module_policy,
+                mode_allowed=False,
+            )
+        if selected_mode is None:
+            return self._mode_decision(
+                decision="deny",
+                reason="ProviderResolver did not select a provider mode.",
+                requested_mode=requested_mode,
+                selected_mode=selected_mode,
+                c18f_state=c18f_state,
+                c05_state=c05_state,
+                provider_readiness=provider_readiness,
+                module_policy=module_policy,
+                mode_allowed=False,
+            )
+        if requested_mode == "live" or provider_readiness == "live_ready":
+            return self._mode_decision(
+                decision="deny",
+                reason="Live execution is future-gated and cannot dispatch.",
+                requested_mode=requested_mode,
+                selected_mode=selected_mode,
+                c18f_state=c18f_state,
+                c05_state=c05_state,
+                provider_readiness=provider_readiness,
+                module_policy=module_policy,
+                mode_allowed=False,
+            )
+        if selected_mode == "staging" and provider_readiness != "staging_ready":
+            return self._mode_decision(
+                decision="deny",
+                reason="Staging mode requires a staging_ready provider.",
+                requested_mode=requested_mode,
+                selected_mode=selected_mode,
+                c18f_state=c18f_state,
+                c05_state=c05_state,
+                provider_readiness=provider_readiness,
+                module_policy=module_policy,
+                mode_allowed=False,
+            )
+        if selected_mode == "mock" and requested_mode == "staging":
+            return self._mode_decision(
+                decision="partial",
+                reason="Staging provider was unavailable; mock fallback is allowed only as partial routing.",
+                requested_mode=requested_mode,
+                selected_mode=selected_mode,
+                c18f_state=c18f_state,
+                c05_state=c05_state,
+                provider_readiness=provider_readiness,
+                module_policy=module_policy,
+                mode_allowed=True,
+            )
+        return self._mode_decision(
+            decision="allow",
+            reason="Execution mode allowed by C13 mode-aware gate.",
+            requested_mode=requested_mode,
+            selected_mode=selected_mode,
+            c18f_state=c18f_state,
+            c05_state=c05_state,
+            provider_readiness=provider_readiness,
+            module_policy=module_policy,
+            mode_allowed=True,
+        )
+
+    def _mode_decision(
+        self,
+        *,
+        decision: str,
+        reason: str,
+        requested_mode: ExecutionRuntimeMode,
+        selected_mode: ExecutionRuntimeMode | None,
+        c18f_state: str,
+        c05_state: str,
+        provider_readiness: str,
+        module_policy: str,
+        mode_allowed: bool,
+    ) -> ExecutionModeAwareGateDecision:
+        return ExecutionModeAwareGateDecision(
+            decision=decision,
+            reason=reason,
+            execution_mode_requested=requested_mode,
+            execution_mode_allowed=mode_allowed,
+            execution_mode_selected=selected_mode,
+            c18f_decision=c18f_state,
+            c05_decision=c05_state,
+            provider_readiness=provider_readiness,
+            module_policy=module_policy,
+        )
+
+
+def _permission_state(value: Any) -> str:
+    if value is None:
+        return "deny"
+    if isinstance(value, Mapping):
+        if value.get("decision") in {"allow", "deny", "partial"}:
+            return str(value["decision"])
+        if value.get("allowed") is True:
+            return "allow"
+        if value.get("partial") is True:
+            return "partial"
+        return "deny"
+    decision = getattr(value, "decision", None)
+    if decision in {"allow", "deny", "partial"}:
+        return str(decision)
+    if getattr(value, "allowed", False) is True:
+        return "allow"
+    if getattr(value, "partial", False) is True:
+        return "partial"
+    return "deny"
+
+
+MODE_AWARE_GATE = ExecutionModeAwareGate()
+C13E_GATE = MODE_AWARE_GATE
 
 
 def check_execution_flow_gate(

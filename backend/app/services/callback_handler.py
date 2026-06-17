@@ -7,9 +7,15 @@ from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import SecretStr
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.config import Settings
+from ..models.execution_state import (
+    ExecutionCallbackRecord,
+    ExecutionDLQRecord,
+    ExecutionResultRecord,
+)
 from ..schemas.callback_handler import (
     CallbackContextBinding,
     CallbackContextBindingModel,
@@ -103,6 +109,17 @@ def _payload_digest(payload: CallbackHandlerPayload) -> str:
     return hashlib.sha256(
         canonical_callback_payload(payload).encode("utf-8")
     ).hexdigest()
+
+
+def _stable_record_id(prefix: str, value: dict[str, Any]) -> str:
+    encoded = json.dumps(
+        value,
+        default=str,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+    return f"{prefix}_{hashlib.sha256(encoded.encode('utf-8')).hexdigest()[:24]}"
 
 
 def _callback_nonce_key(payload: CallbackHandlerPayload) -> str:
@@ -321,9 +338,14 @@ def bind_callback_context(
     request: ExecutionPayloadStandardRequest,
     *,
     store: CallbackExecutionStore | None = None,
+    db: Session | None = None,
+    org_id: str | None = None,
 ) -> CallbackContextBinding:
     target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
     binding = target_store.bind_execution_request(request)
+    record = target_store.get_result(request.context_id)
+    if db is not None and org_id is not None and record is not None:
+        persist_execution_result_binding(db, org_id=org_id, record=record)
     record_workflow_event(
         event_type="workflow.execution.start",
         action="workflow.execution.start",
@@ -341,7 +363,12 @@ def get_callback_result(
     context_id: str,
     *,
     store: CallbackExecutionStore | None = None,
+    db: Session | None = None,
 ) -> CallbackResultStorageRecord | None:
+    if db is not None:
+        persistent = load_execution_result_record(db, context_id=context_id)
+        if persistent is not None:
+            return persistent
     target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
     return target_store.get_result(context_id)
 
@@ -374,6 +401,7 @@ def handle_callback(
     provided_signature: str | None,
     settings: Settings,
     db: Session | None = None,
+    org_id: str | None = None,
     store: CallbackExecutionStore | None = None,
 ) -> CallbackHandlerResult:
     verify_callback_signature(
@@ -383,7 +411,43 @@ def handle_callback(
         db=db,
     )
     target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
-    binding, record = target_store.update_status_from_callback(payload)
+    try:
+        binding, record = target_store.update_status_from_callback(payload)
+    except CallbackContextBindingError as exc:
+        if db is None:
+            raise
+        try:
+            binding, record = update_persistent_result_from_callback(
+                db,
+                payload=payload,
+            )
+        except CallbackContextBindingError:
+            persist_execution_dlq(
+                db,
+                org_id=org_id,
+                payload=payload,
+                reason=str(exc),
+                last_error="callback_context_binding_error",
+            )
+            raise
+
+    if db is not None:
+        callback_org_id = org_id or load_execution_result_org_id(
+            db,
+            context_id=payload.context_id,
+        )
+        if callback_org_id is not None:
+            persist_execution_callback(
+                db,
+                org_id=callback_org_id,
+                payload=payload,
+                provided_signature=provided_signature,
+            )
+            persist_execution_result_binding(
+                db,
+                org_id=callback_org_id,
+                record=record,
+            )
     notification = _build_module_notification(record)
     record_workflow_event(
         event_type=(
@@ -455,6 +519,285 @@ def update_execution_status(
         payload={"execution_status": updated_record.status},
     )
     return updated_record
+
+
+def persist_execution_result_binding(
+    db: Session,
+    *,
+    org_id: str,
+    record: CallbackResultStorageRecord,
+) -> ExecutionResultRecord:
+    existing = db.scalar(
+        select(ExecutionResultRecord).where(
+            ExecutionResultRecord.context_id == record.context_id
+        )
+    )
+    data = {
+        "org_id": org_id,
+        "result_id": _stable_record_id(
+            "execution_result",
+            {"context_id": record.context_id, "workflow_id": record.workflow_id},
+        ),
+        "context_id": record.context_id,
+        "execution_id": record.context_id,
+        "module_key": record.module,
+        "task": record.task,
+        "workflow_id": record.workflow_id,
+        "status": record.status,
+        "original_request": record.original_request.model_dump(mode="json"),
+        "workflow_output": record.workflow_output,
+        "execution_metadata": record.execution_metadata,
+        "callbacks_received": record.callbacks_received,
+        "signature_validated": record.signature_validated,
+        "payload_validated": record.payload_validated,
+        "started_at": _parse_optional_timestamp(record.started_at),
+        "completed_at": _parse_optional_timestamp(record.completed_at),
+    }
+    if existing is None:
+        existing = ExecutionResultRecord(**data)
+        db.add(existing)
+    else:
+        for key, value in data.items():
+            if key == "result_id":
+                continue
+            setattr(existing, key, value)
+    db.commit()
+    db.refresh(existing)
+    return existing
+
+
+def persist_execution_callback(
+    db: Session,
+    *,
+    org_id: str,
+    payload: CallbackHandlerPayload,
+    provided_signature: str | None,
+) -> ExecutionCallbackRecord:
+    payload_json = payload.model_dump(mode="json")
+    digest = _payload_digest(payload)
+    callback_id = _stable_record_id(
+        "execution_callback",
+        {
+            "context_id": payload.context_id,
+            "workflow_id": payload.workflow_id,
+            "digest": digest,
+            "status": payload.status,
+        },
+    )
+    record = db.scalar(
+        select(ExecutionCallbackRecord).where(
+            ExecutionCallbackRecord.callback_id == callback_id
+        )
+    )
+    data = {
+        "org_id": org_id,
+        "callback_id": callback_id,
+        "context_id": payload.context_id,
+        "execution_id": payload.context_id,
+        "module_key": payload.module,
+        "workflow_id": payload.workflow_id,
+        "status": payload.status,
+        "signature_status": "validated" if provided_signature else "missing",
+        "payload_digest": digest,
+        "payload": payload_json,
+        "validation_result": {
+            "signature_validated": True,
+            "payload_validated": True,
+            "runtime_execution_allowed": False,
+        },
+        "received_at": datetime.now(UTC),
+    }
+    if record is None:
+        record = ExecutionCallbackRecord(**data)
+        db.add(record)
+    else:
+        for key, value in data.items():
+            setattr(record, key, value)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def persist_execution_dlq(
+    db: Session,
+    *,
+    org_id: str | None,
+    payload: CallbackHandlerPayload,
+    reason: str,
+    last_error: str | None = None,
+) -> ExecutionDLQRecord | None:
+    if org_id is None:
+        return None
+    dlq_id = _stable_record_id(
+        "execution_dlq",
+        {
+            "context_id": payload.context_id,
+            "workflow_id": payload.workflow_id,
+            "reason": reason,
+        },
+    )
+    record = db.scalar(
+        select(ExecutionDLQRecord).where(ExecutionDLQRecord.dlq_id == dlq_id)
+    )
+    data = {
+        "org_id": org_id,
+        "dlq_id": dlq_id,
+        "context_id": payload.context_id,
+        "execution_id": payload.context_id,
+        "module_key": payload.module,
+        "workflow_id": payload.workflow_id,
+        "status": "retryable",
+        "reason": reason,
+        "payload": payload.model_dump(mode="json"),
+        "retry_count": 0,
+        "replayable": True,
+        "last_error": last_error,
+    }
+    if record is None:
+        record = ExecutionDLQRecord(**data)
+        db.add(record)
+    else:
+        for key, value in data.items():
+            if key == "retry_count":
+                continue
+            setattr(record, key, value)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+def load_execution_result_org_id(
+    db: Session,
+    *,
+    context_id: str,
+) -> str | None:
+    row = db.scalar(
+        select(ExecutionResultRecord.org_id).where(
+            ExecutionResultRecord.context_id == context_id
+        )
+    )
+    return row
+
+
+def load_execution_result_record(
+    db: Session,
+    *,
+    context_id: str,
+) -> CallbackResultStorageRecord | None:
+    row = db.scalar(
+        select(ExecutionResultRecord).where(
+            ExecutionResultRecord.context_id == context_id
+        )
+    )
+    if row is None:
+        return None
+    return _storage_record_from_persistent(row)
+
+
+def update_persistent_result_from_callback(
+    db: Session,
+    *,
+    payload: CallbackHandlerPayload,
+) -> tuple[CallbackContextBinding, CallbackResultStorageRecord]:
+    row = db.scalar(
+        select(ExecutionResultRecord).where(
+            ExecutionResultRecord.context_id == payload.context_id
+        )
+    )
+    if row is None:
+        raise CallbackContextBindingError(
+            "C15D callback context_id is not bound to a durable execution result."
+        )
+    record = _storage_record_from_persistent(row)
+    binding = CallbackContextBinding(
+        context_id=record.context_id,
+        module=record.module,
+        task=record.task,
+        workflow_id=record.workflow_id,
+        original_request=record.original_request,
+        status=record.status,
+        bound_at=record.created_at,
+    )
+    temporary_store = CallbackExecutionStore()
+    temporary_store._bindings[payload.context_id] = binding
+    temporary_store._records[payload.context_id] = record
+    updated_binding, updated_record = temporary_store.update_status_from_callback(
+        payload
+    )
+    persist_execution_result_binding(db, org_id=row.org_id, record=updated_record)
+    return updated_binding, updated_record
+
+
+def retry_execution_dlq(
+    db: Session,
+    *,
+    dlq_id: str,
+) -> ExecutionDLQRecord:
+    row = db.scalar(select(ExecutionDLQRecord).where(ExecutionDLQRecord.dlq_id == dlq_id))
+    if row is None:
+        raise CallbackContextBindingError("Execution DLQ record was not found.")
+    row.retry_count += 1
+    row.status = "retry_scheduled"
+    row.retry_after = datetime.now(UTC)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def replay_execution_dlq(
+    db: Session,
+    *,
+    dlq_id: str,
+) -> ExecutionDLQRecord:
+    row = db.scalar(select(ExecutionDLQRecord).where(ExecutionDLQRecord.dlq_id == dlq_id))
+    if row is None:
+        raise CallbackContextBindingError("Execution DLQ record was not found.")
+    if not row.replayable:
+        raise CallbackStatusTransitionError("Execution DLQ record is not replayable.")
+    row.status = "replay_ready"
+    row.retry_count += 1
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+def _parse_optional_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return _parse_timestamp(value)
+
+
+def _format_timestamp(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return value.astimezone(UTC).replace(microsecond=0).isoformat().replace(
+        "+00:00",
+        "Z",
+    )
+
+
+def _storage_record_from_persistent(
+    row: ExecutionResultRecord,
+) -> CallbackResultStorageRecord:
+    return CallbackResultStorageRecord(
+        context_id=row.context_id,
+        module=row.module_key,
+        task=row.task,
+        workflow_id=row.workflow_id,
+        status=row.status,
+        original_request=ExecutionPayloadStandardRequest.model_validate(
+            row.original_request
+        ),
+        workflow_output=row.workflow_output,
+        execution_metadata=row.execution_metadata,
+        created_at=_format_timestamp(row.created_at) or _utc_now_timestamp(),
+        updated_at=_format_timestamp(row.updated_at) or _utc_now_timestamp(),
+        started_at=_format_timestamp(row.started_at),
+        completed_at=_format_timestamp(row.completed_at),
+        callbacks_received=row.callbacks_received,
+        signature_validated=row.signature_validated,
+        payload_validated=row.payload_validated,
+    )
 
 
 def get_callback_handler_design() -> CallbackHandlerDesign:

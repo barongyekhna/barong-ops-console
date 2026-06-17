@@ -11,6 +11,8 @@ C10E adds the mock-only bridge from C09 execution request contracts to the C10
 sandbox runner and a C09 provider mock interface without live provider calls.
 C10F finalizes the mock sandbox runtime with a disabled-execution lifecycle,
 final safety lock, and sealed mock-only final state.
+C10 staging runtime layer adds a staging-ready policy envelope beside the
+mock sandbox without enabling production access or live provider dispatch.
 """
 
 from .bridge import (
@@ -88,6 +90,15 @@ from .runtime import (
     SandboxRuntimeResponse,
     finalize_sandbox_runtime,
 )
+from .staging import (
+    STAGING_SANDBOX_STAGE,
+    StagingSandbox,
+    StagingSandboxPolicy,
+    StagingSandboxRequest,
+    StagingSandboxResponse,
+)
+
+MockSandbox = SandboxRuntime
 
 __all__ = [
     "BRIDGE_FLOW",
@@ -105,6 +116,7 @@ __all__ = [
     "RUNNER_MODE",
     "RUNNER_STAGE",
     "SAFETY_GUARANTEES",
+    "STAGING_SANDBOX_STAGE",
     "BridgeRequest",
     "BridgeResponse",
     "BridgeSafetyGuardReport",
@@ -129,6 +141,7 @@ __all__ = [
     "ExecutionIsolationLevel",
     "FinalSafetyLock",
     "FinalSafetyLockViolation",
+    "MockSandbox",
     "ResourceControlModel",
     "ResourceEnforcementReport",
     "ResourcePolicy",
@@ -151,6 +164,10 @@ __all__ = [
     "SandboxRuntimeLifecycle",
     "SandboxRuntimeLifecycleStep",
     "SandboxRuntimeResponse",
+    "StagingSandbox",
+    "StagingSandboxPolicy",
+    "StagingSandboxRequest",
+    "StagingSandboxResponse",
     "bridge_execution_request",
     "deterministic_mock_execution_response",
     "finalize_sandbox_runtime",
