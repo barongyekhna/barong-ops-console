@@ -1,0 +1,561 @@
+{
+  "diagnostic_id": "FIX-D01",
+  "generated_at": "2026-06-17T00:00:00Z",
+  "scope": "FRONTEND PERFORMANCE & AUTH FLOW DIAGNOSTIC",
+  "constraints_honored": {
+    "code_modified": false,
+    "bug_fixes_applied": false,
+    "r05_or_r04_changes": false,
+    "ui_changes": false,
+    "api_changes": false
+  },
+  "methodology": [
+    "Static trace of Next.js routes, auth flow, providers, API client, proxy route, and backend auth/control-plane routes.",
+    "Read-only runtime checks of running prod/staging containers, recent backend/frontend logs, HTTP timings, and PostgreSQL connection state.",
+    "No login POST was executed during this diagnostic to avoid creating a new auth session and audit-write side effects."
+  ],
+  "executive_summary": {
+    "primary_root_cause": "The current production backend is effectively wedged by DB connection pool exhaustion: PostgreSQL shows 15 idle-in-transaction connections, matching SQLAlchemy's default pool capacity of size 5 plus overflow 10. New requests wait for a connection and then fail after 30 seconds.",
+    "frontend_contribution": "The frontend amplifies the backend bottleneck during auth and console boot by issuing duplicate provider fan-out requests with no client timeout, while route guards keep /login or protected pages in loading states until auth/provider requests resolve.",
+    "login_failure_root_cause": "Login cannot reliably complete because the login flow requires both /auth/login and an immediate /auth/me revalidation. In the current prod state, auth/me does not return within 10 seconds and backend logs show 30 second pool timeouts. Additionally, prod/staging default to Secure cookies, so direct HTTP access on localhost-style ports will not persist the session cookie.",
+    "white_screen_or_loading_cause": "The first browser render is blocked by guard state, not by the HTML response. /login HTML returned in about 16 ms, but PublicOnly hides the login form while AuthProvider waits on /auth/me; if /auth/me hangs, the login page remains a spinner."
+  },
+  "root_cause_ranking_top_5": [
+    {
+      "rank": 1,
+      "cause": "Backend DB connection pool exhaustion with idle-in-transaction leak/saturation",
+      "severity": "P0",
+      "evidence": [
+        "Production backend logs show sqlalchemy.exc.TimeoutError: QueuePool limit of size 5 overflow 10 reached, connection timed out, timeout 30.00.",
+        "PostgreSQL pg_stat_activity showed 15 idle in transaction connections plus active/background sessions.",
+        "Production /health and /api/backend/health did not return within 10 seconds, proving the issue is systemic and not only a business endpoint."
+      ],
+      "impact": "All auth/provider/API requests can hang or fail with 500 after 30 seconds. This directly explains slow loads, stuck auth checks, and login failure."
+    },
+    {
+      "rank": 2,
+      "cause": "Frontend boot fan-out and duplicate provider requests",
+      "severity": "P1",
+      "evidence": [
+        "CapabilityStateProvider dispatches 9 parallel requests after authentication.",
+        "AdapterAccessProvider repeats 4 of those requests.",
+        "ModuleAccessProvider repeats /modules/me.",
+        "OperationsDashboard calls capability refresh again while also loading health, logs, approvals, and users."
+      ],
+      "impact": "A single dashboard load can multiply auth/session/permission checks, accelerating backend pool saturation and making slow API tails dominate first paint."
+    },
+    {
+      "rank": 3,
+      "cause": "Repeated backend session validation and write amplification per request",
+      "severity": "P1",
+      "evidence": [
+        "Control-plane isolation, org context, permission isolation, data isolation, and route dependencies can each validate the session.",
+        "validate_session() updates last_seen and commits during read-heavy paths.",
+        "The prior PRE20-K report independently flagged this as high write amplification and row contention risk."
+      ],
+      "impact": "Provider fan-out becomes many DB sessions and commits per browser action, creating contention on auth_sessions and pressure on SQLAlchemy's pool."
+    },
+    {
+      "rank": 4,
+      "cause": "Production/staging Secure session cookie over direct HTTP access",
+      "severity": "P1",
+      "evidence": [
+        "APP_ENV is production or staging and AUTH_SESSION_COOKIE_SECURE is not explicitly disabled, so backend defaults Secure=true.",
+        "Published local ports are http://127.0.0.1:3000 and http://127.0.0.1:3100.",
+        "Secure cookies are not persisted by browsers over plain HTTP."
+      ],
+      "impact": "When accessed through direct HTTP ports, /auth/login can return Set-Cookie but the browser drops it; the immediate /auth/me then returns unauthenticated."
+    },
+    {
+      "rank": 5,
+      "cause": "Route guards and auth flow have no request timeout boundary",
+      "severity": "P2",
+      "evidence": [
+        "apiRequest() calls fetch without AbortController timeout.",
+        "PublicOnly returns only a spinner while auth status is checking.",
+        "LoginForm keeps isSubmitting true until login() resolves or rejects.",
+        "AuthProvider login() requires currentUserRequest() after loginRequest()."
+      ],
+      "impact": "Backend hangs propagate directly into infinite-looking spinners, stuck Signing in state, and delayed redirects."
+    }
+  ],
+  "observed_runtime_timings": {
+    "prod_frontend_login_html": {
+      "url": "http://127.0.0.1:3000/login",
+      "http_status": 200,
+      "connect_seconds": 0.000211,
+      "ttfb_seconds": 0.015716,
+      "total_seconds": 0.015851,
+      "interpretation": "The server-side login page HTML is fast; the slow visible page state is caused by client-side auth check after hydration."
+    },
+    "prod_backend_public_health": {
+      "url": "http://127.0.0.1:8000/api/public/health",
+      "http_status": 0,
+      "total_seconds": ">10.0",
+      "result": "curl timeout with 0 bytes received"
+    },
+    "prod_backend_health": {
+      "url": "http://127.0.0.1:8000/health",
+      "http_status": 0,
+      "total_seconds": ">10.0",
+      "result": "curl timeout with 0 bytes received"
+    },
+    "prod_proxy_health": {
+      "url": "http://127.0.0.1:3000/api/backend/health",
+      "http_status": 0,
+      "total_seconds": ">10.0",
+      "result": "curl timeout with 0 bytes received"
+    },
+    "prod_proxy_auth_me_unauthenticated": {
+      "url": "http://127.0.0.1:3000/api/backend/auth/me",
+      "http_status": 0,
+      "total_seconds": ">10.0",
+      "result": "curl timeout with 0 bytes received"
+    },
+    "staging_proxy_health": {
+      "url": "http://127.0.0.1:3100/api/backend/health",
+      "http_status": 200,
+      "ttfb_seconds": 3.806713,
+      "total_seconds": 3.898817
+    },
+    "staging_proxy_auth_me_unauthenticated": {
+      "url": "http://127.0.0.1:3100/api/backend/auth/me",
+      "http_status": 401,
+      "ttfb_seconds": 5.696509,
+      "total_seconds": 5.701452
+    }
+  },
+  "page_load_chain_analysis": {
+    "login_first_load_path": [
+      {
+        "step": "GET /login HTML",
+        "component_or_file": "frontend/src/app/login/page.tsx",
+        "estimated_time": "observed prod server HTML 15.851 ms",
+        "blocking": false
+      },
+      {
+        "step": "RootLayout mounts AuthProvider",
+        "component_or_file": "frontend/src/app/layout.tsx, frontend/src/components/auth-provider.tsx",
+        "estimated_time": "render immediate; async auth check starts after mount",
+        "blocking": "indirect"
+      },
+      {
+        "step": "AuthProvider refresh -> GET /auth/me",
+        "component_or_file": "frontend/src/components/auth-provider.tsx, frontend/src/lib/auth.ts",
+        "estimated_time": "prod >10s timeout observed via proxy; backend logs show possible 30s DB pool timeout",
+        "blocking": true
+      },
+      {
+        "step": "PublicOnly waits for auth status",
+        "component_or_file": "frontend/src/components/auth-guard.tsx",
+        "estimated_time": "same as /auth/me; no fallback timer in PublicOnly",
+        "blocking": true
+      },
+      {
+        "step": "LoginForm becomes visible",
+        "component_or_file": "frontend/src/components/login-form.tsx",
+        "estimated_time": "only after auth status becomes unauthenticated",
+        "blocking": true
+      }
+    ],
+    "console_layout_initialization_path": [
+      {
+        "step": "AuthGuard checks AuthProvider status",
+        "component_or_file": "frontend/src/components/auth-guard.tsx",
+        "estimated_time": "blocked by /auth/me; fallback panel after 3000 ms for protected routes",
+        "blocking": true
+      },
+      {
+        "step": "CapabilityStateProvider",
+        "component_or_file": "frontend/src/components/capability-state-provider.tsx",
+        "estimated_time": "duration equals slowest of 9 API calls; currently can exceed 30s or hang without client timeout",
+        "blocking": "does not block children render directly, but exposes isLoading/fallback and feeds route/capability decisions"
+      },
+      {
+        "step": "AdapterAccessProvider",
+        "component_or_file": "frontend/src/components/adapter-access-provider.tsx",
+        "estimated_time": "duration equals slowest of 4 repeated API calls",
+        "blocking": "non-render-blocking provider value, but consumers see loading/unknown access"
+      },
+      {
+        "step": "ModuleAccessProvider",
+        "component_or_file": "frontend/src/components/module-access-provider.tsx",
+        "estimated_time": "/modules/me logged as 30s backend pool timeout/500 in production",
+        "blocking": "non-render-blocking provider value; PermissionRouteGuard uses its moduleAccessUnknown result"
+      },
+      {
+        "step": "ConsoleShell + PermissionRouteGuard + Dashboard",
+        "component_or_file": "frontend/src/components/console-shell.tsx, frontend/src/components/permission-route-guard.tsx, frontend/src/components/operations-dashboard.tsx",
+        "estimated_time": "dashboard starts another capability refresh plus 4 data requests; visible fallback after 3000 ms",
+        "blocking": "dashboard data waits on Promise.allSettled including capability refresh"
+      }
+    ],
+    "dependency_chain_graph": [
+      "Browser /login -> RootLayout/AuthProvider -> /api/backend/auth/me -> Next proxy -> backend /api/public/auth/me -> require_rbac(AUTH, read) -> validate_session/permissions -> DB pool",
+      "Browser /dashboard -> AuthGuard -> AuthProvider /auth/me -> CapabilityStateProvider 9x API -> AdapterAccessProvider 4x API -> ModuleAccessProvider /modules/me -> PermissionRouteGuard -> OperationsDashboard refreshCapabilityState + data APIs",
+      "Provider API -> Next proxy /api/backend/* -> backend public/app/control-plane layer -> middleware session/org/permission/data isolation -> route dependency require_rbac -> service permission resolution -> DB"
+    ]
+  },
+  "login_failure_trace": {
+    "frontend_submit_path": [
+      "LoginForm.handleSubmit() sets isSubmitting=true.",
+      "useAuth().login(username, password) calls loginRequest('/auth/login').",
+      "AuthProvider.login() then calls currentUserRequest('/auth/me') even if /auth/login returned a user payload.",
+      "Only after currentUserRequest resolves does AuthProvider set authenticated and LoginForm router.replace('/dashboard')."
+    ],
+    "request_trace": [
+      {
+        "request": "POST /api/backend/auth/login",
+        "frontend_source": "frontend/src/lib/auth.ts",
+        "backend_target": "/api/public/auth/login",
+        "failure_modes": [
+          "Can hang or fail if backend threadpool/DB pool is exhausted.",
+          "Can return 401 for invalid credentials or 429 for rate limit.",
+          "Can set Secure cookie that browser drops on direct HTTP access."
+        ]
+      },
+      {
+        "request": "GET /api/backend/auth/me",
+        "frontend_source": "frontend/src/lib/auth.ts",
+        "backend_target": "/api/public/auth/me",
+        "failure_modes": [
+          "Currently observed in prod proxy as no response within 10s.",
+          "Staging unauthenticated check returned 401 but took 5.701s.",
+          "If Secure cookie was dropped, returns 401 and AuthProvider clears session.",
+          "If DB pool is saturated, can hang or return 500 after backend timeout."
+        ]
+      },
+      {
+        "request": "router.replace('/dashboard')",
+        "frontend_source": "frontend/src/components/login-form.tsx",
+        "failure_modes": [
+          "Not reached unless both /auth/login and the second /auth/me succeed."
+        ]
+      }
+    ],
+    "token_or_session_write_assessment": {
+      "local_storage_token": "Not used. Current auth is HttpOnly session cookie based.",
+      "cookie_write": "Backend sets session cookie; frontend proxy forwards Set-Cookie.",
+      "likely_cookie_failure": "If accessed over plain HTTP in production/staging, Secure cookie is not stored by the browser.",
+      "backend_session_failure": "If auth_sessions table/pool is blocked, session validation cannot complete."
+    },
+    "failure_location": {
+      "current_primary": "backend/runtime infrastructure: DB pool exhausted and backend requests not returning",
+      "current_secondary": "deployment/access-mode mismatch: Secure cookie with direct HTTP access",
+      "frontend_role": "frontend requires /auth/me after login and has no timeout, so backend stalls surface as login failure/loading instead of a bounded error state"
+    }
+  },
+  "provider_blocking_analysis": {
+    "provider_dependency_graph": [
+      {
+        "from": "RootLayout",
+        "to": "AuthProvider",
+        "dependency": "global auth context"
+      },
+      {
+        "from": "LoginPage",
+        "to": "PublicOnly",
+        "dependency": "AuthProvider.status; blocks login form while checking"
+      },
+      {
+        "from": "ProtectedLayout",
+        "to": "AuthGuard",
+        "dependency": "AuthProvider.status; blocks console children until authenticated"
+      },
+      {
+        "from": "AuthGuard",
+        "to": "CapabilityStateProvider",
+        "dependency": "only mounted after authenticated"
+      },
+      {
+        "from": "CapabilityStateProvider",
+        "to": "backend capability fan-out",
+        "dependency": "modules, adapters, execution providers, live gate"
+      },
+      {
+        "from": "AdapterAccessProvider",
+        "to": "backend adapter/provider APIs",
+        "dependency": "duplicates adapter and execution-provider reads"
+      },
+      {
+        "from": "ModuleAccessProvider",
+        "to": "backend /modules/me",
+        "dependency": "route guard module decisions"
+      },
+      {
+        "from": "OperationsDashboard",
+        "to": "CapabilityStateProvider.refresh",
+        "dependency": "triggers another capability fan-out during dashboard load"
+      }
+    ],
+    "blocking_provider_list": [
+      {
+        "provider_or_guard": "PublicOnly",
+        "blocking_surface": "/login form",
+        "condition": "Auth status === checking",
+        "risk": "No timeout fallback; login form can remain hidden while /auth/me hangs."
+      },
+      {
+        "provider_or_guard": "AuthGuard",
+        "blocking_surface": "console layout children",
+        "condition": "Auth status !== authenticated",
+        "risk": "Protected routes show spinner/fallback until /auth/me resolves."
+      },
+      {
+        "provider_or_guard": "CapabilityStateProvider",
+        "blocking_surface": "capability graph/loading state",
+        "condition": "Promise.all waits for all 9 API promises to settle",
+        "risk": "No client timeout; a hung fetch keeps isLocalLoading true."
+      },
+      {
+        "provider_or_guard": "OperationsDashboard",
+        "blocking_surface": "dashboard data state",
+        "condition": "Promise.allSettled waits for refreshCapabilityState and dashboard API calls",
+        "risk": "Dashboard load remains in progress while fallback UI is shown."
+      }
+    ],
+    "deadlock_or_wait_chain": {
+      "frontend_circular_dependency_detected": false,
+      "backend_resource_wait_chain_detected": true,
+      "graph": [
+        "Frontend provider fan-out",
+        "Next proxy fetches backend",
+        "FastAPI sync route/middleware needs worker thread and DB session",
+        "SQLAlchemy pool has 15 connections idle in transaction",
+        "New request waits for DB connection",
+        "Thread remains occupied while waiting",
+        "Health/auth/provider requests stop returning",
+        "AuthProvider/PublicOnly/AuthGuard remain in loading/checking"
+      ]
+    }
+  },
+  "api_performance_analysis": {
+    "slow_api_list": [
+      {
+        "api": "/auth/me",
+        "observed": "prod proxy did not return within 10s; staging unauthenticated returned 401 in 5.701s",
+        "blocking_reason": "session validation plus require_rbac(AUTH, read) and permission resolution; currently impacted by backend pool/threadpool saturation"
+      },
+      {
+        "api": "/modules/me",
+        "observed": "production backend log shows 500 after SQLAlchemy QueuePool 30s timeout",
+        "blocking_reason": "control-plane middleware/session validation plus list_modules_for_user permission resolution"
+      },
+      {
+        "api": "/execution-providers/me",
+        "observed": "staging logs show 401s when no session; production expected to share pool bottleneck",
+        "blocking_reason": "control-plane middleware, require_rbac(C09, execute), provider contract validation, adapter/module access derivation"
+      },
+      {
+        "api": "/permissions/me",
+        "observed": "not directly part of current console boot fan-out, but backend path shares /auth/me permission-resolution behavior",
+        "blocking_reason": "require_rbac(AUTH, read) and resolve_current_user_permission_info"
+      },
+      {
+        "api": "/health",
+        "observed": "prod backend and proxy health did not return within 10s; staging proxy health took 3.899s",
+        "blocking_reason": "systemic backend worker/threadpool saturation; not a business query issue"
+      }
+    ],
+    "failed_api_list": [
+      {
+        "api": "/api/control-plane/modules/me",
+        "status": "500",
+        "evidence": "production backend log QueuePool timeout after 30 seconds"
+      },
+      {
+        "api": "/api/backend/auth/me",
+        "status": "timeout/no response in prod timing",
+        "evidence": "curl --max-time 10 received 0 bytes"
+      },
+      {
+        "api": "/api/backend/health",
+        "status": "timeout/no response in prod timing",
+        "evidence": "curl --max-time 10 received 0 bytes"
+      },
+      {
+        "api": "/execution-providers/me and /execution-providers/registry",
+        "status": "401 in staging logs without session",
+        "evidence": "recent staging backend logs"
+      }
+    ],
+    "retry_loops": {
+      "automatic_retry_loop_detected": false,
+      "manual_retry_surfaces": [
+        "AuthGuard Try refresh",
+        "ConsoleShell capability Try refresh",
+        "OperationsDashboard Refresh",
+        "CapabilityEmptyState retry buttons"
+      ],
+      "risk": "Because no request timeout exists, manual retries can overlap with still-pending hung requests after UI fallback appears."
+    },
+    "network_latency_estimation": {
+      "frontend_html_latency": "low: /login HTML about 16 ms",
+      "proxy_to_backend_latency": "not the dominant issue; backend/proxy requests connect quickly but wait for response",
+      "backend_service_latency": "critical: prod no response within 10s for health/auth; backend logs show 30s pool timeout"
+    }
+  },
+  "react_render_loop_analysis": {
+    "infinite_use_effect_loop_detected": false,
+    "render_loop_source_file_list": [],
+    "render_frequency_hotspots": [
+      {
+        "file": "frontend/src/components/capability-state-provider.tsx",
+        "reason": "Many state fields are updated after one fan-out result; React batching should reduce this, but provider value invalidates all capability consumers."
+      },
+      {
+        "file": "frontend/src/components/adapter-access-provider.tsx",
+        "reason": "Several access/registry/error/loading states update after duplicated API fan-out."
+      },
+      {
+        "file": "frontend/src/components/module-access-provider.tsx",
+        "reason": "Module access updates feed PermissionRouteGuard and navigation decisions."
+      },
+      {
+        "file": "frontend/src/components/operations-dashboard.tsx",
+        "reason": "Dashboard load calls refreshCapabilityState and then sets dashboard state, causing provider consumers and dashboard to update together."
+      },
+      {
+        "file": "frontend/src/components/console-shell.tsx",
+        "reason": "Consumes capability state and recomputes title/fallback banner/sidebar on provider value changes."
+      },
+      {
+        "file": "frontend/src/components/permission-route-guard.tsx",
+        "reason": "Consumes capability graph, auth user, and module access state; rerenders on each provider state transition."
+      }
+    ],
+    "dashboard_rerender_triggers": [
+      "AuthProvider user/status changes",
+      "CapabilityStateProvider loading/fallback/graph updates",
+      "ModuleAccessProvider module access updates",
+      "OperationsDashboard local loading, timeout, and data state updates"
+    ],
+    "conclusion": "The render issue is not an infinite React loop. It is repeated legitimate rerendering driven by slow duplicated async provider loads."
+  },
+  "loading_bottleneck_chain": [
+    {
+      "order": 1,
+      "step": "AuthProvider /auth/me",
+      "status": "blocking",
+      "why": "PublicOnly and AuthGuard wait on auth status."
+    },
+    {
+      "order": 2,
+      "step": "Backend DB pool/threadpool",
+      "status": "critical bottleneck",
+      "why": "15 idle-in-transaction DB connections consume the default pool capacity; new requests time out."
+    },
+    {
+      "order": 3,
+      "step": "CapabilityStateProvider 9-request fan-out",
+      "status": "amplifier",
+      "why": "Slowest request gates capability loading; no client timeout."
+    },
+    {
+      "order": 4,
+      "step": "AdapterAccessProvider and ModuleAccessProvider duplicate requests",
+      "status": "amplifier",
+      "why": "Repeats backend calls already made by capability provider."
+    },
+    {
+      "order": 5,
+      "step": "OperationsDashboard refreshCapabilityState plus dashboard data",
+      "status": "amplifier",
+      "why": "Starts another capability refresh during first dashboard render."
+    }
+  ],
+  "provider_deadlock_graph": {
+    "nodes": [
+      "PublicOnly",
+      "AuthGuard",
+      "AuthProvider",
+      "CapabilityStateProvider",
+      "AdapterAccessProvider",
+      "ModuleAccessProvider",
+      "OperationsDashboard",
+      "Next backend proxy",
+      "FastAPI middleware stack",
+      "SQLAlchemy QueuePool",
+      "PostgreSQL idle-in-transaction sessions"
+    ],
+    "edges": [
+      ["PublicOnly", "AuthProvider.status"],
+      ["AuthGuard", "AuthProvider.status"],
+      ["AuthProvider", "/auth/me"],
+      ["CapabilityStateProvider", "9 backend API requests"],
+      ["AdapterAccessProvider", "4 backend API requests"],
+      ["ModuleAccessProvider", "/modules/me"],
+      ["OperationsDashboard", "CapabilityStateProvider.refresh"],
+      ["Next backend proxy", "FastAPI middleware stack"],
+      ["FastAPI middleware stack", "SQLAlchemy QueuePool"],
+      ["SQLAlchemy QueuePool", "PostgreSQL idle-in-transaction sessions"]
+    ],
+    "deadlock_type": "resource starvation/wait chain, not React circular dependency"
+  },
+  "recommended_fix_order_no_implementation": [
+    {
+      "order": 1,
+      "recommendation": "Recover and inspect backend DB connection pool state: identify why sessions remain idle in transaction, close leaked sessions safely, and confirm health returns quickly before touching frontend.",
+      "rationale": "The current production system cannot serve even health/auth reliably while pool slots are consumed."
+    },
+    {
+      "order": 2,
+      "recommendation": "Audit backend middleware/session lifecycle: remove repeated per-request validate_session commits and ensure all middleware-created sessions are closed promptly.",
+      "rationale": "This is the backend source of pool/write amplification."
+    },
+    {
+      "order": 3,
+      "recommendation": "Add request timeout/cancellation boundaries around frontend apiRequest and provider loads.",
+      "rationale": "A backend hang should degrade to a bounded fallback/error state instead of infinite checking/signing-in."
+    },
+    {
+      "order": 4,
+      "recommendation": "Deduplicate console boot data: make CapabilityStateProvider the single source for module/adapter/execution-provider access or share a request cache.",
+      "rationale": "This reduces first-load fan-out and backend auth/permission checks."
+    },
+    {
+      "order": 5,
+      "recommendation": "Fix environment/access-mode mismatch: use HTTPS for production/staging access or explicitly configure non-secure cookies only for local non-production diagnostics.",
+      "rationale": "Secure cookies over direct HTTP make login appear to succeed but /auth/me fails."
+    },
+    {
+      "order": 6,
+      "recommendation": "Move dashboard refreshCapabilityState out of the first dashboard data load or make it use the already-loaded provider state.",
+      "rationale": "Avoids another 9-request capability fan-out during first dashboard render."
+    },
+    {
+      "order": 7,
+      "recommendation": "Add observability for provider/API boot timings and backend pool metrics.",
+      "rationale": "Future regressions should identify slow provider/API stages before users see blank/loading screens."
+    }
+  ],
+  "source_evidence": {
+    "frontend": [
+      "frontend/src/app/layout.tsx: AuthProvider wraps all routes.",
+      "frontend/src/app/login/page.tsx: LoginPage is wrapped by PublicOnly.",
+      "frontend/src/components/auth-provider.tsx: refresh calls currentUserRequest on mount; login calls loginRequest then currentUserRequest.",
+      "frontend/src/components/auth-guard.tsx: PublicOnly blocks while checking; AuthGuard blocks protected routes and shows fallback after 3000 ms.",
+      "frontend/src/components/capability-state-provider.tsx: authenticated init dispatches 9 API calls with Promise.all.",
+      "frontend/src/components/adapter-access-provider.tsx: authenticated init dispatches 4 repeated adapter/provider API calls.",
+      "frontend/src/components/module-access-provider.tsx: authenticated init dispatches /modules/me.",
+      "frontend/src/components/operations-dashboard.tsx: dashboard load calls refreshCapabilityState plus health/logs/approvals/users.",
+      "frontend/src/lib/api.ts: fetch uses no-store and credentials include, but no timeout."
+    ],
+    "backend": [
+      "backend/app/db/session.py: engine uses create_engine(..., pool_pre_ping=True) with default QueuePool sizing.",
+      "backend/app/services/auth_service.py: validate_session updates last_seen and commits.",
+      "backend/app/api/deps.py: require_rbac validates session and permission.",
+      "backend/app/main.py and middleware files: control-plane/org/permission/data isolation layers can each validate session.",
+      "backend/app/api/routes/auth.py: /auth/me requires require_rbac(AUTH, read) and permission resolution.",
+      "backend/app/api/routes/modules.py: /modules/me requires require_rbac(REGISTRY, admin) and list_modules_for_user.",
+      "backend/app/api/routes/execution_providers.py: /execution-providers/me requires require_rbac(C09, execute).",
+      "backend/app/api/routes/permissions.py: /permissions/me requires require_rbac(AUTH, read)."
+    ],
+    "runtime": [
+      "Production backend logs: QueuePool limit size 5 overflow 10 reached, timeout 30s, during GET /api/control-plane/modules/me.",
+      "PostgreSQL prod pg_stat_activity: 15 idle in transaction connections.",
+      "Prod timing: /login HTML 15.851 ms; prod backend/proxy health/auth did not respond within 10s.",
+      "Staging timing: proxy health 3.899s; unauthenticated auth/me 5.701s."
+    ]
+  }
+}
