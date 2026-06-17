@@ -20,9 +20,8 @@ def list_users(
     limit: int,
     offset: int,
 ) -> list[User]:
-    return list(
-        db.scalars(select(User).order_by(User.id).limit(limit).offset(offset))
-    )
+    rows = list(db.scalars(select(User).order_by(User.id).limit(limit + offset)))
+    return rows[offset : offset + limit]
 
 
 def get_owner(db: Session) -> User | None:

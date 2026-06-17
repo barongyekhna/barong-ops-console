@@ -9,14 +9,14 @@ from ..services.event_collector import emit_event
 def list_modules(
     db: Session, *, limit: int, offset: int
 ) -> list[ModuleRegistry]:
-    modules = list(
+    rows = list(
         db.scalars(
             select(ModuleRegistry)
             .order_by(ModuleRegistry.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
     )
+    modules = rows[offset : offset + limit]
     emit_event(
         event_type="category_tree.read",
         module="system",
@@ -60,10 +60,9 @@ def list_agents(
         db.scalars(
             select(AgentRegistry)
             .order_by(AgentRegistry.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
-    )
+    )[offset : offset + limit]
 
 
 def get_agent(db: Session, agent_key: str) -> AgentRegistry | None:
@@ -97,10 +96,9 @@ def list_workflows(
         db.scalars(
             select(WorkflowRegistry)
             .order_by(WorkflowRegistry.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
-    )
+    )[offset : offset + limit]
 
 
 def get_workflow(

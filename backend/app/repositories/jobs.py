@@ -7,18 +7,21 @@ from .tenant import current_tenant_org_id, tenant_org_id_for_create
 
 
 def list_jobs(
-    db: Session, *, limit: int, offset: int
+    db: Session, *, limit: int, offset: int = 0, cursor: str | None = None
 ) -> list[AutomationJob]:
     org_id = current_tenant_org_id()
-    return list(
-        db.scalars(
-            select(AutomationJob)
-            .where(AutomationJob.org_id == org_id)
-            .order_by(AutomationJob.id.desc())
-            .limit(limit)
-            .offset(offset)
-        )
+    statement = (
+        select(AutomationJob)
+        .where(AutomationJob.org_id == org_id)
+        .order_by(AutomationJob.id.desc())
     )
+    if cursor is not None:
+        statement = statement.where(AutomationJob.id < int(cursor))
+    fetch_limit = limit if cursor is not None else limit + offset
+    rows = list(db.scalars(statement.limit(fetch_limit)))
+    if cursor is None and offset:
+        return rows[offset : offset + limit]
+    return rows
 
 
 def get_job(db: Session, job_id: str) -> AutomationJob | None:
@@ -61,18 +64,22 @@ def list_job_events(
     *,
     job_id: str,
     limit: int,
-    offset: int,
+    offset: int = 0,
+    cursor: str | None = None,
 ) -> list[JobEvent]:
     org_id = current_tenant_org_id()
-    return list(
-        db.scalars(
-            select(JobEvent)
-            .where(JobEvent.job_id == job_id, JobEvent.org_id == org_id)
-            .order_by(JobEvent.id.asc())
-            .limit(limit)
-            .offset(offset)
-        )
+    statement = (
+        select(JobEvent)
+        .where(JobEvent.job_id == job_id, JobEvent.org_id == org_id)
+        .order_by(JobEvent.id.asc())
     )
+    if cursor is not None:
+        statement = statement.where(JobEvent.id > int(cursor))
+    fetch_limit = limit if cursor is not None else limit + offset
+    rows = list(db.scalars(statement.limit(fetch_limit)))
+    if cursor is None and offset:
+        return rows[offset : offset + limit]
+    return rows
 
 
 def create_job_event(

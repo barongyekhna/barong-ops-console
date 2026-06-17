@@ -12,15 +12,15 @@ def list_memory_events(
     db: Session, *, limit: int, offset: int
 ) -> list[MemoryEvent]:
     org_id = current_tenant_org_id()
-    events = list(
+    rows = list(
         db.scalars(
             select(MemoryEvent)
             .where(MemoryEvent.org_id == org_id)
             .order_by(MemoryEvent.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
     )
+    events = rows[offset : offset + limit]
     record_product_knowledge_event(
         action="read",
         payload={"operation": "list_memory_events", "count": len(events)},
@@ -80,15 +80,15 @@ def list_context_packets(
     db: Session, *, limit: int, offset: int
 ) -> list[ContextPacket]:
     org_id = current_tenant_org_id()
-    packets = list(
+    rows = list(
         db.scalars(
             select(ContextPacket)
             .where(ContextPacket.org_id == org_id)
             .order_by(ContextPacket.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
     )
+    packets = rows[offset : offset + limit]
     record_product_knowledge_event(
         action="read",
         payload={"operation": "list_context_packets", "count": len(packets)},
@@ -151,15 +151,15 @@ def list_memory_summaries(
     db: Session, *, limit: int, offset: int
 ) -> list[MemorySummary]:
     org_id = current_tenant_org_id()
-    summaries = list(
+    rows = list(
         db.scalars(
             select(MemorySummary)
             .where(MemorySummary.org_id == org_id)
             .order_by(MemorySummary.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
     )
+    summaries = rows[offset : offset + limit]
     record_product_knowledge_event(
         action="read",
         payload={"operation": "list_memory_summaries", "count": len(summaries)},

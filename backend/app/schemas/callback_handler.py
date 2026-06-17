@@ -355,14 +355,20 @@ class CallbackResultStorageModel(BaseModel):
         "completed_at",
         "callbacks_received",
     )
-    storage_mode: Literal["durable_db_with_memory_compat"] = (
-        "durable_db_with_memory_compat"
+    storage_mode: Literal["durable_db_transactional"] = (
+        "durable_db_transactional"
     )
     durable_tables: tuple[
         Literal["execution_callbacks"],
-        Literal["execution_dlq"],
-        Literal["execution_results"],
-    ] = ("execution_callbacks", "execution_dlq", "execution_results")
+        Literal["callback_state"],
+        Literal["callback_state_transitions"],
+        Literal["dlq_state"],
+    ] = (
+        "execution_callbacks",
+        "callback_state",
+        "callback_state_transitions",
+        "dlq_state",
+    )
     credentials_stored: Literal[False] = False
     n8n_url_stored: Literal[False] = False
     runtime_execution_allowed: Literal[False] = False

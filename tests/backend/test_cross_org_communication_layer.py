@@ -27,7 +27,8 @@ from backend.app.schemas.cross_org_communication import (
     get_default_cross_org_policy,
 )
 from backend.app.schemas.message import MessageSendRequest
-from backend.app.schemas.module_binding import GLOBAL_MODULE_BOUND_ORG, ModuleBinding
+from backend.app.models.module_binding import ModuleBindingRecord
+from backend.app.schemas.module_binding import GLOBAL_MODULE_BOUND_ORG
 from backend.app.schemas.org_membership import generate_membership_id
 from backend.app.schemas.organization import generate_org_id
 from backend.app.services import module_binding_service as c18d_binding
@@ -124,13 +125,15 @@ def _create_identity(db, *, user: User, org_id: str, org_name: str) -> None:
 
 
 def _disable_c19e_boundary() -> None:
-    with c18d_binding._MODULE_BINDINGS_LOCK:
-        c18d_binding._MODULE_BINDINGS["C19E"] = ModuleBinding(
-            module_id="C19E",
-            bound_orgs=[GLOBAL_MODULE_BOUND_ORG],
-            mode="global",
-            enabled=False,
+    with SessionLocal() as db:
+        db.add(
+            ModuleBindingRecord(
+                org_id=GLOBAL_MODULE_BOUND_ORG,
+                module_id="C19E",
+                status="disabled",
+            )
         )
+        db.commit()
 
 
 def test_c19e_design_outputs_match_required_contract() -> None:

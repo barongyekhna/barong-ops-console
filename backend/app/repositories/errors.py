@@ -10,15 +10,15 @@ def list_errors(
     db: Session, *, limit: int, offset: int
 ) -> list[SystemError]:
     org_id = current_tenant_org_id()
-    return list(
+    rows = list(
         db.scalars(
             select(SystemError)
             .where(SystemError.org_id == org_id)
             .order_by(SystemError.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
     )
+    return rows[offset : offset + limit]
 
 
 def get_error(db: Session, error_id: str) -> SystemError | None:

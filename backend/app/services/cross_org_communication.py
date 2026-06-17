@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
-
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..db.session import SessionLocal
 from ..models.user import User
 from ..schemas.conversation import Conversation as C19DConversation
 from ..schemas.cross_org_communication import (
@@ -26,7 +26,6 @@ from ..schemas.message import (
     MessageSendRequest,
     enforce_message_conversation_binding,
 )
-from ..schemas.module_binding import GLOBAL_MODULE_BOUND_ORG, ModuleBinding
 from ..schemas.permission import PermissionAction, PermissionDecision
 from . import module_binding_service as c18d_binding
 from .auth_service import AuditContext
@@ -38,6 +37,7 @@ from .conversation_service import (
 )
 from .event_collector import emit_event, generate_context_id
 from .permission_isolation import check_permission
+from ..repositories import module_bindings as module_binding_repo
 
 
 class CrossOrgCommunicationError(ValueError):
@@ -75,25 +75,30 @@ def _data_scope(
     )
 
 
-def _ensure_default_global_im_boundary() -> bool:
-    with c18d_binding._MODULE_BINDINGS_LOCK:
-        existing = c18d_binding._MODULE_BINDINGS.get(
-            CROSS_ORG_COMMUNICATION_MODULE_ID
-        )
-        if existing is not None:
-            return False
+def _ensure_default_global_im_boundary(db: Session) -> bool:
+    existing = module_binding_repo.get_module_binding(
+        db,
+        CROSS_ORG_COMMUNICATION_MODULE_ID,
+    )
+    if existing is not None:
+        return False
 
-        now = datetime.now(UTC)
-        c18d_binding._MODULE_BINDINGS[CROSS_ORG_COMMUNICATION_MODULE_ID] = (
-            ModuleBinding(
+    with SessionLocal() as init_db:
+        if module_binding_repo.get_module_binding(
+            init_db,
+            CROSS_ORG_COMMUNICATION_MODULE_ID,
+        ) is not None:
+            return False
+        try:
+            module_binding_repo.replace_module_binding(
+                init_db,
                 module_id=CROSS_ORG_COMMUNICATION_MODULE_ID,
-                bound_orgs=[GLOBAL_MODULE_BOUND_ORG],
-                mode="global",
-                enabled=True,
-                created_at=now,
-                updated_at=now,
+                bound_orgs=[c18d_binding.GLOBAL_MODULE_BOUND_ORG],
             )
-        )
+            init_db.commit()
+        except IntegrityError:
+            init_db.rollback()
+            return False
     return True
 
 
@@ -333,7 +338,7 @@ def can_communicate(
             c18f_permission_checked=False,
         )
 
-    _ensure_default_global_im_boundary()
+    _ensure_default_global_im_boundary(db)
     permission_decision = check_permission(
         db,
         payload.sender_user_id,

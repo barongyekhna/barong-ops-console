@@ -11,15 +11,15 @@ def list_artifacts(
     db: Session, *, limit: int, offset: int
 ) -> list[Artifact]:
     org_id = current_tenant_org_id()
-    artifacts = list(
+    rows = list(
         db.scalars(
             select(Artifact)
             .where(Artifact.org_id == org_id)
             .order_by(Artifact.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
     )
+    artifacts = rows[offset : offset + limit]
     record_file_operation(
         action="read",
         storage_provider="artifact_registry",

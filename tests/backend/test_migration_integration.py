@@ -5,7 +5,7 @@ from backend.app.db.session import engine
 
 pytestmark = pytest.mark.integration
 
-ALEMBIC_HEAD = "c17_durable_observability_001"
+ALEMBIC_HEAD = "pre20_o_concurrency_perf_001"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",
@@ -15,6 +15,9 @@ REQUIRED_ALEMBIC_TABLES = {
     "org_memberships",
     "module_bindings",
     "execution_callbacks",
+    "callback_state",
+    "callback_state_transitions",
+    "dlq_state",
     "execution_dlq",
     "execution_results",
     "event_streams",

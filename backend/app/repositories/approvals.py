@@ -152,12 +152,11 @@ class ApprovalRepository:
             statement = statement.where(
                 ApprovalRequestRecord.requester_id == requester_id
             )
-        statement = (
-            statement.order_by(ApprovalRequestRecord.id.desc())
-            .limit(limit)
-            .offset(offset)
+        statement = statement.order_by(ApprovalRequestRecord.id.desc()).limit(
+            limit + offset
         )
-        return list(self.db.scalars(statement))
+        rows = list(self.db.scalars(statement))
+        return rows[offset : offset + limit]
 
 
 class WorkflowRepository:
@@ -243,12 +242,11 @@ class WorkflowRepository:
             statement = statement.where(
                 ApprovalWorkflowRecord.approval_id == approval_id
             )
-        statement = (
-            statement.order_by(ApprovalWorkflowRecord.id.desc())
-            .limit(limit)
-            .offset(offset)
+        statement = statement.order_by(ApprovalWorkflowRecord.id.desc()).limit(
+            limit + offset
         )
-        return list(self.db.scalars(statement))
+        rows = list(self.db.scalars(statement))
+        return rows[offset : offset + limit]
 
 
 class DecisionRepository:
@@ -334,9 +332,8 @@ class DecisionRepository:
             statement = statement.where(
                 ApprovalDecisionRecord.decision_source.in_(sources)
             )
-        statement = (
-            statement.order_by(ApprovalDecisionRecord.id.asc())
-            .limit(limit)
-            .offset(offset)
+        statement = statement.order_by(ApprovalDecisionRecord.id.asc()).limit(
+            limit + offset
         )
-        return list(self.db.scalars(statement))
+        rows = list(self.db.scalars(statement))
+        return rows[offset : offset + limit]

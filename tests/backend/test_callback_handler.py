@@ -8,9 +8,16 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import SecretStr
+from sqlalchemy import func, select
 
+from backend.app.db.session import SessionLocal
 from backend.app.core.config import Settings, get_settings
 from backend.app.main import app
+from backend.app.models.execution_state import (
+    CallbackStateRecord,
+    CallbackStateTransitionRecord,
+    ExecutionCallbackRecord,
+)
 from backend.app.schemas.callback_handler import CallbackHandlerPayload
 from backend.app.schemas.execution_payload_standardization import (
     ExecutionPayloadStandardRequest,
@@ -32,9 +39,19 @@ from backend.app.services.callback_handler import (
     sign_callback_payload,
     verify_callback_signature,
 )
+from backend.app.services.replay_protection import reset_replay_protection_store
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TEST_CALLBACK_SECRET = "c15d-test-signing-value-not-for-production-use"
+
+
+@pytest.fixture(autouse=True)
+def c15d_state(clean_auth_tables: None) -> None:
+    reset_callback_execution_store()
+    reset_replay_protection_store()
+    yield
+    reset_callback_execution_store()
+    reset_replay_protection_store()
 
 
 def callback_settings() -> Settings:
@@ -137,11 +154,6 @@ def test_c15d_binds_c15c_context_and_stores_signed_callback_result() -> None:
     payload = callback_payload()
     signature = sign_callback_payload(payload, secret=TEST_CALLBACK_SECRET)
 
-    verify_callback_signature(
-        payload,
-        provided_signature=signature,
-        settings=callback_settings(),
-    )
     result = handle_callback(
         payload,
         provided_signature=signature,
@@ -252,6 +264,73 @@ def test_c15d_status_manager_allows_safe_progression_and_rejects_regression() ->
         )
 
 
+def test_c15d_concurrent_callbacks_are_transactional_and_idempotent() -> None:
+    from concurrent.futures import ThreadPoolExecutor
+
+    request = c15c_request(context_id="ctx.c15c.aaaaaaaaaaaaaaaa")
+    with SessionLocal() as db:
+        bind_callback_context(request, db=db, org_id="platform")
+
+    def submit(index: int) -> str:
+        payload = callback_payload(
+            context_id=request.context_id,
+            nonce=f"nonce.concurrent.{index:02d}",
+            idempotency_key="idem.concurrent.success",
+        )
+        with SessionLocal() as db:
+            result = handle_callback(
+                payload,
+                provided_signature=sign_callback_payload(
+                    payload,
+                    secret=TEST_CALLBACK_SECRET,
+                ),
+                settings=callback_settings(),
+                db=db,
+                org_id="platform",
+            )
+            return result.status
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        statuses = list(executor.map(submit, range(8)))
+
+    with SessionLocal() as db:
+        state = db.scalar(
+            select(CallbackStateRecord).where(
+                CallbackStateRecord.context_id == request.context_id
+            )
+        )
+        callback_count = db.scalar(
+            select(func.count()).select_from(ExecutionCallbackRecord)
+        )
+        terminal_count = db.scalar(
+            select(func.count())
+            .select_from(CallbackStateTransitionRecord)
+            .where(
+                CallbackStateTransitionRecord.execution_id == request.context_id,
+                CallbackStateTransitionRecord.to_status.in_(("success", "failed")),
+            )
+        )
+
+    assert set(statuses) == {"success"}
+    assert state is not None
+    assert state.status == "success"
+    assert callback_count == 1
+    assert terminal_count == 1
+
+
+def test_c15d_callback_state_survives_store_recreation() -> None:
+    request = c15c_request(context_id="ctx.c15c.bbbbbbbbbbbbbbbb")
+    first_store = CallbackExecutionStore()
+    first_store.bind_execution_request(request)
+
+    second_store = CallbackExecutionStore()
+    result = second_store.get_result(request.context_id)
+
+    assert result is not None
+    assert result.context_id == request.context_id
+    assert result.status == "pending"
+
+
 @pytest.mark.parametrize(
     "updates",
     [
@@ -345,7 +424,7 @@ def test_c15d_callback_handler_api_routes(
         assert "https://" not in serialized
     finally:
         reset_callback_execution_store()
-        app.dependency_overrides[get_settings] = lambda: test_settings
+        app.dependency_overrides.clear()
 
 
 def test_c15d_router_exposes_no_execution_trigger_or_direct_n8n_call() -> None:

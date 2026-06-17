@@ -11,6 +11,10 @@ class OperationLog(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "operation_logs"
     __table_args__ = (
         Index("ix_operation_logs_org_id_created_at", "org_id", "created_at"),
+        Index("ix_operation_logs_org_id_result", "org_id", "result"),
+        Index("ix_operation_logs_org_id_job_id", "org_id", "job_id"),
+        Index("ix_operation_logs_org_id_actor_id", "org_id", "actor_id"),
+        Index("ix_operation_logs_org_id_request_id", "org_id", "request_id"),
     )
 
     operation_id: Mapped[str] = mapped_column(

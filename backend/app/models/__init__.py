@@ -9,6 +9,9 @@ from .contact_identity import ContactIdentityRecord
 from .context import ContextPacket
 from .error import SystemError
 from .execution_state import (
+    CallbackStateRecord,
+    CallbackStateTransitionRecord,
+    DLQStateRecord,
     ExecutionCallbackRecord,
     ExecutionDLQRecord,
     ExecutionResultRecord,
@@ -49,8 +52,11 @@ __all__ = [
     "AuditLogRecord",
     "AuthSession",
     "AutomationJob",
+    "CallbackStateRecord",
+    "CallbackStateTransitionRecord",
     "ContactIdentityRecord",
     "ContextPacket",
+    "DLQStateRecord",
     "ExecutionCallbackRecord",
     "ExecutionDLQRecord",
     "ExecutionResultRecord",

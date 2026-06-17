@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from threading import RLock
 
 from sqlalchemy import inspect
 from sqlalchemy import select
@@ -31,10 +30,6 @@ class ModuleBindingNotFoundError(ModuleBindingError):
 
 class ModuleBindingPermissionDeniedError(PermissionError):
     pass
-
-
-_MODULE_BINDINGS: dict[str, ModuleBinding] = {}
-_MODULE_BINDINGS_LOCK = RLock()
 
 
 def _actor_user_id(actor: User) -> str:
@@ -100,8 +95,6 @@ def _redact_binding_to_actor_orgs(
 
 
 def reset_module_binding_registry() -> None:
-    with _MODULE_BINDINGS_LOCK:
-        _MODULE_BINDINGS.clear()
     with _managed_session() as (db, _):
         if not _module_binding_table_exists(db):
             return

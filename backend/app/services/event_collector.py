@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-import queue
 import threading
 from collections.abc import Mapping
 from contextvars import Token, ContextVar
@@ -11,6 +10,7 @@ from typing import Any, get_args
 from uuid import uuid4
 
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm.exc import StaleDataError
 
 from ..schemas.event_collector import (
     AuditEvent,
@@ -23,6 +23,9 @@ from ..schemas.event_collector import (
 EVENT_LOGGER_NAME = "barong.audit_events"
 DEFAULT_EVENT_BUFFER_SIZE = 5000
 DEFAULT_EVENT_QUEUE_SIZE = 10000
+DEFAULT_EVENT_QUEUE_BATCH_SIZE = 25
+DEFAULT_EVENT_QUEUE_POLL_INTERVAL_SECONDS = 0.25
+DEFAULT_EVENT_QUEUE_MAX_ATTEMPTS = 3
 COLLECTOR_RECORD_PREFIX = "event-"
 PLATFORM_ORG_ID = "platform"
 VALID_EVENT_MODULES = frozenset(get_args(EventModule))
@@ -84,10 +87,17 @@ class EventQueueBackend:
         *,
         queue_size: int = DEFAULT_EVENT_QUEUE_SIZE,
         snapshot_limit: int = DEFAULT_EVENT_BUFFER_SIZE,
+        batch_size: int = DEFAULT_EVENT_QUEUE_BATCH_SIZE,
+        poll_interval_seconds: float = DEFAULT_EVENT_QUEUE_POLL_INTERVAL_SECONDS,
+        max_attempts: int = DEFAULT_EVENT_QUEUE_MAX_ATTEMPTS,
     ) -> None:
-        self._queue: queue.Queue[str] = queue.Queue(maxsize=queue_size)
         self._lock = threading.Lock()
+        self._wake = threading.Event()
+        self._queue_size = queue_size
         self._snapshot_limit = snapshot_limit
+        self._batch_size = batch_size
+        self._poll_interval_seconds = poll_interval_seconds
+        self._max_attempts = max_attempts
         self._failed = 0
         self._emitted = 0
         self._started = False
@@ -119,13 +129,12 @@ class EventQueueBackend:
                 self._failed += 1
             return write
 
-        try:
-            self._queue.put_nowait(write.record_id)
-        except queue.Full:
+        queued_count = self._queued_count()
+        if queued_count > self._queue_size:
             self._mark_processing_status(
                 write.record_id,
-                status="queue_full",
-                error="event processing queue is full",
+                status="backpressure",
+                error="event processing queue backpressure limit exceeded",
             )
             with self._lock:
                 self._failed += 1
@@ -133,10 +142,11 @@ class EventQueueBackend:
                 persisted=True,
                 queued=False,
                 record_id=write.record_id,
-                error="event processing queue is full",
+                error="event processing queue backpressure limit exceeded",
             )
 
         self.start()
+        self._wake.set()
         with self._lock:
             self._emitted += 1
         return EventQueueWriteResult(
@@ -195,12 +205,7 @@ class EventQueueBackend:
         with self._lock:
             self._failed = 0
             self._emitted = 0
-        while True:
-            try:
-                self._queue.get_nowait()
-            except queue.Empty:
-                break
-            self._queue.task_done()
+        self._wake.set()
 
     def stats(self) -> dict[str, int]:
         self._ensure_tables()
@@ -215,10 +220,20 @@ class EventQueueBackend:
                 .select_from(EventStreamRecord)
                 .where(EventStreamRecord.record_id.like(f"{COLLECTOR_RECORD_PREFIX}%"))
             )
+            queued = db.scalar(
+                select(func.count())
+                .select_from(EventStreamRecord)
+                .where(
+                    EventStreamRecord.record_id.like(f"{COLLECTOR_RECORD_PREFIX}%"),
+                    EventStreamRecord.processing_status.in_(
+                        ("queued", "retry_pending", "backpressure")
+                    ),
+                )
+            )
         with self._lock:
             return {
                 "buffered": int(stored or 0),
-                "queued": self._queue.qsize(),
+                "queued": int(queued or 0),
                 "emitted": self._emitted,
                 "dropped": 0,
                 "failed": self._failed,
@@ -226,28 +241,37 @@ class EventQueueBackend:
 
     def _drain(self) -> None:
         while True:
-            record_id = self._queue.get()
             try:
+                record_ids = self._claim_queued_records()
+            except StaleDataError:
+                self._logger.debug(
+                    "C17 event queue claim skipped records that disappeared."
+                )
+                continue
+            if not record_ids:
+                self._wake.wait(self._poll_interval_seconds)
+                self._wake.clear()
+                continue
+            for record_id in record_ids:
                 try:
                     self._process_record(record_id)
+                except StaleDataError:
+                    self._logger.debug(
+                        "C17 event queue record disappeared before processing completed: %s",
+                        record_id,
+                    )
                 except Exception as exc:
                     self._logger.exception(
                         "C17 event queue processing failed for %s",
                         record_id,
                     )
                     try:
-                        self._mark_processing_status(
-                            record_id,
-                            status="processing_failed",
-                            error=str(exc),
-                        )
+                        self._mark_processing_failure(record_id, error=str(exc))
                     except Exception:
                         self._logger.exception(
                             "C17 event queue failed to mark processing failure for %s",
                             record_id,
                         )
-            finally:
-                self._queue.task_done()
 
     def _write_event(
         self,
@@ -282,6 +306,8 @@ class EventQueueBackend:
                 product_key=record.product_key,
                 user_id=record.user_id,
                 workflow_id=event.workflow_id,
+                job_id=self._string_payload_value(event, "job_id"),
+                actor_id=self._string_payload_value(event, "actor_id"),
                 module_id=record.module,
                 event_type=record.event_type,
                 action=event.action,
@@ -296,6 +322,7 @@ class EventQueueBackend:
                 compressed=record.compressed,
                 archive_object_key=record.archive_object_key,
                 processing_status="queued",
+                processing_attempts=0,
             )
             with without_org_data_isolation():
                 with SessionLocal() as db:
@@ -355,10 +382,12 @@ class EventQueueBackend:
                 ReplayJobRecord,
                 StorageEventRecord,
             )
+            from ..models.execution_state import DLQStateRecord
 
             Base.metadata.create_all(
                 bind=engine,
                 tables=[
+                    DLQStateRecord.__table__,
                     EventStreamRecord.__table__,
                     AuditLogRecord.__table__,
                     ReplayJobRecord.__table__,
@@ -424,6 +453,146 @@ class EventQueueBackend:
                 )
                 db.commit()
 
+    def _queued_count(self) -> int:
+        self._ensure_tables()
+        from sqlalchemy import func, select
+
+        from ..db.session import SessionLocal
+        from ..models.observability import EventStreamRecord
+        from .data_isolation import without_org_data_isolation
+
+        with without_org_data_isolation():
+            with SessionLocal() as db:
+                value = db.scalar(
+                    select(func.count())
+                    .select_from(EventStreamRecord)
+                    .where(
+                        EventStreamRecord.record_id.like(
+                            f"{COLLECTOR_RECORD_PREFIX}%"
+                        ),
+                        EventStreamRecord.processing_status.in_(
+                            ("queued", "retry_pending", "backpressure")
+                        ),
+                    )
+                )
+        return int(value or 0)
+
+    def _claim_queued_records(self) -> list[str]:
+        self._ensure_tables()
+        from datetime import UTC, datetime
+
+        from sqlalchemy import or_, select
+
+        from ..db.session import SessionLocal
+        from ..models.observability import EventStreamRecord
+        from .data_isolation import without_org_data_isolation
+
+        now = datetime.now(UTC)
+        with without_org_data_isolation():
+            with SessionLocal() as db:
+                statement = (
+                    select(EventStreamRecord)
+                    .where(
+                        EventStreamRecord.record_id.like(
+                            f"{COLLECTOR_RECORD_PREFIX}%"
+                        ),
+                        EventStreamRecord.processing_status.in_(
+                            ("queued", "retry_pending", "backpressure")
+                        ),
+                        or_(
+                            EventStreamRecord.next_retry_at.is_(None),
+                            EventStreamRecord.next_retry_at <= now,
+                        ),
+                    )
+                    .order_by(EventStreamRecord.id)
+                    .limit(self._batch_size)
+                    .with_for_update(skip_locked=True)
+                )
+                rows = list(db.scalars(statement))
+                for row in rows:
+                    row.processing_status = "processing"
+                    row.processing_attempts = int(row.processing_attempts or 0) + 1
+                    row.processing_error = None
+                db.commit()
+                return [row.record_id for row in rows]
+
+    def _mark_processing_failure(
+        self,
+        record_id: str,
+        *,
+        error: str,
+    ) -> None:
+        self._ensure_tables()
+        from datetime import UTC, datetime, timedelta
+
+        from sqlalchemy import select
+
+        from ..db.session import SessionLocal
+        from ..models.execution_state import DLQStateRecord
+        from ..models.observability import EventStreamRecord
+        from .data_isolation import without_org_data_isolation
+
+        with without_org_data_isolation():
+            with SessionLocal() as db:
+                row = db.scalar(
+                    select(EventStreamRecord).where(
+                        EventStreamRecord.record_id == record_id
+                    )
+                )
+                if row is None:
+                    return
+
+                attempts = int(row.processing_attempts or 0)
+                if attempts < self._max_attempts:
+                    row.processing_status = "retry_pending"
+                    row.processing_error = error
+                    row.next_retry_at = datetime.now(UTC) + timedelta(
+                        seconds=min(2 ** attempts, 60)
+                    )
+                    db.commit()
+                    return
+
+                row.processing_status = "dlq"
+                row.processing_error = error
+                row.processed_at = datetime.now(UTC)
+                dlq_id = f"event-dlq-{row.record_id}"
+                existing = db.scalar(
+                    select(DLQStateRecord).where(DLQStateRecord.dlq_id == dlq_id)
+                )
+                if existing is None:
+                    db.add(
+                        DLQStateRecord(
+                            org_id=row.org_id,
+                            dlq_id=dlq_id,
+                            context_id=row.context_id,
+                            execution_id=row.context_id,
+                            trace_id=row.trace_id,
+                            job_id=row.job_id,
+                            actor_id=row.actor_id or row.user_id,
+                            module_key=row.module_id,
+                            workflow_id=row.workflow_id,
+                            failure_type="manual_failure",
+                            status="queued",
+                            reason="C17 event queue processing exhausted retries.",
+                            payload={
+                                "record_id": row.record_id,
+                                "event_id": row.event_id,
+                                "processing_error": error,
+                            },
+                            failure_context={
+                                "event_stream_record_id": row.record_id,
+                                "event_type": row.event_type,
+                                "attempts": attempts,
+                            },
+                            retry_decision={},
+                            attempt=attempts,
+                            retry_count=attempts,
+                            replayable=True,
+                            last_error=error,
+                        )
+                    )
+                db.commit()
+
     def _process_record(self, record_id: str) -> None:
         self._ensure_tables()
         from datetime import UTC, datetime
@@ -451,6 +620,7 @@ class EventQueueBackend:
                 AuditLogWriter(db, org_id=row.org_id).write_event_stream(row)
                 row.processing_status = "processed"
                 row.processing_error = None
+                row.next_retry_at = None
                 row.processed_at = datetime.now(UTC)
                 db.commit()
 
@@ -477,6 +647,15 @@ class EventQueueBackend:
             payload=dict(raw_payload or {}),
             metadata=dict(raw_metadata or {}),
         )
+
+    def _string_payload_value(self, event: AuditEvent, key: str) -> str | None:
+        for source in (event.payload, event.metadata):
+            value = source.get(key)
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:128]
+            if value is not None and not isinstance(value, (dict, list, tuple)):
+                return str(value).strip()[:128]
+        return None
 
 
 EventEmitter = EventQueueBackend

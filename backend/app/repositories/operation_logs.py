@@ -119,20 +119,27 @@ def list_operation_logs(
     db: Session,
     *,
     limit: int,
-    offset: int,
+    offset: int = 0,
+    cursor: str | None = None,
 ) -> list[OperationLog]:
     from sqlalchemy import select
 
     org_id = current_tenant_org_id()
+    statement = (
+        select(OperationLog)
+        .where(OperationLog.org_id == org_id)
+        .order_by(OperationLog.id.desc())
+    )
+    if cursor is not None:
+        statement = statement.where(OperationLog.id < int(cursor))
+    fetch_limit = limit if cursor is not None else limit + offset
     logs = list(
         db.scalars(
-            select(OperationLog)
-            .where(OperationLog.org_id == org_id)
-            .order_by(OperationLog.id.desc())
-            .limit(limit)
-            .offset(offset)
+            statement.limit(fetch_limit)
         )
     )
+    if cursor is None and offset:
+        logs = logs[offset : offset + limit]
     emit_event(
         event_type="log.read",
         module="system",

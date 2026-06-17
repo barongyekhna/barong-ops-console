@@ -25,6 +25,9 @@ CORE_BUSINESS_TABLES = {
     "security_rate_limit_buckets",
     "security_replay_nonces",
     "execution_callbacks",
+    "callback_state",
+    "callback_state_transitions",
+    "dlq_state",
     "execution_dlq",
     "execution_results",
     "storage_events",
@@ -41,6 +44,9 @@ REQUIRED_MIGRATION_SUFFIXES = {
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 ALEMBIC_ROOT = REPOSITORY_ROOT / "backend" / "alembic"
 VERSIONS_ROOT = ALEMBIC_ROOT / "versions"
+MIGRATIONS_WITH_DATA_BACKFILLS = {
+    "20260617_01_c18_tenant_consistency.py",
+}
 
 
 def test_alembic_skeleton_exists() -> None:
@@ -68,12 +74,16 @@ def test_versions_contain_core_permission_and_approval_migrations() -> None:
         for suffix in REQUIRED_MIGRATION_SUFFIXES
     )
 
-    migration_sources = [
-        migration_file.read_text(encoding="utf-8").lower()
+    migration_sources_by_name = {
+        migration_file.name: migration_file.read_text(encoding="utf-8").lower()
         for migration_file in migration_files
-    ]
-    assert all("insert" not in source for source in migration_sources)
+    }
     assert all(
-        any(table_name in source for source in migration_sources)
+        "insert" not in source
+        for name, source in migration_sources_by_name.items()
+        if name not in MIGRATIONS_WITH_DATA_BACKFILLS
+    )
+    assert all(
+        any(table_name in source for source in migration_sources_by_name.values())
         for table_name in CORE_BUSINESS_TABLES
     )

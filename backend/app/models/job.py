@@ -20,6 +20,13 @@ class AutomationJob(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_automation_jobs_org_id_created_at", "org_id", "created_at"),
         Index("ix_automation_jobs_org_id_status", "org_id", "status"),
         Index("ix_automation_jobs_org_id_module_id", "org_id", "module_id"),
+        Index("ix_automation_jobs_org_id_job_id", "org_id", "job_id"),
+        Index(
+            "ix_automation_jobs_org_id_requested_by_user_id",
+            "org_id",
+            "requested_by_user_id",
+        ),
+        Index("ix_automation_jobs_org_id_correlation_id", "org_id", "correlation_id"),
     )
 
     job_id: Mapped[str] = mapped_column(
@@ -79,6 +86,8 @@ class JobEvent(OrgScopedMixin, PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "job_events"
     __table_args__ = (
         Index("ix_job_events_org_id_created_at", "org_id", "created_at"),
+        Index("ix_job_events_org_id_job_id_created_at", "org_id", "job_id", "created_at"),
+        Index("ix_job_events_org_id_actor_id", "org_id", "actor_id"),
     )
 
     job_id: Mapped[str] = mapped_column(

@@ -20,6 +20,9 @@ from backend.app.models.auth_session import AuthSession
 from backend.app.models.context import ContextPacket
 from backend.app.models.error import SystemError
 from backend.app.models.execution_state import (
+    CallbackStateRecord,
+    CallbackStateTransitionRecord,
+    DLQStateRecord,
     ExecutionCallbackRecord,
     ExecutionDLQRecord,
     ExecutionResultRecord,
@@ -225,8 +228,11 @@ def clear_auth_tables() -> None:
         db.execute(delete(MemorySummary))
         db.execute(delete(MemoryEvent))
         db.execute(delete(SystemError))
+        db.execute(delete(DLQStateRecord))
         db.execute(delete(ExecutionDLQRecord))
         db.execute(delete(ExecutionCallbackRecord))
+        db.execute(delete(CallbackStateTransitionRecord))
+        db.execute(delete(CallbackStateRecord))
         db.execute(delete(ExecutionResultRecord))
         db.execute(delete(ReviewItem))
         db.execute(delete(Artifact))

@@ -1,11 +1,12 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
 from ...db.session import get_db
+from ...middleware.org_context import get_org_context
 from ...models.user import User
 from ...schemas.failure_handling import (
     DeadLetterQueueArchitecture,
@@ -48,12 +49,13 @@ router = APIRouter(
 @router.post("/failures", response_model=FailureHandlingOutcome)
 def failure_handling_submit_failure(
     payload: dict[str, Any],
+    db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C15H", "execute")),
 ) -> FailureHandlingOutcome:
     del user
     try:
         request = FailureHandlingRequest.model_validate(payload)
-        return handle_failure(request)
+        return handle_failure(request, db=db)
     except ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -69,12 +71,13 @@ def failure_handling_submit_failure(
 @router.post("/timeouts/evaluate", response_model=TimeoutHandlingDecision)
 def failure_handling_evaluate_timeout(
     payload: dict[str, Any],
+    db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C15H", "execute")),
 ) -> TimeoutHandlingDecision:
     del user
     try:
         request = TimeoutEvaluationRequest.model_validate(payload)
-        return evaluate_timeout(request)
+        return evaluate_timeout(request, db=db)
     except ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -89,19 +92,21 @@ def failure_handling_evaluate_timeout(
 
 @router.get("/dlq", response_model=DeadLetterQueueResponse)
 def failure_handling_dlq(
+    db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C15H", "execute")),
 ) -> DeadLetterQueueResponse:
     del user
-    return list_dead_letter_records()
+    return list_dead_letter_records(db=db)
 
 
 @router.get("/dlq/{context_id}", response_model=DeadLetterRecord)
 def failure_handling_dlq_record(
     context_id: str,
+    db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C15H", "execute")),
 ) -> DeadLetterRecord:
     del user
-    record = get_dead_letter_record(context_id)
+    record = get_dead_letter_record(context_id, db=db)
     if record is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -113,14 +118,21 @@ def failure_handling_dlq_record(
 @router.post("/recovery/replay", response_model=RecoveryPlan)
 def failure_handling_manual_replay(
     payload: dict[str, Any],
+    http_request: Request,
     user: User = Depends(require_rbac("C15H", "execute")),
     settings: Settings = Depends(get_settings),
     db: Session = Depends(get_db),
 ) -> RecoveryPlan:
     del user
     try:
-        request = ManualReplayRequest.model_validate(payload)
-        plan = manual_replay_context(request, settings=settings, db=db)
+        replay_request = ManualReplayRequest.model_validate(payload)
+        org_context = get_org_context(http_request)
+        plan = manual_replay_context(
+            replay_request,
+            settings=settings,
+            db=db,
+            org_id=org_context.org_id if org_context is not None else None,
+        )
     except ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

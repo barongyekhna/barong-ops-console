@@ -3,18 +3,21 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import SecretStr
-from sqlalchemy import select
+from sqlalchemy import delete, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.config import Settings
 from ..models.execution_state import (
+    CallbackStateRecord,
+    CallbackStateTransitionRecord,
+    DLQStateRecord,
     ExecutionCallbackRecord,
-    ExecutionDLQRecord,
-    ExecutionResultRecord,
 )
 from ..schemas.callback_handler import (
     CallbackContextBinding,
@@ -50,6 +53,7 @@ ALLOWED_STATUS_TRANSITIONS: dict[
     "failed": ("failed",),
 }
 TERMINAL_STATUSES = frozenset(("success", "failed"))
+PLATFORM_ORG_ID = "platform"
 
 
 class CallbackHandlerConfigurationError(RuntimeError):
@@ -187,13 +191,6 @@ def verify_callback_signature(
             ttl_seconds=settings.webhook_replay_nonce_ttl_seconds,
             db=db,
         )
-        register_replay_key(
-            scope="c15d.callback_idempotency",
-            key=_callback_idempotency_key(payload),
-            payload_digest=_payload_digest(payload),
-            ttl_seconds=settings.webhook_replay_nonce_ttl_seconds,
-            db=db,
-        )
     except ReplayProtectionError as exc:
         raise CallbackHandlerReplayError(str(exc)) from None
 
@@ -221,13 +218,17 @@ def _same_standard_request(
 
 
 class CallbackExecutionStore:
-    def __init__(self) -> None:
-        self._bindings: dict[str, CallbackContextBinding] = {}
-        self._records: dict[str, CallbackResultStorageRecord] = {}
+    """Compatibility facade backed by callback_state, not process memory."""
+
+    def __init__(self, *, org_id: str = PLATFORM_ORG_ID) -> None:
+        self.org_id = org_id
 
     def clear(self) -> None:
-        self._bindings.clear()
-        self._records.clear()
+        with _managed_session() as (db, _):
+            db.execute(delete(ExecutionCallbackRecord))
+            db.execute(delete(CallbackStateTransitionRecord))
+            db.execute(delete(CallbackStateRecord))
+            db.commit()
 
     def bind_execution_request(
         self,
@@ -235,96 +236,37 @@ class CallbackExecutionStore:
         *,
         bound_at: str | None = None,
     ) -> CallbackContextBinding:
-        context_id = request.context_id
-        existing = self._bindings.get(context_id)
-        if existing is not None:
-            if not _same_standard_request(existing.original_request, request):
-                raise CallbackContextBindingError(
-                    "C15D context_id is already bound to a different C15C request."
-                )
-            return existing
-
-        timestamp = bound_at or _utc_now_timestamp()
-        binding = CallbackContextBinding(
-            context_id=context_id,
-            module=request.module,
-            task=request.task,
-            workflow_id=request.workflow_id,
-            original_request=request,
-            bound_at=timestamp,
-        )
-        self._bindings[context_id] = binding
-        self._records[context_id] = CallbackResultStorageRecord(
-            context_id=context_id,
-            module=request.module,
-            task=request.task,
-            workflow_id=request.workflow_id,
-            status="pending",
-            original_request=request,
-            created_at=timestamp,
-            updated_at=timestamp,
-        )
-        return binding
+        record = _storage_record_from_request(request, bound_at=bound_at)
+        with _managed_session() as (db, _):
+            row = persist_execution_result_binding(
+                db,
+                org_id=self.org_id,
+                record=record,
+            )
+            return _binding_from_persistent(row)
 
     def get_binding(self, context_id: str) -> CallbackContextBinding | None:
-        return self._bindings.get(context_id)
+        result = self.get_result(context_id)
+        if result is None:
+            return None
+        return _binding_from_storage_record(result)
 
     def get_result(self, context_id: str) -> CallbackResultStorageRecord | None:
-        return self._records.get(context_id)
+        with _managed_session() as (db, _):
+            return load_execution_result_record(db, context_id=context_id)
 
     def update_status_from_callback(
         self,
         payload: CallbackHandlerPayload,
     ) -> tuple[CallbackContextBinding, CallbackResultStorageRecord]:
-        binding = self._bindings.get(payload.context_id)
-        if binding is None:
-            raise CallbackContextBindingError(
-                "C15D callback context_id is not bound to a C15C execution request."
+        with _managed_session() as (db, _):
+            binding, record = update_persistent_result_from_callback(
+                db,
+                payload=payload,
+                org_id=self.org_id,
             )
-        if payload.module != binding.module:
-            raise CallbackContextBindingError(
-                "C15D callback module does not match the bound C15C request."
-            )
-        if payload.workflow_id != binding.workflow_id:
-            raise CallbackContextBindingError(
-                "C15D callback workflow_id does not match the bound C15C request."
-            )
-
-        record = self._records[payload.context_id]
-        if payload.status not in ALLOWED_STATUS_TRANSITIONS[record.status]:
-            raise CallbackStatusTransitionError(
-                "C15D status transition is not allowed: "
-                f"{record.status} -> {payload.status}."
-            )
-
-        if record.status in TERMINAL_STATUSES and payload.status == record.status:
+            db.commit()
             return binding, record
-
-        received_at = _utc_now_timestamp()
-        started_at = record.started_at
-        completed_at = record.completed_at
-        if payload.status in ("running", "success", "failed") and started_at is None:
-            started_at = received_at
-        if payload.status in TERMINAL_STATUSES:
-            completed_at = received_at
-
-        updated_record = record.model_copy(
-            update={
-                "status": payload.status,
-                "workflow_output": payload.output,
-                "execution_metadata": payload.execution_metadata,
-                "updated_at": received_at,
-                "started_at": started_at,
-                "completed_at": completed_at,
-                "callbacks_received": record.callbacks_received + 1,
-                "signature_validated": True,
-                "payload_validated": True,
-            }
-        )
-        updated_binding = binding.model_copy(update={"status": payload.status})
-        self._records[payload.context_id] = updated_record
-        self._bindings[payload.context_id] = updated_binding
-        return updated_binding, updated_record
 
 
 DEFAULT_CALLBACK_EXECUTION_STORE = CallbackExecutionStore()
@@ -334,6 +276,42 @@ def reset_callback_execution_store() -> None:
     DEFAULT_CALLBACK_EXECUTION_STORE.clear()
 
 
+def _storage_record_from_request(
+    request: ExecutionPayloadStandardRequest,
+    *,
+    bound_at: str | None = None,
+) -> CallbackResultStorageRecord:
+    timestamp = bound_at or _utc_now_timestamp()
+    return CallbackResultStorageRecord(
+        context_id=request.context_id,
+        module=request.module,
+        task=request.task,
+        workflow_id=request.workflow_id,
+        status="pending",
+        original_request=request,
+        created_at=timestamp,
+        updated_at=timestamp,
+    )
+
+
+def _binding_from_storage_record(
+    record: CallbackResultStorageRecord,
+) -> CallbackContextBinding:
+    return CallbackContextBinding(
+        context_id=record.context_id,
+        module=record.module,
+        task=record.task,
+        workflow_id=record.workflow_id,
+        original_request=record.original_request,
+        status=record.status,
+        bound_at=record.created_at,
+    )
+
+
+def _binding_from_persistent(row: CallbackStateRecord) -> CallbackContextBinding:
+    return _binding_from_storage_record(_storage_record_from_persistent(row))
+
+
 def bind_callback_context(
     request: ExecutionPayloadStandardRequest,
     *,
@@ -341,11 +319,22 @@ def bind_callback_context(
     db: Session | None = None,
     org_id: str | None = None,
 ) -> CallbackContextBinding:
-    target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
-    binding = target_store.bind_execution_request(request)
-    record = target_store.get_result(request.context_id)
-    if db is not None and org_id is not None and record is not None:
-        persist_execution_result_binding(db, org_id=org_id, record=record)
+    if db is None:
+        target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
+        binding = target_store.bind_execution_request(request)
+    else:
+        record = _storage_record_from_request(request)
+        try:
+            row = persist_execution_result_binding(
+                db,
+                org_id=org_id or PLATFORM_ORG_ID,
+                record=record,
+            )
+            binding = _binding_from_persistent(row)
+        except Exception:
+            db.rollback()
+            raise
+
     record_workflow_event(
         event_type="workflow.execution.start",
         action="workflow.execution.start",
@@ -410,18 +399,20 @@ def handle_callback(
         settings=settings,
         db=db,
     )
-    target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
-    try:
+    if db is None:
+        target_store = store or DEFAULT_CALLBACK_EXECUTION_STORE
         binding, record = target_store.update_status_from_callback(payload)
-    except CallbackContextBindingError as exc:
-        if db is None:
-            raise
+    else:
         try:
             binding, record = update_persistent_result_from_callback(
                 db,
                 payload=payload,
+                org_id=org_id,
+                provided_signature=provided_signature,
             )
-        except CallbackContextBindingError:
+            db.commit()
+        except CallbackContextBindingError as exc:
+            db.rollback()
             persist_execution_dlq(
                 db,
                 org_id=org_id,
@@ -430,24 +421,26 @@ def handle_callback(
                 last_error="callback_context_binding_error",
             )
             raise
-
-    if db is not None:
-        callback_org_id = org_id or load_execution_result_org_id(
-            db,
-            context_id=payload.context_id,
-        )
-        if callback_org_id is not None:
-            persist_execution_callback(
-                db,
-                org_id=callback_org_id,
-                payload=payload,
-                provided_signature=provided_signature,
-            )
-            persist_execution_result_binding(
-                db,
-                org_id=callback_org_id,
-                record=record,
-            )
+        except CallbackStatusTransitionError:
+            db.rollback()
+            raise
+        except IntegrityError:
+            db.rollback()
+            existing = load_execution_result_record(db, context_id=payload.context_id)
+            if existing is None:
+                raise CallbackStatusTransitionError(
+                    "C15D callback idempotency or terminal transition conflicted."
+                ) from None
+            if (
+                payload.status in TERMINAL_STATUSES
+                and existing.status in TERMINAL_STATUSES
+                and existing.status != payload.status
+            ):
+                raise CallbackStatusTransitionError(
+                    "C15D execution already has a different terminal state."
+                ) from None
+            binding = _binding_from_storage_record(existing)
+            record = existing
     notification = _build_module_notification(record)
     record_workflow_event(
         event_type=(
@@ -526,12 +519,23 @@ def persist_execution_result_binding(
     *,
     org_id: str,
     record: CallbackResultStorageRecord,
-) -> ExecutionResultRecord:
+) -> CallbackStateRecord:
     existing = db.scalar(
-        select(ExecutionResultRecord).where(
-            ExecutionResultRecord.context_id == record.context_id
+        select(CallbackStateRecord).where(
+            CallbackStateRecord.context_id == record.context_id
         )
     )
+    if (
+        existing is not None
+        and record.status == "pending"
+        and not _same_standard_request(
+            ExecutionPayloadStandardRequest.model_validate(existing.original_request),
+            record.original_request,
+        )
+    ):
+        raise CallbackContextBindingError(
+            "C15D context_id is already bound to a different C15C request."
+        )
     data = {
         "org_id": org_id,
         "result_id": _stable_record_id(
@@ -540,6 +544,7 @@ def persist_execution_result_binding(
         ),
         "context_id": record.context_id,
         "execution_id": record.context_id,
+        "trace_id": record.context_id,
         "module_key": record.module,
         "task": record.task,
         "workflow_id": record.workflow_id,
@@ -554,7 +559,7 @@ def persist_execution_result_binding(
         "completed_at": _parse_optional_timestamp(record.completed_at),
     }
     if existing is None:
-        existing = ExecutionResultRecord(**data)
+        existing = CallbackStateRecord(**data)
         db.add(existing)
     else:
         for key, value in data.items():
@@ -572,28 +577,31 @@ def persist_execution_callback(
     org_id: str,
     payload: CallbackHandlerPayload,
     provided_signature: str | None,
+    commit: bool = True,
 ) -> ExecutionCallbackRecord:
     payload_json = payload.model_dump(mode="json")
     digest = _payload_digest(payload)
+    idempotency_key = _callback_idempotency_key(payload)
     callback_id = _stable_record_id(
         "execution_callback",
         {
             "context_id": payload.context_id,
             "workflow_id": payload.workflow_id,
-            "digest": digest,
-            "status": payload.status,
+            "idempotency_key": idempotency_key,
         },
     )
     record = db.scalar(
         select(ExecutionCallbackRecord).where(
-            ExecutionCallbackRecord.callback_id == callback_id
+            ExecutionCallbackRecord.idempotency_key == idempotency_key
         )
     )
     data = {
         "org_id": org_id,
         "callback_id": callback_id,
+        "idempotency_key": idempotency_key,
         "context_id": payload.context_id,
         "execution_id": payload.context_id,
+        "trace_id": payload.context_id,
         "module_key": payload.module,
         "workflow_id": payload.workflow_id,
         "status": payload.status,
@@ -613,8 +621,11 @@ def persist_execution_callback(
     else:
         for key, value in data.items():
             setattr(record, key, value)
-    db.commit()
-    db.refresh(record)
+    if commit:
+        db.commit()
+        db.refresh(record)
+    else:
+        db.flush()
     return record
 
 
@@ -625,7 +636,8 @@ def persist_execution_dlq(
     payload: CallbackHandlerPayload,
     reason: str,
     last_error: str | None = None,
-) -> ExecutionDLQRecord | None:
+    commit: bool = True,
+) -> DLQStateRecord | None:
     if org_id is None:
         return None
     dlq_id = _stable_record_id(
@@ -637,32 +649,43 @@ def persist_execution_dlq(
         },
     )
     record = db.scalar(
-        select(ExecutionDLQRecord).where(ExecutionDLQRecord.dlq_id == dlq_id)
+        select(DLQStateRecord).where(DLQStateRecord.dlq_id == dlq_id)
     )
     data = {
         "org_id": org_id,
         "dlq_id": dlq_id,
         "context_id": payload.context_id,
         "execution_id": payload.context_id,
+        "trace_id": payload.context_id,
         "module_key": payload.module,
         "workflow_id": payload.workflow_id,
+        "failure_type": "callback_failed",
         "status": "retryable",
         "reason": reason,
         "payload": payload.model_dump(mode="json"),
+        "failure_context": {
+            "payload": payload.model_dump(mode="json"),
+            "reason": reason,
+        },
+        "retry_decision": {},
+        "attempt": 1,
         "retry_count": 0,
         "replayable": True,
         "last_error": last_error,
     }
     if record is None:
-        record = ExecutionDLQRecord(**data)
+        record = DLQStateRecord(**data)
         db.add(record)
     else:
         for key, value in data.items():
             if key == "retry_count":
                 continue
             setattr(record, key, value)
-    db.commit()
-    db.refresh(record)
+    if commit:
+        db.commit()
+        db.refresh(record)
+    else:
+        db.flush()
     return record
 
 
@@ -672,8 +695,8 @@ def load_execution_result_org_id(
     context_id: str,
 ) -> str | None:
     row = db.scalar(
-        select(ExecutionResultRecord.org_id).where(
-            ExecutionResultRecord.context_id == context_id
+        select(CallbackStateRecord.org_id).where(
+            CallbackStateRecord.context_id == context_id
         )
     )
     return row
@@ -685,8 +708,8 @@ def load_execution_result_record(
     context_id: str,
 ) -> CallbackResultStorageRecord | None:
     row = db.scalar(
-        select(ExecutionResultRecord).where(
-            ExecutionResultRecord.context_id == context_id
+        select(CallbackStateRecord).where(
+            CallbackStateRecord.context_id == context_id
         )
     )
     if row is None:
@@ -698,42 +721,100 @@ def update_persistent_result_from_callback(
     db: Session,
     *,
     payload: CallbackHandlerPayload,
+    org_id: str | None = None,
+    provided_signature: str | None = None,
 ) -> tuple[CallbackContextBinding, CallbackResultStorageRecord]:
     row = db.scalar(
-        select(ExecutionResultRecord).where(
-            ExecutionResultRecord.context_id == payload.context_id
-        )
+        select(CallbackStateRecord)
+        .where(CallbackStateRecord.context_id == payload.context_id)
+        .with_for_update()
     )
     if row is None:
         raise CallbackContextBindingError(
             "C15D callback context_id is not bound to a durable execution result."
         )
     record = _storage_record_from_persistent(row)
-    binding = CallbackContextBinding(
-        context_id=record.context_id,
-        module=record.module,
-        task=record.task,
-        workflow_id=record.workflow_id,
-        original_request=record.original_request,
-        status=record.status,
-        bound_at=record.created_at,
+    binding = _binding_from_storage_record(record)
+    if payload.module != binding.module:
+        raise CallbackContextBindingError(
+            "C15D callback module does not match the bound C15C request."
+        )
+    if payload.workflow_id != binding.workflow_id:
+        raise CallbackContextBindingError(
+            "C15D callback workflow_id does not match the bound C15C request."
+        )
+
+    idempotency_key = _callback_idempotency_key(payload)
+    existing_callback = db.scalar(
+        select(ExecutionCallbackRecord).where(
+            ExecutionCallbackRecord.idempotency_key == idempotency_key
+        )
     )
-    temporary_store = CallbackExecutionStore()
-    temporary_store._bindings[payload.context_id] = binding
-    temporary_store._records[payload.context_id] = record
-    updated_binding, updated_record = temporary_store.update_status_from_callback(
-        payload
+    if existing_callback is not None:
+        return binding, record
+
+    persist_execution_callback(
+        db,
+        org_id=org_id or row.org_id,
+        payload=payload,
+        provided_signature=provided_signature,
+        commit=False,
     )
-    persist_execution_result_binding(db, org_id=row.org_id, record=updated_record)
-    return updated_binding, updated_record
+
+    if payload.status not in ALLOWED_STATUS_TRANSITIONS[record.status]:
+        raise CallbackStatusTransitionError(
+            "C15D status transition is not allowed: "
+            f"{record.status} -> {payload.status}."
+        )
+
+    received_at = _utc_now_timestamp()
+    started_at = record.started_at
+    completed_at = record.completed_at
+    if payload.status in ("running", "success", "failed") and started_at is None:
+        started_at = received_at
+    if payload.status in TERMINAL_STATUSES and completed_at is None:
+        completed_at = received_at
+
+    status_changed = payload.status != record.status
+    if status_changed:
+        db.add(
+            CallbackStateTransitionRecord(
+                transition_id=_stable_record_id(
+                    "callback_transition",
+                    {
+                        "execution_id": row.execution_id,
+                        "idempotency_key": idempotency_key,
+                    },
+                ),
+                context_id=row.context_id,
+                execution_id=row.execution_id,
+                from_status=record.status,
+                to_status=payload.status,
+                idempotency_key=idempotency_key,
+                payload_digest=_payload_digest(payload),
+                created_at=datetime.now(UTC),
+            )
+        )
+
+    row.status = payload.status
+    row.workflow_output = payload.output
+    row.execution_metadata = payload.execution_metadata
+    row.callbacks_received = record.callbacks_received + 1
+    row.signature_validated = True
+    row.payload_validated = True
+    row.started_at = _parse_optional_timestamp(started_at)
+    row.completed_at = _parse_optional_timestamp(completed_at)
+    db.flush()
+    updated_record = _storage_record_from_persistent(row)
+    return _binding_from_storage_record(updated_record), updated_record
 
 
 def retry_execution_dlq(
     db: Session,
     *,
     dlq_id: str,
-) -> ExecutionDLQRecord:
-    row = db.scalar(select(ExecutionDLQRecord).where(ExecutionDLQRecord.dlq_id == dlq_id))
+) -> DLQStateRecord:
+    row = db.scalar(select(DLQStateRecord).where(DLQStateRecord.dlq_id == dlq_id))
     if row is None:
         raise CallbackContextBindingError("Execution DLQ record was not found.")
     row.retry_count += 1
@@ -748,8 +829,8 @@ def replay_execution_dlq(
     db: Session,
     *,
     dlq_id: str,
-) -> ExecutionDLQRecord:
-    row = db.scalar(select(ExecutionDLQRecord).where(ExecutionDLQRecord.dlq_id == dlq_id))
+) -> DLQStateRecord:
+    row = db.scalar(select(DLQStateRecord).where(DLQStateRecord.dlq_id == dlq_id))
     if row is None:
         raise CallbackContextBindingError("Execution DLQ record was not found.")
     if not row.replayable:
@@ -777,7 +858,7 @@ def _format_timestamp(value: datetime | None) -> str | None:
 
 
 def _storage_record_from_persistent(
-    row: ExecutionResultRecord,
+    row: CallbackStateRecord,
 ) -> CallbackResultStorageRecord:
     return CallbackResultStorageRecord(
         context_id=row.context_id,
@@ -798,6 +879,18 @@ def _storage_record_from_persistent(
         signature_validated=row.signature_validated,
         payload_validated=row.payload_validated,
     )
+
+
+@contextmanager
+def _managed_session(db: Session | None = None):
+    if db is not None:
+        yield db, False
+        return
+
+    from ..db.session import SessionLocal
+
+    with SessionLocal() as session:
+        yield session, True
 
 
 def get_callback_handler_design() -> CallbackHandlerDesign:

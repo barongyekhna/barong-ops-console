@@ -20,6 +20,8 @@ class SharedModuleRecord(PrimaryKeyMixin, Base):
         Index("ix_shared_modules_target_org_id", "target_org_id"),
         Index("ix_shared_modules_target_org_id_module_id", "target_org_id", "module_id"),
         Index("ix_shared_modules_module_id", "module_id"),
+        Index("ix_shared_modules_status", "status"),
+        Index("ix_shared_modules_created_at", "created_at"),
     )
 
     source_org_id: Mapped[str] = mapped_column(String(68), nullable=False)

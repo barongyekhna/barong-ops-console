@@ -19,7 +19,18 @@ class EventStreamRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
         Index("ix_event_streams_org_id_module_id", "org_id", "module_id"),
         Index("ix_event_streams_org_id_status", "org_id", "status"),
         Index("ix_event_streams_org_id_event_type", "org_id", "event_type"),
+        Index("ix_event_streams_org_id_created_at", "org_id", "created_at"),
+        Index("ix_event_streams_org_id_workflow_id", "org_id", "workflow_id"),
+        Index("ix_event_streams_org_id_job_id", "org_id", "job_id"),
+        Index("ix_event_streams_org_id_actor_id", "org_id", "actor_id"),
+        Index("ix_event_streams_trace_id", "trace_id"),
+        Index("ix_event_streams_module_id", "module_id"),
         Index("ix_event_streams_processing_status", "processing_status"),
+        Index(
+            "ix_event_streams_processing_status_next_retry_at",
+            "processing_status",
+            "next_retry_at",
+        ),
     )
 
     record_id: Mapped[str] = mapped_column(String(128), nullable=False, unique=True)
@@ -30,6 +41,8 @@ class EventStreamRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
     product_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
     user_id: Mapped[str | None] = mapped_column(String(180), nullable=True)
     workflow_id: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    job_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    actor_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     module_id: Mapped[str] = mapped_column(String(180), nullable=False)
     event_type: Mapped[str] = mapped_column(String(180), nullable=False)
     action: Mapped[str] = mapped_column(String(240), nullable=False)
@@ -57,6 +70,16 @@ class EventStreamRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
         String(50),
         nullable=False,
         default="queued",
+    )
+    processing_attempts: Mapped[int] = mapped_column(
+        Integer,
+        nullable=False,
+        default=0,
+        server_default="0",
+    )
+    next_retry_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
     )
     processing_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     processed_at: Mapped[datetime | None] = mapped_column(

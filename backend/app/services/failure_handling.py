@@ -7,9 +7,11 @@ from typing import Any
 from uuid import uuid4
 
 from pydantic import SecretStr
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from ..core.config import Settings
+from ..models.execution_state import DLQStateRecord
 from ..schemas.failure_handling import (
     DeadLetterQueueArchitecture,
     DeadLetterQueueResponse,
@@ -35,6 +37,7 @@ from ..schemas.webhook_gateway import WebhookGatewayRequest
 from .callback_handler import (
     CallbackContextBindingError,
     CallbackStatusTransitionError,
+    PLATFORM_ORG_ID,
     update_execution_status,
 )
 from .event_collector import record_workflow_event
@@ -200,21 +203,70 @@ def _dlq_status(retry_status: RetryDecisionStatus) -> DeadLetterQueueStatus:
 
 
 class DeadLetterQueueStore:
-    def __init__(self) -> None:
-        self._records: dict[str, DeadLetterRecord] = {}
+    """DB-backed DLQ facade; dlq_state is the source of truth."""
+
+    def __init__(
+        self,
+        *,
+        db: Session | None = None,
+        org_id: str = PLATFORM_ORG_ID,
+    ) -> None:
+        self._db = db
+        self.org_id = org_id
 
     def clear(self) -> None:
-        self._records.clear()
+        with self._session() as db:
+            db.execute(delete(DLQStateRecord))
+            db.commit()
 
     def list_records(self) -> list[DeadLetterRecord]:
-        return sorted(
-            self._records.values(),
-            key=lambda record: (record.failed_at, record.context_id),
-            reverse=True,
-        )
+        with self._session() as db:
+            rows = tuple(
+                db.scalars(
+                    select(DLQStateRecord)
+                    .where(DLQStateRecord.org_id == self.org_id)
+                    .order_by(DLQStateRecord.created_at.desc(), DLQStateRecord.id.desc())
+                )
+            )
+        records: list[DeadLetterRecord] = []
+        for row in rows:
+            if row.context_id is None or row.workflow_id is None:
+                continue
+            try:
+                records.append(_dead_letter_record_from_row(row))
+            except ValueError:
+                continue
+        return records
 
     def get(self, context_id: str) -> DeadLetterRecord | None:
-        return self._records.get(context_id)
+        with self._session() as db:
+            row = db.scalar(
+                select(DLQStateRecord)
+                .where(
+                    DLQStateRecord.org_id == self.org_id,
+                    DLQStateRecord.context_id == context_id,
+                )
+                .order_by(DLQStateRecord.created_at.desc(), DLQStateRecord.id.desc())
+                .limit(1)
+            )
+        if row is None or row.context_id is None or row.workflow_id is None:
+            return None
+        try:
+            return _dead_letter_record_from_row(row)
+        except ValueError:
+            return None
+
+    def get_row(self, context_id: str) -> DLQStateRecord | None:
+        with self._session() as db:
+            return db.scalar(
+                select(DLQStateRecord)
+                .where(
+                    DLQStateRecord.org_id == self.org_id,
+                    DLQStateRecord.context_id == context_id,
+                )
+                .order_by(DLQStateRecord.created_at.desc(), DLQStateRecord.id.desc())
+                .limit(1)
+            )
 
     def record_failure(
         self,
@@ -223,34 +275,60 @@ class DeadLetterQueueStore:
         retry_decision: FailureRetryDecision,
         failed_at: str,
     ) -> DeadLetterRecord:
-        existing = self._records.get(request.context_id)
         failure_context = {
             "task": request.task,
             "payload": request.payload,
             "failure_type": request.failure_type,
             "attempt": request.attempt,
         }
-        record = DeadLetterRecord(
-            dlq_id=_dlq_id(
-                context_id=request.context_id,
-                module=request.module,
-                workflow_id=request.workflow_id,
-            ),
+        dlq_id = _dlq_id(
             context_id=request.context_id,
             module=request.module,
             workflow_id=request.workflow_id,
-            failure_type=request.failure_type,
-            failure_reason=request.reason,
-            attempt=request.attempt,
-            status=_dlq_status(retry_decision.retry_status),
-            failure_context=failure_context,
-            retry_decision=retry_decision,
-            failed_at=failed_at,
-            replay_count=existing.replay_count if existing else 0,
-            last_replayed_at=existing.last_replayed_at if existing else None,
         )
-        self._records[request.context_id] = record
-        return record
+        with self._session() as db:
+            row = db.scalar(
+                select(DLQStateRecord).where(DLQStateRecord.dlq_id == dlq_id)
+            )
+            if row is None:
+                row = DLQStateRecord(
+                    org_id=self.org_id,
+                    dlq_id=dlq_id,
+                    context_id=request.context_id,
+                    execution_id=request.context_id,
+                    trace_id=request.context_id,
+                    module_key=request.module,
+                    workflow_id=request.workflow_id,
+                    failure_type=request.failure_type,
+                    status=_dlq_status(retry_decision.retry_status),
+                    reason=request.reason,
+                    payload=request.payload,
+                    failure_context=failure_context,
+                    retry_decision=retry_decision.model_dump(mode="json"),
+                    attempt=request.attempt,
+                    retry_count=max(request.attempt - 1, 0),
+                    retry_after=_parse_optional_timestamp(
+                        retry_decision.next_retry_after
+                    ),
+                    replay_count=0,
+                    replayable=True,
+                )
+                db.add(row)
+            else:
+                row.status = _dlq_status(retry_decision.retry_status)
+                row.reason = request.reason
+                row.payload = request.payload
+                row.failure_context = failure_context
+                row.retry_decision = retry_decision.model_dump(mode="json")
+                row.attempt = request.attempt
+                row.retry_count = max(request.attempt - 1, row.retry_count)
+                row.retry_after = _parse_optional_timestamp(
+                    retry_decision.next_retry_after
+                )
+                row.replayable = True
+            db.commit()
+            db.refresh(row)
+            return _dead_letter_record_from_row(row)
 
     def mark_replayed(
         self,
@@ -258,15 +336,33 @@ class DeadLetterQueueStore:
         *,
         replayed_at: str,
     ) -> DeadLetterRecord:
-        updated = record.model_copy(
-            update={
-                "status": "replayed",
-                "replay_count": record.replay_count + 1,
-                "last_replayed_at": replayed_at,
-            }
-        )
-        self._records[record.context_id] = updated
-        return updated
+        with self._session() as db:
+            row = db.scalar(
+                select(DLQStateRecord).where(DLQStateRecord.dlq_id == record.dlq_id)
+            )
+            if row is None:
+                return record
+            row.status = "replayed"
+            row.replay_count = record.replay_count + 1
+            row.last_replayed_at = _parse_timestamp(replayed_at)
+            db.commit()
+            db.refresh(row)
+            return _dead_letter_record_from_row(row)
+
+    def _session(self):
+        if self._db is not None:
+            class _ExistingSession:
+                def __enter__(_self) -> Session:
+                    return self._db  # type: ignore[return-value]
+
+                def __exit__(_self, *_exc: object) -> None:
+                    return None
+
+            return _ExistingSession()
+
+        from ..db.session import SessionLocal
+
+        return SessionLocal()
 
 
 DEFAULT_DEAD_LETTER_QUEUE = DeadLetterQueueStore()
@@ -274,6 +370,41 @@ DEFAULT_DEAD_LETTER_QUEUE = DeadLetterQueueStore()
 
 def reset_dead_letter_queue() -> None:
     DEFAULT_DEAD_LETTER_QUEUE.clear()
+
+
+def _parse_optional_timestamp(value: str | None) -> datetime | None:
+    if value is None:
+        return None
+    return _parse_timestamp(value)
+
+
+def _format_optional_timestamp(value: datetime | None) -> str | None:
+    if value is None:
+        return None
+    return _timestamp(value)
+
+
+def _dead_letter_record_from_row(row: DLQStateRecord) -> DeadLetterRecord:
+    retry_decision = FailureRetryDecision.model_validate(row.retry_decision)
+    context_id = row.context_id or retry_decision.context_id
+    module = row.module_key or retry_decision.module
+    workflow_id = row.workflow_id or retry_decision.workflow_id
+    failure_type = row.failure_type or retry_decision.failure_type
+    return DeadLetterRecord(
+        dlq_id=row.dlq_id,
+        context_id=context_id,
+        module=module,
+        workflow_id=workflow_id,
+        failure_type=failure_type,  # type: ignore[arg-type]
+        failure_reason=row.reason,
+        attempt=row.attempt,
+        status=row.status,  # type: ignore[arg-type]
+        failure_context=dict(row.failure_context),
+        retry_decision=retry_decision,
+        failed_at=_timestamp(row.created_at),
+        replay_count=row.replay_count,
+        last_replayed_at=_format_optional_timestamp(row.last_replayed_at),
+    )
 
 
 def _build_fallback_response(request: FailureHandlingRequest) -> FallbackResponse:
@@ -342,6 +473,8 @@ def handle_failure(
     request: FailureHandlingRequest,
     *,
     store: DeadLetterQueueStore | None = None,
+    db: Session | None = None,
+    org_id: str | None = None,
     now: datetime | None = None,
 ) -> FailureHandlingOutcome:
     failure_time = now or _utc_now()
@@ -349,7 +482,10 @@ def handle_failure(
     retry_decision = _build_retry_decision(request, now=failure_time)
     fallback_response = _build_fallback_response(request)
     c15d_updated, c15d_reason = _mark_execution_failed(request)
-    target_store = store or DEFAULT_DEAD_LETTER_QUEUE
+    target_store = store or DeadLetterQueueStore(
+        db=db,
+        org_id=org_id or PLATFORM_ORG_ID,
+    )
     dlq_record = target_store.record_failure(
         request,
         retry_decision=retry_decision,
@@ -410,6 +546,8 @@ def evaluate_timeout(
     request: TimeoutEvaluationRequest,
     *,
     store: DeadLetterQueueStore | None = None,
+    db: Session | None = None,
+    org_id: str | None = None,
 ) -> TimeoutHandlingDecision:
     started_at = _parse_timestamp(request.started_at)
     checked_at = (
@@ -466,6 +604,8 @@ def evaluate_timeout(
             retry_policy=request.retry_policy,
         ),
         store=store,
+        db=db,
+        org_id=org_id,
         now=checked_at,
     )
     record_workflow_event(
@@ -503,8 +643,13 @@ def evaluate_timeout(
 def list_dead_letter_records(
     *,
     store: DeadLetterQueueStore | None = None,
+    db: Session | None = None,
+    org_id: str | None = None,
 ) -> DeadLetterQueueResponse:
-    target_store = store or DEFAULT_DEAD_LETTER_QUEUE
+    target_store = store or DeadLetterQueueStore(
+        db=db,
+        org_id=org_id or PLATFORM_ORG_ID,
+    )
     records = target_store.list_records()
     return DeadLetterQueueResponse(
         items=records,
@@ -521,8 +666,13 @@ def get_dead_letter_record(
     context_id: str,
     *,
     store: DeadLetterQueueStore | None = None,
+    db: Session | None = None,
+    org_id: str | None = None,
 ) -> DeadLetterRecord | None:
-    target_store = store or DEFAULT_DEAD_LETTER_QUEUE
+    target_store = store or DeadLetterQueueStore(
+        db=db,
+        org_id=org_id or PLATFORM_ORG_ID,
+    )
     return target_store.get(context_id)
 
 
@@ -532,8 +682,12 @@ def manual_replay_context(
     settings: Settings,
     db: Session | None = None,
     store: DeadLetterQueueStore | None = None,
+    org_id: str | None = None,
 ) -> RecoveryPlan:
-    target_store = store or DEFAULT_DEAD_LETTER_QUEUE
+    target_store = store or DeadLetterQueueStore(
+        db=db,
+        org_id=org_id or PLATFORM_ORG_ID,
+    )
     record = target_store.get(request.context_id)
     if record is None:
         record_workflow_event(

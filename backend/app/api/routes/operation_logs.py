@@ -19,12 +19,21 @@ router = APIRouter(prefix="/operation-logs", tags=["operation-logs"])
 def operation_logs(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    cursor: str | None = Query(default=None, pattern=r"^\d+$"),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("AUDIT", "admin")),
 ) -> ListResponse[OperationLogResponse]:
     del user
-    items = list_operation_logs(db, limit=limit, offset=offset)
-    return ListResponse(items=items, count=len(items), limit=limit, offset=offset)
+    items = list_operation_logs(db, limit=limit, offset=offset, cursor=cursor)
+    next_cursor = str(items[-1].id) if len(items) == limit else None
+    return ListResponse(
+        items=items,
+        count=len(items),
+        limit=limit,
+        offset=offset,
+        cursor=cursor,
+        next_cursor=next_cursor,
+    )
 
 
 @router.get("/{operation_id}", response_model=OperationLogResponse)

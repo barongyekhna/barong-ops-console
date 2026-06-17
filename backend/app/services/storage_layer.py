@@ -600,6 +600,18 @@ def _workflow_id_for_record(record: StorageRecordEnvelope) -> str | None:
     return None
 
 
+def _payload_string(record: StorageRecordEnvelope, key: str) -> str | None:
+    payload = record.payload if isinstance(record.payload, Mapping) else {}
+    metadata = payload.get("metadata") if isinstance(payload.get("metadata"), Mapping) else {}
+    for source in (payload, metadata):
+        value = source.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()[:128]
+        if value is not None and not isinstance(value, (dict, list, tuple)):
+            return str(value).strip()[:128]
+    return None
+
+
 def _latency_for_record(record: StorageRecordEnvelope) -> float:
     payload = record.payload if isinstance(record.payload, Mapping) else {}
     value = payload.get("total_latency_ms" if record.entity_type == "ExecutionTrace" else "latency_ms")
@@ -624,6 +636,8 @@ def _record_to_event_stream_row(
         product_key=record.product_key,
         user_id=record.user_id,
         workflow_id=_workflow_id_for_record(record),
+        job_id=_payload_string(record, "job_id"),
+        actor_id=_payload_string(record, "actor_id") or record.user_id,
         module_id=record.module,
         event_type=record.event_type,
         action=_action_for_record(record),

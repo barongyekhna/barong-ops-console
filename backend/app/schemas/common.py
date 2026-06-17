@@ -108,3 +108,5 @@ class ListResponse(BaseModel, Generic[ItemT]):
     count: int = Field(ge=0)
     limit: int = Field(ge=1, le=100)
     offset: int = Field(ge=0)
+    cursor: str | None = None
+    next_cursor: str | None = None

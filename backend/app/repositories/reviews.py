@@ -18,15 +18,15 @@ def list_reviews(
     db: Session, *, limit: int, offset: int
 ) -> list[ReviewItem]:
     org_id = current_tenant_org_id()
-    return list(
+    rows = list(
         db.scalars(
             select(ReviewItem)
             .where(ReviewItem.org_id == org_id)
             .order_by(ReviewItem.id.desc())
-            .limit(limit)
-            .offset(offset)
+            .limit(limit + offset)
         )
     )
+    return rows[offset : offset + limit]
 
 
 def get_review(db: Session, review_id: str) -> ReviewItem | None:

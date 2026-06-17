@@ -9,6 +9,7 @@ EventModule = Literal[
     "C14",
     "C15",
     "C16",
+    "C17",
     "C18D",
     "C18F",
     "C18G",

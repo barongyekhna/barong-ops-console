@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from contextlib import contextmanager
-from threading import RLock
 from typing import Any
 
 from sqlalchemy import inspect, select
@@ -45,10 +44,6 @@ class SharedModulePermissionDeniedError(PermissionError):
 
 class SharedModuleOrgContextRequiredError(SharedModulePermissionDeniedError):
     pass
-
-
-_SHARED_MODULES: dict[str, SharedModule] = {}
-_SHARED_MODULES_LOCK = RLock()
 
 
 def _actor_user_id(actor: User) -> str:
@@ -110,8 +105,6 @@ def _sync_c18d_binding(db: Session, module: SharedModule) -> None:
 
 
 def reset_shared_module_registry() -> None:
-    with _SHARED_MODULES_LOCK:
-        _SHARED_MODULES.clear()
     with _managed_session() as (db, _):
         if not _shared_module_table_exists(db):
             return

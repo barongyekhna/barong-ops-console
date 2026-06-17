@@ -16,6 +16,9 @@ class ModuleBindingRecord(PrimaryKeyMixin, Base):
             name="uq_module_bindings_org_id_module_id",
         ),
         Index("ix_module_bindings_org_id", "org_id"),
+        Index("ix_module_bindings_module_id", "module_id"),
+        Index("ix_module_bindings_status", "status"),
+        Index("ix_module_bindings_created_at", "created_at"),
         Index("ix_module_bindings_org_id_status", "org_id", "status"),
         Index("ix_module_bindings_org_id_module_id", "org_id", "module_id"),
     )
