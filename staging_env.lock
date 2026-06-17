@@ -1,0 +1,133 @@
+{
+  "canonical_env_file": ".env.staging.example",
+  "canonical_env_keys": [
+    "APP_DEBUG",
+    "APP_DOCS_ENABLED",
+    "APP_ENV",
+    "APP_NAME",
+    "APP_VERSION",
+    "BACKEND_API_URL",
+    "CONTROL_PLANE_STEALTH_MODE",
+    "DATABASE_URL",
+    "LOGIN_ACCOUNT_LOCKOUT_MINUTES",
+    "LOGIN_ENDPOINT_RATE_LIMIT_ATTEMPTS",
+    "LOGIN_FAILED_ATTEMPT_BASE_DELAY_SECONDS",
+    "LOGIN_FAILED_ATTEMPT_LOCKOUT_THRESHOLD",
+    "LOGIN_FAILED_ATTEMPT_MAX_DELAY_SECONDS",
+    "LOGIN_IP_RATE_LIMIT_ATTEMPTS",
+    "LOGIN_IP_RATE_LIMIT_WINDOW_SECONDS",
+    "LOGIN_USER_RATE_LIMIT_ATTEMPTS",
+    "N8N_TEST_CALLBACK_SECRET",
+    "N8N_TEST_REQUEST_TIMEOUT_SECONDS",
+    "N8N_TEST_WEBHOOK_URL",
+    "NEXT_PUBLIC_API_BASE_URL",
+    "OWNER_PASSWORD",
+    "OWNER_USERNAME",
+    "POSTGRES_DB",
+    "POSTGRES_PASSWORD",
+    "POSTGRES_USER",
+    "WEBHOOK_GATEWAY_SIGNING_SECRET",
+    "WEBHOOK_REPLAY_NONCE_TTL_SECONDS"
+  ],
+  "canonical_env_nonsecret_values": {
+    "APP_DEBUG": "false",
+    "APP_DOCS_ENABLED": "false",
+    "APP_ENV": "staging",
+    "APP_NAME": "barong-ops-console-backend",
+    "APP_VERSION": "0.1.0",
+    "BACKEND_API_URL": "http://console_staging_backend:8000",
+    "CONTROL_PLANE_STEALTH_MODE": "true",
+    "DATABASE_URL": "postgresql+psycopg://barong_ops_console_staging:CHANGE-ME-url-encoded-staging-postgres-password@console_staging_postgres:5432/barong_ops_console_staging",
+    "LOGIN_ACCOUNT_LOCKOUT_MINUTES": "15",
+    "LOGIN_ENDPOINT_RATE_LIMIT_ATTEMPTS": "200",
+    "LOGIN_FAILED_ATTEMPT_BASE_DELAY_SECONDS": "2",
+    "LOGIN_FAILED_ATTEMPT_LOCKOUT_THRESHOLD": "5",
+    "LOGIN_FAILED_ATTEMPT_MAX_DELAY_SECONDS": "60",
+    "LOGIN_IP_RATE_LIMIT_ATTEMPTS": "20",
+    "LOGIN_IP_RATE_LIMIT_WINDOW_SECONDS": "900",
+    "LOGIN_USER_RATE_LIMIT_ATTEMPTS": "10",
+    "N8N_TEST_CALLBACK_SECRET": "",
+    "N8N_TEST_REQUEST_TIMEOUT_SECONDS": "10",
+    "N8N_TEST_WEBHOOK_URL": "",
+    "NEXT_PUBLIC_API_BASE_URL": "http://127.0.0.1:3100",
+    "OWNER_PASSWORD": "[redacted]",
+    "OWNER_USERNAME": "staging_owner",
+    "POSTGRES_DB": "barong_ops_console_staging",
+    "POSTGRES_PASSWORD": "[redacted]",
+    "POSTGRES_USER": "barong_ops_console_staging",
+    "WEBHOOK_GATEWAY_SIGNING_SECRET": "[redacted]",
+    "WEBHOOK_REPLAY_NONCE_TTL_SECONDS": "900"
+  },
+  "canonical_env_sha256": "37bcc8f5c1c22f123abb4c9ba43e23a7e4d52b3cd5564b6ce05e88b5ee8b12ba",
+  "compose_config_available": true,
+  "compose_config_error": null,
+  "compose_config_sha256": "dad31b10db2b11bd521a9574917e7a5fc8d88987a2fa5d54bd1a97fbcb1d6719",
+  "compose_config_source_env_file": ".env.staging.example",
+  "compose_file": "docker-compose.staging.yml",
+  "compose_file_sha256": "200d56cd0d59a1bf9994fccd0cdc7efc5ed0988b68a219dca6174ceab570b5d2",
+  "docker_compose": {
+    "available": true,
+    "binary": "docker-compose",
+    "pin": "1.29.2",
+    "pin_match": true,
+    "raw": "1.29.2",
+    "version": "1.29.2"
+  },
+  "drift_guards": [
+    {
+      "id": "app_env_staging",
+      "status": "passed"
+    },
+    {
+      "actual": 3,
+      "expected": 3,
+      "id": "runtime_env_file_count",
+      "status": "passed"
+    },
+    {
+      "id": "no_host_env_interpolation",
+      "status": "passed"
+    },
+    {
+      "id": "no_production_references",
+      "status": "passed"
+    },
+    {
+      "id": "staging_network_pinned",
+      "status": "passed"
+    },
+    {
+      "id": "staging_volume_pinned",
+      "status": "passed"
+    },
+    {
+      "id": "staging_ports_pinned",
+      "status": "passed"
+    },
+    {
+      "id": "postgres_host_port_blocked",
+      "status": "passed"
+    },
+    {
+      "id": "staging_webhook_empty",
+      "status": "passed"
+    }
+  ],
+  "dynamic_config_injection": {
+    "compose_environment_overrides_required": true,
+    "host_env_interpolation_allowed": false,
+    "runtime_env_drift_allowed": false,
+    "status": "passed"
+  },
+  "environment": "staging",
+  "generated_at": "2026-06-17T00:00:00Z",
+  "lock_version": "PRE20-P-Batch10-FIX041-v1",
+  "runtime_env_file": ".env.staging",
+  "runtime_env_policy": {
+    "must_be_git_ignored": true,
+    "must_match_canonical_key_set": true,
+    "must_not_be_printed_by_validators": true,
+    "must_not_reuse_production_secrets": true
+  },
+  "scope": "staging-infra-validation-only"
+}

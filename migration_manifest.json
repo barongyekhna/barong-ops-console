@@ -1,0 +1,103 @@
+{
+  "alembic_head": "pre20_o_ops_dr_001",
+  "environment": "staging",
+  "expected_alembic_head": "pre20_o_ops_dr_001",
+  "generated_at": "2026-06-17T00:00:00Z",
+  "head_locked": true,
+  "manifest_version": "PRE20-P-Batch10-FIX042-v1",
+  "migration_count": 11,
+  "migration_hash": "b3af56a058d11764d636601605c38d7a13c616f4e8dc079ba0a12cd48d70158b",
+  "migration_order": [
+    "f07_core_001",
+    "c05b_permissions_001",
+    "c12d_approval_001",
+    "c16_auth_sessions_001",
+    "c16_fix4_login_lockout_001",
+    "c16_adv_security_001",
+    "c18_tenant_consistency_001",
+    "execution_durable_state_001",
+    "c17_durable_observability_001",
+    "pre20_o_concurrency_perf_001",
+    "pre20_o_ops_dr_001"
+  ],
+  "migration_order_checksum": "da929c060552390cdae21b019a6509054e82fb0b03c6570816b7bd1f6c1cddae",
+  "migrations": [
+    {
+      "applied_at": "2026-06-08T00:00:00Z",
+      "checksum": "e230b768f33c9cc04c67e6c6ed1458da5362a9abdcb1dbfe1d090cdfa92f7bcd",
+      "down_revision": null,
+      "path": "backend/alembic/versions/20260608_01_create_core_foundation_tables.py",
+      "version": "f07_core_001"
+    },
+    {
+      "applied_at": "2026-06-10T00:00:00Z",
+      "checksum": "dab996ab32822fa131749b255211ace171e9d662f82f737bb8fa347336e7d64c",
+      "down_revision": "f07_core_001",
+      "path": "backend/alembic/versions/20260610_01_create_permission_tables.py",
+      "version": "c05b_permissions_001"
+    },
+    {
+      "applied_at": "2026-06-14T00:00:00Z",
+      "checksum": "4bd1528296e5b68d7ee5ed3830f87407409e8e00d6fdbed6cacc84a72b22eca4",
+      "down_revision": "c05b_permissions_001",
+      "path": "backend/alembic/versions/20260614_01_create_approval_tables.py",
+      "version": "c12d_approval_001"
+    },
+    {
+      "applied_at": "2026-06-15T00:00:00Z",
+      "checksum": "94f843318c10de9734345bba25a8d9c66506a2a8deb7586405e3f01b7263a571",
+      "down_revision": "c12d_approval_001",
+      "path": "backend/alembic/versions/20260615_01_create_auth_sessions.py",
+      "version": "c16_auth_sessions_001"
+    },
+    {
+      "applied_at": "2026-06-15T00:00:00Z",
+      "checksum": "c0f4bda32860ade754309e4c794694b7ea617468d96814d2587354bcf67d5843",
+      "down_revision": "c16_auth_sessions_001",
+      "path": "backend/alembic/versions/20260615_02_add_login_lockout_fields.py",
+      "version": "c16_fix4_login_lockout_001"
+    },
+    {
+      "applied_at": "2026-06-15T00:00:00Z",
+      "checksum": "4fbbe184bb497907f79219efa96d2ddf5dbbea87eb81286b2f27158a9c4a9f6e",
+      "down_revision": "c16_fix4_login_lockout_001",
+      "path": "backend/alembic/versions/20260615_03_c16_adv_security_hardening.py",
+      "version": "c16_adv_security_001"
+    },
+    {
+      "applied_at": "2026-06-17T00:00:00Z",
+      "checksum": "7d4a45286f56bfd794429b97baeb1a76a5408e1ba6913a4736e3f5fcc3368ff6",
+      "down_revision": "c16_adv_security_001",
+      "path": "backend/alembic/versions/20260617_01_c18_tenant_consistency.py",
+      "version": "c18_tenant_consistency_001"
+    },
+    {
+      "applied_at": "2026-06-17T00:00:00Z",
+      "checksum": "93a609bd086a440b4fe74f8ba1ce25aa7c7c6e3d9f14f83907260ed66800c282",
+      "down_revision": "c18_tenant_consistency_001",
+      "path": "backend/alembic/versions/20260617_02_execution_durable_state.py",
+      "version": "execution_durable_state_001"
+    },
+    {
+      "applied_at": "2026-06-17T00:00:00Z",
+      "checksum": "e6c46113e6eb5cdfc00fedf3c112999d9f1ba3cedb842f1afe7b656fc454a8a9",
+      "down_revision": "execution_durable_state_001",
+      "path": "backend/alembic/versions/20260617_03_c17_durable_observability.py",
+      "version": "c17_durable_observability_001"
+    },
+    {
+      "applied_at": "2026-06-17T00:00:00Z",
+      "checksum": "d40b35ff809fef2cf99dfa6cda8b98f80bb714b5ecc404eaca37c44ba2b60ef3",
+      "down_revision": "c17_durable_observability_001",
+      "path": "backend/alembic/versions/20260617_04_pre20_o_concurrency_performance.py",
+      "version": "pre20_o_concurrency_perf_001"
+    },
+    {
+      "applied_at": "2026-06-17T00:00:00Z",
+      "checksum": "d0457c345c9383069d3659766fbeb59e3ffa0ec3480a04191329d3a551c86ed1",
+      "down_revision": "pre20_o_concurrency_perf_001",
+      "path": "backend/alembic/versions/20260617_05_pre20_o_operations_disaster_recovery.py",
+      "version": "pre20_o_ops_dr_001"
+    }
+  ]
+}

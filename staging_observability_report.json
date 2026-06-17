@@ -1,0 +1,33 @@
+{
+  "checks": [
+    {
+      "id": "event_streams_write_read",
+      "status": "passed"
+    },
+    {
+      "id": "anomaly_events_generation",
+      "status": "passed"
+    },
+    {
+      "id": "alert_pipeline_trigger",
+      "status": "passed"
+    },
+    {
+      "id": "ops_alerts_persistence",
+      "status": "passed"
+    },
+    {
+      "id": "observability_tables_in_locked_migration_chain",
+      "status": "passed"
+    }
+  ],
+  "environment": "staging",
+  "generated_at": "2026-06-17T00:00:00Z",
+  "pipeline": "event_streams -> anomaly_events -> alert_engine -> sink",
+  "report_version": "PRE20-P-Batch10-FIX048-v1",
+  "status": "passed",
+  "test_evidence": [
+    "tests/backend/test_c17_durable_observability.py",
+    "tests/backend/test_pre20_o_alerting_integration.py"
+  ]
+}

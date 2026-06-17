@@ -1,0 +1,174 @@
+{
+  "checks": [
+    {
+      "id": "staging_env_lock",
+      "status": "passed"
+    },
+    {
+      "id": "migration_manifest",
+      "status": "passed"
+    },
+    {
+      "id": "contract_validation",
+      "status": "passed"
+    },
+    {
+      "id": "c17_c18_state_enforcement",
+      "status": "passed"
+    }
+  ],
+  "contract_validation": {
+    "broken_proxy_allowlist": [],
+    "error_format": {
+      "checks": [
+        {
+          "id": "backend_error_detail_shape",
+          "status": "passed"
+        },
+        {
+          "id": "proxy_not_found_detail_shape",
+          "status": "passed"
+        },
+        {
+          "id": "proxy_unavailable_detail_shape",
+          "status": "passed"
+        }
+      ],
+      "status": "passed"
+    },
+    "missing_endpoint": [],
+    "schema_mismatch": [],
+    "status": "passed"
+  },
+  "env_lock_validation": {
+    "checks": [
+      {
+        "actual": "37bcc8f5c1c22f123abb4c9ba43e23a7e4d52b3cd5564b6ce05e88b5ee8b12ba",
+        "expected": "37bcc8f5c1c22f123abb4c9ba43e23a7e4d52b3cd5564b6ce05e88b5ee8b12ba",
+        "id": "canonical_env_sha256",
+        "status": "passed"
+      },
+      {
+        "actual": "200d56cd0d59a1bf9994fccd0cdc7efc5ed0988b68a219dca6174ceab570b5d2",
+        "expected": "200d56cd0d59a1bf9994fccd0cdc7efc5ed0988b68a219dca6174ceab570b5d2",
+        "id": "compose_file_sha256",
+        "status": "passed"
+      },
+      {
+        "actual": "dad31b10db2b11bd521a9574917e7a5fc8d88987a2fa5d54bd1a97fbcb1d6719",
+        "expected": "dad31b10db2b11bd521a9574917e7a5fc8d88987a2fa5d54bd1a97fbcb1d6719",
+        "id": "compose_config_sha256",
+        "status": "passed"
+      },
+      {
+        "actual": "1.29.2",
+        "expected": "1.29.2",
+        "id": "docker_compose_version_pin",
+        "status": "passed"
+      },
+      {
+        "id": "app_env_staging",
+        "status": "passed"
+      },
+      {
+        "actual": 3,
+        "expected": 3,
+        "id": "runtime_env_file_count",
+        "status": "passed"
+      },
+      {
+        "id": "no_host_env_interpolation",
+        "status": "passed"
+      },
+      {
+        "id": "no_production_references",
+        "status": "passed"
+      },
+      {
+        "id": "staging_network_pinned",
+        "status": "passed"
+      },
+      {
+        "id": "staging_volume_pinned",
+        "status": "passed"
+      },
+      {
+        "id": "staging_ports_pinned",
+        "status": "passed"
+      },
+      {
+        "id": "postgres_host_port_blocked",
+        "status": "passed"
+      },
+      {
+        "id": "staging_webhook_empty",
+        "status": "passed"
+      }
+    ],
+    "status": "passed"
+  },
+  "environment": "staging",
+  "generated_at": "2026-06-17T00:00:00Z",
+  "migration_validation": {
+    "checks": [
+      {
+        "actual": "pre20_o_ops_dr_001",
+        "expected": "pre20_o_ops_dr_001",
+        "id": "alembic_head_locked",
+        "status": "passed"
+      },
+      {
+        "actual": "b3af56a058d11764d636601605c38d7a13c616f4e8dc079ba0a12cd48d70158b",
+        "expected": "b3af56a058d11764d636601605c38d7a13c616f4e8dc079ba0a12cd48d70158b",
+        "id": "migration_hash",
+        "status": "passed"
+      },
+      {
+        "actual": "da929c060552390cdae21b019a6509054e82fb0b03c6570816b7bd1f6c1cddae",
+        "expected": "da929c060552390cdae21b019a6509054e82fb0b03c6570816b7bd1f6c1cddae",
+        "id": "migration_order_checksum",
+        "status": "passed"
+      },
+      {
+        "id": "migration_entries_have_required_fields",
+        "status": "passed"
+      }
+    ],
+    "status": "passed"
+  },
+  "report_version": "PRE20-P-Batch10-staging-consistency-v1",
+  "state_enforcement": {
+    "checks": [
+      {
+        "id": "c17_db_storage_adapter_present",
+        "status": "passed"
+      },
+      {
+        "id": "c17_event_collector_db_write_path",
+        "status": "passed"
+      },
+      {
+        "forbidden_in_staging": "InMemoryStorageAdapter",
+        "id": "c17_memory_adapter_not_staging_runtime",
+        "status": "passed"
+      },
+      {
+        "id": "c18_module_binding_db_repository",
+        "status": "passed"
+      },
+      {
+        "id": "c18_org_context_db_membership_resolution",
+        "status": "passed"
+      }
+    ],
+    "policy": {
+      "c17_state_backend": "DBStorageAdapter/event_streams",
+      "c18_state_backend": "organizations/org_memberships/module_bindings/shared_modules",
+      "in_memory_registry_fallback_allowed_in_staging": false,
+      "memory_fallback_allowed_in_staging": false
+    },
+    "report_version": "PRE20-P-Batch10-FIX047-v1",
+    "status": "passed"
+  },
+  "status": "passed"
+}

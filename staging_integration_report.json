@@ -1,0 +1,75 @@
+{
+  "checks": [
+    {
+      "id": "backend_api_health_contract",
+      "path": "/api/public/health",
+      "status": "passed"
+    },
+    {
+      "id": "auth_login_flow_contract",
+      "path": "/api/public/auth/login",
+      "status": "passed"
+    },
+    {
+      "id": "permission_check_c05_contract",
+      "path": "/api/app/permissions/me",
+      "status": "passed"
+    },
+    {
+      "id": "c18_org_isolation_suite",
+      "marker": "test_repository_enforces_org_filter_and_missing_context_denies",
+      "path": "tests/backend/test_c18_tenant_consistency.py",
+      "status": "passed"
+    },
+    {
+      "id": "c17_event_write_read_suite",
+      "marker": "test_c17_event_write_is_db_first_and_reports_queue_status",
+      "path": "tests/backend/test_c17_durable_observability.py",
+      "status": "passed"
+    },
+    {
+      "expected_head": "pre20_o_ops_dr_001",
+      "id": "db_migration_validation",
+      "status": "passed"
+    },
+    {
+      "id": "frontend_proxy_contract",
+      "status": "passed"
+    }
+  ],
+  "environment": "staging",
+  "generated_at": "2026-06-17T00:00:00Z",
+  "live_checks": [
+    {
+      "error": "HTTP Error 404: Not Found",
+      "http_status": 404,
+      "id": "live_backend_api_health",
+      "status": "failed",
+      "url": "http://127.0.0.1:8100/api/public/health"
+    },
+    {
+      "http_status": 200,
+      "id": "live_frontend_load",
+      "json": null,
+      "status": "passed",
+      "url": "http://127.0.0.1:3100/login"
+    },
+    {
+      "http_status": 200,
+      "id": "live_frontend_api_proxy_health",
+      "json": {
+        "database": "not_configured",
+        "environment": "staging",
+        "external_services": "not_connected",
+        "service": "barong-ops-console-backend",
+        "status": "ok",
+        "version": "0.1.0"
+      },
+      "status": "passed",
+      "url": "http://127.0.0.1:3100/api/backend/health"
+    }
+  ],
+  "mode": "static-validation-with-live-probes-if-staging-is-running",
+  "report_version": "PRE20-P-Batch10-FIX043-v1",
+  "status": "failed"
+}

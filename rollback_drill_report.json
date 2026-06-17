@@ -1,0 +1,42 @@
+{
+  "checks": [
+    {
+      "command": "./scripts/safe_compose_release.sh --env staging --service backend --dry-run",
+      "id": "deploy_version_n_dry_run",
+      "status": "passed"
+    },
+    {
+      "command": "./scripts/rollback_release.sh --env staging --service backend --image barong-ops-console-staging_console_staging_backend:rollback-candidate --dry-run",
+      "id": "rollback_to_n_minus_1_dry_run",
+      "status": "passed"
+    },
+    {
+      "expected_alembic_head": "pre20_o_ops_dr_001",
+      "id": "db_state_verification",
+      "status": "passed"
+    },
+    {
+      "id": "api_health_verification",
+      "status": "failed"
+    },
+    {
+      "id": "frontend_load_verification",
+      "status": "passed"
+    },
+    {
+      "id": "c17_logs_consistency",
+      "source": "locked migration chain and C17 durable tests",
+      "status": "passed"
+    }
+  ],
+  "environment": "staging",
+  "generated_at": "2026-06-17T00:00:00Z",
+  "mode": "rollback-drill-dry-run-with-live-probes-if-staging-is-running",
+  "report_version": "PRE20-P-Batch10-FIX046-v1",
+  "status": "failed",
+  "steps": [
+    "deploy version N with staging safe compose release dry-run",
+    "rollback to N-1 with rollback release dry-run",
+    "verify DB state, API health, frontend load, and C17 logs consistency"
+  ]
+}
