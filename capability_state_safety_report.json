@@ -1,0 +1,43 @@
+{
+  "generated_for": "CAPABILITY STATE SAFE INITIALIZATION FIX (FIX-R02)",
+  "status": "completed",
+  "changed_files": [
+    "frontend/src/components/capability-state-provider.tsx",
+    "frontend/src/components/capability-sidebar-engine.tsx"
+  ],
+  "safe_initialization": {
+    "capability_context": "SAFE_CONTEXT_VALUE returned when context is missing.",
+    "capability_graph": "createSafeGraph() builds a complete empty graph and catches graph construction failures.",
+    "module_access": "safeModuleAccess() normalizes missing module access into empty arrays, unknown access, and async no-op refresh.",
+    "adapter_access": "safeAdapterAccess() normalizes missing adapter/provider access into empty arrays, unknown access, and async no-op refresh.",
+    "registry": "registryItems defaults to [], registryUnavailable defaults to true, registryError defaults to SAFE_REGISTRY_ERROR.",
+    "live_gate": "readiness, productionReadiness, policies, and liveGateErrors use safe fallback reports/errors on first render and failure."
+  },
+  "fallback_ui_state": {
+    "context_fields": [
+      "uiState",
+      "isDegraded",
+      "isFallbackMode",
+      "isLoading"
+    ],
+    "ui_state_values": [
+      "loading",
+      "ready",
+      "degraded",
+      "fallback"
+    ],
+    "visible_surface": "Sidebar footer now shows Loading workspace, Degraded mode, or Fallback mode."
+  },
+  "defensive_guards": [
+    "useFrontendCapabilityState() returns SAFE_CONTEXT_VALUE instead of throwing when provider context is missing.",
+    "refresh() uses Promise.allSettled() so one provider refresh failure cannot block render.",
+    "loadCapabilityState() uses try/catch/finally and always clears local loading.",
+    "graph construction is wrapped in try/catch and falls back to createSafeGraph().",
+    "array inputs are normalized through safeArray() before graph construction.",
+    "no async request is required before first render; provider emits safe fallback state immediately."
+  ],
+  "verification": {
+    "typecheck": "passed",
+    "command": "npm run typecheck"
+  }
+}

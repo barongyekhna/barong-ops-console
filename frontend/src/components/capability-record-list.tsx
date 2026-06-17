@@ -40,7 +40,7 @@ export function CapabilityRecordList({
   emptyDescription,
   emptyTitle,
   fields,
-  requiredPermission = "Read permission for this capability.",
+  requiredPermission = "View permission for this area.",
   title,
 }: CapabilityRecordListProps) {
   const [result, setResult] = useState<CapabilityRecordListResponse | null>(null);
@@ -57,7 +57,7 @@ export function CapabilityRecordList({
       setError(
         requestError instanceof ApiError
           ? requestError.message
-          : "The backend record API is unavailable.",
+          : "Records are unavailable right now.",
       );
     } finally {
       setIsLoading(false);
@@ -72,7 +72,7 @@ export function CapabilityRecordList({
     return (
       <section className="list-state" aria-label={`Loading ${title}`}>
         <LoaderCircle className="spin" aria-hidden="true" size={22} />
-        <span>Loading backend records</span>
+        <span>Loading records</span>
       </section>
     );
   }
@@ -87,13 +87,13 @@ export function CapabilityRecordList({
           </button>
         }
         reason={error}
-        required_execution_mode="Read-only backend API must be reachable."
-        required_module_state="Module route and backend binding must be available."
-        required_org_state="Active organization context must be accepted by the backend."
+        required_execution_mode="View access must be available."
+        required_module_state="This product area must be available."
+        required_org_state="Active organization access is required."
         required_permission={requiredPermission}
-        state="backend_unavailable"
-        title={`${title} API request failed`}
-        unlock_condition={`Restore ${endpoint} and retry the request.`}
+        state="missing_feature"
+        title={`${title} are unavailable`}
+        unlock_condition="Try again after the service is available."
       />
     );
   }

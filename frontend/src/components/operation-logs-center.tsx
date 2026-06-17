@@ -65,7 +65,7 @@ function formatDate(value: string | null | undefined) {
 function errorMessage(error: unknown) {
   return error instanceof ApiError
     ? error.message
-    : "C17 operation log API is unavailable.";
+    : "Logs are unavailable right now.";
 }
 
 function isFailedLog(log: OperationLogRecord) {
@@ -76,7 +76,7 @@ function actionLabel(log: OperationLogRecord) {
   return log.action ?? log.target_type ?? "Unknown operation";
 }
 
-export function C17ObservabilityCenter() {
+export function OperationLogsCenter() {
   const [result, setResult] = useState<ListResponse<OperationLogRecord> | null>(
     null,
   );
@@ -132,9 +132,9 @@ export function C17ObservabilityCenter() {
 
   if (isLoading) {
     return (
-      <section className="list-state" aria-label="Loading C17 observability">
+      <section className="list-state" aria-label="Loading logs">
         <LoaderCircle className="spin" aria-hidden="true" size={22} />
-        <span>Loading C17 observability</span>
+        <span>Loading logs</span>
       </section>
     );
   }
@@ -149,26 +149,26 @@ export function C17ObservabilityCenter() {
           </button>
         }
         reason={error}
-        required_execution_mode="Read-only C17 observability API."
-        required_module_state="system.operation_logs sealed and visible."
-        required_org_state="Active org context accepted by operation log API."
+        required_execution_mode="View access must be available."
+        required_module_state="Logs must be available for this workspace."
+        required_org_state="Active workspace access is required."
         required_permission="operation_logs.read"
-        state="backend_unavailable"
-        title="C17 observability unavailable"
-        unlock_condition="Restore /operation-logs or grant operation_logs.read."
+        state="missing_feature"
+        title="Logs are unavailable"
+        unlock_condition="Try again after logs are available."
       />
     );
   }
 
   return (
-    <section className="observability-workspace" aria-label="C17 observability">
+    <section className="observability-workspace" aria-label="Logs">
       <div className="registry-command-bar">
         <div>
-          <span className="eyebrow">C17 Observability</span>
-          <h2>Logs, traces, alerts, and anomaly signals</h2>
+          <span className="eyebrow">Logs</span>
+          <h2>Operations, traces, alerts, and signals</h2>
           <p>
-            Unified read surface for operation logs, trace correlation, alert
-            candidates, and anomaly signals derived from the C17 log stream.
+            Review recent operations, trace groups, alert candidates, and
+            unusual activity signals in one place.
           </p>
         </div>
         <button
@@ -224,7 +224,7 @@ export function C17ObservabilityCenter() {
               <li>
                 <span>empty</span>
                 <strong>No operation logs recorded.</strong>
-                <small>C17 returned zero records.</small>
+                <small>Activity will appear here when work is completed.</small>
               </li>
             ) : null}
           </ol>
@@ -236,7 +236,7 @@ export function C17ObservabilityCenter() {
               <h3>Traces</h3>
               <p>Trace groups derived from trace, context, request, or job IDs.</p>
             </div>
-            <span className="ops-source">C17 correlation</span>
+            <span className="ops-source">Trace groups</span>
           </div>
           <div className="ops-trace-grid">
             {traces.slice(0, 8).map(([key, log]) => (
@@ -262,7 +262,7 @@ export function C17ObservabilityCenter() {
               <h3>Alerts</h3>
               <p>Alert candidates from failed operation records.</p>
             </div>
-            <span className="ops-source">C17 alert projection</span>
+            <span className="ops-source">Alert candidates</span>
           </div>
           <ol className="ops-record-list">
             {failedLogs.slice(0, 6).map((log) => (
@@ -288,7 +288,7 @@ export function C17ObservabilityCenter() {
               <h3>Anomaly signals</h3>
               <p>Signals derived from repeated actions and missing trace data.</p>
             </div>
-            <span className="ops-source">C17 anomaly projection</span>
+            <span className="ops-source">Activity signals</span>
           </div>
           <ol className="ops-record-list">
             {actionCounts.slice(0, 5).map(([action, count]) => (

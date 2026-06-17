@@ -1,0 +1,61 @@
+# PRE20-ALIGN Frontend Gap Table
+
+| Area | Current UI State | Backend/API State | DB State | Gap | Severity |
+|---|---|---|---|---|---|
+| Sidebar | Static groups enriched by capability state and badges | Capability metadata endpoints exist | Mixed global registry and tenant binding tables | Capability-aware, but still exposes engineering states like Mock, No execution, Adapter pending, Read-only | Medium |
+| Dashboard | System Operations Control Center with C17/C12/C18/C05/PRE20-Q language | Health, operation logs, approval list, live gate reads exist | Relevant records are mostly tenant-scoped | Control-plane dashboard, not product workflow dashboard | High |
+| User management | Create, edit, disable, enable, reset password present | User APIs present | Users are global; memberships exist separately | Usable, but tenant-local semantics are not explicit | Medium |
+| Permission assignment | Embedded under users | Permission assignment APIs present | user_permission_assignments lacks org_id | Product action exists, but tenant table shape is not aligned | High |
+| Organization management | Missing | Org create/update/delete/activate/suspend/member APIs exist | organizations and org_memberships exist | DB/API capability has no product entry | High |
+| Organization switching | Missing | Org context middleware and session-derived org context exist | memberships exist | Users cannot select or switch orgs from UI | High |
+| API key management | Missing | No API key API found | No API key table found | Capability absent across all layers | High |
+| Jobs | Read-only list | GET and POST jobs/events exist | automation_jobs/job_events have org_id | Create/event action path hidden | Medium |
+| Artifacts | Read-only list | GET and POST artifacts exist | artifacts has org_id | Create path hidden | Medium |
+| Reviews | Read-only list | GET, POST, decision POST exist | review_items has org_id | Review creation and decision actions hidden | High |
+| Approvals | Dashboard list/count only | request/detail/approve/reject exist | approval tables have org_id | Approval action workflow missing | High |
+| Errors | Read-only list | GET and POST errors exist | system_errors has org_id | Create/report action hidden | Medium |
+| Modules | Registry/readiness table, refresh only | Registry and binding APIs exist | module_registry global; module_bindings org-scoped | No bind/unbind/share/configure action UI | High |
+| Module actions | Adapter/action contracts visible but disabled | POST action request exists | Callback/DLQ durable; no execution request table | UI cannot invoke backend action path | Critical |
+| Execution controls | Disabled provider action buttons | Gates/router/unlock flow exist; runtime mock-only | C15 state partly durable | Product shows capability without actionable execution | Critical |
+| Live gate | Read-only readiness/policies | Policy/canary/rollback writes exist | ops live gate tables have org_id | Operator write controls missing | High |
+| C15 callback/DLQ | No product page | Callback/failure/DLQ/replay APIs exist | execution callbacks/results/DLQ and dlq_state have org_id | Recovery operations unproductized | High |
+| C17 observability | Operation logs page is read-only and C17-labelled | Event/audit/anomaly/replay services exist | C17 tables have org_id | Anomaly/replay/audit workflows hidden | Medium |
+| Agents | Read-only list | Registry GET/POST exists | agent_registry global | Create/manage action hidden | Medium |
+| Workflows | Read-only list | Registry GET/POST exists | workflow_registry global | Create/manage action hidden | Medium |
+| Products | Empty state route | No product workflow API found | No matching product tables found | Orphan frontend placeholder | Low |
+| Settings | Empty state route | No settings workflow API found | No matching settings table found | Orphan frontend placeholder | Low |
+| Memory events | Hidden/excluded style route | API supports reads/writes | memory tables have org_id | Legacy/internal surface not productized | Medium |
+
+## Missing UI Action Map
+
+| Product Action | UI | Proxy Allowlist | Backend | DB | Chain Status |
+|---|---|---|---|---|---|
+| Create/edit/disable user | Present | Present | Present | Global users | Working with global identity caveat |
+| Grant/revoke permissions | Present | Present | Present | Present, no org_id | Working with tenant-shape caveat |
+| Create/switch org | Missing | Missing | Present | Present | Broken: DB/API hidden |
+| Manage org members | Missing | Missing | Present | Present | Broken: DB/API hidden |
+| Manage API keys | Missing | Missing | Missing | Missing | Absent |
+| Trigger module action | Disabled | Missing for POST action request | Present, gated | Partial C15 durability | Broken: UI/proxy/runtime |
+| Create job | Missing | Missing | Present | Present | Broken: backend hidden |
+| Create artifact | Missing | Missing | Present | Present | Broken: backend hidden |
+| Create review | Missing | Missing | Present | Present | Broken: backend hidden |
+| Submit review decision | Missing | Missing | Present | Present | Broken: backend hidden |
+| Request approval | Missing | Missing | Present | Present | Broken: backend hidden |
+| Approve/reject request | Missing | Missing | Present | Present | Broken: backend hidden |
+| Edit live gate policy | Missing | Missing | Present | Present | Broken: backend hidden |
+| Start canary | Missing | Missing | Present | Present | Broken: backend hidden |
+| Roll back | Missing | Missing | Present | Present | Broken: backend hidden |
+| Replay DLQ item | Missing | Missing | Present | Present | Broken: backend hidden |
+| View anomaly events | Missing | Missing | Service/table present | Present | Broken: DB/service hidden |
+
+## Non-Clickable Feature Inventory
+
+| Surface | Non-Clickable Element | User Impact |
+|---|---|---|
+| AdapterSurfaceShell | Adapter action/provider buttons disabled | User sees actions but cannot execute them |
+| ExecutionProviderStatusShell | Provider status button disabled | Execution appears intentionally unavailable |
+| Dashboard approval card | Approval count only | User cannot approve, reject, or inspect full workflow |
+| Dashboard live gate card | Readiness only | User cannot modify policy, canary, or rollback |
+| CapabilityRecordList pages | Retry/refresh only | Data can be listed but not operated |
+| Module registry page | Refresh only | Modules cannot be bound, shared, configured, or executed |
+

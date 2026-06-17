@@ -3,22 +3,22 @@ import type { Metadata } from "next";
 import { CapabilityRecordList } from "@/components/capability-record-list";
 
 export const metadata: Metadata = {
-  title: "Agents",
+  title: "Automation Directory",
 };
 
 export default function AgentsPage() {
   return (
     <CapabilityRecordList
-      emptyDescription="No agent records match the current backend result set."
-      emptyTitle="No agents registered yet."
+      emptyDescription="No automation records match the current view."
+      emptyTitle="No automation records yet."
       endpoint="/agents"
       fields={[
-        { key: "agent_key", label: "Agent key" },
+        { key: "agent_key", label: "Automation ID" },
         { key: "name", label: "Name" },
         { key: "status", label: "Status" },
       ]}
       requiredPermission="modules.read"
-      title="Agent registry"
+      title="Automation Directory"
     />
   );
 }

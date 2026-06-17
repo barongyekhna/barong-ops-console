@@ -4,7 +4,6 @@ import { Blocks, LogOut, Menu } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
-import { AdapterSurfaceShell } from "@/components/module-adapter-shell";
 import { useAuth } from "@/components/auth-provider";
 import { CapabilitySidebarEngine } from "@/components/capability-sidebar-engine";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
@@ -29,7 +28,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   }
 
   const currentCapability = getCapabilityForPath(pathname);
-  const title = currentCapability?.label ?? pageTitles[pathname] ?? "Console";
+  const title = pageTitles[pathname] ?? currentCapability?.label ?? "Workspace";
 
   return (
     <div className="console-layout">
@@ -42,7 +41,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           </span>
           <span>
             <strong>Barong</strong>
-            <small>Ops Console</small>
+            <small>Operations</small>
           </span>
         </div>
 
@@ -89,7 +88,6 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
         <main className="page-content">
           {children}
-          <AdapterSurfaceShell />
         </main>
       </div>
     </div>

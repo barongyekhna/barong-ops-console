@@ -11,14 +11,16 @@ export default function ProductsPage() {
   return (
     <CapabilityEmptyState
       icon={Package}
-      reason="The products route has no production product API binding in the current capability graph."
-      required_execution_mode="Non-mock execution provider mode for product actions."
-      required_module_state="business.products must be installed with a durable backend adapter."
-      required_org_state="Active organization context must expose business.products."
-      required_permission="products.read"
-      state="hidden"
-      title="Products capability is not installed"
-      unlock_condition="Install a real products module and backend API binding before exposing this route."
+      next_action_href="/dashboard"
+      next_action_label="Open dashboard"
+      reason="Products are not available in this workspace."
+      required_execution_mode="Actions must be enabled before use."
+      required_module_state="Products must be enabled for this workspace."
+      required_org_state="Active workspace access is required."
+      required_permission="Product access granted by an owner."
+      state="missing_feature"
+      title="Products are not available yet"
+      unlock_condition="Use the dashboard while products are completed."
     />
   );
 }

@@ -1,0 +1,70 @@
+# PRE20-ALIGN Cross-Layer Mismatch Map
+
+## Orphan Backend APIs
+
+| Backend Capability | API Exists | UI Entry | Proxy Binding | DB Backing | Mismatch |
+|---|---|---|---|---|---|
+| Org create/update/delete/activate/suspend | Yes | No | No | Yes | Backend and DB hidden |
+| Org members add/remove/list | Yes | No | No | Yes | Backend and DB hidden |
+| Module bind/visibility/share | Yes | No | No | Yes | Backend and DB hidden |
+| Jobs create/events | Yes | No | GET list only | Yes | Write path hidden |
+| Artifacts create | Yes | No | GET list only | Yes | Write path hidden |
+| Reviews create/decision | Yes | No | GET list only | Yes | Write path hidden |
+| Approval request/detail/approve/reject | Yes | Dashboard list only | approval/list only | Yes | Approval workflow broken |
+| Module adapter action request | Yes | Disabled shell only | GET registry/me only | Partial | Execution chain broken |
+| Live gate policy/canary/rollback | Yes | Read-only cards | GET only | Yes | Operator workflow hidden |
+| C15 callback bindings/results | Yes | No | No | Yes | Recovery workflow engineering-only |
+| C15 failure/DLQ/replay | Yes | No | No | Yes | Recovery workflow engineering-only |
+| Webhook ingress | Yes | No | Explicitly blocked | Partial | Backend-only ingress |
+| C14 dependency/binding management | Yes | No dedicated product workflow | Partial GET/POST coverage | Mixed | Control-plane only |
+| Module/agent/workflow registry writes | Yes | Read-only list | GET list only | Global registries | Registry management hidden |
+
+## Orphan Frontend Routes
+
+| Frontend Route | UI State | Backend/API Match | Mismatch |
+|---|---|---|---|
+| /products | Empty capability state | No product workflow API found | Placeholder without stack |
+| /settings | Empty capability state | No settings workflow API found | Placeholder without stack |
+| /memory-events | Hidden/internal-style route | API exists | Legacy/internal surface not productized |
+| /dashboard | Control-plane aggregate | Multiple backend reads | Not a product workflow closure |
+
+## Unexposed DB Capabilities
+
+| DB Capability | Tables | Backend Exists | Frontend Productized |
+|---|---|---|---|
+| Tenant/org management | organizations, org_memberships | Yes | No |
+| Module tenant binding/share | module_bindings, shared_modules | Yes | No |
+| C15 callbacks and DLQ | execution_callbacks, execution_results, execution_dlq, callback_state, dlq_state | Yes | No |
+| C17 event/audit/anomaly/replay | event_streams, audit_logs, replay_jobs, anomaly_events, storage_events | Yes | Partially read-only through operation logs |
+| Live gate operations | ops_live_gate_policies, ops_canary_rollouts, ops_rollback_guards, ops_execution_unlock_tokens | Yes | Read-only |
+| Approvals decisions | approval_decisions | Yes | No action UI |
+| Memory/context | memory_events, memory_summaries, context_packets | Yes | Mostly hidden/read-only |
+| Ops alerts | ops_alerts, ops_alert_deliveries | Yes | No |
+
+## Broken Feature Chains
+
+| Feature Chain | Frontend | Proxy | Backend | Database | Result |
+|---|---|---|---|---|---|
+| Module execution | Disabled action/status UI | POST action request missing | Route/gates exist; provider/runtime mock-only | Callback/DLQ durable; no execution request table | Broken |
+| Organization management | Missing | Missing | Org APIs exist | Org tables exist | Hidden capability |
+| Organization switching | Missing | Missing | Org context middleware exists | Memberships exist | Hidden capability |
+| Approvals | List/count only | List only | approve/reject/request exist | Approval tables scoped | Read-only gap |
+| Live gate | Read-only readiness/policies | GET only | write APIs exist | Ops gate tables scoped | Write gap |
+| Jobs/artifacts/reviews | Read-only lists | GET only | create/decision APIs exist | Scoped tables | Write gap |
+| C17 anomalies/replay | No anomaly/replay workflow | Missing | Services exist | Tables scoped | Hidden capability |
+| Permission assignment | Present | Present | Present | No org_id assignment table | Usable with DB drift |
+| API keys | Missing | Missing | Missing | Missing | Absent |
+
+## API Exists But Is Not Bound To UI
+
+| API Family | Product Impact |
+|---|---|
+| Org management | Tenants cannot be managed from the product |
+| Module binding/share | Modules cannot be activated or shared from the product |
+| Approval decisions | Human approval workflow cannot complete from UI |
+| Module action request | Execution cannot be triggered from UI |
+| Live gate writes | Operators cannot manage live rollout from UI |
+| C15 DLQ/replay | Recovery cannot be operated from UI |
+| Jobs/artifacts/reviews/errors create | Product records are mostly read-only |
+| Registry writes | Modules/agents/workflows cannot be managed from UI |
+

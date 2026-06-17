@@ -3,19 +3,18 @@ import type { Metadata } from "next";
 import { UserManagementPanel } from "@/components/user-management-panel";
 
 export const metadata: Metadata = {
-  title: "User Management",
+  title: "Users",
 };
 
 export default function UsersPage() {
   return (
     <div className="page-stack">
       <div className="page-heading">
-        <span className="section-index">C03</span>
+        <span className="section-index">Core</span>
         <div>
-          <h2>User Management</h2>
+          <h2>Users</h2>
           <p>
-            Internal account management for owner-created console users. This
-            page is not a public registration flow.
+            Manage workspace accounts, roles, passwords, and access from one place.
           </p>
         </div>
       </div>

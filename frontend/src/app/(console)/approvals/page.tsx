@@ -6,16 +6,16 @@ export const metadata: Metadata = {
   title: "Approvals",
 };
 
-export default function ReviewsPage() {
+export default function ApprovalsPage() {
   return (
     <CapabilityRecordList
-      emptyDescription="No approval records match the current view."
-      emptyTitle="No approvals waiting."
-      endpoint="/reviews"
+      emptyDescription="There are no approval requests waiting for review."
+      emptyTitle="No approvals waiting"
+      endpoint="/approval/list?limit=50&offset=0"
       fields={[
-        { key: "review_id", label: "Approval ID" },
-        { key: "review_type", label: "Type" },
+        { key: "approval_id", label: "Approval ID" },
         { key: "status", label: "Status" },
+        { key: "risk_level", label: "Risk" },
       ]}
       requiredPermission="reviews.read"
       title="Approvals"

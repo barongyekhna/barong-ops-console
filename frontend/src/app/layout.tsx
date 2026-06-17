@@ -7,10 +7,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "Barong Ops Console",
-    template: "%s | Barong Ops Console",
+    default: "Barong Operations",
+    template: "%s | Barong Operations",
   },
-  description: "Barong Ops Console capability-aware operations interface.",
+  description: "Barong workspace operations interface.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

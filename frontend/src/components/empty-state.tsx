@@ -14,25 +14,26 @@ type EmptyStateProps = {
 };
 
 export function EmptyState({
-  dataSource = "Backend list API returned zero records.",
+  dataSource = "No records are available yet.",
   title,
   description,
   icon: Icon = Inbox,
-  requiredExecutionMode = "Read-only mode is sufficient.",
-  requiredModuleState = "Module installed and visible.",
+  requiredExecutionMode = "View access is available.",
+  requiredModuleState = "Product area is available.",
   requiredOrgState = "Active organization context is available.",
-  requiredPermission = "Read permission for this capability.",
-  unlockCondition = "Records will appear when the backend stores matching data.",
+  requiredPermission = "View permission for this area.",
+  unlockCondition = "Records will appear when activity starts.",
 }: EmptyStateProps) {
   return (
     <CapabilityEmptyState
       icon={Icon}
-      reason={`${description} Source: ${dataSource}`}
+      next_action_label="Refresh"
+      reason={`${description} ${dataSource}`}
       required_execution_mode={requiredExecutionMode}
       required_module_state={requiredModuleState}
       required_org_state={requiredOrgState}
       required_permission={requiredPermission}
-      state="allowed"
+      state="no_data"
       title={title}
       unlock_condition={unlockCondition}
     />

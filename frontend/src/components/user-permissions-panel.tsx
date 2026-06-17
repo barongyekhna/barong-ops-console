@@ -56,6 +56,15 @@ const SCOPE_OPTIONS = [
   "organization",
 ] as const;
 
+const SCOPE_LABELS: Record<(typeof SCOPE_OPTIONS)[number], string> = {
+  company: "Company",
+  department: "Department",
+  factory: "Factory",
+  global: "Workspace",
+  module: "Area",
+  organization: "Organization",
+};
+
 type GrantFormState = {
   permission_key: string;
   scope_type: string;
@@ -140,6 +149,10 @@ function assignmentRiskLabel(assignment: PermissionAssignment) {
   return assignment.risk_level
     ? assignment.risk_level.toUpperCase()
     : "Normal";
+}
+
+function scopeLabel(scope: string) {
+  return SCOPE_LABELS[scope as (typeof SCOPE_OPTIONS)[number]] ?? scope;
 }
 
 function createEditForm(assignment: PermissionAssignment): EditFormState {
@@ -318,7 +331,7 @@ export function UserPermissionsPanel({
         );
       }
 
-      setActionNotice("权限已授予。");
+      setActionNotice("Permission granted.");
       setGrantForm((current) => ({
         ...DEFAULT_GRANT_FORM,
         permission_key: current.permission_key,
@@ -355,7 +368,7 @@ export function UserPermissionsPanel({
         assignment.id,
         validation.payload,
       );
-      setActionNotice("权限已更新。");
+      setActionNotice("Permission updated.");
       setEditingAssignmentId(null);
       setEditForm(null);
       await refreshAfterMutation("update");
@@ -381,7 +394,7 @@ export function UserPermissionsPanel({
 
     if (
       !window.confirm(
-        `撤销 ${assignment.permission_key}？此操作会软撤销该显式授权。`,
+        `Revoke ${assignment.permission_key}? This will remove the explicit assignment.`,
       )
     ) {
       return;
@@ -394,7 +407,7 @@ export function UserPermissionsPanel({
         assignment.id,
         validation.payload,
       );
-      setActionNotice("权限已撤销。");
+      setActionNotice("Permission revoked.");
       setRevokeReasons((current) => ({
         ...current,
         [assignment.id]: "",
@@ -418,8 +431,8 @@ export function UserPermissionsPanel({
     <section className="permissions-panel" aria-label="User permissions">
       <div className="users-panel-heading">
         <div>
-          <span className="eyebrow">C06C permissions</span>
-          <h3>用户权限管理</h3>
+          <span className="eyebrow">Permissions</span>
+          <h3>User permissions</h3>
           <p>{ROLE_DEFAULT_PERMISSIONS_NOTICE}</p>
         </div>
         <button
@@ -468,7 +481,7 @@ export function UserPermissionsPanel({
             <h4>{OWNER_FULL_ACCESS_NOTICE}</h4>
             <p>
               {assignmentResponse?.owner_full_access_note ??
-                "Owner full access 来自 role，不会渲染成普通 assignment。"}
+                "Owner access comes from the role and is not shown as a standard assignment."}
             </p>
           </div>
         </div>
@@ -481,10 +494,10 @@ export function UserPermissionsPanel({
             aria-label="Grant permission"
           >
             <div className="permissions-section-heading">
-              <h4>授予权限</h4>
+              <h4>Grant permission</h4>
               <p>
-                Permission key 来自 /permissions/registry，不提供 wildcard
-                或批量全权限授权。
+                Choose one permission at a time. Wildcard and bulk grants are
+                not available here.
               </p>
             </div>
 
@@ -505,7 +518,7 @@ export function UserPermissionsPanel({
                     onChange={(event) =>
                       setSearchQuery(event.target.value)
                     }
-                    placeholder="key, name, module, category"
+                    placeholder="key, name, area, category"
                     type="search"
                     value={searchQuery}
                   />
@@ -540,7 +553,7 @@ export function UserPermissionsPanel({
                 </select>
                 <span className="users-field-note">
                   {isRegistryLoading
-                    ? "Loading permission registry."
+                    ? "Loading permissions."
                     : `${filteredGrantPermissions.length} grantable permissions shown.`}
                 </span>
               </label>
@@ -564,7 +577,7 @@ export function UserPermissionsPanel({
                 >
                   {SCOPE_OPTIONS.map((scope) => (
                     <option key={scope} value={scope}>
-                      {scope}
+                      {scopeLabel(scope)}
                     </option>
                   ))}
                 </select>
@@ -650,7 +663,9 @@ export function UserPermissionsPanel({
                   <AlertTriangle aria-hidden="true" size={18} />
                   <div>
                     <strong>
-                      此权限会影响系统管理、安全、发布或用户权限，请确认授权原因。
+                      This permission affects administration, security,
+                      releases, or user access. Confirm the reason before
+                      granting it.
                     </strong>
                     <label className="permissions-checkbox-line">
                       <input
@@ -779,7 +794,7 @@ export function UserPermissionsPanel({
                               </span>
                             </td>
                             <td>
-                              <strong>{assignment.scope_type}</strong>
+                              <strong>{scopeLabel(assignment.scope_type)}</strong>
                               <span>{assignment.scope_id}</span>
                             </td>
                             <td>
@@ -885,7 +900,7 @@ export function UserPermissionsPanel({
                                   <div className="permissions-section-heading">
                                     <h4>Update assignment</h4>
                                     <p>
-                                      Permission key is read-only here. Revoke
+                                      Permission key cannot be edited here. Revoke
                                       and grant again to change it.
                                     </p>
                                   </div>
@@ -938,7 +953,7 @@ export function UserPermissionsPanel({
                                     >
                                       {SCOPE_OPTIONS.map((scope) => (
                                         <option key={scope} value={scope}>
-                                          {scope}
+                                          {scopeLabel(scope)}
                                         </option>
                                       ))}
                                     </select>
@@ -1025,8 +1040,8 @@ export function UserPermissionsPanel({
                                       />
                                       <div>
                                         <strong>
-                                          高风险权限重新启用或变更 scope
-                                          需要二次确认。
+                                          High-risk permission changes require
+                                          confirmation.
                                         </strong>
                                         <label className="permissions-checkbox-line">
                                           <input

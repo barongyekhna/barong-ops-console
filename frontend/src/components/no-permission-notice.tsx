@@ -20,13 +20,13 @@ export function NoPermissionNotice({
     <CapabilityEmptyState
       icon={LockKeyhole}
       reason={description}
-      required_execution_mode="No execution mode grants permission bypass."
-      required_module_state="Module must be visible and permission-allowed."
-      required_org_state="Active organization context must include this module."
-      required_permission="See the module permission manifest."
-      state="forbidden"
+      required_execution_mode="Actions do not bypass account access."
+      required_module_state="This product area must be available."
+      required_org_state="Active organization access is required."
+      required_permission="Access granted by an owner."
+      state="no_permission"
       title={title}
-      unlock_condition="Ask an owner to grant the required permission in C05/C06."
+      unlock_condition="Ask an owner to grant access."
     />
   );
 }
@@ -39,13 +39,13 @@ export function ModuleUnavailableNotice({
     <CapabilityEmptyState
       icon={CircleSlash2}
       reason={description}
-      required_execution_mode="Execution mode must be connected and non-mock."
-      required_module_state="Module status must be enabled or sealed."
-      required_org_state="Active organization context must expose this module."
-      required_permission="See the module permission manifest."
-      state="no_execution"
+      required_execution_mode="Actions must be enabled before use."
+      required_module_state="This product area must be available."
+      required_org_state="Active organization access is required."
+      required_permission="Access granted by an owner."
+      state="missing_feature"
       title={title}
-      unlock_condition="Enable the module, adapter, and execution provider before exposing this route."
+      unlock_condition="Ask an owner to finish setup."
     />
   );
 }

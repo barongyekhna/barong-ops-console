@@ -4,21 +4,23 @@ import type { Metadata } from "next";
 import { CapabilityEmptyState } from "@/components/capability-empty-state";
 
 export const metadata: Metadata = {
-  title: "Hidden Capability",
+  title: "Logs",
 };
 
 export default function MemoryEventsPage() {
   return (
     <CapabilityEmptyState
       icon={Database}
-      reason="This memory event route is excluded from the production capability graph."
-      required_execution_mode="No execution mode unlocks this placeholder route."
-      required_module_state="system.memory_events must be replaced by durable C17 observability surfaces."
-      required_org_state="Not available through organization module visibility."
-      required_permission="operation_logs.read"
-      state="hidden"
-      title="Capability hidden"
-      unlock_condition="Use the C17 observability center backed by operation logs and trace correlation."
+      next_action_href="/operation-logs"
+      next_action_label="Open logs"
+      reason="This view has moved to Logs."
+      required_execution_mode="View access is available."
+      required_module_state="Logs must be available for this workspace."
+      required_org_state="Active workspace access is required."
+      required_permission="Log access granted by an owner."
+      state="missing_feature"
+      title="Use Logs for operation history"
+      unlock_condition="Open Logs from the sidebar."
     />
   );
 }

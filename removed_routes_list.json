@@ -1,0 +1,15 @@
+{
+  "generated_for": "FRONTEND ROUTE ALIGNMENT FIX (FIX-R01)",
+  "removed_routes": [],
+  "reason": "No sidebar route referenced a missing page, and every sidebar href matched its route_namespace and app router page path.",
+  "non_sidebar_pages": [
+    "/agents",
+    "/artifacts",
+    "/errors",
+    "/memory-events",
+    "/modules",
+    "/products",
+    "/reviews",
+    "/workflows"
+  ]
+}

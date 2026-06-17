@@ -850,13 +850,17 @@ textarea:focus-visible {
   border-radius: 6px;
 }
 
-.capability-empty-state-forbidden .capability-empty-state-icon,
-.capability-empty-state-hidden .capability-empty-state-icon,
-.capability-empty-state-no_execution .capability-empty-state-icon,
-.capability-empty-state-backend_unavailable .capability-empty-state-icon {
+.capability-empty-state-no_permission .capability-empty-state-icon,
+.capability-empty-state-missing_feature .capability-empty-state-icon {
   color: #8a5d13;
   background: #fff2d7;
   border-color: #ebd19e;
+}
+
+.capability-empty-state-no_organization .capability-empty-state-icon {
+  color: #295a74;
+  background: #e5f3fa;
+  border-color: #bfdeeb;
 }
 
 .capability-empty-state-copy {
@@ -2145,7 +2149,6 @@ textarea:focus-visible {
   .users-form-grid,
   .users-role-catalog-grid,
   .user-detail-grid,
-  .capability-requirements,
   .permissions-grant-form,
   .permissions-edit-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2175,7 +2178,6 @@ textarea:focus-visible {
     flex-direction: column;
   }
 
-  .capability-requirements,
   .ops-metric-grid,
   .ops-readiness-list {
     grid-template-columns: 1fr;

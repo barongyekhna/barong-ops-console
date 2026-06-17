@@ -42,27 +42,27 @@ export function ModuleRegistryProductView() {
           </button>
         }
         icon={Boxes}
-        reason={registryError?.message ?? "Module registry is unavailable."}
-        required_execution_mode="No execution mode required for registry read."
-        required_module_state="C18 module registry API must be reachable."
-        required_org_state="Active organization context must allow module registry read."
+        reason={registryError?.message ?? "Product areas are unavailable."}
+        required_execution_mode="View access is available."
+        required_module_state="Product areas must be available."
+        required_org_state="Active workspace access is required."
         required_permission="modules.read"
-        state="backend_unavailable"
-        title="Module registry unavailable"
-        unlock_condition="Restore /modules/registry and /modules/me."
+        state="missing_feature"
+        title="Product areas are unavailable"
+        unlock_condition="Try again after product areas are available."
       />
     );
   }
 
   return (
-    <section className="module-registry-workspace" aria-label="Module registry">
+    <section className="module-registry-workspace" aria-label="Product areas">
       <div className="registry-command-bar">
         <div>
-          <span className="eyebrow">Capability Registry</span>
-          <h2>Module capability map</h2>
+          <span className="eyebrow">Product areas</span>
+          <h2>Workspace product area map</h2>
           <p>
-            Dynamic module list with C18 org visibility, C05 permission state,
-            adapter state, API binding, and PRE20-Q execution mode.
+            Workspace visibility, access state, service mapping, and action
+            readiness for product areas.
           </p>
         </div>
         <button
@@ -82,7 +82,7 @@ export function ModuleRegistryProductView() {
 
       <div className="capability-summary-grid">
         <div>
-          <span>Total modules</span>
+          <span>Total areas</span>
           <strong>{items.length}</strong>
         </div>
         <div>
@@ -114,7 +114,7 @@ export function ModuleRegistryProductView() {
           <strong>{orgContext.state}</strong>
         </div>
         <div>
-          <span>Execution mode</span>
+          <span>Action mode</span>
           <strong>{executionState.execution_mode}</strong>
         </div>
       </div>
@@ -122,7 +122,7 @@ export function ModuleRegistryProductView() {
       {registryUnavailable ? (
         <p className="ops-warning">
           {registryError?.message ??
-            "Registry metadata is unavailable; route metadata fallback is active."}
+            "Product area details are unavailable; navigation remains available."}
         </p>
       ) : null}
 
@@ -130,12 +130,12 @@ export function ModuleRegistryProductView() {
         <table className="module-registry-table">
           <thead>
             <tr>
-              <th>Module</th>
+              <th>Area</th>
               <th>Product state</th>
               <th>Org visibility</th>
               <th>Permission</th>
-              <th>Adapter</th>
-              <th>Execution</th>
+              <th>Setup</th>
+              <th>Actions</th>
               <th>API mapping</th>
             </tr>
           </thead>

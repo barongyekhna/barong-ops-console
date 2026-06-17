@@ -3,10 +3,10 @@ import type { FrontendPermissions } from "./permissions";
 export const HIGH_RISK_CONFIRMATION_TEXT =
   "CONFIRM_HIGH_RISK_PERMISSION";
 export const OWNER_FULL_ACCESS_NOTICE =
-  "Owner 拥有全局全权限，不需要单独授权。";
+  "Owner has full workspace access and does not need separate assignments.";
 export const ROLE_DEFAULT_PERMISSIONS_NOTICE =
-  "这里管理的是显式权限授权。角色默认权限不会自动生效。";
-export const EMPTY_ASSIGNMENTS_NOTICE = "暂无显式授权。";
+  "Manage explicit permission assignments for this user.";
+export const EMPTY_ASSIGNMENTS_NOTICE = "No explicit assignments yet.";
 
 const GLOBAL_PERMISSION_WILDCARD = "*";
 const HIGH_RISK_PERMISSION_KEYS = new Set([
@@ -436,12 +436,12 @@ export function validatePermissionGrantInput(
 ): ValidationResult<PermissionAssignmentCreateInput> {
   const permissionKey = input.permission_key.trim();
   if (!permissionKey) {
-    return { ok: false, message: "请选择要授予的 permission key。" };
+    return { ok: false, message: "Choose a permission before granting access." };
   }
   if (isWildcardPermissionKey(permissionKey)) {
     return {
       ok: false,
-      message: "前端不会授予 wildcard 权限。",
+      message: "Wildcard grants are not available here.",
     };
   }
 
@@ -450,7 +450,7 @@ export function validatePermissionGrantInput(
   if (highRisk && !reason) {
     return {
       ok: false,
-      message: "高风险权限必须填写授权原因。",
+      message: "High-risk permissions require a reason.",
     };
   }
   if (
@@ -461,7 +461,7 @@ export function validatePermissionGrantInput(
     return {
       ok: false,
       message:
-        "高风险权限必须勾选确认，并输入 CONFIRM_HIGH_RISK_PERMISSION。",
+        "High-risk permissions require confirmation text.",
     };
   }
 
@@ -518,7 +518,7 @@ export function validatePermissionUpdateInput(
   if (highRisk && !reason) {
     return {
       ok: false,
-      message: "高风险权限更新必须填写原因。",
+      message: "High-risk permission updates require a reason.",
     };
   }
 
@@ -534,7 +534,7 @@ export function validatePermissionUpdateInput(
     return {
       ok: false,
       message:
-        "高风险权限重新启用或变更 scope 时必须输入 CONFIRM_HIGH_RISK_PERMISSION。",
+        "High-risk permission changes require confirmation text.",
     };
   }
 
@@ -573,7 +573,7 @@ export function validatePermissionRevokeInput(
   if (detectHighRiskPermission(assignment) && !reason) {
     return {
       ok: false,
-      message: "撤销高风险权限必须填写原因。",
+      message: "Revoking a high-risk permission requires a reason.",
     };
   }
 
@@ -622,7 +622,7 @@ function safeApiDetail(message: string) {
 
 export function formatPermissionAssignmentsApiError(
   error: unknown,
-  fallback = "操作失败，请检查权限、重复授权或高风险确认要求。",
+  fallback = "The action could not be completed. Check access, duplicate assignments, or high-risk confirmation.",
 ) {
   if (!isApiErrorLike(error)) {
     return fallback;
@@ -632,16 +632,16 @@ export function formatPermissionAssignmentsApiError(
   const lowerDetail = detail.toLowerCase();
 
   if (error.status === 401) {
-    return "请重新登录后再管理用户权限。";
+    return "Sign in again before managing permissions.";
   }
   if (error.status === 403) {
-    return "只有 owner 可以管理用户权限。";
+    return "Only an owner can manage permissions.";
   }
   if (error.status === 404) {
-    return "未找到目标用户、权限或 assignment，请刷新后重试。";
+    return "The user or assignment was not found. Refresh and try again.";
   }
   if (error.status === 409) {
-    return "该权限 assignment 已存在或当前请求与现有授权冲突。";
+    return "This assignment already exists or conflicts with current access.";
   }
   if (
     error.status === 400 &&
@@ -649,7 +649,7 @@ export function formatPermissionAssignmentsApiError(
       lowerDetail.includes("confirmation") ||
       lowerDetail.includes("reason"))
   ) {
-    return "高风险权限需要填写原因，并完成 CONFIRM_HIGH_RISK_PERMISSION 二次确认。";
+    return "High-risk permissions require a reason and confirmation text.";
   }
   if (error.status === 400) {
     return detail || fallback;

@@ -51,10 +51,10 @@ const RESERVED_ROLE_NAMES = [
   "bot_agent",
 ] as const;
 const RESERVED_ROLE_NOTES: Record<string, string> = {
-  bot_agent: "Bot Agent requires agent identity and token scope design.",
-  module_admin: "Module Admin requires module scope first.",
+  bot_agent: "Automation accounts require a separate identity and token setup.",
+  module_admin: "Area Admin requires scoped access first.",
   owner: "Owner remains bootstrap-only and cannot be created through /users.",
-  super_admin: "Super Admin will be enabled in the later permission system.",
+  super_admin: "Super Admin will be enabled when advanced access controls are available.",
 };
 const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
   {
@@ -68,7 +68,7 @@ const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
   {
     assignable: false,
     c04_status: "reserved_no_permissions",
-    description: "Reserved standard role; no C04 permissions.",
+    description: "Reserved standard role with no workspace permissions.",
     human_or_agent: "human",
     label: "Super Admin",
     name: "super_admin",
@@ -76,9 +76,9 @@ const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
   {
     assignable: false,
     c04_status: "reserved_until_c05_c07",
-    description: "Reserved until module scope is defined.",
+    description: "Reserved until area-level access is available.",
     human_or_agent: "human",
-    label: "Module Admin",
+    label: "Area Admin",
     name: "module_admin",
   },
   {
@@ -108,9 +108,9 @@ const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
   {
     assignable: false,
     c04_status: "reserved_no_login_flow",
-    description: "Reserved for future robot accounts.",
+    description: "Reserved for future automation accounts.",
     human_or_agent: "agent",
-    label: "Bot Agent",
+    label: "Automation Account",
     name: "bot_agent",
   },
 ];
@@ -346,7 +346,7 @@ export function UserManagementPanel() {
       !assignableRoleNames.has(createRole)
     ) {
       setActionError(
-        "Choose one of the current assignable C04 roles before creating the account.",
+        "Choose one of the current assignable roles before creating the account.",
       );
       return;
     }
@@ -476,7 +476,7 @@ export function UserManagementPanel() {
       !assignableRoleNames.has(detailRole)
     ) {
       setActionError(
-        "Choose one of the current assignable C04 roles before saving.",
+        "Choose one of the current assignable roles before saving.",
       );
       return;
     }
@@ -653,11 +653,11 @@ export function UserManagementPanel() {
       <section className="users-role-catalog-panel" aria-label="Role catalog">
         <div className="users-panel-heading">
           <div>
-            <span className="eyebrow">C04 role catalog</span>
+            <span className="eyebrow">Role catalog</span>
             <h3>Roles</h3>
             <p>
-              User Management reads role labels and selectable roles from the
-              owner-only role catalog. Full RBAC is planned for C05.
+              Users reads role labels and selectable roles from the owner-only
+              role catalog.
             </p>
           </div>
           <button
@@ -703,7 +703,7 @@ export function UserManagementPanel() {
             </div>
 
             <div className="users-role-group">
-              <h4>Reserved roles, not assignable in C04</h4>
+              <h4>Reserved roles</h4>
               <ul>
                 {reservedRoleOptions.map((role) => (
                   <li key={role.name}>
@@ -714,7 +714,9 @@ export function UserManagementPanel() {
                   </li>
                 ))}
               </ul>
-              <p className="users-muted-note">Full RBAC is planned for C05.</p>
+              <p className="users-muted-note">
+                Advanced access controls will be enabled when they are ready.
+              </p>
             </div>
           </div>
         ) : null}
@@ -898,7 +900,7 @@ export function UserManagementPanel() {
                             className="secondary-button"
                             disabled={isBusy}
                             onClick={() => void handleOpenPermissions(target)}
-                            title="权限管理"
+                            title="Manage permissions"
                             type="button"
                           >
                             {pendingAction === `detail-${target.id}` ? (
@@ -910,7 +912,7 @@ export function UserManagementPanel() {
                             ) : (
                               <ShieldCheck aria-hidden="true" size={17} />
                             )}
-                            权限
+                            Permissions
                           </button>
 
                           {target.is_active ? (
@@ -1090,9 +1092,9 @@ export function UserManagementPanel() {
             </form>
           ) : (
             <p className="users-muted-note">
-              Owner and reserved roles are displayed for audit context. C04C
-              does not allow changing owner, super admin, module admin, or bot
-              agent roles.
+              Owner and reserved roles are displayed for audit context. Owner,
+              super admin, area admin, and automation account roles cannot be
+              changed here.
             </p>
           )}
 

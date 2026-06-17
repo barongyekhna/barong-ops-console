@@ -1,0 +1,88 @@
+{
+  "generated_for": "FRONTEND ROUTE ALIGNMENT FIX (FIX-R01)",
+  "route_base": "frontend/src/app/(console)",
+  "source_files": [
+    "frontend/src/lib/navigation.ts",
+    "frontend/src/components/console-shell.tsx"
+  ],
+  "sidebar_routes": [
+    {
+      "group": "Core",
+      "label": "Users",
+      "href": "/users",
+      "route_namespace": "/users",
+      "page_file": "frontend/src/app/(console)/users/page.tsx",
+      "module_key": "admin.users",
+      "status": "aligned"
+    },
+    {
+      "group": "Core",
+      "label": "Organizations",
+      "href": "/organizations",
+      "route_namespace": "/organizations",
+      "page_file": "frontend/src/app/(console)/organizations/page.tsx",
+      "module_key": "admin.organizations",
+      "status": "aligned"
+    },
+    {
+      "group": "Core",
+      "label": "Permissions",
+      "href": "/permissions",
+      "route_namespace": "/permissions",
+      "page_file": "frontend/src/app/(console)/permissions/page.tsx",
+      "module_key": "admin.permissions",
+      "status": "aligned"
+    },
+    {
+      "group": "Operations",
+      "label": "Logs",
+      "href": "/operation-logs",
+      "route_namespace": "/operation-logs",
+      "page_file": "frontend/src/app/(console)/operation-logs/page.tsx",
+      "module_key": "system.operation_logs",
+      "status": "aligned"
+    },
+    {
+      "group": "Operations",
+      "label": "Approvals",
+      "href": "/approvals",
+      "route_namespace": "/approvals",
+      "page_file": "frontend/src/app/(console)/approvals/page.tsx",
+      "module_key": "business.approvals",
+      "status": "aligned"
+    },
+    {
+      "group": "Operations",
+      "label": "Jobs (Records)",
+      "href": "/jobs",
+      "route_namespace": "/jobs",
+      "page_file": "frontend/src/app/(console)/jobs/page.tsx",
+      "module_key": "business.jobs",
+      "status": "aligned"
+    },
+    {
+      "group": "System",
+      "label": "Dashboard",
+      "href": "/dashboard",
+      "route_namespace": "/dashboard",
+      "page_file": "frontend/src/app/(console)/dashboard/page.tsx",
+      "module_key": "core.dashboard",
+      "status": "aligned"
+    },
+    {
+      "group": "System",
+      "label": "Settings",
+      "href": "/settings",
+      "route_namespace": "/settings",
+      "page_file": "frontend/src/app/(console)/settings/page.tsx",
+      "module_key": "admin.settings",
+      "status": "aligned"
+    }
+  ],
+  "summary": {
+    "sidebar_route_count": 8,
+    "missing_page_count": 0,
+    "route_namespace_mismatch_count": 0,
+    "removed_route_count": 0
+  }
+}

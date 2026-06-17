@@ -1,0 +1,69 @@
+# PRE20-ALIGN Product Readiness Scorecard
+
+| Dimension | Score | Status | Rationale |
+|---|---:|---|---|
+| Frontend productization | 38/100 | Engineering surface | User management works, but most pages are read-only, actionless, or expose internal C-label semantics. |
+| Backend alignment | 64/100 | Partially aligned platform | Gates, tenant checks, persistence, and APIs exist, but execution is metadata/mock-only and many capabilities are not product-bound. |
+| DB consistency | 76/100 | Mostly tenant-shaped | Most business and observability tables have org_id; remaining drift is concentrated in permission assignments, callback transitions, global identity/session/security state, and static registries. |
+| Overall alignment | 59/100 | Internal platform | Backend and DB are ahead of the product UI; full feature chains are incomplete. |
+
+## What The System Can Do Now
+
+| Capability | Current Real State |
+|---|---|
+| User management | UI can create, edit, disable, enable, reset password, and manage permissions. |
+| Read operational data | UI can list jobs, artifacts, reviews, errors, operation logs, modules, agents, and workflows. |
+| Dashboard health | UI can show backend health, operation log projections, approval counts, module readiness, permission status, and live gate readiness. |
+| Tenant persistence | Core jobs/artifacts/reviews/approvals/memory/operation/C17/C15/PRE20 ops records are mostly org_id scoped. |
+| Execution gating | Backend can evaluate execution requests through C05/C12/C13/C14/C18/C09/C10 controls. |
+| Callback/DLQ persistence | Backend can persist callback, result, DLQ, callback_state, and dlq_state records. |
+
+## What The System Cannot Do From UI
+
+| Missing Product Workflow | Blocking Layer |
+|---|---|
+| Create/switch organizations | Frontend/proxy |
+| Manage org members | Frontend/proxy |
+| Manage API keys | All layers |
+| Trigger module execution | Frontend/proxy/runtime |
+| Approve/reject approvals | Frontend/proxy |
+| Create jobs/artifacts/reviews/errors | Frontend/proxy |
+| Submit review decisions | Frontend/proxy |
+| Edit live gate policy, canary, rollback | Frontend/proxy |
+| Operate C15 callback/DLQ/replay | Frontend/proxy |
+| Operate C17 anomaly/replay | Frontend/proxy/product API |
+| Manage module/agent/workflow registries | Frontend/proxy |
+
+## Hidden Backend Capabilities
+
+| Hidden Capability | Why It Is Not Productized |
+|---|---|
+| Org and membership management | No UI/proxy binding |
+| Module binding and sharing | No UI/proxy binding |
+| Approval write workflow | Dashboard is read-only |
+| Module adapter action request | UI disabled and proxy POST missing |
+| Live gate writes | GET-only UI/proxy |
+| C15 callback/failure/DLQ/replay | No product workflow |
+| C17 anomaly/replay/audit storage | No product workflow |
+| Registry writes | Product pages are read-only |
+| C14 dependency/binding management | Control-plane/engineering-only |
+
+## Engineering-Only Exposure
+
+| Exposure | Product Risk |
+|---|---|
+| C17/C18/C12/C15/C05/PRE20-Q labels | Users see implementation milestones instead of product concepts |
+| Adapter contract/provider metadata | Users see integration internals rather than actions |
+| Mock/no-execution/read-only badges | Product appears unfinished or intentionally disabled |
+| System Operations Control Center copy | Dashboard frames the app as a control plane |
+| Capability registry language | Navigation and pages describe architecture rather than user outcomes |
+
+## Final Classification
+
+| Question | Answer |
+|---|---|
+| Is the system truly a product? | No |
+| Is it still an engineering platform? | Yes |
+| Main blocker | Product workflows do not close across UI -> API -> backend runtime -> DB for orgs, execution, approvals, live operations, C15 recovery, API keys, and record creation. |
+| Best next phase | PRE20-PRODUCT FINAL should focus on productizing complete feature chains, hiding internal C-labels, and deciding the remaining DB tenant-shape gaps before adding new capabilities. |
+

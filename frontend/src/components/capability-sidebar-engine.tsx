@@ -10,12 +10,12 @@ const CAPABILITY_BADGE_LABELS: Record<
   Exclude<ProductCapabilityBadge, null>,
   string
 > = {
-  adapter_pending: "Adapter pending",
-  backend_unavailable: "Backend unavailable",
+  adapter_pending: "Setup needed",
+  backend_unavailable: "Unavailable",
   locked: "Locked",
-  mock: "Mock",
-  no_execution: "No execution",
-  read_only: "Read-only",
+  mock: "Preview",
+  no_execution: "Setup needed",
+  read_only: "Limited",
 };
 
 export function CapabilitySidebarEngine({
@@ -31,7 +31,17 @@ export function CapabilitySidebarEngine({
     registryError,
     registryUnavailable,
     sidebarItems,
+    uiState,
   } = useFrontendCapabilityState();
+  const footerLabel = isLoading
+    ? "Loading workspace"
+    : uiState === "fallback"
+      ? "Fallback mode"
+      : uiState === "degraded"
+        ? "Degraded mode"
+        : registryUnavailable
+          ? (registryError?.message ?? "Workspace navigation unavailable")
+          : `${sidebarItems.length} product areas`;
 
   return (
     <>
@@ -63,7 +73,7 @@ export function CapabilitySidebarEngine({
                   title={
                     locked || unavailable
                       ? item.reason
-                      : `${item.label}: ${item.required_permission}`
+                      : item.label
                   }
                 >
                   <Icon aria-hidden="true" size={18} />
@@ -89,11 +99,7 @@ export function CapabilitySidebarEngine({
 
       <div className="sidebar-footer">
         <span className="environment-dot" />
-        {isLoading
-          ? "Resolving capability graph"
-          : registryUnavailable
-            ? (registryError?.message ?? "Capability registry unavailable")
-            : `${sidebarItems.length} product capabilities`}
+        {footerLabel}
       </div>
     </>
   );

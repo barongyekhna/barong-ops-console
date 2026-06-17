@@ -1,0 +1,666 @@
+{
+  "audit_id": "PRE20-ALIGN",
+  "title": "System Alignment Full Stack Audit",
+  "repository": "barong-ops-console",
+  "audit_date": "2026-06-17",
+  "scope": {
+    "frontend": true,
+    "backend": true,
+    "database": true,
+    "excluded": [
+      "C19 IM system",
+      "production migration execution",
+      "execution engine modification",
+      "permission logic modification",
+      "code refactor or repair"
+    ],
+    "method": "static source audit, SQLAlchemy metadata import, Alembic migration review, frontend route and proxy allowlist review"
+  },
+  "executive_conclusion": {
+    "answer": "Still an engineering platform, not yet a true product.",
+    "reason": "The backend and DB contain many durable capabilities, and tenant scoping is mostly present for core business records. The frontend, however, exposes mostly read-only control-plane surfaces with engineering labels, disabled action shells, and missing workflows for organization management, execution, approvals, live gate writes, API keys, and record creation. Several backend APIs and DB-backed capabilities are hidden from the product UI or blocked by the frontend proxy allowlist."
+  },
+  "alignment_scores": {
+    "frontend_productization_score": 38,
+    "backend_alignment_score": 64,
+    "db_consistency_score": 76,
+    "overall_system_alignment_score": 59,
+    "scale": "0-100",
+    "interpretation": {
+      "0_39": "engineering-only or prototype surface",
+      "40_69": "partially aligned internal platform",
+      "70_84": "productizing but still missing complete workflow closure",
+      "85_100": "product-ready full-stack alignment"
+    }
+  },
+  "database_alignment_audit": {
+    "summary": "Core C18 tenant scope is mostly persisted for jobs, artifacts, reviews, approvals, memory, operation logs, C17 observability, and C15 callback/DLQ state. Remaining risk is concentrated in transition/history rows, permission assignment scope, global identity/session state, static registries, and nonstandard shared-module scoping.",
+    "missing_org_id_tables": [
+      {
+        "table": "callback_state_transitions",
+        "severity": "high",
+        "classification": "business execution history",
+        "finding": "Transition history has no org_id column and is not directly tenant-filterable by C18G loader criteria.",
+        "impact": "Callback lifecycle history can become globally addressable unless every access joins through callback_state and enforces org scope."
+      },
+      {
+        "table": "user_permission_assignments",
+        "severity": "high",
+        "classification": "permission business state",
+        "finding": "Assignments use scope_type and scope_key but no org_id column.",
+        "impact": "Org-scoped permission rows rely on convention instead of DB-level tenant shape and are not automatically covered by C18G org filtering."
+      },
+      {
+        "table": "shared_modules",
+        "severity": "medium",
+        "classification": "cross-org business state",
+        "finding": "Uses source_org_id and target_org_id instead of standard org_id.",
+        "impact": "Legitimate cross-org model, but it is outside automatic org_id filtering and requires explicit query discipline."
+      },
+      {
+        "table": "users",
+        "severity": "medium",
+        "classification": "global identity state",
+        "finding": "No org_id column.",
+        "impact": "Global identity may be intentional, but product user management must avoid presenting users as tenant-local unless membership filtering is applied."
+      },
+      {
+        "table": "auth_sessions",
+        "severity": "medium",
+        "classification": "global session state",
+        "finding": "No org_id column.",
+        "impact": "Session state is platform-global and must not be used as a tenant-specific authorization boundary."
+      },
+      {
+        "table": "security_rate_limit_buckets",
+        "severity": "medium",
+        "classification": "global security state",
+        "finding": "No org_id column.",
+        "impact": "Rate limit keys are global operational state; this is acceptable only if keys encode tenant scope where needed."
+      },
+      {
+        "table": "security_replay_nonces",
+        "severity": "medium",
+        "classification": "global security state",
+        "finding": "No org_id column.",
+        "impact": "Replay protection is global operational state; tenant isolation is not DB-native."
+      },
+      {
+        "table": "agent_registry",
+        "severity": "low",
+        "classification": "global registry",
+        "finding": "No org_id column.",
+        "impact": "Likely intentional metadata registry; safe only while treated as global catalog metadata."
+      },
+      {
+        "table": "module_registry",
+        "severity": "low",
+        "classification": "global registry",
+        "finding": "No org_id column.",
+        "impact": "Likely intentional metadata registry; tenant activation is expected through module_bindings."
+      },
+      {
+        "table": "workflow_registry",
+        "severity": "low",
+        "classification": "global registry",
+        "finding": "No org_id column.",
+        "impact": "Likely intentional metadata registry; safe only as global template metadata."
+      },
+      {
+        "table": "permission_registry",
+        "severity": "low",
+        "classification": "global registry",
+        "finding": "No org_id column.",
+        "impact": "Global permission catalog is expected, but assignments remain a separate org-scope risk."
+      },
+      {
+        "table": "role_default_permissions",
+        "severity": "low",
+        "classification": "global role template",
+        "finding": "No org_id column.",
+        "impact": "Global defaults are expected if not treated as tenant-specific grants."
+      }
+    ],
+    "c19_excluded_org_id_findings": [
+      {
+        "table": "messages",
+        "finding": "No org_id column, excluded by audit constraint."
+      },
+      {
+        "table": "contact_identities",
+        "finding": "Has org_id, excluded by audit constraint."
+      }
+    ],
+    "tenant_safe_business_tables": [
+      "approval_requests",
+      "approval_workflows",
+      "approval_decisions",
+      "automation_jobs",
+      "job_events",
+      "artifacts",
+      "review_items",
+      "system_errors",
+      "operation_logs",
+      "memory_events",
+      "memory_summaries",
+      "agent_memory_access_logs",
+      "context_packets",
+      "module_bindings",
+      "organizations",
+      "org_memberships",
+      "execution_callbacks",
+      "execution_results",
+      "execution_dlq",
+      "callback_state",
+      "dlq_state",
+      "event_streams",
+      "audit_logs",
+      "replay_jobs",
+      "anomaly_events",
+      "storage_events",
+      "ops_alerts",
+      "ops_alert_deliveries",
+      "ops_live_gate_policies",
+      "ops_canary_rollouts",
+      "ops_rollback_guards",
+      "ops_execution_unlock_tokens"
+    ],
+    "memory_only_state": [
+      {
+        "component": "C08 module adapter registry",
+        "state": "Static in-code adapter contracts.",
+        "impact": "Not DB-backed; product cannot manage adapter definitions as data."
+      },
+      {
+        "component": "C09 execution provider registry",
+        "state": "Static in-code provider contracts.",
+        "impact": "Not DB-backed; provider availability is metadata, not a configurable runtime inventory."
+      },
+      {
+        "component": "C10 sandbox runtime",
+        "state": "Mock-only request-bound memory/log/state references.",
+        "impact": "No real runtime state or provider execution persistence."
+      },
+      {
+        "component": "EventQueueBackend worker",
+        "state": "Queue counters and drain worker are in process memory.",
+        "impact": "Source events are DB-backed, but operational queue state is not durable."
+      },
+      {
+        "component": "LiveGatingController memory policy fallback",
+        "state": "In-memory policy map exists for non-DB use.",
+        "impact": "DB-backed controller exists, but fallback can diverge in tests or non-DB paths."
+      },
+      {
+        "component": "InMemoryStorageAdapter",
+        "state": "Memory adapter exists for design/test use.",
+        "impact": "Safe as a non-production adapter, but it confirms C17 has memory-only code paths."
+      },
+      {
+        "component": "Execution action request/plan",
+        "state": "No durable first-class execution request or execution plan table was found.",
+        "impact": "Execution routing decisions are returned but not product-traceable as tenant records."
+      }
+    ],
+    "schema_drift_from_c05_baseline": [
+      {
+        "area": "Permissions",
+        "baseline": "C05 created permission_registry, user_permission_assignments, and role_default_permissions.",
+        "current": "Permission assignments remain non-org_id scoped and rely on scope_type/scope_key; unified permission semantics now constrain owner access to platform admin/system categories instead of blanket owner full access.",
+        "severity": "high"
+      },
+      {
+        "area": "Core tenant records",
+        "baseline": "F07 core records were created without tenant scope.",
+        "current": "C18 migration added org_id to jobs, events, artifacts, reviews, approvals, memory, and operation logs.",
+        "severity": "resolved"
+      },
+      {
+        "area": "C15 durable execution state",
+        "baseline": "No C05 equivalent.",
+        "current": "execution_callbacks, execution_results, execution_dlq, callback_state, and dlq_state are DB-backed with org_id; callback_state_transitions lacks org_id.",
+        "severity": "medium"
+      },
+      {
+        "area": "C17 observability",
+        "baseline": "No C05 equivalent.",
+        "current": "event_streams, audit_logs, replay_jobs, anomaly_events, and storage_events are DB-backed with org_id, but query paths can fall back to platform/no explicit org filter.",
+        "severity": "medium"
+      },
+      {
+        "area": "PRE20 operations/live gate",
+        "baseline": "No C05 equivalent.",
+        "current": "ops alerts, canary, rollback, live gate policies, and unlock tokens are DB-backed with org_id.",
+        "severity": "aligned"
+      }
+    ],
+    "unsafe_global_tables": [
+      "callback_state_transitions",
+      "user_permission_assignments",
+      "shared_modules",
+      "users",
+      "auth_sessions",
+      "security_rate_limit_buckets",
+      "security_replay_nonces"
+    ]
+  },
+  "backend_alignment_audit": {
+    "summary": "Backend has strong gating and durable support services, but actual execution remains mock/metadata-only. Many write APIs exist without frontend productization. Permission semantics are centralized, but C05 owner-full-access expectations and C18F/RBAC behavior are not fully aligned.",
+    "backend_capability_map": [
+      {
+        "capability": "C08 adapter execution path",
+        "status": "metadata_only",
+        "evidence": "module_adapter_registry defines static adapter contracts; module_adapters action request route validates and delegates to execution unlock flow.",
+        "gap": "Adapters are not executable implementations and are not product-managed."
+      },
+      {
+        "capability": "C09 provider registry",
+        "status": "metadata_only",
+        "evidence": "execution_provider_registry declares provider contracts and blocks live/external/callback capability.",
+        "gap": "No runtime provider binding, endpoint, secret, or dispatch implementation."
+      },
+      {
+        "capability": "C10 sandbox runtime",
+        "status": "mock_only",
+        "evidence": "sandbox runtime declares disabled_execution and mock_only capability.",
+        "gap": "No real runtime process, external provider execution, filesystem/network execution, or DB-writing execution engine."
+      },
+      {
+        "capability": "C13 live gate enforcement",
+        "status": "enforced",
+        "evidence": "execution_flow_gate blocks missing C08/C09/C10/C12/C14/C18/C05 conditions and requires live gate allow for live mode.",
+        "gap": "Gate is stronger than product surface; UI mainly reads readiness and cannot operate policies."
+      },
+      {
+        "capability": "C15 workflow dispatch pipeline",
+        "status": "safe_but_non_executing",
+        "evidence": "execution_dispatch_pipeline delegates to execution_unlock_flow and router; no direct webhook/external execution.",
+        "gap": "Accepted dispatch does not equal actual provider execution or durable product workflow completion."
+      },
+      {
+        "capability": "C15 callback and DLQ",
+        "status": "mostly_db_backed",
+        "evidence": "execution_callbacks, execution_results, execution_dlq, callback_state, and dlq_state are persisted.",
+        "gap": "callback_state_transitions lacks org_id; fallback org_id platform can hide missing tenant context."
+      },
+      {
+        "capability": "C17 observability",
+        "status": "db_backed_with_memory_queue",
+        "evidence": "event_streams, audit_logs, replay_jobs, anomaly_events, and storage_events are persisted.",
+        "gap": "Queue counters are memory-only; query paths can read without explicit org filter; anomaly/replay capabilities are not productized."
+      },
+      {
+        "capability": "Permission system",
+        "status": "centralized_but_semantic_drift",
+        "evidence": "UnifiedPermissionEngine combines C05 permission keys, C18F org isolation, memberships, module bindings, and RBAC metadata gates.",
+        "gap": "C05 owner-full-access semantics drifted; user_permission_assignments are not org_id scoped; require_owner remains a separate bypass gate for user/permission admin routes."
+      },
+      {
+        "capability": "Product records",
+        "status": "db_backed",
+        "evidence": "jobs, artifacts, reviews, errors, approvals, memory, and operation logs have DB routes.",
+        "gap": "Frontend exposes mostly list/read surfaces and omits create/decision workflows."
+      },
+      {
+        "capability": "Operations/live gate",
+        "status": "db_backed_read_mostly_from_ui",
+        "evidence": "live gate policy/canary/rollback/unlock tables and APIs exist.",
+        "gap": "Frontend proxy and UI expose GET readiness/policies only, not writes."
+      }
+    ],
+    "missing_runtime_bindings": [
+      "No real provider invocation behind C09 contracts.",
+      "No DB-backed provider registry management surface.",
+      "No DB-backed adapter registry management surface.",
+      "No first-class execution request or execution plan persistence table.",
+      "No frontend proxy binding for POST /module-adapters/{adapter_key}/actions/{action_key}/request.",
+      "No product UI binding for C15 failure handling, DLQ replay, callback binding, or callback results.",
+      "No external execution callback/webhook path connected to a product workflow.",
+      "No API key management data model/API/UI found."
+    ],
+    "mock_only_components": [
+      "C10 SandboxRuntime",
+      "C10 SandboxRunner",
+      "C08 adapter contract registry",
+      "C09 provider contract registry",
+      "InMemoryStorageAdapter",
+      "AdapterSurfaceShell disabled action buttons",
+      "foundation/n8n test or design endpoints",
+      "jobs/artifacts/reviews demo-style create paths that do not trigger execution"
+    ],
+    "execution_non_aligned_paths": [
+      {
+        "path": "UI adapter action",
+        "finding": "Frontend displays provider/action status as disabled buttons.",
+        "impact": "No user can initiate execution from the product UI."
+      },
+      {
+        "path": "Frontend proxy to module action request",
+        "finding": "Next backend proxy allows GET module-adapters endpoints but not POST action request.",
+        "impact": "Even if UI added a button, the browser-facing proxy would block it."
+      },
+      {
+        "path": "Backend action request to provider",
+        "finding": "Execution router resolves metadata and gate status but does not invoke live providers.",
+        "impact": "Backend capability is a gated plan, not execution."
+      },
+      {
+        "path": "Dispatch pipeline without DB session",
+        "finding": "Dispatch can call unlock flow without an explicit DB session.",
+        "impact": "Live C12 validation and durable context are incomplete in non-API call sites."
+      },
+      {
+        "path": "C15 state transitions",
+        "finding": "callback_state_transitions are durable but not org_id scoped.",
+        "impact": "Execution history is not fully tenant-safe at table shape level."
+      }
+    ],
+    "permission_alignment_gaps": [
+      {
+        "gap": "C05 owner semantics drift",
+        "detail": "Permission service no longer reports owner full access, while C05 baseline language expected owner global full access."
+      },
+      {
+        "gap": "Assignment table tenant shape",
+        "detail": "user_permission_assignments relies on scope_type/scope_key instead of org_id."
+      },
+      {
+        "gap": "Owner/admin route bypass",
+        "detail": "require_owner is still used as a separate gate for user and permission admin operations."
+      },
+      {
+        "gap": "Control-plane RBAC vs org isolation",
+        "detail": "require_rbac uses platform metadata gates; org isolation only applies where org context is established."
+      }
+    ]
+  },
+  "frontend_productization_audit": {
+    "summary": "Frontend has a capability-aware shell and usable user/permission management, but most operational pages are read-only lists or engineering dashboards. Internal labels C17, C18, C12, C15, C05, and PRE20-Q remain visible. Product workflows for orgs, execution, approvals, live gate writes, API keys, and record creation are missing.",
+    "sidebar_capability_driven": {
+      "status": "partial",
+      "evidence": "navigation is static by group but enriched by useFrontendCapabilityState and capability-sidebar badges.",
+      "gap": "It still shows engineering states such as Adapter pending, Mock, No execution, Read-only, and omits several backend capabilities."
+    },
+    "dashboard_product_ui": {
+      "status": "no",
+      "evidence": "Dashboard title and tiles expose System Operations Control Center, C17 observability, C12 approvals, C18 module readiness, C05 permissions, and PRE20-Q live gate.",
+      "gap": "This is a control-plane/operator dashboard, not a user-facing product workflow."
+    },
+    "readonly_pages": [
+      "/jobs",
+      "/artifacts",
+      "/reviews",
+      "/errors",
+      "/agents",
+      "/workflows",
+      "/operation-logs",
+      "/modules",
+      "/memory-events"
+    ],
+    "dead_ui_or_non_clickable_features": [
+      {
+        "surface": "AdapterSurfaceShell / ExecutionProviderStatusShell",
+        "finding": "Action/provider buttons are disabled and explain that execution is not connected."
+      },
+      {
+        "surface": "CapabilityRecordList pages",
+        "finding": "Most pages expose Refresh/Retry only, no create/update/action layer."
+      },
+      {
+        "surface": "Dashboard approval and live gate cards",
+        "finding": "Cards read state but do not approve/reject, request approval, update policy, or roll back."
+      },
+      {
+        "surface": "/products and /settings",
+        "finding": "Routes exist as empty capability states with no backend workflow."
+      }
+    ],
+    "engineering_labels_exposed": [
+      "C17",
+      "C18",
+      "C12",
+      "C15",
+      "C05",
+      "PRE20-Q",
+      "Adapter contract",
+      "Execution provider",
+      "Mock",
+      "No execution",
+      "Control Center",
+      "Capability registry"
+    ],
+    "feature_entry_check": [
+      {
+        "feature": "user management create/edit/disable",
+        "ui": "present",
+        "backend": "present",
+        "db": "global users/auth state plus permissions/memberships",
+        "status": "aligned_with_global_identity_caveat"
+      },
+      {
+        "feature": "org management create/switch",
+        "ui": "missing",
+        "backend": "present",
+        "db": "present",
+        "status": "not_productized"
+      },
+      {
+        "feature": "API key management",
+        "ui": "missing",
+        "backend": "not_found",
+        "db": "not_found",
+        "status": "absent"
+      },
+      {
+        "feature": "permission assignment UI",
+        "ui": "present under users",
+        "backend": "present",
+        "db": "present but no org_id",
+        "status": "partially_aligned"
+      },
+      {
+        "feature": "execution controls UI",
+        "ui": "disabled/read-only",
+        "backend": "gated metadata request path present",
+        "db": "callback/DLQ durable but no execution request table",
+        "status": "broken_chain"
+      },
+      {
+        "feature": "module action UI",
+        "ui": "disabled/read-only",
+        "backend": "POST action request exists",
+        "db": "no first-class action request table",
+        "status": "broken_chain"
+      },
+      {
+        "feature": "approval action UI",
+        "ui": "missing",
+        "backend": "approve/reject present",
+        "db": "present",
+        "status": "not_productized"
+      },
+      {
+        "feature": "live gate write controls",
+        "ui": "missing",
+        "backend": "present",
+        "db": "present",
+        "status": "not_productized"
+      },
+      {
+        "feature": "record creation for jobs/artifacts/reviews",
+        "ui": "missing",
+        "backend": "present",
+        "db": "present",
+        "status": "not_productized"
+      }
+    ]
+  },
+  "cross_layer_alignment": {
+    "orphan_backend_apis": [
+      "POST/PATCH/DELETE org management and membership endpoints",
+      "Module binding, visibility, and shared module endpoints",
+      "POST jobs, job events, artifacts, reviews, review decisions, errors, memory events, context packets",
+      "Approval request/detail/approve/reject endpoints",
+      "POST /module-adapters/{adapter_key}/actions/{action_key}/request",
+      "Live gate policy upsert, canary, rollback, and unlock operations",
+      "C15 callback handler, callback bindings, result binding, failure handling, DLQ replay, webhook ingress",
+      "Control-plane create/update paths for modules, agents, and workflows",
+      "C14 external dependency, AI binding, model lock, capability binding, workflow binding, allocation, execution prompt management"
+    ],
+    "orphan_frontend_routes": [
+      {
+        "route": "/products",
+        "finding": "Empty state only; no backend product workflow found."
+      },
+      {
+        "route": "/settings",
+        "finding": "Empty state only; no backend settings workflow found."
+      },
+      {
+        "route": "/memory-events",
+        "finding": "Hidden/excluded in navigation semantics while proxy/API still support reads."
+      },
+      {
+        "route": "/dashboard",
+        "finding": "Aggregates backend internals rather than closing user workflows."
+      }
+    ],
+    "unexposed_db_capabilities": [
+      "organizations and org_memberships",
+      "module_bindings and shared_modules",
+      "execution_callbacks, execution_results, execution_dlq, callback_state, dlq_state",
+      "event_streams, audit_logs, replay_jobs, anomaly_events, storage_events",
+      "ops_live_gate_policies, ops_canary_rollouts, ops_rollback_guards, ops_execution_unlock_tokens",
+      "approval_decisions",
+      "context_packets and memory summaries",
+      "ops_alerts and ops_alert_deliveries"
+    ],
+    "api_exists_but_not_ui_bound": [
+      "approval approve/reject",
+      "module adapter action request",
+      "org create/update/switch-style operations",
+      "module bind/share operations",
+      "live gate policy/canary/rollback writes",
+      "C15 callback/DLQ/replay operations",
+      "jobs/artifacts/reviews/errors create operations",
+      "control-plane registry writes"
+    ],
+    "frontend_feature_without_backend_api": [
+      "/products capability placeholder",
+      "/settings capability placeholder",
+      "disabled execution provider action buttons as product-visible affordances"
+    ],
+    "broken_feature_chains": [
+      {
+        "feature": "Module execution",
+        "frontend": "Adapter/action surface is visible but disabled.",
+        "proxy": "POST action request is not allowlisted.",
+        "backend": "Action request route and gates exist, but provider/runtime are metadata/mock only.",
+        "database": "Callback/DLQ records exist; first-class execution request/plan record not found.",
+        "result": "broken"
+      },
+      {
+        "feature": "Organization management",
+        "frontend": "No org create/switch/member UI.",
+        "proxy": "Org routes are not product-bound.",
+        "backend": "Org and membership APIs exist.",
+        "database": "organizations and org_memberships exist.",
+        "result": "backend_and_db_hidden"
+      },
+      {
+        "feature": "Approvals",
+        "frontend": "Dashboard reads approval list only.",
+        "proxy": "Only approval/list is allowlisted.",
+        "backend": "request/detail/approve/reject exist.",
+        "database": "approval requests/workflows/decisions are tenant-scoped.",
+        "result": "read_only_product_gap"
+      },
+      {
+        "feature": "Live gate operations",
+        "frontend": "Readiness/policy read status only.",
+        "proxy": "GET-only live gate allowlist.",
+        "backend": "Policy/canary/rollback writes exist.",
+        "database": "Ops live gate tables are tenant-scoped.",
+        "result": "write_path_hidden"
+      },
+      {
+        "feature": "C17 anomalies/replay",
+        "frontend": "Operation logs page projects C17 status, no anomaly/replay workflow.",
+        "proxy": "No anomaly/replay product endpoint is exposed.",
+        "backend": "DB anomaly engine and replay_jobs table exist.",
+        "database": "anomaly_events and replay_jobs are tenant-scoped.",
+        "result": "db_and_backend_unexposed"
+      },
+      {
+        "feature": "Permission assignment",
+        "frontend": "Embedded user permission management exists.",
+        "proxy": "Permission assignment endpoints are allowlisted.",
+        "backend": "Unified permission engine handles grants.",
+        "database": "assignment table lacks org_id.",
+        "result": "usable_but_tenant_shape_gap"
+      },
+      {
+        "feature": "API keys",
+        "frontend": "No entry.",
+        "proxy": "No route.",
+        "backend": "No API key management API found.",
+        "database": "No API key table found.",
+        "result": "absent"
+      }
+    ]
+  },
+  "product_gap_analysis": {
+    "what_system_can_do_now": [
+      "Authenticate and operate an owner/admin console session.",
+      "Manage users from UI, including create, edit, disable, enable, reset password, and embedded permission assignment.",
+      "List jobs, artifacts, reviews, errors, modules, agents, workflows, and operation logs.",
+      "Show a dashboard with health, C17-style operation log projections, approval counts, module readiness, permission status, and live gate readiness.",
+      "Persist tenant-scoped jobs, artifacts, reviews, approvals, memory, operation logs, C17 observability records, C15 callback/DLQ state, and PRE20 ops/live gate records.",
+      "Evaluate execution requests through permission, tenant, approval, provider, runtime, dependency, and live gate controls.",
+      "Persist C15 callback, result, DLQ, and failure state when invoked through backend paths."
+    ],
+    "what_system_cannot_do_from_ui": [
+      "Create or switch organizations.",
+      "Manage organization memberships or module bindings.",
+      "Manage API keys.",
+      "Trigger module execution or adapter actions.",
+      "Approve or reject approval requests.",
+      "Create jobs, artifacts, reviews, errors, memory events, or context packets.",
+      "Submit review decisions.",
+      "Edit live gate policies, start canaries, roll back, or issue unlock operations.",
+      "Inspect or operate C15 callback/DLQ/replay workflows.",
+      "Operate C17 anomaly/replay/audit storage as product workflows.",
+      "Create or manage module, agent, or workflow registry records from product pages."
+    ],
+    "backend_exists_but_not_productized": [
+      "Organization and membership management",
+      "Module binding, visibility, and sharing",
+      "Approval request/detail/approve/reject",
+      "Job, artifact, review, error, memory, and context creation",
+      "Module adapter action request",
+      "Live gate write operations",
+      "C15 callback, failure handling, DLQ replay, and webhook ingress",
+      "C17 anomaly/replay storage",
+      "Control-plane registry writes",
+      "C14 dependency and binding management"
+    ],
+    "still_engineering_only": [
+      "C17 observability labels and projections",
+      "C18 tenant/module readiness language",
+      "C12 approval internals",
+      "C15 callback/DLQ/workflow dispatch internals",
+      "C05 permission baseline language",
+      "PRE20-Q live gate wording",
+      "Adapter contract and execution provider metadata surfaces",
+      "Mock/no-execution badges and disabled execution controls"
+    ]
+  },
+  "required_artifacts": {
+    "alignment_report_json": "alignment_report.json",
+    "frontend_gap_table": "frontend_gap_table",
+    "backend_gap_table": "backend_gap_table",
+    "db_drift_table": "db_drift_table",
+    "cross_layer_mismatch_map": "cross_layer_mismatch_map",
+    "product_readiness_scorecard": "product_readiness_scorecard"
+  }
+}

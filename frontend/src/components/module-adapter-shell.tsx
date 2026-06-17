@@ -66,8 +66,8 @@ export function AdapterStatusBadge({
 }
 
 export function AdapterUnavailableNotice({
-  description = "This adapter is pending, disabled, or unavailable. No live business action is connected.",
-  title = "Adapter Surface",
+  description = "This feature is pending, disabled, or unavailable. No action is connected.",
+  title = "Feature setup",
 }: {
   title?: string;
   description?: string;
@@ -357,8 +357,8 @@ export function AdapterSurfaceShell({
 
   if (adapterMetadataUnavailable || !adapter) {
     return (
-      <section className="adapter-shell" aria-label="Adapter Surface">
-        <AdapterUnavailableNotice description="Adapter metadata unavailable. Adapter access unknown." />
+      <section className="adapter-shell" aria-label="Feature setup">
+        <AdapterUnavailableNotice description="Feature setup details are unavailable." />
       </section>
     );
   }
@@ -371,13 +371,13 @@ export function AdapterSurfaceShell({
     isAdapterUnavailable(accessState);
 
   return (
-    <section className="adapter-shell" aria-label="Adapter Surface">
+    <section className="adapter-shell" aria-label="Feature setup">
       <div className="adapter-shell-heading">
         <div>
-          <span className="eyebrow">Adapter Surface</span>
+          <span className="eyebrow">Feature setup</span>
           <h2>{adapter.display_name}</h2>
           <p>
-            Adapter contract is available, but execution is not connected yet.
+            This feature is available, but actions are not connected yet.
           </p>
         </div>
         <AdapterStatusBadge status={adapter.adapter_status} />
@@ -388,7 +388,7 @@ export function AdapterSurfaceShell({
           description={
             accessState?.reason ||
             surfaceState.reason ||
-            "This adapter is pending, disabled, or unavailable. No live business action is connected."
+            "This feature is pending, disabled, or unavailable. No action is connected."
           }
         />
       ) : null}

@@ -2,9 +2,11 @@ import {
   Archive,
   Bot,
   Boxes,
+  Building2,
   CircleAlert,
   ClipboardCheck,
   Database,
+  FileText,
   LayoutDashboard,
   LockKeyhole,
   Package,
@@ -164,9 +166,11 @@ const ICONS: Record<string, LucideIcon> = {
   Archive,
   Bot,
   Boxes,
+  Building2,
   CircleAlert,
   ClipboardCheck,
   Database,
+  FileText,
   LayoutDashboard,
   LockKeyhole,
   Package,
@@ -177,12 +181,42 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 const GROUP_ORDER = new Map([
-  ["Core System", 10],
-  ["Overview", 10],
+  ["Core", 10],
   ["Operations", 20],
-  ["Governance", 30],
-  ["Registry", 40],
-  ["System", 50],
+  ["System", 30],
+]);
+
+const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
+  ["admin.users", "Core"],
+  ["admin.organizations", "Core"],
+  ["admin.permissions", "Core"],
+  ["system.operation_logs", "Operations"],
+  ["business.approvals", "Operations"],
+  ["business.jobs", "Operations"],
+  ["core.dashboard", "System"],
+  ["admin.settings", "System"],
+]);
+
+const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
+  ["admin.users", "Users"],
+  ["admin.organizations", "Organizations"],
+  ["admin.permissions", "Permissions"],
+  ["system.operation_logs", "Logs"],
+  ["business.approvals", "Approvals"],
+  ["business.jobs", "Jobs (Records)"],
+  ["core.dashboard", "Dashboard"],
+  ["admin.settings", "Settings"],
+]);
+
+const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
+  ["admin.users", 10],
+  ["admin.organizations", 20],
+  ["admin.permissions", 30],
+  ["system.operation_logs", 10],
+  ["business.approvals", 20],
+  ["business.jobs", 30],
+  ["core.dashboard", 10],
+  ["admin.settings", 20],
 ]);
 
 const INTERNAL_EXERCISE_MODULE_KEY = [
@@ -191,7 +225,6 @@ const INTERNAL_EXERCISE_MODULE_KEY = [
 ].join(".");
 
 export const PRODUCT_HIDDEN_MODULE_KEYS = new Set([
-  "admin.settings",
   "business.products",
   INTERNAL_EXERCISE_MODULE_KEY,
   "integration.n8n_test_bridge",
@@ -231,23 +264,35 @@ function routeIcon(record: ModuleAwareNavigationRecord, manifest: ModuleManifest
 }
 
 function routeLabel(record: ModuleAwareNavigationRecord, manifest: ModuleManifest | null) {
+  const productLabel = PRODUCT_NAVIGATION_LABELS.get(record.module_key);
+  if (productLabel) {
+    return productLabel;
+  }
   return manifest?.navigation.label || manifest?.display_name || record.label;
 }
 
 function routeGroup(record: ModuleAwareNavigationRecord, manifest: ModuleManifest | null) {
+  const productGroup = PRODUCT_NAVIGATION_GROUPS.get(record.module_key);
+  if (productGroup) {
+    return productGroup;
+  }
   if (manifest?.navigation.group) {
     if (manifest.navigation.group === "Overview") {
-      return "Core System";
+      return "System";
     }
     if (manifest.module_key === "system.operation_logs") {
       return "Operations";
     }
     return manifest.navigation.group;
   }
-  return record.category === "core" ? "Core System" : "Operations";
+  return record.category === "core" ? "System" : "Operations";
 }
 
 function routeOrder(record: ModuleAwareNavigationRecord, manifest: ModuleManifest | null) {
+  const productOrder = PRODUCT_NAVIGATION_ORDER.get(record.module_key);
+  if (productOrder !== undefined) {
+    return productOrder;
+  }
   if (manifest?.module_key === "system.operation_logs") {
     return 5;
   }
@@ -384,24 +429,23 @@ function stateFromSources({
     providerContracts,
   });
   const base = {
-    reason: "Capability is visible, permission-allowed, and backed by a registered route.",
+    reason: "This product area is available for the current workspace.",
     required_execution_mode: executionRequired
-      ? "PRE20-Q execution gate and provider readiness must allow a non-blocked mode."
-      : "Read-only backend capability.",
+      ? "Actions must be enabled for this workspace."
+      : "View access is available.",
     required_module_state: manifest?.status ?? record.status ?? "enabled",
-    required_org_state: "Active organization context with module visibility.",
+    required_org_state: "Active organization access.",
     required_permission: requiredPermission,
     state: "allowed" as ProductCapabilityStateName,
-    unlock_condition: "Capability is available for this account and organization.",
+    unlock_condition: "Open this product area.",
   };
 
   if (PRODUCT_HIDDEN_MODULE_KEYS.has(record.module_key)) {
     return {
       ...base,
-      reason: "This route is excluded from production product navigation.",
+      reason: "This feature is not part of the current product navigation.",
       state: "hidden" as const,
-      unlock_condition:
-        "Install a durable product capability with a non-placeholder backend binding.",
+      unlock_condition: "Use an available product area from the sidebar.",
     };
   }
 
@@ -410,9 +454,9 @@ function stateFromSources({
       ...base,
       reason:
         navigationState.reason ||
-        "C18 module visibility or C05 permission snapshot hides this capability.",
+        "This product area is not visible for the current workspace.",
       state: "hidden" as const,
-      unlock_condition: "Grant module visibility and the required permission.",
+      unlock_condition: "Ask an owner to review workspace access.",
     };
   }
 
@@ -421,27 +465,27 @@ function stateFromSources({
       ...base,
       reason:
         navigationState.reason ||
-        "C05 permission snapshot forbids this capability for the current account.",
+        "Your account does not have access to this product area.",
       state: "forbidden" as const,
-      unlock_condition: "Grant the missing permission in C05/C06.",
+      unlock_condition: "Ask an owner to grant the required access.",
     };
   }
 
   if (!routeBound) {
     return {
       ...base,
-      reason: "Module is registered, but no frontend product route is bound.",
+      reason: "This feature is not connected to a product page yet.",
       state: "partial" as const,
-      unlock_condition: "Bind a durable frontend route before exposing this capability.",
+      unlock_condition: "Use an available product area from the sidebar.",
     };
   }
 
   if (registryUnavailable && !manifest) {
     return {
       ...base,
-      reason: "Module registry is unavailable; frontend is using route metadata only.",
+      reason: "Workspace product areas could not be refreshed.",
       state: "partial" as const,
-      unlock_condition: "Restore /modules/registry and /modules/me.",
+      unlock_condition: "Refresh the page or try again later.",
     };
   }
 
@@ -450,9 +494,9 @@ function stateFromSources({
       ...base,
       reason:
         navigationState.reason ||
-        "C18 module visibility is unavailable; frontend is using a safe partial state.",
+        "Workspace access could not be confirmed.",
       state: "partial" as const,
-      unlock_condition: "Restore /modules/me.",
+      unlock_condition: "Refresh the page or contact an owner.",
     };
   }
 
@@ -466,28 +510,28 @@ function stateFromSources({
       reason:
         adapter?.reason ||
         navigationState.reason ||
-        "Adapter readiness is pending.",
-      required_execution_mode: "Adapter contract must be ready before execution.",
+        "This feature is still being prepared.",
+      required_execution_mode: "Actions must be enabled before use.",
       state: "adapter_pending" as const,
-      unlock_condition: "Complete adapter readiness and provider binding.",
+      unlock_condition: "Check back after setup is complete.",
     };
   }
 
   if (adapter?.hidden) {
     return {
       ...base,
-      reason: adapter.reason || "Adapter access state hides this capability.",
+      reason: adapter.reason || "This feature is hidden for the current workspace.",
       state: "hidden" as const,
-      unlock_condition: "Expose the adapter for this account and organization.",
+      unlock_condition: "Ask an owner to review workspace access.",
     };
   }
 
   if (adapter?.locked) {
     return {
       ...base,
-      reason: adapter.reason || "Adapter access state is locked.",
+      reason: adapter.reason || "Your account does not have access to this feature.",
       state: "forbidden" as const,
-      unlock_condition: "Grant adapter action permissions.",
+      unlock_condition: "Ask an owner to grant the required access.",
     };
   }
 
@@ -504,20 +548,20 @@ function stateFromSources({
       reason:
         adapter?.reason ||
         navigationState.reason ||
-        "Capability exists but is not fully available.",
-      required_execution_mode: "Read-only route may be visible, but actions remain disabled.",
+        "This feature is not fully available yet.",
+      required_execution_mode: "Actions are not available yet.",
       state: "partial" as const,
-      unlock_condition: "Enable the module and adapter readiness chain.",
+      unlock_condition: "Use the available product areas while setup continues.",
     };
   }
 
   if (executionRequired && executionState.live_gate_status === "backend_unavailable") {
     return {
       ...base,
-      reason: executionState.blocked_reason,
-      required_execution_mode: "PRE20-Q live gate state must be readable.",
+      reason: "Action readiness could not be confirmed.",
+      required_execution_mode: "Action readiness must be available.",
       state: "backend_unavailable" as const,
-      unlock_condition: "Restore PRE20-Q live gate status APIs.",
+      unlock_condition: "Refresh the page or try again later.",
     };
   }
 
@@ -534,11 +578,10 @@ function stateFromSources({
       ...base,
       reason:
         providerAccess.find((provider) => provider.block_reason)?.block_reason ||
-        executionState.blocked_reason ||
-        "Execution is blocked by provider or PRE20-Q gate state.",
-      required_execution_mode: "Execution provider and PRE20-Q gate must allow staging or live.",
+        "Actions are not enabled for this workspace.",
+      required_execution_mode: "Actions must be enabled before use.",
       state: "no_execution" as const,
-      unlock_condition: "Connect provider readiness and unblock PRE20-Q.",
+      unlock_condition: "Ask an owner to finish feature setup.",
     };
   }
 
@@ -549,21 +592,21 @@ function stateFromSources({
     return {
       ...base,
       reason: executionProviderAccessUnknown
-        ? "Execution provider state is unavailable; actions are fail-closed."
-        : "Execution provider mode is mock or contract-only; no live execution is exposed.",
-      required_execution_mode: "Live or approved non-mock provider mode.",
+        ? "Action readiness could not be confirmed."
+        : "This feature is available only as a preview.",
+      required_execution_mode: "Actions must be enabled before use.",
       state: executionProviderAccessUnknown ? "partial" as const : "mock" as const,
-      unlock_condition: "Connect a permitted execution provider before enabling actions.",
+      unlock_condition: "Ask an owner to finish feature setup.",
     };
   }
 
   if (adapterAccessUnknown && manifest?.module_adapter_required) {
     return {
       ...base,
-      reason: "Adapter access state is unavailable; actions are fail-closed.",
-      required_execution_mode: "Adapter readiness must be confirmed.",
+      reason: "Feature setup could not be confirmed.",
+      required_execution_mode: "Feature setup must be confirmed.",
       state: "backend_unavailable" as const,
-      unlock_condition: "Restore /module-adapters/me.",
+      unlock_condition: "Refresh the page or try again later.",
     };
   }
 
@@ -777,7 +820,7 @@ function orgContext({
   if (moduleAccessUnknown) {
     return {
       hidden_modules: moduleAccessItems.filter((item) => item.hidden).length,
-      reason: "C18 module visibility is unavailable or incomplete.",
+      reason: "Workspace organization access is unavailable or incomplete.",
       role,
       source: "/modules/me",
       state: "unknown",
@@ -787,7 +830,7 @@ function orgContext({
 
   return {
     hidden_modules: moduleAccessItems.filter((item) => item.hidden).length,
-    reason: "C18 module visibility snapshot is available.",
+    reason: "Workspace organization access is available.",
     role,
     source: "/modules/me",
     state: "active",
@@ -832,18 +875,34 @@ export function buildFrontendCapabilityGraph({
     executionProviderAccessItems,
     liveGate,
   });
-  const sources =
-    registryItems.length > 0
-      ? registryItems.map((manifest) => ({
-          manifest,
-          moduleKey: manifest.module_key,
-          record: routeByModuleKey.get(manifest.module_key) ?? recordFromManifest(manifest),
-        }))
-      : navigationModuleRecords.map((record) => ({
-          manifest: registryByModule.get(record.module_key) ?? null,
-          moduleKey: record.module_key,
-          record,
-        }));
+  const sourceMap = new Map<
+    string,
+    {
+      manifest: ModuleManifest | null;
+      moduleKey: string;
+      record: ModuleAwareNavigationRecord;
+    }
+  >();
+
+  for (const record of navigationModuleRecords) {
+    sourceMap.set(record.module_key, {
+      manifest: registryByModule.get(record.module_key) ?? null,
+      moduleKey: record.module_key,
+      record,
+    });
+  }
+
+  for (const manifest of registryItems) {
+    if (!sourceMap.has(manifest.module_key)) {
+      sourceMap.set(manifest.module_key, {
+        manifest,
+        moduleKey: manifest.module_key,
+        record: routeByModuleKey.get(manifest.module_key) ?? recordFromManifest(manifest),
+      });
+    }
+  }
+
+  const sources = Array.from(sourceMap.values());
   const owner = isOwnerFullAccess(permissions);
 
   const items = sources

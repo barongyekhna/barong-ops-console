@@ -1,0 +1,74 @@
+# PRE20-ALIGN DB Drift Table
+
+## Missing `org_id` Tables
+
+| Table | Classification | Severity | Alignment Finding | Required Productization Decision |
+|---|---|---|---|---|
+| callback_state_transitions | Execution history | High | Durable transition rows are not directly tenant-scoped | Add tenant shape or guarantee all access joins through callback_state org scope |
+| user_permission_assignments | Permission grant state | High | Uses scope_type/scope_key, not org_id | Decide whether org grants need DB-native org_id and C18G coverage |
+| shared_modules | Cross-org business relation | Medium | Uses source_org_id/target_org_id, not org_id | Keep explicit dual-org access rules; do not rely on C18G automatic filtering |
+| users | Global identity | Medium | Global identity table | Product UI must avoid treating all users as tenant-local |
+| auth_sessions | Global session state | Medium | Global session table | Do not use as tenant boundary; rely on org context/membership |
+| security_rate_limit_buckets | Security operational state | Medium | Global keyed bucket table | Ensure keys encode tenant where tenant rate limits are required |
+| security_replay_nonces | Security operational state | Medium | Global replay nonce table | Ensure keys encode tenant where tenant replay isolation is required |
+| agent_registry | Global registry | Low | No org_id by design | Safe only as global metadata catalog |
+| module_registry | Global registry | Low | No org_id by design | Tenant activation must remain in module_bindings |
+| workflow_registry | Global registry | Low | No org_id by design | Safe only as global template catalog |
+| permission_registry | Global permission catalog | Low | No org_id by design | Safe as catalog; grants are separate |
+| role_default_permissions | Global role defaults | Low | No org_id by design | Safe as global defaults |
+
+Excluded by scope: C19 `messages` lacks `org_id`, and C19 `contact_identities` has `org_id`; both are intentionally excluded from PRE20-ALIGN scoring.
+
+## Tenant-Safe Business Tables
+
+| Capability | Tables With `org_id` | Alignment |
+|---|---|---|
+| Approvals | approval_requests, approval_workflows, approval_decisions | Tenant-safe table shape |
+| Jobs | automation_jobs, job_events | Tenant-safe table shape |
+| Artifacts | artifacts | Tenant-safe table shape |
+| Reviews | review_items | Tenant-safe table shape |
+| Errors | system_errors | Tenant-safe table shape |
+| Memory | memory_events, memory_summaries, agent_memory_access_logs, context_packets | Tenant-safe table shape |
+| Operation logs | operation_logs | Tenant-safe table shape |
+| C15 callbacks/DLQ | execution_callbacks, execution_results, execution_dlq, callback_state, dlq_state | Mostly tenant-safe; transition table missing org_id |
+| C17 observability | event_streams, audit_logs, replay_jobs, anomaly_events, storage_events | Tenant-safe table shape |
+| PRE20 ops/live gate | ops_alerts, ops_alert_deliveries, ops_live_gate_policies, ops_canary_rollouts, ops_rollback_guards, ops_execution_unlock_tokens | Tenant-safe table shape |
+| C18 tenant management | organizations, org_memberships, module_bindings | Tenant-safe table shape |
+
+## Memory-Only Or Non-DB-Managed State
+
+| Component | State | Risk |
+|---|---|---|
+| C08 module adapter registry | Static in-code contracts | Adapter catalog cannot be product-managed as data |
+| C09 provider registry | Static in-code contracts | Provider availability cannot be product-managed as data |
+| C10 sandbox runtime | Request-bound mock memory/log/state refs | No durable real runtime execution state |
+| Event collector worker | In-memory queue counters and drain worker | Operational queue state not durable, though source events are persisted |
+| LiveGatingController fallback | In-memory policy map path exists | Non-DB path can diverge from persisted policies |
+| InMemoryStorageAdapter | Memory storage implementation | Must remain test/design-only |
+| Execution request/plan | No first-class table found | Execution decisions are not product-traceable as durable records |
+
+## Schema Drift From C05 Baseline
+
+| Area | C05/F07 Baseline | PRE20 Current State | Drift |
+|---|---|---|---|
+| Permission assignments | C05 assignment table without org_id | Still no org_id; uses scope_type/scope_key | Unresolved tenant-shape drift |
+| Owner access semantics | C05 text expected owner global full access | Current service reports owner as platform owner, not full access; unified engine restricts owner categories | Semantic drift |
+| Core records | F07 jobs/artifacts/reviews/errors/memory/operation tables initially global | C18 added org_id to core business records | Resolved |
+| Approvals | Approval persistence existed outside C05 baseline | C18 added org_id; approval_decisions scoped | Aligned |
+| C15 durable state | Not in C05 | Added callbacks/results/DLQ/callback_state/dlq_state; transition table unscoped | Partial drift |
+| C17 observability | Not in C05 | Added event/audit/replay/anomaly/storage tables with org_id | Mostly aligned |
+| PRE20 ops/live gate | Not in C05 | Added live gate, canary, rollback, alert, unlock tables with org_id | Aligned |
+| Registries | Global catalogs | Remain global | Acceptable if catalog-only |
+
+## Unsafe Global Tables
+
+| Table | Why Unsafe Or Requires Discipline | Severity |
+|---|---|---|
+| callback_state_transitions | Execution transition history lacks org_id | High |
+| user_permission_assignments | Tenant grants are scope-key convention, not org_id shape | High |
+| shared_modules | Dual-org relation outside automatic org_id filter | Medium |
+| users | Global identity exposed through product user management | Medium |
+| auth_sessions | Global session state | Medium |
+| security_rate_limit_buckets | Global security bucket keys | Medium |
+| security_replay_nonces | Global replay nonce keys | Medium |
+

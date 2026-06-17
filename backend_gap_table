@@ -1,0 +1,62 @@
+# PRE20-ALIGN Backend Gap Table
+
+| Backend Area | Current State | Alignment | Gap | Severity |
+|---|---|---|---|---|
+| C08 adapter execution path | Static adapter contracts plus action request route | Safe metadata path | No executable adapter implementation; action request is not UI/proxy bound | Critical |
+| C09 provider registry | Static provider contracts, live/external disabled | Safe metadata path | No provider runtime endpoint/secret/callback binding | Critical |
+| C10 sandbox runtime | disabled_execution, mock_only | Safe for audit constraints | No real execution runtime; request-bound mock state only | Critical |
+| C13 live gate | Enforced through execution_flow_gate and mode-aware gate | Strong backend guardrail | UI exposes read status but not policy/canary/rollback operations | Medium |
+| C15 dispatch pipeline | Delegates to unlock/router; no direct external call | Safe but non-executing | Dispatch acceptance does not equal provider execution or durable product workflow | High |
+| C15 callback persistence | execution_callbacks/results/DLQ, callback_state, dlq_state persisted | Mostly aligned | callback_state_transitions has no org_id; fallback platform org can hide context gaps | High |
+| C17 event collector | event_streams, audit_logs, storage_events persisted | DB-backed source records | Queue counters are memory-only; snapshot/query paths can lack explicit org filter | Medium |
+| C17 anomaly detection | anomaly_events persisted | DB-backed service | No product API/UI binding for anomaly operation | Medium |
+| C17 audit logs | audit_logs persisted | DB-backed | Query without org context can read broad data unless middleware/session supplies scope | Medium |
+| C05 permission registry | permission_registry and role defaults global | Expected global catalog | Assignment table lacks org_id; owner semantics drift from original full-access baseline | High |
+| C18F permission middleware | Resolves org/module/action where org context exists | Partially aligned | Control-plane RBAC and org-scoped app paths have different semantics | Medium |
+| Owner bypass | require_owner remains for users/permissions | Operationally clear | Separate from unified org permission path; can conflict with tenant-scoped product model | Medium |
+| C18G data isolation | OrgDataIsolationSession filters org_id mapped classes | Strong where org_id exists | Tables without org_id and raw/control-plane paths require manual discipline | High |
+| Org management APIs | Present | Backend ready | No frontend/proxy product binding | High |
+| Module binding/share APIs | Present | Backend ready | No frontend/proxy product binding | High |
+| Jobs/artifacts/reviews/errors create APIs | Present | Backend ready | UI/proxy exposes mostly GET-only list surfaces | Medium |
+| Approval write APIs | request/approve/reject present | Backend ready | UI/proxy exposes list only | High |
+| Live gate write APIs | Policy/canary/rollback present | Backend ready | Frontend allows GET only | High |
+| C15 failure/DLQ/replay APIs | Present | Backend ready | No product surface | High |
+| Webhook ingress | Present/design-oriented | Internal/backend-only | Explicitly blocked by frontend proxy and not productized | Medium |
+| C14 dependency/binding APIs | Present | Backend/control-plane ready | Mostly hidden, engineering-only naming | Medium |
+| API key management | Not found | Missing | No backend data model or API detected | High |
+
+## Missing Runtime Bindings
+
+| Runtime Binding | Finding | Product Impact |
+|---|---|---|
+| Real provider invocation | C09 contracts are non-executing metadata | No live action can complete through provider path |
+| Provider registry DB management | Provider registry is static code | Operators cannot configure providers as product data |
+| Adapter registry DB management | Adapter registry is static code | Operators cannot onboard adapters from UI/data layer |
+| Execution request persistence | No first-class execution request/plan table found | Accepted requests are not product-traceable as durable objects |
+| Frontend proxy action binding | POST module-adapter action request is not allowlisted | Browser UI cannot call the backend action route |
+| C15 callback product flow | Callback/DLQ APIs exist without UI | Recovery and replay are engineering-only |
+| Live operations product flow | Live gate writes exist without UI | Gate operation remains backend/control-plane only |
+| API key stack | No model/API/UI found | API key management is not implemented |
+
+## Mock-Only Components
+
+| Component | Evidence | Required Productization Step |
+|---|---|---|
+| C10 SandboxRuntime | Runtime capability is mock_only/disabled_execution | Replace or complement with governed real runtime when allowed |
+| C10 SandboxRunner | Deterministic mock runner | Connect real execution path when product scope requires it |
+| C08 adapter registry | Static contract catalog | Persist/manage adapter lifecycle |
+| C09 provider registry | Static non-live provider catalog | Persist/manage real provider integrations |
+| InMemoryStorageAdapter | Memory adapter exists for design/test | Keep out of production path or gate clearly |
+| AdapterSurfaceShell | Disabled action buttons | Bind to real action workflow or remove from product surface |
+| Foundation/n8n design endpoints | Test/design style endpoints | Hide from product UI or formalize as product features |
+
+## Execution Non-Aligned Paths
+
+| Path | Frontend | Backend | DB | Status |
+|---|---|---|---|---|
+| Module action request | Disabled UI; proxy POST missing | Route exists and gates request | No execution request table | Broken |
+| Provider routing | No UI trigger | Metadata resolver only | No provider config table | Metadata-only |
+| Live execution | No UI trigger | C12/C13/C18/C05 gates enforce denial unless fully unlocked | Unlock/gate tables exist | Guarded but not productized |
+| Callback result | No UI | Callback handler persists result | execution_results has org_id | Backend-only |
+| DLQ replay | No UI | Failure handling/replay APIs exist | dlq_state/execution_dlq have org_id | Backend-only |
+
