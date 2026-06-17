@@ -5,7 +5,7 @@ from backend.app.db.session import engine
 
 pytestmark = pytest.mark.integration
 
-ALEMBIC_HEAD = "pre20_o_concurrency_perf_001"
+ALEMBIC_HEAD = "pre20_o_ops_dr_001"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",
@@ -25,6 +25,8 @@ REQUIRED_ALEMBIC_TABLES = {
     "anomaly_events",
     "replay_jobs",
     "storage_events",
+    "ops_alerts",
+    "ops_alert_deliveries",
 }
 
 

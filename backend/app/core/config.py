@@ -49,6 +49,8 @@ class Settings(BaseSettings):
         le=900,
     )
     webhook_replay_nonce_ttl_seconds: int = Field(default=900, gt=0, le=3600)
+    ops_alert_webhook_url: str | None = None
+    ops_alert_webhook_timeout_seconds: int = Field(default=5, gt=0, le=30)
     control_plane_stealth_mode: bool | None = None
     login_ip_rate_limit_attempts: int = Field(default=20, gt=0, le=1000)
     login_user_rate_limit_attempts: int = Field(default=10, gt=0, le=1000)
@@ -103,10 +105,11 @@ class Settings(BaseSettings):
     @field_validator(
         "app_docs_enabled",
         "control_plane_stealth_mode",
+        "ops_alert_webhook_url",
         mode="before",
     )
     @classmethod
-    def default_empty_optional_bools(cls, value: Any) -> Any:
+    def default_empty_optional_values(cls, value: Any) -> Any:
         if value == "":
             return None
         return value
@@ -128,6 +131,7 @@ class Settings(BaseSettings):
         "login_failed_attempt_base_delay_seconds",
         "login_failed_attempt_max_delay_seconds",
         "login_account_lockout_minutes",
+        "ops_alert_webhook_timeout_seconds",
         mode="before",
     )
     @classmethod
@@ -148,6 +152,7 @@ class Settings(BaseSettings):
             "login_failed_attempt_base_delay_seconds": 2,
             "login_failed_attempt_max_delay_seconds": 60,
             "login_account_lockout_minutes": 15,
+            "ops_alert_webhook_timeout_seconds": 5,
         }
         return defaults[info.field_name]
 
