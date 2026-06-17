@@ -42,7 +42,14 @@ from backend.app.models.observability import (
     ReplayJobRecord,
     StorageEventRecord,
 )
-from backend.app.models.ops import OpsAlertDeliveryRecord, OpsAlertRecord
+from backend.app.models.ops import (
+    OpsAlertDeliveryRecord,
+    OpsAlertRecord,
+    OpsCanaryRolloutRecord,
+    OpsExecutionUnlockTokenRecord,
+    OpsLiveGatePolicyRecord,
+    OpsRollbackGuardRecord,
+)
 from backend.app.models.org_membership import OrgMembershipRecord
 from backend.app.models.organization import OrganizationRecord
 from backend.app.models.permission import (
@@ -250,6 +257,10 @@ def clear_auth_tables() -> None:
         db.execute(delete(SecurityReplayNonce))
         db.execute(delete(OpsAlertDeliveryRecord))
         db.execute(delete(OpsAlertRecord))
+        db.execute(delete(OpsRollbackGuardRecord))
+        db.execute(delete(OpsCanaryRolloutRecord))
+        db.execute(delete(OpsExecutionUnlockTokenRecord))
+        db.execute(delete(OpsLiveGatePolicyRecord))
         db.execute(delete(AnomalyEventRecord))
         db.execute(delete(ReplayJobRecord))
         db.execute(delete(AuditLogRecord))

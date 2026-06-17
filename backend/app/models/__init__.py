@@ -28,7 +28,14 @@ from .observability import (
     StorageEventRecord,
 )
 from .operation_log import OperationLog
-from .ops import OpsAlertDeliveryRecord, OpsAlertRecord
+from .ops import (
+    OpsAlertDeliveryRecord,
+    OpsAlertRecord,
+    OpsCanaryRolloutRecord,
+    OpsExecutionUnlockTokenRecord,
+    OpsLiveGatePolicyRecord,
+    OpsRollbackGuardRecord,
+)
 from .org_membership import OrgMembershipRecord
 from .organization import OrganizationRecord
 from .permission import (
@@ -71,6 +78,10 @@ __all__ = [
     "OperationLog",
     "OpsAlertDeliveryRecord",
     "OpsAlertRecord",
+    "OpsCanaryRolloutRecord",
+    "OpsExecutionUnlockTokenRecord",
+    "OpsLiveGatePolicyRecord",
+    "OpsRollbackGuardRecord",
     "OrgMembershipRecord",
     "OrganizationRecord",
     "PermissionRegistry",

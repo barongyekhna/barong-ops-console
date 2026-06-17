@@ -47,6 +47,7 @@ from .approval_workflow_engine import (
     ApprovalWorkflowEngine,
     ApprovalWorkflowTransitionError,
 )
+from .c12_approval_unlock import C12ApprovalUnlockTokenController
 
 
 ApprovalBoundaryAction = Literal[
@@ -425,10 +426,15 @@ class ApprovalService:
 
         self.workflow_service.save_created_workflow(workflow)
         self.db.flush()
+        execution_unlock = self._sync_unlock_binding(
+            workflow.approval_id,
+            reveal_token=workflow.state in {"approved", "auto_approved"},
+        )
         return self._detail_response(
             workflow.approval_id,
             actor=actor,
             workflow=workflow,
+            execution_unlock=execution_unlock,
         )
 
     def get_approval(
@@ -523,10 +529,15 @@ class ApprovalService:
             event_time=_utc_now(),
         )
         self.db.flush()
+        execution_unlock = self._sync_unlock_binding(
+            workflow.approval_id,
+            reveal_token=status == "approved",
+        )
         return self._detail_response(
             workflow.approval_id,
             actor=actor,
             workflow=workflow,
+            execution_unlock=execution_unlock,
         )
 
     def _detail_response(
@@ -535,6 +546,7 @@ class ApprovalService:
         *,
         actor: ApprovalActor,
         workflow: ApprovalWorkflow | None = None,
+        execution_unlock=None,
     ) -> ApprovalDetailResponse:
         request_record = self.approval_repo.load_record(approval_id)
         if request_record is None:
@@ -552,10 +564,37 @@ class ApprovalService:
             limit=100,
             offset=0,
         )
+        if execution_unlock is None:
+            execution_unlock = self._describe_unlock_binding(approval_id)
         return ApprovalDetailResponse(
             approval=approval_request_from_record(request_record),
             workflow=workflow,
             decisions=[_decision_response(record) for record in decisions],
             permission_boundary=actor.permission_boundary(),
+            execution_unlock=execution_unlock,
             safety=ApprovalSafetyBoundaryResponse(),
+        )
+
+    def _sync_unlock_binding(
+        self,
+        approval_id: str,
+        *,
+        reveal_token: bool,
+    ):
+        request_record = self.approval_repo.load_record(approval_id)
+        if request_record is None:
+            return None
+        return C12ApprovalUnlockTokenController(self.db).sync_from_approval(
+            org_id=request_record.org_id,
+            approval_id=approval_id,
+            reveal_token=reveal_token,
+        )
+
+    def _describe_unlock_binding(self, approval_id: str):
+        request_record = self.approval_repo.load_record(approval_id)
+        if request_record is None:
+            return None
+        return C12ApprovalUnlockTokenController(self.db).describe_approval(
+            org_id=request_record.org_id,
+            approval_id=approval_id,
         )

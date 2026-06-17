@@ -678,9 +678,9 @@ def request_adapter_action_execution(
     payload: Mapping[str, Any],
     context: Mapping[str, Any],
 ):
-    from .execution_router import EXECUTION_ROUTER
+    from .execution_unlock_flow import EXECUTION_UNLOCK_FLOW
 
-    return EXECUTION_ROUTER.receive_request(
+    return EXECUTION_UNLOCK_FLOW.request_execution(
         org_id=org_id,
         module_id=module_id,
         action=action,

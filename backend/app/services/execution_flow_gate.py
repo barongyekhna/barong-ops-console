@@ -546,6 +546,9 @@ class ExecutionModeAwareGate(ExecutionFlowGate):
         requested_mode: ExecutionRuntimeMode,
         selected_mode: ExecutionRuntimeMode | None,
         module_policy: str = "router_default",
+        execution_entrypoint: str | None = None,
+        approval_unlock_decision: Any = None,
+        live_gate_decision: Any = None,
     ) -> ExecutionModeAwareGateDecision:
         c18f_state = _permission_state(c18f_permission_decision)
         c05_state = _permission_state(c05_permission_result)
@@ -611,9 +614,31 @@ class ExecutionModeAwareGate(ExecutionFlowGate):
                 mode_allowed=False,
             )
         if requested_mode == "live" or provider_readiness == "live_ready":
+            if (
+                execution_entrypoint == "ExecutionUnlockFlow"
+                and selected_mode == "live"
+                and provider_readiness == "live_ready"
+                and _live_gate_allows(live_gate_decision)
+                and _approval_unlocked(approval_unlock_decision)
+            ):
+                return self._mode_decision(
+                    decision="allow",
+                    reason=(
+                        "Live execution unlocked by C12 and LiveGatingController; "
+                        "provider router may build a live plan."
+                    ),
+                    requested_mode=requested_mode,
+                    selected_mode=selected_mode,
+                    c18f_state=c18f_state,
+                    c05_state=c05_state,
+                    provider_readiness=provider_readiness,
+                    module_policy=module_policy,
+                    mode_allowed=True,
+                    live_execution_allowed=True,
+                )
             return self._mode_decision(
                 decision="deny",
-                reason="Live execution is future-gated and cannot dispatch.",
+                reason="Live execution requires ExecutionUnlockFlow, C12 unlock, and live gate ALLOW.",
                 requested_mode=requested_mode,
                 selected_mode=selected_mode,
                 c18f_state=c18f_state,
@@ -670,6 +695,7 @@ class ExecutionModeAwareGate(ExecutionFlowGate):
         provider_readiness: str,
         module_policy: str,
         mode_allowed: bool,
+        live_execution_allowed: bool = False,
     ) -> ExecutionModeAwareGateDecision:
         return ExecutionModeAwareGateDecision(
             decision=decision,
@@ -681,6 +707,7 @@ class ExecutionModeAwareGate(ExecutionFlowGate):
             c05_decision=c05_state,
             provider_readiness=provider_readiness,
             module_policy=module_policy,
+            live_execution_allowed=live_execution_allowed,
         )
 
 
@@ -703,6 +730,32 @@ def _permission_state(value: Any) -> str:
     if getattr(value, "partial", False) is True:
         return "partial"
     return "deny"
+
+
+def _live_gate_state(value: Any) -> str:
+    if value is None:
+        return "DENY"
+    decision = _field(value, "decision", "DENY")
+    return str(decision)
+
+
+def _live_gate_allows(value: Any) -> bool:
+    return (
+        _live_gate_state(value) == "ALLOW"
+        and bool(_field(value, "global_live_switch", False))
+        and _field(value, "org_policy", None) == "enabled"
+        and _field(value, "module_policy", None) == "enabled"
+        and bool(_field(value, "c12_unlocked", False))
+        and bool(_field(value, "pre_live_validation_passed", False))
+    )
+
+
+def _approval_unlocked(value: Any) -> bool:
+    if value is None:
+        return False
+    if _field(value, "decision", None) == "unlocked":
+        return True
+    return bool(_field(value, "unlocked", False))
 
 
 MODE_AWARE_GATE = ExecutionModeAwareGate()

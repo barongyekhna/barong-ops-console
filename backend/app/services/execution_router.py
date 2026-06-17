@@ -229,6 +229,13 @@ class ExecutionRouter:
             requested_mode=mode,
             selected_mode=resolution.selected_mode,
             module_policy=module_policy,
+            execution_entrypoint=(
+                str(safe_context.get("execution_entrypoint"))
+                if safe_context.get("execution_entrypoint") is not None
+                else None
+            ),
+            approval_unlock_decision=safe_context.get("approval_unlock_decision"),
+            live_gate_decision=safe_context.get("live_gate_decision"),
         )
         validation = ExecutionRouterValidationResult(
             status="valid" if not errors else "invalid",
@@ -276,6 +283,9 @@ class ExecutionRouter:
                 _permission_snapshot("C18F", c18f_decision),
                 _permission_snapshot("C05", c05_decision),
             ),
+            approval_unlock_decision=safe_context.get("approval_unlock_decision"),
+            live_gate_decision=safe_context.get("live_gate_decision"),
+            canary_decision=safe_context.get("canary_decision"),
             dispatch_ready=accepted and gate_decision.decision == "allow",
         )
 

@@ -5,7 +5,7 @@ from backend.app.db.session import engine
 
 pytestmark = pytest.mark.integration
 
-ALEMBIC_HEAD = "pre20_o_ops_dr_001"
+ALEMBIC_HEAD = "pre20_q_live_enable_gate_001"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",
@@ -27,6 +27,10 @@ REQUIRED_ALEMBIC_TABLES = {
     "storage_events",
     "ops_alerts",
     "ops_alert_deliveries",
+    "ops_live_gate_policies",
+    "ops_execution_unlock_tokens",
+    "ops_canary_rollouts",
+    "ops_rollback_guards",
 }
 
 

@@ -10,6 +10,7 @@ from .execution_provider import (
     ExecutionRiskLevel,
     ProviderRuntimeReadiness,
 )
+from .live_gate import ApprovalUnlockDecision, CanaryRouteDecision, LiveGateDecision
 
 
 ExecutionRuntimeMode = Literal["mock", "staging", "live"]
@@ -65,8 +66,8 @@ class ExecutionModeAwareGateDecision(BaseModel):
     c18_org_context_checked: Literal[True] = True
     provider_readiness: ProviderRuntimeReadiness
     module_policy: str = Field(min_length=1, max_length=180)
-    production_external_call_allowed: Literal[False] = False
-    live_execution_allowed: Literal[False] = False
+    production_external_call_allowed: bool = False
+    live_execution_allowed: bool = False
 
 
 class ExecutionRouterValidationResult(BaseModel):
@@ -130,6 +131,9 @@ class ExecutionRouterResponse(BaseModel):
     validation_result: ExecutionRouterValidationResult
     context: ExecutionOrgContextSnapshot | None = None
     permission_decisions: tuple[ExecutionPermissionSnapshot, ...] = ()
+    approval_unlock_decision: ApprovalUnlockDecision | None = None
+    live_gate_decision: LiveGateDecision | None = None
+    canary_decision: CanaryRouteDecision | None = None
     dispatch_ready: bool = False
     live_provider_dispatched: Literal[False] = False
     production_external_call_performed: Literal[False] = False

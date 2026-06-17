@@ -4,7 +4,7 @@ from collections.abc import Mapping
 from typing import Any
 
 from ..schemas.execution_dispatch import ExecutionDispatchResult
-from .execution_router import EXECUTION_ROUTER
+from .execution_unlock_flow import EXECUTION_UNLOCK_FLOW
 from .module_adapter_registry import list_adapter_contracts
 from .module_workflow_binding_engine import evaluate_module_workflow_access
 from .workflow_registry_system import evaluate_workflow_invocation
@@ -53,7 +53,7 @@ class ExecutionDispatchPipeline:
             or safe_payload.get("action_key")
             or self._default_action_for_module(module_id)
         )
-        router_response = EXECUTION_ROUTER.receive_request(
+        unlock_response = EXECUTION_UNLOCK_FLOW.request_execution(
             org_id=org_id,
             module_id=module_id,
             action=action,
@@ -65,15 +65,22 @@ class ExecutionDispatchPipeline:
             },
         )
         return ExecutionDispatchResult(
-            status="accepted" if router_response.accepted else "rejected",
+            status=(
+                "accepted"
+                if unlock_response.router_response is not None
+                and unlock_response.router_response.accepted
+                else "rejected"
+            ),
             reason=(
-                "C15 dispatch reached ExecutionRouter."
-                if router_response.accepted
-                else "ExecutionRouter rejected C15 dispatch."
+                "C15 dispatch reached ExecutionUnlockFlow and provider router."
+                if unlock_response.router_response is not None
+                and unlock_response.router_response.accepted
+                else unlock_response.reason
             ),
             c15a_workflow_match=workflow_decision,
             c15f_whitelist_check=whitelist_decision,
-            router_response=router_response,
+            unlock_response=unlock_response,
+            router_response=unlock_response.router_response,
         )
 
     def _default_action_for_module(self, module_id: str) -> str:

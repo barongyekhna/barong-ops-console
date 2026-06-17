@@ -26,6 +26,7 @@ from .api.routes.foundation_demo import router as foundation_demo_router
 from .api.routes.friends import router as friends_router
 from .api.routes.health import router as health_router
 from .api.routes.jobs import router as jobs_router
+from .api.routes.live_gate import router as live_gate_router
 from .api.routes.memory import router as memory_router
 from .api.routes.messages import router as messages_router
 from .api.routes.model_locks import router as model_locks_router
@@ -401,3 +402,4 @@ app.include_router(payload_standardization_router, prefix=CONTROL_PLANE_API_PREF
 app.include_router(callback_handler_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(result_normalization_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(failure_handling_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(live_gate_router, prefix=CONTROL_PLANE_API_PREFIX)

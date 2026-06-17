@@ -5,6 +5,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from .execution_router import ExecutionRouterResponse
+from .live_gate import ExecutionUnlockResponse
 from .module_workflow_binding import ModuleWorkflowBindingDecision
 from .workflow_registry import WorkflowInvocationDecision
 
@@ -30,6 +31,7 @@ class ExecutionDispatchResult(BaseModel):
     reason: str = Field(min_length=1, max_length=700)
     c15a_workflow_match: WorkflowInvocationDecision
     c15f_whitelist_check: ModuleWorkflowBindingDecision
+    unlock_response: ExecutionUnlockResponse | None = None
     router_response: ExecutionRouterResponse | None = None
     flow: tuple[str, ...] = (
         "C15A workflow match",

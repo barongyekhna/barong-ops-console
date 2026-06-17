@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from .live_gate import ApprovalUnlockDecision
+
 
 ApprovalRiskLevel = Literal["low", "medium", "high"]
 ApprovalExecutionType = Literal["mock", "no_op", "async", "real"]
@@ -270,6 +272,7 @@ class ApprovalDetailResponse(BaseModel):
     workflow: ApprovalWorkflow
     decisions: list[ApprovalDecisionRecordResponse]
     permission_boundary: ApprovalPermissionBoundaryResponse
+    execution_unlock: ApprovalUnlockDecision | None = None
     safety: ApprovalSafetyBoundaryResponse = Field(
         default_factory=ApprovalSafetyBoundaryResponse
     )

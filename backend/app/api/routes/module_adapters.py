@@ -5,7 +5,7 @@ from ...core.permissions import SCOPE_ORGANIZATION
 from ...db.session import get_db
 from ...middleware.org_context import get_org_context
 from ...models.user import User
-from ...schemas.execution_router import ExecutionRouterResponse
+from ...schemas.live_gate import ExecutionUnlockResponse
 from ...schemas.module_adapter import (
     ModuleAdapterAccessListResponse,
     ModuleAdapterRead,
@@ -15,8 +15,8 @@ from ...services.module_adapter_registry import (
     get_adapter_contract,
     list_adapter_contracts,
     list_adapters_for_user,
-    request_adapter_action_execution,
 )
+from ...services.execution_unlock_flow import EXECUTION_UNLOCK_FLOW
 from ...services.unified_permission_engine import (
     UnifiedPermissionEngine,
     UnifiedPermissionRequest,
@@ -56,7 +56,7 @@ def module_adapters_me(
 
 @router.post(
     "/{adapter_key}/actions/{action_key}/request",
-    response_model=ExecutionRouterResponse,
+    response_model=ExecutionUnlockResponse,
 )
 def module_adapter_action_request(
     adapter_key: str,
@@ -65,7 +65,7 @@ def module_adapter_action_request(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C09", "execute")),
-) -> ExecutionRouterResponse:
+) -> ExecutionUnlockResponse:
     adapter = get_adapter_contract(adapter_key)
     if adapter is None:
         raise HTTPException(
@@ -120,11 +120,12 @@ def module_adapter_action_request(
         )
     )
 
-    return request_adapter_action_execution(
+    return EXECUTION_UNLOCK_FLOW.request_execution(
         org_id=org_context.org_id,
         module_id=adapter.module_key,
         action=action_key,
         payload=payload,
+        db=db,
         context={
             "adapter_key": adapter.adapter_key,
             "org_context": org_context,
