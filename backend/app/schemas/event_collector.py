@@ -42,3 +42,10 @@ class AuditEvent(BaseModel):
     latency_ms: float = Field(default=0, ge=0)
     payload: dict[str, Any] = Field(default_factory=dict)
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class EmittedAuditEvent(AuditEvent):
+    persisted: bool = False
+    queued: bool = False
+    success: bool = False
+    error: str | None = None

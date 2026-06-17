@@ -2,9 +2,15 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Iterable, Mapping, Sequence
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, Iterator
+from uuid import uuid4
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..models.observability import AnomalyEventRecord, EventStreamRecord
 from ..schemas.anomaly_detection import (
     Alert,
     AlertEvidence,
@@ -39,7 +45,11 @@ from ..schemas.structured_logs import (
     LogEntry,
     LogMetadata,
 )
-from .storage_layer import StorageAdapter
+from .storage_layer import (
+    StorageAdapter,
+    ensure_observability_tables,
+    storage_record_from_event_stream_row,
+)
 
 
 NormalizedRecord = LogEntry | ExecutionTrace | EventRaw
@@ -1368,6 +1378,228 @@ class AnomalyDetectionEngine:
             analyzed_replay_diff_count=len(replay_diffs),
             baseline_model=self.baseline_model,
         )
+
+
+class StreamAnomalyEngine:
+    """Stream-based anomaly engine backed by event_streams and anomaly_events."""
+
+    def __init__(
+        self,
+        *,
+        db: Session | None = None,
+        org_id: str | None = None,
+        baseline_model: BaselineModel | None = None,
+        window_seconds: int = 60,
+        threshold_event_count: int = 5,
+        spike_threshold_multiplier: float = 3,
+    ) -> None:
+        ensure_observability_tables()
+        self._db = db
+        self._org_id = org_id
+        self.window = timedelta(seconds=max(window_seconds, 1))
+        self.threshold_event_count = max(threshold_event_count, 1)
+        self.detector = AnomalyDetectionEngine(
+            baseline_model=baseline_model,
+            rolling_window_seconds=max(window_seconds, 1),
+            spike_threshold_multiplier=spike_threshold_multiplier,
+            minimum_rate_events=max(threshold_event_count, 1),
+        )
+
+    def analyze_stream(
+        self,
+        *,
+        time_range: StorageTimeRange | None = None,
+        org_id: str | None = None,
+        module_id: str | None = None,
+        threshold_event_count: int | None = None,
+        limit: int | None = None,
+    ) -> AnomalyDetectionResult:
+        rows = self._load_rows(
+            time_range=time_range,
+            org_id=org_id,
+            module_id=module_id,
+            limit=limit,
+        )
+        records = tuple(storage_record_from_event_stream_row(row) for row in rows)
+        normalized = tuple(decode_storage_record(record) for record in records)
+        base = self.detector.analyze_batch(normalized)
+        threshold_findings = self._threshold_findings(
+            rows,
+            normalized,
+            threshold=threshold_event_count or self.threshold_event_count,
+        )
+        findings = (*base.findings, *threshold_findings)
+        result = self.detector._result("streaming", findings, normalized, ())
+        self._persist_findings(result.findings, rows)
+        return result
+
+    def analyze_latest_window(
+        self,
+        *,
+        org_id: str | None = None,
+        module_id: str | None = None,
+        limit: int | None = None,
+    ) -> AnomalyDetectionResult:
+        end_at = datetime.now(UTC)
+        return self.analyze_stream(
+            time_range=StorageTimeRange(start_at=end_at - self.window, end_at=end_at),
+            org_id=org_id,
+            module_id=module_id,
+            limit=limit,
+        )
+
+    def persisted_events(
+        self,
+        *,
+        org_id: str | None = None,
+        module_id: str | None = None,
+        limit: int | None = None,
+    ) -> tuple[AnomalyEventRecord, ...]:
+        with self._session() as db:
+            statement = select(AnomalyEventRecord)
+            effective_org_id = org_id or self._org_id
+            if effective_org_id is not None:
+                statement = statement.where(AnomalyEventRecord.org_id == effective_org_id)
+            if module_id is not None:
+                statement = statement.where(AnomalyEventRecord.module_id == module_id)
+            statement = statement.order_by(
+                AnomalyEventRecord.timestamp.desc(),
+                AnomalyEventRecord.id.desc(),
+            )
+            if limit is not None:
+                statement = statement.limit(max(limit, 0))
+            return tuple(db.scalars(statement))
+
+    def _load_rows(
+        self,
+        *,
+        time_range: StorageTimeRange | None,
+        org_id: str | None,
+        module_id: str | None,
+        limit: int | None,
+    ) -> tuple[EventStreamRecord, ...]:
+        if time_range is None:
+            end_at = datetime.now(UTC)
+            time_range = StorageTimeRange(start_at=end_at - self.window, end_at=end_at)
+        with self._session() as db:
+            statement = select(EventStreamRecord)
+            effective_org_id = org_id or self._org_id
+            if effective_org_id is not None:
+                statement = statement.where(EventStreamRecord.org_id == effective_org_id)
+            if module_id is not None:
+                statement = statement.where(EventStreamRecord.module_id == module_id)
+            if time_range.start_at is not None:
+                statement = statement.where(EventStreamRecord.timestamp >= time_range.start_at)
+            if time_range.end_at is not None:
+                statement = statement.where(EventStreamRecord.timestamp <= time_range.end_at)
+            statement = statement.order_by(EventStreamRecord.timestamp.desc())
+            if limit is not None:
+                statement = statement.limit(max(limit, 0))
+            return tuple(db.scalars(statement))
+
+    def _threshold_findings(
+        self,
+        rows: Sequence[EventStreamRecord],
+        records: Sequence[NormalizedRecord],
+        *,
+        threshold: int,
+    ) -> tuple[AnomalyFinding, ...]:
+        if not rows:
+            return ()
+        records_by_context = {record.context_id: record for record in records}
+        grouped: dict[tuple[str, str], list[EventStreamRecord]] = defaultdict(list)
+        for row in rows:
+            grouped[(row.org_id, row.module_id)].append(row)
+
+        findings: list[AnomalyFinding] = []
+        for (org_id, module_id), grouped_rows in grouped.items():
+            if len(grouped_rows) < threshold:
+                continue
+            evidence_records = tuple(
+                records_by_context[row.context_id]
+                for row in grouped_rows[:5]
+                if row.context_id in records_by_context
+            )
+            findings.append(
+                self.detector._finding(
+                    anomaly_type="rate",
+                    entity_id=f"{org_id}:{module_id}",
+                    entity_type="context",
+                    rule_id="c17g.stream.threshold.module_volume",
+                    rate_score=min(95, 60 + len(grouped_rows) * 4),
+                    description=(
+                        f"Event stream threshold exceeded for org {org_id} "
+                        f"module {module_id}: {len(grouped_rows)} events."
+                    ),
+                    related_context_id=grouped_rows[0].context_id,
+                    related_trace_id=grouped_rows[0].trace_id,
+                    evidence=_evidence_tuple(evidence_records),
+                    detection_mode="streaming",
+                )
+            )
+        return tuple(findings)
+
+    def _persist_findings(
+        self,
+        findings: Sequence[AnomalyFinding],
+        rows: Sequence[EventStreamRecord],
+    ) -> None:
+        if not findings:
+            return
+        row_by_context = {row.context_id: row for row in rows}
+        fallback_org_id = self._org_id or "platform"
+        with self._session() as db:
+            for finding in findings:
+                related_context_id = finding.alert.related_context_id
+                source = (
+                    row_by_context.get(related_context_id)
+                    if related_context_id is not None
+                    else None
+                )
+                db.add(
+                    AnomalyEventRecord(
+                        org_id=(source.org_id if source is not None else fallback_org_id),
+                        anomaly_id=f"anomaly-{uuid4()}",
+                        source_event_id=source.event_id if source is not None else None,
+                        context_id=related_context_id,
+                        trace_id=finding.alert.related_trace_id,
+                        module_id=source.module_id if source is not None else "system",
+                        anomaly_type=finding.anomaly_type,
+                        severity=finding.score.severity,
+                        rule_id=finding.rule_id,
+                        entity_type=finding.entity_type,
+                        entity_id=finding.entity_id,
+                        status="open",
+                        timestamp=(
+                            source.timestamp
+                            if source is not None
+                            else datetime.now(UTC)
+                        ),
+                        threshold_value=float(self.threshold_event_count),
+                        observed_value=finding.score.total_score,
+                        window_seconds=int(self.window.total_seconds()),
+                        event_count=len(rows),
+                        score=finding.score.model_dump(mode="json"),
+                        evidence=finding.alert.model_dump(mode="json"),
+                    )
+                )
+            self._commit(db)
+
+    @contextmanager
+    def _session(self) -> Iterator[Session]:
+        if self._db is not None:
+            yield self._db
+            return
+        from ..db.session import SessionLocal
+
+        with SessionLocal() as db:
+            yield db
+
+    def _commit(self, db: Session) -> None:
+        if self._db is None:
+            db.commit()
+        else:
+            db.flush()
 
 
 def get_anomaly_detection_engine_design() -> AnomalyDetectionEngineDesign:

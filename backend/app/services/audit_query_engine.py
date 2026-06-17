@@ -2,11 +2,17 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from time import perf_counter
-from typing import Any
+from typing import Any, Iterator
+from uuid import uuid4
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..models.observability import AuditLogRecord, EventStreamRecord
 from ..schemas.audit_query_engine import (
     AuditQueryEngineCompletionStatus,
     AuditQueryEngineDesign,
@@ -40,7 +46,11 @@ from ..schemas.storage_layer import (
 )
 from ..schemas.structured_logs import LOG_ENTRY_FIELDS, LogEntry, LogModule
 from .event_collector import normalize_context_id
-from .storage_layer import StorageAdapter
+from .storage_layer import (
+    StorageAdapter,
+    ensure_observability_tables,
+    storage_record_from_event_stream_row,
+)
 
 
 IDX_CONTEXT = "idx_c17d_context_id"
@@ -274,6 +284,134 @@ def _post_filter_fields(
     elif primary_index == IDX_ACTION_SHADOW:
         covered.add("action")
     return tuple(field for field in fields if field not in covered)
+
+
+class AuditLogWriter:
+    """Persistent C17 audit writer backed by audit_logs."""
+
+    def __init__(
+        self,
+        db: Session | None = None,
+        *,
+        org_id: str | None = None,
+    ) -> None:
+        ensure_observability_tables()
+        self._db = db
+        self._org_id = org_id
+
+    def write_storage_record(
+        self,
+        record: StorageRecordEnvelope,
+        *,
+        org_id: str | None = None,
+    ) -> AuditLogRecord:
+        payload = dict(_payload(record))
+        row = AuditLogRecord(
+            org_id=self._resolve_org_id(org_id),
+            audit_id=f"audit-{uuid4()}",
+            event_stream_record_id=record.record_id,
+            event_id=record.event_id,
+            context_id=record.context_id,
+            trace_id=record.trace_id,
+            module_id=record.module,
+            action=_string_value(payload.get("action")) or record.event_type,
+            status=record.status,
+            timestamp=record.timestamp,
+            payload=payload,
+            metadata_json=self._metadata_payload(payload),
+        )
+        with self._session() as db:
+            db.add(row)
+            self._commit(db)
+            return row
+
+    def write_event_stream(self, row: EventStreamRecord) -> AuditLogRecord:
+        record = storage_record_from_event_stream_row(row)
+        audit = AuditLogRecord(
+            org_id=row.org_id,
+            audit_id=f"audit-{uuid4()}",
+            event_stream_record_id=row.record_id,
+            event_id=row.event_id,
+            context_id=row.context_id,
+            trace_id=row.trace_id,
+            module_id=row.module_id,
+            action=row.action,
+            status=row.status,
+            timestamp=row.timestamp,
+            payload=dict(row.payload),
+            metadata_json={
+                **dict(row.metadata_json),
+                "storage_record": record.model_dump(mode="json"),
+            },
+        )
+        with self._session() as db:
+            db.add(audit)
+            self._commit(db)
+            return audit
+
+    def query(
+        self,
+        *,
+        org_id: str | None = None,
+        module_id: str | None = None,
+        context_id: str | None = None,
+        trace_id: str | None = None,
+        limit: int | None = None,
+    ) -> tuple[AuditLogRecord, ...]:
+        with self._session() as db:
+            statement = select(AuditLogRecord)
+            effective_org_id = org_id or self._org_id
+            if effective_org_id is not None:
+                statement = statement.where(AuditLogRecord.org_id == effective_org_id)
+            if module_id is not None:
+                statement = statement.where(AuditLogRecord.module_id == module_id)
+            if context_id is not None:
+                statement = statement.where(AuditLogRecord.context_id == context_id)
+            if trace_id is not None:
+                statement = statement.where(AuditLogRecord.trace_id == trace_id)
+            statement = statement.order_by(
+                AuditLogRecord.timestamp.desc(),
+                AuditLogRecord.id.desc(),
+            )
+            if limit is not None:
+                statement = statement.limit(max(limit, 0))
+            return tuple(db.scalars(statement))
+
+    @contextmanager
+    def _session(self) -> Iterator[Session]:
+        if self._db is not None:
+            yield self._db
+            return
+        from ..db.session import SessionLocal
+
+        with SessionLocal() as db:
+            yield db
+
+    def _commit(self, db: Session) -> None:
+        if self._db is None:
+            db.commit()
+        else:
+            db.flush()
+
+    def _resolve_org_id(self, explicit_org_id: str | None = None) -> str:
+        for value in (explicit_org_id, self._org_id):
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:40]
+        try:
+            from .data_isolation import current_org_data_isolation_context
+
+            context = current_org_data_isolation_context()
+        except Exception:
+            context = None
+        if context is not None and context.org_id:
+            return context.org_id[:40]
+        return "platform"
+
+    def _metadata_payload(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        metadata = payload.get("metadata")
+        if isinstance(metadata, Mapping):
+            return dict(metadata)
+        return {}
 
 
 class QueryOptimizer:

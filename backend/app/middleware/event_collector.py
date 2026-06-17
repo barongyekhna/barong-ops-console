@@ -63,6 +63,7 @@ async def capture_audit_events(request: Request, call_next):
         source="backend",
         status="pending",
         context_id=context_id,
+        org_id=getattr(request.state, "org_id", None),
         payload={
             "method": request.method,
             "path": request.url.path,
@@ -85,6 +86,7 @@ async def capture_audit_events(request: Request, call_next):
             context_id=trace_root_id,
             user_id=getattr(request.state, "user_id", None),
             workflow_id=getattr(request.state, "workflow_id", None),
+            org_id=getattr(request.state, "org_id", None),
             latency_ms=(perf_counter() - started_at) * 1000,
             payload={
                 "method": request.method,
@@ -110,6 +112,7 @@ async def capture_audit_events(request: Request, call_next):
         user_id=getattr(request.state, "user_id", None),
         product_key=getattr(request.state, "product_key", None),
         workflow_id=getattr(request.state, "workflow_id", None),
+        org_id=getattr(request.state, "org_id", None),
         latency_ms=(perf_counter() - started_at) * 1000,
         payload={
             "method": request.method,

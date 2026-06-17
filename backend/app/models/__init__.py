@@ -17,6 +17,12 @@ from .job import AutomationJob, JobEvent
 from .memory import AgentMemoryAccessLog, MemoryEvent, MemorySummary
 from .module_binding import ModuleBindingRecord
 from .message import MessageRecord
+from .observability import (
+    AnomalyEventRecord,
+    AuditLogRecord,
+    EventStreamRecord,
+    ReplayJobRecord,
+)
 from .operation_log import OperationLog
 from .org_membership import OrgMembershipRecord
 from .permission import (
@@ -33,10 +39,12 @@ from .user import User
 __all__ = [
     "AgentMemoryAccessLog",
     "AgentRegistry",
+    "AnomalyEventRecord",
     "ApprovalDecisionRecord",
     "ApprovalRequestRecord",
     "ApprovalWorkflowRecord",
     "Artifact",
+    "AuditLogRecord",
     "AuthSession",
     "AutomationJob",
     "ContactIdentityRecord",
@@ -44,6 +52,7 @@ __all__ = [
     "ExecutionCallbackRecord",
     "ExecutionDLQRecord",
     "ExecutionResultRecord",
+    "EventStreamRecord",
     "JobEvent",
     "MemoryEvent",
     "MemorySummary",
@@ -54,6 +63,7 @@ __all__ = [
     "OrgMembershipRecord",
     "PermissionRegistry",
     "ReviewItem",
+    "ReplayJobRecord",
     "RoleDefaultPermission",
     "SecurityRateLimitBucket",
     "SecurityReplayNonce",

@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 from collections.abc import Mapping, Sequence
 from copy import deepcopy
-from typing import Any, Protocol
+from datetime import UTC, datetime
+from hashlib import sha256
+from typing import Any, Iterator, Protocol
 from uuid import uuid4
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..models.observability import ReplayJobRecord
 from ..schemas.execution_replay import (
     REPLAY_BREAKPOINTS,
     DebugStepExecutionModel,
@@ -36,7 +43,7 @@ from ..schemas.execution_trace import (
 from ..schemas.storage_layer import StorageRecordEnvelope
 from ..schemas.structured_logs import LOG_ENTRY_FIELDS, LogEntry
 from .event_collector import normalize_context_id
-from .storage_layer import StorageAdapter
+from .storage_layer import DBStorageAdapter, StorageAdapter, ensure_observability_tables
 
 
 OUTPUT_MATCH_KEYS: tuple[str, ...] = (
@@ -81,6 +88,10 @@ def _dict_copy(value: Mapping[str, Any] | dict[str, Any]) -> dict[str, Any]:
 
 def _json_fingerprint(value: Any) -> str:
     return json.dumps(value, default=str, ensure_ascii=True, sort_keys=True)
+
+
+def _deterministic_hash(value: Any) -> str:
+    return sha256(_json_fingerprint(value).encode("utf-8")).hexdigest()
 
 
 def _decode_trace_record(record: StorageRecordEnvelope) -> ExecutionTrace:
@@ -524,6 +535,202 @@ class ExecutionReplayEngine:
                 "C17F full replay must enforce the original context_id: "
                 f"{trace.context_id}."
             )
+
+
+class ReplayEngine(ExecutionReplayEngine):
+    """Stateful DB-backed replay engine that records replay_jobs."""
+
+    def __init__(
+        self,
+        storage: StorageAdapter | None = None,
+        *,
+        db: Session | None = None,
+        org_id: str | None = None,
+        executor: StepReplayExecutor | None = None,
+        analyzer: ReplayAnalyzer | None = None,
+    ) -> None:
+        ensure_observability_tables()
+        self._db = db
+        self._org_id = org_id
+        super().__init__(
+            storage or DBStorageAdapter(db, org_id=org_id),
+            executor=executor,
+            analyzer=analyzer,
+        )
+
+    def replay_from_event_stream(
+        self,
+        *,
+        trace_id: str | None = None,
+        context_id: str | None = None,
+        mode: ReplayMode = "dry_run",
+        org_id: str | None = None,
+        breakpoints: Sequence[ReplayBreakpointKind] | None = None,
+    ) -> ExecutionReplay:
+        if trace_id is None and context_id is None:
+            raise ValueError("replay_from_event_stream requires trace_id or context_id.")
+        if org_id is not None and isinstance(self.reader.storage, DBStorageAdapter):
+            self.reader.storage._org_id = org_id
+            self._org_id = org_id
+        if trace_id is not None:
+            return self.replay_by_trace_id(
+                trace_id,
+                mode,
+                context_id=context_id,
+                breakpoints=breakpoints,
+            )
+        return self.replay_by_context_id(
+            context_id or "",
+            mode,
+            breakpoints=breakpoints,
+        )
+
+    def replay_by_trace_id(
+        self,
+        trace_id: str,
+        mode: ReplayMode = "dry_run",
+        *,
+        context_id: str | None = None,
+        breakpoints: Sequence[ReplayBreakpointKind] | None = None,
+    ) -> ExecutionReplay:
+        started_at = datetime.now(UTC)
+        replay = super().replay_by_trace_id(
+            trace_id,
+            mode,
+            context_id=context_id,
+            breakpoints=breakpoints,
+        )
+        self._persist_replay_job(
+            replay,
+            source_type="trace_id",
+            source_id=trace_id,
+            started_at=started_at,
+            breakpoints=breakpoints,
+        )
+        return replay
+
+    def replay_by_context_id(
+        self,
+        context_id: str,
+        mode: ReplayMode = "dry_run",
+        *,
+        breakpoints: Sequence[ReplayBreakpointKind] | None = None,
+    ) -> ExecutionReplay:
+        started_at = datetime.now(UTC)
+        replay = super().replay_by_context_id(
+            context_id,
+            mode,
+            breakpoints=breakpoints,
+        )
+        self._persist_replay_job(
+            replay,
+            source_type="context_id",
+            source_id=context_id,
+            started_at=started_at,
+            breakpoints=breakpoints,
+        )
+        return replay
+
+    def list_jobs(
+        self,
+        *,
+        org_id: str | None = None,
+        context_id: str | None = None,
+        trace_id: str | None = None,
+        limit: int | None = None,
+    ) -> tuple[ReplayJobRecord, ...]:
+        with self._session() as db:
+            statement = select(ReplayJobRecord)
+            effective_org_id = org_id or self._org_id
+            if effective_org_id is not None:
+                statement = statement.where(ReplayJobRecord.org_id == effective_org_id)
+            if context_id is not None:
+                statement = statement.where(ReplayJobRecord.context_id == context_id)
+            if trace_id is not None:
+                statement = statement.where(ReplayJobRecord.trace_id == trace_id)
+            statement = statement.order_by(
+                ReplayJobRecord.created_at.desc(),
+                ReplayJobRecord.id.desc(),
+            )
+            if limit is not None:
+                statement = statement.limit(max(limit, 0))
+            return tuple(db.scalars(statement))
+
+    def _persist_replay_job(
+        self,
+        replay: ExecutionReplay,
+        *,
+        source_type: str,
+        source_id: str,
+        started_at: datetime,
+        breakpoints: Sequence[ReplayBreakpointKind] | None,
+    ) -> None:
+        snapshot = self._active_snapshot
+        input_event_ids = (
+            [record.event_id for record in snapshot.storage_records]
+            if snapshot is not None
+            else []
+        )
+        replay_output = replay.model_dump(mode="json")
+        stable_replay_output = replay.model_dump(mode="json", exclude={"replay_id"})
+        deterministic_payload = {
+            "input_event_ids": sorted(input_event_ids),
+            "replay": stable_replay_output,
+        }
+        row = ReplayJobRecord(
+            org_id=self._resolve_org_id(),
+            replay_id=replay.replay_id,
+            source_type=source_type,
+            source_id=source_id,
+            context_id=replay.context_id,
+            trace_id=replay.original_trace_id,
+            mode=replay.mode,
+            status="completed",
+            deterministic_hash=_deterministic_hash(deterministic_payload),
+            input_event_ids=input_event_ids,
+            replay_input={
+                "breakpoints": list(breakpoints or ()),
+                "source_type": source_type,
+                "source_id": source_id,
+            },
+            replay_output=replay_output,
+            replay_result=replay.replay_result.model_dump(mode="json"),
+            error=None,
+            started_at=started_at,
+            completed_at=datetime.now(UTC),
+        )
+        with self._session() as db:
+            db.add(row)
+            self._commit(db)
+
+    @contextmanager
+    def _session(self) -> Iterator[Session]:
+        if self._db is not None:
+            yield self._db
+            return
+        from ..db.session import SessionLocal
+
+        with SessionLocal() as db:
+            yield db
+
+    def _commit(self, db: Session) -> None:
+        if self._db is None:
+            db.commit()
+        else:
+            db.flush()
+
+    def _resolve_org_id(self) -> str:
+        if self._org_id:
+            return self._org_id[:40]
+        try:
+            from .data_isolation import current_org_data_isolation_context
+
+            context = current_org_data_isolation_context()
+        except Exception:
+            context = None
+        if context is not None and context.org_id:
+            return context.org_id[:40]
+        return "platform"
 
 
 def replay_by_trace_id(

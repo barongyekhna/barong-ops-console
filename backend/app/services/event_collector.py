@@ -4,14 +4,17 @@ import json
 import logging
 import queue
 import threading
-from collections import deque
 from collections.abc import Mapping
 from contextvars import Token, ContextVar
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, get_args
 from uuid import uuid4
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..schemas.event_collector import (
     AuditEvent,
+    EmittedAuditEvent,
     EventModule,
     EventSource,
     EventStatus,
@@ -20,6 +23,11 @@ from ..schemas.event_collector import (
 EVENT_LOGGER_NAME = "barong.audit_events"
 DEFAULT_EVENT_BUFFER_SIZE = 5000
 DEFAULT_EVENT_QUEUE_SIZE = 10000
+COLLECTOR_RECORD_PREFIX = "event-"
+PLATFORM_ORG_ID = "platform"
+VALID_EVENT_MODULES = frozenset(get_args(EventModule))
+VALID_EVENT_SOURCES = frozenset(get_args(EventSource))
+VALID_EVENT_STATUSES = frozenset(get_args(EventStatus))
 MAX_STRING_LENGTH = 2000
 SENSITIVE_KEY_MARKERS = (
     "password",
@@ -55,23 +63,37 @@ _workflow_id: ContextVar[str | None] = ContextVar(
     "event_workflow_id",
     default=None,
 )
+_org_id: ContextVar[str | None] = ContextVar("event_org_id", default=None)
 
 
-class EventEmitter:
+@dataclass(frozen=True)
+class EventQueueWriteResult:
+    persisted: bool
+    queued: bool
+    record_id: str | None = None
+    error: str | None = None
+
+    @property
+    def success(self) -> bool:
+        return self.persisted and self.queued and self.error is None
+
+
+class EventQueueBackend:
     def __init__(
         self,
         *,
-        buffer_size: int = DEFAULT_EVENT_BUFFER_SIZE,
         queue_size: int = DEFAULT_EVENT_QUEUE_SIZE,
+        snapshot_limit: int = DEFAULT_EVENT_BUFFER_SIZE,
     ) -> None:
-        self._queue: queue.Queue[AuditEvent] = queue.Queue(maxsize=queue_size)
-        self._recent_events: deque[AuditEvent] = deque(maxlen=buffer_size)
+        self._queue: queue.Queue[str] = queue.Queue(maxsize=queue_size)
         self._lock = threading.Lock()
-        self._dropped = 0
+        self._snapshot_limit = snapshot_limit
+        self._failed = 0
         self._emitted = 0
         self._started = False
         self._worker: threading.Thread | None = None
         self._logger = logging.getLogger(EVENT_LOGGER_NAME)
+        self._tables_ready = False
 
     def start(self) -> None:
         with self._lock:
@@ -79,34 +101,92 @@ class EventEmitter:
                 return
             self._worker = threading.Thread(
                 target=self._drain,
-                name="barong-audit-event-emitter",
+                name="barong-audit-event-queue",
                 daemon=True,
             )
             self._worker.start()
             self._started = True
 
-    def emit(self, event: AuditEvent) -> bool:
-        self.start()
-        with self._lock:
-            self._recent_events.append(event)
-            self._emitted += 1
+    def emit(
+        self,
+        event: AuditEvent,
+        *,
+        org_id: str | None = None,
+    ) -> EventQueueWriteResult:
+        write = self._write_event(event, org_id=org_id)
+        if not write.persisted or write.record_id is None:
+            with self._lock:
+                self._failed += 1
+            return write
 
         try:
-            self._queue.put_nowait(event)
+            self._queue.put_nowait(write.record_id)
         except queue.Full:
+            self._mark_processing_status(
+                write.record_id,
+                status="queue_full",
+                error="event processing queue is full",
+            )
             with self._lock:
-                self._dropped += 1
-            return False
-        return True
+                self._failed += 1
+            return EventQueueWriteResult(
+                persisted=True,
+                queued=False,
+                record_id=write.record_id,
+                error="event processing queue is full",
+            )
+
+        self.start()
+        with self._lock:
+            self._emitted += 1
+        return EventQueueWriteResult(
+            persisted=True,
+            queued=True,
+            record_id=write.record_id,
+        )
 
     def snapshot(self) -> list[AuditEvent]:
-        with self._lock:
-            return list(self._recent_events)
+        self._ensure_tables()
+        from sqlalchemy import select
+
+        from ..db.session import SessionLocal
+        from ..models.observability import EventStreamRecord
+
+        with SessionLocal() as db:
+            rows = list(
+                db.scalars(
+                    select(EventStreamRecord)
+                    .where(EventStreamRecord.record_id.like(f"{COLLECTOR_RECORD_PREFIX}%"))
+                    .order_by(
+                        EventStreamRecord.timestamp.desc(),
+                        EventStreamRecord.id.desc(),
+                    )
+                    .limit(self._snapshot_limit)
+                )
+            )
+        rows.reverse()
+        return [self._audit_event_from_record(row) for row in rows]
 
     def clear(self) -> None:
+        self._ensure_tables()
+        from sqlalchemy import delete
+
+        from ..db.session import SessionLocal
+        from ..models.observability import EventStreamRecord
+        from .data_isolation import without_org_data_isolation
+
+        with without_org_data_isolation():
+            with SessionLocal() as db:
+                db.execute(
+                    delete(EventStreamRecord).where(
+                        EventStreamRecord.record_id.like(
+                            f"{COLLECTOR_RECORD_PREFIX}%"
+                        )
+                    )
+                )
+                db.commit()
         with self._lock:
-            self._recent_events.clear()
-            self._dropped = 0
+            self._failed = 0
             self._emitted = 0
         while True:
             try:
@@ -116,26 +196,261 @@ class EventEmitter:
             self._queue.task_done()
 
     def stats(self) -> dict[str, int]:
+        self._ensure_tables()
+        from sqlalchemy import func, select
+
+        from ..db.session import SessionLocal
+        from ..models.observability import EventStreamRecord
+
+        with SessionLocal() as db:
+            stored = db.scalar(
+                select(func.count())
+                .select_from(EventStreamRecord)
+                .where(EventStreamRecord.record_id.like(f"{COLLECTOR_RECORD_PREFIX}%"))
+            )
         with self._lock:
             return {
-                "buffered": len(self._recent_events),
+                "buffered": int(stored or 0),
                 "queued": self._queue.qsize(),
                 "emitted": self._emitted,
-                "dropped": self._dropped,
+                "dropped": 0,
+                "failed": self._failed,
             }
 
     def _drain(self) -> None:
         while True:
-            event = self._queue.get()
+            record_id = self._queue.get()
             try:
-                self._logger.info(
-                    json.dumps(event.model_dump(mode="json"), sort_keys=True)
-                )
+                try:
+                    self._process_record(record_id)
+                except Exception as exc:
+                    self._logger.exception(
+                        "C17 event queue processing failed for %s",
+                        record_id,
+                    )
+                    try:
+                        self._mark_processing_status(
+                            record_id,
+                            status="processing_failed",
+                            error=str(exc),
+                        )
+                    except Exception:
+                        self._logger.exception(
+                            "C17 event queue failed to mark processing failure for %s",
+                            record_id,
+                        )
             finally:
                 self._queue.task_done()
 
+    def _write_event(
+        self,
+        event: AuditEvent,
+        *,
+        org_id: str | None,
+    ) -> EventQueueWriteResult:
+        try:
+            self._ensure_tables()
+            from ..db.session import SessionLocal
+            from ..models.observability import EventStreamRecord
+            from .data_isolation import without_org_data_isolation
+            from .storage_layer import storage_record_from_event_raw
 
-DEFAULT_EVENT_EMITTER = EventEmitter()
+            record = storage_record_from_event_raw(event)
+            record.record_id = f"{COLLECTOR_RECORD_PREFIX}{event.event_id}"
+            metadata = {
+                **dict(event.metadata),
+                "c17_collector": "EventQueueBackend",
+            }
+            resolved_org_id = self._resolve_org_id(
+                event,
+                explicit_org_id=org_id,
+            )
+            row = EventStreamRecord(
+                org_id=resolved_org_id,
+                record_id=record.record_id,
+                entity_type=record.entity_type,
+                event_id=record.event_id,
+                context_id=record.context_id,
+                trace_id=record.trace_id,
+                product_key=record.product_key,
+                user_id=record.user_id,
+                workflow_id=event.workflow_id,
+                module_id=record.module,
+                event_type=record.event_type,
+                action=event.action,
+                source=event.source,
+                status=record.status,
+                latency_ms=event.latency_ms,
+                timestamp=record.timestamp,
+                storage_tier=record.tier,
+                backend_targets=list(record.backend_targets),
+                payload=record.payload,
+                metadata_json=metadata,
+                compressed=record.compressed,
+                archive_object_key=record.archive_object_key,
+                processing_status="queued",
+            )
+            with without_org_data_isolation():
+                with SessionLocal() as db:
+                    db.add(row)
+                    db.commit()
+            return EventQueueWriteResult(
+                persisted=True,
+                queued=False,
+                record_id=record.record_id,
+            )
+        except SQLAlchemyError as exc:
+            return EventQueueWriteResult(
+                persisted=False,
+                queued=False,
+                error=str(exc),
+            )
+        except Exception as exc:
+            return EventQueueWriteResult(
+                persisted=False,
+                queued=False,
+                error=str(exc),
+            )
+
+    def _ensure_tables(self) -> None:
+        if self._tables_ready:
+            return
+        with self._lock:
+            if self._tables_ready:
+                return
+            from ..db.base import Base
+            from ..db.session import engine
+            from ..models.observability import (
+                AnomalyEventRecord,
+                AuditLogRecord,
+                EventStreamRecord,
+                ReplayJobRecord,
+            )
+
+            Base.metadata.create_all(
+                bind=engine,
+                tables=[
+                    EventStreamRecord.__table__,
+                    AuditLogRecord.__table__,
+                    ReplayJobRecord.__table__,
+                    AnomalyEventRecord.__table__,
+                ],
+                checkfirst=True,
+            )
+            self._tables_ready = True
+
+    def _resolve_org_id(
+        self,
+        event: AuditEvent,
+        *,
+        explicit_org_id: str | None,
+    ) -> str:
+        for value in (explicit_org_id, _org_id.get()):
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:40]
+
+        try:
+            from .data_isolation import current_org_data_isolation_context
+
+            context = current_org_data_isolation_context()
+        except Exception:
+            context = None
+        if context is not None and context.org_id:
+            return context.org_id[:40]
+
+        for source in (event.metadata, event.payload):
+            for key in ("org_id", "active_org_id", "tenant_org_id"):
+                value = source.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()[:40]
+        return PLATFORM_ORG_ID
+
+    def _mark_processing_status(
+        self,
+        record_id: str,
+        *,
+        status: str,
+        error: str | None = None,
+    ) -> None:
+        self._ensure_tables()
+        from datetime import UTC, datetime
+
+        from sqlalchemy import update
+
+        from ..db.session import SessionLocal
+        from ..models.observability import EventStreamRecord
+        from .data_isolation import without_org_data_isolation
+
+        with without_org_data_isolation():
+            with SessionLocal() as db:
+                db.execute(
+                    update(EventStreamRecord)
+                    .where(EventStreamRecord.record_id == record_id)
+                    .values(
+                        processing_status=status,
+                        processing_error=error,
+                        processed_at=datetime.now(UTC),
+                    )
+                )
+                db.commit()
+
+    def _process_record(self, record_id: str) -> None:
+        self._ensure_tables()
+        from datetime import UTC, datetime
+
+        from sqlalchemy import select
+
+        from ..db.session import SessionLocal
+        from ..models.observability import EventStreamRecord
+        from .audit_query_engine import AuditLogWriter
+        from .data_isolation import without_org_data_isolation
+
+        with without_org_data_isolation():
+            with SessionLocal() as db:
+                row = db.scalar(
+                    select(EventStreamRecord).where(
+                        EventStreamRecord.record_id == record_id
+                    )
+                )
+                if row is None:
+                    return
+                event = self._audit_event_from_record(row)
+                self._logger.info(
+                    json.dumps(event.model_dump(mode="json"), sort_keys=True)
+                )
+                AuditLogWriter(db, org_id=row.org_id).write_event_stream(row)
+                row.processing_status = "processed"
+                row.processing_error = None
+                row.processed_at = datetime.now(UTC)
+                db.commit()
+
+    def _audit_event_from_record(self, row: Any) -> AuditEvent:
+        payload = row.payload if isinstance(row.payload, Mapping) else {}
+        raw_payload = payload.get("payload") if isinstance(payload, Mapping) else {}
+        raw_metadata = payload.get("metadata") if isinstance(payload, Mapping) else {}
+        module = row.module_id if row.module_id in VALID_EVENT_MODULES else "system"
+        source = row.source if row.source in VALID_EVENT_SOURCES else "system"
+        status = row.status if row.status in VALID_EVENT_STATUSES else "pending"
+        return AuditEvent(
+            event_id=row.event_id,
+            timestamp=row.timestamp,
+            event_type=row.event_type,
+            module=module,
+            action=row.action,
+            context_id=row.context_id,
+            user_id=row.user_id,
+            product_key=row.product_key,
+            workflow_id=row.workflow_id,
+            source=source,
+            status=status,
+            latency_ms=max(float(row.latency_ms or 0), 0),
+            payload=dict(raw_payload or {}),
+            metadata=dict(raw_metadata or {}),
+        )
+
+
+EventEmitter = EventQueueBackend
+DEFAULT_EVENT_EMITTER = EventQueueBackend()
 
 
 def _truncate(value: str) -> str:
@@ -187,6 +502,7 @@ def set_current_event_context(
     user_id: str | None = None,
     product_key: str | None = None,
     workflow_id: str | None = None,
+    org_id: str | None = None,
 ) -> dict[str, Token[str | None]]:
     tokens: dict[str, Token[str | None]] = {}
     if context_id is not None:
@@ -197,6 +513,8 @@ def set_current_event_context(
         tokens["product_key"] = _product_key.set(product_key)
     if workflow_id is not None:
         tokens["workflow_id"] = _workflow_id.set(workflow_id)
+    if org_id is not None:
+        tokens["org_id"] = _org_id.set(org_id)
     return tokens
 
 
@@ -206,6 +524,7 @@ def reset_current_event_context(tokens: Mapping[str, Token[str | None]]) -> None
         "user_id": _user_id,
         "product_key": _product_key,
         "workflow_id": _workflow_id,
+        "org_id": _org_id,
     }
     for key, token in tokens.items():
         resetters[key].reset(token)
@@ -222,10 +541,11 @@ def emit_event(
     user_id: str | None = None,
     product_key: str | None = None,
     workflow_id: str | None = None,
+    org_id: str | None = None,
     latency_ms: float = 0,
     payload: Mapping[str, Any] | None = None,
     metadata: Mapping[str, Any] | None = None,
-) -> AuditEvent:
+) -> EmittedAuditEvent:
     effective_context_id = normalize_context_id(context_id or _context_id.get())
     event = AuditEvent(
         event_type=event_type,
@@ -245,8 +565,14 @@ def emit_event(
         payload=sanitize_event_payload(dict(payload or {})),
         metadata=sanitize_event_payload(dict(metadata or {})),
     )
-    DEFAULT_EVENT_EMITTER.emit(event)
-    return event
+    result = DEFAULT_EVENT_EMITTER.emit(event, org_id=org_id)
+    return EmittedAuditEvent(
+        **event.model_dump(mode="python"),
+        persisted=result.persisted,
+        queued=result.queued,
+        success=result.success,
+        error=result.error,
+    )
 
 
 def classify_module_from_path(path: str) -> EventModule:

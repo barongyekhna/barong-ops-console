@@ -108,6 +108,10 @@ class ExecutionTrace(BaseModel):
     final_status: TraceFinalStatus
     total_latency_ms: float = Field(default=0, ge=0)
 
+    @property
+    def status(self) -> TraceFinalStatus:
+        return self.final_status
+
     @model_validator(mode="after")
     def validate_chain_order(self) -> "ExecutionTrace":
         step_ids = [step.step_id for step in self.chain]

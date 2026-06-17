@@ -29,6 +29,12 @@ from backend.app.models.memory import (
 )
 from backend.app.models.module_binding import ModuleBindingRecord
 from backend.app.models.operation_log import OperationLog
+from backend.app.models.observability import (
+    AnomalyEventRecord,
+    AuditLogRecord,
+    EventStreamRecord,
+    ReplayJobRecord,
+)
 from backend.app.models.org_membership import OrgMembershipRecord
 from backend.app.models.organization import OrganizationRecord
 from backend.app.models.permission import (
@@ -70,6 +76,10 @@ def clear_auth_tables() -> None:
         db.execute(delete(AuthSession))
         db.execute(delete(SecurityRateLimitBucket))
         db.execute(delete(SecurityReplayNonce))
+        db.execute(delete(AnomalyEventRecord))
+        db.execute(delete(ReplayJobRecord))
+        db.execute(delete(AuditLogRecord))
+        db.execute(delete(EventStreamRecord))
         db.execute(delete(OrgMembershipRecord))
         db.execute(delete(OrganizationRecord))
         db.execute(delete(UserPermissionAssignment))

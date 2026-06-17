@@ -1,9 +1,20 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
-from typing import Any, Protocol
+from typing import Any, Iterator, Protocol
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ..db.base import Base
+from ..models.observability import (
+    AnomalyEventRecord,
+    AuditLogRecord,
+    EventStreamRecord,
+    ReplayJobRecord,
+)
 from ..schemas.event_collector import AuditEvent
 from ..schemas.execution_trace import ExecutionTrace
 from ..schemas.storage_layer import (
@@ -45,6 +56,26 @@ class StorageAdapter(Protocol):
         ...
 
     def write_event_raw(self, raw_event: EventRaw | AuditEvent) -> StorageWriteResult:
+        ...
+
+    def append_event(
+        self,
+        raw_event: EventRaw | AuditEvent | Mapping[str, Any],
+        *,
+        org_id: str | None = None,
+    ) -> StorageWriteResult:
+        ...
+
+    def query_event(
+        self,
+        *,
+        event_id: str | None = None,
+        org_id: str | None = None,
+        module_id: str | None = None,
+        context_id: str | None = None,
+        trace_id: str | None = None,
+        limit: int | None = None,
+    ) -> StorageQueryResult:
         ...
 
     def query_by_context_id(
@@ -94,6 +125,18 @@ def _dict_value(value: Any) -> dict[str, Any]:
     if isinstance(value, Mapping):
         return sanitize_event_payload(dict(value))
     return {}
+
+
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return {str(key): _json_safe(item) for key, item in value.items()}
+    if isinstance(value, tuple):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, list):
+        return [_json_safe(item) for item in value]
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return value
 
 
 def _timestamp_value(value: Any) -> datetime:
@@ -157,6 +200,21 @@ def _archive_object_key(record: StorageRecordEnvelope) -> str:
     stamp = record.timestamp.strftime("%Y/%m/%d")
     entity = record.entity_type.lower()
     return f"c17d/{entity}/{stamp}/{record.context_id}/{record.record_id}.jsonl.gz"
+
+
+def ensure_observability_tables() -> None:
+    from ..db.session import engine
+
+    Base.metadata.create_all(
+        bind=engine,
+        tables=[
+            EventStreamRecord.__table__,
+            AuditLogRecord.__table__,
+            ReplayJobRecord.__table__,
+            AnomalyEventRecord.__table__,
+        ],
+        checkfirst=True,
+    )
 
 
 def resolve_storage_tier(
@@ -376,6 +434,37 @@ class InMemoryStorageAdapter:
         self._records.append(record)
         return _write_result(record)
 
+    def append_event(
+        self,
+        raw_event: EventRaw | AuditEvent | Mapping[str, Any],
+        *,
+        org_id: str | None = None,
+    ) -> StorageWriteResult:
+        del org_id
+        return self.write_event_raw(raw_event)
+
+    def query_event(
+        self,
+        *,
+        event_id: str | None = None,
+        org_id: str | None = None,
+        module_id: str | None = None,
+        context_id: str | None = None,
+        trace_id: str | None = None,
+        limit: int | None = None,
+    ) -> StorageQueryResult:
+        del org_id
+        return self._query(
+            lambda record: (
+                (event_id is None or record.event_id == event_id)
+                and (module_id is None or record.module == module_id)
+                and (context_id is None or record.context_id == context_id)
+                and (trace_id is None or record.trace_id == trace_id)
+            ),
+            indexes_used=("idx_c17d_event_id", "idx_c17d_module_event_type"),
+            limit=limit,
+        )
+
     def query_by_context_id(
         self,
         context_id: str,
@@ -470,6 +559,340 @@ class InMemoryStorageAdapter:
             searched_tiers=searched_tiers,
             indexes_used=indexes_used,
         )
+
+
+def _metadata_for_record(record: StorageRecordEnvelope) -> dict[str, Any]:
+    payload = record.payload if isinstance(record.payload, Mapping) else {}
+    if record.entity_type == "EventRaw":
+        return _dict_value(payload.get("metadata"))
+    if record.entity_type == "LogEntry":
+        return _dict_value(payload.get("metadata"))
+    return {}
+
+
+def _action_for_record(record: StorageRecordEnvelope) -> str:
+    payload = record.payload if isinstance(record.payload, Mapping) else {}
+    if record.entity_type == "EventRaw":
+        return _string_value(payload.get("action")) or record.event_type
+    if record.entity_type == "LogEntry":
+        return _string_value(payload.get("action")) or record.event_type
+    return "execution.trace"
+
+
+def _source_for_record(record: StorageRecordEnvelope) -> str:
+    payload = record.payload if isinstance(record.payload, Mapping) else {}
+    if record.entity_type in {"EventRaw", "LogEntry"}:
+        return _string_value(payload.get("source")) or "system"
+    return "trace"
+
+
+def _workflow_id_for_record(record: StorageRecordEnvelope) -> str | None:
+    payload = record.payload if isinstance(record.payload, Mapping) else {}
+    if record.entity_type == "EventRaw":
+        return _string_value(payload.get("workflow_id"))
+    if record.entity_type == "LogEntry":
+        entity = payload.get("entity")
+        if isinstance(entity, Mapping):
+            return _string_value(entity.get("workflow_id"))
+    return None
+
+
+def _latency_for_record(record: StorageRecordEnvelope) -> float:
+    payload = record.payload if isinstance(record.payload, Mapping) else {}
+    value = payload.get("total_latency_ms" if record.entity_type == "ExecutionTrace" else "latency_ms")
+    try:
+        return max(float(value), 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _record_to_event_stream_row(
+    record: StorageRecordEnvelope,
+    *,
+    org_id: str,
+) -> EventStreamRecord:
+    return EventStreamRecord(
+        org_id=org_id,
+        record_id=record.record_id,
+        entity_type=record.entity_type,
+        event_id=record.event_id,
+        context_id=record.context_id,
+        trace_id=record.trace_id,
+        product_key=record.product_key,
+        user_id=record.user_id,
+        workflow_id=_workflow_id_for_record(record),
+        module_id=record.module,
+        event_type=record.event_type,
+        action=_action_for_record(record),
+        source=_source_for_record(record),
+        status=record.status,
+        latency_ms=_latency_for_record(record),
+        timestamp=record.timestamp,
+        storage_tier=record.tier,
+        backend_targets=list(record.backend_targets),
+        payload=_json_safe(record.payload),
+        metadata_json=_json_safe(_metadata_for_record(record)),
+        compressed=record.compressed,
+        archive_object_key=record.archive_object_key,
+        processing_status="stored",
+    )
+
+
+def storage_record_from_event_stream_row(
+    row: EventStreamRecord,
+) -> StorageRecordEnvelope:
+    return StorageRecordEnvelope(
+        record_id=row.record_id,
+        entity_type=row.entity_type,  # type: ignore[arg-type]
+        tier=row.storage_tier,  # type: ignore[arg-type]
+        backend_targets=tuple(row.backend_targets),  # type: ignore[arg-type]
+        context_id=row.context_id,
+        trace_id=row.trace_id,
+        event_id=row.event_id,
+        product_key=row.product_key,
+        user_id=row.user_id,
+        module=row.module_id,
+        event_type=row.event_type,
+        timestamp=row.timestamp,
+        status=row.status,  # type: ignore[arg-type]
+        payload=dict(row.payload),
+        compressed=row.compressed,
+        archive_object_key=row.archive_object_key,
+    )
+
+
+class DBStorageAdapter:
+    """DB-backed C17D adapter using event_streams as the durable record source."""
+
+    def __init__(
+        self,
+        db: Session | None = None,
+        *,
+        now: datetime | None = None,
+        org_id: str | None = None,
+    ) -> None:
+        ensure_observability_tables()
+        self._db = db
+        self._now = _timestamp_value(now) if now is not None else None
+        self._org_id = org_id
+
+    @property
+    def records(self) -> tuple[StorageRecordEnvelope, ...]:
+        return self._query_rows(limit=None).records
+
+    def write_log(self, log: LogEntry) -> StorageWriteResult:
+        record = storage_record_from_log_entry(log, now=self._now)
+        self._append_record(record)
+        return _write_result(record)
+
+    def write_trace(self, trace: ExecutionTrace) -> StorageWriteResult:
+        record = storage_record_from_execution_trace(trace, now=self._now)
+        self._append_record(record)
+        return _write_result(record)
+
+    def write_event_raw(
+        self,
+        raw_event: EventRaw | AuditEvent | Mapping[str, Any],
+    ) -> StorageWriteResult:
+        return self.append_event(raw_event)
+
+    def append_event(
+        self,
+        raw_event: EventRaw | AuditEvent | Mapping[str, Any],
+        *,
+        org_id: str | None = None,
+    ) -> StorageWriteResult:
+        record = storage_record_from_event_raw(raw_event, now=self._now)
+        self._append_record(record, org_id=org_id)
+        return _write_result(record)
+
+    def query_event(
+        self,
+        *,
+        event_id: str | None = None,
+        org_id: str | None = None,
+        module_id: str | None = None,
+        context_id: str | None = None,
+        trace_id: str | None = None,
+        limit: int | None = None,
+    ) -> StorageQueryResult:
+        return self._query_rows(
+            event_id=event_id,
+            org_id=org_id,
+            module_id=module_id,
+            context_id=context_id,
+            trace_id=trace_id,
+            limit=limit,
+            indexes_used=("idx_c17d_event_id", "idx_c17d_module_event_type"),
+        )
+
+    def query_by_context_id(
+        self,
+        context_id: str,
+        *,
+        limit: int | None = None,
+    ) -> StorageQueryResult:
+        return self._query_rows(
+            context_id=normalize_context_id(context_id),
+            limit=limit,
+            indexes_used=("idx_c17d_context_id",),
+        )
+
+    def query_by_trace_id(
+        self,
+        trace_id: str,
+        *,
+        limit: int | None = None,
+    ) -> StorageQueryResult:
+        return self._query_rows(
+            trace_id=normalize_context_id(trace_id),
+            limit=limit,
+            indexes_used=("idx_c17d_trace_id",),
+        )
+
+    def query_by_time_range(
+        self,
+        time_range: StorageTimeRange,
+        *,
+        limit: int | None = None,
+    ) -> StorageQueryResult:
+        return self._query_rows(
+            start_at=time_range.start_at,
+            end_at=time_range.end_at,
+            limit=limit,
+            indexes_used=("idx_c17d_timestamp",),
+        )
+
+    def archive_to_cold_storage(
+        self,
+        *,
+        before: datetime | None = None,
+        batch_size: int | None = None,
+    ) -> StorageArchiveResult:
+        current = self._now or utc_now()
+        cutoff = _timestamp_value(before) if before is not None else (
+            current - timedelta(days=WARM_RETENTION_DAYS)
+        )
+        with self._session() as db:
+            statement = (
+                select(EventStreamRecord)
+                .where(
+                    EventStreamRecord.storage_tier != "L3_cold",
+                    EventStreamRecord.timestamp < cutoff,
+                )
+                .order_by(EventStreamRecord.timestamp)
+            )
+            if self._org_id is not None:
+                statement = statement.where(EventStreamRecord.org_id == self._org_id)
+            if batch_size is not None:
+                statement = statement.limit(max(batch_size, 0))
+            rows = list(db.scalars(statement))
+            keys: list[str] = []
+            for row in rows:
+                record = storage_record_from_event_stream_row(row)
+                object_key = row.archive_object_key or _archive_object_key(record)
+                row.storage_tier = "L3_cold"
+                row.backend_targets = list(backend_targets_for_tier("L3_cold"))
+                row.compressed = True
+                row.archive_object_key = object_key
+                keys.append(object_key)
+            self._commit(db)
+        return StorageArchiveResult(
+            candidate_count=len(rows),
+            archived_count=len(rows),
+            archive_object_keys=tuple(keys),
+        )
+
+    def _append_record(
+        self,
+        record: StorageRecordEnvelope,
+        *,
+        org_id: str | None = None,
+    ) -> None:
+        resolved_org_id = self._resolve_org_id(org_id)
+        row = _record_to_event_stream_row(record, org_id=resolved_org_id)
+        with self._session() as db:
+            db.add(row)
+            self._commit(db)
+
+    def _query_rows(
+        self,
+        *,
+        event_id: str | None = None,
+        org_id: str | None = None,
+        module_id: str | None = None,
+        context_id: str | None = None,
+        trace_id: str | None = None,
+        start_at: datetime | None = None,
+        end_at: datetime | None = None,
+        limit: int | None = None,
+        indexes_used: tuple[str, ...] = ("idx_c17d_timestamp",),
+    ) -> StorageQueryResult:
+        with self._session() as db:
+            statement = select(EventStreamRecord)
+            if event_id is not None:
+                statement = statement.where(EventStreamRecord.event_id == event_id)
+            effective_org_id = org_id or self._org_id
+            if effective_org_id is not None:
+                statement = statement.where(EventStreamRecord.org_id == effective_org_id)
+            if module_id is not None:
+                statement = statement.where(EventStreamRecord.module_id == module_id)
+            if context_id is not None:
+                statement = statement.where(EventStreamRecord.context_id == context_id)
+            if trace_id is not None:
+                statement = statement.where(EventStreamRecord.trace_id == trace_id)
+            if start_at is not None:
+                statement = statement.where(EventStreamRecord.timestamp >= start_at)
+            if end_at is not None:
+                statement = statement.where(EventStreamRecord.timestamp <= end_at)
+            statement = statement.order_by(
+                EventStreamRecord.timestamp.desc(),
+                EventStreamRecord.id.desc(),
+            )
+            rows = list(db.scalars(statement))
+            total_count = len(rows)
+            if limit is not None:
+                rows = rows[: max(limit, 0)]
+            records = tuple(storage_record_from_event_stream_row(row) for row in rows)
+        searched_tiers = tuple(dict.fromkeys(record.tier for record in records))
+        if not searched_tiers:
+            searched_tiers = ("L1_hot", "L2_warm", "L3_cold")
+        return StorageQueryResult(
+            records=records,
+            total_count=total_count,
+            searched_tiers=searched_tiers,
+            indexes_used=indexes_used,
+        )
+
+    @contextmanager
+    def _session(self) -> Iterator[Session]:
+        if self._db is not None:
+            yield self._db
+            return
+        from ..db.session import SessionLocal
+
+        with SessionLocal() as db:
+            yield db
+
+    def _commit(self, db: Session) -> None:
+        if self._db is None:
+            db.commit()
+        else:
+            db.flush()
+
+    def _resolve_org_id(self, explicit_org_id: str | None = None) -> str:
+        for value in (explicit_org_id, self._org_id):
+            if isinstance(value, str) and value.strip():
+                return value.strip()[:40]
+        try:
+            from .data_isolation import current_org_data_isolation_context
+
+            context = current_org_data_isolation_context()
+        except Exception:
+            context = None
+        if context is not None and context.org_id:
+            return context.org_id[:40]
+        return "platform"
 
 
 def get_storage_architecture_design() -> StorageArchitectureDesign:
