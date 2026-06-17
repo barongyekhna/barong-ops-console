@@ -170,18 +170,31 @@ def contract_manifest(
     }
 
 
-def owner_permission_info() -> CurrentUserPermissionInfo:
+OWNER_PLATFORM_PERMISSION_KEYS = (
+    "modules.read",
+    "operation_logs.read",
+    "permissions.read",
+    "settings.read",
+    "users.manage",
+)
+
+
+def owner_permission_info(*permission_keys: str) -> CurrentUserPermissionInfo:
     return CurrentUserPermissionInfo(
-        is_owner_full_access=True,
-        permission_keys=["*"],
+        is_owner_full_access=False,
+        permission_keys=sorted(
+            {*OWNER_PLATFORM_PERMISSION_KEYS, *permission_keys}
+        ),
         assignments=[],
         scope_summary=[],
+        is_platform_owner=True,
     )
 
 
 def test_modules_registry_api_requires_login_and_owner_can_read(
     auth_client: TestClient,
 ) -> None:
+    seed_permission_registry()
     unauth_registry = auth_client.get("/api/control-plane/modules/registry")
     unauth_me = auth_client.get("/api/control-plane/modules/me")
     create_module_registry_user(username="c07b_owner_api", role="owner")
@@ -204,7 +217,7 @@ def test_modules_registry_api_requires_login_and_owner_can_read(
         module_keys
     )
     assert "password_hash" not in json.dumps(registry_payload, sort_keys=True)
-    assert me.json()["is_owner_full_access"] is True
+    assert me.json()["is_owner_full_access"] is False
 
 
 def test_static_module_registry_validation_rules() -> None:
@@ -502,7 +515,10 @@ def test_non_executable_statuses_never_return_executable_access() -> None:
                 )
             ]
         )[0]
-        access = build_module_access_state(manifest, owner_permission_info())
+        access = build_module_access_state(
+            manifest,
+            owner_permission_info(f"contract_{status}.read"),
+        )
 
         assert access.visible is True
         assert access.unavailable is True
@@ -513,6 +529,7 @@ def test_non_executable_statuses_never_return_executable_access() -> None:
 def test_owner_and_non_owner_module_access_states(
     auth_client: TestClient,
 ) -> None:
+    seed_permission_registry()
     create_module_registry_user(username="c07b_owner_access", role="owner")
     create_module_registry_user(username="c07b_viewer_access", role="viewer")
     owner_token = login_token(auth_client, username="c07b_owner_access")
@@ -558,6 +575,7 @@ def test_owner_and_non_owner_module_access_states(
 def test_planned_adapter_pending_and_unavailable_modules_are_not_executable(
     auth_client: TestClient,
 ) -> None:
+    seed_permission_registry()
     create_module_registry_user(username="c07b_owner_nonexec", role="owner")
     owner_token = login_token(auth_client, username="c07b_owner_nonexec")
 
@@ -566,14 +584,14 @@ def test_planned_adapter_pending_and_unavailable_modules_are_not_executable(
     assert response.status_code == 200
     items = access_items_by_key(response.json())
     assert items["business.products"]["status"] == "planned"
-    assert items["business.products"]["access_state"] == "planned"
+    assert items["business.products"]["access_state"] == "locked"
     assert items["business.products"]["executable"] is False
     assert items["admin.settings"]["status"] == "planned"
     assert items["admin.settings"]["access_state"] == "planned"
     assert items["admin.settings"]["executable"] is False
     assert items["integration.n8n_test_bridge"]["status"] == "adapter_pending"
     assert items["integration.n8n_test_bridge"]["access_state"] == (
-        "adapter_pending"
+        "hidden"
     )
     assert items["integration.n8n_test_bridge"]["executable"] is False
 

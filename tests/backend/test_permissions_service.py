@@ -81,7 +81,7 @@ def test_permission_registry_seed_upsert_is_idempotent(
             db.commit()
 
 
-def test_owner_has_global_full_access_without_assignments(
+def test_owner_has_platform_admin_scope_without_assignment_bypass(
     clean_auth_tables: None,
 ) -> None:
     owner_id = create_permission_test_user(
@@ -99,23 +99,26 @@ def test_owner_has_global_full_access_without_assignments(
 
         assert owner_assignments == []
         assert user_has_permission(db, owner, "users.manage")
-        assert user_has_permission(
+        assert user_has_permission(db, owner, "production.release")
+        assert not user_has_permission(
             db,
             owner,
             "users.manage",
             scope_type="company",
             scope_key="independent_site",
         )
-        assert user_has_permission(
+        assert not user_has_permission(
             db,
             owner,
             "production.release",
             scope_type="factory",
             scope_key="factory_a",
         )
-        assert effective.is_owner_full_access is True
+        assert effective.is_owner_full_access is False
+        assert effective.is_platform_owner is True
         assert "users.manage" in effective.permissions
         assert "production.release" in effective.permissions
+        assert "jobs.read" not in effective.permissions
 
 
 def test_super_admin_requires_assignment_and_scope_matches(

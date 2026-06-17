@@ -73,9 +73,31 @@ def test_control_plane_has_no_app_or_legacy_bypass(
 def test_control_plane_unknown_routes_default_to_not_found_after_boundary(
     auth_client: TestClient,
 ) -> None:
+    create_user("c16_admin_unknown", "admin")
+    login(auth_client, "c16_admin_unknown")
+
+    response = auth_client.get("/api/control-plane/not-registered")
+
+    assert response.status_code == 404
+
+
+def test_control_plane_system_role_no_longer_bypasses_boundary(
+    auth_client: TestClient,
+) -> None:
     create_user("c16_system", "system")
     login(auth_client, "c16_system")
 
     response = auth_client.get("/api/control-plane/not-registered")
 
-    assert response.status_code == 404
+    assert response.status_code == 403
+
+
+def test_control_plane_legacy_admin_alias_no_longer_bypasses_boundary(
+    auth_client: TestClient,
+) -> None:
+    create_user("c16_super_admin", "super_admin")
+    login(auth_client, "c16_super_admin")
+
+    response = auth_client.get("/api/control-plane/not-registered")
+
+    assert response.status_code == 403

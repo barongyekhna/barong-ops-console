@@ -54,7 +54,6 @@ from .api.org import router as org_router
 from .api.org_membership import router as org_membership_router
 from .api.shared_module import router as shared_module_router
 from .core.config import get_settings
-from .core.rbac import normalize_rbac_role
 from .core.security_headers import apply_security_headers
 from .db.session import SessionLocal
 from .middleware.event_collector import capture_audit_events
@@ -63,13 +62,16 @@ from .middleware.org_context import org_context_middleware
 from .middleware.permission import enforce_permission_isolation
 from .services.event_collector import emit_event
 from .services.auth_service import InvalidSessionError, validate_session
+from .services.unified_permission_engine import (
+    UnifiedPermissionEngine,
+    UnifiedPermissionRequest,
+)
 
 settings = get_settings()
 
 PUBLIC_API_PREFIX = "/api/public"
 APPLICATION_API_PREFIX = "/api/app"
 CONTROL_PLANE_API_PREFIX = "/api/control-plane"
-CONTROL_PLANE_ROLES = frozenset(("admin", "system", "owner"))
 PRODUCTION_LIKE_ENVS = frozenset(("production", "prod", "staging"))
 
 
@@ -268,8 +270,19 @@ async def enforce_control_plane_isolation(request: Request, call_next):
                 detail="Not authenticated.",
             )
 
-        role = normalize_rbac_role(current_session.user.role)
-        if role not in CONTROL_PLANE_ROLES:
+        decision = UnifiedPermissionEngine(db).decide_platform_metadata(
+            UnifiedPermissionRequest(
+                user_id=current_session.user.id,
+                org_id=None,
+                module_id="C16",
+                action="admin",
+                role=current_session.user.role,
+                scope_type="global",
+                scope_key="*",
+                source="control_plane_isolation",
+            )
+        )
+        if not decision.allowed:
             request.state.user_id = str(current_session.user.id)
             emit_event(
                 event_type="control_plane.exit",
@@ -279,7 +292,12 @@ async def enforce_control_plane_isolation(request: Request, call_next):
                 status="failed",
                 context_id=audit.request_id,
                 user_id=str(current_session.user.id),
-                payload={"reason": "role_denied", "role": role},
+                payload={
+                    "reason": "permission_denied",
+                    "role": current_session.user.role,
+                    "decision_source": "UnifiedPermissionEngine",
+                    "denial_code": decision.denial_code,
+                },
             )
             return _control_plane_denied_response(
                 status_code=status.HTTP_403_FORBIDDEN,

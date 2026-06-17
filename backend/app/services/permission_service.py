@@ -11,6 +11,7 @@ from ..core.permissions import (
     RISK_LEVEL_CRITICAL,
     RISK_LEVEL_HIGH,
     SCOPE_GLOBAL,
+    SCOPE_ORGANIZATION,
     validate_permission_definition,
     validate_permission_key,
     validate_scope,
@@ -40,6 +41,11 @@ from ..repositories.permissions import (
 from ..repositories.operation_logs import create_operation_log
 from ..schemas.permission import PermissionAssignmentUpdate
 from .auth_service import AuditContext
+from .unified_permission_engine import (
+    OWNER_PLATFORM_PERMISSION_CATEGORIES,
+    UnifiedPermissionEngine,
+    UnifiedPermissionRequest,
+)
 
 
 class PermissionServiceError(ValueError):
@@ -132,6 +138,7 @@ class EffectivePermissions:
     is_owner_full_access: bool
     permissions: list[str]
     scoped_permissions: list[EffectivePermissionScope]
+    is_platform_owner: bool = False
 
 
 @dataclass(frozen=True)
@@ -154,6 +161,7 @@ class CurrentUserPermissionInfo:
     permission_keys: list[str]
     assignments: list[EffectivePermissionAssignment]
     scope_summary: list[EffectivePermissionScopeSummary]
+    is_platform_owner: bool = False
 
 
 @dataclass(frozen=True)
@@ -657,10 +665,10 @@ def list_user_permission_assignments(
             user_id=target_user.id,
             username=target_user.username,
             role=target_user.role,
-            is_owner_full_access=True,
+            is_owner_full_access=False,
             owner_full_access_note=(
-                "Owner has global full access from role and is not managed "
-                "through permission assignments."
+                "Owner is a platform role evaluated by UnifiedPermissionEngine "
+                "and is not managed through permission assignments."
             ),
             assignments=[],
         )
@@ -1409,29 +1417,21 @@ def user_has_permission(
     scope_type: str = SCOPE_GLOBAL,
     scope_key: str = "*",
 ) -> bool:
-    normalized_key = validate_permission_key(permission_key)
-    normalized_scope_type, normalized_scope_key = validate_scope(
-        scope_type,
-        scope_key,
+    module_id, _, action = permission_key.partition(".")
+    decision = UnifiedPermissionEngine(db).decide(
+        UnifiedPermissionRequest(
+            user_id=user.id,
+            org_id=scope_key if scope_type == SCOPE_ORGANIZATION else None,
+            module_id=module_id or "permissions",
+            action=action or "read",
+            role=user.role,
+            scope_type=scope_type,
+            scope_key=scope_key,
+            permission_key=permission_key,
+            source="c05_user_has_permission_wrapper",
+        )
     )
-    permission = get_permission(db, normalized_key)
-    if permission is None or not permission.is_enabled:
-        return False
-
-    now = _utc_now()
-    assignments = list_enabled_user_assignments(db, user.id, now=now)
-    for assignment in assignments:
-        if assignment.permission_key != normalized_key:
-            continue
-        if _is_expired(assignment.expires_at, now=now):
-            continue
-        if _assignment_matches_scope(
-            assignment,
-            scope_type=normalized_scope_type,
-            scope_key=normalized_scope_key,
-        ):
-            return True
-    return False
+    return decision.allowed
 
 
 def resolve_effective_permissions(
@@ -1442,13 +1442,18 @@ def resolve_effective_permissions(
     enabled_permissions = list_enabled_permissions(db)
 
     if is_owner_role(role):
+        platform_permissions = [
+            permission
+            for permission in enabled_permissions
+            if permission.category in OWNER_PLATFORM_PERMISSION_CATEGORIES
+        ]
         permission_keys = sorted(
-            permission.permission_key for permission in enabled_permissions
+            permission.permission_key for permission in platform_permissions
         )
         return EffectivePermissions(
             user_id=user.id,
             role=role,
-            is_owner_full_access=True,
+            is_owner_full_access=False,
             permissions=permission_keys,
             scoped_permissions=[
                 EffectivePermissionScope(
@@ -1457,8 +1462,9 @@ def resolve_effective_permissions(
                     scope_key="*",
                     expires_at=None,
                 )
-                for permission in enabled_permissions
+                for permission in platform_permissions
             ],
+            is_platform_owner=True,
         )
 
     now = _utc_now()
@@ -1482,6 +1488,7 @@ def resolve_effective_permissions(
         is_owner_full_access=False,
         permissions=permission_keys,
         scoped_permissions=scoped_permissions,
+        is_platform_owner=False,
     )
 
 
@@ -1490,14 +1497,6 @@ def resolve_current_user_permission_info(
     user: User,
 ) -> CurrentUserPermissionInfo:
     effective = resolve_effective_permissions(db, user)
-    if effective.is_owner_full_access:
-        return CurrentUserPermissionInfo(
-            is_owner_full_access=True,
-            permission_keys=["*"],
-            assignments=[],
-            scope_summary=[],
-        )
-
     assignments = [
         EffectivePermissionAssignment(
             permission_key=permission.permission_key,
@@ -1528,6 +1527,7 @@ def resolve_current_user_permission_info(
         permission_keys=effective.permissions,
         assignments=assignments,
         scope_summary=scope_summary,
+        is_platform_owner=effective.is_platform_owner,
     )
 
 

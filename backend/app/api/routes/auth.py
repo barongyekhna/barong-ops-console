@@ -2,7 +2,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
-from ...core.rbac import check_permission
 from ...core.session_cookies import clear_session_cookie, set_session_cookie
 from ...db.session import get_db
 from ...models.user import User
@@ -23,6 +22,10 @@ from ...services.auth_service import (
     validate_session,
 )
 from ...services.permission_service import resolve_current_user_permission_info
+from ...services.unified_permission_engine import (
+    UnifiedPermissionEngine,
+    UnifiedPermissionRequest,
+)
 from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -109,10 +112,22 @@ def logout(
 
     if current_session is not None:
         user = current_session.user
-        if not check_permission(user, "AUTH", "read"):
+        decision = UnifiedPermissionEngine(db).decide_platform_metadata(
+            UnifiedPermissionRequest(
+                user_id=user.id,
+                org_id=getattr(request.state, "org_id", None),
+                module_id="AUTH",
+                action="read",
+                role=user.role,
+                scope_type="global",
+                scope_key="*",
+                source="auth_logout",
+            )
+        )
+        if not decision.allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="RBAC permission denied.",
+                detail="Permission denied.",
             )
         logout_user(
             db,

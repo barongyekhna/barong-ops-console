@@ -147,6 +147,7 @@ def grant_test_permission(
 def test_require_permission_owner_passes_without_assignment(
     auth_client: TestClient,
 ) -> None:
+    seed_permission_registry()
     owner_id = create_permission_api_user(
         username="c05c_owner_dependency",
         role="owner",
@@ -272,9 +273,10 @@ def test_super_admin_requires_explicit_assignment(
     assert still_missing_global.status_code == 403
 
 
-def test_auth_me_returns_owner_wildcard_permissions_without_secrets(
+def test_auth_me_returns_owner_platform_scoped_permissions_without_secrets(
     auth_client: TestClient,
 ) -> None:
+    seed_permission_registry()
     create_permission_api_user(
         username="c05c_owner_auth_me",
         role="owner",
@@ -286,12 +288,12 @@ def test_auth_me_returns_owner_wildcard_permissions_without_secrets(
     assert response.status_code == 200
     payload = response.json()
     assert payload["role"] == "owner"
-    assert payload["permissions"] == {
-        "is_owner_full_access": True,
-        "permission_keys": ["*"],
-        "assignments": [],
-        "scope_summary": [],
-    }
+    permissions = payload["permissions"]
+    assert permissions["is_owner_full_access"] is False
+    assert "*" not in permissions["permission_keys"]
+    assert "users.manage" in permissions["permission_keys"]
+    assert "production.release" in permissions["permission_keys"]
+    assert "jobs.read" not in permissions["permission_keys"]
     assert "password_hash" not in json.dumps(payload, sort_keys=True)
 
 
@@ -378,9 +380,10 @@ def test_permissions_me_returns_current_user_effective_permissions(
     assert payload["permissions"]["permission_keys"] == ["jobs.read"]
 
 
-def test_permissions_me_returns_owner_full_access(
+def test_permissions_me_returns_owner_platform_scoped_permissions(
     auth_client: TestClient,
 ) -> None:
+    seed_permission_registry()
     owner_id = create_permission_api_user(
         username="c05c_owner_permissions_me",
         role="owner",
@@ -394,8 +397,11 @@ def test_permissions_me_returns_owner_full_access(
 
     assert response.status_code == 200
     assert response.json()["user_id"] == owner_id
-    assert response.json()["permissions"]["is_owner_full_access"] is True
-    assert response.json()["permissions"]["permission_keys"] == ["*"]
+    assert response.json()["permissions"]["is_owner_full_access"] is False
+    permission_keys = response.json()["permissions"]["permission_keys"]
+    assert "*" not in permission_keys
+    assert "permissions.read" in permission_keys
+    assert "jobs.read" not in permission_keys
 
 
 def test_permissions_registry_requires_permissions_read_or_owner(

@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from ..core.config import Settings, get_settings
 from ..core.permissions import SCOPE_GLOBAL
-from ..core.rbac import check_internal_permission, check_permission
 from ..core.roles import is_owner_role
 from ..db.session import get_db
 from ..models.user import User
@@ -18,6 +17,11 @@ from ..services.auth_service import (
     validate_session,
 )
 from ..services.permission_service import user_has_permission
+from ..services.unified_permission_engine import (
+    UnifiedPermissionEngine,
+    UnifiedPermissionRequest,
+    check_internal_permission,
+)
 
 SENSITIVE_HEADER_MARKERS = (
     "bearer",
@@ -130,22 +134,40 @@ def get_current_user(
 def require_owner(
     request: Request,
     user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> User:
-    allowed = check_permission(user, "ADMIN", "admin")
+    decision = UnifiedPermissionEngine(db).decide_platform_metadata(
+        UnifiedPermissionRequest(
+            user_id=user.id,
+            org_id=getattr(request.state, "org_id", None),
+            module_id="ADMIN",
+            action="admin",
+            role=user.role,
+            scope_type=SCOPE_GLOBAL,
+            scope_key="*",
+            source="api_require_owner",
+        )
+    )
     emit_event(
         event_type="rbac.check",
         module="system",
         action="rbac.ADMIN.admin",
         source="backend",
-        status="success" if allowed else "failed",
+        status="success" if decision.allowed else "failed",
         context_id=get_audit_context(request).request_id,
         user_id=str(user.id),
-        payload={"module": "ADMIN", "action": "admin", "role": user.role},
+        payload={
+            "module": "ADMIN",
+            "action": "admin",
+            "role": user.role,
+            "decision_source": "UnifiedPermissionEngine",
+            "denial_code": decision.denial_code,
+        },
     )
-    if not allowed:
+    if not decision.allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="RBAC permission denied.",
+            detail="Permission denied.",
         )
     if not is_owner_role(user.role):
         emit_event(
@@ -225,22 +247,40 @@ def require_rbac(module: str, action: str):
     def dependency(
         request: Request,
         user: User = Depends(get_current_user),
+        db: Session = Depends(get_db),
     ) -> User:
-        allowed = check_permission(user, module, action)
+        decision = UnifiedPermissionEngine(db).decide_platform_metadata(
+            UnifiedPermissionRequest(
+                user_id=user.id,
+                org_id=getattr(request.state, "org_id", None),
+                module_id=module,
+                action=action,
+                role=user.role,
+                scope_type=SCOPE_GLOBAL,
+                scope_key="*",
+                source="api_require_rbac",
+            )
+        )
         emit_event(
             event_type="rbac.check",
             module="system",
             action=f"rbac.{module}.{action}",
             source="backend",
-            status="success" if allowed else "failed",
+            status="success" if decision.allowed else "failed",
             context_id=get_audit_context(request).request_id,
             user_id=str(user.id),
-            payload={"module": module, "action": action, "role": user.role},
+            payload={
+                "module": module,
+                "action": action,
+                "role": user.role,
+                "decision_source": "UnifiedPermissionEngine",
+                "denial_code": decision.denial_code,
+            },
         )
-        if not allowed:
+        if not decision.allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="RBAC permission denied.",
+                detail="Permission denied.",
             )
         return user
 
@@ -248,17 +288,23 @@ def require_rbac(module: str, action: str):
 
 
 def require_internal_rbac(module: str, action: str = "internal") -> None:
-    allowed = check_internal_permission(module, action)
+    decision = check_internal_permission(module, action)
     emit_event(
         event_type="rbac.internal_check",
         module="system",
         action=f"rbac.{module}.{action}",
         source="backend",
-        status="success" if allowed else "failed",
-        payload={"module": module, "action": action, "principal": "system"},
+        status="success" if decision.allowed else "failed",
+        payload={
+            "module": module,
+            "action": action,
+            "principal": "system",
+            "decision_source": "UnifiedPermissionEngine",
+            "denial_code": decision.denial_code,
+        },
     )
-    if not allowed:
+    if not decision.allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="RBAC internal permission denied.",
+            detail="Internal permission denied.",
         )

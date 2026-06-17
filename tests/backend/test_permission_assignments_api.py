@@ -95,7 +95,7 @@ def grant_assignment(
     return response.json()
 
 
-def test_owner_lists_assignments_and_owner_target_full_access(
+def test_owner_lists_assignments_and_owner_target_platform_role_note(
     auth_client: TestClient,
 ) -> None:
     seed_registry()
@@ -141,9 +141,9 @@ def test_owner_lists_assignments_and_owner_target_full_access(
     assert owner_response.status_code == 200
     owner_payload = owner_response.json()
     assert owner_payload["user_id"] == owner_id
-    assert owner_payload["is_owner_full_access"] is True
+    assert owner_payload["is_owner_full_access"] is False
     assert owner_payload["assignments"] == []
-    assert "assignment" in owner_payload["owner_full_access_note"]
+    assert "UnifiedPermissionEngine" in owner_payload["owner_full_access_note"]
 
 
 def test_non_owner_and_super_admin_cannot_manage_assignments(
