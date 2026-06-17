@@ -1,12 +1,11 @@
 "use client";
 
-import { Activity, LoaderCircle, Play, RotateCcw } from "lucide-react";
+import { Activity, LoaderCircle, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { ApiError } from "@/lib/api";
 import {
   latestN8nTest,
-  requestN8nTestMock,
   type N8nTestSnapshot,
 } from "@/lib/n8n-test-api";
 
@@ -16,7 +15,6 @@ export function N8nTestPanel() {
   const [snapshot, setSnapshot] = useState<N8nTestSnapshot | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isRunning, setIsRunning] = useState(false);
 
   const loadLatest = useCallback(async (showLoading = true) => {
     if (showLoading) {
@@ -32,7 +30,7 @@ export function N8nTestPanel() {
         setError(
           requestError instanceof ApiError
             ? requestError.message
-            : "The n8n test bridge API is unavailable.",
+            : "The diagnostic status API is unavailable.",
         );
       }
     } finally {
@@ -56,66 +54,47 @@ export function N8nTestPanel() {
     return () => window.clearTimeout(timer);
   }, [loadLatest, snapshot]);
 
-  async function handleRun() {
-    setIsRunning(true);
-    setError("");
-    try {
-      setSnapshot(await requestN8nTestMock());
-    } catch (requestError) {
-      setError(
-        requestError instanceof ApiError
-          ? requestError.message
-          : "The n8n test mock request could not be created.",
-      );
-    } finally {
-      setIsRunning(false);
-    }
-  }
-
   return (
-    <section className="demo-panel" aria-labelledby="n8n-test-title">
-      <div className="demo-panel-heading">
-        <div className="demo-heading-copy">
-          <span className="demo-badge">Test only</span>
+    <section className="diagnostic-panel" aria-labelledby="n8n-test-title">
+      <div className="diagnostic-panel-heading">
+        <div className="diagnostic-heading-copy">
+          <span className="diagnostic-badge">Internal</span>
           <div>
-            <h3 id="n8n-test-title">n8n Test Mock Bridge</h3>
+            <h3 id="n8n-test-title">Bridge diagnostic status</h3>
             <p>
-              Mock bridge only. It does not call n8n, send webhook traffic, or trigger downstream business work.
+              Read-only diagnostic status. Product navigation does not expose
+              this route and this panel cannot create execution results.
             </p>
           </div>
         </div>
         <button
-          className="primary-button"
-          disabled={isLoading || isRunning}
-          onClick={() => void handleRun()}
+          className="secondary-button"
+          disabled={isLoading}
+          onClick={() => void loadLatest()}
           type="button"
         >
-          {isRunning ? (
-            <LoaderCircle className="spin" aria-hidden="true" size={17} />
-          ) : (
-            <Play aria-hidden="true" size={17} />
-          )}
-          {isRunning ? "Creating mock result" : "Create mock n8n result"}
+          <RotateCcw aria-hidden="true" size={17} />
+          Refresh status
         </button>
       </div>
 
       {isLoading ? (
-        <div className="demo-state" aria-label="Loading latest n8n test">
+        <div className="diagnostic-state" aria-label="Loading latest diagnostic status">
           <LoaderCircle className="spin" aria-hidden="true" size={20} />
-          Loading the latest n8n test run
+          Loading diagnostic status
         </div>
       ) : null}
 
       {!isLoading && error ? (
-        <div className="demo-state demo-state-error" role="alert">
+        <div className="diagnostic-state diagnostic-state-error" role="alert">
           <div>
-            <strong>n8n test mock request failed</strong>
+            <strong>Diagnostic status request failed</strong>
             <span>{error}</span>
           </div>
           <button
             className="icon-button"
             onClick={() => void loadLatest()}
-            title="Retry latest n8n test"
+            title="Retry diagnostic status"
             type="button"
           >
             <RotateCcw aria-hidden="true" size={17} />
@@ -124,19 +103,19 @@ export function N8nTestPanel() {
       ) : null}
 
       {!isLoading && !error && !snapshot ? (
-        <div className="demo-state">
+        <div className="diagnostic-state">
           <Activity aria-hidden="true" size={20} />
-          No n8n test bridge run has been recorded.
+          No diagnostic status has been recorded.
         </div>
       ) : null}
 
       {!isLoading && !error && snapshot ? (
-        <div className="demo-result" aria-label="Latest n8n test bridge run">
-          <div className="demo-result-heading">
-            <span>Latest test run</span>
+        <div className="diagnostic-result" aria-label="Latest diagnostic bridge status">
+          <div className="diagnostic-result-heading">
+            <span>Latest diagnostic record</span>
             <strong>{snapshot.job.status}</strong>
           </div>
-          <dl className="demo-result-grid">
+          <dl className="diagnostic-result-grid">
             <div>
               <dt>Job ID</dt>
               <dd>{snapshot.job.job_id}</dd>
@@ -162,12 +141,12 @@ export function N8nTestPanel() {
               <dd>{snapshot.operation_log_count}</dd>
             </div>
           </dl>
-          <div className="demo-memory">
+          <div className="diagnostic-memory">
             <span>Memory event summary</span>
             <p>{snapshot.memory_event?.summary ?? "Not recorded"}</p>
           </div>
           {snapshot.error ? (
-            <div className="demo-memory demo-error-summary">
+            <div className="diagnostic-memory diagnostic-error-summary">
               <span>Test error</span>
               <p>
                 {snapshot.error.error_code}: {snapshot.error.message}

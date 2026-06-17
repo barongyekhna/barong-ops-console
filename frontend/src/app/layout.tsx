@@ -10,7 +10,7 @@ export const metadata: Metadata = {
     default: "Barong Ops Console",
     template: "%s | Barong Ops Console",
   },
-  description: "Barong Ops Console foundation interface.",
+  description: "Barong Ops Console capability-aware operations interface.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

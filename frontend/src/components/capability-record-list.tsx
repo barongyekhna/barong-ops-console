@@ -3,23 +3,25 @@
 import { LoaderCircle, RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
+import { CapabilityEmptyState } from "@/components/capability-empty-state";
 import { EmptyState } from "@/components/empty-state";
 import { ApiError } from "@/lib/api";
 import {
-  foundationListRequest,
-  type FoundationListResponse,
-} from "@/lib/foundation-api";
+  capabilityRecordListRequest,
+  type CapabilityRecordListResponse,
+} from "@/lib/capability-records-api";
 
 type DisplayField = {
   key: string;
   label: string;
 };
 
-type FoundationListProps = {
+type CapabilityRecordListProps = {
   endpoint: string;
   emptyDescription: string;
   emptyTitle: string;
   fields: DisplayField[];
+  requiredPermission?: string;
   title: string;
 };
 
@@ -33,14 +35,15 @@ function displayValue(value: unknown) {
   return String(value);
 }
 
-export function FoundationList({
+export function CapabilityRecordList({
   endpoint,
   emptyDescription,
   emptyTitle,
   fields,
+  requiredPermission = "Read permission for this capability.",
   title,
-}: FoundationListProps) {
-  const [result, setResult] = useState<FoundationListResponse | null>(null);
+}: CapabilityRecordListProps) {
+  const [result, setResult] = useState<CapabilityRecordListResponse | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
 
@@ -48,13 +51,13 @@ export function FoundationList({
     setIsLoading(true);
     setError("");
     try {
-      setResult(await foundationListRequest(endpoint));
+      setResult(await capabilityRecordListRequest(endpoint));
     } catch (requestError) {
       setResult(null);
       setError(
         requestError instanceof ApiError
           ? requestError.message
-          : "The foundation API is unavailable.",
+          : "The backend record API is unavailable.",
       );
     } finally {
       setIsLoading(false);
@@ -69,49 +72,57 @@ export function FoundationList({
     return (
       <section className="list-state" aria-label={`Loading ${title}`}>
         <LoaderCircle className="spin" aria-hidden="true" size={22} />
-        <span>Loading foundation records</span>
+        <span>Loading backend records</span>
       </section>
     );
   }
 
   if (error) {
     return (
-      <section className="list-state list-error" role="alert">
-        <div>
-          <h2>API request failed</h2>
-          <p>{error}</p>
-        </div>
-        <button className="primary-button" onClick={() => void load()}>
-          <RotateCcw aria-hidden="true" size={17} />
-          Retry
-        </button>
-      </section>
+      <CapabilityEmptyState
+        action={
+          <button className="primary-button" onClick={() => void load()}>
+            <RotateCcw aria-hidden="true" size={17} />
+            Retry
+          </button>
+        }
+        reason={error}
+        required_execution_mode="Read-only backend API must be reachable."
+        required_module_state="Module route and backend binding must be available."
+        required_org_state="Active organization context must be accepted by the backend."
+        required_permission={requiredPermission}
+        state="backend_unavailable"
+        title={`${title} API request failed`}
+        unlock_condition={`Restore ${endpoint} and retry the request.`}
+      />
     );
   }
 
   if (!result?.items.length) {
     return (
       <EmptyState
+        dataSource={endpoint}
         description={emptyDescription}
+        requiredPermission={requiredPermission}
         title={emptyTitle}
       />
     );
   }
 
   return (
-    <section className="foundation-list" aria-label={title}>
-      <div className="foundation-list-heading">
+    <section className="record-list" aria-label={title}>
+      <div className="record-list-heading">
         <h2>{title}</h2>
         <span>{result.count} records on this page</span>
       </div>
-      <div className="foundation-card-grid">
+      <div className="record-card-grid">
         {result.items.map((item, index) => (
           <article
-            className="foundation-card"
+            className="record-card"
             key={String(item.id ?? `${endpoint}-${index}`)}
           >
             {fields.map((field) => (
-              <div className="foundation-field" key={field.key}>
+              <div className="record-field" key={field.key}>
                 <span>{field.label}</span>
                 <strong>{displayValue(item[field.key])}</strong>
               </div>

@@ -5,13 +5,7 @@ export type N8nTestSnapshot = {
   job: {
     job_id: string;
     run_type: "n8n_test_bridge";
-    status:
-      | "pending"
-      | "running"
-      | "waiting_callback"
-      | "failed"
-      | "cancelled"
-      | "completed_demo";
+    status: string;
   };
   latest_event: {
     event_type: string;
@@ -32,12 +26,6 @@ export type N8nTestSnapshot = {
   } | null;
   operation_log_count: number;
 };
-
-export function requestN8nTestMock() {
-  return apiRequest<N8nTestSnapshot>("/n8n-test/run", {
-    method: "POST",
-  });
-}
 
 export function latestN8nTest() {
   return apiRequest<N8nTestSnapshot>("/n8n-test/latest", {

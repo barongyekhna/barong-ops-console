@@ -18,6 +18,8 @@ const ALLOWED_APP_LIST_PATHS = new Set([
   "reviews",
   "errors",
   "memory-events",
+  "operation-logs",
+  "approval/list",
 ]);
 const ALLOWED_CONTROL_PLANE_LIST_PATHS = new Set([
   "modules",
@@ -336,10 +338,10 @@ export function getBackendApiPath(method: string, path: string[]) {
       ALLOWED_RESULT_NORMALIZATION_GET_PATHS.has(requestedPath)) ||
     (method === "POST" &&
       ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath)) ||
-    (method === "POST" && requestedPath === "foundation-demo/run") ||
-    (method === "GET" && requestedPath === "foundation-demo/latest") ||
-    (method === "POST" && requestedPath === "n8n-test/run") ||
-    (method === "GET" && requestedPath === "n8n-test/latest")
+    (process.env.NODE_ENV !== "production" &&
+      process.env.NEXT_PUBLIC_ENABLE_INTERNAL_DIAGNOSTICS === "true" &&
+      method === "GET" &&
+      requestedPath === "n8n-test/latest")
   ) {
     return withApiLayer("control-plane", requestedPath);
   }

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { FoundationList } from "@/components/foundation-list";
+import { CapabilityRecordList } from "@/components/capability-record-list";
 
 export const metadata: Metadata = {
   title: "Agents",
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function AgentsPage() {
   return (
-    <FoundationList
-      emptyDescription="Foundation and demo agent records will appear here."
+    <CapabilityRecordList
+      emptyDescription="No agent records match the current backend result set."
       emptyTitle="No agents registered yet."
       endpoint="/agents"
       fields={[
@@ -17,6 +17,7 @@ export default function AgentsPage() {
         { key: "name", label: "Name" },
         { key: "status", label: "Status" },
       ]}
+      requiredPermission="modules.read"
       title="Agent registry"
     />
   );

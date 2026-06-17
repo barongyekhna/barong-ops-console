@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { FoundationList } from "@/components/foundation-list";
+import { CapabilityRecordList } from "@/components/capability-record-list";
 
 export const metadata: Metadata = {
   title: "Artifacts",
@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function ArtifactsPage() {
   return (
-    <FoundationList
+    <CapabilityRecordList
       emptyDescription="Artifact metadata records will appear here."
       emptyTitle="No artifacts registered yet."
       endpoint="/artifacts"
@@ -17,6 +17,7 @@ export default function ArtifactsPage() {
         { key: "name", label: "Name" },
         { key: "status", label: "Status" },
       ]}
+      requiredPermission="artifacts.read"
       title="Artifacts"
     />
   );

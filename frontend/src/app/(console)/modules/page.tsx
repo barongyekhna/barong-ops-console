@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { FoundationList } from "@/components/foundation-list";
+import { CapabilityRecordList } from "@/components/capability-record-list";
 
 export const metadata: Metadata = {
   title: "Modules",
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function ModulesPage() {
   return (
-    <FoundationList
-      emptyDescription="Foundation and demo module records will appear here."
+    <CapabilityRecordList
+      emptyDescription="No module records match the current backend result set."
       emptyTitle="No modules registered yet."
       endpoint="/modules"
       fields={[
@@ -17,6 +17,7 @@ export default function ModulesPage() {
         { key: "name", label: "Name" },
         { key: "status", label: "Status" },
       ]}
+      requiredPermission="modules.read"
       title="Module registry"
     />
   );

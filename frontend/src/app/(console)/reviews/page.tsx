@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { FoundationList } from "@/components/foundation-list";
+import { CapabilityRecordList } from "@/components/capability-record-list";
 
 export const metadata: Metadata = {
   title: "Reviews",
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function ReviewsPage() {
   return (
-    <FoundationList
-      emptyDescription="Foundation review items will appear here."
+    <CapabilityRecordList
+      emptyDescription="No review records match the current backend result set."
       emptyTitle="No reviews waiting."
       endpoint="/reviews"
       fields={[
@@ -17,6 +17,7 @@ export default function ReviewsPage() {
         { key: "review_type", label: "Type" },
         { key: "status", label: "Status" },
       ]}
+      requiredPermission="reviews.read"
       title="Reviews"
     />
   );

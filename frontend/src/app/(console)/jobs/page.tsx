@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { FoundationList } from "@/components/foundation-list";
+import { CapabilityRecordList } from "@/components/capability-record-list";
 
 export const metadata: Metadata = {
   title: "Jobs",
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function JobsPage() {
   return (
-    <FoundationList
-      emptyDescription="Foundation and demo jobs will appear here."
+    <CapabilityRecordList
+      emptyDescription="No operation jobs match the current backend result set."
       emptyTitle="No jobs recorded yet."
       endpoint="/jobs"
       fields={[
@@ -17,6 +17,7 @@ export default function JobsPage() {
         { key: "module_key", label: "Module" },
         { key: "status", label: "Status" },
       ]}
+      requiredPermission="jobs.read"
       title="Jobs"
     />
   );

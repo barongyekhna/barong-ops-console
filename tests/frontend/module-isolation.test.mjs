@@ -271,6 +271,14 @@ const registryItems = [
     route_namespace: "/memory-events",
     status: "enabled",
   }),
+  manifest({
+    category: "system",
+    denied_behavior: "hide_when_denied",
+    module_key: "system.operation_logs",
+    required_permissions: ["operation_logs.read"],
+    route_namespace: "/operation-logs",
+    status: "sealed",
+  }),
 ];
 
 test("backend proxy precisely allows C07B module registry paths", () => {
@@ -391,43 +399,29 @@ test("module access helpers expose owner visible and non-owner hidden or locked 
   assert.equal(isBusinessModule(item("business.jobs")), true);
 });
 
-test("planned and adapter_pending modules are unavailable and not enterable", () => {
-  const plannedProducts = getNavigationStateForModule(
+test("unavailable product modules are not enterable and diagnostics stay out of navigation", () => {
+  const unavailableJobs = getNavigationStateForModule(
     ownerPermissions,
-    item("business.products"),
+    item("business.jobs"),
     [
       access({
-        access_state: "planned",
+        access_state: "unavailable",
         category: "business",
-        module_key: "business.products",
-        route_namespace: "/products",
-        status: "planned",
-        unavailable: true,
-      }),
-    ],
-  );
-  const adapterPendingBridge = getNavigationStateForModule(
-    ownerPermissions,
-    item("integration.n8n_test_bridge"),
-    [
-      access({
-        access_state: "adapter_pending",
-        category: "integration",
-        denied_behavior: "hide_when_denied",
-        module_key: "integration.n8n_test_bridge",
-        route_namespace: "/n8n-test",
-        status: "adapter_pending",
+        module_key: "business.jobs",
+        route_namespace: "/jobs",
+        status: "unavailable",
         unavailable: true,
       }),
     ],
   );
 
-  assert.equal(isModuleUnavailable(plannedProducts), true);
-  assert.equal(plannedProducts.badge, "planned");
-  assert.equal(canEnterModuleRoute(plannedProducts), false);
-  assert.equal(isModuleUnavailable(adapterPendingBridge), true);
-  assert.equal(adapterPendingBridge.badge, "adapter_pending");
-  assert.equal(canEnterModuleRoute(adapterPendingBridge), false);
+  assert.equal(isModuleUnavailable(unavailableJobs), true);
+  assert.equal(unavailableJobs.badge, "unavailable");
+  assert.equal(canEnterModuleRoute(unavailableJobs), false);
+  assert.equal(item("experimental.foundation_demo"), undefined);
+  assert.equal(item("integration.n8n_test_bridge"), undefined);
+  assert.equal(item("business.products"), undefined);
+  assert.equal(item("admin.settings"), undefined);
 });
 
 test("unavailable modules use Module Unavailable decisions and stay non-enterable", () => {
@@ -627,26 +621,25 @@ test("admin.users and admin.permissions remain hidden for non-owner and visible 
 });
 
 test("business modules stay locked for users without permission", () => {
-  const productsState = getNavigationStateForModule(
+  const jobsState = getNavigationStateForModule(
     noPermissions,
-    item("business.products"),
+    item("business.jobs"),
     [
       access({
         access_state: "locked",
         category: "business",
         locked: true,
-        missing_permissions: ["products.read"],
-        module_key: "business.products",
-        route_namespace: "/products",
-        status: "planned",
-        unavailable: true,
+        missing_permissions: ["jobs.read"],
+        module_key: "business.jobs",
+        route_namespace: "/jobs",
+        status: "enabled",
       }),
     ],
   );
 
-  assert.equal(productsState.isVisible, true);
-  assert.equal(productsState.isLocked, true);
-  assert.equal(productsState.badge, "locked");
+  assert.equal(jobsState.isVisible, true);
+  assert.equal(jobsState.isLocked, true);
+  assert.equal(jobsState.badge, "locked");
 
   for (const record of navigationModuleRecords.filter(
     (entry) => entry.category === "business",
@@ -709,17 +702,17 @@ test("module route guard decisions cover locked, hidden, unavailable, and owner 
       }),
     ],
   );
-  const unavailableProducts = getModuleRouteDecision(
+  const unavailableArtifacts = getModuleRouteDecision(
     ownerPermissions,
-    "/products",
+    "/artifacts",
     navigationModuleRecords,
     [
       access({
-        access_state: "planned",
+        access_state: "unavailable",
         category: "business",
-        module_key: "business.products",
-        route_namespace: "/products",
-        status: "planned",
+        module_key: "business.artifacts",
+        route_namespace: "/artifacts",
+        status: "unavailable",
         unavailable: true,
       }),
     ],
@@ -744,8 +737,8 @@ test("module route guard decisions cover locked, hidden, unavailable, and owner 
   assert.equal(lockedBusiness.canEnter, false);
   assert.equal(hiddenAdmin.noticeType, "no_permission");
   assert.equal(hiddenAdmin.canEnter, false);
-  assert.equal(unavailableProducts.noticeType, "module_unavailable");
-  assert.equal(unavailableProducts.canEnter, false);
+  assert.equal(unavailableArtifacts.noticeType, "module_unavailable");
+  assert.equal(unavailableArtifacts.canEnter, false);
   assert.equal(ownerUsers.noticeType, "none");
   assert.equal(ownerUsers.canEnter, true);
 });
@@ -862,6 +855,11 @@ test("sidebar navigation keeps C07B module keys and no K01 or P-series menus", (
   assert.ok(moduleKeys.includes("core.dashboard"));
   assert.ok(moduleKeys.includes("admin.users"));
   assert.ok(moduleKeys.includes("business.jobs"));
+  assert.ok(moduleKeys.includes("system.operation_logs"));
+  assert.equal(moduleKeys.includes("experimental.foundation_demo"), false);
+  assert.equal(moduleKeys.includes("integration.n8n_test_bridge"), false);
+  assert.equal(moduleKeys.includes("business.products"), false);
+  assert.equal(moduleKeys.includes("admin.settings"), false);
   assert.equal(moduleKeys.some((key) => key.startsWith("k01")), false);
   assert.equal(
     navigationItems.some((entry) => /P0[1-8]|K01|WooCommerce/i.test(entry.label)),

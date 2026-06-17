@@ -2,6 +2,7 @@ import type {
   FrontendPermissions,
   PermissionAwareModule,
 } from "./permissions";
+import type { LucideIcon } from "lucide-react";
 
 export type ModuleCategory =
   | "core"
@@ -123,6 +124,7 @@ export type UserModulesResponse = {
 export type ModuleAwareNavigationRecord = PermissionAwareModule & {
   href: string;
   label: string;
+  icon?: LucideIcon;
   module_key: string;
   route_namespace: string;
   category: ModuleCategory;

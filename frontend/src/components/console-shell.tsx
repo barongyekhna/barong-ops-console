@@ -7,15 +7,14 @@ import { useState, type ReactNode } from "react";
 
 import { AdapterSurfaceShell } from "@/components/module-adapter-shell";
 import { useAuth } from "@/components/auth-provider";
-import { useModuleAccess } from "@/components/module-access-provider";
-import { navigationGroups, pageTitles } from "@/lib/navigation";
-import { getNavigationStateForModule } from "@/lib/module-registry";
+import { useCapabilitySidebar } from "@/components/capability-sidebar-provider";
+import { pageTitles } from "@/lib/navigation";
 
 const MODULE_BADGE_LABELS = {
   adapter_pending: "Adapter pending",
   locked: "Locked",
-  planned: "Planned",
-  unavailable: "Unavailable",
+  mock: "Mock",
+  read_only: "Read-only",
 } as const;
 
 export function ConsoleShell({ children }: { children: ReactNode }) {
@@ -23,28 +22,14 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const {
-    error: moduleAccessError,
-    items: moduleAccessItems,
-    moduleAccessUnknown,
-  } = useModuleAccess();
+    error: sidebarError,
+    groups: visibleNavigationGroups,
+    isLoading: isSidebarLoading,
+    items: sidebarItems,
+    registryUnavailable,
+  } = useCapabilitySidebar();
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
-  const visibleNavigationGroups = navigationGroups
-    .map((group) => ({
-      ...group,
-      items: group.items
-        .map((item) => ({
-          ...item,
-          access: getNavigationStateForModule(
-            user?.permissions,
-            item,
-            moduleAccessItems,
-            { moduleAccessUnknown },
-          ),
-        }))
-        .filter((item) => item.access.isVisible),
-    }))
-    .filter((group) => group.items.length > 0);
 
   async function handleLogout() {
     setIsLoggingOut(true);
@@ -80,9 +65,12 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               {group.items.map((item) => {
                 const Icon = item.icon;
                 const active = pathname === item.href;
-                const locked = item.access.isLocked;
-                const unavailable = item.access.isUnavailable;
-                const badge = item.access.badge;
+                const locked = item.state === "forbidden";
+                const unavailable =
+                  item.state === "partial" ||
+                  item.state === "adapter_pending" ||
+                  item.state === "mock";
+                const badge = item.badge;
 
                 return (
                   <Link
@@ -100,9 +88,9 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
                     onClick={() => setIsNavigationOpen(false)}
                     title={
                       locked
-                        ? "No permission for this section"
+                        ? item.reason
                         : unavailable
-                          ? "Module unavailable"
+                          ? item.reason
                         : item.label
                     }
                   >
@@ -129,9 +117,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
         <div className="sidebar-footer">
           <span className="environment-dot" />
-          {moduleAccessUnknown
-            ? (moduleAccessError?.message ?? "Module access fallback")
-            : "Foundation environment"}
+          {isSidebarLoading
+            ? "Resolving capability graph"
+            : registryUnavailable
+              ? (sidebarError?.message ?? "Capability registry unavailable")
+              : `${sidebarItems.length} product capabilities`}
         </div>
       </aside>
 

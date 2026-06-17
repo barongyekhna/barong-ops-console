@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { FoundationList } from "@/components/foundation-list";
+import { CapabilityRecordList } from "@/components/capability-record-list";
 
 export const metadata: Metadata = {
   title: "Errors",
@@ -8,8 +8,8 @@ export const metadata: Metadata = {
 
 export default function ErrorsPage() {
   return (
-    <FoundationList
-      emptyDescription="Foundation error records will appear here."
+    <CapabilityRecordList
+      emptyDescription="No system error records match the current backend result set."
       emptyTitle="No errors recorded."
       endpoint="/errors"
       fields={[
@@ -17,6 +17,7 @@ export default function ErrorsPage() {
         { key: "error_code", label: "Code" },
         { key: "status", label: "Status" },
       ]}
+      requiredPermission="operation_logs.read"
       title="System errors"
     />
   );

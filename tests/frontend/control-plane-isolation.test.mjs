@@ -44,14 +44,11 @@ test("backend proxy maps C14 C15 and execution paths to control-plane only", () 
       ["execution-providers", "registry"],
       "/api/control-plane/execution-providers/registry",
     ],
-    [["n8n-test", "run"], "/api/control-plane/n8n-test/run"],
   ];
 
   for (const [path, expectedBackendPath] of controlPlanePaths) {
-    const method = path.at(-1) === "run" ? "POST" : "GET";
-
-    assert.equal(isAllowedBackendProxyPath(method, path), true);
-    assert.equal(getBackendApiPath(method, path), expectedBackendPath);
+    assert.equal(isAllowedBackendProxyPath("GET", path), true);
+    assert.equal(getBackendApiPath("GET", path), expectedBackendPath);
   }
 });
 
@@ -63,4 +60,5 @@ test("backend proxy denies direct control-plane namespace and unsafe callbacks",
   assert.equal(getBackendApiPath("POST", ["webhook-gateway", "ingress"]), null);
   assert.equal(getBackendApiPath("POST", ["callback-handler", "receiver"]), null);
   assert.equal(getBackendApiPath("POST", ["execution", "submit"]), null);
+  assert.equal(getBackendApiPath("POST", ["n8n-test", "run"]), null);
 });

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { FoundationList } from "@/components/foundation-list";
+import { CapabilityRecordList } from "@/components/capability-record-list";
 
 export const metadata: Metadata = {
   title: "Workflows",
@@ -8,7 +8,7 @@ export const metadata: Metadata = {
 
 export default function WorkflowsPage() {
   return (
-    <FoundationList
+    <CapabilityRecordList
       emptyDescription="Workflow metadata records will appear here."
       emptyTitle="No workflows registered yet."
       endpoint="/workflows"
@@ -17,6 +17,7 @@ export default function WorkflowsPage() {
         { key: "name", label: "Name" },
         { key: "status", label: "Status" },
       ]}
+      requiredPermission="modules.read"
       title="Workflow registry"
     />
   );
