@@ -141,6 +141,16 @@ app = FastAPI(
 )
 
 
+@app.on_event("startup")
+def enforce_production_migration_safety() -> None:
+    if not _production_like():
+        return
+    from .db.migration_safety import enforce_migration_safety
+    from .db.session import engine
+
+    enforce_migration_safety(engine, app_env=settings.app_env)
+
+
 def _is_control_plane_path(path: str) -> bool:
     return (
         path == CONTROL_PLANE_API_PREFIX

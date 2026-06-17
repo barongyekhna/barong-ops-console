@@ -37,6 +37,7 @@ from backend.app.models.observability import (
     AuditLogRecord,
     EventStreamRecord,
     ReplayJobRecord,
+    StorageEventRecord,
 )
 from backend.app.models.org_membership import OrgMembershipRecord
 from backend.app.models.organization import OrganizationRecord
@@ -243,6 +244,7 @@ def clear_auth_tables() -> None:
         db.execute(delete(AnomalyEventRecord))
         db.execute(delete(ReplayJobRecord))
         db.execute(delete(AuditLogRecord))
+        db.execute(delete(StorageEventRecord))
         db.execute(delete(EventStreamRecord))
         db.execute(delete(OrgMembershipRecord))
         db.execute(delete(OrganizationRecord))

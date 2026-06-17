@@ -22,9 +22,11 @@ from .observability import (
     AuditLogRecord,
     EventStreamRecord,
     ReplayJobRecord,
+    StorageEventRecord,
 )
 from .operation_log import OperationLog
 from .org_membership import OrgMembershipRecord
+from .organization import OrganizationRecord
 from .permission import (
     PermissionRegistry,
     RoleDefaultPermission,
@@ -61,6 +63,7 @@ __all__ = [
     "ModuleRegistry",
     "OperationLog",
     "OrgMembershipRecord",
+    "OrganizationRecord",
     "PermissionRegistry",
     "ReviewItem",
     "ReplayJobRecord",
@@ -68,6 +71,7 @@ __all__ = [
     "SecurityRateLimitBucket",
     "SecurityReplayNonce",
     "SharedModuleRecord",
+    "StorageEventRecord",
     "SystemError",
     "User",
     "UserPermissionAssignment",

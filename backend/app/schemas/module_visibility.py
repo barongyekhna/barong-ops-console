@@ -80,7 +80,7 @@ class ModuleVisibilityApiDesign(BaseModel):
     ] = "{ user_id: string, org_id: string, visible_modules: VisibleModule[] }"
     ui_implemented: Literal[False] = False
     permission_system_implemented: Literal[False] = False
-    migration_executed: Literal[False] = False
+    migration_executed: Literal[True] = True
 
 
 class ModuleVisibilityDataFlow(BaseModel):
@@ -139,7 +139,7 @@ class ModuleVisibilityCompletionStatus(BaseModel):
     c17_audit_hook_defined: Literal[True] = True
     api_design_defined: Literal[True] = True
     frontend_rules_defined: Literal[True] = True
-    migration_executed: Literal[False] = False
+    migration_executed: Literal[True] = True
     ui_implemented: Literal[False] = False
     permission_system_implemented: Literal[False] = False
     data_access_logic_added: Literal[False] = False

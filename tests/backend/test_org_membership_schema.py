@@ -165,11 +165,11 @@ def test_c18c_api_database_and_isolation_design_match_required_contract() -> Non
     assert api_design.ui_implemented is False
     assert api_design.module_binding_implemented is False
     assert api_design.c17_system_connected is False
-    assert api_design.runtime_migration_executed is False
+    assert api_design.runtime_migration_executed is True
 
     assert database.table_name == "org_memberships"
     assert database.binding_columns == ("user_id", "org_id")
-    assert database.required_indexes == ("user_id_org_id", "org_id")
+    assert database.required_indexes == ("user_id_org_id", "org_id", "org_id_status")
     assert database.user_id_org_id_pair_is_unique is True
     assert "CREATE TABLE org_memberships" in ORG_MEMBERSHIP_SQL_SCHEMA
     assert "membership_id TEXT PRIMARY KEY" in compact_sql
@@ -183,8 +183,11 @@ def test_c18c_api_database_and_isolation_design_match_required_contract() -> Non
     assert "'active'" in compact_sql
     assert "'suspended'" in compact_sql
     assert "joined_at TIMESTAMP" in compact_sql
+    assert "created_at TIMESTAMP" in compact_sql
+    assert "FOREIGN KEY (org_id) REFERENCES organizations (org_id)" in compact_sql
     assert "ix_org_memberships_user_id_org_id" in compact_sql
     assert "ix_org_memberships_org_id" in compact_sql
+    assert "ix_org_memberships_org_id_status" in compact_sql
 
     assert isolation.membership_must_bind_org_id is True
     assert isolation.every_membership_query_filters_org_id is True
@@ -193,4 +196,4 @@ def test_c18c_api_database_and_isolation_design_match_required_contract() -> Non
     assert isolation.cross_org_query_logic_extended is False
     assert completion.org_membership_schema_defined is True
     assert completion.permission_enforcement_defined is True
-    assert completion.runtime_migration_executed is False
+    assert completion.runtime_migration_executed is True

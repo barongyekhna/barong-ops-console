@@ -316,7 +316,7 @@ class StorageBackendDesign(BaseModel):
     postgresql_is_primary_storage: Literal[True] = True
     redis_is_hot_cache: Literal[True] = True
     object_storage_is_cold_archive: Literal[True] = True
-    database_migration_executed: Literal[False] = False
+    database_migration_executed: Literal[True] = True
 
 
 class StorageAdapterInterfaceDesign(BaseModel):
@@ -337,7 +337,7 @@ class StorageAdapterInterfaceDesign(BaseModel):
         "EventRaw",
     )
     api_behavior_changed: Literal[False] = False
-    runtime_storage_connection_required: Literal[False] = False
+    runtime_storage_connection_required: Literal[True] = True
 
 
 class StorageRetentionPolicy(BaseModel):
@@ -356,7 +356,7 @@ class StorageRetentionPolicy(BaseModel):
     ttl_migration_job_defined: Literal[True] = True
     batch_archiving_defined: Literal[True] = True
     compression_step_defined: Literal[True] = True
-    database_migration_executed: Literal[False] = False
+    database_migration_executed: Literal[True] = True
 
 
 class StorageWritePathDesign(BaseModel):
@@ -422,7 +422,7 @@ class C17CToC17DStorageMigrationStrategy(BaseModel):
     c17a_modified: Literal[False] = False
     c17b_modified: Literal[False] = False
     c17c_modified: Literal[False] = False
-    database_migration_executed: Literal[False] = False
+    database_migration_executed: Literal[True] = True
     api_behavior_changed: Literal[False] = False
     execution_replay_implemented: Literal[False] = False
 
@@ -526,5 +526,5 @@ class StorageLayerCompletionStatus(BaseModel):
     c17a_modified: Literal[False] = False
     c17b_modified: Literal[False] = False
     c17c_modified: Literal[False] = False
-    database_migration_executed: Literal[False] = False
+    database_migration_executed: Literal[True] = True
     api_behavior_changed: Literal[False] = False

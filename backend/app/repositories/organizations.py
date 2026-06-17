@@ -21,6 +21,7 @@ def create_organization_record(
 ) -> OrganizationRecord:
     organization = OrganizationRecord(
         org_id=org_id,
+        name=org_name,
         org_name=org_name,
         org_type=org_type,
         owner_user_id=owner_user_id,
@@ -42,6 +43,7 @@ def update_organization_record(
     status: str | None = None,
 ) -> OrganizationRecord:
     if org_name is not None:
+        organization.name = org_name
         organization.org_name = org_name
     if org_type is not None:
         organization.org_type = org_type

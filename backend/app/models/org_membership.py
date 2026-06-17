@@ -1,6 +1,14 @@
 from datetime import datetime
 
-from sqlalchemy import CheckConstraint, DateTime, Index, String, UniqueConstraint, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
@@ -24,11 +32,16 @@ class OrgMembershipRecord(Base):
         ),
         Index("ix_org_memberships_user_id_org_id", "user_id", "org_id"),
         Index("ix_org_memberships_org_id", "org_id"),
+        Index("ix_org_memberships_org_id_status", "org_id", "status"),
     )
 
     membership_id: Mapped[str] = mapped_column(String(64), primary_key=True)
     user_id: Mapped[str] = mapped_column(String(255), nullable=False)
-    org_id: Mapped[str] = mapped_column(String(40), nullable=False)
+    org_id: Mapped[str] = mapped_column(
+        String(40),
+        ForeignKey("organizations.org_id"),
+        nullable=False,
+    )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     status: Mapped[str] = mapped_column(
         String(20),
@@ -37,6 +50,11 @@ class OrgMembershipRecord(Base):
         server_default="active",
     )
     joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),

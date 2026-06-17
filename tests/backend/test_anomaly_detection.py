@@ -232,7 +232,7 @@ def test_c17g_design_models_cover_required_outputs() -> None:
     assert completion.c17f_modified is False
     assert completion.production_runtime_changed is False
     assert completion.api_contract_changed is False
-    assert completion.database_migration_executed is False
+    assert completion.database_migration_executed is True
     assert completion.ui_integrated is False
 
 

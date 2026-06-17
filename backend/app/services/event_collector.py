@@ -150,7 +150,7 @@ class EventQueueBackend:
         from sqlalchemy import select
 
         from ..db.session import SessionLocal
-        from ..models.observability import EventStreamRecord
+        from ..models.observability import EventStreamRecord, StorageEventRecord
 
         with SessionLocal() as db:
             rows = list(
@@ -172,11 +172,18 @@ class EventQueueBackend:
         from sqlalchemy import delete
 
         from ..db.session import SessionLocal
-        from ..models.observability import EventStreamRecord
+        from ..models.observability import EventStreamRecord, StorageEventRecord
         from .data_isolation import without_org_data_isolation
 
         with without_org_data_isolation():
             with SessionLocal() as db:
+                db.execute(
+                    delete(StorageEventRecord).where(
+                        StorageEventRecord.record_id.like(
+                            f"{COLLECTOR_RECORD_PREFIX}%"
+                        )
+                    )
+                )
                 db.execute(
                     delete(EventStreamRecord).where(
                         EventStreamRecord.record_id.like(
@@ -251,7 +258,7 @@ class EventQueueBackend:
         try:
             self._ensure_tables()
             from ..db.session import SessionLocal
-            from ..models.observability import EventStreamRecord
+            from ..models.observability import EventStreamRecord, StorageEventRecord
             from .data_isolation import without_org_data_isolation
             from .storage_layer import storage_record_from_event_raw
 
@@ -293,6 +300,27 @@ class EventQueueBackend:
             with without_org_data_isolation():
                 with SessionLocal() as db:
                     db.add(row)
+                    db.add(
+                        StorageEventRecord(
+                            org_id=resolved_org_id,
+                            storage_event_id=f"storage-event-{uuid4()}",
+                            record_id=record.record_id,
+                            operation="collector_write",
+                            entity_type=record.entity_type,
+                            context_id=record.context_id,
+                            trace_id=record.trace_id,
+                            event_id=record.event_id,
+                            module_id=record.module,
+                            storage_tier=record.tier,
+                            backend_targets=list(record.backend_targets),
+                            status="queued",
+                            payload={
+                                "collector": "EventQueueBackend",
+                                "processing_status": "queued",
+                            },
+                            occurred_at=event.timestamp,
+                        )
+                    )
                     db.commit()
             return EventQueueWriteResult(
                 persisted=True,
@@ -325,6 +353,7 @@ class EventQueueBackend:
                 AuditLogRecord,
                 EventStreamRecord,
                 ReplayJobRecord,
+                StorageEventRecord,
             )
 
             Base.metadata.create_all(
@@ -334,6 +363,7 @@ class EventQueueBackend:
                     AuditLogRecord.__table__,
                     ReplayJobRecord.__table__,
                     AnomalyEventRecord.__table__,
+                    StorageEventRecord.__table__,
                 ],
                 checkfirst=True,
             )

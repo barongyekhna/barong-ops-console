@@ -267,7 +267,7 @@ class OrganizationApiDesign(BaseModel):
     )
     write_operations_owner_only: Literal[True] = True
     ui_implemented: Literal[False] = False
-    runtime_migration_executed: Literal[False] = False
+    runtime_migration_executed: Literal[True] = True
 
 
 class OrganizationLifecycleAccessDecision(BaseModel):
@@ -578,7 +578,7 @@ class OrganizationLifecycleApiDesign(BaseModel):
     module_binding_implemented: Literal[False] = False
     permission_system_implemented: Literal[False] = False
     cross_org_query_implemented: Literal[False] = False
-    runtime_migration_executed: Literal[False] = False
+    runtime_migration_executed: Literal[True] = True
 
 
 class OrganizationDataIsolationDesign(BaseModel):
@@ -637,13 +637,14 @@ class OrganizationCoreSchemaCompletionStatus(BaseModel):
     module_binding_implemented: Literal[False] = False
     permission_system_implemented: Literal[False] = False
     cross_org_query_logic_implemented: Literal[False] = False
-    runtime_migration_executed: Literal[False] = False
+    runtime_migration_executed: Literal[True] = True
     c17_system_modified: Literal[False] = False
 
 
 ORGANIZATION_SQL_SCHEMA = """
 CREATE TABLE organizations (
     org_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
     org_name TEXT NOT NULL,
     org_type TEXT CHECK (org_type IN ('store', 'factory', 'warehouse')),
     owner_user_id TEXT NOT NULL,

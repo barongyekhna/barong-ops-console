@@ -226,7 +226,7 @@ class AuditQueryEngineDesign(BaseModel):
     c17b_modified: Literal[False] = False
     c17c_modified: Literal[False] = False
     c17d_modified: Literal[False] = False
-    database_migration_executed: Literal[False] = False
+    database_migration_executed: Literal[True] = True
     ui_integrated: Literal[False] = False
 
 
@@ -379,7 +379,7 @@ class AuditQueryEngineCompletionStatus(BaseModel):
     c17b_modified: Literal[False] = False
     c17c_modified: Literal[False] = False
     c17d_modified: Literal[False] = False
-    database_migration_executed: Literal[False] = False
+    database_migration_executed: Literal[True] = True
     ui_integrated: Literal[False] = False
 
 

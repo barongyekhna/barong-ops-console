@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from contextlib import contextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any, Iterator, Protocol
+from uuid import uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -14,6 +15,7 @@ from ..models.observability import (
     AuditLogRecord,
     EventStreamRecord,
     ReplayJobRecord,
+    StorageEventRecord,
 )
 from ..schemas.event_collector import AuditEvent
 from ..schemas.execution_trace import ExecutionTrace
@@ -212,6 +214,7 @@ def ensure_observability_tables() -> None:
             AuditLogRecord.__table__,
             ReplayJobRecord.__table__,
             AnomalyEventRecord.__table__,
+            StorageEventRecord.__table__,
         ],
         checkfirst=True,
     )
@@ -638,6 +641,32 @@ def _record_to_event_stream_row(
     )
 
 
+def _record_to_storage_event_row(
+    record: StorageRecordEnvelope,
+    *,
+    org_id: str,
+    operation: str,
+    status: str,
+    payload: Mapping[str, Any] | None = None,
+) -> StorageEventRecord:
+    return StorageEventRecord(
+        org_id=org_id,
+        storage_event_id=f"storage-event-{uuid4()}",
+        record_id=record.record_id,
+        operation=operation,
+        entity_type=record.entity_type,
+        context_id=record.context_id,
+        trace_id=record.trace_id,
+        event_id=record.event_id,
+        module_id=record.module,
+        storage_tier=record.tier,
+        backend_targets=list(record.backend_targets),
+        status=status,
+        payload=_json_safe(dict(payload or {})),
+        occurred_at=utc_now(),
+    )
+
+
 def storage_record_from_event_stream_row(
     row: EventStreamRecord,
 ) -> StorageRecordEnvelope:
@@ -790,11 +819,25 @@ class DBStorageAdapter:
             keys: list[str] = []
             for row in rows:
                 record = storage_record_from_event_stream_row(row)
+                previous_tier = row.storage_tier
                 object_key = row.archive_object_key or _archive_object_key(record)
                 row.storage_tier = "L3_cold"
                 row.backend_targets = list(backend_targets_for_tier("L3_cold"))
                 row.compressed = True
                 row.archive_object_key = object_key
+                db.add(
+                    _record_to_storage_event_row(
+                        storage_record_from_event_stream_row(row),
+                        org_id=row.org_id,
+                        operation="archive_to_cold_storage",
+                        status="archived",
+                        payload={
+                            "archive_object_key": object_key,
+                            "previous_tier": previous_tier,
+                            "batch_size": batch_size,
+                        },
+                    )
+                )
                 keys.append(object_key)
             self._commit(db)
         return StorageArchiveResult(
@@ -813,6 +856,15 @@ class DBStorageAdapter:
         row = _record_to_event_stream_row(record, org_id=resolved_org_id)
         with self._session() as db:
             db.add(row)
+            db.add(
+                _record_to_storage_event_row(
+                    record,
+                    org_id=resolved_org_id,
+                    operation="write",
+                    status="stored",
+                    payload={"storage_tier": record.tier},
+                )
+            )
             self._commit(db)
 
     def _query_rows(

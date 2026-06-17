@@ -154,7 +154,7 @@ def test_c17d_design_models_cover_required_outputs() -> None:
     )
     assert "TTL job" in flow.warm_flow[0]
     assert migration.c17c_modified is False
-    assert migration.database_migration_executed is False
+    assert migration.database_migration_executed is True
     assert migration.execution_replay_implemented is False
     assert query.primary_index == "context_id"
     assert completion.completion_status == "complete"

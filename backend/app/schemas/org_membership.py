@@ -240,7 +240,7 @@ class OrgMembershipApiDesign(BaseModel):
     ui_implemented: Literal[False] = False
     module_binding_implemented: Literal[False] = False
     c17_system_connected: Literal[False] = False
-    runtime_migration_executed: Literal[False] = False
+    runtime_migration_executed: Literal[True] = True
 
 
 class OrgMembershipDatabaseSchema(BaseModel):
@@ -258,7 +258,8 @@ class OrgMembershipDatabaseSchema(BaseModel):
     required_indexes: tuple[
         Literal["user_id_org_id"],
         Literal["org_id"],
-    ] = ("user_id_org_id", "org_id")
+        Literal["org_id_status"],
+    ] = ("user_id_org_id", "org_id", "org_id_status")
     user_id_org_id_pair_is_unique: Literal[True] = True
     role_check_values: tuple[
         Literal["owner"],
@@ -444,7 +445,7 @@ class OrgMembershipCompletionStatus(BaseModel):
     ui_implemented: Literal[False] = False
     module_binding_implemented: Literal[False] = False
     c17_system_connected: Literal[False] = False
-    runtime_migration_executed: Literal[False] = False
+    runtime_migration_executed: Literal[True] = True
 
 
 ORG_MEMBERSHIP_SQL_SCHEMA = """
@@ -454,7 +455,9 @@ CREATE TABLE org_memberships (
     org_id TEXT NOT NULL,
     role TEXT CHECK (role IN ('owner', 'admin', 'member')),
     status TEXT CHECK (status IN ('active', 'suspended')),
-    joined_at TIMESTAMP
+    joined_at TIMESTAMP,
+    created_at TIMESTAMP,
+    FOREIGN KEY (org_id) REFERENCES organizations (org_id)
 );
 
 CREATE UNIQUE INDEX ix_org_memberships_user_id_org_id
@@ -462,6 +465,9 @@ CREATE UNIQUE INDEX ix_org_memberships_user_id_org_id
 
 CREATE INDEX ix_org_memberships_org_id
     ON org_memberships (org_id);
+
+CREATE INDEX ix_org_memberships_org_id_status
+    ON org_memberships (org_id, status);
 """.strip()
 
 

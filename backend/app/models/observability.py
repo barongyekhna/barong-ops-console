@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, Index, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
@@ -159,3 +159,39 @@ class AnomalyEventRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
     event_count: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     score: Mapped[dict[str, Any]] = mapped_column(json_type(), nullable=False)
     evidence: Mapped[dict[str, Any]] = mapped_column(json_type(), nullable=False)
+
+
+class StorageEventRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Base):
+    __tablename__ = "storage_events"
+    __table_args__ = (
+        Index("ix_storage_events_org_id_created_at", "org_id", "created_at"),
+        Index("ix_storage_events_org_id_context_id", "org_id", "context_id"),
+        Index("ix_storage_events_org_id_trace_id", "org_id", "trace_id"),
+        Index("ix_storage_events_org_id_operation", "org_id", "operation"),
+        Index("ix_storage_events_org_id_status", "org_id", "status"),
+    )
+
+    storage_event_id: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        unique=True,
+    )
+    record_id: Mapped[str | None] = mapped_column(
+        String(128),
+        ForeignKey("event_streams.record_id"),
+        nullable=True,
+    )
+    operation: Mapped[str] = mapped_column(String(80), nullable=False)
+    entity_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    context_id: Mapped[str] = mapped_column(String(180), nullable=False)
+    trace_id: Mapped[str] = mapped_column(String(180), nullable=False)
+    event_id: Mapped[str] = mapped_column(String(180), nullable=False)
+    module_id: Mapped[str] = mapped_column(String(180), nullable=False)
+    storage_tier: Mapped[str] = mapped_column(String(50), nullable=False)
+    backend_targets: Mapped[list[str]] = mapped_column(json_type(), nullable=False)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    payload: Mapped[dict[str, Any]] = mapped_column(json_type(), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+    )

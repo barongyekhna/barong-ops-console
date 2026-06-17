@@ -212,7 +212,7 @@ def test_c17e_design_models_cover_required_outputs() -> None:
     assert result_schema.metadata_fields == ("query_type", "index_used", "cache_hit")
     assert integration.modifies_storage_layer is False
     assert completion.c17d_modified is False
-    assert completion.database_migration_executed is False
+    assert completion.database_migration_executed is True
     assert completion.ui_integrated is False
 
 

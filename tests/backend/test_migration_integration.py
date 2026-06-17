@@ -21,6 +21,7 @@ REQUIRED_ALEMBIC_TABLES = {
     "audit_logs",
     "anomaly_events",
     "replay_jobs",
+    "storage_events",
 }
 
 

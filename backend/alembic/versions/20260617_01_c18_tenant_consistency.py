@@ -86,6 +86,64 @@ def _add_column_if_missing(table_name: str, column: sa.Column) -> None:
             batch_op.add_column(column)
 
 
+def _add_required_text_column_from_source(
+    table_name: str,
+    column_name: str,
+    source_column_name: str,
+    *,
+    length: int,
+) -> None:
+    if _column_exists(table_name, column_name):
+        return
+    with op.batch_alter_table(table_name) as batch_op:
+        batch_op.add_column(sa.Column(column_name, sa.String(length=length), nullable=True))
+    op.execute(
+        sa.text(
+            f"UPDATE {table_name} "
+            f"SET {column_name} = {source_column_name} "
+            f"WHERE {column_name} IS NULL"
+        )
+    )
+    with op.batch_alter_table(table_name) as batch_op:
+        batch_op.alter_column(
+            column_name,
+            existing_type=sa.String(length=length),
+            nullable=False,
+        )
+
+
+def _add_required_datetime_column_from_source(
+    table_name: str,
+    column_name: str,
+    source_column_name: str,
+) -> None:
+    if _column_exists(table_name, column_name):
+        return
+    with op.batch_alter_table(table_name) as batch_op:
+        batch_op.add_column(
+            sa.Column(
+                column_name,
+                sa.DateTime(timezone=True),
+                server_default=sa.func.now(),
+                nullable=True,
+            )
+        )
+    op.execute(
+        sa.text(
+            f"UPDATE {table_name} "
+            f"SET {column_name} = {source_column_name} "
+            f"WHERE {column_name} IS NULL"
+        )
+    )
+    with op.batch_alter_table(table_name) as batch_op:
+        batch_op.alter_column(
+            column_name,
+            existing_type=sa.DateTime(timezone=True),
+            nullable=False,
+            server_default=sa.func.now(),
+        )
+
+
 def _drop_column_if_exists(table_name: str, column_name: str) -> None:
     if _column_exists(table_name, column_name):
         with op.batch_alter_table(table_name) as batch_op:
@@ -127,6 +185,7 @@ def _ensure_fallback_org() -> None:
             """
             INSERT INTO organizations (
                 org_id,
+                name,
                 org_name,
                 org_type,
                 owner_user_id,
@@ -137,6 +196,7 @@ def _ensure_fallback_org() -> None:
             )
             SELECT
                 :org_id,
+                'C18 Rollout Backfill Org',
                 'C18 Rollout Backfill Org',
                 'store',
                 'system',
@@ -157,6 +217,7 @@ def _create_c18_tables() -> None:
         op.create_table(
             "organizations",
             sa.Column("org_id", sa.String(length=40), nullable=False),
+            sa.Column("name", sa.String(length=255), nullable=False),
             sa.Column("org_name", sa.String(length=255), nullable=False),
             sa.Column("org_type", sa.String(length=50), nullable=False),
             sa.Column("owner_user_id", sa.String(length=255), nullable=False),
@@ -169,8 +230,24 @@ def _create_c18_tables() -> None:
             sa.Column("metadata", json_type(), nullable=False),
             created_at_column(),
             updated_at_column(),
+            sa.CheckConstraint(
+                "length(org_id) = 36 AND org_id LIKE 'org_%'",
+                name=op.f("ck_organizations_organizations_org_id_format_valid"),
+            ),
             sa.PrimaryKeyConstraint("org_id", name=op.f("pk_organizations")),
         )
+    else:
+        _add_required_text_column_from_source(
+            "organizations",
+            "name",
+            "org_name",
+            length=255,
+        )
+    _create_index_if_missing(
+        "ix_organizations_org_id",
+        "organizations",
+        ["org_id"],
+    )
     _create_index_if_missing(
         op.f("ix_organizations_owner_user_id"),
         "organizations",
@@ -201,6 +278,7 @@ def _create_c18_tables() -> None:
                 server_default=sa.func.now(),
                 nullable=False,
             ),
+            created_at_column(),
             sa.CheckConstraint(
                 "role IN ('owner', 'admin', 'member')",
                 name=op.f("ck_org_memberships_org_memberships_role_valid"),
@@ -208,6 +286,15 @@ def _create_c18_tables() -> None:
             sa.CheckConstraint(
                 "status IN ('active', 'suspended')",
                 name=op.f("ck_org_memberships_org_memberships_status_valid"),
+            ),
+            sa.CheckConstraint(
+                "length(org_id) = 36 AND org_id LIKE 'org_%'",
+                name=op.f("ck_org_memberships_org_memberships_org_id_format_valid"),
+            ),
+            sa.ForeignKeyConstraint(
+                ["org_id"],
+                ["organizations.org_id"],
+                name=op.f("fk_org_memberships_org_id_organizations"),
             ),
             sa.PrimaryKeyConstraint(
                 "membership_id",
@@ -219,6 +306,12 @@ def _create_c18_tables() -> None:
                 name="uq_org_memberships_user_id_org_id",
             ),
         )
+    else:
+        _add_required_datetime_column_from_source(
+            "org_memberships",
+            "created_at",
+            "joined_at",
+        )
     _create_index_if_missing(
         "ix_org_memberships_user_id_org_id",
         "org_memberships",
@@ -228,6 +321,11 @@ def _create_c18_tables() -> None:
         "ix_org_memberships_org_id",
         "org_memberships",
         ["org_id"],
+    )
+    _create_index_if_missing(
+        "ix_org_memberships_org_id_status",
+        "org_memberships",
+        ["org_id", "status"],
     )
 
     if not _table_exists("module_bindings"):
@@ -408,6 +506,7 @@ def downgrade() -> None:
         op.drop_table("module_bindings")
 
     if _table_exists("org_memberships"):
+        _drop_index_if_exists("ix_org_memberships_org_id_status", "org_memberships")
         _drop_index_if_exists("ix_org_memberships_org_id", "org_memberships")
         _drop_index_if_exists(
             "ix_org_memberships_user_id_org_id",
@@ -416,6 +515,7 @@ def downgrade() -> None:
         op.drop_table("org_memberships")
 
     if _table_exists("organizations"):
+        _drop_index_if_exists("ix_organizations_org_id", "organizations")
         _drop_index_if_exists("ix_organizations_status", "organizations")
         _drop_index_if_exists("ix_organizations_owner_user_id", "organizations")
         op.drop_table("organizations")

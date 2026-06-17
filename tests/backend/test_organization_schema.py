@@ -188,6 +188,7 @@ def test_c18a_sql_schema_matches_organization_table_contract() -> None:
 
     assert "CREATE TABLE organizations" in ORGANIZATION_SQL_SCHEMA
     assert "org_id TEXT PRIMARY KEY" in compact_sql
+    assert "name TEXT NOT NULL" in compact_sql
     assert "org_name TEXT NOT NULL" in compact_sql
     assert "org_type TEXT CHECK" in compact_sql
     assert "'store'" in compact_sql
@@ -217,7 +218,7 @@ def test_c18a_api_design_exposes_required_org_contract_only() -> None:
         if endpoint.method in {"POST", "PATCH", "DELETE"}
     )
     assert design.ui_implemented is False
-    assert design.runtime_migration_executed is False
+    assert design.runtime_migration_executed is True
 
 
 def test_c18a_data_isolation_and_security_boundaries_are_explicit() -> None:
@@ -238,7 +239,7 @@ def test_c18a_data_isolation_and_security_boundaries_are_explicit() -> None:
     assert security.delegation_starts_at == "C18D"
     assert completion.organization_schema_defined is True
     assert completion.owner_only_enforcement_defined is True
-    assert completion.runtime_migration_executed is False
+    assert completion.runtime_migration_executed is True
     assert completion.c17_system_modified is False
 
 
@@ -293,4 +294,4 @@ def test_c18b_lifecycle_api_design_adds_state_operations_without_scope_creep() -
     assert design.module_binding_implemented is False
     assert design.permission_system_implemented is False
     assert design.cross_org_query_implemented is False
-    assert design.runtime_migration_executed is False
+    assert design.runtime_migration_executed is True

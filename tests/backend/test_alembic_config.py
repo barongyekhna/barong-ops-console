@@ -27,6 +27,7 @@ CORE_BUSINESS_TABLES = {
     "execution_callbacks",
     "execution_dlq",
     "execution_results",
+    "storage_events",
 }
 REQUIRED_MIGRATION_SUFFIXES = {
     "create_core_foundation_tables.py",

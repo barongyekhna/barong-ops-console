@@ -214,7 +214,7 @@ class AnomalyDetectionEngineDesign(BaseModel):
     c17f_modified: Literal[False] = False
     production_runtime_changed: Literal[False] = False
     api_contract_changed: Literal[False] = False
-    database_migration_executed: Literal[False] = False
+    database_migration_executed: Literal[True] = True
     ui_integrated: Literal[False] = False
 
 
@@ -343,7 +343,7 @@ class AlertSystemSchema(BaseModel):
         Literal["ReplayDiff"],
     ] = ("LogEntry", "ExecutionTrace", "ReplayDiff")
     emitted_by_detection_engine: Literal[True] = True
-    writes_to_database: Literal[False] = False
+    writes_to_database: Literal[True] = True
     changes_api_contract: Literal[False] = False
 
 
@@ -438,5 +438,5 @@ class AnomalyDetectionCompletionStatus(BaseModel):
     c17f_modified: Literal[False] = False
     production_runtime_changed: Literal[False] = False
     api_contract_changed: Literal[False] = False
-    database_migration_executed: Literal[False] = False
+    database_migration_executed: Literal[True] = True
     ui_integrated: Literal[False] = False

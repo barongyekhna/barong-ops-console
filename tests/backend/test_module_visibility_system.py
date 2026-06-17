@@ -115,7 +115,7 @@ def test_c18e_design_outputs_define_visibility_only_contract() -> None:
     assert frontend.bypass_org_filter_allowed is False
     assert security.visible_modules_equals_data_access_permission is False
     assert security.c18e_decides_data_access is False
-    assert completion.migration_executed is False
+    assert completion.migration_executed is True
     assert completion.ui_implemented is False
 
 

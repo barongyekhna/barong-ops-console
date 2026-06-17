@@ -79,6 +79,7 @@ def create_org_membership_record(
     )
     if joined_at is not None:
         membership.joined_at = joined_at
+        membership.created_at = joined_at
     db.add(membership)
     db.flush()
     return membership

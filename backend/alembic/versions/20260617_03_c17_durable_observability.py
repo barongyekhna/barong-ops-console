@@ -197,9 +197,67 @@ def upgrade() -> None:
         ["org_id", "anomaly_type", "severity"],
     )
 
+    if not _table_exists("storage_events"):
+        op.create_table(
+            "storage_events",
+            sa.Column("id", sa.BigInteger(), autoincrement=True, nullable=False),
+            sa.Column("org_id", sa.String(length=40), nullable=False),
+            sa.Column("storage_event_id", sa.String(length=128), nullable=False),
+            sa.Column("record_id", sa.String(length=128), nullable=True),
+            sa.Column("operation", sa.String(length=80), nullable=False),
+            sa.Column("entity_type", sa.String(length=50), nullable=False),
+            sa.Column("context_id", sa.String(length=180), nullable=False),
+            sa.Column("trace_id", sa.String(length=180), nullable=False),
+            sa.Column("event_id", sa.String(length=180), nullable=False),
+            sa.Column("module_id", sa.String(length=180), nullable=False),
+            sa.Column("storage_tier", sa.String(length=50), nullable=False),
+            sa.Column("backend_targets", json_type(), nullable=False),
+            sa.Column("status", sa.String(length=50), nullable=False),
+            sa.Column("payload", json_type(), nullable=False),
+            sa.Column("occurred_at", sa.DateTime(timezone=True), nullable=False),
+            created_at_column(),
+            updated_at_column(),
+            sa.ForeignKeyConstraint(
+                ["record_id"],
+                ["event_streams.record_id"],
+                name=op.f("fk_storage_events_record_id_event_streams"),
+            ),
+            sa.PrimaryKeyConstraint("id", name=op.f("pk_storage_events")),
+            sa.UniqueConstraint(
+                "storage_event_id",
+                name="uq_storage_events_storage_event_id",
+            ),
+        )
+    _create_index(
+        "ix_storage_events_org_id_created_at",
+        "storage_events",
+        ["org_id", "created_at"],
+    )
+    _create_index(
+        "ix_storage_events_org_id_context_id",
+        "storage_events",
+        ["org_id", "context_id"],
+    )
+    _create_index(
+        "ix_storage_events_org_id_trace_id",
+        "storage_events",
+        ["org_id", "trace_id"],
+    )
+    _create_index(
+        "ix_storage_events_org_id_operation",
+        "storage_events",
+        ["org_id", "operation"],
+    )
+    _create_index(
+        "ix_storage_events_org_id_status",
+        "storage_events",
+        ["org_id", "status"],
+    )
+
 
 def downgrade() -> None:
     for table_name in (
+        "storage_events",
         "anomaly_events",
         "replay_jobs",
         "audit_logs",
