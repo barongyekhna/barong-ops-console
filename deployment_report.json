@@ -1,0 +1,147 @@
+{
+  "deployment": {
+    "target": "ops.barongyekhna.com",
+    "requested_scope": "PRODUCTION DEPLOY (PRE20-O FULL SYSTEM)",
+    "generated_at": "2026-06-17T14:47:42Z",
+    "result": "failed_and_recovered_to_rollback_stack",
+    "full_pre20_system_deployed": false
+  },
+  "git": {
+    "commit_hash": "81649c51bb9bb0ef8da2a47b3e630e47c3cc4979",
+    "head_subject": "feat(pre20-r): frontend capability-driven UI system (sidebar, dashboard, C17 observability, live gate integration, fake UI removal, productization layer)",
+    "working_tree_clean_before_deployment": true,
+    "head_confirmed_pre20_r": true
+  },
+  "constraints": {
+    "code_logic_modified": false,
+    "database_schema_changed": false,
+    "migrations_executed": false,
+    "database_deleted": false,
+    "volumes_reset": false,
+    "c19_modified": false,
+    "execution_engine_modified": false,
+    "permission_system_modified": false
+  },
+  "build_status": {
+    "frontend_npm_build": {
+      "command": "cd frontend && npm run build",
+      "status": "success"
+    },
+    "docker_compose_v2": {
+      "command": "docker compose -f docker-compose.production.yml",
+      "status": "unavailable",
+      "detail": "Docker CLI returned: unknown command: docker compose"
+    },
+    "docker_compose_legacy": {
+      "version": "docker-compose 1.29.2",
+      "project": "barong-ops-console-prod",
+      "used_for_deploy_commands": true
+    },
+    "backend_image_build": {
+      "status": "success",
+      "built_image_id": "sha256:7f1567700dec5020675063eb63e7a12d8b45ee6afe502a6e1205e347dc415f8c",
+      "runtime_status": "not_running",
+      "reason": "Image was rolled back because production DB revision c05b_permissions_001 does not match current script head pre20_q_live_enable_gate_001 and migrations are forbidden."
+    },
+    "frontend_image_build": {
+      "status": "failed",
+      "failed_step": "frontend Dockerfile verification stage: RUN npm run verify",
+      "error": "Missing required route file: (console)/foundation-demo/page.tsx"
+    },
+    "production_image_replace": {
+      "status": "not_completed",
+      "recovery_performed": true,
+      "recovery_detail": "Restored backend latest tag to barong-ops-console-prod_console_backend:rollback-20260612101903 and manually recreated backend/postgres containers after docker-compose v1 ContainerConfig failure."
+    }
+  },
+  "container_status": {
+    "postgres": {
+      "container": "barong-ops-console-prod_console_postgres_1",
+      "status": "running",
+      "health": "healthy",
+      "restart_count": 0,
+      "image": "postgres:17.5-alpine",
+      "image_id": "sha256:deedec4d7fe463f0d7dac743340b1f6ebc12fdf788510ab616dbe6da9e1d9c1e",
+      "volume": "console_postgres_data"
+    },
+    "backend": {
+      "container": "barong-ops-console-prod_console_backend_1",
+      "status": "running",
+      "health": "none",
+      "restart_count": 0,
+      "image": "barong-ops-console-prod_console_backend:latest",
+      "image_id": "sha256:4b2b0f6976b3973aca87a484a755b7041b12dfdbdda8b15fc9b0b1a70d22fee6",
+      "source": "rollback-20260612101903"
+    },
+    "frontend": {
+      "container": "barong-ops-console-prod_console_frontend_1",
+      "status": "running",
+      "health": "none",
+      "restart_count": 0,
+      "image": "barong-ops-console-prod_console_frontend",
+      "image_id": "sha256:cd3a435ea148db16610dd82abc26f1b97a2395c8c6732303060829f1027deb12",
+      "source": "existing production image"
+    },
+    "no_crash_loops_after_recovery": true
+  },
+  "api_health": {
+    "local": {
+      "http://127.0.0.1:3000/": 307,
+      "http://127.0.0.1:3000/login": 200,
+      "http://127.0.0.1:3000/auth/login": 404,
+      "http://127.0.0.1:3000/operation-logs": 404,
+      "http://127.0.0.1:8000/health": 200,
+      "http://127.0.0.1:8000/api/public/health": 404
+    },
+    "public": {
+      "https://ops.barongyekhna.com/": 307,
+      "https://ops.barongyekhna.com/login": 200,
+      "https://ops.barongyekhna.com/health": 404,
+      "https://ops.barongyekhna.com/auth/login": 404,
+      "https://ops.barongyekhna.com/modules/me": 404,
+      "https://ops.barongyekhna.com/operation-logs": 404,
+      "https://ops.barongyekhna.com/api/backend/health": 200,
+      "https://ops.barongyekhna.com/api/backend/modules/me": 401
+    },
+    "auth_check": {
+      "login_post": {
+        "endpoint": "https://ops.barongyekhna.com/api/backend/auth/login",
+        "status": 200
+      },
+      "authenticated_auth_me_with_returned_cookie": {
+        "endpoint": "https://ops.barongyekhna.com/api/backend/auth/me",
+        "status": 401
+      },
+      "authenticated_modules_me_with_returned_cookie": {
+        "endpoint": "https://ops.barongyekhna.com/api/backend/modules/me",
+        "status": 401
+      },
+      "status": "partial_failure"
+    }
+  },
+  "database_validation": {
+    "alembic_version": "c05b_permissions_001",
+    "current_pre20_script_head": "pre20_q_live_enable_gate_001",
+    "migration_state_for_pre20": "blocked_without_schema_migration",
+    "event_streams_table_exists": false,
+    "operation_logs_table_exists": true,
+    "operation_logs_count": 52,
+    "operation_logs_latest_created_at": "2026-06-17 14:47:06.790081+00"
+  },
+  "c17_validation": {
+    "event_streams_write_verified": false,
+    "event_streams_reason": "event_streams table is absent in production DB revision c05b_permissions_001 and migrations are forbidden.",
+    "operation_logs_generating": true,
+    "no_container_crash_loops": true,
+    "status": "failed_for_c17_durable_observability"
+  },
+  "success_criteria": {
+    "frontend_reachable": "partial: /login returns 200, requested /operation-logs returns 404",
+    "backend_healthy": "true after rollback: /api/backend/health returns 200",
+    "auth_working": "partial failure: login POST returns 200, subsequent authenticated checks returned 401",
+    "c18_isolation_intact": "not verified for PRE20 because PRE20 stack was not deployed",
+    "c17_logging_active": false,
+    "no_container_crash": true,
+    "overall": "failed"
+  }
+}
