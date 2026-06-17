@@ -355,9 +355,14 @@ class CallbackResultStorageModel(BaseModel):
         "completed_at",
         "callbacks_received",
     )
-    storage_mode: Literal["in_memory_contract_store"] = (
-        "in_memory_contract_store"
+    storage_mode: Literal["durable_db_with_memory_compat"] = (
+        "durable_db_with_memory_compat"
     )
+    durable_tables: tuple[
+        Literal["execution_callbacks"],
+        Literal["execution_dlq"],
+        Literal["execution_results"],
+    ] = ("execution_callbacks", "execution_dlq", "execution_results")
     credentials_stored: Literal[False] = False
     n8n_url_stored: Literal[False] = False
     runtime_execution_allowed: Literal[False] = False
@@ -395,6 +400,9 @@ class CallbackHandlerCompletionStatus(BaseModel):
     idempotency_enforced: Literal[True] = True
     status_management_defined: Literal[True] = True
     result_storage_defined: Literal[True] = True
+    durable_state_tables_defined: Literal[True] = True
+    persistent_dlq_retry_defined: Literal[True] = True
+    persistent_dlq_replay_defined: Literal[True] = True
     module_notification_defined: Literal[True] = True
     no_execution_trigger: Literal[True] = True
     no_external_api_call: Literal[True] = True

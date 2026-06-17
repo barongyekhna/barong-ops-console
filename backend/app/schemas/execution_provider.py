@@ -14,6 +14,9 @@ ExecutionProviderType = Literal[
     "future_live_provider",
 ]
 ExecutionProviderStatus = Literal[
+    "mock",
+    "staging_ready",
+    "live_ready",
     "draft",
     "contract_ready",
     "test_ready",
@@ -23,11 +26,14 @@ ExecutionProviderStatus = Literal[
     "deprecated",
     "sealed",
 ]
+ProviderRuntimeReadiness = Literal["mock", "staging_ready", "live_ready"]
 ExecutionProviderLifecycle = ExecutionProviderStatus
 ExecutionMode = Literal[
     "contract_only",
     "no_op",
     "mock",
+    "staging",
+    "live",
     "local_backend",
     "queue",
     "webhook",
@@ -273,6 +279,7 @@ class ExecutionProviderContractV1(BaseModel):
     provider_version: str = Field(min_length=1, max_length=40)
     provider_type: ExecutionProviderType
     provider_status: ExecutionProviderStatus
+    provider_readiness: ProviderRuntimeReadiness = "mock"
     lifecycle: ExecutionProviderLifecycle
     display_name: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1, max_length=1000)
@@ -329,6 +336,7 @@ class ExecutionProviderAccessRead(BaseModel):
     provider_key: str
     provider_type: ExecutionProviderType
     provider_status: ExecutionProviderStatus
+    provider_readiness: ProviderRuntimeReadiness
     provider_access_state: ProviderAccessState
     module_key: str
     adapter_key: str
@@ -349,6 +357,7 @@ class ExecutionProviderAccessRead(BaseModel):
     requires_scope: bool
     scope_status: ScopeStatus
     execution_mode: ExecutionMode
+    resolved_execution_mode: Literal["mock", "staging", "live"]
     can_request_execution: bool
     executable: bool
     no_execute_reason: str

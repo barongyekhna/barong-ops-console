@@ -194,30 +194,32 @@ class WorkflowSystemFlowDiagram(BaseModel):
         "c15a_workflow_registry_flow_v1"
     )
     diagram: Literal[
-        "Module -> C15A Registry -> C15B -> n8n webhook -> C15D callback"
-    ] = "Module -> C15A Registry -> C15B -> n8n webhook -> C15D callback"
+        "C15A workflow match -> C15F whitelist check -> ExecutionRouter -> Provider execution mode plan"
+    ] = "C15A workflow match -> C15F whitelist check -> ExecutionRouter -> Provider execution mode plan"
     nodes: tuple[
-        Literal["Module"],
-        Literal["C15A Registry"],
-        Literal["C15B"],
-        Literal["n8n webhook"],
-        Literal["C15D callback"],
+        Literal["C15A workflow match"],
+        Literal["C15F whitelist check"],
+        Literal["ExecutionRouter"],
+        Literal["Provider execution mode plan"],
+        Literal["C15D callback state"],
     ] = (
-        "Module",
-        "C15A Registry",
-        "C15B",
-        "n8n webhook",
-        "C15D callback",
+        "C15A workflow match",
+        "C15F whitelist check",
+        "ExecutionRouter",
+        "Provider execution mode plan",
+        "C15D callback state",
     )
     edges: tuple[str, ...] = (
-        "Module requests workflow by explicit module/workflow_id binding",
-        "C15A validates registration, binding, hidden webhook ref, and status",
-        "C15B may dispatch only an active decision from C15A",
-        "n8n webhook returns through the governed callback boundary",
-        "C15D callback records results without mutating C15A registration",
+        "C15A validates workflow registration, module binding, hidden ref, and status",
+        "C15F requires the workflow to be in the module whitelist",
+        "ExecutionDispatchPipeline calls ExecutionRouter after C15A and C15F pass",
+        "ExecutionRouter selects mock/staging/live mode through ProviderResolver and C13 gate",
+        "C15D persists callback/result state without triggering execution",
     )
     registry_is_single_source_of_truth: Literal[True] = True
     registry_executes_workflow: Literal[False] = False
+    workflow_registry_definition_layer_only: Literal[True] = True
+    webhook_direct_execution_allowed: Literal[False] = False
     no_n8n_execution: Literal[True] = True
     no_ai_model_trigger: Literal[True] = True
 

@@ -16,6 +16,11 @@ from backend.app.models.artifact import Artifact
 from backend.app.models.auth_session import AuthSession
 from backend.app.models.context import ContextPacket
 from backend.app.models.error import SystemError
+from backend.app.models.execution_state import (
+    ExecutionCallbackRecord,
+    ExecutionDLQRecord,
+    ExecutionResultRecord,
+)
 from backend.app.models.job import AutomationJob, JobEvent
 from backend.app.models.memory import (
     AgentMemoryAccessLog,
@@ -49,6 +54,9 @@ def clear_auth_tables() -> None:
         db.execute(delete(MemorySummary))
         db.execute(delete(MemoryEvent))
         db.execute(delete(SystemError))
+        db.execute(delete(ExecutionDLQRecord))
+        db.execute(delete(ExecutionCallbackRecord))
+        db.execute(delete(ExecutionResultRecord))
         db.execute(delete(ReviewItem))
         db.execute(delete(Artifact))
         db.execute(delete(ApprovalDecisionRecord))

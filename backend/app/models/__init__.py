@@ -8,6 +8,11 @@ from .approval import (
 from .contact_identity import ContactIdentityRecord
 from .context import ContextPacket
 from .error import SystemError
+from .execution_state import (
+    ExecutionCallbackRecord,
+    ExecutionDLQRecord,
+    ExecutionResultRecord,
+)
 from .job import AutomationJob, JobEvent
 from .memory import AgentMemoryAccessLog, MemoryEvent, MemorySummary
 from .module_binding import ModuleBindingRecord
@@ -36,6 +41,9 @@ __all__ = [
     "AutomationJob",
     "ContactIdentityRecord",
     "ContextPacket",
+    "ExecutionCallbackRecord",
+    "ExecutionDLQRecord",
+    "ExecutionResultRecord",
     "JobEvent",
     "MemoryEvent",
     "MemorySummary",

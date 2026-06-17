@@ -54,6 +54,9 @@ FUTURE_PROVIDER_TYPES = {
 }
 FUTURE_PROVIDER_ALLOWED_STATUSES = {
     "draft",
+    "mock",
+    "staging_ready",
+    "live_ready",
     "provider_pending",
     "provider_unavailable",
     "disabled",
@@ -188,20 +191,18 @@ def _validate_action_binding(provider: ExecutionProviderContractV1) -> None:
             f"{provider.provider_key} approval policy does not block correctly."
         )
 
-    if adapter_contract.requires_approval and provider.executable:
+    if adapter_contract.requires_approval and (
+        provider.executable or provider.can_request_execution
+    ):
         raise ValueError(f"{provider.provider_key} approval action is executable.")
     if adapter_contract.requires_execution_provider:
-        if provider.executable or provider.can_request_execution:
-            raise ValueError(
-                f"{provider.provider_key} execution action is executable."
-            )
         if (
-            provider.provider_type != "no_op_provider"
+            provider.provider_readiness == "live_ready"
             and provider.provider_status
-            not in {"provider_pending", "provider_unavailable", "disabled"}
+            not in {"provider_pending", "provider_unavailable", "disabled", "live_ready"}
         ):
             raise ValueError(
-                f"{provider.provider_key} execution action is not safely pending."
+                f"{provider.provider_key} live execution action is not safely future gated."
             )
 
 
@@ -226,8 +227,6 @@ def _validate_secret_boundary(provider: ExecutionProviderContractV1) -> None:
 
 
 def _validate_no_live_runtime(provider: ExecutionProviderContractV1) -> None:
-    if provider.executable or provider.can_request_execution:
-        raise ValueError(f"{provider.provider_key} is executable in C09B.")
     if provider.live_provider_connected:
         raise ValueError(f"{provider.provider_key} is live connected.")
     if provider.external_endpoint_declared:
@@ -253,6 +252,14 @@ def _validate_no_live_runtime(provider: ExecutionProviderContractV1) -> None:
             raise ValueError(
                 f"{provider.provider_key} future provider is not pending."
             )
+    if provider.provider_status in {"mock", "staging_ready", "live_ready"}:
+        if provider.provider_status != provider.provider_readiness:
+            raise ValueError(f"{provider.provider_key} readiness status drift.")
+    if provider.provider_readiness == "live_ready":
+        if provider.provider_type != "future_live_provider":
+            raise ValueError(f"{provider.provider_key} live_ready is future only.")
+        if provider.can_request_execution:
+            raise ValueError(f"{provider.provider_key} live_ready cannot request execution yet.")
 
 
 def _validate_serializable_schema(provider: ExecutionProviderContractV1) -> None:
@@ -371,6 +378,14 @@ def _provider_status_access_state(provider_status: str) -> str | None:
     return None
 
 
+def _resolved_mode_for_readiness(provider: ExecutionProviderContractV1) -> str:
+    if provider.provider_readiness == "staging_ready":
+        return "staging"
+    if provider.provider_readiness == "live_ready":
+        return "live"
+    return "mock"
+
+
 def _access_message(block_reason: str) -> str:
     messages = {
         "hidden": "Execution provider metadata is hidden by module or adapter access.",
@@ -383,6 +398,8 @@ def _access_message(block_reason: str) -> str:
         "deprecated": "Provider is deprecated and cannot execute.",
         "provider_unavailable": "Provider is unavailable and cannot execute.",
         "execution_provider_required": "Execution provider is required, but C09B is no-execute.",
+        "router_selection_required": "Execution requests must enter the ExecutionRouter.",
+        "live_mode_future_gated": "Live provider execution remains future-gated.",
         "no_execute_c09b": "Execution Provider contract is readable; execution is disabled in C09B.",
     }
     return messages.get(block_reason, messages["no_execute_c09b"])
@@ -399,6 +416,7 @@ def build_execution_provider_access_state(
             provider_key=provider.provider_key,
             provider_type=provider.provider_type,
             provider_status=provider.provider_status,
+            provider_readiness=provider.provider_readiness,
             provider_access_state="blocked",
             module_key=provider.module_key,
             adapter_key=provider.adapter_key,
@@ -419,6 +437,7 @@ def build_execution_provider_access_state(
             requires_scope=provider.scope_requirement.requires_scope,
             scope_status=provider.scope_requirement.scope_status,
             execution_mode=provider.supported_execution_modes[0],
+            resolved_execution_mode=_resolved_mode_for_readiness(provider),
             can_request_execution=False,
             executable=False,
             no_execute_reason="blocked_by_module_switch",
@@ -448,6 +467,7 @@ def build_execution_provider_access_state(
             provider_key=provider.provider_key,
             provider_type=provider.provider_type,
             provider_status=provider.provider_status,
+            provider_readiness=provider.provider_readiness,
             provider_access_state="hidden",
             module_key=provider.module_key,
             adapter_key=provider.adapter_key,
@@ -468,6 +488,7 @@ def build_execution_provider_access_state(
             requires_scope=provider.scope_requirement.requires_scope,
             scope_status=provider.scope_requirement.scope_status,
             execution_mode=provider.supported_execution_modes[0],
+            resolved_execution_mode=_resolved_mode_for_readiness(provider),
             can_request_execution=False,
             executable=False,
             no_execute_reason="hidden",
@@ -480,6 +501,7 @@ def build_execution_provider_access_state(
             provider_key=provider.provider_key,
             provider_type=provider.provider_type,
             provider_status=provider.provider_status,
+            provider_readiness=provider.provider_readiness,
             provider_access_state="locked",
             module_key=provider.module_key,
             adapter_key=provider.adapter_key,
@@ -500,6 +522,7 @@ def build_execution_provider_access_state(
             requires_scope=provider.scope_requirement.requires_scope,
             scope_status=provider.scope_requirement.scope_status,
             execution_mode=provider.supported_execution_modes[0],
+            resolved_execution_mode=_resolved_mode_for_readiness(provider),
             can_request_execution=False,
             executable=False,
             no_execute_reason="missing_permission",
@@ -513,20 +536,33 @@ def build_execution_provider_access_state(
         or adapter_access.unavailable
         or status_state is not None
     )
-    provider_access_state = "blocked"
-    block_reason = "no_execute_c09b"
-    no_execute_reason = "c09b_no_execution_endpoint"
+    provider_access_state = "visible"
+    block_reason = "router_selection_required"
+    no_execute_reason = "execution_router_required"
+    blocked = False
+    can_request_execution = bool(provider.can_request_execution)
 
     if provider.approval_requirement.requires_approval:
+        blocked = True
+        can_request_execution = False
+        provider_access_state = "blocked"
         block_reason = "blocked_approval_required"
         no_execute_reason = "waiting_c12_approval_gate"
     elif provider.secret_requirement.requires_secret:
+        blocked = True
+        can_request_execution = False
+        provider_access_state = "blocked"
         block_reason = "secret_rules_required"
         no_execute_reason = "waiting_c14_secret_rules"
     elif provider.scope_requirement.requires_scope:
+        blocked = True
+        can_request_execution = False
+        provider_access_state = "blocked"
         block_reason = "scope_adapter_pending"
         no_execute_reason = "waiting_c18_scope_adapter"
     elif status_state is not None:
+        blocked = True
+        can_request_execution = False
         provider_access_state = status_state
         if provider.provider_status == "provider_unavailable":
             block_reason = "provider_unavailable"
@@ -534,10 +570,21 @@ def build_execution_provider_access_state(
         else:
             block_reason = status_state
             no_execute_reason = status_state
-    elif action_contract.requires_execution_provider:
+    elif provider.provider_readiness == "live_ready":
+        blocked = True
+        can_request_execution = False
+        provider_access_state = "blocked"
+        block_reason = "live_mode_future_gated"
+        no_execute_reason = "live_provider_future_only"
+    elif action_contract.requires_execution_provider and not provider.can_request_execution:
+        blocked = True
+        provider_access_state = "blocked"
         block_reason = "execution_provider_required"
-        no_execute_reason = "c09b_no_execute_provider_contract_only"
+        no_execute_reason = "execution_router_required"
 
+    if unavailable:
+        blocked = True
+        can_request_execution = False
     if provider_access_state == "blocked" and unavailable:
         provider_access_state = "unavailable"
 
@@ -545,6 +592,7 @@ def build_execution_provider_access_state(
         provider_key=provider.provider_key,
         provider_type=provider.provider_type,
         provider_status=provider.provider_status,
+        provider_readiness=provider.provider_readiness,
         provider_access_state=provider_access_state,
         module_key=provider.module_key,
         adapter_key=provider.adapter_key,
@@ -553,7 +601,7 @@ def build_execution_provider_access_state(
         hidden=False,
         locked=False,
         unavailable=unavailable,
-        blocked=True,
+        blocked=blocked,
         block_reason=block_reason,
         required_permission=provider.required_permissions[0],
         missing_permissions=[],
@@ -565,7 +613,8 @@ def build_execution_provider_access_state(
         requires_scope=provider.scope_requirement.requires_scope,
         scope_status=provider.scope_requirement.scope_status,
         execution_mode=provider.supported_execution_modes[0],
-        can_request_execution=False,
+        resolved_execution_mode=_resolved_mode_for_readiness(provider),
+        can_request_execution=can_request_execution,
         executable=False,
         no_execute_reason=no_execute_reason,
         operation_log_action=provider.operation_log_action,

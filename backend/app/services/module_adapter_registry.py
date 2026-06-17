@@ -668,3 +668,22 @@ def list_adapters_for_user(
             for adapter in list_adapter_contracts()
         ],
     )
+
+
+def request_adapter_action_execution(
+    *,
+    org_id: str,
+    module_id: str,
+    action: str,
+    payload: Mapping[str, Any],
+    context: Mapping[str, Any],
+):
+    from .execution_router import EXECUTION_ROUTER
+
+    return EXECUTION_ROUTER.receive_request(
+        org_id=org_id,
+        module_id=module_id,
+        action=action,
+        payload=payload,
+        context=context,
+    )

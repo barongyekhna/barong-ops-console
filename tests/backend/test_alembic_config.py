@@ -24,6 +24,9 @@ CORE_BUSINESS_TABLES = {
     "auth_sessions",
     "security_rate_limit_buckets",
     "security_replay_nonces",
+    "execution_callbacks",
+    "execution_dlq",
+    "execution_results",
 }
 REQUIRED_MIGRATION_SUFFIXES = {
     "create_core_foundation_tables.py",

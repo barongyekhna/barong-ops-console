@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
 from ...db.session import get_db
+from ...middleware.org_context import get_org_context
 from ...models.user import User
 from ...schemas.callback_handler import (
     CallbackContextBinding,
@@ -90,11 +91,13 @@ def callback_handler_receiver(
     require_internal_rbac("C15D")
 
     try:
+        org_context = get_org_context(request)
         result = handle_callback(
             callback_payload,
             provided_signature=signature,
             settings=settings,
             db=db,
+            org_id=org_context.org_id if org_context is not None else None,
         )
     except CallbackHandlerConfigurationError as exc:
         emit_event(
@@ -194,12 +197,24 @@ def callback_handler_receiver(
 )
 def callback_handler_bind_context(
     payload: dict[str, Any],
+    request: Request,
+    db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackContextBinding:
     del user
+    org_context = get_org_context(request)
+    if org_context is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="C18H org context is required for callback binding.",
+        )
     try:
-        request = ExecutionPayloadStandardRequest.model_validate(payload)
-        return bind_callback_context(request)
+        execution_request = ExecutionPayloadStandardRequest.model_validate(payload)
+        return bind_callback_context(
+            execution_request,
+            db=db,
+            org_id=org_context.org_id,
+        )
     except ValidationError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -218,10 +233,11 @@ def callback_handler_bind_context(
 )
 def callback_handler_result(
     context_id: str,
+    db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C15D", "execute")),
 ) -> CallbackResultStorageRecord:
     del user
-    result = get_callback_result(context_id)
+    result = get_callback_result(context_id, db=db)
     if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
