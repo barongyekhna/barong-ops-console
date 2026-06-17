@@ -1,0 +1,60 @@
+{
+  "fix_id": "FIX-R04",
+  "status": "completed",
+  "generated_date": "2026-06-17",
+  "provider_chain": [
+    {
+      "provider": "AuthProvider",
+      "file": "frontend/src/app/layout.tsx",
+      "position": 1,
+      "blocking_render": false,
+      "fallback_return": "Always returns children through AuthContext.Provider."
+    },
+    {
+      "provider": "CapabilityStateProvider",
+      "file": "frontend/src/app/(console)/layout.tsx",
+      "position": 2,
+      "blocking_render": false,
+      "fallback_return": "Returns children immediately with safe capability defaults before async init completes."
+    },
+    {
+      "provider": "AdapterAccessProvider",
+      "file": "frontend/src/app/(console)/layout.tsx",
+      "position": 3,
+      "blocking_render": false,
+      "fallback_return": "Returns children while adapter access loads; unauthenticated state resolves to empty arrays and unknown access."
+    },
+    {
+      "provider": "ModuleAccessProvider",
+      "file": "frontend/src/app/(console)/layout.tsx",
+      "position": 4,
+      "blocking_render": false,
+      "fallback_return": "Returns children while module access loads; unauthenticated state resolves to empty arrays and unknown access."
+    }
+  ],
+  "required_order": "AuthProvider -> CapabilityStateProvider -> AdapterAccessProvider",
+  "actual_order": "AuthProvider -> AuthGuard -> CapabilityStateProvider -> AdapterAccessProvider -> ModuleAccessProvider -> ConsoleShell",
+  "capability_init_trace": [
+    "Initial render starts from safe fallback state: empty registry, empty access snapshot, fallback live-gate reports, and isFallbackMode=true.",
+    "Mount effect sets mountedRef=true and checks initStartedRef.",
+    "If initStartedRef is false, it is set true and loadCapabilityState() is called exactly once for automatic init.",
+    "loadCapabilityState() reads auth from latestAuthRef instead of capturing changing auth state in the init dependency chain.",
+    "If auth is not authenticated, applyFallbackState() resolves fallback state and clears local loading.",
+    "If auth is authenticated, read-only frontend APIs are loaded in parallel and normalized into a single capability access snapshot.",
+    "If every API result is unavailable, isFallbackMode remains true; partial success renders degraded state, not a blocked render.",
+    "catch and finally paths preserve fallback state and clear isLocalLoading when mounted."
+  ],
+  "loop_prevention": {
+    "automatic_init_runs_once_per_mount": true,
+    "capability_init_effect_dependencies": "stable loadCapabilityState callback",
+    "state_dependency_on_itself": false,
+    "downstream_provider_dependency_removed": true,
+    "dashboard_refresh_dependency_stable": true,
+    "fullscreen_spinner_timeout_ms": 3000
+  },
+  "forced_fallback_ui": [
+    "System initializing",
+    "Try refresh",
+    "Fallback mode active"
+  ]
+}

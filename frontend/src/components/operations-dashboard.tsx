@@ -65,6 +65,7 @@ type DashboardState = {
 };
 
 const ENGINEERING_LABEL_PREFIX = "C";
+const DASHBOARD_LOADING_FALLBACK_MS = 3000;
 const ENGINEERING_LABEL_REPLACEMENTS: Array<[RegExp, string]> = [
   [
     new RegExp(`\\b${ENGINEERING_LABEL_PREFIX}17(?: Durable Observability)?\\b`, "g"),
@@ -165,7 +166,8 @@ function FallbackNotice({
 }) {
   return (
     <div aria-live="polite" className="ops-empty-state" role="status">
-      <strong>No data available</strong>
+      <strong>System initializing</strong>
+      <span>Fallback mode active</span>
       <span>{textValue(detail, "System initializing")}</span>
       <button
         className="secondary-button"
@@ -178,7 +180,7 @@ function FallbackNotice({
         ) : (
           <RotateCcw aria-hidden="true" size={15} />
         )}
-        Try refreshing
+        Try refresh
       </button>
     </div>
   );
@@ -189,6 +191,7 @@ export function OperationsDashboard() {
   const capabilityState = useFrontendCapabilityState();
   const [state, setState] = useState<DashboardState | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadingTimedOut, setHasLoadingTimedOut] = useState(false);
 
   const refreshCapabilityState = capabilityState?.refresh ?? (async () => {});
 
@@ -260,6 +263,21 @@ export function OperationsDashboard() {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    if (!isLoading) {
+      setHasLoadingTimedOut(false);
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setHasLoadingTimedOut(true);
+    }, DASHBOARD_LOADING_FALLBACK_MS);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [isLoading]);
+
   const safeState = state ?? {};
   const safeOrgContext = {
     role: textValue(capabilityState?.orgContext?.role, "Unknown"),
@@ -292,7 +310,13 @@ export function OperationsDashboard() {
   const executionMode = normalizeExecutionMode(
     capabilityState?.liveGate?.execution_mode,
   );
-  const capabilityLoading = capabilityState?.isLoading === true;
+  const loadingFallbackActive = hasLoadingTimedOut || state === null;
+  const activeLoading = isLoading && !hasLoadingTimedOut;
+  const capabilityLoading =
+    capabilityState?.isLoading === true &&
+    capabilityState?.uiState !== "fallback";
+  const capabilityFallbackActive =
+    capabilityState?.uiState === "fallback" || capabilityState?.isFallbackMode;
   const hasHealthData = safeState.health !== null && safeState.health !== undefined;
   const hasUsersData = safeState.users !== null && safeState.users !== undefined;
   const hasApprovalData =
@@ -309,8 +333,11 @@ export function OperationsDashboard() {
     if (healthError.length > 0) {
       return "No data available";
     }
-    if (!hasHealthData && isLoading) {
+    if (!hasHealthData && activeLoading) {
       return "System initializing";
+    }
+    if (!hasHealthData && loadingFallbackActive) {
+      return "Fallback mode active";
     }
     if (failedLogs > 0 || logsError.length > 0 || approvalsError.length > 0) {
       return "Review";
@@ -319,10 +346,11 @@ export function OperationsDashboard() {
     return "Operational";
   }, [
     approvalsError,
+    activeLoading,
     failedLogs,
     hasHealthData,
     healthError,
-    isLoading,
+    loadingFallbackActive,
     logsError,
   ]);
   const metricCards = [
@@ -378,11 +406,11 @@ export function OperationsDashboard() {
         </div>
         <button
           className="secondary-button"
-          disabled={isLoading}
+          disabled={activeLoading}
           onClick={() => void load()}
           type="button"
         >
-          {isLoading ? (
+          {activeLoading ? (
             <LoaderCircle className="spin" aria-hidden="true" size={17} />
           ) : (
             <RotateCcw aria-hidden="true" size={17} />
@@ -413,7 +441,7 @@ export function OperationsDashboard() {
           {healthError || !hasHealthData ? (
             <FallbackNotice
               detail={healthDetail}
-              isLoading={isLoading}
+              isLoading={activeLoading}
               onRetry={() => void load()}
             />
           ) : (
@@ -456,7 +484,7 @@ export function OperationsDashboard() {
           {usersError && !hasUsersData && !currentUser ? (
             <FallbackNotice
               detail={userDetail}
-              isLoading={isLoading}
+              isLoading={activeLoading}
               onRetry={() => void load()}
             />
           ) : (
@@ -520,7 +548,7 @@ export function OperationsDashboard() {
           ) : (
             <FallbackNotice
               detail="System initializing"
-              isLoading={isLoading}
+              isLoading={activeLoading}
               onRetry={() => void load()}
             />
           )}
@@ -536,7 +564,7 @@ export function OperationsDashboard() {
           {approvalsError || !hasApprovalData ? (
             <FallbackNotice
               detail={approvalDetail}
-              isLoading={isLoading}
+              isLoading={activeLoading}
               onRetry={() => void load()}
             />
           ) : (
@@ -575,7 +603,7 @@ export function OperationsDashboard() {
               ) : (
                 <FallbackNotice
                   detail="System initializing"
-                  isLoading={isLoading}
+                  isLoading={activeLoading}
                   onRetry={() => void load()}
                 />
               )}
@@ -593,7 +621,7 @@ export function OperationsDashboard() {
           {logsError || logs.length === 0 ? (
             <FallbackNotice
               detail={logDetail}
-              isLoading={isLoading}
+              isLoading={activeLoading}
               onRetry={() => void load()}
             />
           ) : (
@@ -634,7 +662,13 @@ export function OperationsDashboard() {
             </div>
             <div>
               <dt>State</dt>
-              <dd>{capabilityLoading ? "System initializing" : "Available"}</dd>
+              <dd>
+                {capabilityFallbackActive
+                  ? "Fallback mode active"
+                  : capabilityLoading
+                    ? "System initializing"
+                    : "Available"}
+              </dd>
             </div>
           </dl>
         </article>

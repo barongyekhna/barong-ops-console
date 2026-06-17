@@ -1,0 +1,54 @@
+{
+  "fix_id": "FIX-R04",
+  "scope": "frontend runtime deadlock fix",
+  "status": "completed",
+  "generated_date": "2026-06-17",
+  "backend_changed": false,
+  "database_changed": false,
+  "execution_engine_changed": false,
+  "changed_files": [
+    "frontend/src/app/(console)/layout.tsx",
+    "frontend/src/app/globals.css",
+    "frontend/src/components/auth-guard.tsx",
+    "frontend/src/components/capability-state-provider.tsx",
+    "frontend/src/components/console-shell.tsx",
+    "frontend/src/components/operations-dashboard.tsx"
+  ],
+  "runtime_deadlock_fixes": [
+    {
+      "area": "capability-state-provider",
+      "result": "Capability init is guarded by initStartedRef and a stable mount effect, so automatic init runs once per provider mount.",
+      "fallback": "All failure and not-authenticated paths resolve to safe fallback state, clear local loading, and keep children rendered."
+    },
+    {
+      "area": "provider dependency chain",
+      "result": "CapabilityStateProvider no longer depends on downstream ModuleAccessProvider or AdapterAccessProvider hooks.",
+      "fallback": "Capability graph inputs are normalized through an internal snapshot with empty arrays and unknown access defaults."
+    },
+    {
+      "area": "dashboard loading",
+      "result": "Dashboard loading switches to fallback mode after 3000 ms and keeps rendering the dashboard UI.",
+      "fallback": "Fallback notices show System initializing, Fallback mode active, and Try refresh."
+    },
+    {
+      "area": "console shell",
+      "result": "Console shell renders a non-blocking fallback banner while capability state is loading or fallback.",
+      "fallback": "The page body remains visible and refresh is available."
+    },
+    {
+      "area": "auth guard",
+      "result": "Protected session checking no longer leaves a full-screen spinner forever.",
+      "fallback": "After 3000 ms, the guard renders a fallback panel with Try refresh."
+    }
+  ],
+  "forbidden_scope_check": {
+    "backend_changes": false,
+    "db_changes": false,
+    "execution_engine_changes": false
+  },
+  "verification": {
+    "npm run typecheck": "passed",
+    "npm test": "passed (0 tests matched)",
+    "npm run build": "passed"
+  }
+}

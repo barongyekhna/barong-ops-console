@@ -13,7 +13,8 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, logout } = useAuth();
-  const { getCapabilityForPath } = useFrontendCapabilityState();
+  const capabilityState = useFrontendCapabilityState();
+  const { getCapabilityForPath } = capabilityState;
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isNavigationOpen, setIsNavigationOpen] = useState(false);
 
@@ -29,6 +30,8 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
   const currentCapability = getCapabilityForPath(pathname);
   const title = pageTitles[pathname] ?? currentCapability?.label ?? "Workspace";
+  const showFallbackBanner =
+    capabilityState.isLoading || capabilityState.uiState === "fallback";
 
   return (
     <div className="console-layout">
@@ -87,6 +90,25 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         </header>
 
         <main className="page-content">
+          {showFallbackBanner ? (
+            <section
+              aria-live="polite"
+              className="runtime-fallback-banner"
+              role="status"
+            >
+              <div>
+                <strong>System initializing</strong>
+                <span>Fallback mode active</span>
+              </div>
+              <button
+                className="secondary-button"
+                onClick={() => void capabilityState.refresh()}
+                type="button"
+              >
+                Try refresh
+              </button>
+            </section>
+          ) : null}
           {children}
         </main>
       </div>

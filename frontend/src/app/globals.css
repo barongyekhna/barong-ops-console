@@ -250,6 +250,34 @@ textarea:focus-visible {
   border-color: #c98282;
 }
 
+.runtime-fallback-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 12px 14px;
+  color: #594315;
+  background: #fff8e4;
+  border: 1px solid #e7d38d;
+  border-radius: 6px;
+}
+
+.runtime-fallback-banner div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.runtime-fallback-banner strong {
+  color: #36290e;
+  font-size: 0.9rem;
+}
+
+.runtime-fallback-banner span {
+  font-size: 0.78rem;
+}
+
 .login-page {
   min-height: 100vh;
   display: grid;

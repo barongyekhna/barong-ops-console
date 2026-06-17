@@ -6,13 +6,21 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 
-import { useAdapterAccess } from "@/components/adapter-access-provider";
 import { useAuth } from "@/components/auth-provider";
-import { useModuleAccess } from "@/components/module-access-provider";
+import {
+  getExecutionProviderRegistry,
+  getMyExecutionProviders,
+  type ExecutionProviderApiErrorSummary,
+} from "@/lib/execution-provider-api";
+import type {
+  ExecutionProviderAccessState,
+  ExecutionProviderContract,
+} from "@/lib/execution-provider";
 import {
   buildFrontendCapabilityGraph,
   findCapabilityForPath,
@@ -33,10 +41,20 @@ import {
   type ProductionReadinessReport,
 } from "@/lib/live-gate";
 import {
+  listModuleAdapterRegistry,
+  listMyModuleAdapters,
+  type ModuleAdapterApiErrorSummary,
+} from "@/lib/module-adapter-api";
+import type {
+  ModuleAdapterAccessState,
+  ModuleAdapterContract,
+} from "@/lib/module-adapter";
+import {
   listModuleRegistry,
+  listMyModules,
   type ModuleApiErrorSummary,
 } from "@/lib/module-registry-api";
-import type { ModuleManifest } from "@/lib/module-registry";
+import type { ModuleAccessState, ModuleManifest } from "@/lib/module-registry";
 
 type CapabilityStateContextValue = FrontendCapabilityGraph & {
   isLoading: boolean;
@@ -73,29 +91,40 @@ const EMPTY_LIVE_GATE = deriveLiveGateRuntimeState({
   readinessError: "Readiness has not loaded.",
 });
 
-const SAFE_MODULE_ACCESS: ReturnType<typeof useModuleAccess> = {
-  error: null,
-  isLoading: false,
-  items: [],
-  moduleAccessUnknown: true,
-  refresh: async () => {},
+type CapabilityAccessSnapshot = {
+  adapterAccessItems: ModuleAdapterAccessState[];
+  adapterAccessUnknown: boolean;
+  adapterContracts: ModuleAdapterContract[];
+  adapterError: ModuleAdapterApiErrorSummary | null;
+  adapterMetadataUnavailable: boolean;
+  adapterRegistryError: ModuleAdapterApiErrorSummary | null;
+  executionProviderAccessItems: ExecutionProviderAccessState[];
+  executionProviderAccessUnknown: boolean;
+  executionProviderContracts: ExecutionProviderContract[];
+  executionProviderError: ExecutionProviderApiErrorSummary | null;
+  executionProviderMetadataUnavailable: boolean;
+  executionProviderRegistryError: ExecutionProviderApiErrorSummary | null;
+  moduleAccessUnknown: boolean;
+  moduleError: ModuleApiErrorSummary | null;
+  moduleItems: ModuleAccessState[];
 };
 
-const SAFE_ADAPTER_ACCESS: ReturnType<typeof useAdapterAccess> = {
-  accessItems: [],
+const SAFE_ACCESS_SNAPSHOT: CapabilityAccessSnapshot = {
+  adapterAccessItems: [],
   adapterAccessUnknown: true,
+  adapterContracts: [],
+  adapterError: null,
   adapterMetadataUnavailable: true,
-  adapters: [],
-  error: null,
+  adapterRegistryError: null,
   executionProviderAccessItems: [],
   executionProviderAccessUnknown: true,
+  executionProviderContracts: [],
   executionProviderError: null,
   executionProviderMetadataUnavailable: true,
   executionProviderRegistryError: null,
-  executionProviders: [],
-  isLoading: false,
-  refresh: async () => {},
-  registryError: null,
+  moduleAccessUnknown: true,
+  moduleError: null,
+  moduleItems: [],
 };
 
 const SAFE_REGISTRY_ERROR: ModuleApiErrorSummary = {
@@ -126,46 +155,6 @@ const SAFE_PRODUCTION_READINESS_REPORT: ProductionReadinessReport = {
 
 function safeArray<T>(value: readonly T[] | null | undefined): T[] {
   return Array.isArray(value) ? [...value] : [];
-}
-
-function safeModuleAccess(
-  value: ReturnType<typeof useModuleAccess> | null | undefined,
-) {
-  return {
-    ...SAFE_MODULE_ACCESS,
-    ...(value ?? {}),
-    error: value?.error ?? null,
-    isLoading: value?.isLoading === true,
-    items: safeArray(value?.items),
-    moduleAccessUnknown: value?.moduleAccessUnknown !== false,
-    refresh: value?.refresh ?? SAFE_MODULE_ACCESS.refresh,
-  };
-}
-
-function safeAdapterAccess(
-  value: ReturnType<typeof useAdapterAccess> | null | undefined,
-) {
-  return {
-    ...SAFE_ADAPTER_ACCESS,
-    ...(value ?? {}),
-    accessItems: safeArray(value?.accessItems),
-    adapterAccessUnknown: value?.adapterAccessUnknown !== false,
-    adapterMetadataUnavailable: value?.adapterMetadataUnavailable !== false,
-    adapters: safeArray(value?.adapters),
-    error: value?.error ?? null,
-    executionProviderAccessItems: safeArray(value?.executionProviderAccessItems),
-    executionProviderAccessUnknown:
-      value?.executionProviderAccessUnknown !== false,
-    executionProviderError: value?.executionProviderError ?? null,
-    executionProviderMetadataUnavailable:
-      value?.executionProviderMetadataUnavailable !== false,
-    executionProviderRegistryError:
-      value?.executionProviderRegistryError ?? null,
-    executionProviders: safeArray(value?.executionProviders),
-    isLoading: value?.isLoading === true,
-    refresh: value?.refresh ?? SAFE_ADAPTER_ACCESS.refresh,
-    registryError: value?.registryError ?? null,
-  };
 }
 
 function createSafeGraph(liveGate: LiveGateRuntimeState = EMPTY_LIVE_GATE) {
@@ -265,8 +254,12 @@ export function CapabilityStateProvider({
   const auth = useAuth();
   const status = auth?.status ?? "unauthenticated";
   const user = auth?.user ?? null;
-  const moduleAccess = safeModuleAccess(useModuleAccess());
-  const adapterAccess = safeAdapterAccess(useAdapterAccess());
+  const latestAuthRef = useRef({ status, user });
+  latestAuthRef.current = { status, user };
+  const mountedRef = useRef(false);
+  const initStartedRef = useRef(false);
+  const [accessSnapshot, setAccessSnapshot] =
+    useState<CapabilityAccessSnapshot>(SAFE_ACCESS_SNAPSHOT);
   const [registryItems, setRegistryItems] = useState<ModuleManifest[]>([]);
   const [registryUnavailable, setRegistryUnavailable] = useState(true);
   const [registryError, setRegistryError] =
@@ -287,19 +280,30 @@ export function CapabilityStateProvider({
   const [isLocalLoading, setIsLocalLoading] = useState(false);
   const [isFallbackMode, setIsFallbackMode] = useState(true);
 
+  const applyFallbackState = useCallback(() => {
+    if (!mountedRef.current) {
+      return;
+    }
+
+    setAccessSnapshot(SAFE_ACCESS_SNAPSHOT);
+    setRegistryItems([]);
+    setRegistryUnavailable(true);
+    setRegistryError(SAFE_REGISTRY_ERROR);
+    setReadiness(SAFE_READINESS_REPORT);
+    setProductionReadiness(SAFE_PRODUCTION_READINESS_REPORT);
+    setPolicies([]);
+    setReadinessError(SAFE_LIVE_GATE_ERROR);
+    setProductionReadinessError(SAFE_LIVE_GATE_ERROR);
+    setPoliciesError(SAFE_LIVE_GATE_ERROR);
+    setIsFallbackMode(true);
+  }, []);
+
   const loadCapabilityState = useCallback(async () => {
-    if (status !== "authenticated" || !user) {
-      setRegistryItems([]);
-      setRegistryUnavailable(true);
-      setRegistryError(SAFE_REGISTRY_ERROR);
-      setReadiness(SAFE_READINESS_REPORT);
-      setProductionReadiness(SAFE_PRODUCTION_READINESS_REPORT);
-      setPolicies([]);
-      setReadinessError(SAFE_LIVE_GATE_ERROR);
-      setProductionReadinessError(SAFE_LIVE_GATE_ERROR);
-      setPoliciesError(SAFE_LIVE_GATE_ERROR);
+    const currentAuth = latestAuthRef.current;
+
+    if (currentAuth.status !== "authenticated" || !currentAuth.user) {
+      applyFallbackState();
       setIsLocalLoading(false);
-      setIsFallbackMode(true);
       return;
     }
 
@@ -307,16 +311,66 @@ export function CapabilityStateProvider({
     try {
       const [
         registryResult,
+        moduleAccessResult,
+        adapterRegistryResult,
+        adapterAccessResult,
+        executionRegistryResult,
+        executionAccessResult,
         readinessResult,
         productionResult,
         policiesResult,
       ] = await Promise.all([
         listModuleRegistry(),
+        listMyModules(),
+        listModuleAdapterRegistry(),
+        listMyModuleAdapters(),
+        getExecutionProviderRegistry(),
+        getMyExecutionProviders(),
         getPreLiveReadiness(),
         getProductionReadiness(),
         listLiveGatePolicies(),
       ]);
 
+      if (!mountedRef.current) {
+        return;
+      }
+
+      const hasLoadedState =
+        registryResult.ok ||
+        moduleAccessResult.ok ||
+        adapterRegistryResult.ok ||
+        adapterAccessResult.ok ||
+        executionRegistryResult.ok ||
+        executionAccessResult.ok ||
+        readinessResult.ok ||
+        productionResult.ok ||
+        policiesResult.ok;
+
+      setAccessSnapshot({
+        adapterAccessItems: safeArray(adapterAccessResult?.data?.items),
+        adapterAccessUnknown:
+          adapterAccessResult?.adapter_access_unknown !== false,
+        adapterContracts: safeArray(adapterRegistryResult?.data?.items),
+        adapterError: adapterAccessResult?.error ?? null,
+        adapterMetadataUnavailable: adapterRegistryResult?.ok !== true,
+        adapterRegistryError: adapterRegistryResult?.error ?? null,
+        executionProviderAccessItems: safeArray(
+          executionAccessResult?.data?.items,
+        ),
+        executionProviderAccessUnknown:
+          executionAccessResult?.provider_access_unknown !== false,
+        executionProviderContracts: safeArray(
+          executionRegistryResult?.data?.items,
+        ),
+        executionProviderError: executionAccessResult?.error ?? null,
+        executionProviderMetadataUnavailable:
+          executionRegistryResult?.ok !== true,
+        executionProviderRegistryError: executionRegistryResult?.error ?? null,
+        moduleAccessUnknown:
+          moduleAccessResult?.module_access_unknown !== false,
+        moduleError: moduleAccessResult?.error ?? null,
+        moduleItems: safeArray(moduleAccessResult?.data?.items),
+      });
       setRegistryItems(safeArray(registryResult?.data?.items));
       setRegistryUnavailable(registryResult?.ok !== true);
       setRegistryError(registryResult?.error ?? null);
@@ -332,47 +386,32 @@ export function CapabilityStateProvider({
       setReadinessError(readinessResult?.error ?? null);
       setProductionReadinessError(productionResult?.error ?? null);
       setPoliciesError(policiesResult?.error ?? null);
-      setIsFallbackMode(false);
+      setIsFallbackMode(!hasLoadedState);
     } catch {
-      setRegistryItems([]);
-      setRegistryUnavailable(true);
-      setRegistryError(SAFE_REGISTRY_ERROR);
-      setReadiness(SAFE_READINESS_REPORT);
-      setProductionReadiness(SAFE_PRODUCTION_READINESS_REPORT);
-      setPolicies([]);
-      setReadinessError(SAFE_LIVE_GATE_ERROR);
-      setProductionReadinessError(SAFE_LIVE_GATE_ERROR);
-      setPoliciesError(SAFE_LIVE_GATE_ERROR);
-      setIsFallbackMode(true);
+      applyFallbackState();
     } finally {
-      setIsLocalLoading(false);
+      if (mountedRef.current) {
+        setIsLocalLoading(false);
+      }
     }
-  }, [status, user]);
+  }, [applyFallbackState]);
 
   useEffect(() => {
-    let active = true;
+    mountedRef.current = true;
 
-    async function refreshWhenActive() {
-      if (!active) {
-        return;
-      }
-      await loadCapabilityState();
+    if (!initStartedRef.current) {
+      initStartedRef.current = true;
+      void loadCapabilityState();
     }
 
-    void refreshWhenActive();
-
     return () => {
-      active = false;
+      mountedRef.current = false;
     };
   }, [loadCapabilityState]);
 
   const refresh = useCallback(async () => {
-    await Promise.allSettled([
-      loadCapabilityState(),
-      moduleAccess.refresh(),
-      adapterAccess.refresh(),
-    ]);
-  }, [adapterAccess, loadCapabilityState, moduleAccess]);
+    await loadCapabilityState();
+  }, [loadCapabilityState]);
 
   const liveGate = useMemo(
     () =>
@@ -400,18 +439,20 @@ export function CapabilityStateProvider({
     () => {
       try {
         return buildFrontendCapabilityGraph({
-          adapterAccessItems: safeArray(adapterAccess.accessItems),
-          adapterAccessUnknown: adapterAccess.adapterAccessUnknown,
-          adapterContracts: safeArray(adapterAccess.adapters),
+          adapterAccessItems: safeArray(accessSnapshot.adapterAccessItems),
+          adapterAccessUnknown: accessSnapshot.adapterAccessUnknown,
+          adapterContracts: safeArray(accessSnapshot.adapterContracts),
           executionProviderAccessItems: safeArray(
-            adapterAccess.executionProviderAccessItems,
+            accessSnapshot.executionProviderAccessItems,
           ),
           executionProviderAccessUnknown:
-            adapterAccess.executionProviderAccessUnknown,
-          executionProviderContracts: safeArray(adapterAccess.executionProviders),
+            accessSnapshot.executionProviderAccessUnknown,
+          executionProviderContracts: safeArray(
+            accessSnapshot.executionProviderContracts,
+          ),
           liveGate,
-          moduleAccessItems: safeArray(moduleAccess.items),
-          moduleAccessUnknown: moduleAccess.moduleAccessUnknown,
+          moduleAccessItems: safeArray(accessSnapshot.moduleItems),
+          moduleAccessUnknown: accessSnapshot.moduleAccessUnknown,
           permissions: user?.permissions,
           registryItems: safeArray(registryItems),
           registryUnavailable,
@@ -422,15 +463,15 @@ export function CapabilityStateProvider({
       }
     },
     [
-      adapterAccess.accessItems,
-      adapterAccess.adapterAccessUnknown,
-      adapterAccess.adapters,
-      adapterAccess.executionProviderAccessItems,
-      adapterAccess.executionProviderAccessUnknown,
-      adapterAccess.executionProviders,
+      accessSnapshot.adapterAccessItems,
+      accessSnapshot.adapterAccessUnknown,
+      accessSnapshot.adapterContracts,
+      accessSnapshot.executionProviderAccessItems,
+      accessSnapshot.executionProviderAccessUnknown,
+      accessSnapshot.executionProviderContracts,
+      accessSnapshot.moduleAccessUnknown,
+      accessSnapshot.moduleItems,
       liveGate,
-      moduleAccess.items,
-      moduleAccess.moduleAccessUnknown,
       registryItems,
       registryUnavailable,
       user?.permissions,
@@ -445,24 +486,22 @@ export function CapabilityStateProvider({
 
   const isLoading =
     status === "checking" ||
-    isLocalLoading ||
-    moduleAccess.isLoading ||
-    adapterAccess.isLoading;
+    isLocalLoading;
   const isDegraded =
     isFallbackMode ||
     registryUnavailable ||
     Boolean(registryError) ||
-    Boolean(moduleAccess.error) ||
-    Boolean(adapterAccess.error) ||
-    Boolean(adapterAccess.registryError) ||
-    Boolean(adapterAccess.executionProviderError) ||
-    Boolean(adapterAccess.executionProviderRegistryError) ||
+    Boolean(accessSnapshot.moduleError) ||
+    Boolean(accessSnapshot.adapterError) ||
+    Boolean(accessSnapshot.adapterRegistryError) ||
+    Boolean(accessSnapshot.executionProviderError) ||
+    Boolean(accessSnapshot.executionProviderRegistryError) ||
     Boolean(readinessError) ||
     Boolean(productionReadinessError) ||
     Boolean(policiesError) ||
-    moduleAccess.moduleAccessUnknown ||
-    adapterAccess.adapterAccessUnknown ||
-    adapterAccess.executionProviderAccessUnknown;
+    accessSnapshot.moduleAccessUnknown ||
+    accessSnapshot.adapterAccessUnknown ||
+    accessSnapshot.executionProviderAccessUnknown;
   const uiState: CapabilityStateContextValue["uiState"] = isLoading
     ? "loading"
     : isFallbackMode
