@@ -1,0 +1,75 @@
+{
+  "fix_id": "FIX-BE-01",
+  "generated_at_utc": "2026-06-18T04:13:20Z",
+  "scope": "backend DB connection layer only",
+  "files_modified": [
+    "backend/app/db/session.py"
+  ],
+  "disallowed_areas_modified": {
+    "frontend": false,
+    "auth_system": false,
+    "permission_system": false,
+    "execution_engine": false
+  },
+  "engine_configuration": {
+    "pool_size": {
+      "before": 5,
+      "after": 20,
+      "applies_to": "postgresql"
+    },
+    "max_overflow": {
+      "before": 10,
+      "after": 30,
+      "applies_to": "postgresql"
+    },
+    "pool_recycle_seconds": {
+      "before": null,
+      "after": 1800
+    },
+    "pool_pre_ping": {
+      "before": true,
+      "after": true
+    },
+    "statement_timeout_ms": {
+      "before": null,
+      "after": 5000,
+      "method": "postgresql connect_args options: -c statement_timeout=5000"
+    }
+  },
+  "dialect_guard": {
+    "postgresql": "Uses QueuePool sizing, overflow, recycle, pre-ping, and statement_timeout.",
+    "non_postgresql": "Keeps pool_pre_ping and pool_recycle while avoiding PostgreSQL-only pool sizing and statement_timeout options."
+  },
+  "session_lifecycle_controls": [
+    "ManagedSession.close() rolls back any open top-level or nested transaction before releasing the connection.",
+    "get_db() rolls back on request exceptions and always closes the session in finally.",
+    "SessionLocal uses close_resets_only=false so a closed session cannot be reused across request boundaries."
+  ],
+  "idle_in_transaction_controls": [
+    "Open transactions left by read-only requests are rolled back during dependency finalization.",
+    "Open transactions left by direct SessionLocal context managers are rolled back during context manager exit.",
+    "Closed sessions are final, preventing accidental cross-request session reuse."
+  ],
+  "verification": [
+    {
+      "command": ".venv/bin/python3 -m py_compile backend/app/db/session.py",
+      "status": "passed"
+    },
+    {
+      "command": ".venv/bin/python3 inline check for _engine_kwargs(postgresql)",
+      "status": "passed",
+      "observed": {
+        "pool_size": 20,
+        "max_overflow": 30,
+        "pool_recycle": 1800,
+        "pool_pre_ping": true,
+        "statement_timeout": "-c statement_timeout=5000"
+      }
+    },
+    {
+      "command": ".venv/bin/python3 inline check for SessionLocal close reuse",
+      "status": "passed",
+      "observed": "Closed ManagedSession rejects reuse with InvalidRequestError."
+    }
+  ]
+}

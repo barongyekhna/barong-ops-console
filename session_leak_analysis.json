@@ -1,0 +1,104 @@
+{
+  "fix_id": "FIX-BE-01",
+  "generated_at_utc": "2026-06-18T04:13:20Z",
+  "analysis_scope": [
+    "backend/app/db/session.py",
+    "backend/app/main.py",
+    "backend/app/middleware",
+    "backend/app/api",
+    "backend/app/services",
+    "backend/app/cli"
+  ],
+  "static_scan": {
+    "get_db_dependency_references": 111,
+    "sessionlocal_invocations_backend_app": 28,
+    "sessionlocal_context_managers": 26,
+    "sessionlocal_return_factories": 1,
+    "commit_calls_backend_app": 84,
+    "rollback_calls_backend_app": 36
+  },
+  "findings": [
+    {
+      "id": "SL-001",
+      "severity": "high",
+      "status": "fixed",
+      "summary": "Request-scoped sessions could leave an implicit transaction open until close.",
+      "evidence_before": "get_db() yielded SessionLocal() and only called close() in finally.",
+      "fix": "get_db() now rolls back on exceptions and ManagedSession.close() rolls back any still-open transaction before close."
+    },
+    {
+      "id": "SL-002",
+      "severity": "high",
+      "status": "fixed",
+      "summary": "Direct SessionLocal context managers needed the same orphan transaction protection as request dependencies.",
+      "evidence_before": "Middleware and service code use with SessionLocal() for bounded database work.",
+      "fix": "SessionLocal now creates ManagedSession, so context manager exit performs rollback-before-close protection globally."
+    },
+    {
+      "id": "SL-003",
+      "severity": "medium",
+      "status": "fixed",
+      "summary": "SQLAlchemy sessions were reusable after close by default.",
+      "evidence_before": "SessionLocal did not set close_resets_only.",
+      "fix": "SessionLocal now uses close_resets_only=false to make closed sessions final and prevent cross-request reuse."
+    },
+    {
+      "id": "SL-004",
+      "severity": "medium",
+      "status": "reviewed",
+      "summary": "Middleware should not hold database sessions across downstream request handling.",
+      "evidence": [
+        "backend/app/main.py:262",
+        "backend/app/middleware/permission.py:225",
+        "backend/app/middleware/data_isolation.py:168",
+        "backend/app/middleware/data_isolation.py:225",
+        "backend/app/middleware/org_context.py:362"
+      ],
+      "result": "Reviewed middleware SessionLocal usages are bounded in with blocks and end before call_next continues."
+    }
+  ],
+  "direct_sessionlocal_usages": [
+    "backend/app/main.py:262",
+    "backend/app/middleware/permission.py:225",
+    "backend/app/middleware/data_isolation.py:168",
+    "backend/app/middleware/data_isolation.py:225",
+    "backend/app/middleware/org_context.py:362",
+    "backend/app/cli/bootstrap_owner.py:152",
+    "backend/app/services/audit_query_engine.py:387",
+    "backend/app/services/callback_handler.py:892",
+    "backend/app/services/execution_replay.py:713",
+    "backend/app/services/failure_handling.py:365",
+    "backend/app/services/event_collector.py:165",
+    "backend/app/services/event_collector.py:189",
+    "backend/app/services/event_collector.py:217",
+    "backend/app/services/event_collector.py:328",
+    "backend/app/services/event_collector.py:444",
+    "backend/app/services/event_collector.py:465",
+    "backend/app/services/event_collector.py:492",
+    "backend/app/services/event_collector.py:536",
+    "backend/app/services/event_collector.py:608",
+    "backend/app/services/replay_protection.py:25",
+    "backend/app/services/replay_protection.py:42",
+    "backend/app/services/cross_org_communication.py:86",
+    "backend/app/services/alerting.py:757",
+    "backend/app/services/shared_module_registry.py:410",
+    "backend/app/services/module_binding_service.py:276",
+    "backend/app/services/anomaly_detection.py:1595",
+    "backend/app/services/storage_layer.py:940"
+  ],
+  "request_lifecycle_after_fix": {
+    "normal_exit": "db.close() invokes ManagedSession.close(), rolling back any uncommitted transaction and releasing the connection.",
+    "exception_exit": "get_db() explicitly rolls back before re-raising, then closes in finally.",
+    "closed_session_reuse": "Rejected by SQLAlchemy InvalidRequestError because close_resets_only=false."
+  },
+  "commit_rollback_assessment": {
+    "business_commit_sites_changed": false,
+    "business_rollback_sites_changed": false,
+    "terminal_rollback_guard": "All SessionLocal sessions now receive rollback-before-close cleanup for uncommitted or orphan transactions.",
+    "reason": "This fixes connection lifecycle leakage without changing API behavior or business transaction boundaries."
+  },
+  "residual_risk": [
+    "Streaming or long-running request responses still release dependency sessions at framework finalization time; the finalizer now rolls back and closes deterministically.",
+    "Injected existing sessions in service helpers remain owned by their caller; caller-owned request sessions are covered by get_db()."
+  ]
+}
