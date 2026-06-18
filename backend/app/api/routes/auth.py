@@ -3,32 +3,93 @@ from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
 from ...core.session_cookies import clear_session_cookie, set_session_cookie
-from ...db.session import get_db
+from ...db.session import get_db, get_read_db
+from ...middleware.org_context import build_org_context
+from ...models.auth_session import AuthSession
 from ...models.user import User
 from ...schemas.auth import (
+    AuthContextResponse,
     AuthenticatedUser,
-    AuthenticatedUserWithPermissions,
     LoginRequest,
     LoginResponse,
     LogoutResponse,
 )
-from ...schemas.permission import CurrentUserPermissionsRead
 from ...services.auth_service import (
+    AuthenticatedUserIdentity,
     InvalidCredentialsError,
     InvalidSessionError,
     LoginRateLimitError,
     login as login_user,
     logout as logout_user,
     validate_session,
+    validate_session_identity_fast,
 )
-from ...services.permission_service import resolve_current_user_permission_info
 from ...services.unified_permission_engine import (
     UnifiedPermissionEngine,
     UnifiedPermissionRequest,
 )
-from ..deps import get_audit_context, require_rbac
+from ..deps import get_audit_context
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
+
+
+def _not_authenticated() -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Not authenticated.",
+    )
+
+
+def _current_identity_fast(
+    request: Request,
+    db: Session = Depends(get_read_db),
+    settings: Settings = Depends(get_settings),
+) -> AuthenticatedUserIdentity:
+    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    if session_id is None:
+        raise _not_authenticated()
+    try:
+        identity = validate_session_identity_fast(db, session_id=session_id)
+    except InvalidSessionError:
+        raise _not_authenticated() from None
+    request.state.user_id = str(identity.id)
+    return identity
+
+
+def _identity_response(identity: AuthenticatedUserIdentity) -> AuthenticatedUser:
+    return AuthenticatedUser(
+        id=identity.id,
+        username=identity.username,
+        role=identity.role,
+        is_active=identity.is_active,
+        last_login_at=identity.last_login_at,
+    )
+
+
+def _identity_user(identity: AuthenticatedUserIdentity) -> User:
+    user = User(
+        username=identity.username,
+        password_hash="",
+        role=identity.role,
+        is_active=identity.is_active,
+    )
+    user.id = identity.id
+    user.last_login_at = identity.last_login_at
+    return user
+
+
+def _identity_auth_session(identity: AuthenticatedUserIdentity) -> AuthSession:
+    auth_session = AuthSession(
+        session_id_hash=identity.session_id_hash,
+        user_id=identity.id,
+        issued_at=identity.session_expires_at,
+        expires_at=identity.session_expires_at,
+        last_seen_at=None,
+        ip_address=None,
+        user_agent=None,
+    )
+    auth_session.id = 0
+    return auth_session
 
 
 @router.post("/login", response_model=LoginResponse)
@@ -71,21 +132,43 @@ def login(
     )
 
 
-@router.get("/me", response_model=AuthenticatedUserWithPermissions)
+@router.get("/me", response_model=AuthenticatedUser)
 def me(
-    db: Session = Depends(get_db),
-    user: User = Depends(require_rbac("AUTH", "read")),
-) -> AuthenticatedUserWithPermissions:
-    permissions = CurrentUserPermissionsRead.model_validate(
-        resolve_current_user_permission_info(db, user)
+    identity: AuthenticatedUserIdentity = Depends(_current_identity_fast),
+) -> AuthenticatedUser:
+    return _identity_response(identity)
+
+
+@router.get("/context", response_model=AuthContextResponse)
+def auth_context(
+    request: Request,
+    db: Session = Depends(get_read_db),
+    identity: AuthenticatedUserIdentity = Depends(_current_identity_fast),
+) -> AuthContextResponse:
+    request_id = str(getattr(request.state, "context_id", "")) or "auth-context"
+    context, resolution_source = build_org_context(
+        db,
+        request=request,
+        user=_identity_user(identity),
+        auth_session=_identity_auth_session(identity),
+        request_id=request_id,
     )
-    return AuthenticatedUserWithPermissions(
-        id=user.id,
-        username=user.username,
-        role=user.role,
-        is_active=user.is_active,
-        last_login_at=user.last_login_at,
-        permissions=permissions,
+    if context is None:
+        return AuthContextResponse(
+            user_id=identity.id,
+            org_id=None,
+            role=None,
+            module_scope=[],
+            context_available=False,
+            resolution_source=resolution_source,
+        )
+    return AuthContextResponse(
+        user_id=identity.id,
+        org_id=context.org_id,
+        role=context.role,
+        module_scope=context.module_scope,
+        context_available=True,
+        resolution_source=resolution_source,
     )
 
 

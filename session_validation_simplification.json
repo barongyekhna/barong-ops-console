@@ -1,0 +1,82 @@
+{
+  "fix_id": "FIX-BE-03",
+  "generated_at_utc": "2026-06-18T04:51:51Z",
+  "status": "implemented",
+  "scope": "auth/session validation path for /auth/me",
+  "new_fast_path": {
+    "function": "validate_session_identity_fast",
+    "file": "backend/app/services/auth_service.py",
+    "returns": "AuthenticatedUserIdentity",
+    "data_loaded": [
+      "session validity",
+      "session expiry",
+      "user id",
+      "username",
+      "role",
+      "is_active",
+      "last_login_at"
+    ],
+    "data_not_loaded": [
+      "permissions",
+      "permission assignments",
+      "role defaults",
+      "org memberships",
+      "module bindings",
+      "execution providers",
+      "data isolation context"
+    ]
+  },
+  "db_access_contract": {
+    "auth_me_cache_hit_queries": 0,
+    "auth_me_cold_path_queries_max": 1,
+    "auth_me_commit": false,
+    "auth_me_write_statements": 0,
+    "query_shape": "single indexed auth_sessions session_id_hash lookup with users basic identity columns; no permission/org/module joins"
+  },
+  "read_only_session_boundary": {
+    "dependency": "get_read_db",
+    "file": "backend/app/db/session.py",
+    "behavior": "rolls back any opened read transaction and closes the session without commit"
+  },
+  "cache_contract": {
+    "cache_name": "session_identity_cache",
+    "ttl_seconds": 5,
+    "max_entries": 4096,
+    "cache_key": "hashed session id",
+    "stores_permissions": false,
+    "stores_org_context": false,
+    "stores_module_access": false
+  },
+  "unchanged_paths": {
+    "login": "keeps existing audit and session creation behavior, warms identity cache after creating a session",
+    "logout": "keeps existing permission decision and audit behavior, clears cached session identity",
+    "general_validate_session": "kept for non-/auth/me protected API paths"
+  },
+  "forbidden_scope_check": {
+    "frontend_modified": false,
+    "db_schema_modified": false,
+    "permission_model_modified": false,
+    "execution_engine_modified": false
+  },
+  "verification": [
+    {
+      "command": "python3 -m py_compile selected backend auth/session files",
+      "status": "passed"
+    },
+    {
+      "command": ".venv/bin/python -m compileall -q backend/app",
+      "status": "passed"
+    },
+    {
+      "command": "direct SQLite validation of validate_session_identity_fast",
+      "status": "passed",
+      "observed": {
+        "select_count": 1,
+        "write_count": 0,
+        "permission_sql": false,
+        "org_membership_sql": false,
+        "module_binding_sql": false
+      }
+    }
+  ]
+}

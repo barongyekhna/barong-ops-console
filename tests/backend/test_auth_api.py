@@ -1,16 +1,17 @@
 import json
 
 from fastapi.testclient import TestClient
-from sqlalchemy import select
+from sqlalchemy import event, select
 
 from backend.app.core.security import (
     hash_session_id,
     hash_password,
 )
-from backend.app.db.session import SessionLocal
+from backend.app.db.session import SessionLocal, engine
 from backend.app.models.auth_session import AuthSession
 from backend.app.models.operation_log import OperationLog
 from backend.app.models.user import User
+from backend.app.services.auth_service import clear_session_identity_cache
 
 USERNAME = "api_owner"
 PASSWORD = "example-only-api-owner-password"
@@ -188,7 +189,57 @@ def test_auth_me_returns_current_user(auth_client: TestClient) -> None:
     assert response.status_code == 200
     assert response.json()["id"] == owner_id
     assert response.json()["username"] == USERNAME
+    assert "permissions" not in response.json()
     assert "password_hash" not in response.json()
+
+
+def test_auth_me_fast_path_uses_one_read_query_without_permissions(
+    auth_client: TestClient,
+) -> None:
+    owner_id = create_test_owner()
+    login(auth_client)
+    clear_session_identity_cache()
+
+    statements: list[str] = []
+
+    def collect_statement(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        del conn, cursor, parameters, context, executemany
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", collect_statement)
+    try:
+        response = auth_client.get("/api/public/auth/me")
+    finally:
+        event.remove(engine, "before_cursor_execute", collect_statement)
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["id"] == owner_id
+    assert "permissions" not in payload
+
+    write_statements = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+    ]
+    assert write_statements == []
+
+    data_statements = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith("SELECT")
+    ]
+    assert len(data_statements) <= 1
+    assert not any("permission" in statement.lower() for statement in statements)
+    assert not any("org_memberships" in statement.lower() for statement in statements)
+    assert not any("module_bindings" in statement.lower() for statement in statements)
 
 
 def test_auth_me_allows_active_non_owner_user(
@@ -206,7 +257,24 @@ def test_auth_me_allows_active_non_owner_user(
     assert response.status_code == 200
     assert response.json()["id"] == user_id
     assert response.json()["role"] == "viewer"
+    assert "permissions" not in response.json()
     assert "password_hash" not in response.json()
+
+
+def test_auth_context_is_lazy_org_context_endpoint(
+    auth_client: TestClient,
+) -> None:
+    owner_id = create_test_owner()
+    login(auth_client)
+
+    response = auth_client.get("/api/public/auth/context")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["user_id"] == owner_id
+    assert payload["context_available"] is False
+    assert payload["org_id"] is None
+    assert payload["module_scope"] == []
 
 
 def test_logout_invalidates_session_and_writes_audit_log(

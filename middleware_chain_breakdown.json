@@ -1,0 +1,79 @@
+{
+  "fix_id": "FIX-BE-03",
+  "generated_at_utc": "2026-06-18T04:51:51Z",
+  "endpoint": "/api/public/auth/me",
+  "status": "implemented",
+  "chain_behavior": [
+    {
+      "middleware": "short_circuit_auth_me",
+      "file": "backend/app/main.py",
+      "behavior": "terminates /auth/me with minimal session identity response",
+      "heavy_checks": false
+    },
+    {
+      "middleware": "capture_audit_events",
+      "file": "backend/app/middleware/event_collector.py",
+      "behavior": "explicit bypass for /auth/me",
+      "heavy_checks": false
+    },
+    {
+      "middleware": "org_context_middleware",
+      "file": "backend/app/middleware/org_context.py",
+      "behavior": "explicit bypass for /auth/me",
+      "heavy_checks": false
+    },
+    {
+      "middleware": "enforce_permission_isolation",
+      "file": "backend/app/middleware/permission.py",
+      "behavior": "explicit bypass for /auth/me",
+      "heavy_checks": false
+    },
+    {
+      "middleware": "enforce_org_data_isolation",
+      "file": "backend/app/middleware/data_isolation.py",
+      "behavior": "explicit bypass for /auth/me",
+      "heavy_checks": false
+    },
+    {
+      "middleware": "enforce_control_plane_isolation",
+      "file": "backend/app/main.py",
+      "behavior": "not applicable because /auth/me is a public auth endpoint",
+      "heavy_checks": false
+    }
+  ],
+  "removed_from_auth_me_chain": {
+    "permission_resolution": true,
+    "org_context_loading": true,
+    "module_access_loading": true,
+    "execution_provider_checks": true,
+    "data_isolation_full_chain": true,
+    "audit_event_write_path": true,
+    "session_last_seen_commit": true
+  },
+  "lazy_endpoint_map": [
+    {
+      "concern": "permission check",
+      "endpoint": "/api/app/permissions/me",
+      "status": "existing lazy API"
+    },
+    {
+      "concern": "org context",
+      "endpoint": "/api/public/auth/context",
+      "status": "added lazy API"
+    },
+    {
+      "concern": "module access",
+      "endpoint": "/api/control-plane/modules/me",
+      "status": "existing lazy API"
+    },
+    {
+      "concern": "execution provider access",
+      "endpoint": "/api/control-plane/execution-providers/me",
+      "status": "existing lazy API"
+    }
+  ],
+  "frontend_contract": {
+    "frontend_files_modified": false,
+    "auth_me_permissions_field": "omitted; frontend normalizer already treats missing permissions as null"
+  }
+}

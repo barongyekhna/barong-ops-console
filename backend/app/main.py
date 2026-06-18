@@ -1,5 +1,6 @@
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -54,15 +55,20 @@ from .api.module_visibility import router as module_visibility_router
 from .api.org import router as org_router
 from .api.org_membership import router as org_membership_router
 from .api.shared_module import router as shared_module_router
+from .core.auth_paths import is_auth_me_path
 from .core.config import get_settings
 from .core.security_headers import apply_security_headers
-from .db.session import managed_session
+from .db.session import SessionLocal, managed_session, rollback_open_transaction
 from .middleware.event_collector import capture_audit_events
 from .middleware.data_isolation import enforce_org_data_isolation
 from .middleware.org_context import org_context_middleware
 from .middleware.permission import enforce_permission_isolation
 from .services.event_collector import emit_event
-from .services.auth_service import InvalidSessionError, validate_session
+from .services.auth_service import (
+    InvalidSessionError,
+    validate_session,
+    validate_session_identity_fast,
+)
 from .services.unified_permission_engine import (
     UnifiedPermissionEngine,
     UnifiedPermissionRequest,
@@ -105,6 +111,37 @@ def _json_security_response(
     )
     apply_security_headers(response, settings=settings)
     return response
+
+
+def _json_ok_security_response(content: object) -> JSONResponse:
+    response = JSONResponse(status_code=status.HTTP_200_OK, content=content)
+    apply_security_headers(response, settings=settings)
+    return response
+
+
+def _auth_me_payload(request: Request) -> dict[str, object] | None:
+    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    if session_id is None:
+        return None
+
+    db = SessionLocal()
+    try:
+        identity = validate_session_identity_fast(db, session_id=session_id)
+        request.state.user_id = str(identity.id)
+        return jsonable_encoder(
+            {
+                "id": identity.id,
+                "username": identity.username,
+                "role": identity.role,
+                "is_active": identity.is_active,
+                "last_login_at": identity.last_login_at,
+            }
+        )
+    except InvalidSessionError:
+        return None
+    finally:
+        rollback_open_transaction(db)
+        db.close()
 
 
 def _production_error_detail(request: Request, status_code: int) -> str:
@@ -355,6 +392,20 @@ async def enforce_c18f_permission_isolation(request: Request, call_next):
 @app.middleware("http")
 async def inject_c18h_org_context(request: Request, call_next):
     return await org_context_middleware(request, call_next)
+
+
+@app.middleware("http")
+async def short_circuit_auth_me(request: Request, call_next):
+    if not is_auth_me_path(request.url.path):
+        return await call_next(request)
+
+    payload = _auth_me_payload(request)
+    if payload is None:
+        return _json_security_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated.",
+        )
+    return _json_ok_security_response(payload)
 
 
 app.include_router(health_router, prefix=PUBLIC_API_PREFIX)

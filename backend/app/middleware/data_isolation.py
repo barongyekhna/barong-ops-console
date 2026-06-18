@@ -8,6 +8,7 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import inspect
 
+from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.compatibility import table_exists
@@ -179,6 +180,9 @@ def _c05b_schema_without_c18_data_isolation() -> bool:
 
 
 async def enforce_org_data_isolation(request: Request, call_next):
+    if is_auth_me_path(request.url.path):
+        return await call_next(request)
+
     if not _is_api_path(request):
         return await call_next(request)
 

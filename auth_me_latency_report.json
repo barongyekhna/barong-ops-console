@@ -1,0 +1,90 @@
+{
+  "fix_id": "FIX-BE-03",
+  "title": "AUTH ME TIMEOUT OPTIMIZATION",
+  "generated_at_utc": "2026-06-18T04:51:51Z",
+  "status": "implemented",
+  "target_endpoint": "/api/public/auth/me",
+  "goal": "/auth/me is a lightweight session existence and basic user identity endpoint.",
+  "scope_guard": {
+    "frontend_modified": false,
+    "db_schema_modified": false,
+    "permission_model_modified": false,
+    "execution_engine_modified": false,
+    "complex_architecture_added": false
+  },
+  "before": {
+    "route_dependency": "require_rbac(\"AUTH\", \"read\")",
+    "session_validation": "validate_session() loaded auth_session, loaded user, updated last_seen_at, and committed.",
+    "permission_resolution": "resolve_current_user_permission_info() resolved effective permission assignments for /auth/me.",
+    "risk": [
+      "Multiple DB operations on a login-critical read path.",
+      "Permission aggregation could block auth hydration.",
+      "Read requests wrote auth_sessions.last_seen_at and amplified DB pool pressure."
+    ]
+  },
+  "after": {
+    "middleware_short_circuit": "short_circuit_auth_me returns the minimal response before the heavy middleware chain.",
+    "route_response_model": "AuthenticatedUser",
+    "response_fields": [
+      "id",
+      "username",
+      "role",
+      "is_active",
+      "last_login_at"
+    ],
+    "removed_from_auth_me": [
+      "permissions",
+      "org context",
+      "module access",
+      "execution provider access",
+      "RBAC platform decision",
+      "data isolation context"
+    ],
+    "db_contract": {
+      "cache_hit": "0 DB queries",
+      "cold_path": "1 indexed session identity SELECT max",
+      "writes": "0 INSERT/UPDATE/DELETE",
+      "commit": false
+    },
+    "cache": {
+      "type": "in-process short TTL identity cache",
+      "ttl_seconds": 5,
+      "invalidated_on": [
+        "logout",
+        "session rotation",
+        "session expiration handling",
+        "user inactive invalidation"
+      ]
+    }
+  },
+  "verification": {
+    "py_compile_target_files": "passed",
+    "compileall_backend_app": "passed",
+    "direct_fast_validation_sql_check": {
+      "status": "passed",
+      "database": "sqlite+pysqlite under /tmp",
+      "observed": {
+        "select_count": 1,
+        "write_count": 0,
+        "permission_sql": false,
+        "org_membership_sql": false,
+        "module_binding_sql": false
+      }
+    },
+    "pytest_target_files": {
+      "status": "blocked_by_environment",
+      "reason": "Default DATABASE_URL points to host 'db', which is not resolvable in this workspace.",
+      "command": ".venv/bin/python -m pytest -c backend/pytest.ini tests/backend/test_auth_api.py tests/backend/test_permissions_api.py -q"
+    },
+    "testclient_sqlite_smoke": {
+      "status": "blocked_by_testclient_runtime",
+      "reason": "Minimal TestClient script did not return within 60 seconds in this workspace; service-level DB verification passed."
+    }
+  },
+  "success_criteria_mapping": {
+    "auth_me_under_200ms": "code path reduced to cache hit or one indexed SELECT; live latency not measurable in current workspace",
+    "no_middleware_chain_blocking": "short-circuit middleware and explicit middleware bypasses implemented",
+    "login_no_longer_stuck_on_loading": "/auth/me no longer resolves permissions or commits read-path writes",
+    "no_db_pool_saturation_from_auth": "auth/me read path has no write amplification and one-query max cold path"
+  }
+}

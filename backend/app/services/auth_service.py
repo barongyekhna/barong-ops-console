@@ -5,7 +5,9 @@ import hmac
 import json
 from math import ceil
 from hashlib import sha256
+from threading import Lock
 
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -79,13 +81,34 @@ class AuthenticatedSession:
 
 
 @dataclass(frozen=True)
+class AuthenticatedUserIdentity:
+    id: int
+    username: str
+    role: str
+    is_active: bool
+    last_login_at: datetime | None
+    session_expires_at: datetime
+    session_id_hash: str
+
+
+@dataclass(frozen=True)
 class SessionRotationResult:
     session_id: str
     auth_session: AuthSession
 
 
+@dataclass(frozen=True)
+class _CachedSessionIdentity:
+    identity: AuthenticatedUserIdentity
+    cached_until: datetime
+
+
 LEGACY_SESSION_PREFIX = "legacy-v1"
 LEGACY_SESSION_HASH_MARKER = "legacy-v1:c05b-compat"
+SESSION_IDENTITY_CACHE_TTL_SECONDS = 5
+SESSION_IDENTITY_CACHE_MAX_ENTRIES = 4096
+_session_identity_cache: dict[str, _CachedSessionIdentity] = {}
+_session_identity_cache_lock = Lock()
 
 
 def _now() -> datetime:
@@ -96,6 +119,73 @@ def _as_aware(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=timezone.utc)
     return value
+
+
+def _legacy_session_cache_key(session_id: str) -> str:
+    digest = sha256(session_id.encode("utf-8")).hexdigest()
+    return f"{LEGACY_SESSION_HASH_MARKER}:{digest}"
+
+
+def _cache_key_for_session_id(session_id: str) -> str:
+    if session_id.startswith(f"{LEGACY_SESSION_PREFIX}."):
+        return _legacy_session_cache_key(session_id)
+    return hash_session_id(session_id)
+
+
+def _identity_from_cache(
+    cache_key: str,
+    *,
+    now: datetime,
+) -> AuthenticatedUserIdentity | None:
+    with _session_identity_cache_lock:
+        cached = _session_identity_cache.get(cache_key)
+        if cached is None:
+            return None
+        if cached.cached_until <= now:
+            _session_identity_cache.pop(cache_key, None)
+            return None
+        if _as_aware(cached.identity.session_expires_at) <= now:
+            _session_identity_cache.pop(cache_key, None)
+            return None
+        return cached.identity
+
+
+def _cache_session_identity(
+    identity: AuthenticatedUserIdentity,
+    *,
+    now: datetime,
+) -> None:
+    cached_until = min(
+        _as_aware(identity.session_expires_at),
+        now + timedelta(seconds=SESSION_IDENTITY_CACHE_TTL_SECONDS),
+    )
+    if cached_until <= now:
+        return
+    with _session_identity_cache_lock:
+        if len(_session_identity_cache) >= SESSION_IDENTITY_CACHE_MAX_ENTRIES:
+            _session_identity_cache.clear()
+        _session_identity_cache[identity.session_id_hash] = _CachedSessionIdentity(
+            identity=identity,
+            cached_until=cached_until,
+        )
+
+
+def forget_cached_session_identity_hash(session_id_hash: str) -> None:
+    with _session_identity_cache_lock:
+        _session_identity_cache.pop(session_id_hash, None)
+
+
+def forget_cached_session_identity(session_id: str) -> None:
+    try:
+        cache_key = _cache_key_for_session_id(session_id)
+    except InvalidSessionIdError:
+        return
+    forget_cached_session_identity_hash(cache_key)
+
+
+def clear_session_identity_cache() -> None:
+    with _session_identity_cache_lock:
+        _session_identity_cache.clear()
 
 
 def _retry_after_seconds(until: datetime, now: datetime) -> int:
@@ -340,6 +430,106 @@ def _new_session(
     return session_id, auth_session
 
 
+def _authenticated_identity_from_user(
+    *,
+    user: User,
+    expires_at: datetime,
+    session_id_hash: str,
+) -> AuthenticatedUserIdentity:
+    return AuthenticatedUserIdentity(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        is_active=user.is_active,
+        last_login_at=user.last_login_at,
+        session_expires_at=expires_at,
+        session_id_hash=session_id_hash,
+    )
+
+
+def validate_session_identity_fast(
+    db: Session,
+    *,
+    session_id: str,
+) -> AuthenticatedUserIdentity:
+    now = _now()
+    try:
+        cache_key = _cache_key_for_session_id(session_id)
+    except InvalidSessionIdError:
+        raise InvalidSessionError("Invalid session.") from None
+
+    cached_identity = _identity_from_cache(cache_key, now=now)
+    if cached_identity is not None:
+        return cached_identity
+
+    from ..core.config import get_settings
+
+    legacy_session = _parse_legacy_session_token(
+        session_id,
+        settings=get_settings(),
+        now=now,
+    )
+    if legacy_session is not None:
+        user_id, expires_at = legacy_session
+        row = db.execute(
+            select(
+                User.id,
+                User.username,
+                User.role,
+                User.is_active,
+                User.last_login_at,
+            ).where(User.id == user_id, User.is_active.is_(True))
+        ).one_or_none()
+        if row is None:
+            raise InvalidSessionError("Invalid session.")
+        identity = AuthenticatedUserIdentity(
+            id=row.id,
+            username=row.username,
+            role=row.role,
+            is_active=row.is_active,
+            last_login_at=row.last_login_at,
+            session_expires_at=expires_at,
+            session_id_hash=cache_key,
+        )
+        _cache_session_identity(identity, now=now)
+        return identity
+
+    row = db.execute(
+        select(
+            User.id,
+            User.username,
+            User.role,
+            User.is_active,
+            User.last_login_at,
+            AuthSession.expires_at.label("session_expires_at"),
+        )
+        .select_from(AuthSession)
+        .join(User, AuthSession.user_id == User.id)
+        .where(
+            AuthSession.session_id_hash == cache_key,
+            AuthSession.invalidated_at.is_(None),
+            AuthSession.expires_at > now,
+            User.is_active.is_(True),
+        )
+        .limit(1)
+    ).one_or_none()
+    if row is None:
+        forget_cached_session_identity_hash(cache_key)
+        raise InvalidSessionError("Invalid session.")
+
+    identity = AuthenticatedUserIdentity(
+        id=row.id,
+        username=row.username,
+        role=row.role,
+        is_active=row.is_active,
+        last_login_at=row.last_login_at,
+        session_expires_at=row.session_expires_at,
+        session_id_hash=cache_key,
+    )
+    _cache_session_identity(identity, now=now)
+    return identity
+
+
 def login(
     db: Session,
     *,
@@ -465,6 +655,14 @@ def login(
         issued_at=logged_in_at,
     )
     update_last_login(db, user, logged_in_at)
+    _cache_session_identity(
+        _authenticated_identity_from_user(
+            user=user,
+            expires_at=auth_session.expires_at,
+            session_id_hash=_cache_key_for_session_id(session_id),
+        ),
+        now=logged_in_at,
+    )
     create_operation_log(
         db,
         actor_type="user",
@@ -543,6 +741,7 @@ def validate_session(
             invalidated_at=now,
             reason="expired",
         )
+        forget_cached_session_identity_hash(auth_session.session_id_hash)
         create_operation_log(
             db,
             actor_type="user",
@@ -567,6 +766,7 @@ def validate_session(
             invalidated_at=now,
             reason="user_inactive",
         )
+        forget_cached_session_identity_hash(auth_session.session_id_hash)
         db.commit()
         raise InvalidSessionError("Invalid session.")
 
@@ -590,12 +790,21 @@ def rotate_session(
         invalidated_at=rotated_at,
         reason="rotated",
     )
+    forget_cached_session_identity_hash(auth_session.session_id_hash)
     session_id, new_session = _new_session(
         db,
         user=user,
         settings=settings,
         audit=audit,
         issued_at=rotated_at,
+    )
+    _cache_session_identity(
+        _authenticated_identity_from_user(
+            user=user,
+            expires_at=new_session.expires_at,
+            session_id_hash=_cache_key_for_session_id(session_id),
+        ),
+        now=rotated_at,
     )
     create_operation_log(
         db,
@@ -631,6 +840,7 @@ def logout(
             invalidated_at=_now(),
             reason="logout",
         )
+        forget_cached_session_identity_hash(auth_session.session_id_hash)
 
     create_operation_log(
         db,

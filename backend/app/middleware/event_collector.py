@@ -4,6 +4,7 @@ from time import perf_counter
 
 from fastapi import Request
 
+from ..core.auth_paths import is_auth_me_path
 from ..services.event_collector import (
     classify_module_from_path,
     emit_event,
@@ -51,6 +52,9 @@ def request_trace_root_id(request: Request, fallback_context_id: str) -> str:
 
 
 async def capture_audit_events(request: Request, call_next):
+    if is_auth_me_path(request.url.path):
+        return await call_next(request)
+
     context_id = ensure_request_context_id(request)
     tokens = set_current_event_context(context_id=context_id)
     module = classify_module_from_path(request.url.path)

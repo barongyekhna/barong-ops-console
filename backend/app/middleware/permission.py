@@ -8,6 +8,7 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
+from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.compatibility import table_exists
@@ -192,6 +193,9 @@ def _c18_permission_tables_available(db: Session) -> bool:
 
 
 async def enforce_permission_isolation(request: Request, call_next):
+    if is_auth_me_path(request.url.path):
+        return await call_next(request)
+
     context = resolve_permission_request_context(request)
     if context is None:
         return await call_next(request)

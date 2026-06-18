@@ -24,6 +24,15 @@ class AuthenticatedUserWithPermissions(AuthenticatedUser):
     permissions: CurrentUserPermissionsRead
 
 
+class AuthContextResponse(BaseModel):
+    user_id: int
+    org_id: str | None
+    role: str | None
+    module_scope: list[str] = Field(default_factory=list)
+    context_available: bool
+    resolution_source: str | None
+
+
 class LoginResponse(BaseModel):
     user: AuthenticatedUser
 

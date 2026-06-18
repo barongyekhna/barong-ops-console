@@ -273,7 +273,7 @@ def test_super_admin_requires_explicit_assignment(
     assert still_missing_global.status_code == 403
 
 
-def test_auth_me_returns_owner_platform_scoped_permissions_without_secrets(
+def test_auth_me_returns_basic_identity_without_permission_payload(
     auth_client: TestClient,
 ) -> None:
     seed_permission_registry()
@@ -288,16 +288,11 @@ def test_auth_me_returns_owner_platform_scoped_permissions_without_secrets(
     assert response.status_code == 200
     payload = response.json()
     assert payload["role"] == "owner"
-    permissions = payload["permissions"]
-    assert permissions["is_owner_full_access"] is False
-    assert "*" not in permissions["permission_keys"]
-    assert "users.manage" in permissions["permission_keys"]
-    assert "production.release" in permissions["permission_keys"]
-    assert "jobs.read" not in permissions["permission_keys"]
+    assert "permissions" not in payload
     assert "password_hash" not in json.dumps(payload, sort_keys=True)
 
 
-def test_auth_me_returns_explicit_assignments_only_for_non_owner(
+def test_auth_me_omits_explicit_assignments_for_non_owner(
     auth_client: TestClient,
 ) -> None:
     user_id = create_permission_api_user(
@@ -317,24 +312,12 @@ def test_auth_me_returns_explicit_assignments_only_for_non_owner(
     response = auth_client.get("/api/public/auth/me", headers=auth_headers(token))
 
     assert response.status_code == 200
-    permissions = response.json()["permissions"]
-    assert permissions["is_owner_full_access"] is False
-    assert permissions["permission_keys"] == ["artifacts.read", "jobs.read"]
-    assert {
-        "permission_key": "jobs.read",
-        "scope_type": "global",
-        "scope_key": "*",
-    } in permissions["assignments"]
-    assert {
-        "permission_key": "artifacts.read",
-        "scope_type": "global",
-        "scope_key": "*",
-    } in permissions["assignments"]
-    assert "permissions.manage" not in permissions["permission_keys"]
+    assert response.json()["id"] == user_id
+    assert "permissions" not in response.json()
     assert "password_hash" not in json.dumps(response.json(), sort_keys=True)
 
 
-def test_auth_me_role_defaults_do_not_grant_permissions(
+def test_auth_me_omits_role_default_permissions(
     auth_client: TestClient,
 ) -> None:
     create_permission_api_user(
@@ -353,8 +336,7 @@ def test_auth_me_role_defaults_do_not_grant_permissions(
     response = auth_client.get("/api/public/auth/me", headers=auth_headers(token))
 
     assert response.status_code == 200
-    assert response.json()["permissions"]["permission_keys"] == []
-    assert response.json()["permissions"]["assignments"] == []
+    assert "permissions" not in response.json()
 
 
 def test_permissions_me_returns_current_user_effective_permissions(

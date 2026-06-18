@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.compatibility import table_exists
@@ -321,6 +322,9 @@ def inject_org_context(request: Request, context: OrgContext) -> None:
 
 
 async def org_context_middleware(request: Request, call_next):
+    if is_auth_me_path(request.url.path):
+        return await call_next(request)
+
     if not _is_api_path(request):
         return await call_next(request)
 
