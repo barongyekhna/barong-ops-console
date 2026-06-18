@@ -1,0 +1,836 @@
+{
+  "report_id": "frontend-full-system-audit",
+  "generated_at_utc": "2026-06-18T00:00:00Z",
+  "mode": "read_only_audit",
+  "scope": {
+    "target": "frontend",
+    "source_code_modified": false,
+    "backend_modified": false,
+    "database_modified": false,
+    "report_file_created": "frontend_full_audit_report.json"
+  },
+  "executive_summary": {
+    "login_failure_root_cause": "The frontend makes /auth/me a hard prerequisite for both rendering /login and entering protected routes, but neither the browser fetch nor the Next proxy fetch has a timeout. If /api/backend/auth/me or the backend fetch never settles, PublicOnly/AuthGuard remain in checking/loading state indefinitely. After login, AuthProvider.login also waits for a second /auth/me before redirect completion. In addition, current /auth/me returns only basic identity and no permissions, while the frontend still treats user.permissions as the owner/full-access source, causing authenticated users to lose owner UI capabilities.",
+    "dashboard_white_screen_root_cause": "The dashboard is hard-blocked first by AuthGuard while AuthProvider is checking /auth/me. After authentication, dashboard content is not a pure white-screen crash, but it can remain loading because OperationsDashboard waits for Promise.allSettled over refreshCapabilityState plus four dashboard APIs, and refreshCapabilityState itself is a 9-request capability fan-out with no timeout. One hung request keeps dashboard loading active forever.",
+    "provider_architecture_root_cause": "Provider state is split across CapabilityStateProvider, AdapterAccessProvider, and ModuleAccessProvider, which independently request overlapping module, adapter, and execution-provider state. Sidebar and route guard can read different copies of the same backend facts. AuthProvider still owns permissions even though /auth/me no longer returns them.",
+    "api_fan_out_root_cause": "Initial dashboard load duplicates capability requests: CapabilityStateProvider fires 9 requests, AdapterAccessProvider repeats 4 of them, ModuleAccessProvider repeats /modules/me, and OperationsDashboard immediately calls capabilityState.refresh(), repeating the 9-request fan-out again.",
+    "missing_product_functionality_root_cause": "Most non-user-management product pages are read-only list shells or explicit empty states. Adapter/execution-provider metadata is fetched, but the action layer is not mounted or executable. /permissions/me exists and is allowlisted but is not bound to AuthProvider.",
+    "frontend_readiness_score": 38
+  },
+  "login_chain_audit": {
+    "flow": [
+      "RootLayout wraps all pages in AuthProvider.",
+      "AuthProvider useEffect calls refresh() on mount.",
+      "refresh() sets status=checking and awaits currentUserRequest().",
+      "currentUserRequest() calls apiRequest('/auth/me').",
+      "apiRequest() fetches /api/backend/auth/me with credentials=include and no timeout.",
+      "Next proxy maps auth/me to backend /api/public/auth/me.",
+      "PublicOnly blocks /login while status is checking.",
+      "LoginForm submit calls AuthProvider.login(username,password).",
+      "login() awaits POST /auth/login, then awaits GET /auth/me again.",
+      "LoginForm redirects with router.replace('/dashboard') only after login() resolves."
+    ],
+    "dependency_graph": {
+      "login_page": [
+        "AuthProvider.status",
+        "PublicOnly",
+        "LoginForm"
+      ],
+      "auth_provider": [
+        "currentUserRequest -> GET /auth/me",
+        "loginRequest -> POST /auth/login",
+        "post_login_currentUserRequest -> GET /auth/me"
+      ],
+      "proxy": [
+        "frontend /api/backend/auth/me",
+        "backend /api/public/auth/me"
+      ],
+      "redirect": [
+        "LoginForm.handleSubmit",
+        "AuthProvider.login resolved",
+        "router.replace('/dashboard')"
+      ]
+    },
+    "login_blocking_points": [
+      {
+        "point": "Initial /auth/me",
+        "effect": "/login shows only spinner while AuthProvider.status is checking.",
+        "evidence_files": [
+          "frontend/src/components/auth-provider.tsx",
+          "frontend/src/components/auth-guard.tsx",
+          "frontend/src/lib/auth.ts",
+          "frontend/src/lib/api.ts"
+        ]
+      },
+      {
+        "point": "POST /auth/login",
+        "effect": "Login button remains in Signing in state while loginRequest is unresolved.",
+        "evidence_files": [
+          "frontend/src/components/login-form.tsx",
+          "frontend/src/components/auth-provider.tsx"
+        ]
+      },
+      {
+        "point": "Post-login /auth/me",
+        "effect": "Login button spinner persists and redirect does not happen until currentUserRequest settles.",
+        "evidence_files": [
+          "frontend/src/components/auth-provider.tsx"
+        ]
+      },
+      {
+        "point": "Next proxy backend fetch",
+        "effect": "Proxy fetch to BACKEND_API_URL has no timeout. Backend/network hangs are propagated as pending browser requests.",
+        "evidence_files": [
+          "frontend/src/app/api/backend/[...path]/route.ts"
+        ]
+      }
+    ],
+    "why_login_spinner_persists": [
+      "PublicOnly renders spinner for status authenticated or checking; checking lasts until refresh() resolves or rejects.",
+      "apiRequest uses fetch without AbortController, timeout, or race guard.",
+      "proxyRequest uses backend fetch without AbortController, timeout, or race guard.",
+      "LoginForm sets isSubmitting=true until AuthProvider.login resolves; login includes a second /auth/me call.",
+      "AuthGuard fallback after 3000ms changes only the visible text/button, not the underlying pending request."
+    ],
+    "permission_contract_break": {
+      "frontend_expectation": "AuthenticatedUserPayload may include permissions and AuthProvider stores user.permissions.",
+      "backend_current_contract": "AuthenticatedUser schema and /api/public/auth/me fast path return id, username, role, is_active, last_login_at only.",
+      "frontend_effect": "normalizeCurrentUserPermissions(undefined) becomes null. isOwnerFullAccess(null) is false.",
+      "affected_ui": [
+        "UserManagementPanel owner check",
+        "CapabilityStateProvider owner-only sidebar visibility",
+        "AdapterAccessProvider metadata filtering",
+        "PermissionRouteGuard fallback decisions"
+      ],
+      "unbound_available_api": "/permissions/me"
+    }
+  },
+  "dashboard_white_screen_audit": {
+    "render_chain": [
+      "frontend/src/app/(console)/dashboard/page.tsx",
+      "frontend/src/app/(console)/layout.tsx",
+      "AuthGuard",
+      "CapabilityStateProvider",
+      "AdapterAccessProvider",
+      "ModuleAccessProvider",
+      "ConsoleShell",
+      "PermissionRouteGuard",
+      "OperationsDashboard"
+    ],
+    "hard_render_blockers": [
+      {
+        "component": "AuthGuard",
+        "condition": "AuthProvider.status !== authenticated",
+        "result": "Protected route shows session spinner or fallback screen instead of dashboard."
+      },
+      {
+        "component": "PermissionRouteGuard",
+        "condition": "capability.can_enter is false or module route decision canEnter is false",
+        "result": "Dashboard child is replaced by capability empty state or no-permission notice."
+      },
+      {
+        "component": "OperationsDashboard",
+        "condition": "load() promise never settles",
+        "result": "Dashboard stays in activeLoading/fallback state."
+      }
+    ],
+    "soft_render_blockers": [
+      {
+        "component": "CapabilityStateProvider",
+        "condition": "9-request Promise.all remains pending",
+        "result": "ConsoleShell shows System initializing banner and sidebar footer loading state."
+      },
+      {
+        "component": "ModuleAccessProvider",
+        "condition": "/modules/me remains pending",
+        "result": "PermissionRouteGuard keeps moduleAccessUnknown and can hide or lock routes."
+      },
+      {
+        "component": "AdapterAccessProvider",
+        "condition": "adapter/execution-provider Promise.all remains pending",
+        "result": "Adapter/action UI remains unknown or disabled."
+      }
+    ],
+    "provider_deadlock_or_delay": {
+      "direct_circular_dependency_detected": false,
+      "logical_cycles_or_state_splits": [
+        "AuthProvider is the single source of user.permissions, but /auth/me no longer returns permissions.",
+        "CapabilityStateProvider and ModuleAccessProvider both load /modules/me and can disagree temporarily.",
+        "CapabilityStateProvider and AdapterAccessProvider both load adapter and execution-provider state and can disagree temporarily.",
+        "OperationsDashboard triggers capabilityState.refresh() while CapabilityStateProvider has already loaded on mount, duplicating work."
+      ],
+      "infinite_loading_causes": [
+        "No request timeout in frontend apiRequest.",
+        "No request timeout in Next proxyRequest.",
+        "Promise.all in CapabilityStateProvider waits for all 9 requests.",
+        "Promise.all in AdapterAccessProvider waits for all 4 requests.",
+        "Promise.allSettled in OperationsDashboard still waits forever if any promise never settles.",
+        "Fallback UI is visual only and does not abort or complete pending loading states."
+      ]
+    }
+  },
+  "provider_architecture_audit": {
+    "provider_dependency_graph": {
+      "RootLayout": [
+        "AuthProvider"
+      ],
+      "ProtectedLayout": [
+        "AuthGuard consumes AuthProvider",
+        "CapabilityStateProvider consumes AuthProvider",
+        "AdapterAccessProvider consumes AuthProvider",
+        "ModuleAccessProvider consumes AuthProvider",
+        "ConsoleShell consumes AuthProvider and CapabilityStateProvider",
+        "PermissionRouteGuard consumes CapabilityStateProvider, AuthProvider, ModuleAccessProvider"
+      ],
+      "DashboardPage": [
+        "OperationsDashboard consumes AuthProvider and CapabilityStateProvider"
+      ]
+    },
+    "circular_dependency_detection": {
+      "react_provider_cycle": false,
+      "import_cycle_confirmed": false,
+      "functional_cycle_risks": [
+        "AuthProvider requires /auth/me to complete before protected providers mount.",
+        "Protected providers make control-plane requests that require a valid session.",
+        "Owner-only UI depends on user.permissions from AuthProvider, but current auth payload has no permissions."
+      ]
+    },
+    "blocking_provider_list": [
+      {
+        "provider_or_component": "AuthProvider",
+        "blocking_level": "hard",
+        "reason": "Global auth status starts as checking and depends on /auth/me."
+      },
+      {
+        "provider_or_component": "AuthGuard",
+        "blocking_level": "hard",
+        "reason": "Protected layout renders no children until status is authenticated."
+      },
+      {
+        "provider_or_component": "PublicOnly",
+        "blocking_level": "hard for login page",
+        "reason": "Login page content is hidden while auth status is checking."
+      },
+      {
+        "provider_or_component": "PermissionRouteGuard",
+        "blocking_level": "hard per route",
+        "reason": "Replaces children when capability or module decision denies entry."
+      },
+      {
+        "provider_or_component": "OperationsDashboard",
+        "blocking_level": "hard for dashboard content",
+        "reason": "Local loading remains until all dashboard promises settle."
+      },
+      {
+        "provider_or_component": "CapabilityStateProvider",
+        "blocking_level": "soft",
+        "reason": "Does not block children, but drives sidebar, fallback banner, capability decisions, and dashboard refresh."
+      },
+      {
+        "provider_or_component": "ModuleAccessProvider",
+        "blocking_level": "soft to hard through PermissionRouteGuard",
+        "reason": "Route guard consumes its module access snapshot."
+      },
+      {
+        "provider_or_component": "AdapterAccessProvider",
+        "blocking_level": "soft",
+        "reason": "No route block, but action surfaces and adapter metadata remain unavailable."
+      }
+    ],
+    "fan_out_request_list": {
+      "AuthProvider": [
+        "GET /auth/me"
+      ],
+      "AuthProvider.login": [
+        "POST /auth/login",
+        "GET /auth/me"
+      ],
+      "CapabilityStateProvider": [
+        "GET /modules/registry",
+        "GET /modules/me",
+        "GET /module-adapters/registry",
+        "GET /module-adapters/me",
+        "GET /execution-providers/registry",
+        "GET /execution-providers/me",
+        "GET /live-gate/readiness",
+        "GET /live-gate/production-readiness",
+        "GET /live-gate/policies"
+      ],
+      "AdapterAccessProvider": [
+        "GET /module-adapters/registry",
+        "GET /module-adapters/me",
+        "GET /execution-providers/registry",
+        "GET /execution-providers/me"
+      ],
+      "ModuleAccessProvider": [
+        "GET /modules/me"
+      ],
+      "OperationsDashboard": [
+        "capabilityState.refresh() repeats the 9 CapabilityStateProvider requests",
+        "GET /health",
+        "GET /operation-logs?limit=8&offset=0",
+        "GET /approval/list?limit=50&offset=0",
+        "GET /users?limit=1&offset=0"
+      ]
+    }
+  },
+  "api_fan_out_audit": {
+    "checked_endpoints": {
+      "/auth/me": {
+        "called_by_frontend": true,
+        "callers": [
+          "AuthProvider.refresh",
+          "AuthProvider.login"
+        ],
+        "problem": "Hard login/protected-route dependency, no timeout, does not provide permissions expected by frontend auth model."
+      },
+      "/modules/me": {
+        "called_by_frontend": true,
+        "callers": [
+          "CapabilityStateProvider",
+          "ModuleAccessProvider",
+          "OperationsDashboard via capabilityState.refresh"
+        ],
+        "problem": "Duplicated at least 3 times on dashboard startup."
+      },
+      "/permissions/me": {
+        "called_by_frontend": false,
+        "callers": [],
+        "problem": "Allowlisted and implemented, but not bound to AuthProvider or auth hydration."
+      },
+      "/execution-providers/me": {
+        "called_by_frontend": true,
+        "callers": [
+          "CapabilityStateProvider",
+          "AdapterAccessProvider",
+          "OperationsDashboard via capabilityState.refresh"
+        ],
+        "problem": "Duplicated at least 3 times and feeds UI that remains non-executable."
+      },
+      "capability_9_request_fan_out": {
+        "called_by_frontend": true,
+        "requests": [
+          "/modules/registry",
+          "/modules/me",
+          "/module-adapters/registry",
+          "/module-adapters/me",
+          "/execution-providers/registry",
+          "/execution-providers/me",
+          "/live-gate/readiness",
+          "/live-gate/production-readiness",
+          "/live-gate/policies"
+        ],
+        "problem": "Repeated by OperationsDashboard.refresh on initial dashboard load."
+      }
+    },
+    "dashboard_request_amplification_map": {
+      "authenticated_dashboard_entry_without_login_submit": {
+        "auth_me": 1,
+        "capability_provider_initial": 9,
+        "adapter_provider_initial": 4,
+        "module_provider_initial": 1,
+        "dashboard_capability_refresh": 9,
+        "dashboard_summary_requests": 4,
+        "estimated_total": 28
+      },
+      "login_then_dashboard": {
+        "login_post": 1,
+        "post_login_auth_me": 1,
+        "capability_provider_initial": 9,
+        "adapter_provider_initial": 4,
+        "module_provider_initial": 1,
+        "dashboard_capability_refresh": 9,
+        "dashboard_summary_requests": 4,
+        "estimated_total": 29
+      }
+    },
+    "duplicate_request_list": [
+      {
+        "endpoint": "/modules/me",
+        "dashboard_startup_count": 3,
+        "sources": [
+          "CapabilityStateProvider",
+          "ModuleAccessProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      },
+      {
+        "endpoint": "/module-adapters/registry",
+        "dashboard_startup_count": 3,
+        "sources": [
+          "CapabilityStateProvider",
+          "AdapterAccessProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      },
+      {
+        "endpoint": "/module-adapters/me",
+        "dashboard_startup_count": 3,
+        "sources": [
+          "CapabilityStateProvider",
+          "AdapterAccessProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      },
+      {
+        "endpoint": "/execution-providers/registry",
+        "dashboard_startup_count": 3,
+        "sources": [
+          "CapabilityStateProvider",
+          "AdapterAccessProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      },
+      {
+        "endpoint": "/execution-providers/me",
+        "dashboard_startup_count": 3,
+        "sources": [
+          "CapabilityStateProvider",
+          "AdapterAccessProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      },
+      {
+        "endpoint": "/modules/registry",
+        "dashboard_startup_count": 2,
+        "sources": [
+          "CapabilityStateProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      },
+      {
+        "endpoint": "/live-gate/readiness",
+        "dashboard_startup_count": 2,
+        "sources": [
+          "CapabilityStateProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      },
+      {
+        "endpoint": "/live-gate/production-readiness",
+        "dashboard_startup_count": 2,
+        "sources": [
+          "CapabilityStateProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      },
+      {
+        "endpoint": "/live-gate/policies",
+        "dashboard_startup_count": 2,
+        "sources": [
+          "CapabilityStateProvider",
+          "OperationsDashboard capability refresh"
+        ]
+      }
+    ],
+    "over_fetching_points": [
+      "CapabilityStateProvider and AdapterAccessProvider both fetch adapter registry, adapter access, execution-provider registry, and execution-provider access.",
+      "CapabilityStateProvider and ModuleAccessProvider both fetch /modules/me.",
+      "OperationsDashboard calls capabilityState.refresh() on mount even though CapabilityStateProvider already initialized on mount.",
+      "Dashboard summary calls /users?limit=1 even when the current authenticated user is already available from AuthProvider.",
+      "Adapter/execution-provider data is fetched although ModuleAdapterShell is not mounted by any route and ExecutionProviderStatusShell remains disabled."
+    ]
+  },
+  "ui_functionality_audit": {
+    "sidebar_routes": [
+      "/users",
+      "/organizations",
+      "/permissions",
+      "/operation-logs",
+      "/approvals",
+      "/jobs",
+      "/dashboard",
+      "/settings"
+    ],
+    "page_routes": [
+      "/agents",
+      "/approvals",
+      "/artifacts",
+      "/dashboard",
+      "/errors",
+      "/jobs",
+      "/memory-events",
+      "/modules",
+      "/operation-logs",
+      "/organizations",
+      "/permissions",
+      "/products",
+      "/reviews",
+      "/settings",
+      "/users",
+      "/workflows"
+    ],
+    "sidebar_vs_pages_mismatch": [
+      {
+        "route": "/agents",
+        "issue": "Page exists but not in static navigation; only reachable if registry dynamically contributes it."
+      },
+      {
+        "route": "/artifacts",
+        "issue": "Page exists but not in static navigation."
+      },
+      {
+        "route": "/errors",
+        "issue": "Page exists but not in static navigation."
+      },
+      {
+        "route": "/memory-events",
+        "issue": "Page exists but is a moved/redirect-style empty state and not in sidebar."
+      },
+      {
+        "route": "/modules",
+        "issue": "Page exists but static navigation has no admin.modules item; ModuleRegistryProductView exists but is not used."
+      },
+      {
+        "route": "/products",
+        "issue": "Page exists but product module is hidden from capability navigation and page is missing-feature empty state."
+      },
+      {
+        "route": "/reviews",
+        "issue": "Page exists, duplicates Approvals concept, and is not in sidebar."
+      },
+      {
+        "route": "/workflows",
+        "issue": "Page exists but not in static navigation."
+      },
+      {
+        "route": "/settings",
+        "issue": "Sidebar item exists but status is planned and page is missing-feature empty state."
+      }
+    ],
+    "ui_incomplete_feature_list": [
+      {
+        "feature": "Products",
+        "route": "/products",
+        "state": "missing feature empty state",
+        "missing": [
+          "product list",
+          "product create",
+          "product edit",
+          "product delete",
+          "real product API binding"
+        ]
+      },
+      {
+        "feature": "Organizations",
+        "route": "/organizations",
+        "state": "missing feature empty state",
+        "missing": [
+          "organization list",
+          "organization detail",
+          "membership management",
+          "organization CRUD"
+        ]
+      },
+      {
+        "feature": "Settings",
+        "route": "/settings",
+        "state": "missing feature empty state",
+        "missing": [
+          "workspace settings forms",
+          "save/update actions",
+          "settings API binding"
+        ]
+      },
+      {
+        "feature": "Product Areas / Modules",
+        "route": "/modules",
+        "state": "empty state despite existing ModuleRegistryProductView component",
+        "missing": [
+          "module registry table on route",
+          "module setup controls",
+          "module action/configuration layer"
+        ]
+      },
+      {
+        "feature": "Agents",
+        "route": "/agents",
+        "state": "read-only CapabilityRecordList",
+        "missing": [
+          "agent create",
+          "agent edit",
+          "agent enable/disable",
+          "agent execution binding"
+        ]
+      },
+      {
+        "feature": "Workflows",
+        "route": "/workflows",
+        "state": "read-only CapabilityRecordList",
+        "missing": [
+          "workflow create",
+          "workflow edit",
+          "workflow run",
+          "workflow bind/unbind"
+        ]
+      },
+      {
+        "feature": "Jobs",
+        "route": "/jobs",
+        "state": "read-only CapabilityRecordList",
+        "missing": [
+          "job run",
+          "job retry",
+          "job cancel",
+          "job detail/log drilldown"
+        ]
+      },
+      {
+        "feature": "Artifacts / Records",
+        "route": "/artifacts",
+        "state": "read-only CapabilityRecordList",
+        "missing": [
+          "artifact detail",
+          "download",
+          "upload",
+          "delete"
+        ]
+      },
+      {
+        "feature": "Approvals",
+        "route": "/approvals and /reviews",
+        "state": "read-only lists",
+        "missing": [
+          "approve",
+          "reject",
+          "request detail",
+          "risk review workflow"
+        ]
+      },
+      {
+        "feature": "Operation logs",
+        "route": "/operation-logs",
+        "state": "read-only latest page",
+        "missing": [
+          "filter",
+          "search",
+          "pagination controls",
+          "export",
+          "trace detail"
+        ]
+      },
+      {
+        "feature": "Permissions page",
+        "route": "/permissions",
+        "state": "empty state that redirects workflow to /users",
+        "missing": [
+          "standalone permission management page",
+          "role default permission UI",
+          "permission registry management"
+        ]
+      }
+    ],
+    "non_clickable_ui_inventory": [
+      {
+        "component": "ExecutionProviderStatusShell",
+        "issue": "Action button is permanently disabled."
+      },
+      {
+        "component": "AdapterAccessProvider hooks",
+        "issue": "useAdapterState and useAdapterStateForModule return isExecutable=false."
+      },
+      {
+        "component": "ModuleAdapterShell",
+        "issue": "Text states actions are not connected yet; component is not mounted by any page."
+      },
+      {
+        "component": "CapabilityRecordList",
+        "issue": "Records render as cards only; no row actions, pagination, filters, or details."
+      },
+      {
+        "component": "Products, Organizations, Settings, Modules pages",
+        "issue": "Primary action routes back to dashboard or users instead of completing the feature."
+      }
+    ],
+    "missing_crud_functionality_map": {
+      "users": "Partial CRUD exists: create, role update, enable, disable, reset password. No delete and owner/reserved roles are intentionally not creatable.",
+      "permission_assignments": "Grant, update, revoke exists inside user detail only. /permissions route itself has no management UI.",
+      "products": "No CRUD.",
+      "organizations": "No CRUD.",
+      "modules": "No CRUD/configuration UI; registry table component exists but route does not use it.",
+      "agents": "No CRUD.",
+      "workflows": "No CRUD or run action.",
+      "jobs": "No create/run/retry/cancel.",
+      "artifacts": "No upload/download/delete/detail action.",
+      "approvals_reviews": "No approve/reject action.",
+      "settings": "No read/write settings API binding."
+    },
+    "capability_only_ui_without_action_layer": [
+      "CapabilityStateProvider builds product capability state, but product actions are absent.",
+      "Module adapter and execution-provider APIs are loaded, but execution surfaces remain disabled.",
+      "Live gate state is displayed as readiness/status, not wired to operator actions."
+    ]
+  },
+  "performance_bottleneck_audit": {
+    "top_5_frontend_bottlenecks": [
+      {
+        "rank": 1,
+        "bottleneck": "Global auth hydration blocks /login and protected routes on /auth/me.",
+        "impact": "White screen/spinner before login form or dashboard shell appears."
+      },
+      {
+        "rank": 2,
+        "bottleneck": "No timeout/abort in apiRequest or proxyRequest.",
+        "impact": "Any hung endpoint can create infinite loading."
+      },
+      {
+        "rank": 3,
+        "bottleneck": "Dashboard startup request amplification: up to 28 requests for authenticated dashboard entry and 29 after login.",
+        "impact": "Slow first dashboard render and backend pressure."
+      },
+      {
+        "rank": 4,
+        "bottleneck": "Duplicate provider state loads across CapabilityStateProvider, AdapterAccessProvider, ModuleAccessProvider, and OperationsDashboard refresh.",
+        "impact": "Over-fetching, duplicate rerenders, inconsistent transient UI state."
+      },
+      {
+        "rank": 5,
+        "bottleneck": "OperationsDashboard waits for capability refresh and summary APIs together.",
+        "impact": "Dashboard loading state is tied to the slowest/hung dependency instead of rendering partial data independently."
+      }
+    ],
+    "hydration_delay_causes": [
+      "Root layout wraps all pages with client AuthProvider.",
+      "Login page content is hidden by client PublicOnly until auth check settles.",
+      "Protected console layout is hidden by client AuthGuard until auth check settles.",
+      "Most runtime data is fetched client-side after hydration rather than server-rendered."
+    ],
+    "rerender_loop_findings": {
+      "unbounded_rerender_loop_detected": false,
+      "observed_rerender_sources": [
+        "CapabilityStateProvider updates many state slices after one fan-out.",
+        "OperationsDashboard load updates state and timeout state.",
+        "UserManagementPanel updates role defaults after catalog load.",
+        "UserPermissionsPanel resets multiple state slices when target user changes."
+      ]
+    },
+    "blocking_use_effect_chains": [
+      {
+        "chain": "AuthProvider.useEffect -> refresh -> /auth/me",
+        "risk": "Global login/protected route block."
+      },
+      {
+        "chain": "CapabilityStateProvider.useEffect -> loadCapabilityState -> 9-request Promise.all",
+        "risk": "One pending capability endpoint keeps provider loading."
+      },
+      {
+        "chain": "AdapterAccessProvider.useEffect -> loadAdapterAccess -> 4-request Promise.all",
+        "risk": "One pending adapter/provider endpoint keeps adapter loading."
+      },
+      {
+        "chain": "ModuleAccessProvider.useEffect -> listMyModules",
+        "risk": "Route guard decisions stay unknown while pending."
+      },
+      {
+        "chain": "OperationsDashboard.useEffect -> load -> Promise.allSettled(refreshCapabilityState + 4 APIs)",
+        "risk": "Dashboard stays loading if any promise never settles."
+      }
+    ],
+    "render_chain_delay_analysis": [
+      "Auth check must finish before ProtectedLayout children mount.",
+      "After mount, providers immediately issue overlapping API calls.",
+      "Dashboard immediately repeats capability provider calls through refreshCapabilityState.",
+      "Sidebar, fallback banner, dashboard metrics, and route guard derive from overlapping but separate state snapshots."
+    ]
+  },
+  "test_and_static_verification": {
+    "commands_run": [
+      {
+        "command": "npm run typecheck",
+        "working_directory": "frontend",
+        "result": "passed"
+      },
+      {
+        "command": "npm test",
+        "working_directory": "frontend",
+        "result": "passed_with_zero_tests",
+        "note": "Script path tests/frontend/*.test.mjs does not match files from frontend working directory."
+      },
+      {
+        "command": "node --test tests/frontend/*.test.mjs",
+        "working_directory": "repo_root",
+        "result": "failed",
+        "summary": "9 files passed, 2 files failed."
+      },
+      {
+        "command": "node tests/frontend/module-isolation.test.mjs",
+        "working_directory": "repo_root",
+        "result": "failed",
+        "summary": "9 subtests passed, 9 subtests failed."
+      },
+      {
+        "command": "node tests/frontend/permission-management.test.mjs",
+        "working_directory": "repo_root",
+        "result": "failed",
+        "summary": "12 subtests passed, 3 subtests failed."
+      }
+    ],
+    "notable_test_failures": [
+      "module-isolation expected /settings to be absent from navigation, but it is present.",
+      "module-isolation expected admin.modules/admin.permissions embedded navigation assumptions that no longer match current navigation.",
+      "module-isolation observed /users fallback route accessState unknown instead of hidden in one missing /modules/me case.",
+      "module-isolation expected module unavailable notice copy in Chinese, current copy is English Product area unavailable.",
+      "module-isolation expected no admin.settings in sidebar keys, current navigation includes it.",
+      "permission-management expected Chinese role/default-permission and error copy, current copy is English.",
+      "permission-management expected Chinese empty assignment text, current copy is English."
+    ],
+    "compile_level_white_screen_cause_found": false
+  },
+  "root_causes": {
+    "1_login_failure_root_cause": [
+      "No timeout/abort on /auth/me and /auth/login request path.",
+      "Login form waits for post-login /auth/me before redirect completion.",
+      "PublicOnly hides login form during AuthProvider checking.",
+      "/auth/me no longer returns permissions, but AuthProvider still treats it as the source of user.permissions."
+    ],
+    "2_dashboard_white_screen_root_cause": [
+      "AuthGuard blocks dashboard until /auth/me settles.",
+      "OperationsDashboard waits for a capability refresh and dashboard APIs together; no timeout means infinite loading is possible.",
+      "Capability refresh duplicates initial provider fan-out and increases probability of slow/hung startup."
+    ],
+    "3_provider_architecture_issues": [
+      "AuthProvider, CapabilityStateProvider, ModuleAccessProvider, and AdapterAccessProvider maintain overlapping state with no central request cache.",
+      "Permission state is expected in AuthProvider but available through /permissions/me, which is not bound.",
+      "CapabilityStateProvider and ModuleAccessProvider can make sidebar and route guard decisions from different /modules/me snapshots.",
+      "AdapterAccessProvider duplicates data already present in CapabilityStateProvider.",
+      "OperationsDashboard imperatively refreshes provider state on mount."
+    ],
+    "4_api_fan_out_inefficiencies": [
+      "28-29 initial requests around dashboard entry/login-to-dashboard path.",
+      "3x duplicate calls for /modules/me, /module-adapters/registry, /module-adapters/me, /execution-providers/registry, /execution-providers/me.",
+      "2x duplicate calls for /modules/registry and live-gate endpoints.",
+      "/permissions/me is available but unused.",
+      "Adapter/execution-provider requests feed UI that is not executable or mounted."
+    ],
+    "5_missing_product_features_list": [
+      "Products CRUD and API binding missing.",
+      "Organization management page missing real list/CRUD.",
+      "Settings page missing forms and write binding.",
+      "Modules registry product view exists but /modules route does not mount it.",
+      "Agents/workflows/jobs/artifacts/reviews/errors are read-only list shells.",
+      "Approvals have no approve/reject action.",
+      "Operation logs lack filter/search/pagination/export/detail.",
+      "Execution provider and adapter action layers are disabled/non-executable.",
+      "Standalone permissions page is not functional; permissions are managed only through user detail."
+    ],
+    "6_frontend_readiness_score": {
+      "score": 38,
+      "scale": "0-100",
+      "rationale": [
+        "TypeScript compiles.",
+        "Auth, users, and permission assignment UI have partial implementation.",
+        "Core auth permission contract is broken because /auth/me no longer returns permissions and /permissions/me is unused.",
+        "Login and dashboard loading can hang indefinitely due to missing timeouts.",
+        "Dashboard over-fetches heavily.",
+        "Most product routes are missing, read-only, or disconnected from action APIs.",
+        "Repo-root frontend tests currently fail in module isolation and permission management contracts."
+      ]
+    }
+  },
+  "final_status": {
+    "frontend_audit_completed": true,
+    "all_findings_are_analysis_only": true,
+    "fixes_applied": false,
+    "source_files_changed": false
+  }
+}
