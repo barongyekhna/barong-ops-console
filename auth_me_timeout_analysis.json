@@ -1,0 +1,63 @@
+{
+  "fix_id": "FIX-FE-01",
+  "title": "/auth/me timeout and fallback analysis",
+  "generated_at_utc": "2026-06-18T07:30:51Z",
+  "status": "implemented",
+  "target_frontend_endpoint": "/api/backend/auth/me",
+  "source_auth_path": "/auth/me",
+  "implementation": {
+    "file": "frontend/src/lib/api.ts",
+    "timeout_wrapper": {
+      "uses_abort_controller": true,
+      "default_timeout_ms": 5000,
+      "deadline_scope": "apiRequest call lifetime, including cache/concurrency queue wait and retry attempts",
+      "timeout_result": "ApiTimeoutError rejection handled by auth fallback"
+    },
+    "retry": {
+      "limit": 1,
+      "applies_to": [
+        "GET",
+        "HEAD",
+        "OPTIONS"
+      ],
+      "not_retried": [
+        "AbortController abort",
+        "timeout abort",
+        "route-change abort",
+        "401 unauthorized",
+        "non-idempotent POST login/logout"
+      ]
+    },
+    "route_change_abort": {
+      "active_request_registry": true,
+      "abort_function": "abortActiveApiRequests()",
+      "caller": "AuthProvider useLayoutEffect on pathname change"
+    }
+  },
+  "lightweight_session_check": {
+    "file": "frontend/src/lib/auth.ts",
+    "selected_path": "/auth/me",
+    "reason": "/auth/session is not currently exposed by the frontend proxy allowlist; backend/proxy contracts were intentionally not changed.",
+    "payload_shape": [
+      "id",
+      "username",
+      "role",
+      "is_active",
+      "last_login_at"
+    ],
+    "permissions_consumed": false,
+    "modules_loaded": false,
+    "adapters_loaded": false,
+    "normalization": "sessionCheckRequest() returns permissions: null even if an unexpected permissions field is present."
+  },
+  "fallback_behavior": {
+    "auth_provider": "401, timeout, and route-change aborts clear session state instead of leaving status=checking.",
+    "public_only": "After 5000ms of checking, renders the public login children.",
+    "auth_guard": "After 5000ms of checking, renders LoginScreen and replaces route with /login.",
+    "ui_hang_possible": false
+  },
+  "risk_notes": [
+    "A live login latency measurement was not run in this workspace because no backend session credentials were provided.",
+    "The frontend avoids changing RBAC behavior; permissions remain outside the login critical path."
+  ]
+}

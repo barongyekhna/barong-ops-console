@@ -1,0 +1,86 @@
+{
+  "fix_id": "FIX-FE-01",
+  "title": "AUTH /auth/me BLOCKING FLOW FIX",
+  "generated_at_utc": "2026-06-18T07:30:51Z",
+  "status": "implemented",
+  "scope_guard": {
+    "frontend_auth_flow_modified": true,
+    "backend_modified": false,
+    "db_schema_modified": false,
+    "rbac_or_permission_system_modified": false,
+    "execution_engine_modified": false
+  },
+  "before": {
+    "login_page_render": "PublicOnly rendered an infinite spinner while AuthProvider waited for /auth/me.",
+    "session_bootstrap": "AuthProvider.refresh() called currentUserRequest() with no frontend timeout.",
+    "login_submit_chain": [
+      "POST /auth/login",
+      "GET /auth/me",
+      "set auth state",
+      "redirect"
+    ],
+    "blocking_points": [
+      "Initial /auth/me could block /login rendering.",
+      "Post-login /auth/me could block redirect.",
+      "AuthGuard/PublicOnly had no 5s hard loading cap."
+    ]
+  },
+  "after": {
+    "session_bootstrap": {
+      "request": "GET /auth/me",
+      "purpose": "lightweight session identity check",
+      "timeout_ms": 5000,
+      "fallback": "clear auth state and render login path instead of hanging"
+    },
+    "login_submit_chain": [
+      "POST /auth/login",
+      "set auth state from login response",
+      "redirect immediately"
+    ],
+    "removed_from_login_critical_path": [
+      "post-login GET /auth/me",
+      "permission loading",
+      "module loading",
+      "adapter loading",
+      "capability provider completion"
+    ],
+    "guard_loading_cap_ms": 5000,
+    "api_safety_layer": {
+      "default_timeout_ms": 5000,
+      "abort_controller": true,
+      "retry_limit": 1,
+      "retry_scope": "safe idempotent methods only; aborts/timeouts are not retried",
+      "abort_on_route_change": true
+    }
+  },
+  "latency_expectation": {
+    "healthy_backend_login_complete_target_ms": 2000,
+    "frontend_auth_me_max_wait_ms": 5000,
+    "infinite_spinner_possible": false,
+    "double_auth_validation_after_login": false
+  },
+  "verification": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "working_directory": "frontend",
+      "result": "pass"
+    },
+    "frontend_root_tests": {
+      "command": "node --test tests/frontend/*.test.mjs",
+      "working_directory": "repo root",
+      "result": "blocked_by_existing_failures",
+      "passed_files": 9,
+      "failed_files": [
+        "tests/frontend/module-isolation.test.mjs",
+        "tests/frontend/permission-management.test.mjs"
+      ]
+    }
+  },
+  "success_criteria_mapping": {
+    "login_under_2s_complete": "Frontend no longer adds a second /auth/me call after successful /auth/login; live latency depends on backend /auth/login response time.",
+    "auth_me_never_blocks_ui": "/auth/me is bounded by apiRequest 5000ms timeout and AuthProvider fallback.",
+    "no_infinite_loading_spinner": "PublicOnly and AuthGuard both have 5000ms loading caps.",
+    "dashboard_reachable_after_login": "LoginForm redirects to /dashboard immediately after AuthProvider.login resolves from /auth/login.",
+    "no_double_auth_validation": "AuthProvider.login removed the post-login currentUserRequest/sessionCheckRequest call."
+  }
+}

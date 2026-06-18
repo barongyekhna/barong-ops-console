@@ -5,29 +5,32 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { LoginScreen } from "@/components/login-screen";
 
-const FALLBACK_DELAY_MS = 3000;
+const AUTH_LOADING_TIMEOUT_MS = 5_000;
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { status, refresh } = useAuth();
-  const [showFallback, setShowFallback] = useState(false);
+  const [hasTimedOut, setHasTimedOut] = useState(false);
+  const shouldFallbackToLogin =
+    status === "unauthenticated" || (status === "checking" && hasTimedOut);
 
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (shouldFallbackToLogin) {
       router.replace("/login");
     }
-  }, [router, status]);
+  }, [router, shouldFallbackToLogin]);
 
   useEffect(() => {
     if (status !== "checking") {
-      setShowFallback(false);
+      setHasTimedOut(false);
       return;
     }
 
     const timer = window.setTimeout(() => {
-      setShowFallback(true);
-    }, FALLBACK_DELAY_MS);
+      setHasTimedOut(true);
+    }, AUTH_LOADING_TIMEOUT_MS);
 
     return () => {
       window.clearTimeout(timer);
@@ -51,43 +54,10 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   }
 
   if (status !== "authenticated") {
-    if (showFallback) {
-      return (
-        <main className="session-screen" aria-label="System initializing">
-          <div className="session-panel">
-            <span className="eyebrow">Fallback mode active</span>
-            <h1>System initializing</h1>
-            <p>Fallback mode active</p>
-            <button className="primary-button" onClick={() => void refresh()}>
-              <RotateCcw aria-hidden="true" size={17} />
-              Try refresh
-            </button>
-          </div>
-        </main>
-      );
+    if (shouldFallbackToLogin) {
+      return <LoginScreen />;
     }
 
-    return (
-      <main className="session-screen" aria-label="Checking session">
-        <LoaderCircle className="spin" aria-hidden="true" size={24} />
-      </main>
-    );
-  }
-
-  return children;
-}
-
-export function PublicOnly({ children }: { children: ReactNode }) {
-  const router = useRouter();
-  const { status } = useAuth();
-
-  useEffect(() => {
-    if (status === "authenticated") {
-      router.replace("/dashboard");
-    }
-  }, [router, status]);
-
-  if (status === "authenticated" || status === "checking") {
     return (
       <main className="session-screen" aria-label="Checking session">
         <LoaderCircle className="spin" aria-hidden="true" size={24} />

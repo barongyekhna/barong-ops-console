@@ -1,0 +1,97 @@
+{
+  "fix_id": "FIX-FE-01",
+  "title": "Frontend login chain trace",
+  "generated_at_utc": "2026-06-18T07:30:51Z",
+  "status": "implemented",
+  "before_trace": [
+    {
+      "step": 1,
+      "source": "AuthProvider mount",
+      "action": "GET /auth/me",
+      "blocking": true
+    },
+    {
+      "step": 2,
+      "source": "PublicOnly",
+      "action": "Render spinner while status=checking",
+      "blocking": true
+    },
+    {
+      "step": 3,
+      "source": "LoginForm submit",
+      "action": "POST /auth/login",
+      "blocking": true
+    },
+    {
+      "step": 4,
+      "source": "AuthProvider.login",
+      "action": "GET /auth/me after login",
+      "blocking": true
+    },
+    {
+      "step": 5,
+      "source": "LoginForm",
+      "action": "router.replace('/dashboard')",
+      "blocking": "waited for step 4"
+    }
+  ],
+  "after_trace": [
+    {
+      "step": 1,
+      "source": "AuthProvider mount",
+      "action": "sessionCheckRequest() -> GET /auth/me",
+      "blocking": "bounded to 5000ms with fallback"
+    },
+    {
+      "step": 2,
+      "source": "PublicOnly",
+      "action": "Render login page after unauthenticated, error, or 5000ms checking timeout",
+      "blocking": false
+    },
+    {
+      "step": 3,
+      "source": "LoginForm submit",
+      "action": "POST /auth/login",
+      "blocking": "only login request is in the submit critical path"
+    },
+    {
+      "step": 4,
+      "source": "AuthProvider.login",
+      "action": "setUser(result.user); setStatus('authenticated')",
+      "blocking": false
+    },
+    {
+      "step": 5,
+      "source": "LoginForm",
+      "action": "router.replace('/dashboard')",
+      "blocking": false
+    },
+    {
+      "step": 6,
+      "source": "Protected layout providers",
+      "action": "Capability/module/adapter providers mount after redirect and do not gate LoginForm completion.",
+      "blocking": false
+    }
+  ],
+  "explicitly_removed": [
+    "AuthProvider.login post-login currentUserRequest()",
+    "POST /auth/login -> GET /auth/me dependency",
+    "infinite PublicOnly spinner while /auth/me hangs",
+    "infinite AuthGuard spinner while /auth/me hangs"
+  ],
+  "files_changed": [
+    "frontend/src/lib/api.ts",
+    "frontend/src/lib/auth.ts",
+    "frontend/src/components/auth-provider.tsx",
+    "frontend/src/components/auth-guard.tsx",
+    "frontend/src/components/public-only.tsx",
+    "frontend/src/components/login-screen.tsx",
+    "frontend/src/app/login/page.tsx"
+  ],
+  "forbidden_scope_touched": {
+    "backend": false,
+    "database_schema": false,
+    "rbac_permission_system": false,
+    "execution_engine": false
+  }
+}

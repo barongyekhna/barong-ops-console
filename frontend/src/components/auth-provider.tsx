@@ -1,20 +1,28 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 
-import { ApiError, AUTH_UNAUTHORIZED_EVENT } from "@/lib/api";
 import {
-  currentUserRequest,
+  abortActiveApiRequests,
+  ApiError,
+  AUTH_UNAUTHORIZED_EVENT,
+  isApiAbortError,
+} from "@/lib/api";
+import {
   loginRequest,
   logoutRequest,
+  sessionCheckRequest,
   type AuthenticatedUser,
 } from "@/lib/auth";
 
@@ -31,8 +39,10 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const pathname = usePathname();
   const [status, setStatus] = useState<AuthStatus>("checking");
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
+  const previousPathnameRef = useRef(pathname);
 
   const clearSession = useCallback(() => {
     setUser(null);
@@ -42,11 +52,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     setStatus("checking");
     try {
-      const currentUser = await currentUserRequest();
+      const currentUser = await sessionCheckRequest();
       setUser(currentUser);
       setStatus("authenticated");
     } catch (error) {
-      if (error instanceof ApiError && error.status === 401) {
+      if (
+        (error instanceof ApiError && error.status === 401) ||
+        isApiAbortError(error)
+      ) {
         clearSession();
         return;
       }
@@ -59,6 +72,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useLayoutEffect(() => {
+    if (previousPathnameRef.current === pathname) {
+      return;
+    }
+
+    previousPathnameRef.current = pathname;
+    abortActiveApiRequests();
+  }, [pathname]);
 
   useEffect(() => {
     const handleUnauthorized = () => clearSession();
@@ -74,20 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     async (username: string, password: string) => {
       const result = await loginRequest(username, password);
 
-      let sessionUser = result.user;
-      try {
-        sessionUser = await currentUserRequest();
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) {
-          clearSession();
-          throw error;
-        }
-      }
-
-      setUser(sessionUser);
+      setUser(result.user);
       setStatus("authenticated");
     },
-    [clearSession],
+    [],
   );
 
   const logout = useCallback(async () => {

@@ -17,6 +17,8 @@ type AuthenticatedUserPayload = Omit<AuthenticatedUser, "permissions"> & {
   permissions?: unknown;
 };
 
+type SessionUserPayload = Omit<AuthenticatedUser, "permissions">;
+
 type LoginResponsePayload = {
   user: AuthenticatedUserPayload;
 };
@@ -34,6 +36,13 @@ function normalizeAuthenticatedUser(
   };
 }
 
+function normalizeSessionUser(user: SessionUserPayload): AuthenticatedUser {
+  return {
+    ...user,
+    permissions: null,
+  };
+}
+
 export async function loginRequest(username: string, password: string) {
   const response = await apiRequest<LoginResponsePayload>("/auth/login", {
     method: "POST",
@@ -46,12 +55,16 @@ export async function loginRequest(username: string, password: string) {
   };
 }
 
-export async function currentUserRequest() {
-  const user = await apiRequest<AuthenticatedUserPayload>("/auth/me", {
+export async function sessionCheckRequest() {
+  const user = await apiRequest<SessionUserPayload>("/auth/me", {
     method: "GET",
   });
 
-  return normalizeAuthenticatedUser(user);
+  return normalizeSessionUser(user);
+}
+
+export async function currentUserRequest() {
+  return sessionCheckRequest();
 }
 
 export function logoutRequest() {
