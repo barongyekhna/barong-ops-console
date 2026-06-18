@@ -13,7 +13,7 @@ from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.compatibility import table_exists
-from ..db.session import managed_session
+from ..db.session import managed_read_session
 from ..models.auth_session import AuthSession
 from ..models.org_membership import OrgMembershipRecord
 from ..models.organization import OrganizationRecord
@@ -23,6 +23,7 @@ from ..repositories.tenant import ROLLOUT_BACKFILL_ORG_ID
 from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
 from ..services.event_collector import emit_event, set_current_event_context
 from ..services.module_binding_service import list_module_bindings
+from ..services.session_seen_buffer import queue_session_seen
 
 settings = get_settings()
 
@@ -363,7 +364,7 @@ async def org_context_middleware(request: Request, call_next):
         return await call_next(request)
 
     audit = _audit_context(request, request_id)
-    with managed_session() as db:
+    with managed_read_session() as db:
         try:
             current_session = validate_session(
                 db,
@@ -376,6 +377,7 @@ async def org_context_middleware(request: Request, call_next):
                 "Not authenticated.",
             )
 
+        queue_session_seen(current_session.auth_session.session_id_hash)
         request.state.user_id = str(current_session.user.id)
         context, resolution_source = build_org_context(
             db,

@@ -1,6 +1,7 @@
 from datetime import datetime
+from collections.abc import Mapping
 
-from sqlalchemy import select, update
+from sqlalchemy import or_, select, update
 from sqlalchemy.orm import Session
 
 from ..models.auth_session import AuthSession
@@ -49,6 +50,29 @@ def mark_session_seen(
     auth_session.last_seen_at = seen_at
     db.add(auth_session)
     return auth_session
+
+
+def mark_sessions_seen_batch(
+    db: Session,
+    seen_by_hash: Mapping[str, datetime],
+) -> int:
+    updated = 0
+    for session_id_hash, seen_at in seen_by_hash.items():
+        result = db.execute(
+            update(AuthSession)
+            .where(
+                AuthSession.session_id_hash == session_id_hash,
+                AuthSession.invalidated_at.is_(None),
+                AuthSession.expires_at > seen_at,
+                or_(
+                    AuthSession.last_seen_at.is_(None),
+                    AuthSession.last_seen_at < seen_at,
+                ),
+            )
+            .values(last_seen_at=seen_at)
+        )
+        updated += int(result.rowcount or 0)
+    return updated
 
 
 def invalidate_auth_session(

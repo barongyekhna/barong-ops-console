@@ -66,6 +66,7 @@ from backend.app.models.review import ReviewItem
 from backend.app.models.security import SecurityRateLimitBucket, SecurityReplayNonce
 from backend.app.models.shared_module import SharedModuleRecord
 from backend.app.models.user import User
+from backend.app.services.session_seen_buffer import clear_session_seen_buffer
 
 
 UNIT_TEST_FILE_NAMES = frozenset(
@@ -226,6 +227,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
 
 
 def clear_auth_tables() -> None:
+    clear_session_seen_buffer()
     if _is_alembic_managed_test_db():
         _assert_safe_test_database_url()
     else:

@@ -58,7 +58,7 @@ from .api.shared_module import router as shared_module_router
 from .core.auth_paths import is_auth_me_path
 from .core.config import get_settings
 from .core.security_headers import apply_security_headers
-from .db.session import SessionLocal, managed_session, rollback_open_transaction
+from .db.session import managed_read_session
 from .middleware.event_collector import capture_audit_events
 from .middleware.data_isolation import enforce_org_data_isolation
 from .middleware.org_context import org_context_middleware
@@ -68,6 +68,11 @@ from .services.auth_service import (
     InvalidSessionError,
     validate_session,
     validate_session_identity_fast,
+)
+from .services.session_seen_buffer import (
+    queue_session_seen,
+    start_session_seen_flush_worker,
+    stop_session_seen_flush_worker,
 )
 from .services.unified_permission_engine import (
     UnifiedPermissionEngine,
@@ -124,9 +129,12 @@ def _auth_me_payload(request: Request) -> dict[str, object] | None:
     if session_id is None:
         return None
 
-    db = SessionLocal()
-    try:
-        identity = validate_session_identity_fast(db, session_id=session_id)
+    with managed_read_session() as db:
+        try:
+            identity = validate_session_identity_fast(db, session_id=session_id)
+        except InvalidSessionError:
+            return None
+        queue_session_seen(identity.session_id_hash)
         request.state.user_id = str(identity.id)
         return jsonable_encoder(
             {
@@ -137,11 +145,6 @@ def _auth_me_payload(request: Request) -> dict[str, object] | None:
                 "last_login_at": identity.last_login_at,
             }
         )
-    except InvalidSessionError:
-        return None
-    finally:
-        rollback_open_transaction(db)
-        db.close()
 
 
 def _production_error_detail(request: Request, status_code: int) -> str:
@@ -181,12 +184,17 @@ app = FastAPI(
 
 @app.on_event("startup")
 def enforce_production_migration_safety() -> None:
-    if not _production_like():
-        return
-    from .db.migration_safety import enforce_migration_safety
-    from .db.session import engine
+    if _production_like():
+        from .db.migration_safety import enforce_migration_safety
+        from .db.session import engine
 
-    enforce_migration_safety(engine, app_env=settings.app_env)
+        enforce_migration_safety(engine, app_env=settings.app_env)
+    start_session_seen_flush_worker()
+
+
+@app.on_event("shutdown")
+def flush_deferred_session_seen_updates() -> None:
+    stop_session_seen_flush_worker()
 
 
 def _is_control_plane_path(path: str) -> bool:
@@ -296,7 +304,7 @@ async def enforce_control_plane_isolation(request: Request, call_next):
             detail="Not authenticated.",
         )
 
-    with managed_session() as db:
+    with managed_read_session() as db:
         try:
             current_session = validate_session(
                 db,
@@ -318,6 +326,7 @@ async def enforce_control_plane_isolation(request: Request, call_next):
                 detail="Not authenticated.",
             )
 
+        queue_session_seen(current_session.auth_session.session_id_hash)
         decision = UnifiedPermissionEngine(db).decide_platform_metadata(
             UnifiedPermissionRequest(
                 user_id=current_session.user.id,

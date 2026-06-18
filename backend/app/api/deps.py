@@ -16,6 +16,7 @@ from ..services.auth_service import (
     InvalidSessionError,
     validate_session,
 )
+from ..services.session_seen_buffer import queue_session_seen
 from ..services.permission_service import user_has_permission
 from ..services.unified_permission_engine import (
     UnifiedPermissionEngine,
@@ -110,6 +111,7 @@ def get_current_session(
             payload={"outcome": "invalid_session"},
         )
         raise unauthorized() from None
+    queue_session_seen(current_session.auth_session.session_id_hash)
     request.state.user_id = str(current_session.user.id)
     set_current_event_context(user_id=str(current_session.user.id))
     emit_event(

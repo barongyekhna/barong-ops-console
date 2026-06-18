@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta, timezone
 
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select
@@ -11,7 +12,17 @@ from backend.app.db.session import SessionLocal, engine
 from backend.app.models.auth_session import AuthSession
 from backend.app.models.operation_log import OperationLog
 from backend.app.models.user import User
-from backend.app.services.auth_service import clear_session_identity_cache
+from backend.app.services.auth_service import (
+    AuditContext,
+    clear_session_identity_cache,
+    login as login_user,
+    validate_session,
+)
+from backend.app.services.session_seen_buffer import (
+    clear_session_seen_buffer,
+    flush_session_seen_updates,
+    queue_session_seen,
+)
 
 USERNAME = "api_owner"
 PASSWORD = "example-only-api-owner-password"
@@ -64,6 +75,28 @@ def session_cookie(response) -> str:
     session_id = response.cookies.get("barong_ops_session")
     assert session_id
     return session_id
+
+
+def service_audit_context(request_id: str) -> AuditContext:
+    return AuditContext(request_id=request_id, ip_address=None, user_agent=None)
+
+
+def create_service_session(settings) -> str:
+    with SessionLocal() as db:
+        result = login_user(
+            db,
+            username=USERNAME,
+            password=PASSWORD,
+            settings=settings,
+            audit=service_audit_context("test-service-login"),
+        )
+        return result.session_id
+
+
+def aware(value):
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+    return value
 
 
 def test_login_returns_session_cookie_updates_user_and_writes_audit_log(
@@ -240,6 +273,100 @@ def test_auth_me_fast_path_uses_one_read_query_without_permissions(
     assert not any("permission" in statement.lower() for statement in statements)
     assert not any("org_memberships" in statement.lower() for statement in statements)
     assert not any("module_bindings" in statement.lower() for statement in statements)
+
+
+def test_validate_session_is_read_only_and_does_not_touch_last_seen(
+    clean_auth_tables: None,
+    test_settings,
+) -> None:
+    del clean_auth_tables
+    owner_id = create_test_owner()
+    raw_session_id = create_service_session(test_settings)
+    session_hash = hash_session_id(raw_session_id)
+
+    with SessionLocal() as db:
+        auth_session = db.scalar(
+            select(AuthSession).where(AuthSession.session_id_hash == session_hash)
+        )
+        assert auth_session is not None
+        original_last_seen_at = auth_session.last_seen_at
+
+    statements: list[str] = []
+
+    def collect_statement(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        del conn, cursor, parameters, context, executemany
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", collect_statement)
+    try:
+        with SessionLocal() as db:
+            current_session = validate_session(
+                db,
+                session_id=raw_session_id,
+                audit=service_audit_context("test-read-only-session-validation"),
+            )
+            assert current_session.user.id == owner_id
+            db.rollback()
+    finally:
+        event.remove(engine, "before_cursor_execute", collect_statement)
+
+    write_statements = [
+        statement
+        for statement in statements
+        if statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+    ]
+    assert write_statements == []
+
+    with SessionLocal() as db:
+        auth_session = db.scalar(
+            select(AuthSession).where(AuthSession.session_id_hash == session_hash)
+        )
+        assert auth_session is not None
+        assert auth_session.last_seen_at == original_last_seen_at
+
+
+def test_session_last_seen_is_deferred_until_batch_flush(
+    clean_auth_tables: None,
+    test_settings,
+) -> None:
+    del clean_auth_tables
+    create_test_owner()
+    raw_session_id = create_service_session(test_settings)
+    session_hash = hash_session_id(raw_session_id)
+    clear_session_seen_buffer()
+
+    with SessionLocal() as db:
+        auth_session = db.scalar(
+            select(AuthSession).where(AuthSession.session_id_hash == session_hash)
+        )
+        assert auth_session is not None
+        original_last_seen_at = auth_session.last_seen_at
+
+    deferred_seen_at = datetime.now(timezone.utc) + timedelta(seconds=5)
+    assert queue_session_seen(session_hash, seen_at=deferred_seen_at) is True
+
+    with SessionLocal() as db:
+        auth_session = db.scalar(
+            select(AuthSession).where(AuthSession.session_id_hash == session_hash)
+        )
+        assert auth_session is not None
+        assert auth_session.last_seen_at == original_last_seen_at
+
+    assert flush_session_seen_updates(force=True) == 1
+
+    with SessionLocal() as db:
+        auth_session = db.scalar(
+            select(AuthSession).where(AuthSession.session_id_hash == session_hash)
+        )
+        assert auth_session is not None
+        assert aware(auth_session.last_seen_at) == deferred_seen_at
 
 
 def test_auth_me_allows_active_non_owner_user(

@@ -1,0 +1,61 @@
+{
+  "task": "FIX-BE-04: MIDDLEWARE SESSION WRITE AMPLIFICATION FIX",
+  "generated_at": "2026-06-18",
+  "scope": "backend middleware/session write behavior only",
+  "constraints_observed": {
+    "frontend_modified": false,
+    "db_schema_modified": false,
+    "auth_logic_structure_modified": false,
+    "permission_model_modified": false,
+    "execution_engine_modified": false
+  },
+  "write_amplification_source": {
+    "primary_source": "backend/app/services/auth_service.py::validate_session",
+    "before": [
+      "validate_session updated auth_sessions.last_seen_at on successful validation.",
+      "validate_session called db.commit() after mark_session_seen().",
+      "Expired or inactive session validation also invalidated rows and committed from the validation path."
+    ],
+    "middleware_callers": [
+      "backend/app/main.py::enforce_control_plane_isolation",
+      "backend/app/middleware/org_context.py::org_context_middleware",
+      "backend/app/middleware/permission.py::enforce_permission_isolation",
+      "backend/app/middleware/data_isolation.py::enforce_org_data_isolation"
+    ],
+    "additional_session_validation_callers": [
+      "backend/app/api/deps.py::get_current_session",
+      "backend/app/api/routes/auth.py::_current_identity_fast",
+      "backend/app/main.py::_auth_me_payload"
+    ],
+    "impact_before": {
+      "per_request_session_write": true,
+      "per_request_last_seen_update": true,
+      "middleware_success_path_commit": true,
+      "contention_target": "auth_sessions rows for active sessions"
+    }
+  },
+  "fix_summary": {
+    "validate_session_read_only": true,
+    "middleware_uses_read_session_context": true,
+    "last_seen_synchronous_write_removed": true,
+    "last_seen_deferred_to_batch_flush": true,
+    "files_changed": [
+      "backend/app/services/auth_service.py",
+      "backend/app/services/session_seen_buffer.py",
+      "backend/app/db/session.py",
+      "backend/app/repositories/auth_sessions.py",
+      "backend/app/main.py",
+      "backend/app/middleware/org_context.py",
+      "backend/app/middleware/permission.py",
+      "backend/app/middleware/data_isolation.py",
+      "backend/app/api/deps.py",
+      "backend/app/api/routes/auth.py"
+    ]
+  },
+  "after": {
+    "per_request_session_db_write": false,
+    "middleware_session_commit_on_success": false,
+    "auth_session_read_path_write_free": true,
+    "last_seen_write_path": "background/session_seen_buffer batch flush only"
+  }
+}

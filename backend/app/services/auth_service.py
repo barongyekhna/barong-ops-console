@@ -26,7 +26,6 @@ from ..repositories.auth_sessions import (
     create_auth_session,
     get_auth_session_by_hash,
     invalidate_auth_session,
-    mark_session_seen,
 )
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.users import (
@@ -735,43 +734,14 @@ def validate_session(
         raise InvalidSessionError("Invalid session.")
 
     if _as_aware(auth_session.expires_at) <= now:
-        invalidate_auth_session(
-            db,
-            auth_session,
-            invalidated_at=now,
-            reason="expired",
-        )
         forget_cached_session_identity_hash(auth_session.session_id_hash)
-        create_operation_log(
-            db,
-            actor_type="user",
-            actor_id=str(auth_session.user_id),
-            action="auth.session_expired",
-            target_type="session",
-            target_id=str(auth_session.id),
-            result="success",
-            request_id=audit.request_id,
-            ip_address=audit.ip_address,
-            user_agent=audit.user_agent,
-            details={"outcome": "session_expired"},
-        )
-        db.commit()
         raise InvalidSessionError("Invalid session.")
 
     user = get_user_by_id(db, auth_session.user_id)
     if user is None or not user.is_active:
-        invalidate_auth_session(
-            db,
-            auth_session,
-            invalidated_at=now,
-            reason="user_inactive",
-        )
         forget_cached_session_identity_hash(auth_session.session_id_hash)
-        db.commit()
         raise InvalidSessionError("Invalid session.")
 
-    mark_session_seen(db, auth_session, now)
-    db.commit()
     return AuthenticatedSession(user=user, auth_session=auth_session)
 
 

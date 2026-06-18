@@ -24,6 +24,7 @@ from ...services.auth_service import (
     validate_session,
     validate_session_identity_fast,
 )
+from ...services.session_seen_buffer import queue_session_seen
 from ...services.unified_permission_engine import (
     UnifiedPermissionEngine,
     UnifiedPermissionRequest,
@@ -52,6 +53,7 @@ def _current_identity_fast(
         identity = validate_session_identity_fast(db, session_id=session_id)
     except InvalidSessionError:
         raise _not_authenticated() from None
+    queue_session_seen(identity.session_id_hash)
     request.state.user_id = str(identity.id)
     return identity
 

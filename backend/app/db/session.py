@@ -94,6 +94,16 @@ def managed_session() -> Iterator[Session]:
         db.close()
 
 
+@contextmanager
+def managed_read_session() -> Iterator[Session]:
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        rollback_open_transaction(db)
+        db.close()
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:

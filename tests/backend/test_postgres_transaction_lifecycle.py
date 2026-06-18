@@ -100,3 +100,17 @@ def test_managed_session_rolls_back_and_closes_on_exception(
     assert fake.commits == 0
     assert fake.rollbacks == 1
     assert fake.closes == 1
+
+
+def test_managed_read_session_rolls_back_without_commit(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    fake = FakeSession()
+    monkeypatch.setattr(db_session, SESSION_FACTORY_NAME, lambda: fake)
+
+    with db_session.managed_read_session() as session:
+        assert session is fake
+
+    assert fake.commits == 0
+    assert fake.rollbacks == 1
+    assert fake.closes == 1

@@ -1,0 +1,35 @@
+{
+  "strategy": "deferred in-memory last_seen batching",
+  "generated_at": "2026-06-18",
+  "implementation": {
+    "buffer_module": "backend/app/services/session_seen_buffer.py",
+    "queue_function": "queue_session_seen",
+    "flush_function": "flush_session_seen_updates",
+    "worker_start": "backend/app/main.py startup",
+    "worker_shutdown_flush": "backend/app/main.py shutdown",
+    "batch_repository_function": "backend/app/repositories/auth_sessions.py::mark_sessions_seen_batch"
+  },
+  "parameters": {
+    "defer_window_seconds_per_session": 60,
+    "flush_interval_seconds": 60,
+    "max_batch_size": 500,
+    "max_tracked_sessions": 8192
+  },
+  "runtime_behavior": {
+    "request_path": [
+      "Successful session validation queues only an in-memory timestamp for persisted session hashes.",
+      "Repeated validations for the same session inside the defer window are ignored.",
+      "No DB UPDATE or COMMIT is issued by middleware for last_seen."
+    ],
+    "flush_path": [
+      "Background worker flushes pending last_seen timestamps periodically.",
+      "Force flush is available for shutdown/tests.",
+      "Batch update skips invalidated or expired sessions and skips rows whose last_seen_at is already newer."
+    ]
+  },
+  "validation_contract": {
+    "validate_session": "read-only DB path; returns AuthenticatedSession or raises InvalidSessionError",
+    "validate_session_identity_fast": "read-only DB/cache identity lookup",
+    "last_seen_update": "explicit deferred queue outside validation functions"
+  }
+}

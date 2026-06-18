@@ -1,0 +1,45 @@
+{
+  "task": "FIX-BE-04",
+  "generated_at": "2026-06-18",
+  "hot_path_reduction": {
+    "before": {
+      "successful_validate_session": [
+        "SELECT auth_sessions",
+        "SELECT users",
+        "UPDATE auth_sessions.last_seen_at",
+        "COMMIT"
+      ],
+      "middleware_stack_effect": "Multiple middleware/dependency validations could update and commit the same auth_sessions row during one logical page/API request."
+    },
+    "after": {
+      "successful_validate_session": [
+        "SELECT auth_sessions",
+        "SELECT users"
+      ],
+      "middleware_stack_effect": "Middleware validation uses managed_read_session and queues last_seen in memory without synchronous DB writes.",
+      "batch_effect": "At most one auth_sessions.last_seen_at update per session per 60 second defer window, written during periodic/background flush."
+    }
+  },
+  "contention_reduction": {
+    "auth_sessions_last_seen_row_locking_on_request": "removed",
+    "middleware_commit_on_read_session": "removed",
+    "expected_result": [
+      "Read-heavy authenticated traffic no longer contends on auth_sessions.last_seen_at for every request.",
+      "login and /auth/me are not blocked by synchronous last_seen writes on the request path.",
+      "auth/session table write pressure is reduced to occasional batch updates."
+    ]
+  },
+  "verification": {
+    "syntax_check": "python3 -m py_compile backend/app/services/session_seen_buffer.py backend/app/services/auth_service.py backend/app/main.py backend/app/middleware/permission.py backend/app/middleware/data_isolation.py backend/app/middleware/org_context.py backend/app/api/deps.py backend/app/api/routes/auth.py backend/app/db/session.py backend/app/repositories/auth_sessions.py tests/backend/test_auth_api.py tests/backend/test_postgres_transaction_lifecycle.py tests/backend/conftest.py",
+    "unit_tests": [
+      ".venv/bin/python -m pytest tests/backend/test_postgres_transaction_lifecycle.py -q",
+      "env DATABASE_URL=sqlite:////tmp/barong_ops_session_fix_service_tests.db .venv/bin/python -m pytest tests/backend/test_auth_api.py::test_validate_session_is_read_only_and_does_not_touch_last_seen tests/backend/test_auth_api.py::test_session_last_seen_is_deferred_until_batch_flush -q"
+    ],
+    "results": {
+      "transaction_lifecycle": "6 passed",
+      "session_write_defer_tests": "2 passed",
+      "warnings": "FastAPI on_event deprecation warnings only"
+    },
+    "full_auth_api_file_note": "Running tests/backend/test_auth_api.py without a test DATABASE_URL failed because the default database host 'db' is not resolvable in this environment."
+  }
+}
