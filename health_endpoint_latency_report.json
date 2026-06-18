@@ -1,0 +1,46 @@
+{
+  "task": "FIX-BE-09: BACKEND HEALTH CHECK OPTIMIZATION",
+  "generated_at": "2026-06-18T06:48:57Z",
+  "goal": "Make health endpoints pure liveness checks with no DB, auth, RBAC, org, module, or execution dependency.",
+  "payload": {
+    "status": "ok",
+    "service": "barong-ops-console",
+    "mode": "lightweight",
+    "db": "not_checked"
+  },
+  "latency_target_ms": 50,
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/health",
+      "http_status": 200,
+      "curl_time_total_ms": 2.405,
+      "passed": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/backend/health",
+      "http_status": 200,
+      "curl_time_total_ms": 11.781,
+      "passed": true
+    },
+    {
+      "method": "GET",
+      "path": "/api/public/health",
+      "http_status": 200,
+      "curl_time_total_ms": 1.74,
+      "passed": true,
+      "compatibility_path": true
+    }
+  ],
+  "verification_commands": [
+    ".venv/bin/python -m pytest -c backend/pytest.ini tests/backend/test_health.py -q",
+    "curl -sS -w \"\\n%{http_code} %{time_total}\\n\" http://127.0.0.1:18081/health",
+    "curl -sS -w \"\\n%{http_code} %{time_total}\\n\" http://127.0.0.1:18081/api/backend/health",
+    "curl -sS -w \"\\n%{http_code} %{time_total}\\n\" http://127.0.0.1:18081/api/public/health"
+  ],
+  "test_result": {
+    "tests_backend_test_health": "10 passed",
+    "warnings": 4
+  }
+}

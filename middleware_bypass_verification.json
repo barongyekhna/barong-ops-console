@@ -1,0 +1,57 @@
+{
+  "task": "FIX-BE-09: BACKEND HEALTH CHECK OPTIMIZATION",
+  "generated_at": "2026-06-18T06:48:57Z",
+  "bypass_middleware": "backend/app/main.py::short_circuit_lightweight_health",
+  "bypass_rule": "if request.url.path is a lightweight health path, return lightweight_health_response() before call_next()",
+  "registered_outermost": true,
+  "observed_user_middleware_order": [
+    "short_circuit_lightweight_health",
+    "short_circuit_auth_me",
+    "inject_c18h_org_context",
+    "enforce_c18f_permission_isolation",
+    "enforce_c18g_org_data_isolation",
+    "collect_audit_events",
+    "add_security_headers",
+    "enforce_control_plane_isolation"
+  ],
+  "bypassed_middleware": [
+    "auth/session short-circuit",
+    "C18H org context middleware",
+    "C18F permission/RBAC middleware",
+    "C18G data isolation middleware",
+    "audit event collector middleware",
+    "security header middleware",
+    "control-plane isolation middleware"
+  ],
+  "header_verification": {
+    "path": "/health",
+    "observed_headers": [
+      "date",
+      "server",
+      "content-length",
+      "content-type"
+    ],
+    "absent_headers": [
+      "x-request-id",
+      "x-trace-id",
+      "x-content-type-options"
+    ],
+    "meaning": "No audit collector request id, trace id, or add_security_headers output was applied to the health response."
+  },
+  "test_verification": {
+    "monkeypatched_to_fail_if_called": [
+      "backend.app.main.apply_security_headers",
+      "backend.app.main.capture_audit_events",
+      "backend.app.main.enforce_org_data_isolation",
+      "backend.app.main.enforce_permission_isolation",
+      "backend.app.main.org_context_middleware",
+      "backend.app.main._auth_me_payload",
+      "backend.app.main.managed_read_session",
+      "backend.app.main.emit_event",
+      "backend.app.middleware.data_isolation.managed_read_session",
+      "backend.app.middleware.org_context.managed_read_session",
+      "backend.app.middleware.permission.managed_read_session"
+    ],
+    "result": "health endpoints still returned 200 with the lightweight payload"
+  }
+}

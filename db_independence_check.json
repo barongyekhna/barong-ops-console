@@ -1,0 +1,33 @@
+{
+  "task": "FIX-BE-09: BACKEND HEALTH CHECK OPTIMIZATION",
+  "generated_at": "2026-06-18T06:48:57Z",
+  "db_independent": true,
+  "works_if_db_is_down": true,
+  "payload_db_field": "not_checked",
+  "code_path": {
+    "health_handler": "backend/app/api/routes/health.py::health",
+    "response_helper": "backend/app/api/routes/health.py::lightweight_health_response",
+    "bypass_middleware": "backend/app/main.py::short_circuit_lightweight_health"
+  },
+  "forbidden_dependencies": {
+    "db_session_created": false,
+    "db_ping_executed": false,
+    "orm_layer_touched": false,
+    "session_validation_executed": false,
+    "rbac_permission_decision_executed": false,
+    "org_context_resolution_executed": false,
+    "module_resolution_executed": false,
+    "execution_provider_touched": false
+  },
+  "implementation_evidence": [
+    "The health payload is a module-level constant dictionary.",
+    "The health handler no longer imports or reads settings.",
+    "The health handler does not import managed_read_session, SessionLocal, engine, ORM models, auth services, permission services, org services, or execution services.",
+    "The outermost middleware returns JSONResponse directly and does not call call_next() for health paths."
+  ],
+  "test_evidence": {
+    "command": ".venv/bin/python -m pytest -c backend/pytest.ini tests/backend/test_health.py -q",
+    "result": "10 passed",
+    "db_failure_simulation": "Tests monkeypatch DB/session and middleware dependencies to raise if called; /health, /api/backend/health, and /api/public/health still return the lightweight payload."
+  }
+}

@@ -580,6 +580,6 @@ docker compose -f docker-compose.example.yml up --build backend
 ```
 
 The health endpoint is available at `http://127.0.0.1:8000/health`.
-It continues to report `database: "not_configured"` and does not perform a
-database connectivity check. The authenticated F10 endpoints use the example
+It reports `db: "not_checked"` and does not perform a database connectivity
+check. The authenticated F10 endpoints use the example
 database, while real external integrations and business modules remain absent.

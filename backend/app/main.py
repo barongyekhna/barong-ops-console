@@ -25,7 +25,13 @@ from .api.routes.execution_prompts import router as execution_prompts_router
 from .api.routes.failure_handling import router as failure_handling_router
 from .api.routes.foundation_demo import router as foundation_demo_router
 from .api.routes.friends import router as friends_router
-from .api.routes.health import router as health_router
+from .api.routes.health import (
+    HealthResponse,
+    health,
+    is_lightweight_health_path,
+    lightweight_health_response,
+    router as health_router,
+)
 from .api.routes.jobs import router as jobs_router
 from .api.routes.live_gate import router as live_gate_router
 from .api.routes.memory import router as memory_router
@@ -423,6 +429,23 @@ async def short_circuit_auth_me(request: Request, call_next):
             detail="Not authenticated.",
         )
     return _json_ok_security_response(payload)
+
+
+@app.middleware("http")
+async def short_circuit_lightweight_health(request: Request, call_next):
+    if is_lightweight_health_path(request.url.path):
+        return lightweight_health_response()
+    return await call_next(request)
+
+
+@app.get("/health", response_model=HealthResponse, include_in_schema=False)
+@app.get(
+    "/api/backend/health",
+    response_model=HealthResponse,
+    include_in_schema=False,
+)
+def lightweight_health() -> HealthResponse:
+    return health()
 
 
 app.include_router(health_router, prefix=PUBLIC_API_PREFIX)
