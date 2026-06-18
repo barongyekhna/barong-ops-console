@@ -59,16 +59,18 @@ export async function loginRequest(
   };
 }
 
-export async function sessionCheckRequest() {
+export async function sessionCheckRequest(options: AuthRequestOptions = {}) {
   const user = await apiRequest<SessionUserPayload>("/auth/me", {
     method: "GET",
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
   });
 
   return normalizeSessionUser(user);
 }
 
-export async function currentUserRequest() {
-  return sessionCheckRequest();
+export async function currentUserRequest(options: AuthRequestOptions = {}) {
+  return sessionCheckRequest(options);
 }
 
 export function logoutRequest() {

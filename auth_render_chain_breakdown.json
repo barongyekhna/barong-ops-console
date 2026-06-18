@@ -1,0 +1,64 @@
+{
+  "title": "AUTH RENDER CHAIN BREAKDOWN",
+  "date": "2026-06-18",
+  "root_chain": [
+    {
+      "node": "RootLayout",
+      "file": "frontend/src/app/layout.tsx",
+      "behavior": "Mounts AuthProvider and always renders children."
+    },
+    {
+      "node": "AuthProvider",
+      "file": "frontend/src/components/auth-provider.tsx",
+      "behavior": "Owns identity and session state only; starts /auth/me as a non-blocking background probe from useEffect.",
+      "blocks_initial_paint": false
+    },
+    {
+      "node": "PublicOnly",
+      "file": "frontend/src/components/public-only.tsx",
+      "behavior": "Renders login content immediately unless already authenticated; authenticated users are redirected to /dashboard without a full-page spinner.",
+      "blocks_initial_paint": false
+    },
+    {
+      "node": "AuthGuard",
+      "file": "frontend/src/components/auth-guard.tsx",
+      "behavior": "Renders protected children for authenticated/checking states and only redirects when status is unauthenticated.",
+      "blocks_initial_paint": false
+    }
+  ],
+  "protected_route_chain": [
+    "AuthGuard",
+    "CapabilityStateProvider",
+    "ModuleAccessProvider",
+    "AdapterAccessProvider",
+    "ConsoleShell",
+    "PermissionRouteGuard",
+    "page"
+  ],
+  "render_order_changes": {
+    "before": "CapabilityStateProvider -> ModuleAccessProvider -> AdapterAccessProvider -> AuthGuard -> ConsoleShell -> PermissionRouteGuard",
+    "after": "AuthGuard -> CapabilityStateProvider -> ModuleAccessProvider -> AdapterAccessProvider -> ConsoleShell -> PermissionRouteGuard",
+    "impact": "Capability, module, and adapter providers no longer mount when AuthGuard has already determined the session is unauthenticated."
+  },
+  "background_work": [
+    {
+      "request": "GET /auth/me",
+      "owner": "AuthProvider.refresh",
+      "trigger": "useEffect after render",
+      "timeout_ms": 1500,
+      "ui_failure_mode": "401 clears session; non-401 failures do not render an error screen or block children."
+    },
+    {
+      "request": "capability bootstrap fan-out",
+      "owner": "CapabilityStateProvider",
+      "trigger": "useEffect after protected tree render and authenticated identity availability",
+      "ui_failure_mode": "fallback/degraded provider state, no full-page auth spinner."
+    }
+  ],
+  "blocking_states_removed": [
+    "AuthGuard full-page checking spinner",
+    "PublicOnly full-page checking spinner",
+    "AuthProvider error screen caused by /auth/me failure",
+    "Capability provider loading inherited from AuthProvider checking state"
+  ]
+}

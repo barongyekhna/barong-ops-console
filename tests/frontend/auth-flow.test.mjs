@@ -24,7 +24,7 @@ test("auth proxy exposes only public session endpoints with exact methods", () =
   assert.equal(isAllowedBackendProxyPath("POST", ["auth", "register"]), false);
 });
 
-test("auth success and root entry land on productized Users route", () => {
+test("auth success and root entry land on dashboard route", () => {
   const rootPageSource = readFileSync("frontend/src/app/page.tsx", "utf8");
   const loginFormSource = readFileSync(
     "frontend/src/components/login-form.tsx",
@@ -35,12 +35,12 @@ test("auth success and root entry land on productized Users route", () => {
     "utf8",
   );
 
-  assert.match(rootPageSource, /redirect\("\/users"\)/);
-  assert.match(loginFormSource, /router\.replace\("\/users"\)/);
-  assert.match(publicOnlySource, /router\.replace\("\/users"\)/);
-  assert.doesNotMatch(rootPageSource, /\/dashboard/);
-  assert.doesNotMatch(loginFormSource, /\/dashboard/);
-  assert.doesNotMatch(publicOnlySource, /\/dashboard/);
+  assert.match(rootPageSource, /redirect\("\/dashboard"\)/);
+  assert.match(loginFormSource, /router\.replace\("\/dashboard"\)/);
+  assert.match(publicOnlySource, /router\.replace\("\/dashboard"\)/);
+  assert.doesNotMatch(rootPageSource, /\/users/);
+  assert.doesNotMatch(loginFormSource, /\/users/);
+  assert.doesNotMatch(publicOnlySource, /\/users/);
 });
 
 test("auth identity does not carry legacy RBAC permission state", () => {
@@ -57,7 +57,7 @@ test("auth identity does not carry legacy RBAC permission state", () => {
   assert.match(providerSource, /user: AuthenticatedUser \| null/);
 });
 
-test("auth guards use bounded loading fallback and product redirect semantics", () => {
+test("auth guards render without full-page session loading gates", () => {
   const authGuardSource = readFileSync(
     "frontend/src/components/auth-guard.tsx",
     "utf8",
@@ -67,8 +67,10 @@ test("auth guards use bounded loading fallback and product redirect semantics", 
     "utf8",
   );
 
-  assert.match(authGuardSource, /AUTH_LOADING_TIMEOUT_MS = 5_000/);
-  assert.match(publicOnlySource, /AUTH_LOADING_TIMEOUT_MS = 5_000/);
+  assert.doesNotMatch(authGuardSource, /AUTH_LOADING_TIMEOUT_MS/);
+  assert.doesNotMatch(publicOnlySource, /AUTH_LOADING_TIMEOUT_MS/);
+  assert.doesNotMatch(authGuardSource, /LoaderCircle/);
+  assert.doesNotMatch(publicOnlySource, /LoaderCircle/);
   assert.match(authGuardSource, /router\.replace\("\/login"\)/);
-  assert.match(publicOnlySource, /router\.replace\("\/users"\)/);
+  assert.match(publicOnlySource, /router\.replace\("\/dashboard"\)/);
 });

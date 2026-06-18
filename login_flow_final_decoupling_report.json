@@ -1,0 +1,60 @@
+{
+  "title": "FINAL LOGIN FLOW DECOUPLING REFACTOR",
+  "date": "2026-06-18",
+  "scope": {
+    "frontend_login_flow_modified": true,
+    "auth_gating_modified": true,
+    "backend_modified": false,
+    "db_schema_modified": false,
+    "rbac_permission_system_modified": false,
+    "execution_engine_modified": false
+  },
+  "login_success_condition": {
+    "only_required_request": "POST /auth/login",
+    "success_definition": "AuthProvider.login resolves after loginRequest returns a successful /auth/login response.",
+    "post_success_route": "/dashboard",
+    "frontend_login_timeout_ms": 2000
+  },
+  "removed_login_dependencies": [
+    {
+      "dependency": "GET /auth/me",
+      "status": "removed from login success path",
+      "details": "AuthProvider.login no longer waits for sessionCheckRequest; /auth/me remains only as a background session probe."
+    },
+    {
+      "dependency": "capability bootstrap",
+      "status": "removed from login success path",
+      "details": "getCapabilityBootstrap runs from CapabilityStateProvider after the protected UI has rendered."
+    },
+    {
+      "dependency": "module access provider",
+      "status": "removed from login success path",
+      "details": "ModuleAccessProvider derives state from CapabilityStateProvider and is mounted inside AuthGuard, after route auth gating."
+    },
+    {
+      "dependency": "adapter access provider",
+      "status": "removed from login success path",
+      "details": "AdapterAccessProvider derives state from CapabilityStateProvider and is mounted inside AuthGuard, after route auth gating."
+    },
+    {
+      "dependency": "permission resolution",
+      "status": "removed from login success path",
+      "details": "PermissionRouteGuard runs only after the console shell is mounted; login does not await permission material."
+    }
+  ],
+  "final_login_flow": [
+    "LoginForm submits credentials.",
+    "AuthProvider.login awaits loginRequest(username, password).",
+    "loginRequest sends POST /auth/login only.",
+    "AuthProvider stores identity from the login response and marks status authenticated.",
+    "LoginForm redirects immediately to /dashboard.",
+    "Capability, module, adapter, and route permission UI state load asynchronously after the protected route has rendered."
+  ],
+  "success_criteria": {
+    "frontend_added_login_dependencies": 0,
+    "auth_me_required_for_login": false,
+    "dashboard_reachable_after_login": true,
+    "full_page_auth_spinner_removed": true,
+    "login_spinner_cap_ms": 2000
+  }
+}

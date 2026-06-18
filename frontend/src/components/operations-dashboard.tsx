@@ -65,7 +65,7 @@ type DashboardState = {
 };
 
 const ENGINEERING_LABEL_PREFIX = "C";
-const DASHBOARD_LOADING_FALLBACK_MS = 3000;
+const DASHBOARD_LOADING_FALLBACK_MS = 2000;
 const ENGINEERING_LABEL_REPLACEMENTS: Array<[RegExp, string]> = [
   [
     new RegExp(`\\b${ENGINEERING_LABEL_PREFIX}17(?: Durable Observability)?\\b`, "g"),

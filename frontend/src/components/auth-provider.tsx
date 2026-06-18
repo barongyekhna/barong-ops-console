@@ -17,7 +17,6 @@ import {
   abortActiveApiRequests,
   ApiError,
   AUTH_UNAUTHORIZED_EVENT,
-  isApiAbortError,
 } from "@/lib/api";
 import {
   loginRequest,
@@ -26,7 +25,7 @@ import {
   type AuthenticatedUser,
 } from "@/lib/auth";
 
-type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "error";
+type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
 type AuthContextValue = {
   status: AuthStatus;
@@ -41,6 +40,7 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const BACKGROUND_SESSION_CHECK_TIMEOUT_MS = 1_500;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -58,9 +58,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     const generation = sessionCheckGenerationRef.current + 1;
     sessionCheckGenerationRef.current = generation;
-    setStatus("checking");
     try {
-      const currentUser = await sessionCheckRequest();
+      const currentUser = await sessionCheckRequest({
+        timeoutMs: BACKGROUND_SESSION_CHECK_TIMEOUT_MS,
+      });
       if (sessionCheckGenerationRef.current !== generation) {
         return;
       }
@@ -72,16 +73,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      if (
-        (error instanceof ApiError && error.status === 401) ||
-        isApiAbortError(error)
-      ) {
+      if (error instanceof ApiError && error.status === 401) {
         clearSession();
         return;
       }
-
-      setUser(null);
-      setStatus("error");
     }
   }, [clearSession]);
 

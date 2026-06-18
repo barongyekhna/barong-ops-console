@@ -309,7 +309,7 @@ export function buildFrontendUiCapabilityGraph({
   authStatus,
   role,
 }: {
-  authStatus: "checking" | "authenticated" | "unauthenticated" | "error";
+  authStatus: "checking" | "authenticated" | "unauthenticated";
   role: string;
 }): FrontendCapabilityGraph {
   const executionState = deriveFrontendExecutionState({

@@ -1,0 +1,69 @@
+{
+  "title": "FRONTEND BLOCKING DEPENDENCY REMOVAL",
+  "date": "2026-06-18",
+  "constraints_observed": {
+    "backend_changes": false,
+    "db_schema_changes": false,
+    "rbac_permission_changes": false,
+    "execution_engine_changes": false,
+    "frontend_scope_only": true
+  },
+  "dependency_matrix": [
+    {
+      "dependency": "/auth/me",
+      "previous_blocking_surface": "AuthProvider initial checking state and auth guards rendered full-page spinners while sessionCheckRequest was pending.",
+      "new_behavior": "Background session probe with 1500ms timeout; login does not await it.",
+      "login_blocking": false,
+      "routing_blocking": false
+    },
+    {
+      "dependency": "capability loading",
+      "previous_blocking_surface": "CapabilityStateProvider mounted before AuthGuard and reflected auth checking as provider loading.",
+      "new_behavior": "Mounted inside AuthGuard and loads from useEffect after authenticated identity is available.",
+      "login_blocking": false,
+      "routing_blocking": false
+    },
+    {
+      "dependency": "module loading",
+      "previous_blocking_surface": "Provider was mounted before AuthGuard through the protected layout.",
+      "new_behavior": "Mounted after AuthGuard and derives from capability state without independent login-phase fetches.",
+      "login_blocking": false,
+      "routing_blocking": false
+    },
+    {
+      "dependency": "adapter loading",
+      "previous_blocking_surface": "Provider was mounted before AuthGuard through the protected layout.",
+      "new_behavior": "Mounted after AuthGuard and derives from capability state without independent login-phase fetches.",
+      "login_blocking": false,
+      "routing_blocking": false
+    },
+    {
+      "dependency": "permission resolution",
+      "previous_blocking_surface": "PermissionRouteGuard was downstream of providers that could be delayed by auth checking.",
+      "new_behavior": "Runs only after auth gating and shell render; no login submit dependency.",
+      "login_blocking": false,
+      "routing_blocking": false
+    }
+  ],
+  "modified_frontend_files": [
+    "frontend/src/lib/auth.ts",
+    "frontend/src/components/auth-provider.tsx",
+    "frontend/src/components/auth-guard.tsx",
+    "frontend/src/components/public-only.tsx",
+    "frontend/src/components/login-form.tsx",
+    "frontend/src/components/capability-state-provider.tsx",
+    "frontend/src/components/operations-dashboard.tsx",
+    "frontend/src/lib/frontend-capability-state.ts",
+    "frontend/src/app/page.tsx",
+    "frontend/src/app/(console)/layout.tsx",
+    "tests/frontend/auth-flow.test.mjs"
+  ],
+  "static_verification": {
+    "login_form_awaits_only_auth_provider_login": true,
+    "auth_provider_login_awaits_only_login_request": true,
+    "auth_guards_have_no_full_page_checking_spinner": true,
+    "public_only_has_no_checking_spinner": true,
+    "capability_loading_not_derived_from_auth_checking": true,
+    "dashboard_loading_fallback_ms": 2000
+  }
+}

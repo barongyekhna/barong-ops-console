@@ -11,7 +11,7 @@ const LOGIN_ERROR =
   "Unable to sign in. Check your credentials and try again.";
 const LOGIN_TIMEOUT_ERROR =
   "Sign-in took longer than expected. Please try again.";
-const LOGIN_REQUEST_TIMEOUT_MS = 5_000;
+const LOGIN_REQUEST_TIMEOUT_MS = 2_000;
 
 class LoginRequestTimeoutError extends Error {
   constructor() {
@@ -60,7 +60,7 @@ export function LoginForm() {
         return;
       }
 
-      router.replace("/users");
+      router.replace("/dashboard");
     } catch (loginError) {
       if (submissionIdRef.current !== submissionId) {
         return;

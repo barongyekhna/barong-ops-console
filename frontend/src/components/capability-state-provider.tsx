@@ -151,7 +151,7 @@ function createContextValue({
   refresh,
   role,
 }: {
-  authStatus: "checking" | "authenticated" | "unauthenticated" | "error";
+  authStatus: "checking" | "authenticated" | "unauthenticated";
   bootstrap: CapabilityBootstrapResult | null;
   isLoading: boolean;
   loadError: string | null;
@@ -264,7 +264,7 @@ export function CapabilityStateProvider({
   const [bootstrap, setBootstrap] = useState<CapabilityBootstrapResult | null>(
     null,
   );
-  const [isLoading, setIsLoading] = useState(status === "checking");
+  const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadRetryNonce, setLoadRetryNonce] = useState(0);
 
@@ -278,7 +278,7 @@ export function CapabilityStateProvider({
         loadingPromiseRef.current = null;
         setBootstrap(null);
         setLoadError(null);
-        setIsLoading(status === "checking");
+        setIsLoading(false);
         return;
       }
 
@@ -381,7 +381,7 @@ export function CapabilityStateProvider({
       createContextValue({
         authStatus: status,
         bootstrap,
-        isLoading: status === "checking" || isLoading,
+        isLoading,
         loadError,
         refresh,
         role,
