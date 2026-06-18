@@ -1,0 +1,89 @@
+{
+  "task": "FIX-BE-06 /modules/me request execution trace",
+  "generated_at": "2026-06-18T00:00:00Z",
+  "endpoint": "GET /api/control-plane/modules/me",
+  "trace_after": [
+    {
+      "order": 1,
+      "component": "org_context_middleware",
+      "action": "exact path skip",
+      "db_access": false,
+      "notes": "No module_scope resolution and no module_bindings fan-out for /modules/me."
+    },
+    {
+      "order": 2,
+      "component": "permission_isolation_middleware",
+      "action": "no org/module context found for this platform endpoint",
+      "db_access": false,
+      "notes": "No C18F org/module permission decision is evaluated for /modules/me."
+    },
+    {
+      "order": 3,
+      "component": "data_isolation_middleware",
+      "action": "exact path skip",
+      "db_access": false,
+      "notes": "Avoids schema probe on a non-mutating control-plane metadata endpoint."
+    },
+    {
+      "order": 4,
+      "component": "control_plane_isolation",
+      "action": "validate session and evaluate PermissionDecisionEngine once for C16/admin",
+      "db_access": true,
+      "cache_written": [
+        "request.state.control_plane_rbac_decision",
+        "request.state.auth_session_cache",
+        "request.state.permission_cache.decisions"
+      ]
+    },
+    {
+      "order": 5,
+      "component": "modules_me route dependency",
+      "action": "require_cached_control_plane_admin",
+      "db_access": false,
+      "cache_read": "request.state.control_plane_rbac_decision",
+      "rbac_re_evaluation": false
+    },
+    {
+      "order": 6,
+      "component": "module_registry.list_modules_for_user",
+      "action": "resolve_current_user_module_permission_info",
+      "db_access": true,
+      "query_count": 1,
+      "query_shapes": [
+        "owner: permission_registry permission_key projection filtered by is_enabled/category",
+        "non_owner: user_permission_assignments projection joined to permission_registry for enabled permission keys"
+      ],
+      "cache_read_write": "request.state.permission_cache.materials"
+    },
+    {
+      "order": 7,
+      "component": "module manifest access",
+      "action": "read cached validated MODULE_MANIFESTS_V1",
+      "db_access": false,
+      "cache": "functools.lru_cache(maxsize=1)"
+    }
+  ],
+  "fan_out": {
+    "internal_api_calls": 0,
+    "nested_permissions_me_calls": 0,
+    "execution_engine_calls": 0,
+    "module_resolution_loops": 0
+  },
+  "rbac": {
+    "decision_engine_evaluations_per_request": 1,
+    "duplicate_rbac_evaluation": false,
+    "cached_decision_source": "control_plane_isolation"
+  },
+  "expected_db_hot_path": {
+    "session_validation": "one control-plane middleware session validation, reused by get_current_user request cache",
+    "module_access_permissions": "one optimized permission material query on cold request, request/TTL cached afterward",
+    "module_bindings": "not queried by /modules/me"
+  },
+  "success_criteria_mapping": {
+    "modules_me_avg_lt_200ms": "query fan-out reduced to one permission material query after session/RBAC",
+    "no_queue_pool_timeout": "middleware and handler DB round trips reduced",
+    "no_duplicate_rbac_evaluation": true,
+    "no_nested_api_fanout": true,
+    "stable_under_concurrent_dashboard_load": "request cache plus short TTL material cache reduce repeated permission DB reads"
+  }
+}

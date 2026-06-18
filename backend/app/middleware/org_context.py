@@ -39,6 +39,11 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
         "/api/app/module/shared/list",
     )
 )
+ORG_CONTEXT_BUILD_EXEMPT_PATHS = frozenset(
+    (
+        "/api/control-plane/modules/me",
+    )
+)
 FRONTEND_ORG_QUERY_KEYS = ("org_id", "active_org_id")
 FRONTEND_ORG_HEADER_KEYS = ("x-org-id", "x-active-org-id")
 ORG_CONTEXT_ROLE = Literal["owner", "admin", "member"]
@@ -354,6 +359,9 @@ async def org_context_middleware(request: Request, call_next):
             status.HTTP_400_BAD_REQUEST,
             "org_id must come from the authenticated server context.",
         )
+
+    if request.url.path in ORG_CONTEXT_BUILD_EXEMPT_PATHS:
+        return await call_next(request)
 
     session_id = request.cookies.get(settings.auth_session_cookie_name)
     if session_id is None:

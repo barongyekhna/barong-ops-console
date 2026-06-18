@@ -1,0 +1,86 @@
+{
+  "task": "FIX-BE-06 /modules/me performance and query optimization",
+  "generated_at": "2026-06-18T00:00:00Z",
+  "endpoint": "GET /api/control-plane/modules/me",
+  "constraints_observed": {
+    "frontend_modified": false,
+    "auth_model_modified": false,
+    "execution_engine_modified": false,
+    "db_schema_change": "indexes_only",
+    "permission_logic_modified": false
+  },
+  "slow_query_path_before": [
+    {
+      "step": "C18H org context middleware",
+      "cost": "validated session and resolved module_scope for all API/control-plane paths",
+      "query_shape": "list all module_bindings, group in Python, then filter by org",
+      "impact": "unneeded module resolution for /modules/me"
+    },
+    {
+      "step": "control-plane isolation middleware",
+      "cost": "validated session and evaluated PermissionDecisionEngine for C16/admin",
+      "query_shape": "session lookup plus RBAC decision"
+    },
+    {
+      "step": "route dependency",
+      "cost": "evaluated PermissionDecisionEngine again for REGISTRY/admin",
+      "query_shape": "duplicate platform metadata RBAC evaluation in the same request"
+    },
+    {
+      "step": "handler permission material",
+      "cost": "resolve_current_user_permission_info loaded broad permission material",
+      "query_shape": "owner loaded all enabled permissions before filtering; non-owner loaded full ORM assignment rows"
+    },
+    {
+      "step": "module manifest access",
+      "cost": "validated static module manifests on each call",
+      "query_shape": "CPU-only repeated validation"
+    }
+  ],
+  "redundant_join_points": [
+    {
+      "location": "backend/app/services/permission_service.py::resolve_effective_permissions",
+      "issue": "owner path loaded all enabled permission_registry rows then filtered categories in Python",
+      "fix": "owner /modules/me path now selects only enabled platform categories"
+    },
+    {
+      "location": "backend/app/repositories/permissions.py::list_enabled_user_assignments",
+      "issue": "module access only needs permission_key/scope fields but loaded full UserPermissionAssignment ORM objects",
+      "fix": "new list_enabled_user_permission_scope_rows projection returns only permission_key, scope_type, scope_key, expires_at"
+    },
+    {
+      "location": "backend/app/middleware/org_context.py",
+      "issue": "module_scope construction listed module_bindings for /modules/me even though the endpoint is platform/control-plane scoped",
+      "fix": "exact /api/control-plane/modules/me skip avoids module binding fan-out"
+    }
+  ],
+  "repeated_permission_resolution_calls": {
+    "before": [
+      "control-plane middleware PermissionDecisionEngine(C16/admin)",
+      "route require_rbac PermissionDecisionEngine(REGISTRY/admin)",
+      "handler resolve_current_user_permission_info independent permission material resolution"
+    ],
+    "after": [
+      "control-plane middleware PermissionDecisionEngine(C16/admin)",
+      "route require_cached_control_plane_admin reads request.state.control_plane_rbac_decision",
+      "handler resolve_current_user_module_permission_info reads/writes request.state.permission_cache.materials"
+    ],
+    "duplicate_rbac_evaluation": false
+  },
+  "optimized_query_path_after": {
+    "rbac": "single control-plane PermissionDecisionEngine evaluation, cached on request.state.control_plane_rbac_decision",
+    "permission_material": {
+      "owner": "select permission_registry.permission_key where is_enabled = true and category in owner platform categories",
+      "non_owner": "select assignment permission_key, scope_type, scope_key, expires_at joined to enabled permission_registry for one user",
+      "cache": "PermissionResolutionCache request materials plus short TTL material cache"
+    },
+    "module_manifest": "validated manifest list cached in-process with lru_cache(maxsize=1)",
+    "org_context": "exact /api/control-plane/modules/me path bypasses org module_scope resolution"
+  },
+  "target_outcome": {
+    "avg_latency_ms": "<200 under normal DB conditions",
+    "queue_pool_timeout_expected": false,
+    "nested_internal_api_calls": false,
+    "repeated_module_resolution_per_request": false
+  }
+}

@@ -1,5 +1,6 @@
 import re
 from collections.abc import Mapping, Sequence
+from functools import lru_cache
 from typing import Any, get_args
 
 from sqlalchemy.orm import Session
@@ -17,7 +18,7 @@ from ..schemas.module import (
 from .event_collector import emit_event
 from .permission_service import (
     CurrentUserPermissionInfo,
-    resolve_current_user_permission_info,
+    resolve_current_user_module_permission_info,
 )
 
 MODULE_KEY_PATTERN = re.compile(
@@ -177,8 +178,13 @@ def validate_module_manifests(
     return manifests
 
 
+@lru_cache(maxsize=1)
+def _cached_module_manifests() -> tuple[ModuleManifestV1, ...]:
+    return tuple(validate_module_manifests())
+
+
 def list_module_manifests() -> list[ModuleManifestV1]:
-    manifests = validate_module_manifests()
+    manifests = list(_cached_module_manifests())
     emit_event(
         event_type="category_tree.read",
         module="system",
@@ -342,8 +348,14 @@ def build_module_access_state(
 def list_modules_for_user(
     db: Session,
     user: User,
+    *,
+    request: object | None = None,
 ) -> tuple[CurrentUserPermissionInfo, list[ModuleAccessRead]]:
-    current_user_permissions = resolve_current_user_permission_info(db, user)
+    current_user_permissions = resolve_current_user_module_permission_info(
+        db,
+        user,
+        request=request,
+    )
     items = [
         build_module_access_state(manifest, current_user_permissions)
         for manifest in list_module_manifests()

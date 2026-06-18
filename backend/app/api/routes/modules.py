@@ -20,7 +20,11 @@ from ...services.module_registry import (
     list_module_manifests,
     list_modules_for_user,
 )
-from ..deps import get_audit_context, require_rbac
+from ..deps import (
+    get_audit_context,
+    require_cached_control_plane_admin,
+    require_rbac,
+)
 
 router = APIRouter(prefix="/modules", tags=["modules"])
 
@@ -52,10 +56,11 @@ def module_registry(
 
 @router.get("/me", response_model=ModuleAccessListResponse)
 def modules_me(
+    request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(require_rbac("REGISTRY", "admin")),
+    user: User = Depends(require_cached_control_plane_admin),
 ) -> ModuleAccessListResponse:
-    permission_info, items = list_modules_for_user(db, user)
+    permission_info, items = list_modules_for_user(db, user, request=request)
     return ModuleAccessListResponse(
         user_id=user.id,
         role=user.role,

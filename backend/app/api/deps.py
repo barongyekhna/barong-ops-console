@@ -326,6 +326,24 @@ def require_rbac(module: str, action: str):
     return dependency
 
 
+def require_cached_control_plane_admin(
+    request: Request,
+    user: User = Depends(get_current_user),
+) -> User:
+    decision = getattr(request.state, "control_plane_rbac_decision", None)
+    if (
+        decision is not None
+        and getattr(decision, "allowed", False)
+        and getattr(decision, "module_id", None) == "C16"
+        and getattr(decision, "action", None) == "admin"
+    ):
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Permission denied.",
+    )
+
+
 def require_internal_rbac(module: str, action: str = "internal") -> None:
     decision = check_internal_permission(module, action)
     emit_event(

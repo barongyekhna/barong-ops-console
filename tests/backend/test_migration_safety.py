@@ -22,7 +22,7 @@ def test_c05b_production_compatibility_baseline_does_not_block_startup(
     monkeypatch.setattr(
         migration_safety,
         "_script_heads",
-        lambda alembic_ini_path=None: ("pre20_q_live_enable_gate_001",),
+        lambda alembic_ini_path=None: ("fix_be_06_modules_me_perf_001",),
     )
 
     report = migration_safety.build_migration_safety_report(
@@ -31,7 +31,7 @@ def test_c05b_production_compatibility_baseline_does_not_block_startup(
     )
 
     assert report.current_revisions == ("c05b_permissions_001",)
-    assert report.expected_heads == ("pre20_q_live_enable_gate_001",)
+    assert report.expected_heads == ("fix_be_06_modules_me_perf_001",)
     assert report.head_mismatch is True
     assert report.clean is False
     assert report.production_blocked is False
@@ -42,7 +42,7 @@ def test_non_baseline_production_head_mismatch_still_blocks(monkeypatch) -> None
     monkeypatch.setattr(
         migration_safety,
         "_script_heads",
-        lambda alembic_ini_path=None: ("pre20_q_live_enable_gate_001",),
+        lambda alembic_ini_path=None: ("fix_be_06_modules_me_perf_001",),
     )
 
     report = migration_safety.build_migration_safety_report(

@@ -346,6 +346,7 @@ async def enforce_control_plane_isolation(request: Request, call_next):
                 source="control_plane_isolation",
             )
         )
+        request.state.control_plane_rbac_decision = decision
         if not decision.allowed:
             request.state.user_id = str(current_session.user.id)
             emit_event(

@@ -6,6 +6,7 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     ForeignKey,
+    Index,
     String,
     Text,
     UniqueConstraint,
@@ -29,6 +30,11 @@ class UUIDPrimaryKeyMixin:
 class PermissionRegistry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "permission_registry"
     __table_args__ = (
+        Index(
+            "ix_permission_registry_enabled_category",
+            "is_enabled",
+            "category",
+        ),
         CheckConstraint(
             "risk_level IN ('low', 'medium', 'high', 'critical')",
             name="valid_risk_level",
@@ -74,6 +80,18 @@ class PermissionRegistry(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 class UserPermissionAssignment(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     __tablename__ = "user_permission_assignments"
     __table_args__ = (
+        Index(
+            "ix_user_permission_assignments_user_enabled_expires",
+            "user_id",
+            "is_enabled",
+            "expires_at",
+        ),
+        Index(
+            "ix_user_permission_assignments_user_scope",
+            "user_id",
+            "scope_type",
+            "scope_key",
+        ),
         UniqueConstraint(
             "user_id",
             "permission_key",

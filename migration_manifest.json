@@ -1,12 +1,12 @@
 {
-  "alembic_head": "pre20_q_live_enable_gate_001",
+  "alembic_head": "fix_be_06_modules_me_perf_001",
   "environment": "staging",
-  "expected_alembic_head": "pre20_q_live_enable_gate_001",
+  "expected_alembic_head": "fix_be_06_modules_me_perf_001",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 12,
-  "migration_hash": "26cc88d91ca2ffb719969598cf166421eca5affc14c20031af07d328ea87ddd0",
+  "migration_count": 13,
+  "migration_hash": "da0a39ef2dd3f31a2bd38423342151784d1611d1475e0fb2b6058df6ee83e7ac",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -19,9 +19,10 @@
     "c17_durable_observability_001",
     "pre20_o_concurrency_perf_001",
     "pre20_o_ops_dr_001",
-    "pre20_q_live_enable_gate_001"
+    "pre20_q_live_enable_gate_001",
+    "fix_be_06_modules_me_perf_001"
   ],
-  "migration_order_checksum": "8c069b95c69c4b481775613f2fe654536dab68fc8045d43ae6b71fcd196e2fcd",
+  "migration_order_checksum": "9151afa52119b220633cbd72a1adb319d5eeed9f9a89eecbf1e0507b06a76d85",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -106,6 +107,13 @@
       "down_revision": "pre20_o_ops_dr_001",
       "path": "backend/alembic/versions/20260617_06_pre20_q_live_enable_gate.py",
       "version": "pre20_q_live_enable_gate_001"
+    },
+    {
+      "applied_at": "2026-06-18T00:00:00Z",
+      "checksum": "b51a992d37174953b340b06b8fa1f73fae6b98f58c296eaca6e2df4e2380974f",
+      "down_revision": "pre20_q_live_enable_gate_001",
+      "path": "backend/alembic/versions/20260618_01_fix_be_06_modules_me_performance.py",
+      "version": "fix_be_06_modules_me_perf_001"
     }
   ]
 }

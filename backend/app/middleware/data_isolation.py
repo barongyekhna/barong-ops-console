@@ -45,6 +45,11 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
 ORG_PATH_PATTERN = re.compile(r"/org/(?P<org_id>org_[0-9a-f]{32})(?:/|$)")
 MUTATING_METHODS = frozenset(("POST", "PUT", "PATCH", "DELETE"))
 C18D_TARGET_ORG_PAYLOAD_PATHS = frozenset(("/api/app/module/bind",))
+DATA_ISOLATION_EXEMPT_PATHS = frozenset(
+    (
+        "/api/control-plane/modules/me",
+    )
+)
 
 
 def _security_response(status_code: int, detail: str) -> JSONResponse:
@@ -186,6 +191,9 @@ def _c05b_schema_without_c18_data_isolation() -> bool:
 
 async def enforce_org_data_isolation(request: Request, call_next):
     if is_auth_me_path(request.url.path):
+        return await call_next(request)
+
+    if request.url.path in DATA_ISOLATION_EXEMPT_PATHS:
         return await call_next(request)
 
     if not _is_api_path(request):

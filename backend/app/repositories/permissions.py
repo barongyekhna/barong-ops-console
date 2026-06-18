@@ -36,6 +36,22 @@ def list_enabled_permissions(db: Session) -> list[PermissionRegistry]:
     )
 
 
+def list_enabled_permission_keys_by_categories(
+    db: Session,
+    categories: frozenset[str] | tuple[str, ...],
+) -> list[str]:
+    return list(
+        db.scalars(
+            select(PermissionRegistry.permission_key)
+            .where(
+                PermissionRegistry.is_enabled.is_(True),
+                PermissionRegistry.category.in_(tuple(sorted(categories))),
+            )
+            .order_by(PermissionRegistry.permission_key)
+        )
+    )
+
+
 def get_permission(
     db: Session,
     permission_key: str,
@@ -121,6 +137,50 @@ def list_enabled_user_assignments(
             )
         )
     )
+
+
+def list_enabled_user_permission_scope_rows(
+    db: Session,
+    user_id: int,
+    *,
+    now: datetime,
+) -> list[tuple[str, str, str, datetime | None]]:
+    rows = db.execute(
+        select(
+            UserPermissionAssignment.permission_key,
+            UserPermissionAssignment.scope_type,
+            UserPermissionAssignment.scope_key,
+            UserPermissionAssignment.expires_at,
+        )
+        .join(
+            PermissionRegistry,
+            PermissionRegistry.permission_key
+            == UserPermissionAssignment.permission_key,
+        )
+        .where(
+            UserPermissionAssignment.user_id == user_id,
+            UserPermissionAssignment.is_enabled.is_(True),
+            PermissionRegistry.is_enabled.is_(True),
+            (
+                UserPermissionAssignment.expires_at.is_(None)
+                | (UserPermissionAssignment.expires_at > now)
+            ),
+        )
+        .order_by(
+            UserPermissionAssignment.permission_key,
+            UserPermissionAssignment.scope_type,
+            UserPermissionAssignment.scope_key,
+        )
+    ).all()
+    return [
+        (
+            row.permission_key,
+            row.scope_type,
+            row.scope_key,
+            row.expires_at,
+        )
+        for row in rows
+    ]
 
 
 def get_user_assignment(

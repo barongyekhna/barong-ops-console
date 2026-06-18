@@ -5,7 +5,7 @@ from backend.app.db.session import engine
 
 pytestmark = pytest.mark.integration
 
-ALEMBIC_HEAD = "pre20_q_live_enable_gate_001"
+ALEMBIC_HEAD = "fix_be_06_modules_me_perf_001"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",

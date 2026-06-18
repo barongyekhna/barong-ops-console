@@ -1,0 +1,90 @@
+{
+  "task": "FIX-BE-06 /modules/me DB index recommendation",
+  "generated_at": "2026-06-18T00:00:00Z",
+  "migration": "backend/alembic/versions/20260618_01_fix_be_06_modules_me_performance.py",
+  "revision": "fix_be_06_modules_me_perf_001",
+  "requested_indexes": [
+    "modules(org_id)",
+    "module_memberships(user_id, module_id)",
+    "permissions(user_id, org_id)",
+    "execution_module_links(module_id)"
+  ],
+  "actual_schema_mapping": [
+    {
+      "requested": "modules(org_id)",
+      "actual": "module_bindings(org_id)",
+      "status": "already_indexed",
+      "existing_indexes": [
+        "ix_module_bindings_org_id",
+        "ix_module_bindings_org_id_status",
+        "ix_module_bindings_org_id_module_id"
+      ],
+      "reason": "There is no modules table with org_id in this codebase; module/org access is represented by module_bindings."
+    },
+    {
+      "requested": "module_memberships(user_id, module_id)",
+      "actual": "not present",
+      "status": "not_created",
+      "reason": "No module_memberships table exists; creating one would violate the no schema change constraint."
+    },
+    {
+      "requested": "permissions(user_id, org_id)",
+      "actual": "user_permission_assignments(user_id, scope_type, scope_key)",
+      "status": "indexed_equivalent",
+      "added_indexes": [
+        "ix_user_permission_assignments_user_enabled_expires",
+        "ix_user_permission_assignments_user_scope"
+      ],
+      "reason": "Permission scope is stored as scope_type/scope_key rather than org_id."
+    },
+    {
+      "requested": "execution_module_links(module_id)",
+      "actual": "not present",
+      "status": "not_created",
+      "reason": "No execution_module_links table exists; /modules/me does not query execution engine tables."
+    }
+  ],
+  "added_indexes": [
+    {
+      "table": "permission_registry",
+      "index": "ix_permission_registry_enabled_category",
+      "columns": [
+        "is_enabled",
+        "category"
+      ],
+      "query_supported": "owner /modules/me platform permission key lookup"
+    },
+    {
+      "table": "user_permission_assignments",
+      "index": "ix_user_permission_assignments_user_enabled_expires",
+      "columns": [
+        "user_id",
+        "is_enabled",
+        "expires_at"
+      ],
+      "query_supported": "current user's non-expired enabled assignment scan"
+    },
+    {
+      "table": "user_permission_assignments",
+      "index": "ix_user_permission_assignments_user_scope",
+      "columns": [
+        "user_id",
+        "scope_type",
+        "scope_key"
+      ],
+      "query_supported": "current user's permission scope materialization"
+    }
+  ],
+  "existing_reused_indexes": [
+    {
+      "table": "module_bindings",
+      "indexes": [
+        "ix_module_bindings_org_id",
+        "ix_module_bindings_module_id",
+        "ix_module_bindings_org_id_status",
+        "ix_module_bindings_org_id_module_id"
+      ]
+    }
+  ],
+  "schema_change_scope": "indexes_only"
+}

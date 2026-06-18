@@ -42,7 +42,11 @@ from ..repositories.operation_logs import create_operation_log
 from ..schemas.permission import PermissionAssignmentUpdate
 from .auth_service import AuditContext
 from .permission_decision_engine import PermissionDecisionEngine
-from .permission_resolution_cache import clear_permission_ttl_cache
+from .permission_resolution_cache import (
+    PermissionResolutionCache,
+    clear_permission_ttl_cache,
+    get_permission_request_cache,
+)
 from .unified_permission_engine import (
     OWNER_PLATFORM_PERMISSION_CATEGORIES,
     UnifiedPermissionRequest,
@@ -201,6 +205,9 @@ class PermissionAssignmentListResult:
 class PermissionAssignmentActionResult:
     assignment: PermissionAssignmentView
     operation_id: str
+
+
+MODULES_ME_PERMISSION_INFO_CACHE_NAMESPACE = "modules_me_permission_info"
 
 
 def _utc_now() -> datetime:
@@ -1505,6 +1512,12 @@ def resolve_current_user_permission_info(
     user: User,
 ) -> CurrentUserPermissionInfo:
     effective = resolve_effective_permissions(db, user)
+    return _current_user_permission_info_from_effective(effective)
+
+
+def _current_user_permission_info_from_effective(
+    effective: EffectivePermissions,
+) -> CurrentUserPermissionInfo:
     assignments = [
         EffectivePermissionAssignment(
             permission_key=permission.permission_key,
@@ -1537,6 +1550,78 @@ def resolve_current_user_permission_info(
         scope_summary=scope_summary,
         is_platform_owner=effective.is_platform_owner,
     )
+
+
+def resolve_current_user_module_permission_info(
+    db: Session,
+    user: User,
+    *,
+    request: object | None = None,
+) -> CurrentUserPermissionInfo:
+    role = normalize_role(user.role)
+    request_cache = get_permission_request_cache(request)
+    cache_key = (
+        MODULES_ME_PERMISSION_INFO_CACHE_NAMESPACE,
+        (user.id, role),
+    )
+    if request_cache is not None and cache_key in request_cache.materials:
+        request_cache.request_material_hits += 1
+        return request_cache.materials[cache_key]
+
+    resolution_cache = PermissionResolutionCache(request=request)
+    if is_owner_role(role):
+        permission_keys = resolution_cache.list_owner_platform_permission_keys(
+            db,
+            OWNER_PLATFORM_PERMISSION_CATEGORIES,
+        )
+        scoped_permissions = [
+            EffectivePermissionScope(
+                permission_key=permission_key,
+                scope_type=SCOPE_GLOBAL,
+                scope_key="*",
+                expires_at=None,
+            )
+            for permission_key in permission_keys
+        ]
+        effective = EffectivePermissions(
+            user_id=user.id,
+            role=role,
+            is_owner_full_access=False,
+            permissions=permission_keys,
+            scoped_permissions=scoped_permissions,
+            is_platform_owner=True,
+        )
+    else:
+        now = _utc_now()
+        scope_rows = resolution_cache.list_user_permission_scopes(
+            db,
+            user_id=user.id,
+            now=now,
+        )
+        scoped_permissions = [
+            EffectivePermissionScope(
+                permission_key=row.permission_key,
+                scope_type=row.scope_type,
+                scope_key=row.scope_key,
+                expires_at=row.expires_at,
+            )
+            for row in scope_rows
+        ]
+        effective = EffectivePermissions(
+            user_id=user.id,
+            role=role,
+            is_owner_full_access=False,
+            permissions=sorted(
+                {permission.permission_key for permission in scoped_permissions}
+            ),
+            scoped_permissions=scoped_permissions,
+            is_platform_owner=False,
+        )
+
+    info = _current_user_permission_info_from_effective(effective)
+    if request_cache is not None:
+        request_cache.materials[cache_key] = info
+    return info
 
 
 def list_role_default_permissions(

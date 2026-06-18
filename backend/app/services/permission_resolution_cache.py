@@ -20,7 +20,9 @@ from ..models.permission import (
 from ..models.user import User
 from ..repositories.permissions import (
     get_permission as get_permission_record,
+    list_enabled_permission_keys_by_categories,
     list_enabled_user_assignments,
+    list_enabled_user_permission_scope_rows,
     list_role_default_permissions,
 )
 from ..schemas.module_binding import ModuleBinding
@@ -78,6 +80,14 @@ class CachedRoleDefaultPermission:
     scope_type: str
     scope_key: str
     is_enabled: bool
+
+
+@dataclass(frozen=True)
+class CachedEffectivePermissionScope:
+    permission_key: str
+    scope_type: str
+    scope_key: str
+    expires_at: Any
 
 
 @dataclass(frozen=True)
@@ -512,6 +522,62 @@ class PermissionResolutionCache:
             ]
 
         return self._material(db, "user_permissions", f"role:{role}", load)
+
+    def list_owner_platform_permission_keys(
+        self,
+        db: Session,
+        categories: frozenset[str] | tuple[str, ...],
+    ) -> list[str]:
+        category_key = tuple(sorted(categories))
+
+        def load() -> list[str]:
+            return list_enabled_permission_keys_by_categories(db, category_key)
+
+        return self._material(
+            db,
+            "user_permissions",
+            ("owner_platform_permission_keys", category_key),
+            load,
+        )
+
+    def list_user_permission_scopes(
+        self,
+        db: Session,
+        *,
+        user_id: int,
+        now: Any,
+    ) -> list[CachedEffectivePermissionScope]:
+        def load() -> list[CachedEffectivePermissionScope]:
+            return [
+                CachedEffectivePermissionScope(
+                    permission_key=permission_key,
+                    scope_type=scope_type,
+                    scope_key=scope_key,
+                    expires_at=expires_at,
+                )
+                for (
+                    permission_key,
+                    scope_type,
+                    scope_key,
+                    expires_at,
+                ) in list_enabled_user_permission_scope_rows(
+                    db,
+                    user_id,
+                    now=time_aware_now(),
+                )
+            ]
+
+        scopes = self._material(
+            db,
+            "user_permissions",
+            f"module_scopes:{user_id}",
+            load,
+        )
+        return [
+            scope
+            for scope in scopes
+            if _not_expired(scope.expires_at, now=now)
+        ]
 
     def get_module_binding(
         self,
