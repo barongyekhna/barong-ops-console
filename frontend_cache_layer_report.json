@@ -1,0 +1,65 @@
+{
+  "fix_id": "FIX-FE-05",
+  "report": "frontend_cache_layer_report",
+  "generated_at": "2026-06-18T08:46:31Z",
+  "status": "passed",
+  "scope": "lightweight frontend memory cache",
+  "cache_layer": {
+    "file": "frontend/src/lib/request-cache.ts",
+    "default_ttl_ms": 60000,
+    "auth_me_ttl_ms": 30000,
+    "capability_bootstrap_ttl_ms": 60000,
+    "error_caching": false,
+    "mutation_invalidation": "non-GET requests clear successful memory cache and advance cacheGeneration"
+  },
+  "covered_get_paths": [
+    {
+      "path": "/auth/me",
+      "ttl_ms": 30000,
+      "note": "read-only cache only; login still uses /auth/login and clears cache"
+    },
+    {
+      "path": "/modules/registry",
+      "ttl_ms": 60000
+    },
+    {
+      "path": "/modules/me",
+      "ttl_ms": 60000
+    },
+    {
+      "path": "/permissions/me",
+      "ttl_ms": 60000
+    },
+    {
+      "path": "/module-adapters/*",
+      "ttl_ms": 60000
+    },
+    {
+      "path": "/execution-providers/*",
+      "ttl_ms": 60000
+    },
+    {
+      "path": "/live-gate/*",
+      "ttl_ms": 60000
+    },
+    {
+      "path": "/capability/bootstrap",
+      "ttl_ms": 60000
+    }
+  ],
+  "derived_provider_cache": {
+    "file": "frontend/src/components/adapter-access-provider.tsx",
+    "ttl_ms": 60000,
+    "purpose": "cache filtered adapter metadata derived from shared capability bootstrap state"
+  },
+  "cache_safety": {
+    "unauthorized_401": "apiRequest clears frontend request cache and dispatches the existing auth unauthorized event",
+    "stale_get_after_mutation": "GET responses that started before cacheGeneration changed are returned to their caller but not written to memory cache",
+    "fe_04_login_safety": "loginRequest still accepts AbortSignal and timeoutMs; /auth/login is not sourced from /auth/me cache"
+  },
+  "verification": {
+    "build": "passed",
+    "typecheck": "passed",
+    "request_dedup_test": "passed"
+  }
+}

@@ -1,26 +1,13 @@
 "use client";
 
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 
-import { useAuth } from "@/components/auth-provider";
+import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import type {
   ExecutionProviderAccessState,
   ExecutionProviderContract,
 } from "@/lib/execution-provider";
-import {
-  getExecutionProviderRegistry,
-  getMyExecutionProviders,
-  type ExecutionProviderApiErrorSummary,
-} from "@/lib/execution-provider-api";
+import type { ExecutionProviderApiErrorSummary } from "@/lib/execution-provider-api";
 import {
   canExposeAdapterMetadata,
   findAdapterAccessState,
@@ -33,11 +20,7 @@ import {
   type ModuleAdapterAccessState,
   type ModuleAdapterContract,
 } from "@/lib/module-adapter";
-import {
-  listModuleAdapterRegistry,
-  listMyModuleAdapters,
-  type ModuleAdapterApiErrorSummary,
-} from "@/lib/module-adapter-api";
+import type { ModuleAdapterApiErrorSummary } from "@/lib/module-adapter-api";
 
 type AdapterAccessContextValue = {
   adapters: ModuleAdapterContract[];
@@ -59,22 +42,93 @@ type AdapterAccessContextValue = {
 const AdapterAccessContext =
   createContext<AdapterAccessContextValue | null>(null);
 
-function authIdentityKey({
-  status,
-  user,
-}: {
-  status: string;
-  user: { id?: number | string | null; role?: string | null; username?: string | null } | null;
-}) {
-  if (status !== "authenticated" || !user) {
-    return null;
-  }
+const ADAPTER_ACCESS_MEMORY_CACHE_TTL_MS = 60_000;
 
-  return [user.id ?? "unknown", user.username ?? "", user.role ?? ""].join(":");
-}
+type AdapterAccessMemoryCacheEntry = {
+  expiresAt: number;
+  value: ModuleAdapterContract[];
+};
+
+const adapterAccessMemoryCache = new Map<
+  string,
+  AdapterAccessMemoryCacheEntry
+>();
 
 function safeArray<T>(value: readonly T[] | null | undefined): T[] {
   return Array.isArray(value) ? [...value] : [];
+}
+
+function adapterAccessCacheKey({
+  accessItems,
+  adapterAccessUnknown,
+  adapters,
+  isOwnerFullAccess,
+}: {
+  adapters: readonly ModuleAdapterContract[];
+  accessItems: readonly ModuleAdapterAccessState[];
+  adapterAccessUnknown: boolean;
+  isOwnerFullAccess: boolean;
+}) {
+  return JSON.stringify({
+    access: accessItems.map((item) => [
+      item.adapter_key,
+      item.module_key,
+      item.adapter_access_state,
+      item.hidden,
+      item.locked,
+      item.unavailable,
+    ]),
+    adapterAccessUnknown,
+    adapters: adapters.map((adapter) => [
+      adapter.adapter_key,
+      adapter.module_key,
+      adapter.adapter_status,
+    ]),
+    isOwnerFullAccess,
+  });
+}
+
+function getFilteredAdapters({
+  accessItems,
+  adapterAccessUnknown,
+  adapters,
+  isOwnerFullAccess,
+}: {
+  adapters: readonly ModuleAdapterContract[];
+  accessItems: readonly ModuleAdapterAccessState[];
+  adapterAccessUnknown: boolean;
+  isOwnerFullAccess: boolean;
+}) {
+  const cacheKey = adapterAccessCacheKey({
+    accessItems,
+    adapterAccessUnknown,
+    adapters,
+    isOwnerFullAccess,
+  });
+  const cached = adapterAccessMemoryCache.get(cacheKey);
+  const now = Date.now();
+
+  if (cached && cached.expiresAt > now) {
+    return [...cached.value];
+  }
+
+  const value = adapters.filter((adapter) =>
+    canExposeAdapterMetadata(
+      adapter,
+      findAdapterAccessState(adapter.adapter_key, accessItems),
+      {
+        adapterAccessUnknown,
+        isOwnerFullAccess,
+      },
+    ),
+  );
+
+  adapterAccessMemoryCache.set(cacheKey, {
+    expiresAt: now + ADAPTER_ACCESS_MEMORY_CACHE_TTL_MS,
+    value,
+  });
+
+  return [...value];
 }
 
 export function AdapterAccessProvider({
@@ -82,193 +136,33 @@ export function AdapterAccessProvider({
 }: {
   children: ReactNode;
 }) {
-  const { status, user } = useAuth();
-  const mountedRef = useRef(false);
-  const loadingKeyRef = useRef<string | null>(null);
-  const loadedKeyRef = useRef<string | null>(null);
-  const loadingPromiseRef = useRef<Promise<void> | null>(null);
-  const authKey = useMemo(
-    () => authIdentityKey({ status, user }),
-    [status, user?.id, user?.role, user?.username],
+  const capabilityState = useFrontendCapabilityState();
+  const {
+    adapterAccessResult,
+    adapterRegistryResult,
+    executionAccessResult,
+    executionRegistryResult,
+  } = capabilityState;
+  const adapters = safeArray(adapterRegistryResult?.data.items);
+  const accessItems = safeArray(adapterAccessResult?.data.items);
+  const executionProviders = safeArray(executionRegistryResult?.data.items);
+  const executionProviderAccessItems = safeArray(
+    executionAccessResult?.data.items,
   );
-  const latestAuthKeyRef = useRef<string | null>(authKey);
-  latestAuthKeyRef.current = authKey;
-  const [adapters, setAdapters] = useState<ModuleAdapterContract[]>([]);
-  const [accessItems, setAccessItems] = useState<ModuleAdapterAccessState[]>(
-    [],
-  );
-  const [executionProviders, setExecutionProviders] = useState<
-    ExecutionProviderContract[]
-  >([]);
-  const [executionProviderAccessItems, setExecutionProviderAccessItems] =
-    useState<ExecutionProviderAccessState[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [adapterAccessUnknown, setAdapterAccessUnknown] = useState(true);
-  const [adapterMetadataUnavailable, setAdapterMetadataUnavailable] =
-    useState(true);
-  const [
-    executionProviderAccessUnknown,
-    setExecutionProviderAccessUnknown,
-  ] = useState(true);
-  const [
-    executionProviderMetadataUnavailable,
-    setExecutionProviderMetadataUnavailable,
-  ] = useState(true);
-  const [error, setError] =
-    useState<ModuleAdapterApiErrorSummary | null>(null);
-  const [registryError, setRegistryError] =
-    useState<ModuleAdapterApiErrorSummary | null>(null);
-  const [executionProviderError, setExecutionProviderError] =
-    useState<ExecutionProviderApiErrorSummary | null>(null);
-  const [
-    executionProviderRegistryError,
-    setExecutionProviderRegistryError,
-  ] = useState<ExecutionProviderApiErrorSummary | null>(null);
-  const [isOwnerFullAccess, setIsOwnerFullAccess] = useState(false);
-
-  const applyFallbackState = useCallback(() => {
-    if (!mountedRef.current) {
-      return;
-    }
-
-    setAdapters([]);
-    setAccessItems([]);
-    setExecutionProviders([]);
-    setExecutionProviderAccessItems([]);
-    setAdapterAccessUnknown(true);
-    setAdapterMetadataUnavailable(true);
-    setExecutionProviderAccessUnknown(true);
-    setExecutionProviderMetadataUnavailable(true);
-    setError(null);
-    setRegistryError(null);
-    setExecutionProviderError(null);
-    setExecutionProviderRegistryError(null);
-    setIsOwnerFullAccess(false);
-  }, []);
-
-  const loadAdapterMetadata = useCallback(
-    async ({ force = false }: { force?: boolean } = {}) => {
-      const currentAuthKey = authIdentityKey({ status, user });
-
-      if (!currentAuthKey) {
-        applyFallbackState();
-        setIsLoading(false);
-        return;
-      }
-
-      if (
-        !force &&
-        loadingPromiseRef.current &&
-        loadingKeyRef.current === currentAuthKey
-      ) {
-        return loadingPromiseRef.current;
-      }
-
-      if (!force && loadedKeyRef.current === currentAuthKey) {
-        return;
-      }
-
-      setIsLoading(true);
-      loadingKeyRef.current = currentAuthKey;
-
-      const loadPromise = (async () => {
-        const [
-          adapterRegistryResult,
-          adapterAccessResult,
-          executionRegistryResult,
-          executionAccessResult,
-        ] = await Promise.all([
-          listModuleAdapterRegistry(),
-          listMyModuleAdapters(),
-          getExecutionProviderRegistry(),
-          getMyExecutionProviders(),
-        ]);
-
-        if (
-          !mountedRef.current ||
-          latestAuthKeyRef.current !== currentAuthKey
-        ) {
-          return;
-        }
-
-        setAdapters(safeArray(adapterRegistryResult.data.items));
-        setAdapterMetadataUnavailable(adapterRegistryResult.ok !== true);
-        setRegistryError(adapterRegistryResult.error);
-        setAccessItems(safeArray(adapterAccessResult.data.items));
-        setAdapterAccessUnknown(
-          adapterAccessResult.adapter_access_unknown !== false,
-        );
-        setError(adapterAccessResult.error);
-        setExecutionProviders(safeArray(executionRegistryResult.data.items));
-        setExecutionProviderMetadataUnavailable(
-          executionRegistryResult.ok !== true,
-        );
-        setExecutionProviderRegistryError(executionRegistryResult.error);
-        setExecutionProviderAccessItems(
-          safeArray(executionAccessResult.data.items),
-        );
-        setExecutionProviderAccessUnknown(
-          executionAccessResult.provider_access_unknown !== false,
-        );
-        setExecutionProviderError(executionAccessResult.error);
-        setIsOwnerFullAccess(
-          adapterAccessResult.data.is_owner_full_access === true ||
-            executionAccessResult.data.is_owner_full_access === true,
-        );
-        loadedKeyRef.current = currentAuthKey;
-      })().finally(() => {
-        if (loadingKeyRef.current === currentAuthKey) {
-          loadingKeyRef.current = null;
-          loadingPromiseRef.current = null;
-        }
-        if (
-          mountedRef.current &&
-          latestAuthKeyRef.current === currentAuthKey
-        ) {
-          setIsLoading(false);
-        }
-      });
-
-      loadingPromiseRef.current = loadPromise;
-      return loadPromise;
-    },
-    [applyFallbackState, status, user],
-  );
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    if (!authKey) {
-      loadedKeyRef.current = null;
-      loadingKeyRef.current = null;
-      loadingPromiseRef.current = null;
-      applyFallbackState();
-      setIsLoading(false);
-    } else {
-      void loadAdapterMetadata();
-    }
-
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [applyFallbackState, authKey, loadAdapterMetadata]);
-
-  const refresh = useCallback(async () => {
-    await loadAdapterMetadata({ force: true });
-  }, [loadAdapterMetadata]);
+  const adapterAccessUnknown =
+    adapterAccessResult?.adapter_access_unknown !== false;
+  const isOwnerFullAccess =
+    adapterAccessResult?.data.is_owner_full_access === true ||
+    executionAccessResult?.data.is_owner_full_access === true;
 
   const filteredAdapters = useMemo(
     () =>
-      adapters.filter((adapter) =>
-        canExposeAdapterMetadata(
-          adapter,
-          findAdapterAccessState(adapter.adapter_key, accessItems),
-          {
-            adapterAccessUnknown,
-            isOwnerFullAccess,
-          },
-        ),
-      ),
+      getFilteredAdapters({
+        accessItems,
+        adapterAccessUnknown,
+        adapters,
+        isOwnerFullAccess,
+      }),
     [accessItems, adapterAccessUnknown, adapters, isOwnerFullAccess],
   );
 
@@ -276,35 +170,33 @@ export function AdapterAccessProvider({
     () => ({
       accessItems,
       adapterAccessUnknown,
-      adapterMetadataUnavailable,
+      adapterMetadataUnavailable: adapterRegistryResult?.ok !== true,
       adapters: filteredAdapters,
-      error,
+      error: adapterAccessResult?.error ?? null,
       executionProviderAccessItems,
-      executionProviderAccessUnknown,
-      executionProviderError,
-      executionProviderMetadataUnavailable,
-      executionProviderRegistryError,
+      executionProviderAccessUnknown:
+        executionAccessResult?.provider_access_unknown !== false,
+      executionProviderError: executionAccessResult?.error ?? null,
+      executionProviderMetadataUnavailable:
+        executionRegistryResult?.ok !== true,
+      executionProviderRegistryError: executionRegistryResult?.error ?? null,
       executionProviders,
-      isLoading: status === "checking" || isLoading,
-      refresh,
-      registryError,
+      isLoading: capabilityState.isLoading,
+      refresh: capabilityState.refresh,
+      registryError: adapterRegistryResult?.error ?? null,
     }),
     [
       accessItems,
+      adapterAccessResult,
       adapterAccessUnknown,
-      adapterMetadataUnavailable,
-      error,
+      adapterRegistryResult,
+      capabilityState.isLoading,
+      capabilityState.refresh,
+      executionAccessResult,
       executionProviderAccessItems,
-      executionProviderAccessUnknown,
-      executionProviderError,
-      executionProviderMetadataUnavailable,
-      executionProviderRegistryError,
       executionProviders,
+      executionRegistryResult,
       filteredAdapters,
-      isLoading,
-      refresh,
-      registryError,
-      status,
     ],
   );
 

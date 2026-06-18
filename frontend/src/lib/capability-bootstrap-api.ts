@@ -1,6 +1,6 @@
 "use client";
 
-import { ApiError, apiRequest } from "@/lib/api";
+import { ApiError, apiRequest, isApiAbortError } from "@/lib/api";
 import {
   executionProviderRegistryResultFromError,
   executionProviderRegistryResultFromResponse,
@@ -215,7 +215,11 @@ export async function getCapabilityBootstrap(): Promise<CapabilityBootstrapResul
         moduleRegistryResultFromError,
       ),
     };
-  } catch {
+  } catch (error) {
+    if (isApiAbortError(error)) {
+      throw error;
+    }
+
     return fallbackCapabilityBootstrap();
   }
 }

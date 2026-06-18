@@ -17,6 +17,7 @@ const inFlightRequests = new Map<string, Promise<unknown>>();
 const requestQueue: QueuedRequest[] = [];
 
 let activeRequestCount = 0;
+let cacheGeneration = 0;
 
 function now() {
   return Date.now();
@@ -111,6 +112,7 @@ export function clearFrontendRequestCache({
 }: {
   includeInFlight?: boolean;
 } = {}) {
+  cacheGeneration += 1;
   memoryCache.clear();
   if (includeInFlight) {
     inFlightRequests.clear();
@@ -160,7 +162,7 @@ export async function requestWithFrontendCache<T>(
   const ttl = canUseMemoryCache ? cacheTtlForPath(path) : 0;
 
   if (method !== "GET") {
-    clearFrontendRequestCache();
+    clearFrontendRequestCache({ includeInFlight: false });
   }
 
   if (ttl > 0) {
@@ -179,9 +181,11 @@ export async function requestWithFrontendCache<T>(
   }
 
   let promise: Promise<T>;
+  const requestCacheGeneration = cacheGeneration;
+
   promise = runWithConcurrencyLimit(request)
     .then((value) => {
-      if (ttl > 0) {
+      if (ttl > 0 && requestCacheGeneration === cacheGeneration) {
         memoryCache.set(cacheKey, {
           expiresAt: now() + ttl,
           value,

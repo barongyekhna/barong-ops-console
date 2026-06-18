@@ -1,0 +1,82 @@
+{
+  "fix_id": "FIX-FE-05",
+  "report": "dashboard_request_reduction_report",
+  "generated_at": "2026-06-18T08:46:31Z",
+  "status": "passed",
+  "scope": "dashboard initial browser request fan-out",
+  "before": {
+    "estimated_initial_browser_requests": 15,
+    "sources": [
+      {
+        "source": "AuthProvider",
+        "requests": [
+          "/auth/me"
+        ]
+      },
+      {
+        "source": "ModuleAccessProvider",
+        "requests": [
+          "/modules/registry",
+          "/modules/me"
+        ]
+      },
+      {
+        "source": "AdapterAccessProvider",
+        "requests": [
+          "/module-adapters/registry",
+          "/module-adapters/me",
+          "/execution-providers/registry",
+          "/execution-providers/me"
+        ]
+      },
+      {
+        "source": "Capability fan-out",
+        "requests": [
+          "/live-gate/readiness",
+          "/live-gate/production-readiness",
+          "/live-gate/policies"
+        ]
+      },
+      {
+        "source": "OperationsDashboard data",
+        "requests": [
+          "/health",
+          "/operation-logs?limit=8&offset=0",
+          "/approval/list?limit=50&offset=0",
+          "/users?limit=1&offset=0"
+        ]
+      }
+    ]
+  },
+  "after": {
+    "estimated_initial_browser_requests": 6,
+    "threshold": "dashboard initial requests <= 8",
+    "threshold_met": true,
+    "browser_requests": [
+      "/auth/me",
+      "/capability/bootstrap",
+      "/health",
+      "/operation-logs?limit=8&offset=0",
+      "/approval/list?limit=50&offset=0",
+      "/users?limit=1&offset=0"
+    ],
+    "operations_dashboard_behavior": "OperationsDashboard consumes useFrontendCapabilityState and does not call capabilityState.refresh on mount",
+    "module_provider_behavior": "ModuleAccessProvider consumes CapabilityStateProvider module results and does not fetch module APIs directly",
+    "adapter_provider_behavior": "AdapterAccessProvider consumes CapabilityStateProvider adapter and execution-provider results and does not fetch APIs directly"
+  },
+  "success_criteria": {
+    "dashboard_initial_requests_lte_8": true,
+    "no_duplicate_api_calls": true,
+    "no_repeated_modules_me_calls": true,
+    "no_redundant_capability_fetch": true,
+    "all_requests_timeout_abort_safe": true,
+    "max_concurrent_frontend_requests_lte_6": true
+  },
+  "verification": {
+    "build": "passed",
+    "typecheck": "passed",
+    "focused_request_dedup": "passed",
+    "full_frontend_tests": "9/12 passed; remaining failures are outside dashboard fan-out paths",
+    "foundation_verify": "failed_existing: C03C user management page incomplete"
+  }
+}

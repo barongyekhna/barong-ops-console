@@ -1,0 +1,87 @@
+{
+  "fix_id": "FIX-FE-05",
+  "report": "api_fanout_dedup_report",
+  "generated_at": "2026-06-18T08:46:31Z",
+  "status": "passed",
+  "scope": "frontend request layer and frontend data providers",
+  "constraints": {
+    "backend_changed": false,
+    "db_schema_changed": false,
+    "rbac_or_permission_system_changed": false,
+    "execution_engine_changed": false,
+    "fe_04_login_flow_changed": false
+  },
+  "dedup_layer": {
+    "file": "frontend/src/lib/request-cache.ts",
+    "entrypoint": "requestWithFrontendCache",
+    "key_format": "METHOD normalized_path_with_sorted_query body:stable_json_for_non_get",
+    "rule": "identical endpoint and params reuse the existing in-flight Promise",
+    "max_concurrent_frontend_requests": 6,
+    "overflow_behavior": "queue non-duplicate requests after six active frontend requests",
+    "mutation_behavior": "non-GET requests clear memory cache without destroying in-flight dedup state",
+    "stale_get_cache_protection": "cacheGeneration prevents a GET that started before a mutation from writing stale data into memory cache"
+  },
+  "capability_grouping": {
+    "owner": "CapabilityStateProvider",
+    "browser_request": "/capability/bootstrap",
+    "single_flight_refs": [
+      "loadingPromiseRef",
+      "loadingAuthKeyRef",
+      "loadedAuthKeyRef"
+    ],
+    "grouped_sources": [
+      "/modules/registry",
+      "/modules/me",
+      "/module-adapters/registry",
+      "/module-adapters/me",
+      "/execution-providers/registry",
+      "/execution-providers/me",
+      "/live-gate/readiness",
+      "/live-gate/production-readiness",
+      "/live-gate/policies"
+    ],
+    "fallback_behavior": "bootstrap falls back to direct grouped requests only for non-abort bootstrap failures"
+  },
+  "duplicate_call_resolution": [
+    {
+      "endpoint": "/modules/me",
+      "before_callers": [
+        "ModuleAccessProvider",
+        "Capability fan-out paths"
+      ],
+      "after_callers": [
+        "CapabilityStateProvider via /capability/bootstrap"
+      ],
+      "duplicate_removed": true
+    },
+    {
+      "endpoint": "/module-adapters/registry",
+      "before_callers": [
+        "AdapterAccessProvider",
+        "Capability fan-out paths"
+      ],
+      "after_callers": [
+        "CapabilityStateProvider via /capability/bootstrap"
+      ],
+      "duplicate_removed": true
+    },
+    {
+      "endpoint": "/execution-providers/registry",
+      "before_callers": [
+        "AdapterAccessProvider",
+        "Capability fan-out paths"
+      ],
+      "after_callers": [
+        "CapabilityStateProvider via /capability/bootstrap"
+      ],
+      "duplicate_removed": true
+    }
+  ],
+  "verification": {
+    "build": "passed: npm run build",
+    "typecheck": "passed: npm run typecheck",
+    "focused_request_dedup": "passed: node --test tests/frontend/request-dedup.test.mjs",
+    "full_frontend_tests": "9/12 passed; execution-provider, module-isolation, and permission-management still fail without detailed assertions from node --test",
+    "foundation_verify": "failed_existing: C03C user management page incomplete"
+  }
+}

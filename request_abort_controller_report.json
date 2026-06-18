@@ -1,0 +1,44 @@
+{
+  "fix_id": "FIX-FE-05",
+  "report": "request_abort_controller_report",
+  "generated_at": "2026-06-18T08:46:31Z",
+  "status": "passed",
+  "scope": "frontend apiRequest abort and timeout safety",
+  "request_layer": {
+    "file": "frontend/src/lib/api.ts",
+    "default_timeout_ms": 5000,
+    "abort_controller_per_attempt": true,
+    "external_signal_supported": true,
+    "route_change_abort_supported": true,
+    "active_controllers_tracked": true,
+    "retry_limit_default": 1,
+    "retryable_methods": [
+      "GET",
+      "HEAD",
+      "OPTIONS"
+    ]
+  },
+  "route_change_abort": {
+    "owner": "AuthProvider",
+    "file": "frontend/src/components/auth-provider.tsx",
+    "hook": "useLayoutEffect on pathname change",
+    "behavior": "abortActiveApiRequests increments route generation and aborts all active controllers",
+    "queued_request_safety": "queued requests compare route generation before fetch and fail without hanging"
+  },
+  "capability_abort_behavior": {
+    "file": "frontend/src/lib/capability-bootstrap-api.ts",
+    "abort_fallback_fanout": false,
+    "timeout_behavior": "timeout abort terminates bootstrap and surfaces degraded state instead of launching fallback fan-out",
+    "route_change_behavior": "route-change abort is retried by CapabilityStateProvider after the route transition"
+  },
+  "hanging_promise_protection": {
+    "timeout_ms": 5000,
+    "controller_dispose": "timeout listeners and active controllers are removed in finally",
+    "concurrency_release": "queued request scheduler releases slots in finally"
+  },
+  "verification": {
+    "build": "passed",
+    "typecheck": "passed",
+    "request_dedup_test": "passed"
+  }
+}
