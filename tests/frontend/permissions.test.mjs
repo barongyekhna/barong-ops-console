@@ -24,19 +24,19 @@ const noPermissions = {
   scope_summary: [],
 };
 
-const jobsReadPermissions = {
+const approvalsReadPermissions = {
   assignments: [
     {
-      permission_key: "jobs.read",
+      permission_key: "reviews.read",
       scope_key: "*",
       scope_type: "global",
     },
   ],
   is_owner_full_access: false,
-  permission_keys: ["jobs.read"],
+  permission_keys: ["reviews.read"],
   scope_summary: [
     {
-      permission_keys: ["jobs.read"],
+      permission_keys: ["reviews.read"],
       scope_key: "*",
       scope_type: "global",
     },
@@ -56,11 +56,11 @@ const usersManagePermissions = {
   scope_summary: [],
 };
 
-const jobsModule = {
+const approvalsModule = {
   category: "business",
   denied_behavior: "show_locked",
-  href: "/jobs",
-  required_permission: "jobs.read",
+  href: "/approvals",
+  required_permission: "reviews.read",
 };
 
 const usersModule = {
@@ -73,9 +73,9 @@ const usersModule = {
 
 test("owner full access can see and access business and admin modules", () => {
   assert.equal(isOwnerFullAccess(ownerPermissions), true);
-  assert.equal(hasPermission(ownerPermissions, "jobs.read"), true);
-  assert.equal(canAccessModule(ownerPermissions, jobsModule), true);
-  assert.deepEqual(getPermissionAccessState(ownerPermissions, jobsModule), {
+  assert.equal(hasPermission(ownerPermissions, "reviews.read"), true);
+  assert.equal(canAccessModule(ownerPermissions, approvalsModule), true);
+  assert.deepEqual(getPermissionAccessState(ownerPermissions, approvalsModule), {
     canAccess: true,
     isLocked: false,
     isVisible: true,
@@ -88,8 +88,8 @@ test("owner full access can see and access business and admin modules", () => {
 });
 
 test("business modules remain visible but locked for a user without permission", () => {
-  assert.equal(canAccessModule(noPermissions, jobsModule), false);
-  assert.deepEqual(getPermissionAccessState(noPermissions, jobsModule), {
+  assert.equal(canAccessModule(noPermissions, approvalsModule), false);
+  assert.deepEqual(getPermissionAccessState(noPermissions, approvalsModule), {
     canAccess: false,
     isLocked: true,
     isVisible: true,
@@ -97,9 +97,9 @@ test("business modules remain visible but locked for a user without permission",
 });
 
 test("a user with a business permission does not see that module as locked", () => {
-  assert.equal(hasPermission(jobsReadPermissions, "jobs.read"), true);
+  assert.equal(hasPermission(approvalsReadPermissions, "reviews.read"), true);
   assert.deepEqual(
-    getPermissionAccessState(jobsReadPermissions, jobsModule),
+    getPermissionAccessState(approvalsReadPermissions, approvalsModule),
     {
       canAccess: true,
       isLocked: false,
@@ -110,7 +110,7 @@ test("a user with a business permission does not see that module as locked", () 
 
 test("direct access to a protected route without permission is denied", () => {
   assert.deepEqual(
-    getRoutePermissionDecision(noPermissions, "/jobs", [jobsModule]),
+    getRoutePermissionDecision(noPermissions, "/approvals", [approvalsModule]),
     {
       canAccess: false,
       isLocked: true,
@@ -123,7 +123,7 @@ test("direct access to a protected route without permission is denied", () => {
 test("auth/me permissions missing or malformed safely downgrade to no access", () => {
   assert.equal(normalizeCurrentUserPermissions(undefined), null);
   assert.equal(normalizeCurrentUserPermissions(null), null);
-  assert.equal(hasPermission(null, "jobs.read"), false);
+  assert.equal(hasPermission(null, "reviews.read"), false);
   assert.deepEqual(
     normalizeCurrentUserPermissions({
       assignments: "invalid",

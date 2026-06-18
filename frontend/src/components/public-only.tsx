@@ -17,7 +17,7 @@ export function PublicOnly({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (status === "authenticated") {
-      router.replace("/dashboard");
+      router.replace("/users");
     }
   }, [router, status]);
 

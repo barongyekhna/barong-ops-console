@@ -1,0 +1,119 @@
+{
+  "report_id": "fe-stabilization-frontend-readiness-score-updated",
+  "generated_at_utc": "2026-06-18T00:00:00Z",
+  "scope": "frontend alignment, frontend tests, UI/provider consistency reports",
+  "constraints_respected": {
+    "backend_changes": false,
+    "db_schema_changes": false,
+    "rbac_system_changes": false,
+    "permission_system_changes": false,
+    "execution_engine_changes": false
+  },
+  "score": {
+    "overall": 72,
+    "scale": "0-100",
+    "status": "stable_frontend_alignment_with_known_product_gaps",
+    "dimensions": [
+      {
+        "name": "test_alignment",
+        "score": 100,
+        "evidence": "npm test passes 13 frontend test files, including module isolation, permission management, execution provider, and auth flow coverage."
+      },
+      {
+        "name": "capability_driven_architecture_alignment",
+        "score": 88,
+        "evidence": "Navigation and route expectations now assert product capability entries instead of legacy admin.modules/settings assumptions."
+      },
+      {
+        "name": "product_navigation_consistency",
+        "score": 92,
+        "evidence": "Visible sidebar product entries are Users, Organizations, Permissions, Logs, and Approvals."
+      },
+      {
+        "name": "ui_backend_binding",
+        "score": 70,
+        "evidence": "Users, Permissions assignments, Logs, and Approvals list are proxy-backed; Organizations remains UI-only."
+      },
+      {
+        "name": "feature_completeness",
+        "score": 48,
+        "evidence": "Users is functional, Permissions is embedded in Users, Logs and Approvals are read-only, and Organizations is an empty shell."
+      },
+      {
+        "name": "action_layer_completeness",
+        "score": 35,
+        "evidence": "Approvals approve/reject/request actions, organization lifecycle/member actions, logs filtering/export, and standalone permissions management are not exposed."
+      },
+      {
+        "name": "verification_stability",
+        "score": 100,
+        "evidence": "npm run typecheck, npm run verify, and npm test all pass from frontend package scripts."
+      }
+    ]
+  },
+  "aligned_product_navigation": [
+    {
+      "label": "Users",
+      "href": "/users",
+      "module_key": "admin.users",
+      "api_binding": "GET/POST /users, GET /users/roles, GET/PATCH /users/{id}, POST /users/{id}/disable|enable|reset-password",
+      "state": "functional_core"
+    },
+    {
+      "label": "Organizations",
+      "href": "/organizations",
+      "module_key": "admin.organizations",
+      "api_binding": "none through frontend proxy",
+      "state": "empty_shell"
+    },
+    {
+      "label": "Permissions",
+      "href": "/permissions",
+      "module_key": "admin.permissions",
+      "api_binding": "Permission assignment APIs are bound inside Users; standalone page has no action layer",
+      "state": "delegated_to_users"
+    },
+    {
+      "label": "Logs",
+      "href": "/operation-logs",
+      "module_key": "system.operation_logs",
+      "api_binding": "GET /operation-logs",
+      "state": "read_only"
+    },
+    {
+      "label": "Approvals",
+      "href": "/approvals",
+      "module_key": "business.approvals",
+      "api_binding": "GET /approval/list",
+      "state": "read_only"
+    }
+  ],
+  "verification": {
+    "commands": [
+      {
+        "command": "npm test",
+        "cwd": "frontend",
+        "result": "passed",
+        "summary": "13 frontend test files passed"
+      },
+      {
+        "command": "npm run typecheck",
+        "cwd": "frontend",
+        "result": "passed",
+        "summary": "tsc --noEmit completed successfully"
+      },
+      {
+        "command": "npm run verify",
+        "cwd": "frontend",
+        "result": "passed",
+        "summary": "Frontend foundation checks passed"
+      }
+    ]
+  },
+  "residual_risks": [
+    "Organizations is visible as a product entry but has no frontend proxy/API binding.",
+    "Approvals list is bound, but approval request/approve/reject APIs are not exposed through the frontend proxy and no UI action layer exists.",
+    "Permissions has real assignment actions inside Users, while /permissions is an empty guidance page.",
+    "Hidden legacy/read-only pages still exist as direct routes and are reported rather than removed."
+  ]
+}

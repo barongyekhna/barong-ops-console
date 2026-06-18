@@ -10,18 +10,11 @@ const frontendTestsRoot = existsSync(join(repoRoot, "tests", "frontend"))
   : join(frontendRoot, "tests", "frontend");
 const requiredRoutes = [
   "login",
-  "(console)/dashboard",
-  "(console)/products",
-  "(console)/modules",
-  "(console)/agents",
-  "(console)/workflows",
-  "(console)/jobs",
-  "(console)/artifacts",
-  "(console)/reviews",
-  "(console)/errors",
-  "(console)/memory-events",
   "(console)/users",
-  "(console)/settings",
+  "(console)/organizations",
+  "(console)/permissions",
+  "(console)/operation-logs",
+  "(console)/approvals",
 ];
 
 if (!existsSync(rootPage)) {
@@ -51,6 +44,7 @@ for (const requiredFile of [
   join(frontendTestsRoot, "module-isolation.test.mjs"),
   join(frontendTestsRoot, "module-adapter.test.mjs"),
   join(frontendTestsRoot, "execution-provider.test.mjs"),
+  join(frontendTestsRoot, "auth-flow.test.mjs"),
 ]) {
   if (!existsSync(requiredFile)) {
     throw new Error(`Missing protected console file: ${requiredFile}`);
@@ -70,12 +64,8 @@ const sourceFiles = walk(join(frontendRoot, "src")).filter((path) =>
 const source = sourceFiles.map((path) => readFileSync(path, "utf8")).join("\n");
 const registrationEndpoint = "/auth/" + "register";
 const requiredApiPaths = [
-  "/agents",
-  "/workflows",
-  "/jobs",
-  "/artifacts",
-  "/reviews",
-  "/errors",
+  "/approval/list",
+  "/operation-logs",
 ];
 
 if (source.includes(registrationEndpoint)) {
@@ -95,8 +85,8 @@ if (/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/.test(source)) {
 }
 
 for (const apiPath of requiredApiPaths) {
-  if (!source.includes(`endpoint="${apiPath}"`)) {
-    throw new Error(`Missing F10 API page connection: ${apiPath}`);
+  if (!source.includes(apiPath)) {
+    throw new Error(`Missing product API page connection: ${apiPath}`);
   }
 }
 
@@ -113,13 +103,13 @@ for (const usersPath of [
 }
 
 if (
-  !source.includes("User Management") ||
-  !source.includes("not a public registration flow") ||
+  !source.includes("Manage workspace accounts") ||
+  !source.includes("Owner remains bootstrap-only") ||
   !source.includes("Current assignable roles") ||
-  !source.includes("Reserved roles, not assignable in C04") ||
-  !source.includes("Full RBAC is planned for C05.")
+  !source.includes("Reserved roles") ||
+  !source.includes("UserPermissionsPanel")
 ) {
-  throw new Error("The C03C user management page is incomplete.");
+  throw new Error("The productized user management page is incomplete.");
 }
 
 const backendProxyRoute = join(
@@ -573,39 +563,50 @@ if (!navigationSource.includes("module_key: string")) {
   throw new Error("Navigation items must require a module_key field.");
 }
 
-for (const navigationModuleKey of [
-  "core.dashboard",
-  "system.operation_logs",
-  "admin.modules",
-  "admin.agents",
-  "admin.workflows",
-  "business.jobs",
-  "business.artifacts",
-  "business.reviews",
-  "system.errors",
+const productNavigationModuleKeys = [
   "admin.users",
+  "admin.organizations",
   "admin.permissions",
-]) {
+  "system.operation_logs",
+  "business.approvals",
+];
+for (const navigationModuleKey of productNavigationModuleKeys) {
   if (!navigationSource.includes(`module_key: "${navigationModuleKey}"`)) {
-    throw new Error(`Missing C07 navigation module_key: ${navigationModuleKey}`);
+    throw new Error(`Missing product navigation module_key: ${navigationModuleKey}`);
   }
 }
 
-if (
-  !/label:\s*"User Management"[\s\S]{0,260}module_key:\s*"admin\.users"/.test(
-    navigationSource,
-  )
-) {
-  throw new Error("User Management must map to module_key admin.users.");
+for (const legacyNavigationModuleKey of [
+  "core.dashboard",
+  "admin.modules",
+  "admin.settings",
+  "business.jobs",
+  "business.products",
+]) {
+  if (navigationSource.includes(`module_key: "${legacyNavigationModuleKey}"`)) {
+    throw new Error(
+      `Legacy navigation module_key must not be visible: ${legacyNavigationModuleKey}`,
+    );
+  }
 }
-if (
-  !/label:\s*"Permission Management"[\s\S]{0,260}module_key:\s*"admin\.permissions"/.test(
-    navigationSource,
-  )
-) {
-  throw new Error(
-    "Permission Management must map to module_key admin.permissions.",
-  );
+
+const productNavigationLabels = [
+  "Users",
+  "Organizations",
+  "Permissions",
+  "Logs",
+  "Approvals",
+];
+for (const label of productNavigationLabels) {
+  if (!navigationSource.includes(`label: "${label}"`)) {
+    throw new Error(`Missing product navigation label: ${label}`);
+  }
+}
+
+for (const legacyLabel of ["Settings", "Products", "Dashboard", "Modules"]) {
+  if (navigationSource.includes(`label: "${legacyLabel}"`)) {
+    throw new Error(`Legacy navigation label must not be visible: ${legacyLabel}`);
+  }
 }
 if (
   !moduleRegistrySource.includes("assertNavigationModulesRegistered") ||

@@ -685,7 +685,7 @@ test("K01 and P-series future examples are not default enabled", () => {
 test("C07 module-isolation route guard regression still denies locked business", () => {
   const decision = getModuleRouteDecision(
     noPermissions,
-    "/jobs",
+    "/approvals",
     navigationModuleRecords,
     [],
     { moduleAccessUnknown: true },
@@ -717,7 +717,7 @@ test("C05 permission helper regression keeps owner full access explicit", () => 
   assert.equal(isOwnerFullAccess(noPermissions), false);
 });
 
-test("User Management remains owner-only", () => {
+test("Users remains owner-only", () => {
   const usersModule = navigationModuleRecords.find(
     (entry) => entry.module_key === "admin.users",
   );
@@ -737,7 +737,7 @@ test("User Management remains owner-only", () => {
   );
 });
 
-test("Permission Management remains owner-only", () => {
+test("Permissions management entry remains owner-only", () => {
   const permissionManagement = navigationModuleRecords.find(
     (entry) => entry.module_key === "admin.permissions",
   );

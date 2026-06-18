@@ -194,7 +194,7 @@ test("detects high-risk permissions using C06B-compatible rules", () => {
     detectHighRiskPermission({
       action: "manage",
       category: "system",
-      permission_key: "settings.manage",
+      permission_key: "system.admin",
       risk_level: "medium",
     }),
     true,
@@ -219,9 +219,9 @@ test("filters wildcard and disabled permissions from grant options", () => {
   );
 });
 
-test("role_default_permissions text remains explicit that defaults do not auto-apply", () => {
-  assert.match(ROLE_DEFAULT_PERMISSIONS_NOTICE, /角色默认权限/);
-  assert.match(ROLE_DEFAULT_PERMISSIONS_NOTICE, /不会自动生效/);
+test("permission management copy stays explicit about explicit assignments", () => {
+  assert.match(ROLE_DEFAULT_PERMISSIONS_NOTICE, /explicit permission assignments/);
+  assert.doesNotMatch(ROLE_DEFAULT_PERMISSIONS_NOTICE, /RBAC|role default/i);
 });
 
 test("permission management entry is visible only for owner full access", () => {
@@ -257,7 +257,7 @@ test("owner target uses full access mode and empty non-owner assignment list sho
       user_id: 2,
       username: "viewer",
     }),
-    "暂无显式授权。",
+    "No explicit assignments yet.",
   );
 });
 
@@ -442,21 +442,21 @@ test("403, 409, and 422 errors produce safe summaries without sensitive values",
       message: "Authorization: Bearer abc.def.ghi",
       status: 403,
     }),
-    "只有 owner 可以管理用户权限。",
+    "Only an owner can manage permissions.",
   );
   assert.equal(
     formatPermissionAssignmentsApiError({
       message: "duplicate active assignment",
       status: 409,
     }),
-    "该权限 assignment 已存在或当前请求与现有授权冲突。",
+    "This assignment already exists or conflicts with current access.",
   );
   assert.equal(
     formatPermissionAssignmentsApiError({
       message: "invalid payload",
       status: 422,
     }),
-    "请求字段不完整或格式不正确，请检查 permission、scope、expires_at 和 reason。",
+    "The request is incomplete or invalid. Check permission, scope, expires_at, and reason.",
   );
   assert.doesNotMatch(
     formatPermissionAssignmentsApiError({

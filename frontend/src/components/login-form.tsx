@@ -60,7 +60,7 @@ export function LoginForm() {
         return;
       }
 
-      router.replace("/dashboard");
+      router.replace("/users");
     } catch (loginError) {
       if (submissionIdRef.current !== submissionId) {
         return;

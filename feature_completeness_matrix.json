@@ -1,0 +1,234 @@
+{
+  "report_id": "fe-stabilization-feature-completeness-matrix",
+  "generated_at_utc": "2026-06-18T00:00:00Z",
+  "scope": "frontend product UI and frontend proxy/API exposure",
+  "product_features": [
+    {
+      "feature": "Users",
+      "route": "/users",
+      "module_key": "admin.users",
+      "visible_in_sidebar": true,
+      "page_type": "full management panel",
+      "frontend_apis": [
+        "GET /users",
+        "POST /users",
+        "GET /users/roles",
+        "GET /users/{id}",
+        "PATCH /users/{id}",
+        "POST /users/{id}/disable",
+        "POST /users/{id}/enable",
+        "POST /users/{id}/reset-password"
+      ],
+      "actions_available": [
+        "list users",
+        "create managed user",
+        "update managed user role",
+        "enable user",
+        "disable user",
+        "reset password",
+        "open user permission assignments"
+      ],
+      "missing_actions": [
+        "delete user",
+        "owner account creation",
+        "bulk user operations"
+      ],
+      "ui_backend_consistency": "aligned",
+      "completion_score": 82,
+      "status": "functional_core"
+    },
+    {
+      "feature": "Organizations",
+      "route": "/organizations",
+      "module_key": "admin.organizations",
+      "visible_in_sidebar": true,
+      "page_type": "capability empty state",
+      "frontend_apis": [],
+      "backend_capabilities_detected_but_not_exposed": [
+        "POST /org/create",
+        "PATCH /org/{org_id}",
+        "DELETE /org/{org_id}",
+        "POST /org/{org_id}/activate",
+        "POST /org/{org_id}/suspend",
+        "GET /org/{org_id}/members",
+        "POST /org/{org_id}/members/add",
+        "POST /org/{org_id}/members/remove"
+      ],
+      "actions_available": [],
+      "missing_actions": [
+        "organization list",
+        "organization create",
+        "organization update",
+        "organization activate/suspend/delete",
+        "member list",
+        "member add/remove",
+        "frontend proxy allowlist for /org routes"
+      ],
+      "ui_backend_consistency": "ui_without_frontend_proxy_binding",
+      "completion_score": 18,
+      "status": "empty_shell"
+    },
+    {
+      "feature": "Permissions",
+      "route": "/permissions",
+      "module_key": "admin.permissions",
+      "visible_in_sidebar": true,
+      "page_type": "guidance empty state delegating to Users",
+      "frontend_apis": [
+        "GET /permissions/registry",
+        "GET /permissions/users/{user_id}/assignments",
+        "POST /permissions/users/{user_id}/assignments",
+        "PATCH /permissions/users/{user_id}/assignments/{assignment_id}",
+        "DELETE /permissions/users/{user_id}/assignments/{assignment_id}"
+      ],
+      "actions_available": [
+        "grant permission assignment from selected user",
+        "update assignment",
+        "revoke assignment",
+        "filter grantable registry"
+      ],
+      "missing_actions": [
+        "standalone permissions table on /permissions",
+        "role default permission management",
+        "permission registry administration",
+        "bulk assignment management"
+      ],
+      "ui_backend_consistency": "partially_aligned_embedded_action_layer",
+      "completion_score": 62,
+      "status": "delegated_to_users"
+    },
+    {
+      "feature": "Logs",
+      "route": "/operation-logs",
+      "module_key": "system.operation_logs",
+      "visible_in_sidebar": true,
+      "page_type": "read-only operations center",
+      "frontend_apis": [
+        "GET /operation-logs"
+      ],
+      "actions_available": [
+        "list recent logs",
+        "derive trace groups from visible fields",
+        "derive alert candidates from failed logs",
+        "refresh current page"
+      ],
+      "missing_actions": [
+        "server-side filters",
+        "search",
+        "pagination controls",
+        "trace detail drill-down",
+        "export"
+      ],
+      "ui_backend_consistency": "aligned_read_only",
+      "completion_score": 58,
+      "status": "read_only"
+    },
+    {
+      "feature": "Approvals",
+      "route": "/approvals",
+      "module_key": "business.approvals",
+      "visible_in_sidebar": true,
+      "page_type": "read-only record list",
+      "frontend_apis": [
+        "GET /approval/list"
+      ],
+      "backend_capabilities_detected_but_not_exposed": [
+        "POST /approval/request",
+        "GET /approval/{approval_id}",
+        "POST /approval/{approval_id}/approve",
+        "POST /approval/{approval_id}/reject"
+      ],
+      "actions_available": [
+        "list approvals",
+        "refresh list through page reload or component reload"
+      ],
+      "missing_actions": [
+        "approval detail",
+        "approve",
+        "reject",
+        "request approval",
+        "risk review workflow",
+        "frontend proxy allowlist for approval actions"
+      ],
+      "ui_backend_consistency": "list_aligned_actions_not_exposed",
+      "completion_score": 43,
+      "status": "read_only"
+    }
+  ],
+  "hidden_or_legacy_routes_reported_only": [
+    {
+      "route": "/dashboard",
+      "page_file": "frontend/src/app/(console)/dashboard/page.tsx",
+      "state": "direct_route_read_only_summary",
+      "reason": "Removed from product navigation; root/login now enter /users."
+    },
+    {
+      "route": "/jobs",
+      "page_file": "frontend/src/app/(console)/jobs/page.tsx",
+      "state": "read_only_list_shell",
+      "reason": "API exists but route is not part of current product sidebar."
+    },
+    {
+      "route": "/artifacts",
+      "page_file": "frontend/src/app/(console)/artifacts/page.tsx",
+      "state": "read_only_list_shell",
+      "reason": "API exists but route is not part of current product sidebar."
+    },
+    {
+      "route": "/reviews",
+      "page_file": "frontend/src/app/(console)/reviews/page.tsx",
+      "state": "read_only_list_shell",
+      "reason": "Overlaps product Approvals vocabulary and is not in current sidebar."
+    },
+    {
+      "route": "/agents",
+      "page_file": "frontend/src/app/(console)/agents/page.tsx",
+      "state": "read_only_list_shell",
+      "reason": "Control-plane list API exists but route is not part of current product sidebar."
+    },
+    {
+      "route": "/workflows",
+      "page_file": "frontend/src/app/(console)/workflows/page.tsx",
+      "state": "read_only_list_shell",
+      "reason": "Control-plane list API exists but route is not part of current product sidebar."
+    },
+    {
+      "route": "/errors",
+      "page_file": "frontend/src/app/(console)/errors/page.tsx",
+      "state": "read_only_list_shell",
+      "reason": "Error records should be consolidated under Logs before product exposure."
+    },
+    {
+      "route": "/memory-events",
+      "page_file": "frontend/src/app/(console)/memory-events/page.tsx",
+      "state": "moved_empty_state",
+      "reason": "Page directs users to Logs."
+    },
+    {
+      "route": "/modules",
+      "page_file": "frontend/src/app/(console)/modules/page.tsx",
+      "state": "empty_shell",
+      "reason": "ModuleRegistryProductView exists but this route renders a managed-for-you empty state."
+    },
+    {
+      "route": "/products",
+      "page_file": "frontend/src/app/(console)/products/page.tsx",
+      "state": "empty_shell",
+      "reason": "No product API/module binding is exposed."
+    },
+    {
+      "route": "/settings",
+      "page_file": "frontend/src/app/(console)/settings/page.tsx",
+      "state": "empty_shell",
+      "reason": "Legacy settings route remains as a direct page but is removed from product navigation."
+    }
+  ],
+  "summary": {
+    "visible_product_feature_count": 5,
+    "functional_core_count": 1,
+    "delegated_action_layer_count": 1,
+    "read_only_product_count": 2,
+    "empty_shell_product_count": 1,
+    "reported_hidden_or_legacy_route_count": 11
+  }
+}

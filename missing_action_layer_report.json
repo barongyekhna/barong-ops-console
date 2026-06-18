@@ -1,0 +1,305 @@
+{
+  "report_id": "fe-stabilization-missing-action-layer-report",
+  "generated_at_utc": "2026-06-18T00:00:00Z",
+  "scope": "static frontend scan and frontend proxy consistency check",
+  "source_code_modified_for_missing_actions": false,
+  "empty_shell_pages": [
+    {
+      "route": "/organizations",
+      "page_file": "frontend/src/app/(console)/organizations/page.tsx",
+      "visible_in_product_navigation": true,
+      "state": "missing_feature",
+      "missing_action_layer": [
+        "organization list",
+        "organization create/update/delete",
+        "organization activate/suspend",
+        "membership add/remove"
+      ]
+    },
+    {
+      "route": "/permissions",
+      "page_file": "frontend/src/app/(console)/permissions/page.tsx",
+      "visible_in_product_navigation": true,
+      "state": "no_data_guidance",
+      "missing_action_layer": [
+        "standalone permission registry view",
+        "standalone user assignment selection",
+        "role default permission management"
+      ]
+    },
+    {
+      "route": "/modules",
+      "page_file": "frontend/src/app/(console)/modules/page.tsx",
+      "visible_in_product_navigation": false,
+      "state": "missing_feature",
+      "missing_action_layer": [
+        "module registry product view is not mounted on the route",
+        "module configuration actions"
+      ]
+    },
+    {
+      "route": "/products",
+      "page_file": "frontend/src/app/(console)/products/page.tsx",
+      "visible_in_product_navigation": false,
+      "state": "missing_feature",
+      "missing_action_layer": [
+        "product list",
+        "product create/update/delete",
+        "product API binding"
+      ]
+    },
+    {
+      "route": "/settings",
+      "page_file": "frontend/src/app/(console)/settings/page.tsx",
+      "visible_in_product_navigation": false,
+      "state": "missing_feature",
+      "missing_action_layer": [
+        "settings read form",
+        "settings save/update",
+        "settings API binding"
+      ]
+    },
+    {
+      "route": "/memory-events",
+      "page_file": "frontend/src/app/(console)/memory-events/page.tsx",
+      "visible_in_product_navigation": false,
+      "state": "moved_empty_state",
+      "missing_action_layer": [
+        "none planned in current product navigation",
+        "page should remain reported until removed or consolidated into Logs"
+      ]
+    }
+  ],
+  "read_only_modules": [
+    {
+      "route": "/operation-logs",
+      "visible_in_product_navigation": true,
+      "frontend_api": "GET /operation-logs",
+      "missing_actions": [
+        "filter",
+        "search",
+        "pagination",
+        "export",
+        "trace detail"
+      ]
+    },
+    {
+      "route": "/approvals",
+      "visible_in_product_navigation": true,
+      "frontend_api": "GET /approval/list",
+      "missing_actions": [
+        "approval detail",
+        "approve",
+        "reject",
+        "request approval"
+      ]
+    },
+    {
+      "route": "/agents",
+      "visible_in_product_navigation": false,
+      "frontend_api": "GET /agents",
+      "missing_actions": [
+        "create agent",
+        "edit agent",
+        "enable/disable agent",
+        "bind execution capability"
+      ]
+    },
+    {
+      "route": "/workflows",
+      "visible_in_product_navigation": false,
+      "frontend_api": "GET /workflows",
+      "missing_actions": [
+        "create workflow",
+        "edit workflow",
+        "run workflow",
+        "bind/unbind modules"
+      ]
+    },
+    {
+      "route": "/jobs",
+      "visible_in_product_navigation": false,
+      "frontend_api": "GET /jobs",
+      "missing_actions": [
+        "run",
+        "retry",
+        "cancel",
+        "detail/log drilldown"
+      ]
+    },
+    {
+      "route": "/artifacts",
+      "visible_in_product_navigation": false,
+      "frontend_api": "GET /artifacts",
+      "missing_actions": [
+        "detail",
+        "download",
+        "upload",
+        "delete"
+      ]
+    },
+    {
+      "route": "/reviews",
+      "visible_in_product_navigation": false,
+      "frontend_api": "GET /reviews",
+      "missing_actions": [
+        "approve/reject",
+        "detail",
+        "consolidation with /approvals"
+      ]
+    },
+    {
+      "route": "/errors",
+      "visible_in_product_navigation": false,
+      "frontend_api": "GET /errors",
+      "missing_actions": [
+        "filter",
+        "resolve/acknowledge",
+        "consolidation with Logs"
+      ]
+    }
+  ],
+  "ui_calls_api_exists": [
+    {
+      "ui_surface": "Users",
+      "frontend_calls": [
+        "/users",
+        "/users/roles",
+        "/users/{id}",
+        "/users/{id}/disable",
+        "/users/{id}/enable",
+        "/users/{id}/reset-password"
+      ],
+      "proxy_status": "allowed"
+    },
+    {
+      "ui_surface": "Permissions inside Users",
+      "frontend_calls": [
+        "/permissions/registry",
+        "/permissions/users/{user_id}/assignments",
+        "/permissions/users/{user_id}/assignments/{assignment_id}"
+      ],
+      "proxy_status": "allowed"
+    },
+    {
+      "ui_surface": "Logs",
+      "frontend_calls": [
+        "/operation-logs"
+      ],
+      "proxy_status": "allowed"
+    },
+    {
+      "ui_surface": "Approvals",
+      "frontend_calls": [
+        "/approval/list"
+      ],
+      "proxy_status": "allowed"
+    },
+    {
+      "ui_surface": "Capability bootstrap/providers",
+      "frontend_calls": [
+        "/capability/bootstrap",
+        "/modules/registry",
+        "/modules/me",
+        "/module-adapters/registry",
+        "/module-adapters/me",
+        "/execution-providers/registry",
+        "/execution-providers/me",
+        "/live-gate/readiness",
+        "/live-gate/production-readiness",
+        "/live-gate/policies"
+      ],
+      "proxy_status": "allowed_read_only_metadata"
+    }
+  ],
+  "ui_without_api_support": [
+    {
+      "ui_surface": "Organizations",
+      "route": "/organizations",
+      "issue": "Visible product route has no frontend API call and /org routes are not allowlisted by the frontend proxy."
+    },
+    {
+      "ui_surface": "Standalone Permissions",
+      "route": "/permissions",
+      "issue": "Route is visible but delegates action workflow to Users; it has no standalone API-bound table or assignment workflow."
+    }
+  ],
+  "api_without_product_ui_exposure": [
+    {
+      "api": "POST /approval/request",
+      "backend_exists": true,
+      "frontend_proxy_allowed": false,
+      "product_ui_exposed": false
+    },
+    {
+      "api": "GET /approval/{approval_id}",
+      "backend_exists": true,
+      "frontend_proxy_allowed": false,
+      "product_ui_exposed": false
+    },
+    {
+      "api": "POST /approval/{approval_id}/approve",
+      "backend_exists": true,
+      "frontend_proxy_allowed": false,
+      "product_ui_exposed": false
+    },
+    {
+      "api": "POST /approval/{approval_id}/reject",
+      "backend_exists": true,
+      "frontend_proxy_allowed": false,
+      "product_ui_exposed": false
+    },
+    {
+      "api": "POST /org/create and /org lifecycle/member routes",
+      "backend_exists": true,
+      "frontend_proxy_allowed": false,
+      "product_ui_exposed": false
+    },
+    {
+      "api": "GET /modules/registry and GET /modules/me",
+      "backend_exists": true,
+      "frontend_proxy_allowed": true,
+      "product_ui_exposed": "provider metadata only; /modules page does not mount registry product view"
+    },
+    {
+      "api": "GET /module-adapters/* and GET /execution-providers/*",
+      "backend_exists": true,
+      "frontend_proxy_allowed": true,
+      "product_ui_exposed": "read-only provider state only; action buttons remain disabled"
+    },
+    {
+      "api": "GET /agents, /workflows, /jobs, /artifacts, /reviews, /errors",
+      "backend_exists": true,
+      "frontend_proxy_allowed": true,
+      "product_ui_exposed": "direct read-only pages exist but are not in current product navigation"
+    }
+  ],
+  "unbound_api_routes": [
+    {
+      "route_or_action": "Organizations product page",
+      "expected_api": "/org or /organizations lifecycle/list API through frontend proxy",
+      "current_binding": "none"
+    },
+    {
+      "route_or_action": "Approvals approve/reject/request",
+      "expected_api": "/approval/request, /approval/{id}/approve, /approval/{id}/reject through frontend proxy",
+      "current_binding": "GET /approval/list only"
+    },
+    {
+      "route_or_action": "Logs filters/search/export",
+      "expected_api": "query/filter/export support through /operation-logs or audit query API",
+      "current_binding": "GET /operation-logs latest page only"
+    },
+    {
+      "route_or_action": "Standalone Permissions route",
+      "expected_api": "permission registry and assignment workflow mounted at /permissions",
+      "current_binding": "actions mounted inside /users only"
+    }
+  ],
+  "final_status": {
+    "missing_actions_fixed": false,
+    "reported_only": true,
+    "frontend_tests_aligned": true,
+    "legacy_navigation_assumptions_removed_from_tests": true
+  }
+}

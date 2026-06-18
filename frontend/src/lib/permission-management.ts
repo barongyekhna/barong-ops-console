@@ -655,13 +655,13 @@ export function formatPermissionAssignmentsApiError(
     return detail || fallback;
   }
   if (error.status === 422) {
-    return "请求字段不完整或格式不正确，请检查 permission、scope、expires_at 和 reason。";
+    return "The request is incomplete or invalid. Check permission, scope, expires_at, and reason.";
   }
   if (error.status === 503) {
-    return "后端 API 暂不可用。";
+    return "The backend API is unavailable.";
   }
   if (error.status >= 500) {
-    return "后端返回内部错误，请稍后重试。";
+    return "The backend returned an internal error. Try again later.";
   }
 
   return detail || fallback;

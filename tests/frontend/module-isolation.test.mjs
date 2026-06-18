@@ -4,7 +4,6 @@ import { readFileSync } from "node:fs";
 
 import { isAllowedBackendProxyPath } from "../../frontend/src/app/api/backend/[...path]/route.ts";
 import {
-  embeddedNavigationModules,
   navigationItems,
   navigationModuleRecords,
 } from "../../frontend/src/lib/navigation.ts";
@@ -61,16 +60,16 @@ const usersManagePermissions = {
   scope_summary: [],
 };
 
-const modulesReadPermissions = {
+const operationLogsReadPermissions = {
   assignments: [
     {
-      permission_key: "modules.read",
+      permission_key: "operation_logs.read",
       scope_key: "*",
       scope_type: "global",
     },
   ],
   is_owner_full_access: false,
-  permission_keys: ["modules.read"],
+  permission_keys: ["operation_logs.read"],
   scope_summary: [],
 };
 
@@ -84,6 +83,19 @@ const permissionsReadPermissions = {
   ],
   is_owner_full_access: false,
   permission_keys: ["permissions.read"],
+  scope_summary: [],
+};
+
+const reviewsReadPermissions = {
+  assignments: [
+    {
+      permission_key: "reviews.read",
+      scope_key: "*",
+      scope_type: "global",
+    },
+  ],
+  is_owner_full_access: false,
+  permission_keys: ["reviews.read"],
   scope_summary: [],
 };
 
@@ -152,13 +164,6 @@ function manifest(raw) {
 
 const registryItems = [
   manifest({
-    category: "core",
-    denied_behavior: "hide_when_denied",
-    module_key: "core.dashboard",
-    route_namespace: "/dashboard",
-    status: "sealed",
-  }),
-  manifest({
     category: "experimental",
     denied_behavior: "hide_when_denied",
     module_key: "experimental.foundation_demo",
@@ -185,95 +190,31 @@ const registryItems = [
   }),
   manifest({
     category: "admin",
-    denied_behavior: "hide_when_denied",
+    denied_behavior: "show_locked",
     module_key: "admin.permissions",
     required_permissions: ["permissions.read"],
-    route_namespace: "/users",
+    route_namespace: "/permissions",
     status: "sealed",
   }),
   manifest({
     category: "admin",
-    denied_behavior: "hide_when_denied",
-    module_key: "admin.modules",
-    required_permissions: ["modules.read"],
-    route_namespace: "/modules",
-    status: "sealed",
-  }),
-  manifest({
-    category: "admin",
-    denied_behavior: "hide_when_denied",
-    module_key: "admin.agents",
-    required_permissions: ["modules.read"],
-    route_namespace: "/agents",
-    status: "sealed",
-  }),
-  manifest({
-    category: "admin",
-    denied_behavior: "hide_when_denied",
-    module_key: "admin.workflows",
-    required_permissions: ["modules.read"],
-    route_namespace: "/workflows",
-    status: "sealed",
-  }),
-  manifest({
-    category: "admin",
-    denied_behavior: "hide_when_denied",
-    module_key: "admin.settings",
-    required_permissions: ["settings.read"],
-    route_namespace: "/settings",
-    status: "planned",
-  }),
-  manifest({
-    category: "business",
     denied_behavior: "show_locked",
-    module_key: "business.products",
-    required_permissions: ["products.read"],
-    route_namespace: "/products",
-    status: "planned",
-  }),
-  manifest({
-    category: "business",
-    denied_behavior: "show_locked",
-    module_key: "business.jobs",
-    required_permissions: ["jobs.read"],
-    route_namespace: "/jobs",
+    module_key: "admin.organizations",
+    required_permissions: ["organizations.read"],
+    route_namespace: "/organizations",
     status: "enabled",
   }),
   manifest({
     category: "business",
     denied_behavior: "show_locked",
-    module_key: "business.artifacts",
-    required_permissions: ["artifacts.read"],
-    route_namespace: "/artifacts",
-    status: "enabled",
-  }),
-  manifest({
-    category: "business",
-    denied_behavior: "show_locked",
-    module_key: "business.reviews",
+    module_key: "business.approvals",
     required_permissions: ["reviews.read"],
-    route_namespace: "/reviews",
+    route_namespace: "/approvals",
     status: "enabled",
   }),
   manifest({
     category: "system",
-    denied_behavior: "hide_when_denied",
-    module_key: "system.errors",
-    required_permissions: ["operation_logs.read"],
-    route_namespace: "/errors",
-    status: "enabled",
-  }),
-  manifest({
-    category: "system",
-    denied_behavior: "hide_when_denied",
-    module_key: "system.memory_events",
-    required_permissions: ["operation_logs.read"],
-    route_namespace: "/memory-events",
-    status: "enabled",
-  }),
-  manifest({
-    category: "system",
-    denied_behavior: "hide_when_denied",
+    denied_behavior: "show_locked",
     module_key: "system.operation_logs",
     required_permissions: ["operation_logs.read"],
     route_namespace: "/operation-logs",
@@ -321,7 +262,7 @@ test("backend proxy precisely allows C07B module registry paths", () => {
   );
   assert.equal(isAllowedBackendProxyPath("GET", ["modules", "me", "x"]), false);
   assert.equal(
-    isAllowedBackendProxyPath("GET", ["module-api", "business.jobs"]),
+    isAllowedBackendProxyPath("GET", ["module-api", "business.approvals"]),
     false,
   );
   assert.equal(
@@ -375,17 +316,17 @@ test("module access helpers expose owner visible and non-owner hidden or locked 
       }),
     ],
   );
-  const lockedJobs = getNavigationStateForModule(
+  const lockedApprovals = getNavigationStateForModule(
     noPermissions,
-    item("business.jobs"),
+    item("business.approvals"),
     [
       access({
         access_state: "locked",
         category: "business",
         locked: true,
-        missing_permissions: ["jobs.read"],
-        module_key: "business.jobs",
-        route_namespace: "/jobs",
+        missing_permissions: ["reviews.read"],
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "enabled",
       }),
     ],
@@ -395,45 +336,47 @@ test("module access helpers expose owner visible and non-owner hidden or locked 
   assert.equal(canEnterModuleRoute(ownerUsers), true);
   assert.equal(isModuleHidden(hiddenUsers), true);
   assert.equal(isAdminOrSystemModule(item("admin.users")), true);
-  assert.equal(isModuleLocked(lockedJobs), true);
-  assert.equal(isBusinessModule(item("business.jobs")), true);
+  assert.equal(isModuleLocked(lockedApprovals), true);
+  assert.equal(isBusinessModule(item("business.approvals")), true);
 });
 
 test("unavailable product modules are not enterable and diagnostics stay out of navigation", () => {
-  const unavailableJobs = getNavigationStateForModule(
+  const unavailableApprovals = getNavigationStateForModule(
     ownerPermissions,
-    item("business.jobs"),
+    item("business.approvals"),
     [
       access({
         access_state: "unavailable",
         category: "business",
-        module_key: "business.jobs",
-        route_namespace: "/jobs",
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "unavailable",
         unavailable: true,
       }),
     ],
   );
 
-  assert.equal(isModuleUnavailable(unavailableJobs), true);
-  assert.equal(unavailableJobs.badge, "unavailable");
-  assert.equal(canEnterModuleRoute(unavailableJobs), false);
+  assert.equal(isModuleUnavailable(unavailableApprovals), true);
+  assert.equal(unavailableApprovals.badge, "unavailable");
+  assert.equal(canEnterModuleRoute(unavailableApprovals), false);
   assert.equal(item("experimental.foundation_demo"), undefined);
   assert.equal(item("integration.n8n_test_bridge"), undefined);
   assert.equal(item("business.products"), undefined);
+  assert.equal(item("business.jobs"), undefined);
+  assert.equal(item("core.dashboard"), undefined);
   assert.equal(item("admin.settings"), undefined);
 });
 
 test("unavailable modules use Module Unavailable decisions and stay non-enterable", () => {
-  const unavailableJobs = getNavigationStateForModule(
+  const unavailableApprovals = getNavigationStateForModule(
     ownerPermissions,
-    item("business.jobs"),
+    item("business.approvals"),
     [
       access({
         access_state: "unavailable",
         category: "business",
-        module_key: "business.jobs",
-        route_namespace: "/jobs",
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "unavailable",
         unavailable: true,
       }),
@@ -441,46 +384,54 @@ test("unavailable modules use Module Unavailable decisions and stay non-enterabl
   );
   const unavailableDecision = getModuleRouteDecision(
     ownerPermissions,
-    "/jobs",
+    "/approvals",
     navigationModuleRecords,
     [
       access({
         access_state: "unavailable",
         category: "business",
-        module_key: "business.jobs",
-        route_namespace: "/jobs",
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "unavailable",
         unavailable: true,
       }),
     ],
   );
 
-  assert.equal(isModuleUnavailable(unavailableJobs), true);
-  assert.equal(unavailableJobs.badge, "unavailable");
-  assert.equal(canEnterModuleRoute(unavailableJobs), false);
+  assert.equal(isModuleUnavailable(unavailableApprovals), true);
+  assert.equal(unavailableApprovals.badge, "unavailable");
+  assert.equal(canEnterModuleRoute(unavailableApprovals), false);
   assert.equal(unavailableDecision.noticeType, "module_unavailable");
   assert.equal(unavailableDecision.canEnter, false);
 });
 
 test("missing module access state safely degrades without exposing admin/system modules", () => {
-  const adminModules = getNavigationStateForModule(
-    modulesReadPermissions,
-    item("admin.modules"),
+  const adminOrganizations = getNavigationStateForModule(
+    noPermissions,
+    item("admin.organizations"),
     [],
     { moduleAccessUnknown: true },
   );
-  const businessJobs = getNavigationStateForModule(
+  const systemLogs = getNavigationStateForModule(
+    operationLogsReadPermissions,
+    item("system.operation_logs"),
+    [],
+    { moduleAccessUnknown: true },
+  );
+  const businessApprovals = getNavigationStateForModule(
     noPermissions,
-    item("business.jobs"),
+    item("business.approvals"),
     [],
     { moduleAccessUnknown: true },
   );
 
-  assert.equal(adminModules.moduleAccessUnknown, true);
-  assert.equal(adminModules.isVisible, false);
-  assert.equal(adminModules.isHidden, true);
-  assert.equal(businessJobs.isVisible, true);
-  assert.equal(businessJobs.isLocked, true);
+  assert.equal(adminOrganizations.moduleAccessUnknown, true);
+  assert.equal(adminOrganizations.isVisible, false);
+  assert.equal(adminOrganizations.isHidden, true);
+  assert.equal(systemLogs.isVisible, false);
+  assert.equal(systemLogs.isHidden, true);
+  assert.equal(businessApprovals.isVisible, true);
+  assert.equal(businessApprovals.isLocked, true);
 });
 
 test("/modules/me failure fallback keeps non-owner admin/system hidden", () => {
@@ -491,16 +442,16 @@ test("/modules/me failure fallback keeps non-owner admin/system hidden", () => {
     [],
     { moduleAccessUnknown: true },
   );
-  const missingErrors = getModuleRouteDecision(
+  const missingLogs = getModuleRouteDecision(
     noPermissions,
-    "/errors",
+    "/operation-logs",
     navigationModuleRecords,
     [],
     { moduleAccessUnknown: true },
   );
-  const missingJobs = getModuleRouteDecision(
+  const missingApprovals = getModuleRouteDecision(
     noPermissions,
-    "/jobs",
+    "/approvals",
     navigationModuleRecords,
     [],
     { moduleAccessUnknown: true },
@@ -508,11 +459,11 @@ test("/modules/me failure fallback keeps non-owner admin/system hidden", () => {
 
   assert.equal(missingUsers.accessState, "hidden");
   assert.equal(missingUsers.noticeType, "no_permission");
-  assert.equal(missingErrors.accessState, "hidden");
-  assert.equal(missingErrors.noticeType, "no_permission");
-  assert.equal(missingJobs.isLocked, true);
-  assert.equal(missingJobs.canEnter, false);
-  assert.equal(missingJobs.noticeType, "no_permission");
+  assert.equal(missingLogs.accessState, "hidden");
+  assert.equal(missingLogs.noticeType, "no_permission");
+  assert.equal(missingApprovals.isLocked, true);
+  assert.equal(missingApprovals.canEnter, false);
+  assert.equal(missingApprovals.noticeType, "no_permission");
 });
 
 test("external_dependencies normalization keeps only safe dependency names", () => {
@@ -567,7 +518,7 @@ test("every navigation module is registered and aligned with registry metadata",
     assertNavigationModulesRegistered(
       [
         {
-          ...item("business.jobs"),
+          ...item("business.approvals"),
           module_key: "business.missing",
         },
       ],
@@ -578,17 +529,17 @@ test("every navigation module is registered and aligned with registry metadata",
 
 test("admin.users and admin.permissions remain hidden for non-owner and visible for owner", () => {
   const adminUsers = item("admin.users");
-  const adminPermissions = embeddedNavigationModules[0];
+  const adminPermissions = item("admin.permissions");
 
-  assert.equal(adminUsers.label, "User Management");
+  assert.equal(adminUsers.label, "Users");
   assert.equal(adminUsers.module_key, "admin.users");
   assert.equal(adminUsers.owner_only, true);
   assert.equal(adminUsers.denied_behavior, "hide_when_denied");
   assert.equal(adminUsers.category, "admin");
-  assert.equal(adminPermissions.label, "Permission Management");
+  assert.equal(adminPermissions.label, "Permissions");
   assert.equal(adminPermissions.module_key, "admin.permissions");
   assert.equal(adminPermissions.owner_only, true);
-  assert.equal(adminPermissions.denied_behavior, "hide_when_denied");
+  assert.equal(adminPermissions.denied_behavior, "show_locked");
   assert.equal(adminPermissions.category, "admin");
 
   assert.equal(
@@ -621,25 +572,25 @@ test("admin.users and admin.permissions remain hidden for non-owner and visible 
 });
 
 test("business modules stay locked for users without permission", () => {
-  const jobsState = getNavigationStateForModule(
+  const approvalsState = getNavigationStateForModule(
     noPermissions,
-    item("business.jobs"),
+    item("business.approvals"),
     [
       access({
         access_state: "locked",
         category: "business",
         locked: true,
-        missing_permissions: ["jobs.read"],
-        module_key: "business.jobs",
-        route_namespace: "/jobs",
+        missing_permissions: ["reviews.read"],
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "enabled",
       }),
     ],
   );
 
-  assert.equal(jobsState.isVisible, true);
-  assert.equal(jobsState.isLocked, true);
-  assert.equal(jobsState.badge, "locked");
+  assert.equal(approvalsState.isVisible, true);
+  assert.equal(approvalsState.isLocked, true);
+  assert.equal(approvalsState.badge, "locked");
 
   for (const record of navigationModuleRecords.filter(
     (entry) => entry.category === "business",
@@ -654,33 +605,37 @@ test("business modules stay locked for users without permission", () => {
   }
 });
 
-test("admin and system modules keep hide_when_denied behavior", () => {
-  for (const record of navigationModuleRecords.filter(
-    (entry) => entry.category === "admin" || entry.category === "system",
-  )) {
-    assert.equal(record.denied_behavior, "hide_when_denied");
-    assert.equal(
-      getNavigationStateForModule(noPermissions, record, [], {
-        moduleAccessUnknown: true,
-      }).isHidden,
-      true,
+test("owner-only admin entries and system logs fail closed when module access is unknown", () => {
+  for (const moduleKey of [
+    "admin.users",
+    "admin.organizations",
+    "admin.permissions",
+    "system.operation_logs",
+  ]) {
+    const state = getNavigationStateForModule(
+      noPermissions,
+      item(moduleKey),
+      [],
+      { moduleAccessUnknown: true },
     );
+    assert.equal(state.isHidden, true);
+    assert.equal(state.canEnter, false);
   }
 });
 
 test("module route guard decisions cover locked, hidden, unavailable, and owner paths", () => {
   const lockedBusiness = getModuleRouteDecision(
     noPermissions,
-    "/jobs",
+    "/approvals",
     navigationModuleRecords,
     [
       access({
         access_state: "locked",
         category: "business",
         locked: true,
-        missing_permissions: ["jobs.read"],
-        module_key: "business.jobs",
-        route_namespace: "/jobs",
+        missing_permissions: ["reviews.read"],
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "enabled",
       }),
     ],
@@ -702,16 +657,16 @@ test("module route guard decisions cover locked, hidden, unavailable, and owner 
       }),
     ],
   );
-  const unavailableArtifacts = getModuleRouteDecision(
+  const unavailableApprovals = getModuleRouteDecision(
     ownerPermissions,
-    "/artifacts",
+    "/approvals",
     navigationModuleRecords,
     [
       access({
         access_state: "unavailable",
         category: "business",
-        module_key: "business.artifacts",
-        route_namespace: "/artifacts",
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "unavailable",
         unavailable: true,
       }),
@@ -737,17 +692,17 @@ test("module route guard decisions cover locked, hidden, unavailable, and owner 
   assert.equal(lockedBusiness.canEnter, false);
   assert.equal(hiddenAdmin.noticeType, "no_permission");
   assert.equal(hiddenAdmin.canEnter, false);
-  assert.equal(unavailableArtifacts.noticeType, "module_unavailable");
-  assert.equal(unavailableArtifacts.canEnter, false);
+  assert.equal(unavailableApprovals.noticeType, "module_unavailable");
+  assert.equal(unavailableApprovals.canEnter, false);
   assert.equal(ownerUsers.noticeType, "none");
   assert.equal(ownerUsers.canEnter, true);
 });
 
 test("module notice copy remains module-aware", () => {
-  assert.equal(MODULE_UNAVAILABLE_TITLE, "模块暂不可用");
-  assert.match(MODULE_UNAVAILABLE_DESCRIPTION, /尚未接入执行能力/);
-  assert.equal(MODULE_NO_PERMISSION_TITLE, "无权访问此模块");
-  assert.match(MODULE_NO_PERMISSION_DESCRIPTION, /后端校验/);
+  assert.equal(MODULE_UNAVAILABLE_TITLE, "Product area unavailable");
+  assert.match(MODULE_UNAVAILABLE_DESCRIPTION, /workspace/);
+  assert.equal(MODULE_NO_PERMISSION_TITLE, "Access needed");
+  assert.match(MODULE_NO_PERMISSION_DESCRIPTION, /product area/);
   assert.doesNotMatch(
     [
       MODULE_UNAVAILABLE_TITLE,
@@ -784,17 +739,17 @@ test("C05 and C06 regression assumptions remain intact", () => {
 });
 
 test("role defaults and super_admin do not become implicit module access", () => {
-  const jobsWithoutExplicitAssignment = getNavigationStateForModule(
+  const approvalsWithoutExplicitAssignment = getNavigationStateForModule(
     noPermissions,
-    item("business.jobs"),
+    item("business.approvals"),
     [
       access({
         access_state: "locked",
         category: "business",
         locked: true,
-        missing_permissions: ["jobs.read"],
-        module_key: "business.jobs",
-        route_namespace: "/jobs",
+        missing_permissions: ["reviews.read"],
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "enabled",
       }),
     ],
@@ -816,7 +771,7 @@ test("role defaults and super_admin do not become implicit module access", () =>
     ],
   );
 
-  assert.equal(jobsWithoutExplicitAssignment.isLocked, true);
+  assert.equal(approvalsWithoutExplicitAssignment.isLocked, true);
   assert.equal(superAdminWithoutAssignments.isHidden, true);
 });
 
@@ -827,17 +782,17 @@ test("wildcard permission does not override module access safety states", () => 
     [],
     { moduleAccessUnknown: true },
   );
-  const backendLockedJobs = getNavigationStateForModule(
+  const backendLockedApprovals = getNavigationStateForModule(
     wildcardNonOwnerPermissions,
-    item("business.jobs"),
+    item("business.approvals"),
     [
       access({
         access_state: "locked",
         category: "business",
         locked: true,
-        missing_permissions: ["jobs.read"],
-        module_key: "business.jobs",
-        route_namespace: "/jobs",
+        missing_permissions: ["reviews.read"],
+        module_key: "business.approvals",
+        route_namespace: "/approvals",
         status: "enabled",
       }),
     ],
@@ -845,21 +800,32 @@ test("wildcard permission does not override module access safety states", () => 
 
   assert.equal(wildcardHiddenUsers.isHidden, true);
   assert.equal(wildcardHiddenUsers.canEnter, false);
-  assert.equal(backendLockedJobs.isLocked, true);
-  assert.equal(backendLockedJobs.canEnter, false);
+  assert.equal(backendLockedApprovals.isLocked, true);
+  assert.equal(backendLockedApprovals.canEnter, false);
 });
 
-test("sidebar navigation keeps C07B module keys and no K01 or P-series menus", () => {
+test("sidebar navigation exposes only productized capability entries", () => {
   const moduleKeys = navigationItems.map((entry) => entry.module_key);
 
-  assert.ok(moduleKeys.includes("core.dashboard"));
-  assert.ok(moduleKeys.includes("admin.users"));
-  assert.ok(moduleKeys.includes("business.jobs"));
-  assert.ok(moduleKeys.includes("system.operation_logs"));
-  assert.equal(moduleKeys.includes("experimental.foundation_demo"), false);
-  assert.equal(moduleKeys.includes("integration.n8n_test_bridge"), false);
-  assert.equal(moduleKeys.includes("business.products"), false);
-  assert.equal(moduleKeys.includes("admin.settings"), false);
+  assert.deepEqual(moduleKeys, [
+    "admin.users",
+    "admin.organizations",
+    "admin.permissions",
+    "system.operation_logs",
+    "business.approvals",
+  ]);
+  for (const legacyKey of [
+    "core.dashboard",
+    "admin.modules",
+    "admin.settings",
+    "business.jobs",
+    "business.products",
+    "business.reviews",
+    "experimental.foundation_demo",
+    "integration.n8n_test_bridge",
+  ]) {
+    assert.equal(moduleKeys.includes(legacyKey), false);
+  }
   assert.equal(moduleKeys.some((key) => key.startsWith("k01")), false);
   assert.equal(
     navigationItems.some((entry) => /P0[1-8]|K01|WooCommerce/i.test(entry.label)),

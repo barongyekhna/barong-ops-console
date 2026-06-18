@@ -10,7 +10,6 @@ import {
   LayoutDashboard,
   LockKeyhole,
   Package,
-  Settings,
   Sparkles,
   UserRoundCog,
   Workflow,
@@ -178,7 +177,6 @@ const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   LockKeyhole,
   Package,
-  Settings,
   Sparkles,
   UserRoundCog,
   Workflow,
@@ -187,7 +185,6 @@ const ICONS: Record<string, LucideIcon> = {
 const GROUP_ORDER = new Map([
   ["Core", 10],
   ["Operations", 20],
-  ["System", 30],
 ]);
 
 const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
@@ -196,9 +193,6 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["admin.permissions", "Core"],
   ["system.operation_logs", "Operations"],
   ["business.approvals", "Operations"],
-  ["business.jobs", "Operations"],
-  ["core.dashboard", "System"],
-  ["admin.settings", "System"],
 ]);
 
 const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
@@ -207,9 +201,6 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["admin.permissions", "Permissions"],
   ["system.operation_logs", "Logs"],
   ["business.approvals", "Approvals"],
-  ["business.jobs", "Jobs (Records)"],
-  ["core.dashboard", "Dashboard"],
-  ["admin.settings", "Settings"],
 ]);
 
 const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
@@ -218,9 +209,6 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["admin.permissions", 30],
   ["system.operation_logs", 10],
   ["business.approvals", 20],
-  ["business.jobs", 30],
-  ["core.dashboard", 10],
-  ["admin.settings", 20],
 ]);
 
 const INTERNAL_EXERCISE_MODULE_KEY = [
@@ -229,9 +217,18 @@ const INTERNAL_EXERCISE_MODULE_KEY = [
 ].join(".");
 
 export const PRODUCT_HIDDEN_MODULE_KEYS = new Set([
+  "admin.agents",
+  "admin.modules",
+  "admin.settings",
+  "admin.workflows",
+  "business.artifacts",
+  "business.jobs",
   "business.products",
+  "business.reviews",
+  "core.dashboard",
   INTERNAL_EXERCISE_MODULE_KEY,
   "integration.n8n_test_bridge",
+  "system.errors",
   "system.memory_events",
 ]);
 

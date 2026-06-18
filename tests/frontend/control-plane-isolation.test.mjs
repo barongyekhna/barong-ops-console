@@ -16,8 +16,12 @@ test("backend proxy maps public and app paths to non-control-plane APIs", () => 
     "/api/public/auth/login",
   );
   assert.equal(
-    getBackendApiPath("GET", ["jobs"]),
-    "/api/app/jobs",
+    getBackendApiPath("GET", ["approval", "list"]),
+    "/api/app/approval/list",
+  );
+  assert.equal(
+    getBackendApiPath("GET", ["operation-logs"]),
+    "/api/app/operation-logs",
   );
   assert.equal(
     getBackendApiPath("GET", ["permissions", "me"]),

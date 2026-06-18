@@ -676,7 +676,7 @@ test("module adapter shell is execution-aware but no-execute", () => {
     /apiRequest|fetch\(|method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/,
   );
   assert.match(providerSource, /useFrontendCapabilityState/);
-  assert.match(providerSource, /executionProviderContracts/);
+  assert.match(providerSource, /executionProviders/);
   assert.match(providerSource, /executionProviderAccessItems/);
   assert.doesNotMatch(
     providerSource,
