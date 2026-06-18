@@ -6,6 +6,7 @@ const CONTROL_PLANE_API_PREFIX = "/api/control-plane";
 
 const ALLOWED_PUBLIC_GET_PATHS = new Set([
   "health",
+  "auth/context",
   "auth/me",
 ]);
 const ALLOWED_PUBLIC_POST_PATHS = new Set([
@@ -24,6 +25,28 @@ const ALLOWED_APP_LIST_PATHS = new Set([
 const ALLOWED_CONTROL_PLANE_LIST_PATHS = new Set([
   "modules",
   "agents",
+  "workflows",
+]);
+const ALLOWED_APP_RESOURCE_PATHS = new Set([
+  "artifacts",
+  "context-packets",
+  "errors",
+  "jobs",
+  "memory-events",
+  "memory-summaries",
+  "reviews",
+]);
+const ALLOWED_APP_CREATE_RESOURCE_PATHS = new Set([
+  "artifacts",
+  "context-packets",
+  "errors",
+  "jobs",
+  "memory-events",
+  "reviews",
+]);
+const ALLOWED_CONTROL_PLANE_RESOURCE_PATHS = new Set([
+  "agents",
+  "modules",
   "workflows",
 ]);
 const ALLOWED_USER_ACTIONS = new Set([
@@ -291,6 +314,123 @@ function isAllowedUsersPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedAppResourcePath(method: string, path: string[]) {
+  const resource = path[0];
+
+  if (!ALLOWED_APP_RESOURCE_PATHS.has(resource)) {
+    return false;
+  }
+
+  if (path.length === 1) {
+    return (
+      method === "GET" ||
+      (method === "POST" && ALLOWED_APP_CREATE_RESOURCE_PATHS.has(resource))
+    );
+  }
+
+  if (path.length === 2) {
+    return method === "GET";
+  }
+
+  if (
+    resource === "jobs" &&
+    path.length === 3 &&
+    path[2] === "events"
+  ) {
+    return method === "GET" || method === "POST";
+  }
+
+  if (
+    resource === "reviews" &&
+    path.length === 3 &&
+    path[2] === "decision"
+  ) {
+    return method === "POST";
+  }
+
+  return false;
+}
+
+function isAllowedApprovalPath(method: string, path: string[]) {
+  if (path[0] !== "approval") {
+    return false;
+  }
+
+  if (path.length === 2 && path[1] === "list") {
+    return method === "GET";
+  }
+
+  if (path.length === 2 && path[1] === "request") {
+    return method === "POST";
+  }
+
+  if (path.length === 2) {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 3 &&
+    (path[2] === "approve" || path[2] === "reject")
+  ) {
+    return method === "POST";
+  }
+
+  return false;
+}
+
+function isAllowedOrgPath(method: string, path: string[]) {
+  if (path[0] !== "org") {
+    return false;
+  }
+
+  if (path.length === 2 && path[1] === "create") {
+    return method === "POST";
+  }
+
+  if (path.length === 2) {
+    return method === "PATCH" || method === "DELETE";
+  }
+
+  if (
+    path.length === 3 &&
+    (path[2] === "activate" || path[2] === "suspend")
+  ) {
+    return method === "POST";
+  }
+
+  if (path.length === 3 && path[2] === "members") {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 4 &&
+    path[2] === "members" &&
+    (path[3] === "add" || path[3] === "remove")
+  ) {
+    return method === "POST";
+  }
+
+  return false;
+}
+
+function isAllowedControlPlaneResourcePath(method: string, path: string[]) {
+  const resource = path[0];
+
+  if (!ALLOWED_CONTROL_PLANE_RESOURCE_PATHS.has(resource)) {
+    return false;
+  }
+
+  if (path.length === 1) {
+    return method === "GET" || method === "POST";
+  }
+
+  if (path.length === 2) {
+    return method === "GET";
+  }
+
+  return false;
+}
+
 function isAllowedPermissionPath(method: string, path: string[]) {
   const requestedPath = path.join("/");
 
@@ -358,6 +498,9 @@ export function getBackendApiPath(method: string, path: string[]) {
 
   if (
     (method === "GET" && ALLOWED_APP_LIST_PATHS.has(requestedPath)) ||
+    isAllowedAppResourcePath(method, path) ||
+    isAllowedApprovalPath(method, path) ||
+    isAllowedOrgPath(method, path) ||
     isAllowedPermissionPath(method, path) ||
     isAllowedUsersPath(method, path)
   ) {
@@ -366,6 +509,7 @@ export function getBackendApiPath(method: string, path: string[]) {
 
   if (
     (method === "GET" && ALLOWED_CONTROL_PLANE_LIST_PATHS.has(requestedPath)) ||
+    isAllowedControlPlaneResourcePath(method, path) ||
     (method === "GET" && ALLOWED_MODULE_REGISTRY_PATHS.has(requestedPath)) ||
     (method === "GET" &&
       ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS.has(requestedPath)) ||

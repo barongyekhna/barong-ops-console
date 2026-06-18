@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LockKeyhole,
   Package,
+  Settings,
   Sparkles,
   UserRoundCog,
   Workflow,
@@ -177,38 +178,79 @@ const ICONS: Record<string, LucideIcon> = {
   LayoutDashboard,
   LockKeyhole,
   Package,
+  Settings,
   Sparkles,
   UserRoundCog,
   Workflow,
 };
 
 const GROUP_ORDER = new Map([
+  ["Users & Organizations", 10],
+  ["Business Modules", 20],
+  ["System Modules", 30],
+  ["Extensions", 40],
   ["Core", 10],
   ["Operations", 20],
+  ["System", 30],
+  ["Registry", 40],
+  ["Governance", 50],
 ]);
 
 const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
-  ["admin.users", "Core"],
-  ["admin.organizations", "Core"],
-  ["admin.permissions", "Core"],
-  ["system.operation_logs", "Operations"],
-  ["business.approvals", "Operations"],
+  ["admin.users", "Users & Organizations"],
+  ["admin.organizations", "Users & Organizations"],
+  ["admin.permissions", "Users & Organizations"],
+  ["business.jobs", "Business Modules"],
+  ["admin.workflows", "Business Modules"],
+  ["business.approvals", "Business Modules"],
+  ["business.reviews", "Business Modules"],
+  ["business.artifacts", "Business Modules"],
+  ["core.dashboard", "System Modules"],
+  ["admin.modules", "System Modules"],
+  ["admin.settings", "System Modules"],
+  ["system.errors", "System Modules"],
+  ["system.memory_events", "System Modules"],
+  ["system.operation_logs", "System Modules"],
+  ["admin.agents", "Extensions"],
+  ["business.products", "Extensions"],
 ]);
 
 const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["admin.users", "Users"],
   ["admin.organizations", "Organizations"],
   ["admin.permissions", "Permissions"],
-  ["system.operation_logs", "Logs"],
+  ["business.jobs", "Jobs"],
+  ["admin.workflows", "Workflows"],
   ["business.approvals", "Approvals"],
+  ["business.reviews", "Reviews"],
+  ["business.artifacts", "Artifacts"],
+  ["core.dashboard", "Dashboard"],
+  ["admin.modules", "Modules"],
+  ["admin.settings", "Settings"],
+  ["system.errors", "Errors"],
+  ["system.memory_events", "Memory Events"],
+  ["system.operation_logs", "Logs"],
+  ["admin.agents", "Agents"],
+  ["business.products", "Products"],
 ]);
 
 const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["admin.users", 10],
   ["admin.organizations", 20],
   ["admin.permissions", 30],
-  ["system.operation_logs", 10],
-  ["business.approvals", 20],
+  ["business.jobs", 10],
+  ["admin.workflows", 20],
+  ["business.approvals", 30],
+  ["business.reviews", 40],
+  ["business.artifacts", 50],
+  ["core.dashboard", 10],
+  ["admin.modules", 20],
+  ["admin.settings", 30],
+  ["system.errors", 40],
+  ["system.memory_events", 50],
+  ["system.operation_logs", 60],
+  ["admin.agents", 10],
+  ["business.products", 20],
 ]);
 
 const INTERNAL_EXERCISE_MODULE_KEY = [
@@ -217,19 +259,8 @@ const INTERNAL_EXERCISE_MODULE_KEY = [
 ].join(".");
 
 export const PRODUCT_HIDDEN_MODULE_KEYS = new Set([
-  "admin.agents",
-  "admin.modules",
-  "admin.settings",
-  "admin.workflows",
-  "business.artifacts",
-  "business.jobs",
-  "business.products",
-  "business.reviews",
-  "core.dashboard",
   INTERNAL_EXERCISE_MODULE_KEY,
   "integration.n8n_test_bridge",
-  "system.errors",
-  "system.memory_events",
 ]);
 
 const routeByModuleKey = new Map(
@@ -620,6 +651,17 @@ function stateFromSources({
   }
 
   if (navigationState.isHidden) {
+    if (record.denied_behavior === "show_locked") {
+      return {
+        ...base,
+        reason:
+          navigationState.reason ||
+          "Your account does not have access to this product area.",
+        state: "forbidden" as const,
+        unlock_condition: "Ask an owner to grant the required access.",
+      };
+    }
+
     return {
       ...base,
       reason:
@@ -1164,9 +1206,15 @@ export function buildFrontendCapabilityGraph({
         return {
           ...item,
           can_enter: false,
-          org_visibility: "hidden" as const,
-          sidebar_state: "hidden" as const,
-          state: "hidden" as const,
+          badge: "locked" as const,
+          org_visibility: "visible" as const,
+          permission_state: "locked" as const,
+          reason: "Owner access is required for this product area.",
+          required_permission:
+            record.required_permission ?? "Owner access required.",
+          sidebar_state: "forbidden" as const,
+          state: "forbidden" as const,
+          unlock_condition: "Ask an owner to grant the required access.",
         };
       }
 

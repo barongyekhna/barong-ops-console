@@ -1,0 +1,120 @@
+{
+  "report": "api_ui_binding_report",
+  "generated_at": "2026-06-18T00:00:00Z",
+  "frontend_proxy_updates": {
+    "public": [
+      "GET /auth/context"
+    ],
+    "app": [
+      "GET /jobs",
+      "GET /jobs/{job_id}",
+      "POST /jobs",
+      "GET /jobs/{job_id}/events",
+      "POST /jobs/{job_id}/events",
+      "GET /artifacts",
+      "GET /artifacts/{artifact_id}",
+      "POST /artifacts",
+      "GET /reviews",
+      "GET /reviews/{review_id}",
+      "POST /reviews",
+      "POST /reviews/{review_id}/decision",
+      "POST /approval/request",
+      "GET /approval/list",
+      "GET /approval/{approval_id}",
+      "POST /approval/{approval_id}/approve",
+      "POST /approval/{approval_id}/reject",
+      "POST /org/create",
+      "PATCH /org/{org_id}",
+      "DELETE /org/{org_id}",
+      "POST /org/{org_id}/activate",
+      "POST /org/{org_id}/suspend",
+      "GET /org/{org_id}/members",
+      "POST /org/{org_id}/members/add",
+      "POST /org/{org_id}/members/remove",
+      "GET /errors",
+      "GET /errors/{error_id}",
+      "POST /errors",
+      "GET /memory-events",
+      "GET /memory-events/{memory_event_id}",
+      "POST /memory-events"
+    ],
+    "control_plane": [
+      "GET /modules",
+      "GET /modules/{module_key}",
+      "POST /modules",
+      "GET /modules/registry",
+      "GET /modules/me",
+      "GET /agents",
+      "GET /agents/{agent_key}",
+      "POST /agents",
+      "GET /workflows",
+      "GET /workflows/{workflow_key}",
+      "POST /workflows",
+      "GET /module-adapters/registry",
+      "GET /module-adapters/me",
+      "GET /execution-providers/registry",
+      "GET /execution-providers/me",
+      "GET /live-gate/readiness",
+      "GET /live-gate/production-readiness",
+      "GET /live-gate/policies"
+    ]
+  },
+  "ui_consumers": [
+    {
+      "namespace": "org/*",
+      "consumer": "frontend/src/components/organization-product-view.tsx",
+      "coverage": "create, update, delete, activate, suspend, member list, add member, remove member, auth context"
+    },
+    {
+      "namespace": "jobs/*",
+      "consumer": "frontend/src/app/(console)/jobs/page.tsx and workflow/agent/product action forms",
+      "coverage": "list, detail, create, events list, event append"
+    },
+    {
+      "namespace": "reviews/*",
+      "consumer": "frontend/src/app/(console)/reviews/page.tsx",
+      "coverage": "list, detail, create, decision"
+    },
+    {
+      "namespace": "artifacts/*",
+      "consumer": "frontend/src/app/(console)/artifacts/page.tsx",
+      "coverage": "list, detail, create, review handoff"
+    },
+    {
+      "namespace": "workflows/*",
+      "consumer": "frontend/src/app/(console)/workflows/page.tsx",
+      "coverage": "list, detail, create, job execution request"
+    },
+    {
+      "namespace": "approval/*",
+      "consumer": "frontend/src/app/(console)/approvals/page.tsx",
+      "coverage": "request, list, detail, approve, reject"
+    },
+    {
+      "namespace": "module registry APIs",
+      "consumer": "frontend/src/app/(console)/modules/page.tsx and frontend/src/components/module-registry-product-view.tsx",
+      "coverage": "modules registry, my modules, module resource list/detail/create"
+    },
+    {
+      "namespace": "execution provider UI mapping",
+      "consumer": "frontend/src/components/control-plane-settings-view.tsx",
+      "coverage": "execution provider registry/access, adapter registry/access, live gate readiness and policies"
+    },
+    {
+      "namespace": "permissions/*",
+      "consumer": "frontend/src/components/permissions-product-view.tsx and frontend/src/components/user-permissions-panel.tsx",
+      "coverage": "registry, assignment list, grant, update, revoke"
+    },
+    {
+      "namespace": "errors/*",
+      "consumer": "frontend/src/app/(console)/errors/page.tsx",
+      "coverage": "list, detail, create"
+    },
+    {
+      "namespace": "memory-events/*",
+      "consumer": "frontend/src/app/(console)/memory-events/page.tsx",
+      "coverage": "list, detail, create"
+    }
+  ],
+  "unbound_audit_namespaces_after_productization": []
+}

@@ -671,40 +671,31 @@ function fallbackNavigationState(
   moduleAccessUnknown: boolean,
 ): ModuleNavigationState {
   const permissionState = getPermissionAccessState(permissions, module);
-  const owner = isOwnerFullAccess(permissions);
   const staticUnavailable =
     module.status !== undefined && NON_EXECUTABLE_STATUSES.has(module.status);
-  const forceHideAdminOrSystem =
-    moduleAccessUnknown && isAdminOrSystemModule(module) && !owner;
-  const isVisible = !forceHideAdminOrSystem && permissionState.isVisible;
+  const isVisible = permissionState.isVisible;
   const isHidden = !isVisible;
-  const isLocked =
-    !forceHideAdminOrSystem && !staticUnavailable && permissionState.isLocked;
-  const isUnavailable =
-    !forceHideAdminOrSystem &&
-    permissionState.canAccess &&
-    staticUnavailable;
-  const accessState: ModuleNavigationState["accessState"] = forceHideAdminOrSystem
-    ? "hidden"
-    : staticUnavailable
-      ? module.status === "planned"
-        ? "planned"
-        : module.status === "adapter_pending"
-          ? "adapter_pending"
-          : "unavailable"
-      : moduleAccessUnknown
-        ? "unknown"
-        : permissionState.canAccess
-          ? "available"
-          : permissionState.isLocked
-            ? "locked"
-            : "hidden";
+  const isLocked = !staticUnavailable && permissionState.isLocked;
+  const isUnavailable = permissionState.canAccess && staticUnavailable;
+  const accessState: ModuleNavigationState["accessState"] = staticUnavailable
+    ? module.status === "planned"
+      ? "planned"
+      : module.status === "adapter_pending"
+        ? "adapter_pending"
+        : "unavailable"
+    : moduleAccessUnknown
+      ? "unknown"
+      : permissionState.canAccess
+        ? "available"
+        : permissionState.isLocked
+          ? "locked"
+          : "hidden";
 
   const result: ModuleNavigationState = {
     accessState,
     badge: null,
-    canAccess: permissionState.canAccess && !forceHideAdminOrSystem,
-    canEnter: permissionState.canAccess && !forceHideAdminOrSystem && !isUnavailable,
+    canAccess: permissionState.canAccess,
+    canEnter: permissionState.canAccess && !isUnavailable,
     isHidden,
     isLocked,
     isUnavailable,

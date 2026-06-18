@@ -1,0 +1,97 @@
+{
+  "report": "feature_exposure_completion_map",
+  "generated_at": "2026-06-18T00:00:00Z",
+  "source_audit_findings": {
+    "orphan_console_routes": [
+      "/agents",
+      "/artifacts",
+      "/dashboard",
+      "/errors",
+      "/jobs",
+      "/memory-events",
+      "/modules",
+      "/products",
+      "/reviews",
+      "/settings",
+      "/workflows"
+    ],
+    "placeholder_or_empty_routes": [
+      "/organizations",
+      "/permissions",
+      "/memory-events",
+      "/modules",
+      "/products",
+      "/settings"
+    ],
+    "hidden_module_keys": [
+      "admin.agents",
+      "admin.modules",
+      "admin.settings",
+      "admin.workflows",
+      "business.artifacts",
+      "business.jobs",
+      "business.products",
+      "business.reviews",
+      "core.dashboard",
+      "system.errors",
+      "system.memory_events"
+    ]
+  },
+  "completion": [
+    {
+      "feature": "orphan routes",
+      "status": "completed",
+      "result": "All audited orphan console routes are in navigation and render product UI."
+    },
+    {
+      "feature": "hidden modules",
+      "status": "completed",
+      "result": "Audited hidden module keys were removed from PRODUCT_HIDDEN_MODULE_KEYS and mapped into navigation groups."
+    },
+    {
+      "feature": "placeholder pages",
+      "status": "completed",
+      "result": "Placeholder pages were replaced with API-backed product views."
+    },
+    {
+      "feature": "module registry UI",
+      "status": "completed",
+      "result": "/modules displays module registry/capability state and module resource CRUD metadata."
+    },
+    {
+      "feature": "execution provider UI mapping",
+      "status": "completed",
+      "result": "/settings displays execution providers, adapters, live gate readiness, production readiness, and policies."
+    },
+    {
+      "feature": "approval action UI",
+      "status": "completed",
+      "result": "/approvals exposes approve and reject actions."
+    },
+    {
+      "feature": "job execution UI",
+      "status": "completed",
+      "result": "/jobs creates job requests and appends job execution events."
+    },
+    {
+      "feature": "workflow execution UI",
+      "status": "completed",
+      "result": "/workflows creates workflow records and starts job requests from selected workflows."
+    },
+    {
+      "feature": "products planned no_api module",
+      "status": "completed",
+      "result": "/products exposes product adapter/capability metadata and existing metadata-only product prepare job request."
+    }
+  ],
+  "remaining_non_product_entries": [
+    {
+      "module_key": "experimental.foundation_demo",
+      "reason": "Internal exercise route not present as a console page."
+    },
+    {
+      "module_key": "integration.n8n_test_bridge",
+      "reason": "Adapter-pending test bridge route not present as a console page."
+    }
+  ]
+}

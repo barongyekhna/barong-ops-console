@@ -1,0 +1,84 @@
+{
+  "report": "ui_productization_execution_report",
+  "generated_at": "2026-06-18T00:00:00Z",
+  "source_audit": "system_feature_audit_full_report.json",
+  "scope": {
+    "backend_changed": false,
+    "db_schema_changed": false,
+    "rbac_changed": false,
+    "execution_engine_changed": false,
+    "frontend_ui_navigation_routing_api_binding_changed": true
+  },
+  "completed_work": [
+    {
+      "area": "navigation",
+      "status": "completed",
+      "details": "Sidebar navigation now exposes Users, Organizations, Permissions, Jobs, Workflows, Approvals, Reviews, Artifacts, Dashboard, Modules, Settings, Errors, Memory Events, Logs, Agents, and Products."
+    },
+    {
+      "area": "permission_visibility",
+      "status": "completed",
+      "details": "Permission-denied entries are shown as locked/disabled instead of hidden for productized routes."
+    },
+    {
+      "area": "placeholder_pages",
+      "status": "completed",
+      "details": "Organizations, Permissions, Memory Events, Modules, Products, and Settings placeholders were replaced with API-backed product UI."
+    },
+    {
+      "area": "record_pages",
+      "status": "completed",
+      "details": "Agents, Jobs, Workflows, Artifacts, Reviews, Approvals, Errors, and Memory Events now expose list, detail, loading, empty, error, and action/create UI where backend APIs exist."
+    },
+    {
+      "area": "control_plane",
+      "status": "completed",
+      "details": "Module registry, module resource registry, adapter mapping, execution provider mapping, live gate readiness, and policy surfaces are visible."
+    },
+    {
+      "area": "execution_surfaces",
+      "status": "completed",
+      "details": "Job creation/event UI and workflow/agent/product job request UI are exposed through existing metadata-only jobs APIs."
+    }
+  ],
+  "routes_productized": [
+    "/agents",
+    "/jobs",
+    "/workflows",
+    "/artifacts",
+    "/reviews",
+    "/approvals",
+    "/errors",
+    "/modules",
+    "/settings",
+    "/products",
+    "/memory-events",
+    "/organizations",
+    "/permissions",
+    "/dashboard",
+    "/operation-logs"
+  ],
+  "new_frontend_components": [
+    "frontend/src/components/product-resource-console.tsx",
+    "frontend/src/components/control-plane-settings-view.tsx",
+    "frontend/src/components/organization-product-view.tsx",
+    "frontend/src/components/permissions-product-view.tsx"
+  ],
+  "verification": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "working_directory": "frontend",
+      "status": "passed"
+    },
+    "unit_tests": {
+      "command": "npm run test:unit",
+      "working_directory": "frontend",
+      "status": "passed",
+      "summary": {
+        "tests": 13,
+        "passed": 13,
+        "failed": 0
+      }
+    }
+  }
+}

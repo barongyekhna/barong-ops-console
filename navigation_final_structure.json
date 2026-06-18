@@ -1,0 +1,158 @@
+{
+  "report": "navigation_final_structure",
+  "generated_at": "2026-06-18T00:00:00Z",
+  "permission_display_policy": {
+    "permission_exists_but_user_lacks_access": "show_locked",
+    "hidden_entries_reserved_for": [
+      "experimental.foundation_demo",
+      "integration.n8n_test_bridge"
+    ]
+  },
+  "groups": [
+    {
+      "label": "Users & Organizations",
+      "items": [
+        {
+          "label": "Users",
+          "href": "/users",
+          "module_key": "admin.users",
+          "required_permission": "users.manage",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Organizations",
+          "href": "/organizations",
+          "module_key": "admin.organizations",
+          "required_permission": "organizations.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Permissions",
+          "href": "/permissions",
+          "module_key": "admin.permissions",
+          "required_permission": "permissions.read",
+          "denied_behavior": "show_locked"
+        }
+      ]
+    },
+    {
+      "label": "Business Modules",
+      "items": [
+        {
+          "label": "Jobs",
+          "href": "/jobs",
+          "module_key": "business.jobs",
+          "required_permission": "jobs.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Workflows",
+          "href": "/workflows",
+          "module_key": "admin.workflows",
+          "required_permission": "modules.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Approvals",
+          "href": "/approvals",
+          "module_key": "business.approvals",
+          "required_permission": "reviews.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Reviews",
+          "href": "/reviews",
+          "module_key": "business.reviews",
+          "required_permission": "reviews.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Artifacts",
+          "href": "/artifacts",
+          "module_key": "business.artifacts",
+          "required_permission": "artifacts.read",
+          "denied_behavior": "show_locked"
+        }
+      ]
+    },
+    {
+      "label": "System Modules",
+      "items": [
+        {
+          "label": "Dashboard",
+          "href": "/dashboard",
+          "module_key": "core.dashboard",
+          "required_permission": null,
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Modules",
+          "href": "/modules",
+          "module_key": "admin.modules",
+          "required_permission": "modules.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Settings",
+          "href": "/settings",
+          "module_key": "admin.settings",
+          "required_permission": "settings.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Errors",
+          "href": "/errors",
+          "module_key": "system.errors",
+          "required_permission": "operation_logs.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Memory Events",
+          "href": "/memory-events",
+          "module_key": "system.memory_events",
+          "required_permission": "operation_logs.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Logs",
+          "href": "/operation-logs",
+          "module_key": "system.operation_logs",
+          "required_permission": "operation_logs.read",
+          "denied_behavior": "show_locked"
+        }
+      ]
+    },
+    {
+      "label": "Extensions",
+      "items": [
+        {
+          "label": "Agents",
+          "href": "/agents",
+          "module_key": "admin.agents",
+          "required_permission": "modules.read",
+          "denied_behavior": "show_locked"
+        },
+        {
+          "label": "Products",
+          "href": "/products",
+          "module_key": "business.products",
+          "required_permission": "products.read",
+          "denied_behavior": "show_locked"
+        }
+      ]
+    }
+  ],
+  "orphan_routes_now_in_navigation": [
+    "/agents",
+    "/artifacts",
+    "/dashboard",
+    "/errors",
+    "/jobs",
+    "/memory-events",
+    "/modules",
+    "/products",
+    "/reviews",
+    "/settings",
+    "/workflows"
+  ]
+}
