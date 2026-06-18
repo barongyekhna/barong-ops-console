@@ -1,0 +1,87 @@
+{
+  "task": "FIX-BE-08",
+  "generated_at": "2026-06-18",
+  "status": "passed",
+  "scope": "backend cookie, session, and environment configuration only",
+  "environment_resolution": {
+    "source_priority": [
+      "APP_ENV",
+      "ENV",
+      "default:development"
+    ],
+    "canonical_values": {
+      "production": [
+        "production",
+        "prod"
+      ],
+      "staging": [
+        "staging",
+        "stage"
+      ],
+      "development": [
+        "development",
+        "dev",
+        "local",
+        "test",
+        "testing"
+      ]
+    },
+    "implementation": "backend.app.core.environments"
+  },
+  "cookie_policy": {
+    "development": {
+      "secure": false,
+      "samesite": "lax",
+      "httponly": true,
+      "domain_default": null,
+      "http_cookie_fallback": true,
+      "notes": "Development forces non-secure host-only cookies so localhost and IP HTTP access can persist the session."
+    },
+    "staging": {
+      "secure": "AUTH_SESSION_COOKIE_SECURE",
+      "secure_default": false,
+      "samesite_when_secure": "none",
+      "samesite_when_insecure": "lax",
+      "httponly": true,
+      "domain_default": null,
+      "http_cookie_fallback": true,
+      "notes": "Staging is configurable: set AUTH_SESSION_COOKIE_SECURE=true only when staging is accessed through HTTPS."
+    },
+    "production": {
+      "secure": true,
+      "samesite": "none",
+      "httponly": true,
+      "domain_default": null,
+      "http_cookie_fallback": false,
+      "notes": "Production enforces Secure cookies and SameSite=None regardless of insecure cookie misconfiguration."
+    }
+  },
+  "standardized_cookie_helpers": [
+    "get_session_cookie_policy",
+    "set_session_cookie",
+    "clear_session_cookie"
+  ],
+  "files_changed": [
+    "backend/app/core/environments.py",
+    "backend/app/core/config.py",
+    "backend/app/core/session_cookies.py",
+    "backend/app/core/security_headers.py",
+    "backend/app/main.py",
+    "backend/app/db/migration_safety.py",
+    ".env.example",
+    ".env.staging.example",
+    ".env.production.example",
+    "docker-compose.example.yml",
+    "docker-compose.staging.yml",
+    "docker-compose.production.yml",
+    "tests/backend/test_session_cookie_policy.py",
+    "tests/backend/test_auth_api.py"
+  ],
+  "constraints_observed": {
+    "frontend_modified": false,
+    "db_schema_modified": false,
+    "auth_logic_modified": false,
+    "permission_system_modified": false,
+    "execution_engine_modified": false
+  }
+}

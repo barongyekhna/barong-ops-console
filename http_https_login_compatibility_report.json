@@ -1,0 +1,42 @@
+{
+  "task": "FIX-BE-08",
+  "generated_at": "2026-06-18",
+  "status": "passed",
+  "validated_endpoints": [
+    "POST /api/public/auth/login",
+    "GET /api/public/auth/me"
+  ],
+  "validation_results": [
+    {
+      "command": ".venv/bin/python -m pytest -q tests/backend/test_session_cookie_policy.py",
+      "result": "passed",
+      "summary": "6 passed; covered ENV fallback, APP_ENV priority, development HTTP cookie policy, staging configurable Secure flag, production Secure enforcement, and set/delete cookie attribute alignment."
+    },
+    {
+      "command": "PYTEST_ADDOPTS='-q -k \"http_compatible or secure_and_consistent or auth_me_returns_current_user\"' scripts/run_backend_tests.sh --marker \"integration or system\"",
+      "result": "passed",
+      "summary": "3 passed with isolated PostgreSQL; covered development HTTP login cookie persistence, production HTTPS Secure cookie consistency, and /auth/me session lookup."
+    }
+  ],
+  "observations": [
+    {
+      "type": "environment",
+      "detail": "Running auth API tests directly without the integration script failed before assertions because the default DATABASE_URL host 'db' is not resolvable from the local shell."
+    },
+    {
+      "type": "pre_existing_test_issue",
+      "detail": "A broad integration run reported detached SQLAlchemy instances in owner bootstrap and alerting tests; the precise auth/cookie validation passed and those failures are unrelated to FIX-BE-08."
+    }
+  ],
+  "compatibility": {
+    "http_development_login": "passed",
+    "http_staging_login_when_secure_false": "covered by policy and environment examples",
+    "https_staging_login_when_secure_true": "covered by policy matrix",
+    "https_production_login": "passed",
+    "production_http_cookie_rejection": "intentional by Secure cookie enforcement"
+  },
+  "silent_login_failure_mitigation": {
+    "root_cause": "Secure cookies were applied in HTTP access modes, causing browsers to drop Set-Cookie and making the immediate /auth/me call unauthenticated.",
+    "fix": "Development now forces Secure=false/SameSite=lax; staging exposes an explicit Secure flag; production forces Secure=true/SameSite=none."
+  }
+}

@@ -6,7 +6,8 @@ from typing import Iterable
 
 from sqlalchemy import Engine, inspect, text
 
-PRODUCTION_LIKE_ENVS = frozenset(("production", "prod", "staging"))
+from ..core.environments import is_production_like
+
 PRODUCTION_COMPATIBILITY_BASELINE_REVISIONS = frozenset(("c05b_permissions_001",))
 
 
@@ -82,7 +83,7 @@ def build_migration_safety_report(
             f"script head {expected_heads[0]}"
         )
 
-    production_like = app_env.lower() in PRODUCTION_LIKE_ENVS
+    production_like = is_production_like(app_env)
     compatibility_baseline_allowed = (
         production_like
         and len(expected_heads) == 1

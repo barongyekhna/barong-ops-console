@@ -1,8 +1,7 @@
 from fastapi import Response
 
 from .config import Settings
-
-PRODUCTION_ENVS = frozenset({"production", "prod", "staging"})
+from .environments import is_production_like
 
 CONTENT_SECURITY_POLICY = "; ".join(
     (
@@ -32,10 +31,6 @@ PERMISSIONS_POLICY = ", ".join(
     )
 )
 HSTS_VALUE = "max-age=31536000; includeSubDomains"
-
-
-def is_production_like(settings: Settings) -> bool:
-    return settings.app_env.lower() in PRODUCTION_ENVS
 
 
 def apply_security_headers(response: Response, *, settings: Settings) -> None:

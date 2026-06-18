@@ -63,6 +63,7 @@ from .api.org_membership import router as org_membership_router
 from .api.shared_module import router as shared_module_router
 from .core.auth_paths import is_auth_me_path
 from .core.config import get_settings
+from .core.environments import is_production_like
 from .core.security_headers import apply_security_headers
 from .db.session import managed_read_session
 from .middleware.event_collector import capture_audit_events
@@ -89,11 +90,10 @@ settings = get_settings()
 PUBLIC_API_PREFIX = "/api/public"
 APPLICATION_API_PREFIX = "/api/app"
 CONTROL_PLANE_API_PREFIX = "/api/control-plane"
-PRODUCTION_LIKE_ENVS = frozenset(("production", "prod", "staging"))
 
 
 def _production_like() -> bool:
-    return settings.app_env.lower() in PRODUCTION_LIKE_ENVS
+    return is_production_like(settings)
 
 
 def _docs_enabled() -> bool:

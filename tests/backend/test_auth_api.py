@@ -4,11 +4,13 @@ from datetime import datetime, timedelta, timezone
 from fastapi.testclient import TestClient
 from sqlalchemy import event, select
 
+from backend.app.core.config import Settings, get_settings
 from backend.app.core.security import (
     hash_session_id,
     hash_password,
 )
 from backend.app.db.session import SessionLocal, engine
+from backend.app.main import app
 from backend.app.models.auth_session import AuthSession
 from backend.app.models.operation_log import OperationLog
 from backend.app.models.user import User
@@ -136,6 +138,53 @@ def test_login_returns_session_cookie_updates_user_and_writes_audit_log(
     assert auth_session.expires_at is not None
     assert operation_log is not None
     assert operation_log.actor_id == str(owner_id)
+
+
+def test_login_cookie_is_http_compatible_in_development(
+    auth_client: TestClient,
+) -> None:
+    owner_id = create_test_owner()
+
+    response = login(auth_client)
+    set_cookie = response.headers["set-cookie"].lower()
+    me_response = auth_client.get("/api/public/auth/me")
+
+    assert "httponly" in set_cookie
+    assert "secure" not in set_cookie
+    assert "samesite=lax" in set_cookie
+    assert me_response.status_code == 200
+    assert me_response.json()["id"] == owner_id
+
+
+def test_login_cookie_is_secure_and_consistent_in_production_https(
+    clean_auth_tables: None,
+) -> None:
+    del clean_auth_tables
+    settings = Settings(
+        app_env="production",
+        auth_session_cookie_path="/",
+        auth_session_cookie_secure=False,
+        auth_session_cookie_samesite="lax",
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        with TestClient(app, base_url="https://testserver") as client:
+            owner_id = create_test_owner()
+            response = client.post(
+                "/api/public/auth/login",
+                json={"username": USERNAME, "password": PASSWORD},
+            )
+            assert response.status_code == 200
+            set_cookie = response.headers["set-cookie"].lower()
+            assert "httponly" in set_cookie
+            assert "secure" in set_cookie
+            assert "samesite=none" in set_cookie
+
+            me_response = client.get("/api/public/auth/me")
+            assert me_response.status_code == 200
+            assert me_response.json()["id"] == owner_id
+    finally:
+        app.dependency_overrides.clear()
 
 
 def test_login_failure_is_uniform_and_audited_without_secrets(

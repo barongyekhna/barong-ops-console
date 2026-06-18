@@ -1,0 +1,81 @@
+{
+  "task": "FIX-BE-08",
+  "generated_at": "2026-06-18",
+  "status": "passed",
+  "matrix": [
+    {
+      "environment": "development",
+      "access_mode": "HTTP localhost or IP",
+      "secure": false,
+      "samesite": "lax",
+      "httponly": true,
+      "domain": "host-only by default",
+      "browser_cookie_persistence": "expected",
+      "login_to_me_session_consistency": "expected",
+      "configuration": "APP_ENV=development"
+    },
+    {
+      "environment": "development",
+      "access_mode": "HTTPS",
+      "secure": false,
+      "samesite": "lax",
+      "httponly": true,
+      "domain": "host-only by default",
+      "browser_cookie_persistence": "expected",
+      "login_to_me_session_consistency": "expected",
+      "configuration": "APP_ENV=development"
+    },
+    {
+      "environment": "staging",
+      "access_mode": "HTTP localhost or IP",
+      "secure": false,
+      "samesite": "lax",
+      "httponly": true,
+      "domain": "host-only by default",
+      "browser_cookie_persistence": "expected",
+      "login_to_me_session_consistency": "expected",
+      "configuration": "APP_ENV=staging, AUTH_SESSION_COOKIE_SECURE=false"
+    },
+    {
+      "environment": "staging",
+      "access_mode": "HTTPS",
+      "secure": true,
+      "samesite": "none",
+      "httponly": true,
+      "domain": "host-only by default unless AUTH_SESSION_COOKIE_DOMAIN is set",
+      "browser_cookie_persistence": "expected",
+      "login_to_me_session_consistency": "expected",
+      "configuration": "APP_ENV=staging, AUTH_SESSION_COOKIE_SECURE=true"
+    },
+    {
+      "environment": "production",
+      "access_mode": "HTTP",
+      "secure": true,
+      "samesite": "none",
+      "httponly": true,
+      "domain": "host-only by default unless AUTH_SESSION_COOKIE_DOMAIN is set",
+      "browser_cookie_persistence": "not expected because Secure cookies are intentionally rejected over HTTP",
+      "login_to_me_session_consistency": "not supported over HTTP",
+      "configuration": "APP_ENV=production"
+    },
+    {
+      "environment": "production",
+      "access_mode": "HTTPS",
+      "secure": true,
+      "samesite": "none",
+      "httponly": true,
+      "domain": "host-only by default unless AUTH_SESSION_COOKIE_DOMAIN is set",
+      "browser_cookie_persistence": "expected",
+      "login_to_me_session_consistency": "expected",
+      "configuration": "APP_ENV=production"
+    }
+  ],
+  "set_cookie_standardization": {
+    "login_endpoint": "POST /api/public/auth/login",
+    "cookie_helper": "set_session_cookie",
+    "clear_helper": "clear_session_cookie",
+    "path_default": "/api/backend",
+    "domain_default": null,
+    "domain_behavior": "No Domain attribute is emitted unless AUTH_SESSION_COOKIE_DOMAIN is configured, preserving localhost/IP compatibility."
+  }
+}

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Any, Literal
 
-from pydantic import Field, SecretStr, ValidationInfo, field_validator
+from pydantic import AliasChoices, Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 EXAMPLE_DATABASE_URL = (
@@ -12,10 +12,17 @@ EXAMPLE_DATABASE_URL = (
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(case_sensitive=False, extra="ignore")
+    model_config = SettingsConfigDict(
+        case_sensitive=False,
+        extra="ignore",
+        populate_by_name=True,
+    )
 
     app_name: str = "barong-ops-console-backend"
-    app_env: str = "development"
+    app_env: str = Field(
+        default="development",
+        validation_alias=AliasChoices("APP_ENV", "ENV", "app_env", "env"),
+    )
     app_debug: bool = False
     app_docs_enabled: bool | None = None
     app_version: str = "0.1.0"
@@ -31,8 +38,9 @@ class Settings(BaseSettings):
         min_length=1,
         max_length=255,
     )
-    auth_session_cookie_samesite: Literal["strict", "lax"] = "strict"
+    auth_session_cookie_samesite: Literal["strict", "lax", "none"] = "lax"
     auth_session_cookie_secure: bool | None = None
+    auth_session_cookie_domain: str | None = None
     owner_username: str | None = None
     owner_password: SecretStr | None = None
     n8n_test_webhook_url: str = ""
@@ -69,6 +77,15 @@ class Settings(BaseSettings):
     )
     login_account_lockout_minutes: int = Field(default=15, gt=0, le=1440)
 
+    @field_validator("app_env", mode="before")
+    @classmethod
+    def default_empty_app_env(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return "development"
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
     @field_validator(
         "auth_session_cookie_name",
         "auth_session_cookie_path",
@@ -91,7 +108,7 @@ class Settings(BaseSettings):
         defaults = {
             "auth_session_cookie_name": "barong_ops_session",
             "auth_session_cookie_path": "/api/backend",
-            "auth_session_cookie_samesite": "strict",
+            "auth_session_cookie_samesite": "lax",
         }
         return defaults[info.field_name]
 
@@ -106,12 +123,16 @@ class Settings(BaseSettings):
         "app_docs_enabled",
         "control_plane_stealth_mode",
         "ops_alert_webhook_url",
+        "auth_session_cookie_domain",
         mode="before",
     )
     @classmethod
     def default_empty_optional_values(cls, value: Any) -> Any:
         if value == "":
             return None
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
         return value
 
     @field_validator("auth_session_expire_minutes", mode="before")
