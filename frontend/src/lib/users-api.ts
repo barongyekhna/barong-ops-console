@@ -1,8 +1,10 @@
 import { ApiError, apiRequest } from "@/lib/api";
 
 export const MANAGED_USER_ROLES = [
-  "viewer",
+  "owner",
+  "super_admin",
   "operator",
+  "viewer",
   "reviewer",
 ] as const;
 
@@ -26,6 +28,9 @@ export type ManagedUser = {
   id: number;
   username: string;
   role: string;
+  job_title: string | null;
+  organization_id: string | null;
+  must_change_password: boolean;
   is_active: boolean;
   last_login_at: string | null;
   created_at: string;
@@ -39,9 +44,25 @@ export type UserListResponse = {
   offset: number;
 };
 
+export type OrganizationOption = {
+  org_id: string;
+  org_name: string;
+  org_type: string;
+  status: string;
+  owner_user_id: string;
+};
+
+export type OrganizationListResponse = {
+  items: OrganizationOption[];
+  count: number;
+  limit: number;
+  offset: number;
+};
+
 export type CreateUserPayload = {
   username: string;
-  password: string;
+  job_title?: string | null;
+  organization_id?: string | null;
   role: ManagedUserRole;
 };
 
@@ -69,6 +90,20 @@ export function listUserRoles() {
   return apiRequest<UserRolesResponse>("/users/roles", {
     method: "GET",
   });
+}
+
+export function listOrganizations(limit = 100, offset = 0) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  return apiRequest<OrganizationListResponse>(
+    `/organizations?${params.toString()}`,
+    {
+      method: "GET",
+    },
+  );
 }
 
 export function createUser(payload: CreateUserPayload) {
@@ -125,7 +160,7 @@ export function formatUsersApiError(error: unknown, fallback: string) {
     return "Sign in again before managing console accounts.";
   }
   if (error.status === 403) {
-    return "Only owner accounts can manage console users.";
+    return "Only owner and super admin accounts can manage console users.";
   }
   if (error.status === 409) {
     return "That username already exists. Choose a different username.";
@@ -135,7 +170,7 @@ export function formatUsersApiError(error: unknown, fallback: string) {
   }
   if (error.status === 422) {
     return error.message === "The request could not be completed."
-      ? "Check the username, role, and password. Passwords must be 12 to 256 characters."
+      ? "Check the username, role, and organization."
       : error.message;
   }
   if (error.status === 503) {

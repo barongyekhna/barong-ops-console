@@ -1,10 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from ...core.roles import (
-    list_assignable_user_role_metadata,
-    list_standard_role_metadata,
-)
+from ...core.roles import list_standard_role_metadata
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.common import ListResponse
@@ -14,6 +11,8 @@ from ...schemas.user import (
     UserResponse,
     UserRolesResponse,
     UserUpdate,
+    is_user_manager_role,
+    user_management_role_metadata,
 )
 from ...services.user_management_service import (
     DuplicateUsernameError,
@@ -21,6 +20,7 @@ from ...services.user_management_service import (
     OwnerRoleNotAllowedError,
     SelfDisableNotAllowedError,
     SelfPasswordResetNotAllowedError,
+    UserOrganizationNotFoundError,
     create_managed_user,
     disable_managed_user,
     enable_managed_user,
@@ -29,7 +29,7 @@ from ...services.user_management_service import (
     reset_managed_user_password,
     update_managed_user,
 )
-from ..deps import get_audit_context, require_owner
+from ..deps import get_audit_context, get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 
@@ -50,6 +50,11 @@ def _raise_user_management_error(exc: Exception) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from None
+    if isinstance(exc, UserOrganizationNotFoundError):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from None
     if isinstance(
         exc,
         (SelfDisableNotAllowedError, SelfPasswordResetNotAllowedError),
@@ -61,12 +66,21 @@ def _raise_user_management_error(exc: Exception) -> None:
     raise exc
 
 
+def require_user_manager(user: User = Depends(get_current_user)) -> User:
+    if not is_user_manager_role(user.role):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner or super admin role required.",
+        )
+    return user
+
+
 @router.get("", response_model=ListResponse[UserResponse])
 def users(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    owner: User = Depends(require_user_manager),
 ) -> ListResponse[UserResponse]:
     del owner
     result = list_users(db, limit=limit, offset=offset)
@@ -87,7 +101,7 @@ def user_create(
     payload: UserCreate,
     request: Request,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    owner: User = Depends(require_user_manager),
 ) -> UserResponse:
     try:
         user = create_managed_user(
@@ -103,11 +117,12 @@ def user_create(
 
 @router.get("/roles", response_model=UserRolesResponse)
 def user_roles(
-    owner: User = Depends(require_owner),
+    owner: User = Depends(require_user_manager),
 ) -> UserRolesResponse:
     del owner
+    role_metadata = user_management_role_metadata()
     return UserRolesResponse(
-        assignable_roles=list_assignable_user_role_metadata(),
+        assignable_roles=role_metadata,
         standard_roles=list_standard_role_metadata(),
     )
 
@@ -116,7 +131,7 @@ def user_roles(
 def user_detail(
     user_id: int,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    owner: User = Depends(require_user_manager),
 ) -> UserResponse:
     del owner
     try:
@@ -132,7 +147,7 @@ def user_update(
     payload: UserUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    owner: User = Depends(require_user_manager),
 ) -> UserResponse:
     try:
         user = update_managed_user(
@@ -153,7 +168,7 @@ def user_reset_password(
     payload: PasswordResetRequest,
     request: Request,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    owner: User = Depends(require_user_manager),
 ) -> UserResponse:
     try:
         user = reset_managed_user_password(
@@ -173,7 +188,7 @@ def user_disable(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    owner: User = Depends(require_user_manager),
 ) -> UserResponse:
     try:
         user = disable_managed_user(
@@ -192,7 +207,7 @@ def user_enable(
     user_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    owner: User = Depends(require_user_manager),
 ) -> UserResponse:
     try:
         user = enable_managed_user(

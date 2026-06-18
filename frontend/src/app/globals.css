@@ -524,6 +524,63 @@ textarea:focus-visible {
   transform: translateY(-1px);
 }
 
+.force-reset-page {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: clamp(24px, 5vw, 56px);
+  background: var(--bg);
+}
+
+.force-reset-panel {
+  width: min(100%, 440px);
+  display: grid;
+  gap: 22px;
+  padding: clamp(22px, 4vw, 32px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+}
+
+.force-reset-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+
+.force-reset-icon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--signal-dark);
+  background: #e8f7f1;
+  border: 1px solid #bee5d7;
+  border-radius: 8px;
+}
+
+.force-reset-heading h1 {
+  margin: 3px 0 0;
+  font-size: 1.35rem;
+  letter-spacing: 0;
+}
+
+.force-reset-heading small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.5;
+}
+
+.force-reset-form {
+  display: grid;
+  gap: 15px;
+}
+
 .primary-button:disabled,
 .secondary-button:disabled,
 .danger-button:disabled,
@@ -1766,7 +1823,7 @@ textarea:focus-visible {
 
 .users-form-grid {
   display: grid;
-  grid-template-columns: minmax(180px, 1.2fr) minmax(180px, 1.2fr) minmax(150px, 0.7fr);
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
   gap: 14px;
 }
 
@@ -1869,7 +1926,7 @@ textarea:focus-visible {
 
 .users-table {
   width: 100%;
-  min-width: 900px;
+  min-width: 1180px;
   border-collapse: collapse;
   font-size: 0.8rem;
 }

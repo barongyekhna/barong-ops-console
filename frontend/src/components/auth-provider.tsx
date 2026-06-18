@@ -21,6 +21,7 @@ import {
   isApiAbortError,
 } from "@/lib/api";
 import {
+  changePasswordRequest,
   loginRequest,
   logoutRequest,
   sessionCheckRequest,
@@ -28,6 +29,10 @@ import {
 } from "@/lib/auth";
 
 type AuthStatus = "checking" | "authenticated" | "unauthenticated";
+type AuthLoginResult = {
+  message: string | null;
+  requirePasswordChange: boolean;
+};
 
 type AuthContextValue = {
   status: AuthStatus;
@@ -36,6 +41,11 @@ type AuthContextValue = {
   login: (
     username: string,
     password: string,
+    options?: { signal?: AbortSignal; timeoutMs?: number },
+  ) => Promise<AuthLoginResult>;
+  changePassword: (
+    currentPassword: string,
+    newPassword: string,
     options?: { signal?: AbortSignal; timeoutMs?: number },
   ) => Promise<void>;
   logout: () => Promise<void>;
@@ -191,11 +201,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         sessionCheckGenerationRef.current += 1;
         setUser(result.user);
         setStatus("authenticated");
+        return {
+          message: result.message,
+          requirePasswordChange: result.require_password_change,
+        };
       } catch (error) {
         setUser(null);
         setStatus("unauthenticated");
         throw error;
       }
+    },
+    [],
+  );
+
+  const changePassword = useCallback(
+    async (
+      currentPassword: string,
+      newPassword: string,
+      options: { signal?: AbortSignal; timeoutMs?: number } = {},
+    ) => {
+      const result = await changePasswordRequest(
+        currentPassword,
+        newPassword,
+        options,
+      );
+      sessionCheckGenerationRef.current += 1;
+      setUser(result.user);
+      setStatus("authenticated");
     },
     [],
   );
@@ -210,8 +242,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isOwner = user?.role === "owner";
   const value = useMemo(
-    () => ({ status, user, isOwner, login, logout, refresh, resetAuthState }),
-    [status, user, isOwner, login, logout, refresh, resetAuthState],
+    () => ({
+      status,
+      user,
+      isOwner,
+      login,
+      changePassword,
+      logout,
+      refresh,
+      resetAuthState,
+    }),
+    [
+      status,
+      user,
+      isOwner,
+      login,
+      changePassword,
+      logout,
+      refresh,
+      resetAuthState,
+    ],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

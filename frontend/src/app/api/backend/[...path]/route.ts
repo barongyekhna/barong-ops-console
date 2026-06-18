@@ -10,6 +10,7 @@ const ALLOWED_PUBLIC_GET_PATHS = new Set([
   "auth/me",
 ]);
 const ALLOWED_PUBLIC_POST_PATHS = new Set([
+  "auth/change-password",
   "auth/login",
   "auth/logout",
 ]);
@@ -20,6 +21,7 @@ const ALLOWED_APP_LIST_PATHS = new Set([
   "errors",
   "memory-events",
   "operation-logs",
+  "organizations",
   "approval/list",
 ]);
 const ALLOWED_CONTROL_PLANE_LIST_PATHS = new Set([

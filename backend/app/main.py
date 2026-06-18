@@ -45,6 +45,7 @@ from .api.routes.module_workflow_bindings import (
 )
 from .api.routes.n8n_test import router as n8n_test_router
 from .api.routes.operation_logs import router as operation_logs_router
+from .api.routes.organizations import router as organizations_router
 from .api.routes.payload_standardization import (
     router as payload_standardization_router,
 )
@@ -146,6 +147,7 @@ def _auth_me_payload(request: Request) -> dict[str, object] | None:
                 "id": identity.id,
                 "username": identity.username,
                 "role": identity.role,
+                "must_change_password": identity.must_change_password,
                 "is_active": identity.is_active,
                 "last_login_at": identity.last_login_at,
             }
@@ -461,6 +463,7 @@ app.include_router(errors_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(memory_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(operation_logs_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(permissions_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(organizations_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(contacts_router, prefix=APPLICATION_API_PREFIX)

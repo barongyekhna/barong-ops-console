@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, false
+from sqlalchemy import Boolean, DateTime, Integer, String, false, true
 from sqlalchemy.orm import Mapped, mapped_column
 
 from ..db.base import Base
@@ -17,6 +17,18 @@ class User(PrimaryKeyMixin, TimestampMixin, Base):
     )
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
     role: Mapped[str] = mapped_column(String(50), nullable=False)
+    job_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    organization_id: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+        index=True,
+    )
+    must_change_password: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=true(),
+    )
     is_active: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,

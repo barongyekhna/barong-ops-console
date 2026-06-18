@@ -48,7 +48,7 @@ export function LoginForm() {
         }, LOGIN_REQUEST_TIMEOUT_MS);
       });
 
-      await Promise.race([
+      const result = await Promise.race([
         login(username.trim(), password, {
           signal: controller.signal,
           timeoutMs: LOGIN_REQUEST_TIMEOUT_MS,
@@ -60,7 +60,9 @@ export function LoginForm() {
         return;
       }
 
-      router.replace("/dashboard");
+      router.replace(
+        result.requirePasswordChange ? "/force-password-reset" : "/dashboard",
+      );
     } catch (loginError) {
       if (submissionIdRef.current !== submissionId) {
         return;

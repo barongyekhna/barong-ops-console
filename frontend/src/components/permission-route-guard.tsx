@@ -10,6 +10,7 @@ import {
   ModuleUnavailableNotice,
   NoPermissionNotice,
 } from "@/components/no-permission-notice";
+import { useAuth } from "@/components/auth-provider";
 import { navigationModuleRecords } from "@/lib/navigation";
 import { getModuleRouteDecision } from "@/lib/module-registry";
 
@@ -19,13 +20,16 @@ export function PermissionRouteGuard({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  const { user } = useAuth();
   const { getCapabilityForPath, permissionSnapshot } =
     useFrontendCapabilityState();
   const { items, moduleAccessUnknown } = useModuleAccess();
   const capability = getCapabilityForPath(pathname);
   const isOwner = permissionSnapshot.is_owner_full_access === true;
+  const isUserManagerRoute =
+    pathname === "/users" && user?.role === "super_admin";
 
-  if (isOwner) {
+  if (isOwner || isUserManagerRoute) {
     return children;
   }
 

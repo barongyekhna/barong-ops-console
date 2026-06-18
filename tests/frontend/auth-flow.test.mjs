@@ -17,6 +17,10 @@ test("auth proxy exposes only public session endpoints with exact methods", () =
     getBackendApiPath("POST", ["auth", "logout"]),
     "/api/public/auth/logout",
   );
+  assert.equal(
+    getBackendApiPath("POST", ["auth", "change-password"]),
+    "/api/public/auth/change-password",
+  );
 
   assert.equal(isAllowedBackendProxyPath("POST", ["auth", "me"]), false);
   assert.equal(isAllowedBackendProxyPath("GET", ["auth", "login"]), false);
@@ -38,12 +42,14 @@ test("root entry routes authenticated users home and unauthenticated users to lo
   assert.match(rootPageSource, /"use client"/);
   assert.match(rootPageSource, /useAuth/);
   assert.match(rootPageSource, /status === "authenticated"/);
-  assert.match(rootPageSource, /router\.replace\("\/dashboard"\)/);
+  assert.match(rootPageSource, /\/force-password-reset/);
+  assert.match(rootPageSource, /\/dashboard/);
   assert.match(rootPageSource, /status === "unauthenticated"/);
   assert.match(rootPageSource, /router\.replace\("\/login"\)/);
   assert.doesNotMatch(rootPageSource, /LoginScreen/);
   assert.doesNotMatch(rootPageSource, /PublicOnly/);
-  assert.match(loginFormSource, /router\.replace\("\/dashboard"\)/);
+  assert.match(loginFormSource, /\/force-password-reset/);
+  assert.match(loginFormSource, /\/dashboard/);
   assert.doesNotMatch(publicOnlySource, /router\.replace\("\/dashboard"\)/);
   assert.doesNotMatch(rootPageSource, /\/users/);
   assert.doesNotMatch(loginFormSource, /\/users/);
@@ -80,6 +86,7 @@ test("auth guards render without full-page session loading gates", () => {
   assert.doesNotMatch(publicOnlySource, /LoaderCircle/);
   assert.doesNotMatch(authGuardSource, /LoginScreen/);
   assert.match(authGuardSource, /redirect\("\/login"\)/);
+  assert.match(authGuardSource, /redirect\("\/force-password-reset"\)/);
   assert.match(authGuardSource, /status !== "authenticated"[\s\S]*return null/);
   assert.doesNotMatch(publicOnlySource, /\/dashboard/);
 });

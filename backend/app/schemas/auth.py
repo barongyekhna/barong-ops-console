@@ -16,6 +16,7 @@ class AuthenticatedUser(BaseModel):
     id: int
     username: str
     role: str
+    must_change_password: bool
     is_active: bool
     last_login_at: datetime | None
 
@@ -35,6 +36,18 @@ class AuthContextResponse(BaseModel):
 
 class LoginResponse(BaseModel):
     user: AuthenticatedUser
+    require_password_change: bool = False
+    message: str | None = None
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: SecretStr = Field(min_length=1, max_length=256)
+    new_password: SecretStr = Field(min_length=12, max_length=256)
+
+
+class ChangePasswordResponse(BaseModel):
+    user: AuthenticatedUser
+    message: str
 
 
 class LogoutResponse(BaseModel):

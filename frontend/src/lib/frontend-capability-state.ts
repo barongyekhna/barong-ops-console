@@ -285,6 +285,10 @@ function isOwnerFullAccess(
   return permissions?.is_owner_full_access === true;
 }
 
+function isUserManagementAdmin(role: string, moduleKey: string) {
+  return role === "super_admin" && moduleKey === "admin.users";
+}
+
 function missingPermissionText(
   record: ModuleAwareNavigationRecord,
   accessState: ModuleAccessState | null,
@@ -1238,7 +1242,7 @@ export function buildFrontendCapabilityGraph({
         unlock_condition: sourceState.unlock_condition,
       };
 
-      if (owner) {
+      if (owner || isUserManagementAdmin(role, moduleKey)) {
         const permissionBlocked =
           navigationState.isHidden ||
           navigationState.isLocked ||

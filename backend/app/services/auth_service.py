@@ -34,8 +34,10 @@ from ..repositories.users import (
     record_failed_login,
     reset_login_failures,
     login_lockout_columns_available,
+    update_password_hash,
     update_last_login,
 )
+from ..schemas.user import DEFAULT_INITIAL_PASSWORD
 from .event_collector import emit_event
 from .rate_limiter import register_login_rate_limit_attempt
 
@@ -84,6 +86,7 @@ class AuthenticatedUserIdentity:
     id: int
     username: str
     role: str
+    must_change_password: bool
     is_active: bool
     last_login_at: datetime | None
     session_expires_at: datetime
@@ -451,6 +454,7 @@ def _authenticated_identity_from_user(
         id=user.id,
         username=user.username,
         role=user.role,
+        must_change_password=user.must_change_password,
         is_active=user.is_active,
         last_login_at=user.last_login_at,
         session_expires_at=expires_at,
@@ -487,6 +491,7 @@ def validate_session_identity_fast(
                 User.id,
                 User.username,
                 User.role,
+                User.must_change_password,
                 User.is_active,
                 User.last_login_at,
             ).where(User.id == user_id, User.is_active.is_(True))
@@ -497,6 +502,7 @@ def validate_session_identity_fast(
             id=row.id,
             username=row.username,
             role=row.role,
+            must_change_password=row.must_change_password,
             is_active=row.is_active,
             last_login_at=row.last_login_at,
             session_expires_at=expires_at,
@@ -511,6 +517,7 @@ def validate_session_identity_fast(
                 User.id,
                 User.username,
                 User.role,
+                User.must_change_password,
                 User.is_active,
                 User.last_login_at,
                 AuthSession.expires_at.label("session_expires_at"),
@@ -539,6 +546,7 @@ def validate_session_identity_fast(
         id=row.id,
         username=row.username,
         role=row.role,
+        must_change_password=row.must_change_password,
         is_active=row.is_active,
         last_login_at=row.last_login_at,
         session_expires_at=row.session_expires_at,
@@ -820,6 +828,77 @@ def rotate_session(
         session_id=session_id,
         auth_session=new_session,
     )
+
+
+def change_password(
+    db: Session,
+    *,
+    user: User,
+    current_password: str,
+    new_password: str,
+    audit: AuditContext,
+    session_id_hash: str | None = None,
+) -> User:
+    if user.must_change_password and current_password != DEFAULT_INITIAL_PASSWORD:
+        create_operation_log(
+            db,
+            actor_type="user",
+            actor_id=str(user.id),
+            action="auth.change_password",
+            target_type="user",
+            target_id=str(user.id),
+            result="failure",
+            error_code="invalid_current_password",
+            request_id=audit.request_id,
+            ip_address=audit.ip_address,
+            user_agent=audit.user_agent,
+            details={"outcome": "invalid_current_password"},
+        )
+        db.commit()
+        raise InvalidCredentialsError("Invalid current password.")
+
+    if not verify_password(current_password, user.password_hash):
+        create_operation_log(
+            db,
+            actor_type="user",
+            actor_id=str(user.id),
+            action="auth.change_password",
+            target_type="user",
+            target_id=str(user.id),
+            result="failure",
+            error_code="invalid_current_password",
+            request_id=audit.request_id,
+            ip_address=audit.ip_address,
+            user_agent=audit.user_agent,
+            details={"outcome": "invalid_current_password"},
+        )
+        db.commit()
+        raise InvalidCredentialsError("Invalid current password.")
+
+    user = update_password_hash(
+        db,
+        user,
+        hash_password(new_password),
+        must_change_password=False,
+    )
+    if session_id_hash is not None:
+        forget_cached_session_identity_hash(session_id_hash)
+    create_operation_log(
+        db,
+        actor_type="user",
+        actor_id=str(user.id),
+        action="auth.change_password",
+        target_type="user",
+        target_id=str(user.id),
+        result="success",
+        request_id=audit.request_id,
+        ip_address=audit.ip_address,
+        user_agent=audit.user_agent,
+        details={"outcome": "password_changed"},
+    )
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 def logout(

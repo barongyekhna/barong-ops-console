@@ -12,6 +12,9 @@ C05B_USER_COLUMNS = (
     User.username,
     User.password_hash,
     User.role,
+    User.job_title,
+    User.organization_id,
+    User.must_change_password,
     User.is_active,
     User.last_login_at,
     User.created_at,
@@ -75,6 +78,7 @@ def create_owner(
         username=username,
         password_hash=password_hash,
         role="owner",
+        must_change_password=False,
         is_active=True,
     )
     db.add(user)
@@ -88,12 +92,17 @@ def create_user(
     username: str,
     password_hash: str,
     role: str,
+    job_title: str | None,
+    organization_id: str | None,
     is_active: bool,
 ) -> User:
     user = User(
         username=username,
         password_hash=password_hash,
         role=role,
+        job_title=job_title,
+        organization_id=organization_id,
+        must_change_password=True,
         is_active=is_active,
     )
     db.add(user)
@@ -121,8 +130,12 @@ def update_password_hash(
     db: Session,
     user: User,
     password_hash: str,
+    *,
+    must_change_password: bool | None = None,
 ) -> User:
     user.password_hash = password_hash
+    if must_change_password is not None:
+        user.must_change_password = must_change_password
     db.add(user)
     db.flush()
     return user

@@ -5,7 +5,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from backend.app.core.roles import (
-    ASSIGNABLE_USER_ROLES,
     ROLE_BOT_AGENT,
     ROLE_MODULE_ADMIN,
     ROLE_OPERATOR,
@@ -20,11 +19,13 @@ from backend.app.core.security import hash_password, verify_password
 from backend.app.db.session import SessionLocal
 from backend.app.models.operation_log import OperationLog
 from backend.app.models.user import User
+from backend.app.schemas.user import DEFAULT_INITIAL_PASSWORD, USER_MANAGEMENT_ROLES
 
 VIEWER_USERNAME = "managed_viewer"
 VIEWER_PASSWORD = "example-only-viewer-password"
 RESET_PASSWORD = "example-only-reset-password"
 OWNER_ROLE_PASSWORD = "example-only-owner-role-password"
+DEFAULT_ORG_ID = "org_11111111111111111111111111111111"
 
 
 def create_db_user(
@@ -50,18 +51,24 @@ def create_user_via_api(
     client: TestClient,
     *,
     username: str = VIEWER_USERNAME,
-    password: str = VIEWER_PASSWORD,
     role: str = "viewer",
+    organization_id: str | None = DEFAULT_ORG_ID,
+    job_title: str | None = "Operations Associate",
     is_active: bool = True,
 ) -> dict:
+    payload = {
+        "username": username,
+        "role": role,
+        "job_title": job_title,
+        "organization_id": organization_id,
+        "is_active": is_active,
+    }
+    if role == "owner":
+        payload["organization_id"] = None
+        payload["job_title"] = None
     response = client.post(
         "/api/app/users",
-        json={
-            "username": username,
-            "password": password,
-            "role": role,
-            "is_active": is_active,
-        },
+        json=payload,
     )
     assert response.status_code == 201
     return response.json()
@@ -113,9 +120,9 @@ def test_users_requires_owner_auth(
 
 @pytest.mark.parametrize(
     "role",
-    [ROLE_VIEWER, ROLE_OPERATOR, ROLE_REVIEWER],
+    [ROLE_OWNER, ROLE_SUPER_ADMIN, ROLE_VIEWER, ROLE_OPERATOR, ROLE_REVIEWER],
 )
-def test_owner_creates_assignable_user_roles(
+def test_owner_creates_user_management_roles(
     owner_client: TestClient,
     role: str,
 ) -> None:
@@ -130,9 +137,9 @@ def test_owner_creates_assignable_user_roles(
 
 @pytest.mark.parametrize(
     "role",
-    [ROLE_OWNER, ROLE_SUPER_ADMIN, ROLE_MODULE_ADMIN, ROLE_BOT_AGENT],
+    ["admin", ROLE_MODULE_ADMIN, ROLE_BOT_AGENT],
 )
-def test_owner_cannot_create_unassignable_user_roles(
+def test_owner_cannot_create_roles_outside_user_management_policy(
     owner_client: TestClient,
     role: str,
 ) -> None:
@@ -142,6 +149,7 @@ def test_owner_cannot_create_unassignable_user_roles(
             "username": f"blocked_{role}",
             "password": OWNER_ROLE_PASSWORD,
             "role": role,
+            "organization_id": DEFAULT_ORG_ID,
         },
     )
 
@@ -154,7 +162,7 @@ def test_owner_reads_user_role_catalog(owner_client: TestClient) -> None:
     assert response.status_code == 200
     payload = response.json()
     assert [role["name"] for role in payload["assignable_roles"]] == list(
-        ASSIGNABLE_USER_ROLES
+        USER_MANAGEMENT_ROLES
     )
     assert [role["name"] for role in payload["standard_roles"]] == list(
         STANDARD_ROLES
@@ -163,9 +171,9 @@ def test_owner_reads_user_role_catalog(owner_client: TestClient) -> None:
     assignable_by_name = {
         role["name"]: role["assignable"] for role in payload["standard_roles"]
     }
-    for role in ASSIGNABLE_USER_ROLES:
+    for role in USER_MANAGEMENT_ROLES:
         assert assignable_by_name[role] is True
-    for role in UNASSIGNABLE_USER_ROLES:
+    for role in set(UNASSIGNABLE_USER_ROLES) - set(USER_MANAGEMENT_ROLES):
         assert assignable_by_name[role] is False
 
 
@@ -176,6 +184,9 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
 
     assert created["username"] == VIEWER_USERNAME
     assert created["role"] == "operator"
+    assert created["job_title"] == "Operations Associate"
+    assert created["organization_id"] == DEFAULT_ORG_ID
+    assert created["must_change_password"] is True
     assert created["is_active"] is True
     assert_no_password_hash(created)
 
@@ -187,7 +198,8 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
 
     assert stored_user is not None
     assert stored_user.password_hash != VIEWER_PASSWORD
-    assert verify_password(VIEWER_PASSWORD, stored_user.password_hash)
+    assert verify_password(DEFAULT_INITIAL_PASSWORD, stored_user.password_hash)
+    assert stored_user.must_change_password is True
     assert create_log is not None
     assert create_log.actor_type == "user"
     assert create_log.target_id == str(created["id"])
@@ -198,28 +210,28 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
             "username": VIEWER_USERNAME,
             "password": "example-only-duplicate-password",
             "role": "viewer",
+            "organization_id": DEFAULT_ORG_ID,
         },
     )
-    owner_role = owner_client.post(
+    missing_org = owner_client.post(
         "/api/app/users",
         json={
-            "username": "blocked_owner_role",
-            "password": OWNER_ROLE_PASSWORD,
-            "role": "owner",
-        },
-    )
-    weak_password = owner_client.post(
-        "/api/app/users",
-        json={
-            "username": "weak_password_user",
-            "password": "short",
+            "username": "missing_org_user",
             "role": "viewer",
+        },
+    )
+    invalid_role = owner_client.post(
+        "/api/app/users",
+        json={
+            "username": "invalid_role_user",
+            "role": "admin",
+            "organization_id": DEFAULT_ORG_ID,
         },
     )
 
     assert duplicate.status_code == 409
-    assert owner_role.status_code == 422
-    assert weak_password.status_code == 422
+    assert missing_org.status_code == 422
+    assert invalid_role.status_code == 422
 
 
 def test_auth_register_remains_absent(auth_client: TestClient) -> None:
@@ -281,12 +293,12 @@ def test_owner_updates_disables_enables_and_resets_user_password(
     disabled = owner_client.post(f"/api/app/users/{user_id}/disable")
     disabled_login = owner_client.post(
         "/api/public/auth/login",
-        json={"username": VIEWER_USERNAME, "password": VIEWER_PASSWORD},
+        json={"username": VIEWER_USERNAME, "password": DEFAULT_INITIAL_PASSWORD},
     )
     enabled = owner_client.post(f"/api/app/users/{user_id}/enable")
     old_login_before_reset = owner_client.post(
         "/api/public/auth/login",
-        json={"username": VIEWER_USERNAME, "password": VIEWER_PASSWORD},
+        json={"username": VIEWER_USERNAME, "password": DEFAULT_INITIAL_PASSWORD},
     )
     reset = owner_client.post(
         f"/api/app/users/{user_id}/reset-password",
@@ -294,7 +306,7 @@ def test_owner_updates_disables_enables_and_resets_user_password(
     )
     old_login_after_reset = owner_client.post(
         "/api/public/auth/login",
-        json={"username": VIEWER_USERNAME, "password": VIEWER_PASSWORD},
+        json={"username": VIEWER_USERNAME, "password": DEFAULT_INITIAL_PASSWORD},
     )
     new_login_after_reset = owner_client.post(
         "/api/public/auth/login",
@@ -358,9 +370,9 @@ def test_owner_updates_disables_enables_and_resets_user_password(
 
 @pytest.mark.parametrize(
     "role",
-    [ROLE_OWNER, ROLE_SUPER_ADMIN, ROLE_MODULE_ADMIN, ROLE_BOT_AGENT],
+    ["admin", ROLE_MODULE_ADMIN, ROLE_BOT_AGENT],
 )
-def test_owner_cannot_update_user_to_unassignable_roles(
+def test_owner_cannot_update_user_to_roles_outside_user_management_policy(
     owner_client: TestClient,
     role: str,
 ) -> None:

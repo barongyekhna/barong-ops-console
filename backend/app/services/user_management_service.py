@@ -4,11 +4,11 @@ from datetime import datetime, timezone
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..core.roles import validate_assignable_user_role
 from ..core.security import hash_password
 from ..models.user import User
 from ..repositories.auth_sessions import invalidate_active_sessions_for_user
 from ..repositories.operation_logs import create_operation_log
+from ..repositories.organizations import get_organization
 from ..repositories.users import (
     create_user as create_user_record,
     get_user_by_id,
@@ -17,7 +17,12 @@ from ..repositories.users import (
     update_password_hash,
     update_user as update_user_record,
 )
-from ..schemas.user import UserCreate, UserUpdate
+from ..schemas.user import (
+    DEFAULT_INITIAL_PASSWORD,
+    UserCreate,
+    UserUpdate,
+    validate_user_management_role,
+)
 from .auth_service import AuditContext
 
 
@@ -34,6 +39,10 @@ class ManagedUserNotFoundError(UserManagementError):
 
 
 class OwnerRoleNotAllowedError(UserManagementError):
+    pass
+
+
+class UserOrganizationNotFoundError(UserManagementError):
     pass
 
 
@@ -104,20 +113,32 @@ def create_managed_user(
     audit: AuditContext,
 ) -> User:
     try:
-        role = validate_assignable_user_role(payload.role)
+        role = validate_user_management_role(payload.role)
     except ValueError as exc:
         raise OwnerRoleNotAllowedError(str(exc)) from None
 
     username = payload.username.strip()
     if get_user_by_username(db, username) is not None:
         raise DuplicateUsernameError("Username already exists.")
+    organization_id = payload.organization_id
+    job_title = payload.job_title
+    if role == "owner":
+        organization_id = None
+        job_title = None
+    elif (
+        organization_id is None
+        or get_organization(db, organization_id) is None
+    ):
+        raise UserOrganizationNotFoundError("Organization not found.")
 
     try:
         user = create_user_record(
             db,
             username=username,
-            password_hash=hash_password(payload.password.get_secret_value()),
+            password_hash=hash_password(DEFAULT_INITIAL_PASSWORD),
             role=role,
+            job_title=job_title,
+            organization_id=organization_id,
             is_active=payload.is_active,
         )
         _log_user_operation(
@@ -129,6 +150,9 @@ def create_managed_user(
             details={
                 "username": user.username,
                 "role": user.role,
+                "job_title": user.job_title,
+                "organization_id": user.organization_id,
+                "must_change_password": user.must_change_password,
                 "is_active": user.is_active,
             },
         )
@@ -156,7 +180,7 @@ def update_managed_user(
     role = None
     if payload.role is not None:
         try:
-            role = validate_assignable_user_role(payload.role)
+            role = validate_user_management_role(payload.role)
         except ValueError as exc:
             raise OwnerRoleNotAllowedError(str(exc)) from None
     if user.id == actor.id and payload.is_active is False:
@@ -197,7 +221,12 @@ def reset_managed_user_password(
             "Current owner password reset is not available here."
         )
 
-    user = update_password_hash(db, user, hash_password(new_password))
+    user = update_password_hash(
+        db,
+        user,
+        hash_password(new_password),
+        must_change_password=True,
+    )
     invalidated_session_count = invalidate_active_sessions_for_user(
         db,
         user_id=user.id,

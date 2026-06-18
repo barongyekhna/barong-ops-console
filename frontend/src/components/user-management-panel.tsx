@@ -31,33 +31,24 @@ import {
   formatUsersApiError,
   getUser,
   isManagedUserRole,
+  listOrganizations,
   listUserRoles,
   listUsers,
   resetUserPassword,
   updateUser,
   type ManagedUser,
   type ManagedUserRole,
+  type OrganizationOption,
   type UserRoleMetadata,
   type UserRolesResponse,
 } from "@/lib/users-api";
 
+const DEFAULT_INITIAL_PASSWORD = "123456";
 const PASSWORD_LENGTH_MESSAGE =
   "Password must be 12 to 256 characters.";
-const RESERVED_ROLE_NAMES = [
-  "owner",
-  "super_admin",
-  "module_admin",
-  "bot_agent",
-] as const;
-const RESERVED_ROLE_NOTES: Record<string, string> = {
-  bot_agent: "Automation accounts require a separate identity and token setup.",
-  module_admin: "Area Admin requires scoped access first.",
-  owner: "Owner remains bootstrap-only and cannot be created through /users.",
-  super_admin: "Super Admin will be enabled when advanced access controls are available.",
-};
 const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
   {
-    assignable: false,
+    assignable: true,
     c04_status: "bootstrap_only",
     description: "Bootstrap/system owner account.",
     human_or_agent: "human",
@@ -65,20 +56,12 @@ const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
     name: "owner",
   },
   {
-    assignable: false,
-    c04_status: "reserved_no_permissions",
-    description: "Reserved standard role with no workspace permissions.",
+    assignable: true,
+    c04_status: "user_management_admin_role",
+    description: "User management administrator.",
     human_or_agent: "human",
     label: "Super Admin",
     name: "super_admin",
-  },
-  {
-    assignable: false,
-    c04_status: "reserved_until_c05_c07",
-    description: "Reserved until area-level access is available.",
-    human_or_agent: "human",
-    label: "Area Admin",
-    name: "module_admin",
   },
   {
     assignable: true,
@@ -103,14 +86,6 @@ const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
     human_or_agent: "human",
     label: "Reviewer",
     name: "reviewer",
-  },
-  {
-    assignable: false,
-    c04_status: "reserved_no_login_flow",
-    description: "Reserved for future automation accounts.",
-    human_or_agent: "agent",
-    label: "Automation Account",
-    name: "bot_agent",
   },
 ];
 const FALLBACK_ROLE_METADATA_BY_NAME = new Map(
@@ -143,6 +118,14 @@ function validatePassword(password: string) {
   return "";
 }
 
+function canManageUsers(role: string | undefined) {
+  return role === "owner" || role === "super_admin";
+}
+
+function isOwnerRole(role: string) {
+  return role === "owner";
+}
+
 export function UserManagementPanel() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -151,6 +134,12 @@ export function UserManagementPanel() {
     useState<UserRolesResponse | null>(null);
   const [isRoleCatalogLoading, setIsRoleCatalogLoading] = useState(true);
   const [roleCatalogError, setRoleCatalogError] = useState("");
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>(
+    [],
+  );
+  const [isOrganizationsLoading, setIsOrganizationsLoading] =
+    useState(true);
+  const [organizationsError, setOrganizationsError] = useState("");
   const [listError, setListError] = useState("");
   const [actionError, setActionError] = useState("");
   const [actionNotice, setActionNotice] = useState("");
@@ -161,15 +150,16 @@ export function UserManagementPanel() {
   const [resetTarget, setResetTarget] = useState<ManagedUser | null>(null);
   const [resetPassword, setResetPassword] = useState("");
   const [createUsername, setCreateUsername] = useState("");
-  const [createPassword, setCreatePassword] = useState("");
+  const [createJobTitle, setCreateJobTitle] = useState("");
+  const [createOrganizationId, setCreateOrganizationId] = useState("");
   const [createRole, setCreateRole] =
     useState<ManagedUserRole>("viewer");
 
-  const isOwner = currentUser?.role === "owner";
+  const userCanManageUsers = canManageUsers(currentUser?.role);
   const isBusy = pendingAction !== null;
 
   const loadRoleCatalog = useCallback(async () => {
-    if (!isOwner) {
+    if (!userCanManageUsers) {
       setRoleCatalog(null);
       setRoleCatalogError("");
       setIsRoleCatalogLoading(false);
@@ -192,11 +182,37 @@ export function UserManagementPanel() {
     } finally {
       setIsRoleCatalogLoading(false);
     }
-  }, [isOwner]);
+  }, [userCanManageUsers]);
+
+  const loadOrganizations = useCallback(async () => {
+    if (!userCanManageUsers) {
+      setOrganizations([]);
+      setOrganizationsError("");
+      setIsOrganizationsLoading(false);
+      return;
+    }
+
+    setIsOrganizationsLoading(true);
+    setOrganizationsError("");
+    try {
+      const result = await listOrganizations();
+      setOrganizations(result.items);
+    } catch (error) {
+      setOrganizations([]);
+      setOrganizationsError(
+        formatUsersApiError(
+          error,
+          "Organizations could not be loaded.",
+        ),
+      );
+    } finally {
+      setIsOrganizationsLoading(false);
+    }
+  }, [userCanManageUsers]);
 
   const loadUsers = useCallback(
     async (showLoading = true) => {
-      if (!isOwner) {
+      if (!userCanManageUsers) {
         setIsLoading(false);
         return;
       }
@@ -223,12 +239,16 @@ export function UserManagementPanel() {
         }
       }
     },
-    [isOwner],
+    [userCanManageUsers],
   );
 
   useEffect(() => {
     void loadRoleCatalog();
   }, [loadRoleCatalog]);
+
+  useEffect(() => {
+    void loadOrganizations();
+  }, [loadOrganizations]);
 
   useEffect(() => {
     void loadUsers();
@@ -260,16 +280,6 @@ export function UserManagementPanel() {
     [assignableRoleOptions],
   );
 
-  const reservedRoleOptions = useMemo(
-    () =>
-      RESERVED_ROLE_NAMES.map(
-        (role) =>
-          roleCatalog?.standard_roles.find((entry) => entry.name === role) ??
-          FALLBACK_ROLE_METADATA_BY_NAME.get(role),
-      ).filter((role): role is UserRoleMetadata => Boolean(role)),
-    [roleCatalog],
-  );
-
   useEffect(() => {
     if (assignableRoleOptions.length === 0) {
       return;
@@ -288,6 +298,27 @@ export function UserManagementPanel() {
     createRole,
     detailRole,
   ]);
+
+  useEffect(() => {
+    if (
+      organizations.length > 0 &&
+      !createOrganizationId &&
+      !isOwnerRole(createRole)
+    ) {
+      setCreateOrganizationId(organizations[0].org_id);
+    }
+  }, [createOrganizationId, createRole, organizations]);
+
+  const organizationById = useMemo(
+    () =>
+      new Map(
+        organizations.map((organization) => [
+          organization.org_id,
+          organization,
+        ]),
+      ),
+    [organizations],
+  );
 
   const sortedUsers = useMemo(
     () =>
@@ -331,13 +362,9 @@ export function UserManagementPanel() {
     clearActionMessages();
 
     const username = createUsername.trim();
-    const passwordError = validatePassword(createPassword);
+    const jobTitle = createJobTitle.trim();
     if (!username) {
       setActionError("Username is required.");
-      return;
-    }
-    if (passwordError) {
-      setActionError(passwordError);
       return;
     }
     if (
@@ -349,16 +376,27 @@ export function UserManagementPanel() {
       );
       return;
     }
+    if (!isOwnerRole(createRole) && !createOrganizationId) {
+      setActionError("Organization is required for non-owner users.");
+      return;
+    }
 
     setPendingAction("create");
     try {
       const created = await createUser({
-        password: createPassword,
+        job_title: isOwnerRole(createRole) ? null : jobTitle || null,
+        organization_id: isOwnerRole(createRole)
+          ? null
+          : createOrganizationId,
         role: createRole,
         username,
       });
       setActionNotice(`Created account ${created.username}.`);
       setCreateUsername("");
+      setCreateJobTitle("");
+      setCreateOrganizationId(
+        organizations.length > 0 ? organizations[0].org_id : "",
+      );
       setCreateRole("viewer");
       await refreshAfterMutation(created.id);
     } catch (error) {
@@ -366,7 +404,6 @@ export function UserManagementPanel() {
         formatUsersApiError(error, "The account could not be created."),
       );
     } finally {
-      setCreatePassword("");
       setPendingAction(null);
     }
   }
@@ -411,7 +448,7 @@ export function UserManagementPanel() {
   async function handleDisable(target: ManagedUser) {
     clearActionMessages();
     if (target.id === currentUser?.id) {
-      setActionError("You cannot disable your own owner account here.");
+      setActionError("You cannot disable your own account here.");
       return;
     }
     if (
@@ -463,7 +500,7 @@ export function UserManagementPanel() {
       return;
     }
     if (expandedUser.id === currentUser?.id) {
-      setActionError("You cannot change your own owner role here.");
+      setActionError("You cannot change your own role here.");
       return;
     }
     if (!isManagedUserRole(expandedUser.role)) {
@@ -501,7 +538,7 @@ export function UserManagementPanel() {
       return;
     }
     if (resetTarget.id === currentUser?.id) {
-      setActionError("You cannot reset your own owner password here.");
+      setActionError("You cannot reset your own password here.");
       setResetPassword("");
       setResetTarget(null);
       return;
@@ -540,14 +577,14 @@ export function UserManagementPanel() {
     }
   }
 
-  if (!isOwner) {
+  if (!userCanManageUsers) {
     return (
       <section className="list-state list-error" role="alert">
         <div>
-          <h2>User management is owner-only</h2>
+          <h2>User management is restricted</h2>
           <p>
-            This signed-in account can use the console, but only owner accounts
-            can manage internal users.
+            This signed-in account can use the console, but only owner and
+            super admin accounts can manage internal users.
           </p>
         </div>
       </section>
@@ -561,10 +598,6 @@ export function UserManagementPanel() {
           <div>
             <span className="eyebrow">Internal accounts</span>
             <h3>Create user</h3>
-            <p>
-              Owner-created console accounts only. This is not public
-              registration.
-            </p>
           </div>
           <UserRoundCog aria-hidden="true" size={24} />
         </div>
@@ -590,13 +623,10 @@ export function UserManagementPanel() {
             <span className="input-shell">
               <input
                 autoComplete="new-password"
-                disabled={isBusy}
-                maxLength={256}
-                minLength={12}
-                onChange={(event) => setCreatePassword(event.target.value)}
-                placeholder="12+ characters"
+                aria-readonly="true"
+                readOnly
                 type="password"
-                value={createPassword}
+                value={DEFAULT_INITIAL_PASSWORD}
               />
             </span>
           </label>
@@ -623,10 +653,68 @@ export function UserManagementPanel() {
             </select>
             <span className="users-field-note">
               {isRoleCatalogLoading
-                ? "Loading owner-only role catalog."
+                ? "Loading role catalog."
                 : roleCatalogError
-                  ? "Using safe fallback roles after the role catalog failed."
+                  ? "Using fallback roles."
                   : "Loaded from /users/roles."}
+            </span>
+          </label>
+
+          <label className="field-group">
+            <span>Job title</span>
+            <span className="input-shell">
+              <input
+                autoComplete="organization-title"
+                disabled={isBusy || isOwnerRole(createRole)}
+                maxLength={255}
+                onChange={(event) => setCreateJobTitle(event.target.value)}
+                type="text"
+                value={isOwnerRole(createRole) ? "" : createJobTitle}
+              />
+            </span>
+          </label>
+
+          <label className="field-group">
+            <span>Organization</span>
+            <select
+              className="select-shell"
+              disabled={
+                isBusy ||
+                isOrganizationsLoading ||
+                isOwnerRole(createRole) ||
+                organizations.length === 0
+              }
+              onChange={(event) =>
+                setCreateOrganizationId(event.target.value)
+              }
+              required={!isOwnerRole(createRole)}
+              value={
+                isOwnerRole(createRole)
+                  ? ""
+                  : createOrganizationId
+              }
+            >
+              {isOwnerRole(createRole) ? (
+                <option value="">No organization required</option>
+              ) : organizations.length === 0 ? (
+                <option value="">No organizations available</option>
+              ) : (
+                organizations.map((organization) => (
+                  <option
+                    key={organization.org_id}
+                    value={organization.org_id}
+                  >
+                    {organization.org_name}
+                  </option>
+                ))
+              )}
+            </select>
+            <span className="users-field-note">
+              {isOrganizationsLoading
+                ? "Loading organizations."
+                : organizationsError
+                  ? organizationsError
+                  : "Loaded from /organizations."}
             </span>
           </label>
         </div>
@@ -636,7 +724,9 @@ export function UserManagementPanel() {
           disabled={
             isBusy ||
             isRoleCatalogLoading ||
-            assignableRoleOptions.length === 0
+            isOrganizationsLoading ||
+            assignableRoleOptions.length === 0 ||
+            (!isOwnerRole(createRole) && organizations.length === 0)
           }
           type="submit"
         >
@@ -648,78 +738,6 @@ export function UserManagementPanel() {
           Create user
         </button>
       </form>
-
-      <section className="users-role-catalog-panel" aria-label="Role catalog">
-        <div className="users-panel-heading">
-          <div>
-            <span className="eyebrow">Role catalog</span>
-            <h3>Roles</h3>
-            <p>
-              Users reads role labels and selectable roles from the owner-only
-              role catalog.
-            </p>
-          </div>
-          <button
-            className="secondary-button"
-            disabled={isBusy || isRoleCatalogLoading}
-            onClick={() => void loadRoleCatalog()}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" size={17} />
-            Refresh roles
-          </button>
-        </div>
-
-        {isRoleCatalogLoading ? (
-          <div className="list-state" aria-label="Loading role catalog">
-            <LoaderCircle className="spin" aria-hidden="true" size={22} />
-            Loading role catalog
-          </div>
-        ) : null}
-
-        {!isRoleCatalogLoading && roleCatalogError ? (
-          <div className="users-alert users-alert-warning" role="status">
-            <ShieldAlert aria-hidden="true" size={18} />
-            <span>
-              {roleCatalogError} Safe fallback roles are limited to viewer,
-              operator, and reviewer.
-            </span>
-          </div>
-        ) : null}
-
-        {!isRoleCatalogLoading ? (
-          <div className="users-role-catalog-grid">
-            <div className="users-role-group">
-              <h4>Current assignable roles</h4>
-              <ul>
-                {assignableRoleOptions.map((role) => (
-                  <li key={role.name}>
-                    <span>{role.label}</span>
-                    <p>{role.description}</p>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="users-role-group">
-              <h4>Reserved roles</h4>
-              <ul>
-                {reservedRoleOptions.map((role) => (
-                  <li key={role.name}>
-                    <span>{role.label}</span>
-                    <p>
-                      {role.description} {RESERVED_ROLE_NOTES[role.name]}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-              <p className="users-muted-note">
-                Advanced access controls will be enabled when they are ready.
-              </p>
-            </div>
-          </div>
-        ) : null}
-      </section>
 
       {actionError ? (
         <div className="users-alert users-alert-error" role="alert">
@@ -786,7 +804,7 @@ export function UserManagementPanel() {
         <div className="users-list-heading">
           <div>
             <h3>Users</h3>
-            <p>{users.length} accounts returned by the owner-only API.</p>
+            <p>{users.length} accounts returned by the user management API.</p>
           </div>
           <button
             className="secondary-button"
@@ -833,6 +851,8 @@ export function UserManagementPanel() {
                   <th scope="col">Status</th>
                   <th scope="col">Created</th>
                   <th scope="col">Updated</th>
+                  <th scope="col">Job title</th>
+                  <th scope="col">Organization</th>
                   <th scope="col">Actions</th>
                 </tr>
               </thead>
@@ -843,6 +863,10 @@ export function UserManagementPanel() {
                   const rowPending =
                     pendingAction?.endsWith(`-${target.id}`) ?? false;
                   const roleMetadata = catalogRoleByName.get(target.role);
+                  const targetOrganization = target.organization_id
+                    ? organizationById.get(target.organization_id)
+                    : null;
+                  const showOrgFields = !isOwnerRole(target.role);
 
                   return (
                     <tr key={target.id}>
@@ -875,6 +899,14 @@ export function UserManagementPanel() {
                       </td>
                       <td>{formatDate(target.created_at)}</td>
                       <td>{formatDate(target.updated_at)}</td>
+                      <td>{showOrgFields ? target.job_title ?? "" : ""}</td>
+                      <td>
+                        {showOrgFields
+                          ? targetOrganization?.org_name ??
+                            target.organization_id ??
+                            ""
+                          : ""}
+                      </td>
                       <td>
                         <div className="users-actions">
                           <button
@@ -1032,6 +1064,23 @@ export function UserManagementPanel() {
                 ) : null}
               </dd>
             </div>
+            {!isOwnerRole(expandedUser.role) ? (
+              <>
+                <div>
+                  <dt>Job title</dt>
+                  <dd>{expandedUser.job_title ?? "Not set"}</dd>
+                </div>
+                <div>
+                  <dt>Organization</dt>
+                  <dd>
+                    {expandedUser.organization_id
+                      ? organizationById.get(expandedUser.organization_id)
+                          ?.org_name ?? expandedUser.organization_id
+                      : "Not set"}
+                  </dd>
+                </div>
+              </>
+            ) : null}
             <div>
               <dt>Status</dt>
               <dd>{expandedUser.is_active ? "Active" : "Disabled"}</dd>

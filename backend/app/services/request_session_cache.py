@@ -29,6 +29,9 @@ def _user_snapshot(user: User) -> User:
         username=_loaded_value(user, "username"),
         password_hash=_loaded_value(user, "password_hash"),
         role=_loaded_value(user, "role"),
+        job_title=_optional_loaded_value(user, "job_title"),
+        organization_id=_optional_loaded_value(user, "organization_id"),
+        must_change_password=_loaded_value(user, "must_change_password"),
         is_active=_loaded_value(user, "is_active"),
     )
     snapshot.id = _loaded_value(user, "id")

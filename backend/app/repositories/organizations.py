@@ -1,3 +1,4 @@
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models.organization import OrganizationRecord
@@ -8,6 +9,23 @@ def get_organization(
     org_id: str,
 ) -> OrganizationRecord | None:
     return db.get(OrganizationRecord, org_id)
+
+
+def list_organizations(
+    db: Session,
+    *,
+    limit: int,
+    offset: int,
+) -> list[OrganizationRecord]:
+    rows = list(
+        db.scalars(
+            select(OrganizationRecord)
+            .where(OrganizationRecord.status != "deleted")
+            .order_by(OrganizationRecord.org_name, OrganizationRecord.org_id)
+            .limit(limit + offset)
+        )
+    )
+    return rows[offset : offset + limit]
 
 
 def create_organization_record(

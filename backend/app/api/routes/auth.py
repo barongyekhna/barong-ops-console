@@ -10,15 +10,19 @@ from ...models.user import User
 from ...schemas.auth import (
     AuthContextResponse,
     AuthenticatedUser,
+    ChangePasswordRequest,
+    ChangePasswordResponse,
     LoginRequest,
     LoginResponse,
     LogoutResponse,
 )
 from ...services.auth_service import (
+    AuthenticatedSession,
     AuthenticatedUserIdentity,
     InvalidCredentialsError,
     InvalidSessionError,
     LoginRateLimitError,
+    change_password as change_user_password,
     login as login_user,
     logout as logout_user,
     validate_session,
@@ -27,7 +31,7 @@ from ...services.auth_service import (
 from ...services.permission_decision_engine import PermissionDecisionEngine
 from ...services.session_seen_buffer import queue_session_seen
 from ...services.unified_permission_engine import UnifiedPermissionRequest
-from ..deps import get_audit_context
+from ..deps import get_audit_context, get_current_session
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -61,6 +65,7 @@ def _identity_response(identity: AuthenticatedUserIdentity) -> AuthenticatedUser
         id=identity.id,
         username=identity.username,
         role=identity.role,
+        must_change_password=identity.must_change_password,
         is_active=identity.is_active,
         last_login_at=identity.last_login_at,
     )
@@ -71,6 +76,7 @@ def _identity_user(identity: AuthenticatedUserIdentity) -> User:
         username=identity.username,
         password_hash="",
         role=identity.role,
+        must_change_password=identity.must_change_password,
         is_active=identity.is_active,
     )
     user.id = identity.id
@@ -129,6 +135,12 @@ def login(
     )
     return LoginResponse(
         user=AuthenticatedUser.model_validate(result.user),
+        require_password_change=result.user.must_change_password,
+        message=(
+            "首次登录默认密码为123456，请立即修改密码"
+            if result.user.must_change_password
+            else None
+        ),
     )
 
 
@@ -169,6 +181,33 @@ def auth_context(
         module_scope=context.module_scope,
         context_available=True,
         resolution_source=resolution_source,
+    )
+
+
+@router.post("/change-password", response_model=ChangePasswordResponse)
+def change_password(
+    payload: ChangePasswordRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_session: AuthenticatedSession = Depends(get_current_session),
+) -> ChangePasswordResponse:
+    try:
+        user = change_user_password(
+            db,
+            user=current_session.user,
+            current_password=payload.current_password.get_secret_value(),
+            new_password=payload.new_password.get_secret_value(),
+            audit=get_audit_context(request),
+            session_id_hash=current_session.auth_session.session_id_hash,
+        )
+    except InvalidCredentialsError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from None
+    return ChangePasswordResponse(
+        user=AuthenticatedUser.model_validate(user),
+        message="Password changed.",
     )
 
 
