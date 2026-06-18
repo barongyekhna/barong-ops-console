@@ -16,7 +16,9 @@ import {
 import {
   abortActiveApiRequests,
   ApiError,
+  ApiRequestAbortedError,
   AUTH_UNAUTHORIZED_EVENT,
+  isApiAbortError,
 } from "@/lib/api";
 import {
   loginRequest,
@@ -37,17 +39,36 @@ type AuthContextValue = {
   ) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
+  resetAuthState: () => void;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+const LOGIN_PATHNAME = "/login";
 const BACKGROUND_SESSION_CHECK_TIMEOUT_MS = 1_500;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [status, setStatus] = useState<AuthStatus>("checking");
+  const [status, setStatus] = useState<AuthStatus>(() =>
+    pathname === LOGIN_PATHNAME ? "unauthenticated" : "checking",
+  );
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const previousPathnameRef = useRef(pathname);
+  const authSnapshotRef = useRef<{
+    status: AuthStatus;
+    user: AuthenticatedUser | null;
+  }>({ status, user });
+  const sessionCheckAbortControllerRef = useRef<AbortController | null>(null);
   const sessionCheckGenerationRef = useRef(0);
+  authSnapshotRef.current = { status, user };
+
+  const abortSessionCheck = useCallback((message: string) => {
+    const controller = sessionCheckAbortControllerRef.current;
+    sessionCheckAbortControllerRef.current = null;
+
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new ApiRequestAbortedError(message));
+    }
+  }, []);
 
   const clearSession = useCallback(() => {
     sessionCheckGenerationRef.current += 1;
@@ -55,21 +76,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStatus("unauthenticated");
   }, []);
 
+  const resetAuthState = useCallback(() => {
+    sessionCheckGenerationRef.current += 1;
+    abortSessionCheck("The session check was aborted because auth state reset.");
+    setUser(null);
+    setStatus("unauthenticated");
+  }, [abortSessionCheck]);
+
   const refresh = useCallback(async () => {
+    if (pathname === LOGIN_PATHNAME) {
+      resetAuthState();
+      return;
+    }
+
+    if (
+      authSnapshotRef.current.status === "authenticated" &&
+      authSnapshotRef.current.user
+    ) {
+      return;
+    }
+
     const generation = sessionCheckGenerationRef.current + 1;
     sessionCheckGenerationRef.current = generation;
+    abortSessionCheck("The session check was replaced by a newer request.");
+    const controller = new AbortController();
+    sessionCheckAbortControllerRef.current = controller;
+    setStatus("checking");
+
     try {
       const currentUser = await sessionCheckRequest({
+        signal: controller.signal,
         timeoutMs: BACKGROUND_SESSION_CHECK_TIMEOUT_MS,
       });
-      if (sessionCheckGenerationRef.current !== generation) {
+      if (
+        sessionCheckGenerationRef.current !== generation ||
+        controller.signal.aborted
+      ) {
         return;
       }
 
       setUser(currentUser);
       setStatus("authenticated");
     } catch (error) {
-      if (sessionCheckGenerationRef.current !== generation) {
+      if (
+        sessionCheckGenerationRef.current !== generation ||
+        controller.signal.aborted ||
+        isApiAbortError(error)
+      ) {
         return;
       }
 
@@ -79,8 +132,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       clearSession();
+    } finally {
+      if (sessionCheckAbortControllerRef.current === controller) {
+        sessionCheckAbortControllerRef.current = null;
+      }
     }
-  }, [clearSession]);
+  }, [abortSessionCheck, clearSession, pathname, resetAuthState]);
 
   useEffect(() => {
     void refresh();
@@ -93,17 +150,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     previousPathnameRef.current = pathname;
     abortActiveApiRequests();
-  }, [pathname]);
+    abortSessionCheck(
+      "The session check was aborted because the route changed.",
+    );
+    sessionCheckGenerationRef.current += 1;
+
+    if (pathname === LOGIN_PATHNAME) {
+      setUser(null);
+      setStatus("unauthenticated");
+      return;
+    }
+
+    if (authSnapshotRef.current.status !== "authenticated") {
+      setUser(null);
+      setStatus("checking");
+    }
+  }, [abortSessionCheck, pathname]);
 
   useEffect(() => {
-    const handleUnauthorized = () => clearSession();
+    const handleUnauthorized = () => resetAuthState();
 
     window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
 
     return () => {
       window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
     };
-  }, [clearSession]);
+  }, [resetAuthState]);
 
   const login = useCallback(
     async (
@@ -131,13 +203,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await logoutRequest();
     } finally {
-      clearSession();
+      resetAuthState();
     }
-  }, [clearSession]);
+  }, [resetAuthState]);
 
   const value = useMemo(
-    () => ({ status, user, login, logout, refresh }),
-    [status, user, login, logout, refresh],
+    () => ({ status, user, login, logout, refresh, resetAuthState }),
+    [status, user, login, logout, refresh, resetAuthState],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

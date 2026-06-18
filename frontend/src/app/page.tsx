@@ -1,10 +1,5 @@
-import { LoginScreen } from "@/components/login-screen";
-import { PublicOnly } from "@/components/public-only";
+import { redirect } from "next/navigation";
 
 export default function HomePage() {
-  return (
-    <PublicOnly>
-      <LoginScreen />
-    </PublicOnly>
-  );
+  redirect("/login");
 }

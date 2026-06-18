@@ -1,0 +1,42 @@
+{
+  "report": "dashboard_access_control_report",
+  "date": "2026-06-18",
+  "scope": "frontend dashboard route access control",
+  "backend_modified": false,
+  "db_schema_modified": false,
+  "rbac_modified": false,
+  "execution_engine_modified": false,
+  "changes": [
+    {
+      "file": "frontend/src/app/(console)/layout.tsx",
+      "status": "unchanged",
+      "control": "Protected console layout still wraps console routes in AuthGuard before capability/module/dashboard providers render."
+    },
+    {
+      "file": "frontend/src/app/(console)/dashboard/page.tsx",
+      "status": "updated",
+      "control": "Dashboard content is wrapped in DashboardAccessControl."
+    },
+    {
+      "file": "frontend/src/components/dashboard-access-control.tsx",
+      "status": "added",
+      "control": "Unauthenticated dashboard state redirects to /login; non-authenticated checking state returns null; only authenticated state renders dashboard children."
+    },
+    {
+      "file": "frontend/src/components/auth-guard.tsx",
+      "status": "updated",
+      "control": "Protected children are not rendered until status is authenticated, preventing capability/module/dashboard loading in unauthenticated state."
+    }
+  ],
+  "access_results": {
+    "unauthenticated_dashboard_access": "redirect /login",
+    "dashboard_spinner_on_unauthenticated": false,
+    "capability_loading_before_authenticated": false,
+    "module_loading_before_authenticated": false,
+    "operations_dashboard_mount_before_authenticated": false
+  },
+  "verification": {
+    "frontend_tests": "passed: npm test",
+    "typecheck": "passed: npm run typecheck"
+  }
+}

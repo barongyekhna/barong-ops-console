@@ -1,0 +1,37 @@
+{
+  "report": "auth_state_isolation_report",
+  "date": "2026-06-18",
+  "scope": "frontend auth provider transient state isolation",
+  "backend_modified": false,
+  "db_schema_modified": false,
+  "rbac_modified": false,
+  "execution_engine_modified": false,
+  "changes": [
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "change": "Added resetAuthState() to clear user, set status to unauthenticated, abort pending session checks, and invalidate stale auth generations."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "change": "Initial /login render now starts with status=unauthenticated instead of checking."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "change": "Route changes abort pending frontend API requests and pending /auth/me session checks before stale responses can update auth state."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "change": "The /login route forces clean unauthenticated frontend auth state and prevents inherited checking state from dashboard navigation."
+    }
+  ],
+  "state_isolation": {
+    "login_state": "isolated unauthenticated frontend state",
+    "dashboard_state": "requires authenticated provider state before protected subtree renders",
+    "pending_auth_me_on_navigation": "aborted via AbortController and invalidated generation",
+    "stale_auth_me_response": "ignored when generation changes or request is aborted"
+  },
+  "verification": {
+    "frontend_tests": "passed: npm test",
+    "typecheck": "passed: npm run typecheck"
+  }
+}

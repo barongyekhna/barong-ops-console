@@ -1,0 +1,33 @@
+{
+  "report": "routing_auth_flow_fix_report",
+  "date": "2026-06-18",
+  "scope": "frontend routing and auth state handling only",
+  "backend_modified": false,
+  "db_schema_modified": false,
+  "rbac_modified": false,
+  "execution_engine_modified": false,
+  "changes": [
+    {
+      "file": "frontend/src/app/page.tsx",
+      "change": "Root route now redirects directly to /login and contains no /dashboard redirect path."
+    },
+    {
+      "file": "frontend/src/components/auth-guard.tsx",
+      "change": "Unauthenticated protected routes synchronously redirect to /login; checking routes return null and do not render protected children."
+    },
+    {
+      "file": "frontend/src/components/public-only.tsx",
+      "change": "Removed the legacy authenticated redirect to /dashboard from public-only rendering."
+    }
+  ],
+  "enforced_flow": {
+    "/": "/login",
+    "/dashboard_without_authenticated_state": "/login",
+    "/login": "renders login screen without PublicOnly auth readiness dependency",
+    "post_login_success": "login form redirects to /dashboard only after POST /auth/login succeeds"
+  },
+  "verification": {
+    "frontend_tests": "passed: npm test",
+    "typecheck": "passed: npm run typecheck"
+  }
+}

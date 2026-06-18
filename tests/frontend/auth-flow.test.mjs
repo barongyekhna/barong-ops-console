@@ -24,7 +24,7 @@ test("auth proxy exposes only public session endpoints with exact methods", () =
   assert.equal(isAllowedBackendProxyPath("POST", ["auth", "register"]), false);
 });
 
-test("auth success and root entry land on dashboard route without blanking initial HTML", () => {
+test("root entry always redirects to login and never dashboard", () => {
   const rootPageSource = readFileSync("frontend/src/app/page.tsx", "utf8");
   const loginFormSource = readFileSync(
     "frontend/src/components/login-form.tsx",
@@ -35,10 +35,12 @@ test("auth success and root entry land on dashboard route without blanking initi
     "utf8",
   );
 
-  assert.match(rootPageSource, /<LoginScreen \/>/);
-  assert.match(rootPageSource, /<PublicOnly>/);
+  assert.match(rootPageSource, /redirect\("\/login"\)/);
+  assert.doesNotMatch(rootPageSource, /\/dashboard/);
+  assert.doesNotMatch(rootPageSource, /LoginScreen/);
+  assert.doesNotMatch(rootPageSource, /PublicOnly/);
   assert.match(loginFormSource, /router\.replace\("\/dashboard"\)/);
-  assert.match(publicOnlySource, /router\.replace\("\/dashboard"\)/);
+  assert.doesNotMatch(publicOnlySource, /router\.replace\("\/dashboard"\)/);
   assert.doesNotMatch(rootPageSource, /\/users/);
   assert.doesNotMatch(loginFormSource, /\/users/);
   assert.doesNotMatch(publicOnlySource, /\/users/);
@@ -72,19 +74,43 @@ test("auth guards render without full-page session loading gates", () => {
   assert.doesNotMatch(publicOnlySource, /AUTH_LOADING_TIMEOUT_MS/);
   assert.doesNotMatch(authGuardSource, /LoaderCircle/);
   assert.doesNotMatch(publicOnlySource, /LoaderCircle/);
-  assert.doesNotMatch(publicOnlySource, /return null/);
-  assert.match(authGuardSource, /router\.replace\("\/login"\)/);
-  assert.match(publicOnlySource, /router\.replace\("\/dashboard"\)/);
+  assert.doesNotMatch(authGuardSource, /LoginScreen/);
+  assert.match(authGuardSource, /redirect\("\/login"\)/);
+  assert.match(authGuardSource, /status !== "authenticated"[\s\S]*return null/);
+  assert.doesNotMatch(publicOnlySource, /\/dashboard/);
 });
 
-test("auth initialization failures do not leave session status checking forever", () => {
+test("auth initialization and route changes reset transient auth state", () => {
   const providerSource = readFileSync(
     "frontend/src/components/auth-provider.tsx",
     "utf8",
   );
 
   assert.match(providerSource, /BACKGROUND_SESSION_CHECK_TIMEOUT_MS = 1_500/);
+  assert.match(providerSource, /resetAuthState/);
+  assert.match(providerSource, /LOGIN_PATHNAME = "\/login"/);
+  assert.match(providerSource, /pathname === LOGIN_PATHNAME[\s\S]*resetAuthState\(\)/);
+  assert.match(providerSource, /abortSessionCheck/);
+  assert.match(providerSource, /sessionCheckRequest\(\{[\s\S]*signal: controller\.signal/);
   assert.match(providerSource, /catch \(error\)[\s\S]*clearSession\(\);/);
+});
+
+test("dashboard page has explicit unauthenticated access control", () => {
+  const dashboardPageSource = readFileSync(
+    "frontend/src/app/(console)/dashboard/page.tsx",
+    "utf8",
+  );
+  const dashboardAccessControlSource = readFileSync(
+    "frontend/src/components/dashboard-access-control.tsx",
+    "utf8",
+  );
+
+  assert.match(dashboardPageSource, /<DashboardAccessControl>/);
+  assert.match(dashboardAccessControlSource, /redirect\("\/login"\)/);
+  assert.match(
+    dashboardAccessControlSource,
+    /status !== "authenticated"[\s\S]*return null/,
+  );
 });
 
 test("login route renders independently from public-only auth readiness", () => {

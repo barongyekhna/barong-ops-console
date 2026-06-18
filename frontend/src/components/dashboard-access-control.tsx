@@ -5,7 +5,11 @@ import type { ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 
-export function AuthGuard({ children }: { children: ReactNode }) {
+export function DashboardAccessControl({
+  children,
+}: {
+  children: ReactNode;
+}) {
   const { status } = useAuth();
 
   if (status === "unauthenticated") {
