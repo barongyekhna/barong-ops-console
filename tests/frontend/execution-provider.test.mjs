@@ -675,8 +675,13 @@ test("module adapter shell is execution-aware but no-execute", () => {
     shellSource,
     /apiRequest|fetch\(|method:\s*["'](?:POST|PUT|PATCH|DELETE)["']/,
   );
-  assert.match(providerSource, /getExecutionProviderRegistry/);
-  assert.match(providerSource, /getMyExecutionProviders/);
+  assert.match(providerSource, /useFrontendCapabilityState/);
+  assert.match(providerSource, /executionProviderContracts/);
+  assert.match(providerSource, /executionProviderAccessItems/);
+  assert.doesNotMatch(
+    providerSource,
+    /getExecutionProviderRegistry|getMyExecutionProviders|apiRequest|fetch\(/,
+  );
 });
 
 test("adapter contract normalization remains intact with C09C provider state", () => {

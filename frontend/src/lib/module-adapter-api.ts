@@ -21,12 +21,12 @@ export type ModuleAdapterApiResult<T> = {
   adapter_access_unknown: boolean;
 };
 
-const EMPTY_REGISTRY_RESPONSE: ModuleAdapterRegistryResponse = {
+export const EMPTY_MODULE_ADAPTER_REGISTRY_RESPONSE: ModuleAdapterRegistryResponse = {
   count: 0,
   items: [],
 };
 
-const EMPTY_USER_ADAPTERS_RESPONSE: UserModuleAdaptersResponse = {
+export const EMPTY_USER_MODULE_ADAPTERS_RESPONSE: UserModuleAdaptersResponse = {
   count: 0,
   is_owner_full_access: false,
   items: [],
@@ -34,7 +34,7 @@ const EMPTY_USER_ADAPTERS_RESPONSE: UserModuleAdaptersResponse = {
   user_id: 0,
 };
 
-function formatModuleAdapterApiError(
+export function formatModuleAdapterApiError(
   error: unknown,
 ): ModuleAdapterApiErrorSummary {
   if (error instanceof ApiError) {
@@ -80,6 +80,50 @@ function formatModuleAdapterApiError(
   };
 }
 
+export function moduleAdapterRegistryResultFromResponse(
+  response: unknown,
+): ModuleAdapterApiResult<ModuleAdapterRegistryResponse> {
+  return {
+    adapter_access_unknown: false,
+    data: normalizeModuleAdapterRegistryResponse(response),
+    error: null,
+    ok: true,
+  };
+}
+
+export function moduleAdapterRegistryResultFromError(
+  error: unknown,
+): ModuleAdapterApiResult<ModuleAdapterRegistryResponse> {
+  return {
+    adapter_access_unknown: true,
+    data: EMPTY_MODULE_ADAPTER_REGISTRY_RESPONSE,
+    error: formatModuleAdapterApiError(error),
+    ok: false,
+  };
+}
+
+export function userModuleAdaptersResultFromResponse(
+  response: unknown,
+): ModuleAdapterApiResult<UserModuleAdaptersResponse> {
+  return {
+    adapter_access_unknown: false,
+    data: normalizeUserModuleAdaptersResponse(response),
+    error: null,
+    ok: true,
+  };
+}
+
+export function userModuleAdaptersResultFromError(
+  error: unknown,
+): ModuleAdapterApiResult<UserModuleAdaptersResponse> {
+  return {
+    adapter_access_unknown: true,
+    data: EMPTY_USER_MODULE_ADAPTERS_RESPONSE,
+    error: formatModuleAdapterApiError(error),
+    ok: false,
+  };
+}
+
 export async function listModuleAdapterRegistry(): Promise<
   ModuleAdapterApiResult<ModuleAdapterRegistryResponse>
 > {
@@ -87,19 +131,9 @@ export async function listModuleAdapterRegistry(): Promise<
     const response = await apiRequest<unknown>("/module-adapters/registry", {
       method: "GET",
     });
-    return {
-      adapter_access_unknown: false,
-      data: normalizeModuleAdapterRegistryResponse(response),
-      error: null,
-      ok: true,
-    };
+    return moduleAdapterRegistryResultFromResponse(response);
   } catch (error) {
-    return {
-      adapter_access_unknown: true,
-      data: EMPTY_REGISTRY_RESPONSE,
-      error: formatModuleAdapterApiError(error),
-      ok: false,
-    };
+    return moduleAdapterRegistryResultFromError(error);
   }
 }
 
@@ -110,18 +144,8 @@ export async function listMyModuleAdapters(): Promise<
     const response = await apiRequest<unknown>("/module-adapters/me", {
       method: "GET",
     });
-    return {
-      adapter_access_unknown: false,
-      data: normalizeUserModuleAdaptersResponse(response),
-      error: null,
-      ok: true,
-    };
+    return userModuleAdaptersResultFromResponse(response);
   } catch (error) {
-    return {
-      adapter_access_unknown: true,
-      data: EMPTY_USER_ADAPTERS_RESPONSE,
-      error: formatModuleAdapterApiError(error),
-      ok: false,
-    };
+    return userModuleAdaptersResultFromError(error);
   }
 }

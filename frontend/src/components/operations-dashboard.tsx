@@ -193,15 +193,12 @@ export function OperationsDashboard() {
   const [isLoading, setIsLoading] = useState(true);
   const [hasLoadingTimedOut, setHasLoadingTimedOut] = useState(false);
 
-  const refreshCapabilityState = capabilityState?.refresh ?? (async () => {});
-
   const load = useCallback(async () => {
     setIsLoading(true);
 
     try {
-      const [, health, operationLogs, approvals, users] =
+      const [health, operationLogs, approvals, users] =
         await Promise.allSettled([
-          refreshCapabilityState(),
           apiRequest<HealthResponse>("/health", { method: "GET" }),
           apiRequest<ListResponse<OperationLogRecord>>(
             "/operation-logs?limit=8&offset=0",
@@ -257,7 +254,7 @@ export function OperationsDashboard() {
     } finally {
       setIsLoading(false);
     }
-  }, [refreshCapabilityState]);
+  }, []);
 
   useEffect(() => {
     void load();

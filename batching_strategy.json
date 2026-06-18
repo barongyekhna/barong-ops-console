@@ -1,0 +1,67 @@
+{
+  "task": "FIX-BE-07_PROVIDER_FAN_OUT_OPTIMIZATION",
+  "generated_at": "2026-06-18",
+  "strategy": "frontend proxy virtual bootstrap endpoint",
+  "frontend_endpoint": "/api/backend/capability/bootstrap",
+  "backend_api_contract_changed": false,
+  "backend_business_logic_changed": false,
+  "implementation_files": [
+    "frontend/src/app/api/backend/[...path]/route.ts",
+    "frontend/src/lib/capability-bootstrap-api.ts",
+    "frontend/src/components/capability-state-provider.tsx"
+  ],
+  "batched_sources": [
+    {
+      "bootstrap_key": "modules_registry",
+      "backend_endpoint": "/modules/registry"
+    },
+    {
+      "bootstrap_key": "modules_me",
+      "backend_endpoint": "/modules/me"
+    },
+    {
+      "bootstrap_key": "module_adapters_registry",
+      "backend_endpoint": "/module-adapters/registry"
+    },
+    {
+      "bootstrap_key": "module_adapters_me",
+      "backend_endpoint": "/module-adapters/me"
+    },
+    {
+      "bootstrap_key": "execution_providers_registry",
+      "backend_endpoint": "/execution-providers/registry"
+    },
+    {
+      "bootstrap_key": "execution_providers_me",
+      "backend_endpoint": "/execution-providers/me"
+    },
+    {
+      "bootstrap_key": "live_gate_readiness",
+      "backend_endpoint": "/live-gate/readiness"
+    },
+    {
+      "bootstrap_key": "live_gate_production_readiness",
+      "backend_endpoint": "/live-gate/production-readiness"
+    },
+    {
+      "bootstrap_key": "live_gate_policies",
+      "backend_endpoint": "/live-gate/policies"
+    }
+  ],
+  "cold_boot_behavior": {
+    "browser_requests_for_capability_state": 1,
+    "server_side_subrequests": 9,
+    "server_side_max_concurrency": 6,
+    "subrequest_error_model": "per-entry ok/status/data/detail; outer bootstrap remains 200 when individual entries fail"
+  },
+  "warm_ttl_behavior": {
+    "client_memory_cache_ttl_ms": 30000,
+    "frontend_proxy_memory_cache_ttl_ms": 30000,
+    "same_session_cache_key": "cookie header or anonymous",
+    "backend_subrequests_on_cache_hit": 0
+  },
+  "fallback_behavior": {
+    "when_frontend_bootstrap_route_is_unavailable": "capability-bootstrap-api falls back to existing individual API clients",
+    "fallback_dedup": "individual API clients still pass through apiRequest in-flight dedup and TTL cache"
+  }
+}

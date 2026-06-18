@@ -21,12 +21,12 @@ export type ExecutionProviderApiResult<T> = {
   provider_access_unknown: boolean;
 };
 
-const EMPTY_REGISTRY_RESPONSE: ExecutionProviderRegistryResponse = {
+export const EMPTY_EXECUTION_PROVIDER_REGISTRY_RESPONSE: ExecutionProviderRegistryResponse = {
   count: 0,
   items: [],
 };
 
-const EMPTY_USER_PROVIDERS_RESPONSE: UserExecutionProvidersResponse = {
+export const EMPTY_USER_EXECUTION_PROVIDERS_RESPONSE: UserExecutionProvidersResponse = {
   count: 0,
   is_owner_full_access: false,
   items: [],
@@ -34,7 +34,7 @@ const EMPTY_USER_PROVIDERS_RESPONSE: UserExecutionProvidersResponse = {
   user_id: 0,
 };
 
-function formatExecutionProviderApiError(
+export function formatExecutionProviderApiError(
   error: unknown,
 ): ExecutionProviderApiErrorSummary {
   if (error instanceof ApiError) {
@@ -82,6 +82,50 @@ function formatExecutionProviderApiError(
   };
 }
 
+export function executionProviderRegistryResultFromResponse(
+  response: unknown,
+): ExecutionProviderApiResult<ExecutionProviderRegistryResponse> {
+  return {
+    data: normalizeExecutionProviderRegistryResponse(response),
+    error: null,
+    ok: true,
+    provider_access_unknown: false,
+  };
+}
+
+export function executionProviderRegistryResultFromError(
+  error: unknown,
+): ExecutionProviderApiResult<ExecutionProviderRegistryResponse> {
+  return {
+    data: EMPTY_EXECUTION_PROVIDER_REGISTRY_RESPONSE,
+    error: formatExecutionProviderApiError(error),
+    ok: false,
+    provider_access_unknown: true,
+  };
+}
+
+export function userExecutionProvidersResultFromResponse(
+  response: unknown,
+): ExecutionProviderApiResult<UserExecutionProvidersResponse> {
+  return {
+    data: normalizeUserExecutionProvidersResponse(response),
+    error: null,
+    ok: true,
+    provider_access_unknown: false,
+  };
+}
+
+export function userExecutionProvidersResultFromError(
+  error: unknown,
+): ExecutionProviderApiResult<UserExecutionProvidersResponse> {
+  return {
+    data: EMPTY_USER_EXECUTION_PROVIDERS_RESPONSE,
+    error: formatExecutionProviderApiError(error),
+    ok: false,
+    provider_access_unknown: true,
+  };
+}
+
 export async function getExecutionProviderRegistry(): Promise<
   ExecutionProviderApiResult<ExecutionProviderRegistryResponse>
 > {
@@ -89,19 +133,9 @@ export async function getExecutionProviderRegistry(): Promise<
     const response = await apiRequest<unknown>("/execution-providers/registry", {
       method: "GET",
     });
-    return {
-      data: normalizeExecutionProviderRegistryResponse(response),
-      error: null,
-      ok: true,
-      provider_access_unknown: false,
-    };
+    return executionProviderRegistryResultFromResponse(response);
   } catch (error) {
-    return {
-      data: EMPTY_REGISTRY_RESPONSE,
-      error: formatExecutionProviderApiError(error),
-      ok: false,
-      provider_access_unknown: true,
-    };
+    return executionProviderRegistryResultFromError(error);
   }
 }
 
@@ -112,18 +146,8 @@ export async function getMyExecutionProviders(): Promise<
     const response = await apiRequest<unknown>("/execution-providers/me", {
       method: "GET",
     });
-    return {
-      data: normalizeUserExecutionProvidersResponse(response),
-      error: null,
-      ok: true,
-      provider_access_unknown: false,
-    };
+    return userExecutionProvidersResultFromResponse(response);
   } catch (error) {
-    return {
-      data: EMPTY_USER_PROVIDERS_RESPONSE,
-      error: formatExecutionProviderApiError(error),
-      ok: false,
-      provider_access_unknown: true,
-    };
+    return userExecutionProvidersResultFromError(error);
   }
 }

@@ -21,11 +21,11 @@ export type ModuleApiResult<T> = {
   module_access_unknown: boolean;
 };
 
-const EMPTY_REGISTRY_RESPONSE: ModuleRegistryResponse = {
+export const EMPTY_REGISTRY_RESPONSE: ModuleRegistryResponse = {
   count: 0,
   items: [],
 };
-const EMPTY_USER_MODULES_RESPONSE: UserModulesResponse = {
+export const EMPTY_USER_MODULES_RESPONSE: UserModulesResponse = {
   count: 0,
   is_owner_full_access: false,
   items: [],
@@ -33,7 +33,7 @@ const EMPTY_USER_MODULES_RESPONSE: UserModulesResponse = {
   user_id: 0,
 };
 
-function formatModuleApiError(error: unknown): ModuleApiErrorSummary {
+export function formatModuleApiError(error: unknown): ModuleApiErrorSummary {
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return {
@@ -77,6 +77,50 @@ function formatModuleApiError(error: unknown): ModuleApiErrorSummary {
   };
 }
 
+export function moduleRegistryResultFromResponse(
+  response: unknown,
+): ModuleApiResult<ModuleRegistryResponse> {
+  return {
+    data: normalizeModuleRegistryResponse(response),
+    error: null,
+    module_access_unknown: false,
+    ok: true,
+  };
+}
+
+export function moduleRegistryResultFromError(
+  error: unknown,
+): ModuleApiResult<ModuleRegistryResponse> {
+  return {
+    data: EMPTY_REGISTRY_RESPONSE,
+    error: formatModuleApiError(error),
+    module_access_unknown: true,
+    ok: false,
+  };
+}
+
+export function userModulesResultFromResponse(
+  response: unknown,
+): ModuleApiResult<UserModulesResponse> {
+  return {
+    data: normalizeUserModulesResponse(response),
+    error: null,
+    module_access_unknown: false,
+    ok: true,
+  };
+}
+
+export function userModulesResultFromError(
+  error: unknown,
+): ModuleApiResult<UserModulesResponse> {
+  return {
+    data: EMPTY_USER_MODULES_RESPONSE,
+    error: formatModuleApiError(error),
+    module_access_unknown: true,
+    ok: false,
+  };
+}
+
 export async function listModuleRegistry(): Promise<
   ModuleApiResult<ModuleRegistryResponse>
 > {
@@ -84,19 +128,9 @@ export async function listModuleRegistry(): Promise<
     const response = await apiRequest<unknown>("/modules/registry", {
       method: "GET",
     });
-    return {
-      data: normalizeModuleRegistryResponse(response),
-      error: null,
-      module_access_unknown: false,
-      ok: true,
-    };
+    return moduleRegistryResultFromResponse(response);
   } catch (error) {
-    return {
-      data: EMPTY_REGISTRY_RESPONSE,
-      error: formatModuleApiError(error),
-      module_access_unknown: true,
-      ok: false,
-    };
+    return moduleRegistryResultFromError(error);
   }
 }
 
@@ -107,18 +141,8 @@ export async function listMyModules(): Promise<
     const response = await apiRequest<unknown>("/modules/me", {
       method: "GET",
     });
-    return {
-      data: normalizeUserModulesResponse(response),
-      error: null,
-      module_access_unknown: false,
-      ok: true,
-    };
+    return userModulesResultFromResponse(response);
   } catch (error) {
-    return {
-      data: EMPTY_USER_MODULES_RESPONSE,
-      error: formatModuleApiError(error),
-      module_access_unknown: true,
-      ok: false,
-    };
+    return userModulesResultFromError(error);
   }
 }

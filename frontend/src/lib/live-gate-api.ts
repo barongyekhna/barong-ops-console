@@ -23,21 +23,21 @@ export type LiveGateApiResult<T> = {
   live_gate_unknown: boolean;
 };
 
-const EMPTY_PRE_LIVE_REPORT: PreLiveValidationReport = {
+export const EMPTY_PRE_LIVE_REPORT: PreLiveValidationReport = {
   checks: [],
   engine: "PreLiveValidationEngine",
   generated_at: null,
   passed: false,
 };
 
-const EMPTY_PRODUCTION_REPORT: ProductionReadinessReport = {
+export const EMPTY_PRODUCTION_REPORT: ProductionReadinessReport = {
   checks: [],
   engine: "ProductionReadinessEngine",
   generated_at: null,
   ready: false,
 };
 
-function formatLiveGateApiError(error: unknown): LiveGateApiErrorSummary {
+export function formatLiveGateApiError(error: unknown): LiveGateApiErrorSummary {
   if (error instanceof ApiError) {
     if (error.status === 401) {
       return {
@@ -83,6 +83,72 @@ function formatLiveGateApiError(error: unknown): LiveGateApiErrorSummary {
   };
 }
 
+export function preLiveReadinessResultFromResponse(
+  response: unknown,
+): LiveGateApiResult<PreLiveValidationReport> {
+  return {
+    data: normalizePreLiveValidationReport(response),
+    error: null,
+    live_gate_unknown: false,
+    ok: true,
+  };
+}
+
+export function preLiveReadinessResultFromError(
+  error: unknown,
+): LiveGateApiResult<PreLiveValidationReport> {
+  return {
+    data: EMPTY_PRE_LIVE_REPORT,
+    error: formatLiveGateApiError(error),
+    live_gate_unknown: true,
+    ok: false,
+  };
+}
+
+export function productionReadinessResultFromResponse(
+  response: unknown,
+): LiveGateApiResult<ProductionReadinessReport> {
+  return {
+    data: normalizeProductionReadinessReport(response),
+    error: null,
+    live_gate_unknown: false,
+    ok: true,
+  };
+}
+
+export function productionReadinessResultFromError(
+  error: unknown,
+): LiveGateApiResult<ProductionReadinessReport> {
+  return {
+    data: EMPTY_PRODUCTION_REPORT,
+    error: formatLiveGateApiError(error),
+    live_gate_unknown: true,
+    ok: false,
+  };
+}
+
+export function liveGatePoliciesResultFromResponse(
+  response: unknown,
+): LiveGateApiResult<LiveGatePolicyRead[]> {
+  return {
+    data: normalizeLiveGatePolicies(response),
+    error: null,
+    live_gate_unknown: false,
+    ok: true,
+  };
+}
+
+export function liveGatePoliciesResultFromError(
+  error: unknown,
+): LiveGateApiResult<LiveGatePolicyRead[]> {
+  return {
+    data: [],
+    error: formatLiveGateApiError(error),
+    live_gate_unknown: true,
+    ok: false,
+  };
+}
+
 export async function getPreLiveReadiness(): Promise<
   LiveGateApiResult<PreLiveValidationReport>
 > {
@@ -90,19 +156,9 @@ export async function getPreLiveReadiness(): Promise<
     const response = await apiRequest<unknown>("/live-gate/readiness", {
       method: "GET",
     });
-    return {
-      data: normalizePreLiveValidationReport(response),
-      error: null,
-      live_gate_unknown: false,
-      ok: true,
-    };
+    return preLiveReadinessResultFromResponse(response);
   } catch (error) {
-    return {
-      data: EMPTY_PRE_LIVE_REPORT,
-      error: formatLiveGateApiError(error),
-      live_gate_unknown: true,
-      ok: false,
-    };
+    return preLiveReadinessResultFromError(error);
   }
 }
 
@@ -114,19 +170,9 @@ export async function getProductionReadiness(): Promise<
       "/live-gate/production-readiness",
       { method: "GET" },
     );
-    return {
-      data: normalizeProductionReadinessReport(response),
-      error: null,
-      live_gate_unknown: false,
-      ok: true,
-    };
+    return productionReadinessResultFromResponse(response);
   } catch (error) {
-    return {
-      data: EMPTY_PRODUCTION_REPORT,
-      error: formatLiveGateApiError(error),
-      live_gate_unknown: true,
-      ok: false,
-    };
+    return productionReadinessResultFromError(error);
   }
 }
 
@@ -137,18 +183,8 @@ export async function listLiveGatePolicies(): Promise<
     const response = await apiRequest<unknown>("/live-gate/policies", {
       method: "GET",
     });
-    return {
-      data: normalizeLiveGatePolicies(response),
-      error: null,
-      live_gate_unknown: false,
-      ok: true,
-    };
+    return liveGatePoliciesResultFromResponse(response);
   } catch (error) {
-    return {
-      data: [],
-      error: formatLiveGateApiError(error),
-      live_gate_unknown: true,
-      ok: false,
-    };
+    return liveGatePoliciesResultFromError(error);
   }
 }

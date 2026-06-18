@@ -52,6 +52,9 @@ const ALLOWED_LIVE_GATE_GET_PATHS = new Set([
   "live-gate/production-readiness",
   "live-gate/policies",
 ]);
+const CAPABILITY_BOOTSTRAP_PATH = "capability/bootstrap";
+const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 30_000;
+const CAPABILITY_BOOTSTRAP_MAX_BACKEND_CONCURRENCY = 6;
 const ALLOWED_EXTERNAL_DEPENDENCY_PATHS = new Set([
   "external-dependencies/registry",
   "external-dependencies/proposals",
@@ -152,6 +155,48 @@ type RouteContext = {
 type HeadersWithSetCookie = Headers & {
   getSetCookie?: () => string[];
 };
+
+type CapabilityBootstrapEntry = {
+  ok: boolean;
+  status: number;
+  data: unknown;
+  detail: unknown;
+};
+
+type CapabilityBootstrapTarget = {
+  key: string;
+  path: string[];
+};
+
+const capabilityBootstrapTargets: CapabilityBootstrapTarget[] = [
+  { key: "modules_registry", path: ["modules", "registry"] },
+  { key: "modules_me", path: ["modules", "me"] },
+  {
+    key: "module_adapters_registry",
+    path: ["module-adapters", "registry"],
+  },
+  { key: "module_adapters_me", path: ["module-adapters", "me"] },
+  {
+    key: "execution_providers_registry",
+    path: ["execution-providers", "registry"],
+  },
+  { key: "execution_providers_me", path: ["execution-providers", "me"] },
+  { key: "live_gate_readiness", path: ["live-gate", "readiness"] },
+  {
+    key: "live_gate_production_readiness",
+    path: ["live-gate", "production-readiness"],
+  },
+  { key: "live_gate_policies", path: ["live-gate", "policies"] },
+];
+
+const capabilityBootstrapCache = new Map<
+  string,
+  { expiresAt: number; payload: Record<string, CapabilityBootstrapEntry> }
+>();
+const capabilityBootstrapInFlight = new Map<
+  string,
+  Promise<Record<string, CapabilityBootstrapEntry>>
+>();
 
 function getApiBaseUrl() {
   const configuredUrl =
@@ -300,6 +345,10 @@ export function getBackendApiPath(method: string, path: string[]) {
     return null;
   }
 
+  if (method === "GET" && requestedPath === CAPABILITY_BOOTSTRAP_PATH) {
+    return CAPABILITY_BOOTSTRAP_PATH;
+  }
+
   if (
     (method === "GET" && ALLOWED_PUBLIC_GET_PATHS.has(requestedPath)) ||
     (method === "POST" && ALLOWED_PUBLIC_POST_PATHS.has(requestedPath))
@@ -370,6 +419,12 @@ async function proxyRequest(
   context: RouteContext,
 ) {
   const { path } = await context.params;
+  const requestedPath = path.join("/");
+
+  if (request.method === "GET" && requestedPath === CAPABILITY_BOOTSTRAP_PATH) {
+    return capabilityBootstrapRequest(request);
+  }
+
   const backendApiPath = getBackendApiPath(request.method, path);
 
   if (isBlockedSecurityIsolationPath(path)) {
@@ -429,6 +484,154 @@ async function proxyRequest(
       { status: 503 },
     );
   }
+}
+
+function getCapabilityBootstrapCacheKey(request: NextRequest) {
+  return request.headers.get("cookie") ?? "anonymous";
+}
+
+function readCapabilityBootstrapCache(cacheKey: string) {
+  const cached = capabilityBootstrapCache.get(cacheKey);
+
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    capabilityBootstrapCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.payload;
+}
+
+async function readBackendJson(response: Response) {
+  try {
+    const text = await response.text();
+    if (text.trim().length === 0) {
+      return null;
+    }
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  } catch {
+    return null;
+  }
+}
+
+async function fetchCapabilityBootstrapTarget(
+  target: CapabilityBootstrapTarget,
+  request: NextRequest,
+): Promise<[string, CapabilityBootstrapEntry]> {
+  const backendApiPath = getBackendApiPath("GET", target.path);
+  if (backendApiPath === null || backendApiPath === CAPABILITY_BOOTSTRAP_PATH) {
+    return [
+      target.key,
+      {
+        data: null,
+        detail: "Capability bootstrap target is not allowed.",
+        ok: false,
+        status: 404,
+      },
+    ];
+  }
+
+  try {
+    const targetUrl = new URL(backendApiPath, getApiBaseUrl());
+    const headers = new Headers({ Accept: "application/json" });
+    const cookie = request.headers.get("cookie");
+
+    if (cookie) {
+      headers.set("Cookie", cookie);
+    }
+
+    const backendResponse = await fetch(targetUrl, {
+      cache: "no-store",
+      headers,
+      method: "GET",
+    });
+    const payload = await readBackendJson(backendResponse);
+
+    return [
+      target.key,
+      {
+        data: backendResponse.ok ? payload : null,
+        detail: backendResponse.ok ? null : payload,
+        ok: backendResponse.ok,
+        status: backendResponse.status,
+      },
+    ];
+  } catch {
+    return [
+      target.key,
+      {
+        data: null,
+        detail: "Backend API service is unavailable.",
+        ok: false,
+        status: 503,
+      },
+    ];
+  }
+}
+
+async function runCapabilityBootstrapTargets(request: NextRequest) {
+  const payload: Record<string, CapabilityBootstrapEntry> = {};
+  let nextIndex = 0;
+
+  async function worker() {
+    while (nextIndex < capabilityBootstrapTargets.length) {
+      const target = capabilityBootstrapTargets[nextIndex];
+      nextIndex += 1;
+      const [key, entry] = await fetchCapabilityBootstrapTarget(
+        target,
+        request,
+      );
+      payload[key] = entry;
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      {
+        length: Math.min(
+          CAPABILITY_BOOTSTRAP_MAX_BACKEND_CONCURRENCY,
+          capabilityBootstrapTargets.length,
+        ),
+      },
+      () => worker(),
+    ),
+  );
+
+  return payload;
+}
+
+async function capabilityBootstrapRequest(request: NextRequest) {
+  const cacheKey = getCapabilityBootstrapCacheKey(request);
+  const cached = readCapabilityBootstrapCache(cacheKey);
+
+  if (cached) {
+    return Response.json(cached);
+  }
+
+  const inFlight = capabilityBootstrapInFlight.get(cacheKey);
+  if (inFlight) {
+    return Response.json(await inFlight);
+  }
+
+  const promise = runCapabilityBootstrapTargets(request).finally(() => {
+    capabilityBootstrapInFlight.delete(cacheKey);
+  });
+  capabilityBootstrapInFlight.set(cacheKey, promise);
+
+  const payload = await promise;
+  capabilityBootstrapCache.set(cacheKey, {
+    expiresAt: Date.now() + CAPABILITY_BOOTSTRAP_CACHE_TTL_MS,
+    payload,
+  });
+
+  return Response.json(payload);
 }
 
 export function GET(request: NextRequest, context: RouteContext) {

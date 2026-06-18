@@ -2,25 +2,15 @@
 
 import {
   createContext,
-  useCallback,
   useContext,
-  useEffect,
   useMemo,
-  useState,
   type ReactNode,
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import {
-  listModuleAdapterRegistry,
-  listMyModuleAdapters,
-  type ModuleAdapterApiErrorSummary,
-} from "@/lib/module-adapter-api";
-import {
-  getExecutionProviderRegistry,
-  getMyExecutionProviders,
-  type ExecutionProviderApiErrorSummary,
-} from "@/lib/execution-provider-api";
+import { useFrontendCapabilityState } from "@/components/capability-state-provider";
+import type { ModuleAdapterApiErrorSummary } from "@/lib/module-adapter-api";
+import type { ExecutionProviderApiErrorSummary } from "@/lib/execution-provider-api";
 import type {
   ExecutionProviderAccessState,
   ExecutionProviderContract,
@@ -69,145 +59,68 @@ export function AdapterAccessProvider({
 }: {
   children: ReactNode;
 }) {
-  const { user, status } = useAuth();
-  const [adapters, setAdapters] = useState<ModuleAdapterContract[]>([]);
-  const [accessItems, setAccessItems] = useState<ModuleAdapterAccessState[]>([]);
-  const [executionProviders, setExecutionProviders] = useState<
-    ExecutionProviderContract[]
-  >([]);
-  const [executionProviderAccessItems, setExecutionProviderAccessItems] =
-    useState<ExecutionProviderAccessState[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [adapterAccessUnknown, setAdapterAccessUnknown] = useState(true);
-  const [adapterMetadataUnavailable, setAdapterMetadataUnavailable] =
-    useState(true);
-  const [executionProviderAccessUnknown, setExecutionProviderAccessUnknown] =
-    useState(true);
-  const [
-    executionProviderMetadataUnavailable,
-    setExecutionProviderMetadataUnavailable,
-  ] = useState(true);
-  const [error, setError] = useState<ModuleAdapterApiErrorSummary | null>(null);
-  const [registryError, setRegistryError] =
-    useState<ModuleAdapterApiErrorSummary | null>(null);
-  const [executionProviderError, setExecutionProviderError] =
-    useState<ExecutionProviderApiErrorSummary | null>(null);
-  const [
-    executionProviderRegistryError,
-    setExecutionProviderRegistryError,
-  ] = useState<ExecutionProviderApiErrorSummary | null>(null);
-
-  const loadAdapterAccess = useCallback(async () => {
-    if (status !== "authenticated" || !user) {
-      setAdapters([]);
-      setAccessItems([]);
-      setExecutionProviders([]);
-      setExecutionProviderAccessItems([]);
-      setError(null);
-      setRegistryError(null);
-      setExecutionProviderError(null);
-      setExecutionProviderRegistryError(null);
-      setIsLoading(false);
-      setAdapterAccessUnknown(true);
-      setAdapterMetadataUnavailable(true);
-      setExecutionProviderAccessUnknown(true);
-      setExecutionProviderMetadataUnavailable(true);
-      return;
-    }
-
-    setIsLoading(true);
-    const [
-      registryResult,
-      accessResult,
-      executionRegistryResult,
-      executionAccessResult,
-    ] = await Promise.all([
-      listModuleAdapterRegistry(),
-      listMyModuleAdapters(),
-      getExecutionProviderRegistry(),
-      getMyExecutionProviders(),
-    ]);
-    setAdapters(registryResult.data.items);
-    setAccessItems(accessResult.data.items);
-    setExecutionProviders(executionRegistryResult.data.items);
-    setExecutionProviderAccessItems(executionAccessResult.data.items);
-    setRegistryError(registryResult.error);
-    setError(accessResult.error);
-    setExecutionProviderRegistryError(executionRegistryResult.error);
-    setExecutionProviderError(executionAccessResult.error);
-    setAdapterMetadataUnavailable(!registryResult.ok);
-    setAdapterAccessUnknown(accessResult.adapter_access_unknown);
-    setExecutionProviderMetadataUnavailable(!executionRegistryResult.ok);
-    setExecutionProviderAccessUnknown(
-      executionAccessResult.provider_access_unknown,
-    );
-    setIsLoading(false);
-  }, [status, user]);
-
-  useEffect(() => {
-    let active = true;
-
-    async function refreshWhenActive() {
-      if (!active) {
-        return;
-      }
-      await loadAdapterAccess();
-    }
-
-    void refreshWhenActive();
-
-    return () => {
-      active = false;
-    };
-  }, [loadAdapterAccess]);
+  const { user } = useAuth();
+  const capabilityState = useFrontendCapabilityState();
 
   const filteredAdapters = useMemo(() => {
     const owner = isOwnerFullAccess(user?.permissions);
 
-    return adapters.filter((adapter) =>
+    return capabilityState.adapterContracts.filter((adapter) =>
       canExposeAdapterMetadata(
         adapter,
-        findAdapterAccessState(adapter.adapter_key, accessItems),
+        findAdapterAccessState(
+          adapter.adapter_key,
+          capabilityState.adapterAccessItems,
+        ),
         {
-          adapterAccessUnknown,
+          adapterAccessUnknown: capabilityState.adapterAccessUnknown,
           isOwnerFullAccess: owner,
         },
       ),
     );
-  }, [accessItems, adapterAccessUnknown, adapters, user?.permissions]);
+  }, [
+    capabilityState.adapterAccessItems,
+    capabilityState.adapterAccessUnknown,
+    capabilityState.adapterContracts,
+    user?.permissions,
+  ]);
 
   const value = useMemo(
     () => ({
-      accessItems,
-      adapterAccessUnknown,
-      adapterMetadataUnavailable,
+      accessItems: capabilityState.adapterAccessItems,
+      adapterAccessUnknown: capabilityState.adapterAccessUnknown,
+      adapterMetadataUnavailable: capabilityState.adapterMetadataUnavailable,
       adapters: filteredAdapters,
-      error,
-      executionProviderAccessItems,
-      executionProviderAccessUnknown,
-      executionProviderError,
-      executionProviderMetadataUnavailable,
-      executionProviderRegistryError,
-      executionProviders,
-      isLoading,
-      refresh: loadAdapterAccess,
-      registryError,
+      error: capabilityState.adapterError,
+      executionProviderAccessItems:
+        capabilityState.executionProviderAccessItems,
+      executionProviderAccessUnknown:
+        capabilityState.executionProviderAccessUnknown,
+      executionProviderError: capabilityState.executionProviderError,
+      executionProviderMetadataUnavailable:
+        capabilityState.executionProviderMetadataUnavailable,
+      executionProviderRegistryError:
+        capabilityState.executionProviderRegistryError,
+      executionProviders: capabilityState.executionProviderContracts,
+      isLoading: capabilityState.isLoading,
+      refresh: capabilityState.refresh,
+      registryError: capabilityState.adapterRegistryError,
     }),
     [
-      accessItems,
-      adapterAccessUnknown,
-      adapterMetadataUnavailable,
-      error,
-      executionProviderAccessItems,
-      executionProviderAccessUnknown,
-      executionProviderError,
-      executionProviderMetadataUnavailable,
-      executionProviderRegistryError,
-      executionProviders,
+      capabilityState.adapterAccessItems,
+      capabilityState.adapterAccessUnknown,
+      capabilityState.adapterError,
+      capabilityState.adapterMetadataUnavailable,
+      capabilityState.adapterRegistryError,
+      capabilityState.executionProviderAccessItems,
+      capabilityState.executionProviderAccessUnknown,
+      capabilityState.executionProviderContracts,
+      capabilityState.executionProviderError,
+      capabilityState.executionProviderMetadataUnavailable,
+      capabilityState.executionProviderRegistryError,
+      capabilityState.isLoading,
+      capabilityState.refresh,
       filteredAdapters,
-      isLoading,
-      loadAdapterAccess,
-      registryError,
     ],
   );
 

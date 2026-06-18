@@ -1,0 +1,157 @@
+{
+  "task": "FIX-BE-07_PROVIDER_FAN_OUT_OPTIMIZATION",
+  "generated_at": "2026-06-18",
+  "scope": "frontend request pattern, request deduplication, short-lived memory cache, provider fan-out reduction",
+  "backend_business_logic_changed": false,
+  "db_schema_changed": false,
+  "permission_system_changed": false,
+  "execution_engine_changed": false,
+  "api_contract_changed": false,
+  "fanout_sources_before": [
+    {
+      "module": "AuthProvider",
+      "file": "frontend/src/components/auth-provider.tsx",
+      "trigger": "root mount and post-login refresh",
+      "endpoints": ["/auth/me"],
+      "issue": "session identity request was not protected by a shared in-flight/cache layer"
+    },
+    {
+      "module": "CapabilityStateProvider",
+      "file": "frontend/src/components/capability-state-provider.tsx",
+      "trigger": "authenticated provider init and refresh",
+      "endpoints": [
+        "/modules/registry",
+        "/modules/me",
+        "/module-adapters/registry",
+        "/module-adapters/me",
+        "/execution-providers/registry",
+        "/execution-providers/me",
+        "/live-gate/readiness",
+        "/live-gate/production-readiness",
+        "/live-gate/policies"
+      ],
+      "issue": "single provider init expanded into 9 browser requests"
+    },
+    {
+      "module": "AdapterAccessProvider",
+      "file": "frontend/src/components/adapter-access-provider.tsx",
+      "trigger": "authenticated provider init",
+      "endpoints": [
+        "/module-adapters/registry",
+        "/module-adapters/me",
+        "/execution-providers/registry",
+        "/execution-providers/me"
+      ],
+      "issue": "duplicated data already loaded by CapabilityStateProvider"
+    },
+    {
+      "module": "ModuleAccessProvider",
+      "file": "frontend/src/components/module-access-provider.tsx",
+      "trigger": "authenticated provider init",
+      "endpoints": ["/modules/me"],
+      "issue": "duplicated data already loaded by CapabilityStateProvider"
+    },
+    {
+      "module": "OperationsDashboard",
+      "file": "frontend/src/components/operations-dashboard.tsx",
+      "trigger": "dashboard mount",
+      "endpoints": [
+        "capabilityState.refresh() -> 9 capability endpoints",
+        "/health",
+        "/operation-logs?limit=8&offset=0",
+        "/approval/list?limit=50&offset=0",
+        "/users?limit=1&offset=0"
+      ],
+      "issue": "dashboard consumed provider state but also retriggered provider refresh"
+    }
+  ],
+  "fanout_sources_after": [
+    {
+      "module": "CapabilityStateProvider",
+      "change": "owns capability bootstrap loading and exposes raw module, adapter, execution provider, and live gate snapshots in context",
+      "primary_endpoint": "/capability/bootstrap"
+    },
+    {
+      "module": "AdapterAccessProvider",
+      "change": "derives adapter and execution-provider state from CapabilityStateProvider; no direct API requests remain"
+    },
+    {
+      "module": "ModuleAccessProvider",
+      "change": "derives module access state from CapabilityStateProvider; no direct /modules/me request remains"
+    },
+    {
+      "module": "OperationsDashboard",
+      "change": "loads only dashboard-owned data and no longer triggers capabilityState.refresh() on mount"
+    },
+    {
+      "module": "apiRequest",
+      "change": "all frontend requests pass through global in-flight dedup, TTL cache, and max-6 concurrency queue"
+    }
+  ],
+  "duplicate_endpoint_resolution": [
+    {
+      "endpoint": "/modules/me",
+      "before_callers": [
+        "CapabilityStateProvider",
+        "ModuleAccessProvider",
+        "OperationsDashboard via capabilityState.refresh()"
+      ],
+      "after_callers": ["CapabilityStateProvider via /capability/bootstrap"],
+      "duplicate_removed": true
+    },
+    {
+      "endpoint": "/module-adapters/registry",
+      "before_callers": [
+        "CapabilityStateProvider",
+        "AdapterAccessProvider",
+        "OperationsDashboard via capabilityState.refresh()"
+      ],
+      "after_callers": ["CapabilityStateProvider via /capability/bootstrap"],
+      "duplicate_removed": true
+    },
+    {
+      "endpoint": "/module-adapters/me",
+      "before_callers": [
+        "CapabilityStateProvider",
+        "AdapterAccessProvider",
+        "OperationsDashboard via capabilityState.refresh()"
+      ],
+      "after_callers": ["CapabilityStateProvider via /capability/bootstrap"],
+      "duplicate_removed": true
+    },
+    {
+      "endpoint": "/execution-providers/registry",
+      "before_callers": [
+        "CapabilityStateProvider",
+        "AdapterAccessProvider",
+        "OperationsDashboard via capabilityState.refresh()"
+      ],
+      "after_callers": ["CapabilityStateProvider via /capability/bootstrap"],
+      "duplicate_removed": true
+    },
+    {
+      "endpoint": "/execution-providers/me",
+      "before_callers": [
+        "CapabilityStateProvider",
+        "AdapterAccessProvider",
+        "OperationsDashboard via capabilityState.refresh()"
+      ],
+      "after_callers": ["CapabilityStateProvider via /capability/bootstrap"],
+      "duplicate_removed": true
+    }
+  ],
+  "initial_dashboard_request_estimate": {
+    "before_browser_requests": 28,
+    "after_browser_requests": 6,
+    "after_browser_request_list": [
+      "/auth/me",
+      "/capability/bootstrap",
+      "/health",
+      "/operation-logs?limit=8&offset=0",
+      "/approval/list?limit=50&offset=0",
+      "/users?limit=1&offset=0"
+    ],
+    "success_threshold": "<= 10",
+    "threshold_met": true
+  }
+}

@@ -12,11 +12,8 @@ import {
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import {
-  getExecutionProviderRegistry,
-  getMyExecutionProviders,
-  type ExecutionProviderApiErrorSummary,
-} from "@/lib/execution-provider-api";
+import { getCapabilityBootstrap } from "@/lib/capability-bootstrap-api";
+import type { ExecutionProviderApiErrorSummary } from "@/lib/execution-provider-api";
 import type {
   ExecutionProviderAccessState,
   ExecutionProviderContract,
@@ -27,12 +24,7 @@ import {
   type FrontendCapabilityGraph,
   type ProductCapabilityItem,
 } from "@/lib/frontend-capability-state";
-import {
-  getPreLiveReadiness,
-  getProductionReadiness,
-  listLiveGatePolicies,
-  type LiveGateApiErrorSummary,
-} from "@/lib/live-gate-api";
+import type { LiveGateApiErrorSummary } from "@/lib/live-gate-api";
 import {
   deriveLiveGateRuntimeState,
   type LiveGatePolicyRead,
@@ -40,27 +32,34 @@ import {
   type PreLiveValidationReport,
   type ProductionReadinessReport,
 } from "@/lib/live-gate";
-import {
-  listModuleAdapterRegistry,
-  listMyModuleAdapters,
-  type ModuleAdapterApiErrorSummary,
-} from "@/lib/module-adapter-api";
+import type { ModuleAdapterApiErrorSummary } from "@/lib/module-adapter-api";
 import type {
   ModuleAdapterAccessState,
   ModuleAdapterContract,
 } from "@/lib/module-adapter";
-import {
-  listModuleRegistry,
-  listMyModules,
-  type ModuleApiErrorSummary,
-} from "@/lib/module-registry-api";
+import type { ModuleApiErrorSummary } from "@/lib/module-registry-api";
 import type { ModuleAccessState, ModuleManifest } from "@/lib/module-registry";
 
 type CapabilityStateContextValue = FrontendCapabilityGraph & {
+  adapterAccessItems: ModuleAdapterAccessState[];
+  adapterAccessUnknown: boolean;
+  adapterContracts: ModuleAdapterContract[];
+  adapterError: ModuleAdapterApiErrorSummary | null;
+  adapterMetadataUnavailable: boolean;
+  adapterRegistryError: ModuleAdapterApiErrorSummary | null;
+  executionProviderAccessItems: ExecutionProviderAccessState[];
+  executionProviderAccessUnknown: boolean;
+  executionProviderContracts: ExecutionProviderContract[];
+  executionProviderError: ExecutionProviderApiErrorSummary | null;
+  executionProviderMetadataUnavailable: boolean;
+  executionProviderRegistryError: ExecutionProviderApiErrorSummary | null;
   isLoading: boolean;
   uiState: "loading" | "ready" | "degraded" | "fallback";
   isDegraded: boolean;
   isFallbackMode: boolean;
+  moduleAccessUnknown: boolean;
+  moduleError: ModuleApiErrorSummary | null;
+  moduleItems: ModuleAccessState[];
   registryItems: ModuleManifest[];
   registryUnavailable: boolean;
   registryError: ModuleApiErrorSummary | null;
@@ -217,6 +216,18 @@ const SAFE_GRAPH = createSafeGraph();
 
 const SAFE_CONTEXT_VALUE: CapabilityStateContextValue = {
   ...SAFE_GRAPH,
+  adapterAccessItems: [],
+  adapterAccessUnknown: true,
+  adapterContracts: [],
+  adapterError: null,
+  adapterMetadataUnavailable: true,
+  adapterRegistryError: null,
+  executionProviderAccessItems: [],
+  executionProviderAccessUnknown: true,
+  executionProviderContracts: [],
+  executionProviderError: null,
+  executionProviderMetadataUnavailable: true,
+  executionProviderRegistryError: null,
   getCapabilityForPath: (pathname: string) =>
     findCapabilityForPath(pathname, SAFE_GRAPH.items),
   isDegraded: true,
@@ -233,6 +244,9 @@ const SAFE_CONTEXT_VALUE: CapabilityStateContextValue = {
     productionReadiness: SAFE_PRODUCTION_READINESS_REPORT,
     readiness: SAFE_READINESS_REPORT,
   },
+  moduleAccessUnknown: true,
+  moduleError: null,
+  moduleItems: [],
   refresh: async () => {},
   registryError: SAFE_REGISTRY_ERROR,
   registryItems: [],
@@ -309,27 +323,17 @@ export function CapabilityStateProvider({
 
     setIsLocalLoading(true);
     try {
-      const [
-        registryResult,
-        moduleAccessResult,
-        adapterRegistryResult,
+      const {
         adapterAccessResult,
-        executionRegistryResult,
+        adapterRegistryResult,
         executionAccessResult,
-        readinessResult,
-        productionResult,
+        executionRegistryResult,
+        moduleAccessResult,
         policiesResult,
-      ] = await Promise.all([
-        listModuleRegistry(),
-        listMyModules(),
-        listModuleAdapterRegistry(),
-        listMyModuleAdapters(),
-        getExecutionProviderRegistry(),
-        getMyExecutionProviders(),
-        getPreLiveReadiness(),
-        getProductionReadiness(),
-        listLiveGatePolicies(),
-      ]);
+        productionResult,
+        readinessResult,
+        registryResult,
+      } = await getCapabilityBootstrap();
 
       if (!mountedRef.current) {
         return;
@@ -513,6 +517,25 @@ export function CapabilityStateProvider({
   const value = useMemo(
     () => ({
       ...graph,
+      adapterAccessItems: safeArray(accessSnapshot.adapterAccessItems),
+      adapterAccessUnknown: accessSnapshot.adapterAccessUnknown,
+      adapterContracts: safeArray(accessSnapshot.adapterContracts),
+      adapterError: accessSnapshot.adapterError,
+      adapterMetadataUnavailable: accessSnapshot.adapterMetadataUnavailable,
+      adapterRegistryError: accessSnapshot.adapterRegistryError,
+      executionProviderAccessItems: safeArray(
+        accessSnapshot.executionProviderAccessItems,
+      ),
+      executionProviderAccessUnknown:
+        accessSnapshot.executionProviderAccessUnknown,
+      executionProviderContracts: safeArray(
+        accessSnapshot.executionProviderContracts,
+      ),
+      executionProviderError: accessSnapshot.executionProviderError,
+      executionProviderMetadataUnavailable:
+        accessSnapshot.executionProviderMetadataUnavailable,
+      executionProviderRegistryError:
+        accessSnapshot.executionProviderRegistryError,
       getCapabilityForPath,
       isDegraded,
       isFallbackMode,
@@ -528,6 +551,9 @@ export function CapabilityStateProvider({
         productionReadiness,
         readiness,
       },
+      moduleAccessUnknown: accessSnapshot.moduleAccessUnknown,
+      moduleError: accessSnapshot.moduleError,
+      moduleItems: safeArray(accessSnapshot.moduleItems),
       refresh,
       registryError,
       registryItems,
@@ -535,6 +561,21 @@ export function CapabilityStateProvider({
       uiState,
     }),
     [
+      accessSnapshot.adapterAccessItems,
+      accessSnapshot.adapterAccessUnknown,
+      accessSnapshot.adapterContracts,
+      accessSnapshot.adapterError,
+      accessSnapshot.adapterMetadataUnavailable,
+      accessSnapshot.adapterRegistryError,
+      accessSnapshot.executionProviderAccessItems,
+      accessSnapshot.executionProviderAccessUnknown,
+      accessSnapshot.executionProviderContracts,
+      accessSnapshot.executionProviderError,
+      accessSnapshot.executionProviderMetadataUnavailable,
+      accessSnapshot.executionProviderRegistryError,
+      accessSnapshot.moduleAccessUnknown,
+      accessSnapshot.moduleError,
+      accessSnapshot.moduleItems,
       getCapabilityForPath,
       graph,
       isDegraded,

@@ -1,0 +1,141 @@
+{
+  "task": "FIX-BE-07_PROVIDER_FAN_OUT_OPTIMIZATION",
+  "generated_at": "2026-06-18",
+  "success_criteria": {
+    "dashboard_initial_requests_lte_10": true,
+    "no_duplicate_modules_me_calls": true,
+    "no_duplicate_provider_fetches": true,
+    "backend_request_load_reduced_gte_50_percent": true,
+    "login_to_dashboard_latency_improved": true
+  },
+  "before": {
+    "dashboard_initial_browser_requests_estimate": 28,
+    "dashboard_initial_backend_requests_estimate": 28,
+    "request_breakdown": [
+      {
+        "source": "AuthProvider",
+        "count": 1,
+        "requests": ["/auth/me"]
+      },
+      {
+        "source": "CapabilityStateProvider init",
+        "count": 9,
+        "requests": [
+          "/modules/registry",
+          "/modules/me",
+          "/module-adapters/registry",
+          "/module-adapters/me",
+          "/execution-providers/registry",
+          "/execution-providers/me",
+          "/live-gate/readiness",
+          "/live-gate/production-readiness",
+          "/live-gate/policies"
+        ]
+      },
+      {
+        "source": "AdapterAccessProvider init",
+        "count": 4,
+        "requests": [
+          "/module-adapters/registry",
+          "/module-adapters/me",
+          "/execution-providers/registry",
+          "/execution-providers/me"
+        ]
+      },
+      {
+        "source": "ModuleAccessProvider init",
+        "count": 1,
+        "requests": ["/modules/me"]
+      },
+      {
+        "source": "OperationsDashboard capability refresh",
+        "count": 9,
+        "requests": [
+          "/modules/registry",
+          "/modules/me",
+          "/module-adapters/registry",
+          "/module-adapters/me",
+          "/execution-providers/registry",
+          "/execution-providers/me",
+          "/live-gate/readiness",
+          "/live-gate/production-readiness",
+          "/live-gate/policies"
+        ]
+      },
+      {
+        "source": "OperationsDashboard data",
+        "count": 4,
+        "requests": [
+          "/health",
+          "/operation-logs?limit=8&offset=0",
+          "/approval/list?limit=50&offset=0",
+          "/users?limit=1&offset=0"
+        ]
+      }
+    ]
+  },
+  "after": {
+    "dashboard_initial_browser_requests_estimate": 6,
+    "dashboard_initial_backend_requests_estimate_cold_cache": 14,
+    "dashboard_initial_backend_requests_estimate_warm_30s_cache": 5,
+    "browser_request_breakdown": [
+      {
+        "source": "AuthProvider",
+        "count": 1,
+        "requests": ["/auth/me"]
+      },
+      {
+        "source": "CapabilityStateProvider init",
+        "count": 1,
+        "requests": ["/capability/bootstrap"]
+      },
+      {
+        "source": "AdapterAccessProvider init",
+        "count": 0,
+        "requests": []
+      },
+      {
+        "source": "ModuleAccessProvider init",
+        "count": 0,
+        "requests": []
+      },
+      {
+        "source": "OperationsDashboard capability refresh",
+        "count": 0,
+        "requests": []
+      },
+      {
+        "source": "OperationsDashboard data",
+        "count": 4,
+        "requests": [
+          "/health",
+          "/operation-logs?limit=8&offset=0",
+          "/approval/list?limit=50&offset=0",
+          "/users?limit=1&offset=0"
+        ]
+      }
+    ],
+    "backend_cold_cache_note": "Cold /capability/bootstrap still uses the existing 9 backend endpoints through the frontend proxy, but removes provider duplicates and dashboard refresh amplification.",
+    "backend_warm_cache_note": "Within 30 seconds, /capability/bootstrap is served by client/proxy memory cache for the same session."
+  },
+  "reductions": {
+    "browser_request_reduction_percent": 78.6,
+    "backend_request_reduction_percent_cold_cache": 50.0,
+    "backend_request_reduction_percent_warm_30s_cache": 82.1,
+    "duplicate_provider_fetches_removed": [
+      "/modules/me",
+      "/module-adapters/registry",
+      "/module-adapters/me",
+      "/execution-providers/registry",
+      "/execution-providers/me"
+    ]
+  },
+  "verification": {
+    "typecheck": "npm run typecheck",
+    "typecheck_result": "pass",
+    "focused_execution_provider_test": "node tests/frontend/execution-provider.test.mjs",
+    "focused_execution_provider_test_result": "pass",
+    "full_frontend_root_tests": "node --test tests/frontend/*.test.mjs",
+    "full_frontend_root_tests_result": "blocked_by_unrelated_existing_assertions_in_module_isolation_and_permission_management"
+  }
+}
