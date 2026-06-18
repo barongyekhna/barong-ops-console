@@ -4,11 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev --hostname 0.0.0.0",
-    "build": "next build",
+    "build": "next build && node scripts/prepare-standalone-runtime.mjs",
     "start": "next start --hostname 0.0.0.0",
     "test": "cd .. && node --test tests/frontend/*.test.mjs",
     "test:unit": "cd .. && node --test tests/frontend/*.test.mjs",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "node scripts/clean-next-dev-types.mjs && tsc --noEmit",
     "verify": "node scripts/verify-foundation.mjs"
   },
   "dependencies": {

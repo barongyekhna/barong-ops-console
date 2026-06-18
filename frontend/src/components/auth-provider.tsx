@@ -77,6 +77,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearSession();
         return;
       }
+
+      clearSession();
     }
   }, [clearSession]);
 

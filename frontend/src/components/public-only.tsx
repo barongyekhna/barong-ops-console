@@ -15,9 +15,5 @@ export function PublicOnly({ children }: { children: ReactNode }) {
     }
   }, [router, status]);
 
-  if (status === "authenticated") {
-    return null;
-  }
-
   return children;
 }

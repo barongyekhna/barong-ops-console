@@ -1,0 +1,67 @@
+{
+  "created_at_utc": "2026-06-18T11:16:45Z",
+  "status": "fixed_locally",
+  "root_causes": [
+    {
+      "id": "auth_checking_deadlock",
+      "severity": "high",
+      "before": "AuthProvider only transitioned to unauthenticated on 401. Timeouts, network failures, and non-401 API failures left status as checking.",
+      "after": "AuthProvider calls clearSession for any session-check failure that belongs to the active generation.",
+      "file": "frontend/src/components/auth-provider.tsx"
+    },
+    {
+      "id": "public_only_blank_authenticated_render",
+      "severity": "medium",
+      "before": "PublicOnly returned null while redirecting authenticated users, which could blank the page if navigation stalled.",
+      "after": "PublicOnly keeps rendering children and performs redirect asynchronously.",
+      "file": "frontend/src/components/public-only.tsx"
+    },
+    {
+      "id": "login_route_auth_readiness_coupling",
+      "severity": "high",
+      "before": "LoginPage was wrapped by PublicOnly.",
+      "after": "LoginPage renders LoginScreen directly.",
+      "file": "frontend/src/app/login/page.tsx"
+    },
+    {
+      "id": "root_redirect_no_html_fallback",
+      "severity": "medium",
+      "before": "Root page performed server redirect to /dashboard.",
+      "after": "Root page returns HTTP 200 login fallback; authenticated users are still routed to /dashboard by PublicOnly after mount.",
+      "file": "frontend/src/app/page.tsx"
+    },
+    {
+      "id": "standalone_static_missing_when_run_directly",
+      "severity": "high",
+      "before": ".next/static existed but .next/standalone/.next/static could be missing outside the Docker COPY path.",
+      "after": "Build script prepares standalone runtime assets after every next build.",
+      "file": "frontend/scripts/prepare-standalone-runtime.mjs"
+    }
+  ],
+  "auth_flow_after_fix": {
+    "initial_paint_blocks_on_auth_me": false,
+    "auth_me_timeout_ms": 1500,
+    "auth_me_runs_async_after_mount": true,
+    "auth_me_failure_blocks_login_render": false,
+    "auth_me_failure_result": "unauthenticated fallback state",
+    "login_form_submit_path": "/auth/login via frontend proxy",
+    "successful_login_redirect": "/dashboard"
+  },
+  "non_goals_respected": {
+    "backend_changes": false,
+    "db_schema_changes": false,
+    "rbac_changes": false,
+    "execution_engine_changes": false,
+    "frontend_architecture_redesign": false
+  },
+  "verification": {
+    "tests_added_or_updated": [
+      "auth initialization failures do not leave session status checking forever",
+      "login route renders independently from public-only auth readiness",
+      "root entry renders initial HTML while preserving dashboard redirect after auth"
+    ],
+    "npm_run_test_unit": "passed",
+    "npm_run_typecheck": "passed",
+    "npm_run_build": "passed"
+  }
+}

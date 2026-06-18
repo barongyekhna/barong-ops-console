@@ -1,5 +1,10 @@
-import { redirect } from "next/navigation";
+import { LoginScreen } from "@/components/login-screen";
+import { PublicOnly } from "@/components/public-only";
 
 export default function HomePage() {
-  redirect("/dashboard");
+  return (
+    <PublicOnly>
+      <LoginScreen />
+    </PublicOnly>
+  );
 }

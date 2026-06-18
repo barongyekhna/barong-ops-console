@@ -1,0 +1,48 @@
+{
+  "created_at_utc": "2026-06-18T11:16:45Z",
+  "scope": "frontend_only",
+  "status": "fixed_locally_pending_production_deploy",
+  "backend_changed": false,
+  "database_changed": false,
+  "rbac_or_auth_system_changed": false,
+  "execution_engine_changed": false,
+  "summary": {
+    "login_page": "renders static HTML immediately",
+    "root_page": "renders login fallback with HTTP 200 locally",
+    "auth_initialization": "session check remains async and now fails closed instead of leaving status checking forever",
+    "standalone_assets": "post-build step copies .next/static into .next/standalone/.next/static"
+  },
+  "local_runtime": {
+    "server": "frontend/.next/standalone/server.js",
+    "url": "http://127.0.0.1:3101",
+    "login_status": 200,
+    "root_status": 200,
+    "js_bundle_status": 200,
+    "css_asset_status": 200,
+    "login_html_contains_form": true,
+    "root_html_contains_login_fallback": true,
+    "pre_react_spinner_in_login_html": false
+  },
+  "production_runtime_observed": {
+    "domain": "ops.barongyekhna.com",
+    "http_to_https_redirect": true,
+    "login_final_status": 200,
+    "root_final_status_sequence": [301, 307, 200],
+    "js_bundle_final_status": 200,
+    "production_still_old_deploy": true,
+    "evidence": [
+      "production /login HTML still contains session-screen spinner",
+      "production / still redirects through /dashboard",
+      "local fixed build returns / as 200 with login fallback"
+    ]
+  },
+  "verification": {
+    "npm_run_test_unit": "passed: 13 tests",
+    "npm_run_typecheck": "passed",
+    "npm_run_build": "passed",
+    "local_curl_login": "HTTP 200",
+    "local_curl_root": "HTTP 200",
+    "local_curl_next_static_js": "HTTP 200",
+    "local_curl_next_static_css": "HTTP 200"
+  }
+}

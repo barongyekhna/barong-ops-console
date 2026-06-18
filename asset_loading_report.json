@@ -1,0 +1,69 @@
+{
+  "created_at_utc": "2026-06-18T11:16:45Z",
+  "status": "fixed_locally",
+  "build_output": {
+    ".next_static_generated": true,
+    ".next_standalone_generated": true,
+    "standalone_static_present": true,
+    "build_id_directory": "frontend/.next/standalone/.next/static/laSIxssuq4OHFZt0JqIjp",
+    "sample_assets": [
+      "frontend/.next/standalone/.next/static/chunks/1kgyy8xifom2l.js",
+      "frontend/.next/standalone/.next/static/chunks/20so6be0ks83x.css",
+      "frontend/.next/standalone/.next/static/laSIxssuq4OHFZt0JqIjp/_buildManifest.js"
+    ]
+  },
+  "runtime_asset_fix": {
+    "file": "frontend/scripts/prepare-standalone-runtime.mjs",
+    "package_script": "npm run build",
+    "behavior": "after next build, copy .next/static to .next/standalone/.next/static and public to .next/standalone/public",
+    "reason": "standalone server.js serves assets relative to .next/standalone/.next/static when run directly"
+  },
+  "local_http_verification": {
+    "server": "frontend/.next/standalone/server.js",
+    "root": {
+      "url": "http://127.0.0.1:3101/",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    "login": {
+      "url": "http://127.0.0.1:3101/login",
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    "js_bundle": {
+      "url": "http://127.0.0.1:3101/_next/static/chunks/1kgyy8xifom2l.js",
+      "status": 200,
+      "content_type": "application/javascript; charset=UTF-8",
+      "cache_control": "public, max-age=31536000, immutable"
+    },
+    "css_asset": {
+      "url": "http://127.0.0.1:3101/_next/static/chunks/20so6be0ks83x.css",
+      "status": 200,
+      "content_type": "text/css; charset=UTF-8",
+      "cache_control": "public, max-age=31536000, immutable"
+    }
+  },
+  "production_http_verification": {
+    "http_login": {
+      "url": "http://ops.barongyekhna.com/login",
+      "status": 301,
+      "location": "https://ops.barongyekhna.com/login"
+    },
+    "https_login_final": {
+      "status": 200,
+      "content_type": "text/html; charset=utf-8"
+    },
+    "http_root": {
+      "url": "http://ops.barongyekhna.com/",
+      "status": 301,
+      "location": "https://ops.barongyekhna.com/"
+    },
+    "https_root_final_sequence": [307, 200],
+    "js_bundle_final": {
+      "url": "http://ops.barongyekhna.com/_next/static/chunks/1kgyy8xifom2l.js",
+      "status_sequence": [301, 200],
+      "content_type": "application/javascript; charset=UTF-8"
+    },
+    "production_matches_local_fix": false
+  }
+}

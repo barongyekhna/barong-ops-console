@@ -24,7 +24,7 @@ test("auth proxy exposes only public session endpoints with exact methods", () =
   assert.equal(isAllowedBackendProxyPath("POST", ["auth", "register"]), false);
 });
 
-test("auth success and root entry land on dashboard route", () => {
+test("auth success and root entry land on dashboard route without blanking initial HTML", () => {
   const rootPageSource = readFileSync("frontend/src/app/page.tsx", "utf8");
   const loginFormSource = readFileSync(
     "frontend/src/components/login-form.tsx",
@@ -35,7 +35,8 @@ test("auth success and root entry land on dashboard route", () => {
     "utf8",
   );
 
-  assert.match(rootPageSource, /redirect\("\/dashboard"\)/);
+  assert.match(rootPageSource, /<LoginScreen \/>/);
+  assert.match(rootPageSource, /<PublicOnly>/);
   assert.match(loginFormSource, /router\.replace\("\/dashboard"\)/);
   assert.match(publicOnlySource, /router\.replace\("\/dashboard"\)/);
   assert.doesNotMatch(rootPageSource, /\/users/);
@@ -71,6 +72,27 @@ test("auth guards render without full-page session loading gates", () => {
   assert.doesNotMatch(publicOnlySource, /AUTH_LOADING_TIMEOUT_MS/);
   assert.doesNotMatch(authGuardSource, /LoaderCircle/);
   assert.doesNotMatch(publicOnlySource, /LoaderCircle/);
+  assert.doesNotMatch(publicOnlySource, /return null/);
   assert.match(authGuardSource, /router\.replace\("\/login"\)/);
   assert.match(publicOnlySource, /router\.replace\("\/dashboard"\)/);
+});
+
+test("auth initialization failures do not leave session status checking forever", () => {
+  const providerSource = readFileSync(
+    "frontend/src/components/auth-provider.tsx",
+    "utf8",
+  );
+
+  assert.match(providerSource, /BACKGROUND_SESSION_CHECK_TIMEOUT_MS = 1_500/);
+  assert.match(providerSource, /catch \(error\)[\s\S]*clearSession\(\);/);
+});
+
+test("login route renders independently from public-only auth readiness", () => {
+  const loginPageSource = readFileSync(
+    "frontend/src/app/login/page.tsx",
+    "utf8",
+  );
+
+  assert.match(loginPageSource, /return <LoginScreen \/>/);
+  assert.doesNotMatch(loginPageSource, /PublicOnly/);
 });

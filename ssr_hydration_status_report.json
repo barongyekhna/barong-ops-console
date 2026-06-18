@@ -1,0 +1,55 @@
+{
+  "created_at_utc": "2026-06-18T11:16:45Z",
+  "status": "fixed_locally",
+  "findings": {
+    "root_layout_blocks_render": false,
+    "auth_provider_ssr_blocks": false,
+    "auth_provider_client_mount_check": true,
+    "public_only_initial_null_render": "removed",
+    "login_page_depends_on_public_only": false,
+    "root_server_redirect": "removed locally",
+    "hydration_spinner_before_login": "removed locally"
+  },
+  "changes": [
+    {
+      "file": "frontend/src/app/login/page.tsx",
+      "change": "render LoginScreen directly without PublicOnly wrapper"
+    },
+    {
+      "file": "frontend/src/app/page.tsx",
+      "change": "render PublicOnly-wrapped LoginScreen as root fallback instead of server redirect to /dashboard"
+    },
+    {
+      "file": "frontend/src/components/public-only.tsx",
+      "change": "always render children while redirecting authenticated users asynchronously"
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "change": "clear session on non-401 session-check failures to avoid infinite checking status"
+    }
+  ],
+  "ssr_results": {
+    "local_login_html": {
+      "status": 200,
+      "contains_login_form": true,
+      "contains_session_screen_spinner": false,
+      "contains_next_static_scripts": true
+    },
+    "local_root_html": {
+      "status": 200,
+      "contains_login_fallback": true,
+      "contains_session_screen_spinner": false,
+      "contains_next_static_scripts": true
+    },
+    "production_login_html": {
+      "status": 200,
+      "contains_session_screen_spinner": true,
+      "deployed_version_matches_local_fix": false
+    }
+  },
+  "hydration_risk_after_fix": {
+    "login": "low",
+    "root": "low",
+    "reason": "server-rendered HTML contains the real login UI and scripts load with HTTP 200; auth redirect is client-side and non-blocking"
+  }
+}
