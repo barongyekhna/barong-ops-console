@@ -1,0 +1,85 @@
+{
+  "fix_id": "FIX-BE-02",
+  "generated_at_utc": "2026-06-18T04:26:34Z",
+  "validated_pattern": {
+    "normal_path": [
+      "yield session",
+      "session.commit()",
+      "session.close()"
+    ],
+    "exception_path": [
+      "yield session",
+      "session.rollback()",
+      "raise",
+      "session.close()"
+    ],
+    "terminal_close_guard": "ManagedSession.close() rolls back any still-open top-level or nested transaction before releasing the DBAPI connection."
+  },
+  "implementation_points": [
+    {
+      "file": "backend/app/db/session.py",
+      "change": "get_db() commits after successful dependency use, rolls back on exception, and always closes."
+    },
+    {
+      "file": "backend/app/db/session.py",
+      "change": "managed_session() applies the same lifecycle to direct backend session contexts."
+    },
+    {
+      "file": "backend/app/db/session.py",
+      "change": "SessionLocal keeps close_resets_only=false to prevent session reuse after close."
+    },
+    {
+      "file": "backend/app/db/session.py",
+      "change": "PostgreSQL runtime options include statement_timeout and idle_in_transaction_session_timeout."
+    }
+  ],
+  "middleware_validation": {
+    "permission_middleware": {
+      "file": "backend/app/middleware/permission.py",
+      "session_lifecycle": "managed_session()",
+      "cross_request_session_cache": false,
+      "holds_session_across_call_next": false
+    },
+    "org_context_middleware": {
+      "file": "backend/app/middleware/org_context.py",
+      "session_lifecycle": "managed_session()",
+      "cross_request_session_cache": false,
+      "holds_session_across_call_next": false
+    },
+    "data_isolation_middleware": {
+      "file": "backend/app/middleware/data_isolation.py",
+      "session_lifecycle": "managed_session()",
+      "cross_request_session_cache": false,
+      "holds_session_across_call_next": false
+    },
+    "control_plane_auth_middleware": {
+      "file": "backend/app/main.py",
+      "session_lifecycle": "managed_session()",
+      "cross_request_session_cache": false,
+      "holds_session_across_call_next": false
+    }
+  },
+  "service_session_validation": {
+    "direct_sessionlocal_contexts_replaced": true,
+    "service_logic_changed": false,
+    "caller_owned_sessions": "Service helpers that receive a db argument still leave commit ownership to the caller."
+  },
+  "unit_tests": [
+    {
+      "command": ".venv/bin/python3 -m pytest tests/backend/test_postgres_transaction_lifecycle.py -q",
+      "status": "passed",
+      "result": "5 passed, 2 warnings"
+    }
+  ],
+  "compile_validation": [
+    {
+      "command": ".venv/bin/python3 -m compileall -q backend/app",
+      "status": "passed"
+    }
+  ],
+  "known_unrelated_test_failure": {
+    "command": ".venv/bin/python3 -m pytest tests/backend/test_db_config.py -q",
+    "status": "failed_before_fix_scope",
+    "summary": "test_sqlalchemy_metadata_contains_core_foundation_tables expects only the original foundation table set, but current metadata includes newer C17/C18/auth/execution tables."
+  }
+}

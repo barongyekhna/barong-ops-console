@@ -1,0 +1,77 @@
+{
+  "fix_id": "FIX-BE-02",
+  "generated_at_utc": "2026-06-18T04:26:34Z",
+  "success_criteria": {
+    "idle_in_transaction_zero": {
+      "code_guard_status": "implemented",
+      "live_database_status": "not_observable_in_current_workspace"
+    },
+    "no_hanging_transactions": {
+      "code_guard_status": "implemented",
+      "live_database_status": "not_observable_in_current_workspace"
+    },
+    "connection_release_deterministic": {
+      "status": "validated_by_unit_tests",
+      "evidence": "get_db() and managed_session() success and exception paths commit or rollback and close exactly once."
+    },
+    "backend_stable_under_load": {
+      "status": "not_load_tested_in_current_workspace",
+      "reason": "No reachable PostgreSQL service was available for load verification."
+    }
+  },
+  "verification_commands": [
+    {
+      "command": ".venv/bin/python3 -m pytest tests/backend/test_postgres_transaction_lifecycle.py -q",
+      "status": "passed"
+    },
+    {
+      "command": ".venv/bin/python3 -m compileall -q backend/app",
+      "status": "passed"
+    },
+    {
+      "command": "rg -n \"SessionLocal\\(\" backend/app",
+      "status": "passed",
+      "observed": [
+        "backend/app/db/session.py:86",
+        "backend/app/db/session.py:98"
+      ]
+    },
+    {
+      "command": "PostgreSQL pg_stat_activity idle-in-transaction query through SQLAlchemy engine",
+      "status": "blocked",
+      "reason": "Configured host 'db' was not resolvable."
+    }
+  ],
+  "runtime_timeout_enforcement": {
+    "statement_timeout_ms": 5000,
+    "idle_in_transaction_session_timeout_ms": 10000,
+    "configured_at": "SQLAlchemy PostgreSQL connect_args options",
+    "options": "-c statement_timeout=5000 -c idle_in_transaction_session_timeout=10000"
+  },
+  "transaction_lifecycle_matrix": [
+    {
+      "owner": "FastAPI get_db dependency",
+      "success": "commit then close",
+      "exception": "rollback then close",
+      "unclosed_transaction_guard": "ManagedSession.close rollback"
+    },
+    {
+      "owner": "managed_session direct backend contexts",
+      "success": "commit then close",
+      "exception": "rollback then close",
+      "unclosed_transaction_guard": "ManagedSession.close rollback"
+    },
+    {
+      "owner": "caller-supplied service db sessions",
+      "success": "caller-owned transaction boundary",
+      "exception": "caller-owned transaction boundary",
+      "unclosed_transaction_guard": "covered when caller uses get_db or managed_session"
+    }
+  ],
+  "cleanup_verdict": {
+    "static_lifecycle_cleanup": "passed",
+    "postgres_timeout_guard": "passed",
+    "live_idle_transaction_count": "blocked_by_unreachable_database",
+    "ready_for_live_recheck_when_database_is_available": true
+  }
+}

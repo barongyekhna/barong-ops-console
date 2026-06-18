@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.compatibility import table_exists
-from ..db.session import SessionLocal
+from ..db.session import managed_session
 from ..middleware.org_context import get_org_context
 from ..schemas.permission import PermissionAction
 from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
@@ -222,7 +222,7 @@ async def enforce_permission_isolation(request: Request, call_next):
         )
 
     skipped_c05b_compat = False
-    with SessionLocal() as db:
+    with managed_session() as db:
         try:
             current_session = validate_session(
                 db,

@@ -19,10 +19,10 @@ class ReplayProtectionStore:
 
     def clear(self) -> None:
         self._ensure_table()
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.security import SecurityReplayNonce
 
-        with SessionLocal() as db:
+        with managed_session() as db:
             db.execute(delete(SecurityReplayNonce))
             db.commit()
 
@@ -37,9 +37,9 @@ class ReplayProtectionStore:
     ) -> None:
         del now
         self._ensure_table()
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
 
-        with SessionLocal() as db:
+        with managed_session() as db:
             _register_replay_key_in_db(
                 db,
                 scope=scope,

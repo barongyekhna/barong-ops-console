@@ -887,9 +887,9 @@ def _managed_session(db: Session | None = None):
         yield db, False
         return
 
-    from ..db.session import SessionLocal
+    from ..db.session import managed_session
 
-    with SessionLocal() as session:
+    with managed_session() as session:
         yield session, True
 
 

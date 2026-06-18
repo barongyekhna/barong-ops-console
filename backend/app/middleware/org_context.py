@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.compatibility import table_exists
-from ..db.session import SessionLocal
+from ..db.session import managed_session
 from ..models.auth_session import AuthSession
 from ..models.org_membership import OrgMembershipRecord
 from ..models.organization import OrganizationRecord
@@ -359,7 +359,7 @@ async def org_context_middleware(request: Request, call_next):
         return await call_next(request)
 
     audit = _audit_context(request, request_id)
-    with SessionLocal() as db:
+    with managed_session() as db:
         try:
             current_session = validate_session(
                 db,

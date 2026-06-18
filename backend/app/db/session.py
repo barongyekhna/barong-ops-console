@@ -1,4 +1,5 @@
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import create_engine
@@ -17,6 +18,18 @@ POOL_SIZE = 20
 MAX_OVERFLOW = 30
 POOL_RECYCLE_SECONDS = 1800
 STATEMENT_TIMEOUT_MS = 5000
+IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = 10_000
+
+
+def _postgres_runtime_options() -> str:
+    return " ".join(
+        (
+            f"-c statement_timeout={STATEMENT_TIMEOUT_MS}",
+            "-c "
+            "idle_in_transaction_session_timeout="
+            f"{IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS}",
+        )
+    )
 
 
 def _engine_kwargs(database_url: str) -> dict[str, Any]:
@@ -30,7 +43,7 @@ def _engine_kwargs(database_url: str) -> dict[str, Any]:
                 "pool_size": POOL_SIZE,
                 "max_overflow": MAX_OVERFLOW,
                 "connect_args": {
-                    "options": f"-c statement_timeout={STATEMENT_TIMEOUT_MS}",
+                    "options": _postgres_runtime_options(),
                 },
             }
         )
@@ -68,10 +81,24 @@ SessionLocal = sessionmaker(
 install_org_data_isolation_events()
 
 
+@contextmanager
+def managed_session() -> Iterator[Session]:
+    db = SessionLocal()
+    try:
+        yield db
+        db.commit()
+    except Exception:
+        rollback_open_transaction(db)
+        raise
+    finally:
+        db.close()
+
+
 def get_db() -> Generator[Session, None, None]:
     db = SessionLocal()
     try:
         yield db
+        db.commit()
     except Exception:
         rollback_open_transaction(db)
         raise

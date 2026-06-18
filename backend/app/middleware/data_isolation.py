@@ -11,7 +11,7 @@ from sqlalchemy import inspect
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..db.compatibility import table_exists
-from ..db.session import SessionLocal
+from ..db.session import managed_session
 from ..middleware.org_context import get_org_context
 from ..schemas.organization import ORG_ID_PATTERN
 from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
@@ -165,7 +165,7 @@ def _requires_org_context(request: Request) -> bool:
 
 
 def _c05b_schema_without_c18_data_isolation() -> bool:
-    with SessionLocal() as db:
+    with managed_session() as db:
         if not table_exists(db, "org_memberships"):
             return True
         if table_exists(db, "operation_logs"):
@@ -222,7 +222,7 @@ async def enforce_org_data_isolation(request: Request, call_next):
 
     audit = _audit_context(request)
     with without_org_data_isolation():
-        with SessionLocal() as db:
+        with managed_session() as db:
             try:
                 current_session = validate_session(
                     db,

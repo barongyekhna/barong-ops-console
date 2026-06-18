@@ -159,10 +159,10 @@ class EventQueueBackend:
         self._ensure_tables()
         from sqlalchemy import select
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.observability import EventStreamRecord, StorageEventRecord
 
-        with SessionLocal() as db:
+        with managed_session() as db:
             rows = list(
                 db.scalars(
                     select(EventStreamRecord)
@@ -181,12 +181,12 @@ class EventQueueBackend:
         self._ensure_tables()
         from sqlalchemy import delete
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.observability import EventStreamRecord, StorageEventRecord
         from .data_isolation import without_org_data_isolation
 
         with without_org_data_isolation():
-            with SessionLocal() as db:
+            with managed_session() as db:
                 db.execute(
                     delete(StorageEventRecord).where(
                         StorageEventRecord.record_id.like(
@@ -211,10 +211,10 @@ class EventQueueBackend:
         self._ensure_tables()
         from sqlalchemy import func, select
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.observability import EventStreamRecord
 
-        with SessionLocal() as db:
+        with managed_session() as db:
             stored = db.scalar(
                 select(func.count())
                 .select_from(EventStreamRecord)
@@ -281,7 +281,7 @@ class EventQueueBackend:
     ) -> EventQueueWriteResult:
         try:
             self._ensure_tables()
-            from ..db.session import SessionLocal
+            from ..db.session import managed_session
             from ..models.observability import EventStreamRecord, StorageEventRecord
             from .data_isolation import without_org_data_isolation
             from .storage_layer import storage_record_from_event_raw
@@ -325,7 +325,7 @@ class EventQueueBackend:
                 processing_attempts=0,
             )
             with without_org_data_isolation():
-                with SessionLocal() as db:
+                with managed_session() as db:
                     db.add(row)
                     db.add(
                         StorageEventRecord(
@@ -436,12 +436,12 @@ class EventQueueBackend:
 
         from sqlalchemy import update
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.observability import EventStreamRecord
         from .data_isolation import without_org_data_isolation
 
         with without_org_data_isolation():
-            with SessionLocal() as db:
+            with managed_session() as db:
                 db.execute(
                     update(EventStreamRecord)
                     .where(EventStreamRecord.record_id == record_id)
@@ -457,12 +457,12 @@ class EventQueueBackend:
         self._ensure_tables()
         from sqlalchemy import func, select
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.observability import EventStreamRecord
         from .data_isolation import without_org_data_isolation
 
         with without_org_data_isolation():
-            with SessionLocal() as db:
+            with managed_session() as db:
                 value = db.scalar(
                     select(func.count())
                     .select_from(EventStreamRecord)
@@ -483,13 +483,13 @@ class EventQueueBackend:
 
         from sqlalchemy import or_, select
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.observability import EventStreamRecord
         from .data_isolation import without_org_data_isolation
 
         now = datetime.now(UTC)
         with without_org_data_isolation():
-            with SessionLocal() as db:
+            with managed_session() as db:
                 statement = (
                     select(EventStreamRecord)
                     .where(
@@ -527,13 +527,13 @@ class EventQueueBackend:
 
         from sqlalchemy import select
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.execution_state import DLQStateRecord
         from ..models.observability import EventStreamRecord
         from .data_isolation import without_org_data_isolation
 
         with without_org_data_isolation():
-            with SessionLocal() as db:
+            with managed_session() as db:
                 row = db.scalar(
                     select(EventStreamRecord).where(
                         EventStreamRecord.record_id == record_id
@@ -599,13 +599,13 @@ class EventQueueBackend:
 
         from sqlalchemy import select
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
         from ..models.observability import EventStreamRecord
         from .audit_query_engine import AuditLogWriter
         from .data_isolation import without_org_data_isolation
 
         with without_org_data_isolation():
-            with SessionLocal() as db:
+            with managed_session() as db:
                 row = db.scalar(
                     select(EventStreamRecord).where(
                         EventStreamRecord.record_id == record_id

@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ..db.session import SessionLocal
+from ..db.session import managed_session
 from ..models.user import User
 from ..schemas.conversation import Conversation as C19DConversation
 from ..schemas.cross_org_communication import (
@@ -83,7 +83,7 @@ def _ensure_default_global_im_boundary(db: Session) -> bool:
     if existing is not None:
         return False
 
-    with SessionLocal() as init_db:
+    with managed_session() as init_db:
         if module_binding_repo.get_module_binding(
             init_db,
             CROSS_ORG_COMMUNICATION_MODULE_ID,

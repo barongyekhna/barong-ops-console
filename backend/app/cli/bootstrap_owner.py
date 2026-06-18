@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..core.config import EXAMPLE_DATABASE_URL, get_settings
 from ..core.security import hash_password
-from ..db.session import SessionLocal
+from ..db.session import managed_session
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.users import (
     create_owner,
@@ -149,7 +149,7 @@ def main() -> int:
         else None
     )
 
-    with SessionLocal() as db:
+    with managed_session() as db:
         try:
             result = bootstrap_owner(
                 db,

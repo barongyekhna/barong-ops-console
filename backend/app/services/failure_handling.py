@@ -360,9 +360,9 @@ class DeadLetterQueueStore:
 
             return _ExistingSession()
 
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
 
-        return SessionLocal()
+        return managed_session()
 
 
 DEFAULT_DEAD_LETTER_QUEUE = DeadLetterQueueStore()

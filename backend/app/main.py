@@ -56,7 +56,7 @@ from .api.org_membership import router as org_membership_router
 from .api.shared_module import router as shared_module_router
 from .core.config import get_settings
 from .core.security_headers import apply_security_headers
-from .db.session import SessionLocal
+from .db.session import managed_session
 from .middleware.event_collector import capture_audit_events
 from .middleware.data_isolation import enforce_org_data_isolation
 from .middleware.org_context import org_context_middleware
@@ -259,7 +259,7 @@ async def enforce_control_plane_isolation(request: Request, call_next):
             detail="Not authenticated.",
         )
 
-    with SessionLocal() as db:
+    with managed_session() as db:
         try:
             current_session = validate_session(
                 db,

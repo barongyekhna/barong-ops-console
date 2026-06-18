@@ -382,9 +382,9 @@ class AuditLogWriter:
         if self._db is not None:
             yield self._db
             return
-        from ..db.session import SessionLocal
+        from ..db.session import managed_session
 
-        with SessionLocal() as db:
+        with managed_session() as db:
             yield db
 
     def _commit(self, db: Session) -> None:
