@@ -1,0 +1,83 @@
+{
+  "refactor_id": "FIX-FE-03",
+  "generated_at": "2026-06-18",
+  "scope": "frontend provider layer only",
+  "initialization_order": [
+    "AuthProvider",
+    "CapabilityStateProvider",
+    "ModuleAccessProvider",
+    "AdapterAccessProvider"
+  ],
+  "provider_import_graph": {
+    "AuthProvider": [],
+    "CapabilityStateProvider": [
+      "AuthProvider"
+    ],
+    "ModuleAccessProvider": [
+      "AuthProvider"
+    ],
+    "AdapterAccessProvider": [
+      "AuthProvider"
+    ]
+  },
+  "identity_flow": [
+    {
+      "from": "AuthProvider",
+      "to": "CapabilityStateProvider",
+      "mode": "read-only identity"
+    },
+    {
+      "from": "AuthProvider",
+      "to": "ModuleAccessProvider",
+      "mode": "read-only identity"
+    },
+    {
+      "from": "AuthProvider",
+      "to": "AdapterAccessProvider",
+      "mode": "read-only identity"
+    }
+  ],
+  "forbidden_edges_absent": [
+    "CapabilityStateProvider -> ModuleAccessProvider",
+    "CapabilityStateProvider -> AdapterAccessProvider",
+    "ModuleAccessProvider -> CapabilityStateProvider",
+    "ModuleAccessProvider -> AdapterAccessProvider",
+    "AdapterAccessProvider -> CapabilityStateProvider",
+    "AdapterAccessProvider -> ModuleAccessProvider"
+  ],
+  "fetch_ownership": {
+    "AuthProvider": [
+      "auth session APIs only"
+    ],
+    "CapabilityStateProvider": [],
+    "ModuleAccessProvider": [
+      "/modules/registry",
+      "/modules/me"
+    ],
+    "AdapterAccessProvider": [
+      "/module-adapters/registry",
+      "/module-adapters/me",
+      "/execution-providers/registry",
+      "/execution-providers/me"
+    ]
+  },
+  "circular_dependency_detected": false,
+  "static_check": {
+    "command": "node -e provider import graph check over frontend/src/components/*provider.tsx",
+    "result": {
+      "graph": {
+        "auth-provider": [],
+        "capability-state-provider": [
+          "auth-provider"
+        ],
+        "module-access-provider": [
+          "auth-provider"
+        ],
+        "adapter-access-provider": [
+          "auth-provider"
+        ]
+      },
+      "cycles": []
+    }
+  }
+}

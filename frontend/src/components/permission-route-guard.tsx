@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 
 import { CapabilityEmptyStateEngine } from "@/components/capability-empty-state";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
-import { useAuth } from "@/components/auth-provider";
 import { useModuleAccess } from "@/components/module-access-provider";
 import {
   ModuleUnavailableNotice,
@@ -21,7 +20,6 @@ export function PermissionRouteGuard({
 }) {
   const pathname = usePathname();
   const { getCapabilityForPath } = useFrontendCapabilityState();
-  const { user } = useAuth();
   const { items, moduleAccessUnknown } = useModuleAccess();
   const capability = getCapabilityForPath(pathname);
 
@@ -41,7 +39,7 @@ export function PermissionRouteGuard({
   }
 
   const decision = getModuleRouteDecision(
-    user?.permissions,
+    null,
     pathname,
     navigationModuleRecords,
     items,

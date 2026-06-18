@@ -2,19 +2,25 @@
 
 import {
   createContext,
+  useCallback,
   useContext,
+  useEffect,
   useMemo,
+  useRef,
+  useState,
   type ReactNode,
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { useFrontendCapabilityState } from "@/components/capability-state-provider";
-import type { ModuleAdapterApiErrorSummary } from "@/lib/module-adapter-api";
-import type { ExecutionProviderApiErrorSummary } from "@/lib/execution-provider-api";
 import type {
   ExecutionProviderAccessState,
   ExecutionProviderContract,
 } from "@/lib/execution-provider";
+import {
+  getExecutionProviderRegistry,
+  getMyExecutionProviders,
+  type ExecutionProviderApiErrorSummary,
+} from "@/lib/execution-provider-api";
 import {
   canExposeAdapterMetadata,
   findAdapterAccessState,
@@ -27,6 +33,11 @@ import {
   type ModuleAdapterAccessState,
   type ModuleAdapterContract,
 } from "@/lib/module-adapter";
+import {
+  listModuleAdapterRegistry,
+  listMyModuleAdapters,
+  type ModuleAdapterApiErrorSummary,
+} from "@/lib/module-adapter-api";
 
 type AdapterAccessContextValue = {
   adapters: ModuleAdapterContract[];
@@ -48,73 +59,22 @@ type AdapterAccessContextValue = {
 const AdapterAccessContext =
   createContext<AdapterAccessContextValue | null>(null);
 
-const ADAPTER_ACCESS_MEMORY_CACHE_TTL_MS = 60_000;
-
-type AdapterAccessCacheEntry = {
-  adapters: ModuleAdapterContract[];
-  expiresAt: number;
-};
-
-const adapterAccessMemoryCache = new Map<string, AdapterAccessCacheEntry>();
-
-function isOwnerFullAccess(
-  permissions: { is_owner_full_access?: boolean } | null | undefined,
-) {
-  return permissions?.is_owner_full_access === true;
-}
-
-function adapterAccessCacheKey({
-  accessItems,
-  adapterAccessUnknown,
-  contracts,
-  owner,
+function authIdentityKey({
+  status,
+  user,
 }: {
-  accessItems: ModuleAdapterAccessState[];
-  adapterAccessUnknown: boolean;
-  contracts: ModuleAdapterContract[];
-  owner: boolean;
+  status: string;
+  user: { id?: number | string | null; role?: string | null; username?: string | null } | null;
 }) {
-  return JSON.stringify({
-    accessItems: accessItems.map((item) => [
-      item.adapter_key,
-      item.adapter_access_state,
-      item.hidden,
-      item.locked,
-      item.unavailable,
-      item.visible,
-    ]),
-    adapterAccessUnknown,
-    contracts: contracts.map((adapter) => [
-      adapter.adapter_key,
-      adapter.adapter_status,
-      adapter.module_key,
-    ]),
-    owner,
-  });
-}
-
-function readAdapterAccessMemoryCache(cacheKey: string) {
-  const cached = adapterAccessMemoryCache.get(cacheKey);
-  if (!cached) {
+  if (status !== "authenticated" || !user) {
     return null;
   }
 
-  if (cached.expiresAt <= Date.now()) {
-    adapterAccessMemoryCache.delete(cacheKey);
-    return null;
-  }
-
-  return cached.adapters;
+  return [user.id ?? "unknown", user.username ?? "", user.role ?? ""].join(":");
 }
 
-function writeAdapterAccessMemoryCache(
-  cacheKey: string,
-  adapters: ModuleAdapterContract[],
-) {
-  adapterAccessMemoryCache.set(cacheKey, {
-    adapters,
-    expiresAt: Date.now() + ADAPTER_ACCESS_MEMORY_CACHE_TTL_MS,
-  });
+function safeArray<T>(value: readonly T[] | null | undefined): T[] {
+  return Array.isArray(value) ? [...value] : [];
 }
 
 export function AdapterAccessProvider({
@@ -122,82 +82,229 @@ export function AdapterAccessProvider({
 }: {
   children: ReactNode;
 }) {
-  const { user } = useAuth();
-  const capabilityState = useFrontendCapabilityState();
+  const { status, user } = useAuth();
+  const mountedRef = useRef(false);
+  const loadingKeyRef = useRef<string | null>(null);
+  const loadedKeyRef = useRef<string | null>(null);
+  const loadingPromiseRef = useRef<Promise<void> | null>(null);
+  const authKey = useMemo(
+    () => authIdentityKey({ status, user }),
+    [status, user?.id, user?.role, user?.username],
+  );
+  const latestAuthKeyRef = useRef<string | null>(authKey);
+  latestAuthKeyRef.current = authKey;
+  const [adapters, setAdapters] = useState<ModuleAdapterContract[]>([]);
+  const [accessItems, setAccessItems] = useState<ModuleAdapterAccessState[]>(
+    [],
+  );
+  const [executionProviders, setExecutionProviders] = useState<
+    ExecutionProviderContract[]
+  >([]);
+  const [executionProviderAccessItems, setExecutionProviderAccessItems] =
+    useState<ExecutionProviderAccessState[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [adapterAccessUnknown, setAdapterAccessUnknown] = useState(true);
+  const [adapterMetadataUnavailable, setAdapterMetadataUnavailable] =
+    useState(true);
+  const [
+    executionProviderAccessUnknown,
+    setExecutionProviderAccessUnknown,
+  ] = useState(true);
+  const [
+    executionProviderMetadataUnavailable,
+    setExecutionProviderMetadataUnavailable,
+  ] = useState(true);
+  const [error, setError] =
+    useState<ModuleAdapterApiErrorSummary | null>(null);
+  const [registryError, setRegistryError] =
+    useState<ModuleAdapterApiErrorSummary | null>(null);
+  const [executionProviderError, setExecutionProviderError] =
+    useState<ExecutionProviderApiErrorSummary | null>(null);
+  const [
+    executionProviderRegistryError,
+    setExecutionProviderRegistryError,
+  ] = useState<ExecutionProviderApiErrorSummary | null>(null);
+  const [isOwnerFullAccess, setIsOwnerFullAccess] = useState(false);
 
-  const filteredAdapters = useMemo(() => {
-    const owner = isOwnerFullAccess(user?.permissions);
-    const cacheKey = adapterAccessCacheKey({
-      accessItems: capabilityState.adapterAccessItems,
-      adapterAccessUnknown: capabilityState.adapterAccessUnknown,
-      contracts: capabilityState.adapterContracts,
-      owner,
-    });
-    const cached = readAdapterAccessMemoryCache(cacheKey);
-
-    if (cached) {
-      return cached;
+  const applyFallbackState = useCallback(() => {
+    if (!mountedRef.current) {
+      return;
     }
 
-    const adapters = capabilityState.adapterContracts.filter((adapter) =>
-      canExposeAdapterMetadata(
-        adapter,
-        findAdapterAccessState(
-          adapter.adapter_key,
-          capabilityState.adapterAccessItems,
-        ),
-        {
-          adapterAccessUnknown: capabilityState.adapterAccessUnknown,
-          isOwnerFullAccess: owner,
-        },
-      ),
-    );
-    writeAdapterAccessMemoryCache(cacheKey, adapters);
+    setAdapters([]);
+    setAccessItems([]);
+    setExecutionProviders([]);
+    setExecutionProviderAccessItems([]);
+    setAdapterAccessUnknown(true);
+    setAdapterMetadataUnavailable(true);
+    setExecutionProviderAccessUnknown(true);
+    setExecutionProviderMetadataUnavailable(true);
+    setError(null);
+    setRegistryError(null);
+    setExecutionProviderError(null);
+    setExecutionProviderRegistryError(null);
+    setIsOwnerFullAccess(false);
+  }, []);
 
-    return adapters;
-  }, [
-    capabilityState.adapterAccessItems,
-    capabilityState.adapterAccessUnknown,
-    capabilityState.adapterContracts,
-    user?.permissions,
-  ]);
+  const loadAdapterMetadata = useCallback(
+    async ({ force = false }: { force?: boolean } = {}) => {
+      const currentAuthKey = authIdentityKey({ status, user });
+
+      if (!currentAuthKey) {
+        applyFallbackState();
+        setIsLoading(false);
+        return;
+      }
+
+      if (
+        !force &&
+        loadingPromiseRef.current &&
+        loadingKeyRef.current === currentAuthKey
+      ) {
+        return loadingPromiseRef.current;
+      }
+
+      if (!force && loadedKeyRef.current === currentAuthKey) {
+        return;
+      }
+
+      setIsLoading(true);
+      loadingKeyRef.current = currentAuthKey;
+
+      const loadPromise = (async () => {
+        const [
+          adapterRegistryResult,
+          adapterAccessResult,
+          executionRegistryResult,
+          executionAccessResult,
+        ] = await Promise.all([
+          listModuleAdapterRegistry(),
+          listMyModuleAdapters(),
+          getExecutionProviderRegistry(),
+          getMyExecutionProviders(),
+        ]);
+
+        if (
+          !mountedRef.current ||
+          latestAuthKeyRef.current !== currentAuthKey
+        ) {
+          return;
+        }
+
+        setAdapters(safeArray(adapterRegistryResult.data.items));
+        setAdapterMetadataUnavailable(adapterRegistryResult.ok !== true);
+        setRegistryError(adapterRegistryResult.error);
+        setAccessItems(safeArray(adapterAccessResult.data.items));
+        setAdapterAccessUnknown(
+          adapterAccessResult.adapter_access_unknown !== false,
+        );
+        setError(adapterAccessResult.error);
+        setExecutionProviders(safeArray(executionRegistryResult.data.items));
+        setExecutionProviderMetadataUnavailable(
+          executionRegistryResult.ok !== true,
+        );
+        setExecutionProviderRegistryError(executionRegistryResult.error);
+        setExecutionProviderAccessItems(
+          safeArray(executionAccessResult.data.items),
+        );
+        setExecutionProviderAccessUnknown(
+          executionAccessResult.provider_access_unknown !== false,
+        );
+        setExecutionProviderError(executionAccessResult.error);
+        setIsOwnerFullAccess(
+          adapterAccessResult.data.is_owner_full_access === true ||
+            executionAccessResult.data.is_owner_full_access === true,
+        );
+        loadedKeyRef.current = currentAuthKey;
+      })().finally(() => {
+        if (loadingKeyRef.current === currentAuthKey) {
+          loadingKeyRef.current = null;
+          loadingPromiseRef.current = null;
+        }
+        if (
+          mountedRef.current &&
+          latestAuthKeyRef.current === currentAuthKey
+        ) {
+          setIsLoading(false);
+        }
+      });
+
+      loadingPromiseRef.current = loadPromise;
+      return loadPromise;
+    },
+    [applyFallbackState, status, user],
+  );
+
+  useEffect(() => {
+    mountedRef.current = true;
+
+    if (!authKey) {
+      loadedKeyRef.current = null;
+      loadingKeyRef.current = null;
+      loadingPromiseRef.current = null;
+      applyFallbackState();
+      setIsLoading(false);
+    } else {
+      void loadAdapterMetadata();
+    }
+
+    return () => {
+      mountedRef.current = false;
+    };
+  }, [applyFallbackState, authKey, loadAdapterMetadata]);
+
+  const refresh = useCallback(async () => {
+    await loadAdapterMetadata({ force: true });
+  }, [loadAdapterMetadata]);
+
+  const filteredAdapters = useMemo(
+    () =>
+      adapters.filter((adapter) =>
+        canExposeAdapterMetadata(
+          adapter,
+          findAdapterAccessState(adapter.adapter_key, accessItems),
+          {
+            adapterAccessUnknown,
+            isOwnerFullAccess,
+          },
+        ),
+      ),
+    [accessItems, adapterAccessUnknown, adapters, isOwnerFullAccess],
+  );
 
   const value = useMemo(
     () => ({
-      accessItems: capabilityState.adapterAccessItems,
-      adapterAccessUnknown: capabilityState.adapterAccessUnknown,
-      adapterMetadataUnavailable: capabilityState.adapterMetadataUnavailable,
+      accessItems,
+      adapterAccessUnknown,
+      adapterMetadataUnavailable,
       adapters: filteredAdapters,
-      error: capabilityState.adapterError,
-      executionProviderAccessItems:
-        capabilityState.executionProviderAccessItems,
-      executionProviderAccessUnknown:
-        capabilityState.executionProviderAccessUnknown,
-      executionProviderError: capabilityState.executionProviderError,
-      executionProviderMetadataUnavailable:
-        capabilityState.executionProviderMetadataUnavailable,
-      executionProviderRegistryError:
-        capabilityState.executionProviderRegistryError,
-      executionProviders: capabilityState.executionProviderContracts,
-      isLoading: capabilityState.isLoading,
-      refresh: capabilityState.refresh,
-      registryError: capabilityState.adapterRegistryError,
+      error,
+      executionProviderAccessItems,
+      executionProviderAccessUnknown,
+      executionProviderError,
+      executionProviderMetadataUnavailable,
+      executionProviderRegistryError,
+      executionProviders,
+      isLoading: status === "checking" || isLoading,
+      refresh,
+      registryError,
     }),
     [
-      capabilityState.adapterAccessItems,
-      capabilityState.adapterAccessUnknown,
-      capabilityState.adapterError,
-      capabilityState.adapterMetadataUnavailable,
-      capabilityState.adapterRegistryError,
-      capabilityState.executionProviderAccessItems,
-      capabilityState.executionProviderAccessUnknown,
-      capabilityState.executionProviderContracts,
-      capabilityState.executionProviderError,
-      capabilityState.executionProviderMetadataUnavailable,
-      capabilityState.executionProviderRegistryError,
-      capabilityState.isLoading,
-      capabilityState.refresh,
+      accessItems,
+      adapterAccessUnknown,
+      adapterMetadataUnavailable,
+      error,
+      executionProviderAccessItems,
+      executionProviderAccessUnknown,
+      executionProviderError,
+      executionProviderMetadataUnavailable,
+      executionProviderRegistryError,
+      executionProviders,
       filteredAdapters,
+      isLoading,
+      refresh,
+      registryError,
+      status,
     ],
   );
 

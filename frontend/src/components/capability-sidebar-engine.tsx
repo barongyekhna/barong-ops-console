@@ -28,8 +28,6 @@ export function CapabilitySidebarEngine({
   const {
     groups,
     isLoading,
-    registryError,
-    registryUnavailable,
     sidebarItems,
     uiState,
   } = useFrontendCapabilityState();
@@ -39,9 +37,7 @@ export function CapabilitySidebarEngine({
       ? "Fallback mode"
       : uiState === "degraded"
         ? "Degraded mode"
-        : registryUnavailable
-          ? (registryError?.message ?? "Workspace navigation unavailable")
-          : `${sidebarItems.length} product areas`;
+        : `${sidebarItems.length} product areas`;
 
   return (
     <>

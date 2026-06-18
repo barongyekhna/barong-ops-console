@@ -9,16 +9,16 @@ import { PermissionRouteGuard } from "@/components/permission-route-guard";
 
 export default function ProtectedLayout({ children }: { children: ReactNode }) {
   return (
-    <AuthGuard>
-      <CapabilityStateProvider>
+    <CapabilityStateProvider>
+      <ModuleAccessProvider>
         <AdapterAccessProvider>
-          <ModuleAccessProvider>
+          <AuthGuard>
             <ConsoleShell>
               <PermissionRouteGuard>{children}</PermissionRouteGuard>
             </ConsoleShell>
-          </ModuleAccessProvider>
+          </AuthGuard>
         </AdapterAccessProvider>
-      </CapabilityStateProvider>
-    </AuthGuard>
+      </ModuleAccessProvider>
+    </CapabilityStateProvider>
   );
 }

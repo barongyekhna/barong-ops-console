@@ -1,0 +1,74 @@
+{
+  "refactor_id": "FIX-FE-03",
+  "generated_at": "2026-06-18",
+  "scope": "frontend provider layer only",
+  "removed_couplings": [
+    {
+      "coupling": "CapabilityStateProvider backend fan-out through getCapabilityBootstrap",
+      "status": "removed",
+      "evidence": "frontend/src/components/capability-state-provider.tsx no longer imports getCapabilityBootstrap or any metadata API client."
+    },
+    {
+      "coupling": "ModuleAccessProvider -> CapabilityStateProvider data and refresh inheritance",
+      "status": "removed",
+      "evidence": "frontend/src/components/module-access-provider.tsx imports useAuth and module registry clients only."
+    },
+    {
+      "coupling": "AdapterAccessProvider -> CapabilityStateProvider data and refresh inheritance",
+      "status": "removed",
+      "evidence": "frontend/src/components/adapter-access-provider.tsx imports useAuth, adapter clients, and execution provider clients only."
+    },
+    {
+      "coupling": "AdapterAccessProvider shared mutable memory cache",
+      "status": "removed",
+      "evidence": "ADAPTER_ACCESS_MEMORY_CACHE_TTL_MS and adapterAccessMemoryCache were removed."
+    },
+    {
+      "coupling": "AuthProvider permission exposure",
+      "status": "removed",
+      "evidence": "frontend/src/lib/auth.ts drops permissions from auth payload normalization before AuthProvider receives user identity."
+    },
+    {
+      "coupling": "Provider initialization order Adapter before Module",
+      "status": "removed",
+      "evidence": "frontend/src/app/(console)/layout.tsx now nests CapabilityStateProvider -> ModuleAccessProvider -> AdapterAccessProvider."
+    }
+  ],
+  "remaining_frontend_surface_not_called_by_provider": [
+    {
+      "surface": "frontend/src/lib/capability-bootstrap-api.ts",
+      "reason_retained": "Existing frontend helper was left in place to avoid non-provider API surface changes.",
+      "provider_usage": false
+    },
+    {
+      "surface": "frontend/src/app/api/backend/[...path]/route.ts capability bootstrap proxy support",
+      "reason_retained": "Proxy contract was left untouched per no API contract changes constraint.",
+      "provider_usage": false
+    }
+  ],
+  "loop_prevention": {
+    "provider_cascade_refresh": false,
+    "provider_to_provider_fetch_trigger": false,
+    "cross_provider_hook_invocation_inside_provider": false,
+    "shared_mutable_provider_state": false
+  },
+  "validation": {
+    "typecheck": {
+      "command": "npm run typecheck",
+      "cwd": "frontend",
+      "result": "passed"
+    },
+    "provider_graph_cycle_check": {
+      "result": "passed",
+      "cycles": []
+    },
+    "frontend_tests": {
+      "command": "node --test tests/frontend/*.test.mjs",
+      "result": "failed",
+      "notes": [
+        "Provider-related failures are stale assertions expecting the old bootstrap-coupled architecture.",
+        "Additional unrelated existing failures assert older navigation and permission-management copy/labels."
+      ]
+    }
+  }
+}

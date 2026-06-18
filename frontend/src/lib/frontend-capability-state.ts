@@ -40,7 +40,11 @@ import {
   type ModuleNavigationState,
   type ModuleStatus,
 } from "@/lib/module-registry";
-import { navigationItems, navigationModuleRecords } from "@/lib/navigation";
+import {
+  navigationGroups,
+  navigationItems,
+  navigationModuleRecords,
+} from "@/lib/navigation";
 import type { FrontendPermissions } from "@/lib/permissions";
 
 export type ProductCapabilityStateName =
@@ -123,7 +127,7 @@ export type FrontendPermissionSnapshot = {
 };
 
 export type FrontendOrgContext = {
-  source: "/modules/me";
+  source: "/modules/me" | "frontend_ui_state";
   state: "active" | "unknown" | "backend_unavailable";
   role: string;
   visible_modules: number;
@@ -235,6 +239,18 @@ const routeByModuleKey = new Map(
   navigationModuleRecords.map((record) => [record.module_key, record]),
 );
 
+const UI_ONLY_LIVE_GATE: LiveGateRuntimeState = {
+  active_policy_count: 0,
+  blocked_reason: "Execution metadata is owned by AdapterAccessProvider.",
+  canary_state: "not_configured",
+  execution_mode: "mock",
+  live_gate_status: "blocked",
+  production_ready: false,
+  readiness_passed: false,
+  rollout_percentage: 0,
+  source: "frontend_ui_state",
+};
+
 function isOwnerFullAccess(
   permissions: { is_owner_full_access?: boolean } | null | undefined,
 ) {
@@ -257,6 +273,163 @@ function missingPermissionText(
 
 function groupOrder(label: string) {
   return GROUP_ORDER.get(label) ?? 999;
+}
+
+function stateFromStaticNavigation(
+  record: ModuleAwareNavigationRecord,
+): ProductCapabilityStateName {
+  if (PRODUCT_HIDDEN_MODULE_KEYS.has(record.module_key)) {
+    return "hidden";
+  }
+  if (record.status === "adapter_pending") {
+    return "adapter_pending";
+  }
+  if (
+    record.status === "planned" ||
+    record.status === "disabled" ||
+    record.status === "unavailable" ||
+    record.status === "deprecated"
+  ) {
+    return "partial";
+  }
+  return "allowed";
+}
+
+function staticCapabilityReason(state: ProductCapabilityStateName) {
+  if (state === "hidden") {
+    return "This product area is not part of the current navigation.";
+  }
+  if (state === "adapter_pending") {
+    return "This product area is waiting for adapter metadata.";
+  }
+  if (state === "partial") {
+    return "This product area is visible while metadata is loaded by its owner provider.";
+  }
+  return "This product area is available in the current navigation.";
+}
+
+export function buildFrontendUiCapabilityGraph({
+  authStatus,
+  role,
+}: {
+  authStatus: "checking" | "authenticated" | "unauthenticated" | "error";
+  role: string;
+}): FrontendCapabilityGraph {
+  const executionState = deriveFrontendExecutionState({
+    adapterAccessItems: [],
+    executionProviderAccessItems: [],
+    liveGate: UI_ONLY_LIVE_GATE,
+  });
+  const items = navigationGroups
+    .flatMap((group) =>
+      group.items.map((record) => {
+        const state = stateFromStaticNavigation(record);
+        const reason = staticCapabilityReason(state);
+        const routeBound = Boolean(routeByModuleKey.get(record.module_key));
+        const item: ProductCapabilityItem = {
+          adapter_state: "owned_by_adapter_provider",
+          api_binding: {
+            adapter_bindings: [],
+            api_bound: false,
+            api_namespace: "owned_by_module_provider",
+            no_api: true,
+            route_bound: routeBound,
+            route_namespace: record.route_namespace,
+          },
+          approval_state: executionState.approval_state,
+          badge: badgeForState(state),
+          blocked_reason: reason,
+          can_enter:
+            authStatus === "authenticated" &&
+            routeBound &&
+            state !== "hidden",
+          canary_state: executionState.canary_state,
+          description: "",
+          execution_mode: executionState.execution_mode,
+          href: record.href,
+          icon: record.icon ?? Boxes,
+          label: record.label,
+          live_gate_status: executionState.live_gate_status,
+          module_key: record.module_key,
+          module_status: record.status ?? "unknown",
+          nav_group: group.label,
+          nav_order: routeOrder(record, null),
+          org_visibility:
+            authStatus === "authenticated" ? "visible" : "unknown",
+          permission_state:
+            authStatus === "authenticated" ? "available" : "unknown",
+          provider_state: "owned_by_adapter_provider",
+          reason,
+          required_execution_mode:
+            "Execution metadata is loaded by AdapterAccessProvider.",
+          required_module_state:
+            record.status ?? "Module metadata is loaded by ModuleAccessProvider.",
+          required_org_state:
+            authStatus === "authenticated"
+              ? "Authenticated workspace identity."
+              : "Authenticated identity is required.",
+          required_permission:
+            record.required_permission ?? "No additional permission required.",
+          route_bound: routeBound,
+          route_namespace: record.route_namespace,
+          sidebar_state: sidebarStateForState(state),
+          state,
+          unlock_condition:
+            state === "allowed"
+              ? "Open this product area."
+              : "Wait for the owning metadata provider to report availability.",
+        };
+
+        return item;
+      }),
+    )
+    .sort((left, right) => {
+      const groupDelta = groupOrder(left.nav_group) - groupOrder(right.nav_group);
+      if (groupDelta !== 0) {
+        return groupDelta;
+      }
+      if (left.nav_order !== right.nav_order) {
+        return left.nav_order - right.nav_order;
+      }
+      return left.label.localeCompare(right.label);
+    });
+  const sidebarItems = items.filter(
+    (item) => item.route_bound && item.sidebar_state !== "hidden",
+  );
+  const grouped = new Map<string, ProductCapabilityItem[]>();
+  for (const item of sidebarItems) {
+    const groupItems = grouped.get(item.nav_group) ?? [];
+    groupItems.push(item);
+    grouped.set(item.nav_group, groupItems);
+  }
+  const groups = Array.from(grouped.entries())
+    .map(([label, groupItems]) => ({ items: groupItems, label }))
+    .sort((left, right) => groupOrder(left.label) - groupOrder(right.label));
+
+  return {
+    byModuleKey: new Map(items.map((item) => [item.module_key, item])),
+    executionState,
+    groups,
+    items,
+    orgContext: {
+      hidden_modules: items.length - sidebarItems.length,
+      reason:
+        authStatus === "authenticated"
+          ? "Workspace UI state is derived from authenticated identity."
+          : "Workspace UI state is waiting for authenticated identity.",
+      role,
+      source: "frontend_ui_state",
+      state: authStatus === "authenticated" ? "active" : "unknown",
+      visible_modules: sidebarItems.length,
+    },
+    permissionSnapshot: {
+      is_owner_full_access: false,
+      permission_count: 0,
+      permissions: [],
+      source: "/auth/me",
+    },
+    sidebarItems,
+  };
 }
 
 function routeIcon(record: ModuleAwareNavigationRecord, manifest: ModuleManifest | null) {

@@ -1,0 +1,59 @@
+{
+  "refactor_id": "FIX-FE-03",
+  "generated_at": "2026-06-18",
+  "scope": "frontend provider layer only",
+  "constraints_respected": {
+    "backend_changes": false,
+    "db_schema_changes": false,
+    "api_contract_changes": false,
+    "rbac_system_changes": false,
+    "execution_engine_changes": false
+  },
+  "summary": [
+    "AuthProvider remains the root identity/session/login provider and no longer receives normalized permissions in frontend auth state.",
+    "CapabilityStateProvider is now UI-only and derives sidebar/product UI flags from auth identity and static frontend navigation.",
+    "ModuleAccessProvider independently owns module registry and current-user module metadata reads.",
+    "AdapterAccessProvider independently owns module adapter registry/access and execution provider registry/access metadata reads.",
+    "Provider initialization order is deterministic: AuthProvider -> CapabilityStateProvider -> ModuleAccessProvider -> AdapterAccessProvider.",
+    "No provider consumes another non-auth provider, triggers another provider fetch, or cascades refresh."
+  ],
+  "changed_files": [
+    "frontend/src/app/(console)/layout.tsx",
+    "frontend/src/components/adapter-access-provider.tsx",
+    "frontend/src/components/capability-sidebar-engine.tsx",
+    "frontend/src/components/capability-state-provider.tsx",
+    "frontend/src/components/module-access-provider.tsx",
+    "frontend/src/components/module-registry-product-view.tsx",
+    "frontend/src/components/permission-route-guard.tsx",
+    "frontend/src/components/user-management-panel.tsx",
+    "frontend/src/lib/auth.ts",
+    "frontend/src/lib/frontend-capability-state.ts"
+  ],
+  "success_criteria": {
+    "no_cross_provider_fetch_loops": true,
+    "auth_provider_independent": true,
+    "capability_provider_no_backend_fanout": true,
+    "module_provider_read_only_metadata_layer": true,
+    "adapter_provider_read_only_metadata_layer": true,
+    "deterministic_initialization": true,
+    "circular_dependency_detected": false
+  },
+  "verification_commands": [
+    {
+      "command": "npm run typecheck",
+      "cwd": "frontend",
+      "result": "passed"
+    },
+    {
+      "command": "node -e provider import graph check over frontend/src/components/*provider.tsx",
+      "cwd": ".",
+      "result": "passed"
+    },
+    {
+      "command": "node --test tests/frontend/*.test.mjs",
+      "cwd": ".",
+      "result": "failed",
+      "notes": "Existing tests include stale provider-coupling expectations and unrelated older copy/navigation expectations."
+    }
+  ]
+}

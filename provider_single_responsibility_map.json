@@ -1,0 +1,108 @@
+{
+  "refactor_id": "FIX-FE-03",
+  "generated_at": "2026-06-18",
+  "scope": "frontend provider layer only",
+  "providers": {
+    "AuthProvider": {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "responsibility": [
+        "identity",
+        "session",
+        "login state"
+      ],
+      "exposes": [
+        "status",
+        "user identity",
+        "login",
+        "logout",
+        "refresh session"
+      ],
+      "explicitly_excluded": [
+        "permissions",
+        "modules",
+        "capability state",
+        "adapters",
+        "execution metadata"
+      ],
+      "notes": [
+        "frontend/src/lib/auth.ts strips permissions from auth payloads before they enter AuthProvider context."
+      ]
+    },
+    "CapabilityStateProvider": {
+      "file": "frontend/src/components/capability-state-provider.tsx",
+      "responsibility": [
+        "UI state",
+        "sidebar visibility",
+        "static feature availability flags"
+      ],
+      "consumes": [
+        "AuthProvider identity only"
+      ],
+      "api_calls": [],
+      "explicitly_excluded": [
+        "auth/session mutation",
+        "module ownership logic",
+        "adapter execution logic",
+        "backend fan-out",
+        "capability bootstrap"
+      ],
+      "notes": [
+        "Builds UI-only graph through buildFrontendUiCapabilityGraph.",
+        "refresh is a no-op because this provider owns no backend metadata."
+      ]
+    },
+    "ModuleAccessProvider": {
+      "file": "frontend/src/components/module-access-provider.tsx",
+      "responsibility": [
+        "module metadata",
+        "module list",
+        "module descriptors",
+        "backend-provided module access metadata"
+      ],
+      "consumes": [
+        "AuthProvider identity only"
+      ],
+      "api_calls": [
+        "listModuleRegistry",
+        "listMyModules"
+      ],
+      "explicitly_excluded": [
+        "local permission checks",
+        "execution logic",
+        "capability UI decisions",
+        "adapter metadata"
+      ],
+      "notes": [
+        "Fetches module metadata independently and does not consume CapabilityStateProvider."
+      ]
+    },
+    "AdapterAccessProvider": {
+      "file": "frontend/src/components/adapter-access-provider.tsx",
+      "responsibility": [
+        "execution layer metadata",
+        "adapter registry",
+        "adapter access metadata",
+        "execution-provider mapping"
+      ],
+      "consumes": [
+        "AuthProvider identity only"
+      ],
+      "api_calls": [
+        "listModuleAdapterRegistry",
+        "listMyModuleAdapters",
+        "getExecutionProviderRegistry",
+        "getMyExecutionProviders"
+      ],
+      "explicitly_excluded": [
+        "UI state ownership",
+        "auth logic",
+        "capability decisions",
+        "module provider decisions"
+      ],
+      "notes": [
+        "Does not consume ModuleAccessProvider or CapabilityStateProvider.",
+        "Removed the previous shared mutable adapter memory cache."
+      ]
+    }
+  }
+}

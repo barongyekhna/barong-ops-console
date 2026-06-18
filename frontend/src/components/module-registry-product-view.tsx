@@ -4,6 +4,7 @@ import { Boxes, LoaderCircle, RotateCcw } from "lucide-react";
 
 import { CapabilityEmptyStateEngine } from "@/components/capability-empty-state";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
+import { useModuleAccess } from "@/components/module-access-provider";
 
 function displayBinding(value: string) {
   return value && value !== "no_api" ? value : "No API";
@@ -12,14 +13,15 @@ function displayBinding(value: string) {
 export function ModuleRegistryProductView() {
   const {
     executionState,
-    isLoading,
+    isLoading: isCapabilityLoading,
     items,
     orgContext,
-    permissionSnapshot,
-    refresh,
-    registryError,
-    registryUnavailable,
   } = useFrontendCapabilityState();
+  const moduleAccess = useModuleAccess();
+  const isLoading = isCapabilityLoading || moduleAccess.isLoading;
+  const refresh = moduleAccess.refresh;
+  const registryError = moduleAccess.registryError;
+  const registryUnavailable = moduleAccess.registryUnavailable;
   const visibleCount = items.filter((item) => item.org_visibility === "visible").length;
   const hiddenCount = items.filter((item) => item.state === "hidden").length;
   const partialCount = items.filter(
@@ -102,11 +104,11 @@ export function ModuleRegistryProductView() {
           <strong>{visibleCount}</strong>
         </div>
         <div>
-          <span>Permission keys</span>
+          <span>Module metadata</span>
           <strong>
-            {permissionSnapshot.is_owner_full_access
-              ? "Owner"
-              : permissionSnapshot.permission_count}
+            {moduleAccess.moduleAccessUnknown
+              ? "Unknown"
+              : moduleAccess.items.length}
           </strong>
         </div>
         <div>

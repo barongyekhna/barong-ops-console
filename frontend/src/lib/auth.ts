@@ -1,8 +1,4 @@
 import { apiRequest } from "@/lib/api";
-import {
-  normalizeCurrentUserPermissions,
-  type FrontendPermissions,
-} from "@/lib/permissions";
 
 export type AuthenticatedUser = {
   id: number;
@@ -10,14 +6,13 @@ export type AuthenticatedUser = {
   role: string;
   is_active: boolean;
   last_login_at: string | null;
-  permissions: FrontendPermissions | null;
 };
 
-type AuthenticatedUserPayload = Omit<AuthenticatedUser, "permissions"> & {
+type AuthenticatedUserPayload = AuthenticatedUser & {
   permissions?: unknown;
 };
 
-type SessionUserPayload = Omit<AuthenticatedUser, "permissions">;
+type SessionUserPayload = AuthenticatedUserPayload;
 
 type LoginResponsePayload = {
   user: AuthenticatedUserPayload;
@@ -30,17 +25,15 @@ type LoginResponse = {
 function normalizeAuthenticatedUser(
   user: AuthenticatedUserPayload,
 ): AuthenticatedUser {
+  const { permissions: _permissions, ...identity } = user;
+
   return {
-    ...user,
-    permissions: normalizeCurrentUserPermissions(user.permissions),
+    ...identity,
   };
 }
 
 function normalizeSessionUser(user: SessionUserPayload): AuthenticatedUser {
-  return {
-    ...user,
-    permissions: null,
-  };
+  return normalizeAuthenticatedUser(user);
 }
 
 export async function loginRequest(username: string, password: string) {
