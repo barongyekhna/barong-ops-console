@@ -1,0 +1,216 @@
+完成只读审计。未修改代码、DB、backend、frontend，未部署，未写入任何报告文件；因为你明确禁止“任何写操作”，所以这些 JSON
+  只在下面作为报告内容输出。
+
+  关键证据：
+
+  - 后端 44 个 router 文件全部在 backend/app/main.py:451 挂载。
+  - 前端导航只暴露 5 个入口：frontend/src/lib/navigation.ts:36。
+  - Next proxy 只允许白名单 API：frontend/src/app/api/backend/[...path]/route.ts:7。
+  - 前端主动隐藏 12 个模块：frontend/src/lib/frontend-capability-state.ts:219。
+
+  {
+    "system_feature_audit_full_report.json": {
+      "mode": "read_only",
+      "files_written": false,
+      "reason_files_not_written": "User explicitly prohibited any write operation.",
+      "backend": {
+        "endpoint_count": 212,
+        "by_layer": {
+          "public": 5,
+          "app": 77,
+          "control_plane": 128,
+          "direct": 2
+        },
+        "router_files_mounted": 44,
+        "unmounted_backend_route_files": [],
+        "service_files": 70,
+        "module_manifests": {
+          "count": 16,
+          "status_counts": {
+            "sealed": 7,
+            "enabled": 6,
+            "planned": 2,
+            "adapter_pending": 1
+          }
+        },
+        "permission_seed_count": 18,
+        "execution_provider_keys": 8,
+        "module_adapter_keys": 5
+      },
+      "frontend": {
+        "page_count": 18,
+        "component_count": 23,
+        "lib_file_count": 20,
+        "visible_nav_routes": [
+          "/users",
+          "/organizations",
+          "/permissions",
+          "/operation-logs",
+          "/approvals"
+        ],
+        "orphan_console_routes": [
+          "/agents",
+          "/artifacts",
+          "/dashboard",
+          "/errors",
+          "/jobs",
+          "/memory-events",
+          "/modules",
+          "/products",
+          "/reviews",
+          "/settings",
+          "/workflows"
+        ],
+        "placeholder_or_empty_routes": [
+          "/organizations",
+          "/permissions",
+          "/memory-events",
+          "/modules",
+          "/products",
+          "/settings"
+        ],
+        "hidden_module_keys": [
+          "admin.agents",
+          "admin.modules",
+          "admin.settings",
+          "admin.workflows",
+          "business.artifacts",
+          "business.jobs",
+          "business.products",
+          "business.reviews",
+          "core.dashboard",
+          "integration.n8n_test_bridge",
+          "system.errors",
+          "system.memory_events"
+        ]
+      },
+      "api_binding": {
+        "frontend_used_api_paths": 31,
+        "frontend_used_api_issues": [],
+        "backend_endpoints_allowed_by_next_proxy": 102,
+        "backend_endpoints_blocked_by_next_proxy": 110,
+        "proxy_allowed_but_ui_unused": 66,
+        "blocked_backend_namespaces": [
+          "org",
+          "approval",
+          "jobs",
+          "reviews",
+          "artifacts",
+          "agents",
+          "workflows",
+          "modules",
+          "operation-logs",
+          "memory-events",
+          "messages",
+          "attachments",
+          "contacts",
+          "friends",
+          "conversations",
+          "callback-handler",
+          "webhook-gateway",
+          "workflow-registry",
+          "failure-handling",
+          "live-gate",
+          "n8n-test",
+          "foundation-demo"
+        ],
+        "proxy_allowed_but_unbound_namespaces": [
+          "ai-execution-bindings",
+          "capability-bindings",
+          "execution-prompts",
+          "external-dependencies",
+          "model-locks",
+          "module-allocations",
+          "module-workflow-bindings",
+          "payload-standardization",
+          "result-normalization",
+          "memory-events",
+          "modules",
+          "permissions"
+        ]
+      },
+      "feature_gap_analysis.json": {
+        "implemented_but_not_ui_exposed": [
+          "Organization CRUD/member APIs exist but /organizations is empty and /org routes are not proxied.",
+          "Approval request/detail/approve/reject APIs exist but UI only lists approvals.",
+          "Jobs/artifacts/reviews/errors/agents/workflows have list pages but are hidden from navigation.",
+          "Memory-events API is proxy-allowed but route is an empty state.",
+          "Module registry page exists only as empty state despite backend registry APIs.",
+          "Control-plane design APIs are proxy-allowed but have no product UI."
+        ],
+        "frontend_exists_without_full_backend_flow": [
+          "/products: planned placeholder, no exposed product API",
+          "/settings: planned placeholder, no settings API workflow",
+          "/organizations: placeholder despite backend org APIs blocked by proxy",
+          "/permissions: standalone route delegates to /users instead of hosting management UI"
+        ],
+        "backend_exists_but_frontend_not_bound": [
+          "org/*",
+          "approval detail/actions",
+          "jobs create/detail/events",
+          "reviews create/detail/decision",
+          "artifacts create/detail",
+          "messages/conversations/friends/contacts/attachments",
+          "callback/webhook/failure/live-gate mutation paths"
+        ]
+      },
+      "route_activation_report.json": {
+        "active_product_routes": [
+          "/users",
+          "/organizations",
+          "/permissions",
+          "/operation-logs",
+          "/approvals"
+        ],
+        "direct_url_but_not_sidebar": [
+          "/dashboard",
+          "/agents",
+          "/artifacts",
+          "/errors",
+          "/jobs",
+          "/reviews",
+          "/workflows"
+        ],
+        "exists_but_placeholder": [
+          "/organizations",
+          "/permissions",
+          "/memory-events",
+          "/modules",
+          "/products",
+          "/settings"
+        ]
+      },
+      "permission_usage_report.json": {
+        "backend_permission_system_enabled": true,
+        "evidence": [
+          "require_owner / require_permission / require_rbac use PermissionDecisionEngine",
+          "permission isolation middleware applies to /api/app and /api/control-plane"
+        ],
+        "permissions_present_but_not_productized": [
+          "settings.manage",
+          "production.release",
+          "system.admin",
+          "modules.manage",
+          "jobs.manage",
+          "reviews.approve"
+        ]
+      },
+      "critical_path_directly_usable": [
+        "Users management: list/create/update/enable/disable/reset-password",
+        "User permission assignments via expanded user profile",
+        "Operation logs read-only center",
+        "Approvals read-only list",
+        "Hidden read-only list pages for jobs/artifacts/reviews/errors/agents/workflows can be surfaced by route/
+        navigation activation"
+      ],
+      "production_sync_observation": {
+        "source_side_unsynced_code_detected": false,
+        "basis": "system_final_audit_report records production build on 2026-06-18 12:15 UTC; no backend/frontend source
+        files newer than that deploy timestamp were found, only pytest cache files."
+      }
+    }
+  }
+
+  Main conclusion: the system is not missing backend functionality; it has more backend and proxy capability than the
+  product UI exposes. The largest inactive surface is route/nav activation plus proxy allowlist gaps, especially org
+  management, approval actions, job/review/artifact detail/action flows, and control-plane design APIs.
