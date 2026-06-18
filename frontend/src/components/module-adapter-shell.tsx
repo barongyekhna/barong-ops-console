@@ -349,9 +349,10 @@ export function AdapterSurfaceShell({
     adapterMetadataUnavailable,
     executionProviderAccessItems,
     executionProviders,
+    isOwnerFullAccess,
   } = useAdapterStateForModule(targetModuleKey);
 
-  if (!targetModuleKey || accessState?.hidden === true) {
+  if (!targetModuleKey || (accessState?.hidden === true && !isOwnerFullAccess)) {
     return null;
   }
 
@@ -367,7 +368,7 @@ export function AdapterSurfaceShell({
   const unavailable =
     adapterAccessUnknown ||
     !accessState ||
-    isAdapterLocked(accessState) ||
+    (!isOwnerFullAccess && isAdapterLocked(accessState)) ||
     isAdapterUnavailable(accessState);
 
   return (

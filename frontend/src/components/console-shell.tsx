@@ -28,6 +28,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     }
   }
 
+  function handleLogoClick() {
+    setIsNavigationOpen(false);
+    router.push("/");
+  }
+
   const currentCapability = getCapabilityForPath(pathname);
   const title = pageTitles[pathname] ?? currentCapability?.label ?? "Workspace";
   const showFallbackBanner =
@@ -38,7 +43,13 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
       <aside
         className={`sidebar ${isNavigationOpen ? "sidebar-open" : ""}`}
       >
-        <div className="brand-lockup">
+        <button
+          aria-label="Go to home"
+          className="brand-lockup brand-home-button"
+          onClick={handleLogoClick}
+          title="Go to home"
+          type="button"
+        >
           <span className="brand-mark">
             <Blocks aria-hidden="true" size={20} />
           </span>
@@ -46,7 +57,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
             <strong>Barong</strong>
             <small>Operations</small>
           </span>
-        </div>
+        </button>
 
         <CapabilitySidebarEngine
           onNavigate={() => setIsNavigationOpen(false)}

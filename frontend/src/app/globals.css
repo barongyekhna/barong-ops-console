@@ -558,6 +558,17 @@ textarea:focus-visible {
   border-bottom: 1px solid #2b302e;
 }
 
+.brand-home-button {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #2b302e;
+}
+
 .brand-lockup strong {
   font-size: 0.95rem;
 }

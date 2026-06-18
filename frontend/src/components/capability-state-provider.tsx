@@ -32,7 +32,10 @@ import {
   type PreLiveValidationReport,
   type ProductionReadinessReport,
 } from "@/lib/live-gate";
-import type { FrontendPermissions } from "@/lib/permissions";
+import {
+  createOwnerFullAccessPermissions,
+  type FrontendPermissions,
+} from "@/lib/permissions";
 
 type CapabilityUiState = "loading" | "ready" | "degraded" | "fallback";
 
@@ -80,17 +83,29 @@ function authIdentityKey({
   return [user.id ?? "unknown", user.username ?? "", user.role ?? ""].join(":");
 }
 
-function ownerPermissionsFromBootstrap({
+function permissionsFromBootstrap({
   bootstrap,
+  isOwner,
 }: {
   bootstrap: CapabilityBootstrapResult;
+  isOwner: boolean;
 }): FrontendPermissions {
+  if (isOwner) {
+    return createOwnerFullAccessPermissions();
+  }
+
+  const hasBackendOwnerFullAccess =
+    bootstrap.moduleAccessResult.data.is_owner_full_access === true ||
+    bootstrap.adapterAccessResult.data.is_owner_full_access === true ||
+    bootstrap.executionAccessResult.data.is_owner_full_access === true;
+
+  if (hasBackendOwnerFullAccess) {
+    return createOwnerFullAccessPermissions();
+  }
+
   return {
     assignments: [],
-    is_owner_full_access:
-      bootstrap.moduleAccessResult.data.is_owner_full_access === true ||
-      bootstrap.adapterAccessResult.data.is_owner_full_access === true ||
-      bootstrap.executionAccessResult.data.is_owner_full_access === true,
+    is_owner_full_access: false,
     permission_keys: [],
     scope_summary: [],
   };
@@ -111,9 +126,11 @@ function liveGateFromBootstrap(
 
 function graphFromBootstrap({
   bootstrap,
+  isOwner,
   role,
 }: {
   bootstrap: CapabilityBootstrapResult;
+  isOwner: boolean;
   role: string;
 }) {
   return buildFrontendCapabilityGraph({
@@ -129,7 +146,7 @@ function graphFromBootstrap({
     moduleAccessItems: bootstrap.moduleAccessResult.data.items,
     moduleAccessUnknown:
       bootstrap.moduleAccessResult.module_access_unknown !== false,
-    permissions: ownerPermissionsFromBootstrap({ bootstrap }),
+    permissions: permissionsFromBootstrap({ bootstrap, isOwner }),
     registryItems: bootstrap.registryResult.data.items,
     registryUnavailable: bootstrap.registryResult.ok !== true,
     role: bootstrap.moduleAccessResult.data.role || role,
@@ -149,6 +166,7 @@ function createContextValue({
   isLoading,
   loadError,
   refresh,
+  isOwner,
   role,
 }: {
   authStatus: "checking" | "authenticated" | "unauthenticated";
@@ -156,11 +174,12 @@ function createContextValue({
   isLoading: boolean;
   loadError: string | null;
   refresh: () => Promise<void>;
+  isOwner: boolean;
   role: string;
 }): CapabilityStateContextValue {
   const graph =
     authStatus === "authenticated" && bootstrap
-      ? graphFromBootstrap({ bootstrap, role })
+      ? graphFromBootstrap({ bootstrap, isOwner, role })
       : buildFrontendUiCapabilityGraph({
           authStatus,
           role,
@@ -233,6 +252,7 @@ const SAFE_CONTEXT_VALUE = createContextValue({
   isLoading: false,
   loadError: null,
   refresh: async () => {},
+  isOwner: false,
   role: "",
 });
 
@@ -248,7 +268,7 @@ export function CapabilityStateProvider({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const { status, user } = useAuth();
+  const { isOwner, status, user } = useAuth();
   const role = user?.role ?? "";
   const mountedRef = useRef(false);
   const loadingAuthKeyRef = useRef<string | null>(null);
@@ -384,9 +404,10 @@ export function CapabilityStateProvider({
         isLoading,
         loadError,
         refresh,
+        isOwner,
         role,
       }),
-    [bootstrap, isLoading, loadError, refresh, role, status],
+    [bootstrap, isLoading, isOwner, loadError, refresh, role, status],
   );
 
   return (

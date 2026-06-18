@@ -343,6 +343,7 @@ export function buildFrontendUiCapabilityGraph({
   authStatus: "checking" | "authenticated" | "unauthenticated";
   role: string;
 }): FrontendCapabilityGraph {
+  const owner = role === "owner";
   const executionState = deriveFrontendExecutionState({
     adapterAccessItems: [],
     executionProviderAccessItems: [],
@@ -451,9 +452,9 @@ export function buildFrontendUiCapabilityGraph({
       visible_modules: sidebarItems.length,
     },
     permissionSnapshot: {
-      is_owner_full_access: false,
-      permission_count: 0,
-      permissions: [],
+      is_owner_full_access: owner,
+      permission_count: owner ? 1 : 0,
+      permissions: owner ? ["*"] : [],
       source: "/auth/me",
     },
     sidebarItems,
@@ -947,6 +948,41 @@ function canEnterCapability({
   return true;
 }
 
+function ownerCapabilityItem({
+  item,
+  permissionBlocked,
+  record,
+  routeBound,
+}: {
+  item: ProductCapabilityItem;
+  permissionBlocked: boolean;
+  record: ModuleAwareNavigationRecord;
+  routeBound: boolean;
+}): ProductCapabilityItem {
+  const state = permissionBlocked ? "allowed" : item.state;
+
+  return {
+    ...item,
+    badge: permissionBlocked ? badgeForState(state) : item.badge,
+    can_enter: routeBound && state !== "hidden",
+    org_visibility: "visible",
+    permission_state: "available",
+    reason: permissionBlocked
+      ? "Owner full access bypasses frontend permission checks for this product area."
+      : item.reason,
+    required_permission: permissionBlocked
+      ? record.required_permission ?? "Owner full access."
+      : item.required_permission,
+    sidebar_state: permissionBlocked
+      ? sidebarStateForState(state)
+      : item.sidebar_state,
+    state,
+    unlock_condition: permissionBlocked
+      ? "Open this product area."
+      : item.unlock_condition,
+  };
+}
+
 export function deriveFrontendExecutionState({
   adapterAccessItems,
   executionProviderAccessItems,
@@ -1201,6 +1237,21 @@ export function buildFrontendCapabilityGraph({
         state,
         unlock_condition: sourceState.unlock_condition,
       };
+
+      if (owner) {
+        const permissionBlocked =
+          navigationState.isHidden ||
+          navigationState.isLocked ||
+          adapterAccess?.hidden === true ||
+          adapterAccess?.locked === true;
+
+        return ownerCapabilityItem({
+          item,
+          permissionBlocked,
+          record,
+          routeBound,
+        });
+      }
 
       if (!owner && record.owner_only) {
         return {

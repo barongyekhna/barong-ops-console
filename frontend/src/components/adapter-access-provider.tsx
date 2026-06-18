@@ -36,6 +36,7 @@ type AdapterAccessContextValue = {
   registryError: ModuleAdapterApiErrorSummary | null;
   executionProviderError: ExecutionProviderApiErrorSummary | null;
   executionProviderRegistryError: ExecutionProviderApiErrorSummary | null;
+  isOwnerFullAccess: boolean;
   refresh: () => Promise<void>;
 };
 
@@ -152,6 +153,7 @@ export function AdapterAccessProvider({
   const adapterAccessUnknown =
     adapterAccessResult?.adapter_access_unknown !== false;
   const isOwnerFullAccess =
+    capabilityState.permissionSnapshot.is_owner_full_access === true ||
     adapterAccessResult?.data.is_owner_full_access === true ||
     executionAccessResult?.data.is_owner_full_access === true;
 
@@ -181,6 +183,7 @@ export function AdapterAccessProvider({
         executionRegistryResult?.ok !== true,
       executionProviderRegistryError: executionRegistryResult?.error ?? null,
       executionProviders,
+      isOwnerFullAccess,
       isLoading: capabilityState.isLoading,
       refresh: capabilityState.refresh,
       registryError: adapterRegistryResult?.error ?? null,
@@ -197,6 +200,7 @@ export function AdapterAccessProvider({
       executionProviders,
       executionRegistryResult,
       filteredAdapters,
+      isOwnerFullAccess,
     ],
   );
 
@@ -258,8 +262,9 @@ export function useAdapterState(adapterKey: string | null | undefined) {
       context.executionProviderMetadataUnavailable,
     executionProviders: context.executionProviders,
     isExecutable: false,
-    isHidden: isAdapterHidden(accessState),
-    isLocked: isAdapterLocked(accessState),
+    isHidden: !context.isOwnerFullAccess && isAdapterHidden(accessState),
+    isLocked: !context.isOwnerFullAccess && isAdapterLocked(accessState),
+    isOwnerFullAccess: context.isOwnerFullAccess,
     isUnavailable: isAdapterUnavailable(accessState),
     isVisible: isAdapterVisible(accessState),
   };
@@ -287,8 +292,9 @@ export function useAdapterStateForModule(moduleKey: string | null | undefined) {
       context.executionProviderMetadataUnavailable,
     executionProviders: context.executionProviders,
     isExecutable: false,
-    isHidden: isAdapterHidden(accessState),
-    isLocked: isAdapterLocked(accessState),
+    isHidden: !context.isOwnerFullAccess && isAdapterHidden(accessState),
+    isLocked: !context.isOwnerFullAccess && isAdapterLocked(accessState),
+    isOwnerFullAccess: context.isOwnerFullAccess,
     isUnavailable: isAdapterUnavailable(accessState),
     isVisible: isAdapterVisible(accessState),
   };

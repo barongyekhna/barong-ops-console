@@ -19,9 +19,15 @@ export function PermissionRouteGuard({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const { getCapabilityForPath } = useFrontendCapabilityState();
+  const { getCapabilityForPath, permissionSnapshot } =
+    useFrontendCapabilityState();
   const { items, moduleAccessUnknown } = useModuleAccess();
   const capability = getCapabilityForPath(pathname);
+  const isOwner = permissionSnapshot.is_owner_full_access === true;
+
+  if (isOwner) {
+    return children;
+  }
 
   if (capability && !capability.can_enter) {
     return (

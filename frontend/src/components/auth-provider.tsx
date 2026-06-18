@@ -32,6 +32,7 @@ type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 type AuthContextValue = {
   status: AuthStatus;
   user: AuthenticatedUser | null;
+  isOwner: boolean;
   login: (
     username: string,
     password: string,
@@ -207,9 +208,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [resetAuthState]);
 
+  const isOwner = user?.role === "owner";
   const value = useMemo(
-    () => ({ status, user, login, logout, refresh, resetAuthState }),
-    [status, user, login, logout, refresh, resetAuthState],
+    () => ({ status, user, isOwner, login, logout, refresh, resetAuthState }),
+    [status, user, isOwner, login, logout, refresh, resetAuthState],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

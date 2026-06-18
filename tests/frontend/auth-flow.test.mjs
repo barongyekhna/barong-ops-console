@@ -24,7 +24,7 @@ test("auth proxy exposes only public session endpoints with exact methods", () =
   assert.equal(isAllowedBackendProxyPath("POST", ["auth", "register"]), false);
 });
 
-test("root entry always redirects to login and never dashboard", () => {
+test("root entry routes authenticated users home and unauthenticated users to login", () => {
   const rootPageSource = readFileSync("frontend/src/app/page.tsx", "utf8");
   const loginFormSource = readFileSync(
     "frontend/src/components/login-form.tsx",
@@ -35,8 +35,12 @@ test("root entry always redirects to login and never dashboard", () => {
     "utf8",
   );
 
-  assert.match(rootPageSource, /redirect\("\/login"\)/);
-  assert.doesNotMatch(rootPageSource, /\/dashboard/);
+  assert.match(rootPageSource, /"use client"/);
+  assert.match(rootPageSource, /useAuth/);
+  assert.match(rootPageSource, /status === "authenticated"/);
+  assert.match(rootPageSource, /router\.replace\("\/dashboard"\)/);
+  assert.match(rootPageSource, /status === "unauthenticated"/);
+  assert.match(rootPageSource, /router\.replace\("\/login"\)/);
   assert.doesNotMatch(rootPageSource, /LoginScreen/);
   assert.doesNotMatch(rootPageSource, /PublicOnly/);
   assert.match(loginFormSource, /router\.replace\("\/dashboard"\)/);

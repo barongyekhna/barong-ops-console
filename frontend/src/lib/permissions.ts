@@ -52,6 +52,15 @@ export type RoutePermissionDecision = PermissionAccessState & {
   isProtected: boolean;
 };
 
+export function createOwnerFullAccessPermissions(): FrontendPermissions {
+  return {
+    assignments: [],
+    is_owner_full_access: true,
+    permission_keys: [GLOBAL_PERMISSION_WILDCARD],
+    scope_summary: [],
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }

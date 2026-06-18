@@ -427,6 +427,24 @@ test("module access helpers expose owner visible and non-owner hidden or locked 
   assert.equal(isBusinessModule(item("business.approvals")), true);
 });
 
+test("frontend capability graph contains owner bypass for locked and hidden states", () => {
+  const capabilitySource = readFileSync(
+    "frontend/src/lib/frontend-capability-state.ts",
+    "utf8",
+  );
+
+  assert.match(capabilitySource, /function ownerCapabilityItem/);
+  assert.match(capabilitySource, /can_enter: routeBound && state !== "hidden"/);
+  assert.match(
+    capabilitySource,
+    /navigationState\.isHidden[\s\S]*navigationState\.isLocked[\s\S]*adapterAccess\?\.hidden[\s\S]*adapterAccess\?\.locked/,
+  );
+  assert.match(
+    capabilitySource,
+    /is_owner_full_access: owner[\s\S]*permissions: owner \? \["\*"\] : \[\]/,
+  );
+});
+
 test("productized routes are visible while diagnostics stay out of navigation", () => {
   const unavailableApprovals = getNavigationStateForModule(
     ownerPermissions,
@@ -443,9 +461,9 @@ test("productized routes are visible while diagnostics stay out of navigation", 
     ],
   );
 
-  assert.equal(isModuleUnavailable(unavailableApprovals), true);
-  assert.equal(unavailableApprovals.badge, "unavailable");
-  assert.equal(canEnterModuleRoute(unavailableApprovals), false);
+  assert.equal(isModuleUnavailable(unavailableApprovals), false);
+  assert.equal(unavailableApprovals.badge, null);
+  assert.equal(canEnterModuleRoute(unavailableApprovals), true);
   assert.equal(item("experimental.foundation_demo"), undefined);
   assert.equal(item("integration.n8n_test_bridge"), undefined);
   assert.equal(item("business.products").href, "/products");
@@ -454,7 +472,7 @@ test("productized routes are visible while diagnostics stay out of navigation", 
   assert.equal(item("admin.settings").href, "/settings");
 });
 
-test("unavailable modules use Module Unavailable decisions and stay non-enterable", () => {
+test("owner full access bypasses unavailable route guard decisions", () => {
   const unavailableApprovals = getNavigationStateForModule(
     ownerPermissions,
     item("business.approvals"),
@@ -485,11 +503,11 @@ test("unavailable modules use Module Unavailable decisions and stay non-enterabl
     ],
   );
 
-  assert.equal(isModuleUnavailable(unavailableApprovals), true);
-  assert.equal(unavailableApprovals.badge, "unavailable");
-  assert.equal(canEnterModuleRoute(unavailableApprovals), false);
-  assert.equal(unavailableDecision.noticeType, "module_unavailable");
-  assert.equal(unavailableDecision.canEnter, false);
+  assert.equal(isModuleUnavailable(unavailableApprovals), false);
+  assert.equal(unavailableApprovals.badge, null);
+  assert.equal(canEnterModuleRoute(unavailableApprovals), true);
+  assert.equal(unavailableDecision.noticeType, "none");
+  assert.equal(unavailableDecision.canEnter, true);
 });
 
 test("missing module access state safely degrades to visible locked entries", () => {
@@ -782,8 +800,8 @@ test("module route guard decisions cover locked, hidden, unavailable, and owner 
   assert.equal(lockedBusiness.canEnter, false);
   assert.equal(hiddenAdmin.noticeType, "no_permission");
   assert.equal(hiddenAdmin.canEnter, false);
-  assert.equal(unavailableApprovals.noticeType, "module_unavailable");
-  assert.equal(unavailableApprovals.canEnter, false);
+  assert.equal(unavailableApprovals.noticeType, "none");
+  assert.equal(unavailableApprovals.canEnter, true);
   assert.equal(ownerUsers.noticeType, "none");
   assert.equal(ownerUsers.canEnter, true);
 });

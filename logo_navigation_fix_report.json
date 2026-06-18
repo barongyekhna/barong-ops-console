@@ -1,0 +1,25 @@
+{
+  "status": "completed",
+  "date": "2026-06-18",
+  "scope": "frontend UI navigation behavior only",
+  "implemented_in": [
+    "frontend/src/components/console-shell.tsx",
+    "frontend/src/app/globals.css",
+    "frontend/src/app/page.tsx"
+  ],
+  "logo_behavior": {
+    "component": "ConsoleShell sidebar brand lockup",
+    "click_action": "router.push(\"/\")",
+    "always_targets_root": true
+  },
+  "root_route_behavior": {
+    "authenticated": "router.replace(\"/dashboard\")",
+    "unauthenticated": "router.replace(\"/login\")",
+    "checking": "render null until auth status resolves"
+  },
+  "verification": {
+    "typecheck": "npm run typecheck",
+    "tests": "npm test",
+    "result": "passed"
+  }
+}

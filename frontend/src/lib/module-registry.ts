@@ -717,6 +717,26 @@ function fallbackNavigationState(
   };
 }
 
+function ownerNavigationState(
+  module: ModuleAwareNavigationRecord,
+  moduleAccessUnknown: boolean,
+): ModuleNavigationState {
+  return {
+    accessState: "available",
+    badge: null,
+    canAccess: true,
+    canEnter: true,
+    isHidden: false,
+    isLocked: false,
+    isUnavailable: false,
+    isVisible: true,
+    missingPermissions: [],
+    moduleAccessUnknown,
+    reason: "Owner full access bypasses frontend permission checks.",
+    status: module.status ?? "unknown",
+  };
+}
+
 export function getNavigationStateForModule(
   permissions: FrontendPermissions | null | undefined,
   module: ModuleAwareNavigationRecord,
@@ -726,6 +746,10 @@ export function getNavigationStateForModule(
   const accessState = findModuleAccessState(module.module_key, accessStates);
   const moduleAccessUnknown =
     options.moduleAccessUnknown === true || accessState === null;
+
+  if (isOwnerFullAccess(permissions)) {
+    return ownerNavigationState(module, moduleAccessUnknown);
+  }
 
   if (accessState) {
     return stateFromAccessState(accessState, options.moduleAccessUnknown === true);

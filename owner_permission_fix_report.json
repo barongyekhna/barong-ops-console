@@ -1,0 +1,32 @@
+{
+  "status": "completed",
+  "date": "2026-06-18",
+  "scope": "frontend permission interpretation only",
+  "backend_changed": false,
+  "db_schema_changed": false,
+  "rbac_core_changed": false,
+  "execution_engine_changed": false,
+  "owner_rule": {
+    "source": "user.role === \"owner\"",
+    "priority": "highest",
+    "does_not_depend_on_permission_list": true,
+    "capability": "full_access"
+  },
+  "implemented_in": [
+    "frontend/src/components/auth-provider.tsx",
+    "frontend/src/components/capability-state-provider.tsx",
+    "frontend/src/lib/frontend-capability-state.ts",
+    "frontend/src/lib/permissions.ts"
+  ],
+  "behavior": [
+    "Owner auth context exposes isOwner.",
+    "Owner role creates a frontend full-access permission snapshot before capability graph evaluation.",
+    "Owner capability graph bypasses frontend locked and hidden permission states.",
+    "Owner sidebar entries and route-bound capability items are enterable when blocked only by frontend permission interpretation."
+  ],
+  "verification": {
+    "typecheck": "npm run typecheck",
+    "tests": "npm test",
+    "result": "passed"
+  }
+}

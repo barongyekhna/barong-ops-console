@@ -481,6 +481,12 @@ test("owner can see admin adapter metadata and non-owner admin adapters are hidd
     false,
   );
   assert.equal(
+    canExposeAdapterMetadata(adminAdapter, hiddenState, {
+      isOwnerFullAccess: true,
+    }),
+    true,
+  );
+  assert.equal(
     canExposeAdapterMetadata(adminAdapter, null, {
       adapterAccessUnknown: true,
       isOwnerFullAccess: false,

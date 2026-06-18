@@ -1221,7 +1221,7 @@ export function canExposeAdapterMetadata(
   if (!adapter) {
     return false;
   }
-  if (accessState?.hidden) {
+  if (accessState?.hidden && options.isOwnerFullAccess !== true) {
     return false;
   }
   if (
