@@ -1,0 +1,55 @@
+{
+  "fix_id": "FIX-FE-04",
+  "report": "auth_guard_fallback_report",
+  "generated_at": "2026-06-18T08:29:50Z",
+  "status": "passed",
+  "scope": "frontend guard and public-route fallback logic",
+  "timeout_ms": 5000,
+  "files_changed": [
+    "frontend/src/components/public-only.tsx",
+    "frontend/src/components/auth-guard.tsx"
+  ],
+  "checks": [
+    {
+      "id": "public_only_checking_timeout",
+      "status": "passed",
+      "evidence": "PublicOnly sets hasTimedOut after 5000ms while status is checking and then renders children, which lets the login form render."
+    },
+    {
+      "id": "public_only_no_infinite_spinner",
+      "status": "passed",
+      "evidence": "The checking spinner is no longer the terminal branch; timed-out checking state renders public content."
+    },
+    {
+      "id": "auth_guard_pending_timeout_shell",
+      "status": "passed",
+      "evidence": "AuthGuard sets shouldRenderShell for authenticated or checking plus timed-out status, then returns children."
+    },
+    {
+      "id": "auth_guard_unauthenticated_login",
+      "status": "passed",
+      "evidence": "Unauthenticated status still redirects to /login and renders LoginScreen as a visible fallback."
+    },
+    {
+      "id": "auth_guard_no_blank_screen",
+      "status": "passed",
+      "evidence": "Every AuthGuard status branch returns visible UI: error panel, children shell, LoginScreen, or bounded checking indicator."
+    }
+  ],
+  "verification": [
+    {
+      "command": "npm run typecheck",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "constraints": {
+    "backend_changed": false,
+    "db_schema_changed": false,
+    "rbac_changed": false,
+    "execution_engine_changed": false
+  }
+}

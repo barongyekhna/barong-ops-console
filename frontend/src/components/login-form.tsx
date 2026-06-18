@@ -2,12 +2,23 @@
 
 import { ArrowRight, LoaderCircle, LockKeyhole, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { ApiTimeoutError } from "@/lib/api";
 
 const LOGIN_ERROR =
   "Unable to sign in. Check your credentials and try again.";
+const LOGIN_TIMEOUT_ERROR =
+  "Sign-in took longer than expected. Please try again.";
+const LOGIN_REQUEST_TIMEOUT_MS = 5_000;
+
+class LoginRequestTimeoutError extends Error {
+  constructor() {
+    super("The sign-in request timed out.");
+    this.name = "LoginRequestTimeoutError";
+  }
+}
 
 export function LoginForm() {
   const router = useRouter();
@@ -16,19 +27,61 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const submissionIdRef = useRef(0);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const submissionId = submissionIdRef.current + 1;
+    submissionIdRef.current = submissionId;
+    const controller = new AbortController();
+    let timeoutId: number | undefined;
+
     setError("");
     setIsSubmitting(true);
 
     try {
-      await login(username.trim(), password);
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        timeoutId = window.setTimeout(() => {
+          const timeoutError = new LoginRequestTimeoutError();
+          controller.abort(timeoutError);
+          reject(timeoutError);
+        }, LOGIN_REQUEST_TIMEOUT_MS);
+      });
+
+      await Promise.race([
+        login(username.trim(), password, {
+          signal: controller.signal,
+          timeoutMs: LOGIN_REQUEST_TIMEOUT_MS,
+        }),
+        timeoutPromise,
+      ]);
+
+      if (submissionIdRef.current !== submissionId) {
+        return;
+      }
+
       router.replace("/dashboard");
-    } catch {
-      setError(LOGIN_ERROR);
+    } catch (loginError) {
+      if (submissionIdRef.current !== submissionId) {
+        return;
+      }
+
+      if (
+        loginError instanceof LoginRequestTimeoutError ||
+        loginError instanceof ApiTimeoutError
+      ) {
+        setError(LOGIN_TIMEOUT_ERROR);
+      } else {
+        setError(LOGIN_ERROR);
+      }
     } finally {
-      setIsSubmitting(false);
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+
+      if (submissionIdRef.current === submissionId) {
+        setIsSubmitting(false);
+      }
     }
   }
 

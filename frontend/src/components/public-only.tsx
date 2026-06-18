@@ -12,6 +12,8 @@ export function PublicOnly({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { status } = useAuth();
   const [hasTimedOut, setHasTimedOut] = useState(false);
+  const shouldRenderPublicContent =
+    status !== "authenticated" && (status !== "checking" || hasTimedOut);
 
   useEffect(() => {
     if (status === "authenticated") {
@@ -42,13 +44,13 @@ export function PublicOnly({ children }: { children: ReactNode }) {
     );
   }
 
-  if (status === "checking" && !hasTimedOut) {
-    return (
-      <main className="session-screen" aria-label="Checking session">
-        <LoaderCircle className="spin" aria-hidden="true" size={24} />
-      </main>
-    );
+  if (shouldRenderPublicContent) {
+    return children;
   }
 
-  return children;
+  return (
+    <main className="session-screen" aria-label="Checking session">
+      <LoaderCircle className="spin" aria-hidden="true" size={24} />
+    </main>
+  );
 }

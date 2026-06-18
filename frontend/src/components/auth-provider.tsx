@@ -31,7 +31,11 @@ type AuthStatus = "checking" | "authenticated" | "unauthenticated" | "error";
 type AuthContextValue = {
   status: AuthStatus;
   user: AuthenticatedUser | null;
-  login: (username: string, password: string) => Promise<void>;
+  login: (
+    username: string,
+    password: string,
+    options?: { signal?: AbortSignal; timeoutMs?: number },
+  ) => Promise<void>;
   logout: () => Promise<void>;
   refresh: () => Promise<void>;
 };
@@ -43,19 +47,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AuthStatus>("checking");
   const [user, setUser] = useState<AuthenticatedUser | null>(null);
   const previousPathnameRef = useRef(pathname);
+  const sessionCheckGenerationRef = useRef(0);
 
   const clearSession = useCallback(() => {
+    sessionCheckGenerationRef.current += 1;
     setUser(null);
     setStatus("unauthenticated");
   }, []);
 
   const refresh = useCallback(async () => {
+    const generation = sessionCheckGenerationRef.current + 1;
+    sessionCheckGenerationRef.current = generation;
     setStatus("checking");
     try {
       const currentUser = await sessionCheckRequest();
+      if (sessionCheckGenerationRef.current !== generation) {
+        return;
+      }
+
       setUser(currentUser);
       setStatus("authenticated");
     } catch (error) {
+      if (sessionCheckGenerationRef.current !== generation) {
+        return;
+      }
+
       if (
         (error instanceof ApiError && error.status === 401) ||
         isApiAbortError(error)
@@ -93,11 +109,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession]);
 
   const login = useCallback(
-    async (username: string, password: string) => {
-      const result = await loginRequest(username, password);
+    async (
+      username: string,
+      password: string,
+      options: { signal?: AbortSignal; timeoutMs?: number } = {},
+    ) => {
+      sessionCheckGenerationRef.current += 1;
 
-      setUser(result.user);
-      setStatus("authenticated");
+      try {
+        const result = await loginRequest(username, password, options);
+        sessionCheckGenerationRef.current += 1;
+        setUser(result.user);
+        setStatus("authenticated");
+      } catch (error) {
+        setUser(null);
+        setStatus("unauthenticated");
+        throw error;
+      }
     },
     [],
   );

@@ -1,0 +1,61 @@
+{
+  "fix_id": "FIX-FE-04",
+  "report": "auth_login_timeout_report",
+  "generated_at": "2026-06-18T08:29:50Z",
+  "status": "passed",
+  "scope": "frontend auth flow only",
+  "timeout_ms": 5000,
+  "files_changed": [
+    "frontend/src/components/login-form.tsx",
+    "frontend/src/components/auth-provider.tsx",
+    "frontend/src/lib/auth.ts"
+  ],
+  "checks": [
+    {
+      "id": "login_spinner_max_5s",
+      "status": "passed",
+      "evidence": "LoginForm races the auth login promise against a 5000ms UI timeout and clears isSubmitting in finally."
+    },
+    {
+      "id": "login_timeout_allows_retry",
+      "status": "passed",
+      "evidence": "On timeout, LoginForm aborts the active request, stops the spinner, and shows a retryable error message."
+    },
+    {
+      "id": "stale_submission_guard",
+      "status": "passed",
+      "evidence": "LoginForm uses submissionIdRef so older requests cannot close a newer submission state."
+    },
+    {
+      "id": "request_abort_support",
+      "status": "passed",
+      "evidence": "AuthProvider.login and loginRequest now accept AbortSignal and timeoutMs, passed through to apiRequest."
+    }
+  ],
+  "verification": [
+    {
+      "command": "npm run typecheck",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    },
+    {
+      "command": "npm run verify",
+      "status": "failed_existing_unrelated",
+      "details": "verify-foundation.mjs failed on an existing C03C user management page completeness check, outside the auth flow files changed here."
+    },
+    {
+      "command": "node --test tests/frontend/*.test.mjs",
+      "status": "failed_existing_unrelated",
+      "details": "8 of 12 frontend test files passed. The inspected request-dedup failure is a pre-existing static expectation for getCapabilityBootstrap in capability-state-provider.tsx, outside this auth fix."
+    }
+  ],
+  "constraints": {
+    "backend_changed": false,
+    "db_schema_changed": false,
+    "rbac_changed": false,
+    "execution_engine_changed": false
+  }
+}

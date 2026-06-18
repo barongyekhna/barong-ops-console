@@ -13,8 +13,9 @@ export function AuthGuard({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { status, refresh } = useAuth();
   const [hasTimedOut, setHasTimedOut] = useState(false);
-  const shouldFallbackToLogin =
-    status === "unauthenticated" || (status === "checking" && hasTimedOut);
+  const shouldRenderShell =
+    status === "authenticated" || (status === "checking" && hasTimedOut);
+  const shouldFallbackToLogin = status === "unauthenticated";
 
   useEffect(() => {
     if (shouldFallbackToLogin) {
@@ -53,17 +54,17 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     );
   }
 
-  if (status !== "authenticated") {
-    if (shouldFallbackToLogin) {
-      return <LoginScreen />;
-    }
-
-    return (
-      <main className="session-screen" aria-label="Checking session">
-        <LoaderCircle className="spin" aria-hidden="true" size={24} />
-      </main>
-    );
+  if (shouldRenderShell) {
+    return children;
   }
 
-  return children;
+  if (shouldFallbackToLogin) {
+    return <LoginScreen />;
+  }
+
+  return (
+    <main className="session-screen" aria-label="Checking session">
+      <LoaderCircle className="spin" aria-hidden="true" size={24} />
+    </main>
+  );
 }

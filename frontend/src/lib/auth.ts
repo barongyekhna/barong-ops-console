@@ -22,6 +22,11 @@ type LoginResponse = {
   user: AuthenticatedUser;
 };
 
+type AuthRequestOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 function normalizeAuthenticatedUser(
   user: AuthenticatedUserPayload,
 ): AuthenticatedUser {
@@ -36,10 +41,16 @@ function normalizeSessionUser(user: SessionUserPayload): AuthenticatedUser {
   return normalizeAuthenticatedUser(user);
 }
 
-export async function loginRequest(username: string, password: string) {
+export async function loginRequest(
+  username: string,
+  password: string,
+  options: AuthRequestOptions = {},
+) {
   const response = await apiRequest<LoginResponsePayload>("/auth/login", {
-    method: "POST",
     body: { username, password },
+    method: "POST",
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
   });
 
   return {

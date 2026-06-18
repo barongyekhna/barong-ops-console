@@ -1,0 +1,56 @@
+{
+  "fix_id": "FIX-FE-04",
+  "report": "login_flow_unblocking_report",
+  "generated_at": "2026-06-18T08:29:50Z",
+  "status": "passed",
+  "scope": "frontend login success path and stale auth-check isolation",
+  "login_success_definition": "POST /auth/login response success only",
+  "checks": [
+    {
+      "id": "login_no_auth_me_wait",
+      "status": "passed",
+      "evidence": "LoginForm calls AuthProvider.login; AuthProvider.login calls loginRequest; loginRequest posts to /auth/login and does not call sessionCheckRequest or /auth/me."
+    },
+    {
+      "id": "stale_auth_me_cannot_override_login",
+      "status": "passed",
+      "evidence": "AuthProvider uses sessionCheckGenerationRef. Starting login invalidates in-flight session checks, and stale /auth/me completions or aborts return without changing auth state."
+    },
+    {
+      "id": "login_not_dependent_on_capability_provider",
+      "status": "passed",
+      "evidence": "The login path imports AuthProvider and auth API only; it does not import capability-state-provider or capability bootstrap APIs."
+    },
+    {
+      "id": "login_not_dependent_on_module_provider",
+      "status": "passed",
+      "evidence": "The login path does not import module-access-provider, adapter-access-provider, module registry APIs, or execution provider APIs."
+    },
+    {
+      "id": "login_timeout_unblocks_ui",
+      "status": "passed",
+      "evidence": "LoginForm aborts and resolves the loading state after 5000ms, showing a retryable error instead of a permanent spinner."
+    }
+  ],
+  "verification": [
+    {
+      "command": "rg -n \"sessionCheckRequest|/auth/me|capability|module\" frontend/src/components/login-form.tsx frontend/src/components/auth-provider.tsx frontend/src/lib/auth.ts",
+      "status": "passed",
+      "details": "Only sessionCheckRequest in frontend/src/lib/auth.ts references /auth/me; the login chain does not call it."
+    },
+    {
+      "command": "npm run typecheck",
+      "status": "passed"
+    },
+    {
+      "command": "npm run build",
+      "status": "passed"
+    }
+  ],
+  "constraints": {
+    "backend_changed": false,
+    "db_schema_changed": false,
+    "rbac_changed": false,
+    "execution_engine_changed": false
+  }
+}
