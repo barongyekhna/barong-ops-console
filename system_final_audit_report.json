@@ -1,0 +1,410 @@
+{
+  "report_name": "system_final_audit_report",
+  "generated_at": "2026-06-18T12:29:08Z",
+  "overall_status": "runtime_passed_with_audit_warnings",
+  "scope": {
+    "objective": "FULL SYSTEM FINALIZATION: SAFE RESTART + DEPLOY + AUDIT + CONFLICT RESOLUTION",
+    "production_data_safety": {
+      "database_deleted": false,
+      "volumes_deleted": false,
+      "database_schema_modified": false,
+      "business_logic_modified": false,
+      "rbac_modified": false,
+      "execution_engine_modified": false,
+      "normal_auth_probe_performed": true,
+      "normal_auth_probe_note": "A real owner login/me/logout probe was performed with secrets redacted from output. This creates and invalidates normal auth-session records but does not destroy data."
+    }
+  },
+  "deployment_actions": {
+    "stopped_containers": [
+      "barong-ops-console-prod_console_frontend_1",
+      "barong-ops-console-prod_console_backend_1"
+    ],
+    "removed_containers": [
+      "barong-ops-console-prod_console_backend_1",
+      "barong-ops-console-prod_console_frontend_1"
+    ],
+    "compose_command": "docker-compose -f docker-compose.production.yml up -d --build",
+    "compose_version": "1.29.2",
+    "compose_v2_available": false,
+    "build_status": "completed",
+    "no_remove_orphans_used": true,
+    "no_volume_cleanup_used": true,
+    "project_name_note": {
+      "status": "warning",
+      "detail": "The requested compose command ran without an explicit -p project name, so Docker Compose v1 started the default project containers barong-ops-console_console_backend_1 and barong-ops-console_console_frontend_1. The previously stopped prod-named backend/frontend containers were removed as requested. Database containers and volumes were left untouched."
+    }
+  },
+  "running_containers": {
+    "backend": {
+      "name": "barong-ops-console_console_backend_1",
+      "running": true,
+      "restart_count": 0,
+      "started_at": "2026-06-18T12:15:23.481531195Z",
+      "host_port": "127.0.0.1:8000",
+      "image": "sha256:ee70705f6e8df0d1f00f22c53905f4470545d97a43fe031c31e10eb1801bdae2"
+    },
+    "frontend": {
+      "name": "barong-ops-console_console_frontend_1",
+      "running": true,
+      "restart_count": 0,
+      "started_at": "2026-06-18T12:15:26.002316285Z",
+      "host_port": "127.0.0.1:3000",
+      "image": "sha256:9aff035c93bab365b2fd71c2b97f633d27d67d37f3f3f692635ec8f0e4ead6a9"
+    },
+    "postgres": {
+      "name": "barong-ops-console_console_postgres_1",
+      "running": true,
+      "health": "healthy",
+      "restart_count": 0,
+      "started_at": "2026-06-18T10:18:41.381298524Z"
+    },
+    "untouched_database_containers_observed": [
+      "barong-ops-console-prod_console_postgres_1",
+      "barong-ops-console-staging_console_staging_postgres_1",
+      "barong-ops-console_db_1",
+      "barong-ops-console-c09d-test_db_1"
+    ]
+  },
+  "port_8000_conflict_resolution": {
+    "status": "passed",
+    "host_port_8000_owner": "barong-ops-console_console_backend_1",
+    "conflict_containers_stopped": [],
+    "non_conflicting_internal_8000_mappings": [
+      "barong-ops-console-staging_console_staging_backend_1 publishes 127.0.0.1:8100->8000/tcp",
+      "baisuwan-agent publishes 127.0.0.1:8788->8000/tcp"
+    ],
+    "kill_minus_9_used": false
+  },
+  "backend_validation": {
+    "status": "passed",
+    "health": {
+      "url": "http://127.0.0.1:8000/health",
+      "http_status": 200,
+      "time_seconds": 0.093273,
+      "body": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "requested_auth_me_path": {
+      "url": "http://127.0.0.1:8000/api/backend/auth/me",
+      "http_status": 404,
+      "time_seconds": 0.192414,
+      "no_timeout": true,
+      "no_500": true,
+      "note": "This direct backend path is not the real backend auth route. Frontend /api/backend/auth/me proxies to backend /api/public/auth/me."
+    },
+    "actual_auth_me_routes": {
+      "backend_public_unauthenticated": {
+        "url": "http://127.0.0.1:8000/api/public/auth/me",
+        "http_status": 401,
+        "time_seconds_observed": 0.002695
+      },
+      "frontend_proxy_unauthenticated": {
+        "url": "https://ops.barongyekhna.com/api/backend/auth/me",
+        "http_status": 401,
+        "time_seconds": 0.685801
+      }
+    },
+    "logs": {
+      "uvicorn_started": true,
+      "application_startup_complete": true,
+      "recent_500_errors_observed": false,
+      "login_me_logout_200_observed": true
+    }
+  },
+  "frontend_validation": {
+    "status": "passed_by_http_static_and_api_evidence",
+    "browser_screenshot_check": {
+      "performed": false,
+      "reason": "No local chromium, chromium-browser, google-chrome, Playwright binary, lynx, or w3m was available in the environment."
+    },
+    "routes": {
+      "root": {
+        "url": "http://ops.barongyekhna.com/",
+        "effective_url": "https://ops.barongyekhna.com/login",
+        "http_status": 200,
+        "time_seconds": 0.415263,
+        "size_bytes": 9180,
+        "redirect_to_login": true
+      },
+      "login": {
+        "url": "http://ops.barongyekhna.com/login",
+        "effective_url": "https://ops.barongyekhna.com/login",
+        "http_status": 200,
+        "time_seconds": 0.501386,
+        "size_bytes": 9180,
+        "html_contains_login_form": true
+      },
+      "dashboard": {
+        "url": "http://ops.barongyekhna.com/dashboard",
+        "effective_url": "https://ops.barongyekhna.com/dashboard",
+        "http_status": 200,
+        "time_seconds": 0.491842,
+        "size_bytes": 10885,
+        "html_contains_operations_hub": true,
+        "html_contains_auth_guard": true
+      }
+    },
+    "static_assets": {
+      "sample_next_chunk_http_status": 200,
+      "sample_next_chunk_time_seconds": 0.885522,
+      "sample_next_chunk_size_bytes": 6066
+    },
+    "frontend_logs": {
+      "next_ready": true,
+      "recent_runtime_errors_observed": false
+    }
+  },
+  "login_flow_validation": {
+    "status": "passed",
+    "secrets_redacted": true,
+    "real_owner_login_probe": {
+      "cold_https_attempts": [
+        {
+          "status": 200,
+          "time_ms": 2294,
+          "under_2s": false
+        },
+        {
+          "status": 200,
+          "time_ms": 2290,
+          "under_2s": false
+        }
+      ],
+      "browser_like_warm_https_attempt": {
+        "login_page_warmup_ms": 1205,
+        "login_status": 200,
+        "login_time_ms": 1295,
+        "login_under_2s": true,
+        "cookie_received": true,
+        "auth_me_status": 200,
+        "auth_me_time_ms": 300,
+        "logout_status": 200,
+        "logout_time_ms": 1208
+      },
+      "local_frontend_proxy_attempt": {
+        "login_status": 200,
+        "login_time_ms": 1405,
+        "login_under_2s": true,
+        "logout_status": 200,
+        "logout_time_ms": 1807
+      },
+      "direct_backend_public_attempt": {
+        "login_status": 200,
+        "login_time_ms": 1778,
+        "login_under_2s": true
+      }
+    },
+    "session_deadlock_observed": false,
+    "dashboard_infinite_loop_observed": false,
+    "note": "Cold HTTPS login from a fresh Node process exceeded 2s due to cold connection overhead. Browser-like flow after loading /login completed login in 1.295s."
+  },
+  "build_and_test_validation": {
+    "docker_build": {
+      "backend_build": "completed",
+      "frontend_build": "completed",
+      "frontend_docker_verify": "passed",
+      "frontend_docker_typecheck": "passed",
+      "frontend_next_build": "passed"
+    },
+    "local_frontend_tests": {
+      "npm_run_test": {
+        "status": "passed",
+        "tests": 13,
+        "passed": 13,
+        "failed": 0,
+        "duration_ms": 28298.660512
+      },
+      "npm_run_typecheck": "passed",
+      "npm_run_verify": "passed"
+    },
+    "local_backend_unit_tests": {
+      "status": "failed_with_known_contract_warning",
+      "selected": 187,
+      "passed": 186,
+      "failed": 1,
+      "deselected": 336,
+      "failure": {
+        "test": "tests/backend/test_pre20_p_staging_stabilization.py::test_fix043_fix044_contract_and_integration_reports_are_clean",
+        "reason": "staging.build_contract_report() returned failed because /api/public/auth/me schema is AuthenticatedUser while the stale test contract expects AuthenticatedUserWithPermissions.",
+        "runtime_impact": "No production runtime crash or timeout observed. This conflicts with the final login-flow decoupling evidence that intentionally keeps auth/me identity-only."
+      }
+    }
+  },
+  "repair_audit": {
+    "BE-01": {
+      "status": "audited",
+      "evidence_files": [
+        "db_pool_fix_report.json",
+        "session_leak_analysis.json"
+      ]
+    },
+    "BE-02": {
+      "status": "audited",
+      "evidence_files": [
+        "postgres_idle_transaction_report.json",
+        "session_lifecycle_validation.json",
+        "transaction_cleanup_verification.json"
+      ]
+    },
+    "BE-03": {
+      "status": "audited",
+      "evidence_files": [
+        "auth_me_latency_report.json",
+        "middleware_chain_breakdown.json",
+        "session_validation_simplification.json"
+      ],
+      "runtime_signal": "auth/me proxy returns 401 unauthenticated and 200 after login without deadlock"
+    },
+    "BE-04": {
+      "status": "audited",
+      "evidence_files": [
+        "middleware_write_amplification_report.json",
+        "db_hot_path_reduction_report.json"
+      ]
+    },
+    "BE-05": {
+      "status": "audited",
+      "evidence_files": [
+        "rbac_chain_analysis.json",
+        "middleware_dedup_report.json",
+        "permission_cache_strategy.json"
+      ]
+    },
+    "BE-06": {
+      "status": "audited",
+      "evidence_files": [
+        "modules_me_query_plan.json",
+        "request_execution_trace.json",
+        "db_index_recommendation.json",
+        "backend/alembic/versions/20260618_01_fix_be_06_modules_me_performance.py"
+      ]
+    },
+    "BE-07": {
+      "status": "audited",
+      "evidence_files": [
+        "batching_strategy.json",
+        "provider_fanout_analysis.json",
+        "frontend_load_reduction_report.json"
+      ]
+    },
+    "BE-08": {
+      "status": "audited",
+      "evidence_files": [
+        "cookie_environment_policy_report.json",
+        "auth_cookie_behavior_matrix.json",
+        "http_https_login_compatibility_report.json"
+      ],
+      "runtime_signal": "real login received auth cookie and logout completed"
+    },
+    "BE-09": {
+      "status": "audited",
+      "evidence_files": [
+        "health_endpoint_latency_report.json",
+        "db_independence_check.json",
+        "middleware_bypass_verification.json"
+      ],
+      "runtime_signal": "/health returned 200 in 0.093s with db=not_checked"
+    },
+    "FE-01": {
+      "status": "audited",
+      "evidence_files": [
+        "auth_flow_latency_report.json",
+        "auth_me_timeout_analysis.json",
+        "frontend_login_chain_trace.json"
+      ]
+    },
+    "FE-02": {
+      "status": "audited",
+      "evidence_files": [
+        "dashboard_fanout_analysis.json",
+        "frontend_request_reduction_report.json",
+        "request_dedup_map.json",
+        "provider_cache_strategy.json"
+      ]
+    },
+    "FE-03": {
+      "status": "audited",
+      "evidence_files": [
+        "frontend_architecture_refactor_summary.json",
+        "coupling_removal_report.json",
+        "provider_single_responsibility_map.json",
+        "provider_dependency_graph.json"
+      ]
+    },
+    "FE-04": {
+      "status": "audited",
+      "evidence_files": [
+        "auth_login_timeout_report.json",
+        "login_flow_unblocking_report.json",
+        "auth_guard_fallback_report.json"
+      ],
+      "runtime_signal": "browser-like warmed login completed under 2s"
+    },
+    "FE-05": {
+      "status": "audited",
+      "evidence_files": [
+        "dashboard_request_reduction_report.json",
+        "frontend_cache_layer_report.json",
+        "api_fanout_dedup_report.json",
+        "request_abort_controller_report.json"
+      ]
+    },
+    "FE-STABILIZATION": {
+      "status": "audited",
+      "evidence_files": [
+        "capability_state_safety_report.json",
+        "crash_prevention_report.json",
+        "frontend_runtime_state_report.json",
+        "ssr_hydration_status_report.json",
+        "asset_loading_report.json"
+      ],
+      "runtime_signal": "login and dashboard HTML render with Next assets available"
+    },
+    "FINAL LOGIN FLOW DECOUPLING": {
+      "status": "audited",
+      "evidence_files": [
+        "login_flow_final_decoupling_report.json",
+        "auth_state_isolation_report.json",
+        "routing_auth_flow_fix_report.json",
+        "redirect_policy_enforcement_report.json"
+      ],
+      "runtime_signal": "auth/me is identity-only and frontend proxy login/me/logout works"
+    }
+  },
+  "success_criteria": {
+    "backend_running_stable": true,
+    "frontend_renders_correctly": true,
+    "login_page_accessible": true,
+    "no_dashboard_infinite_redirect_loop": true,
+    "no_8000_port_conflict": true,
+    "no_session_deadlock": true,
+    "all_be_fe_changes_reflected_in_runtime": "passed_with_backend_unit_contract_warning"
+  },
+  "audit_warnings": [
+    {
+      "id": "compose_project_name_changed_by_requested_command",
+      "severity": "medium",
+      "detail": "The exact requested compose command starts default project containers rather than prod-named containers. Host ports 3000 and 8000 are correctly served, but strict prod container naming would require an explicit project name release path."
+    },
+    {
+      "id": "direct_backend_api_backend_auth_me_returns_404",
+      "severity": "low",
+      "detail": "The specified direct backend URL /api/backend/auth/me returns 404 quickly. The actual backend auth route is /api/public/auth/me, and the frontend proxy /api/backend/auth/me works."
+    },
+    {
+      "id": "backend_unit_contract_test_stale",
+      "severity": "medium",
+      "detail": "Backend unit tests have 1 failure due to a stale staging contract expecting AuthenticatedUserWithPermissions from auth/me after final login-flow decoupling."
+    },
+    {
+      "id": "no_browser_screenshot_tool",
+      "severity": "low",
+      "detail": "No local browser or Playwright binary was available, so no screenshot/pixel-level white-screen check was performed. HTTP HTML, static asset, API, and source guard checks were used instead."
+    }
+  ]
+}
