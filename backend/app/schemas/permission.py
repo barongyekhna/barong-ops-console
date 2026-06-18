@@ -453,8 +453,11 @@ class CurrentUserPermissionsRead(BaseModel):
 
 
 class CurrentUserPermissionResponse(BaseModel):
+    id: int
     user_id: int
     role: str
+    is_owner: bool
+    permission_keys: list[str]
     permissions: CurrentUserPermissionsRead
 
 

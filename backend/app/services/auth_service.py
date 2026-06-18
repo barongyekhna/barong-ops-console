@@ -7,7 +7,7 @@ from math import ceil
 from hashlib import sha256
 from threading import Lock
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -278,7 +278,16 @@ def _record_login_rate_limit(
 
 
 def _auth_sessions_table_available(db: Session) -> bool:
-    return table_exists(db, "auth_sessions")
+    if not table_exists(db, "auth_sessions"):
+        return False
+    try:
+        db.execute(text("SELECT 1 FROM auth_sessions LIMIT 1"))
+    except SQLAlchemyError as exc:
+        db.rollback()
+        if is_missing_table_error(exc, "auth_sessions"):
+            return False
+        raise
+    return True
 
 
 def _legacy_secret(settings: Settings) -> bytes:
@@ -382,9 +391,12 @@ def _new_session(
     settings: Settings,
     audit: AuditContext,
     issued_at: datetime,
+    auth_sessions_available: bool | None = None,
 ) -> tuple[str, AuthSession]:
     expires_at = issued_at + timedelta(minutes=settings.auth_session_expire_minutes)
-    if not _auth_sessions_table_available(db):
+    if auth_sessions_available is None:
+        auth_sessions_available = _auth_sessions_table_available(db)
+    if not auth_sessions_available:
         session_id = _legacy_session_token(
             user_id=user.id,
             expires_at=expires_at,
@@ -493,25 +505,32 @@ def validate_session_identity_fast(
         _cache_session_identity(identity, now=now)
         return identity
 
-    row = db.execute(
-        select(
-            User.id,
-            User.username,
-            User.role,
-            User.is_active,
-            User.last_login_at,
-            AuthSession.expires_at.label("session_expires_at"),
-        )
-        .select_from(AuthSession)
-        .join(User, AuthSession.user_id == User.id)
-        .where(
-            AuthSession.session_id_hash == cache_key,
-            AuthSession.invalidated_at.is_(None),
-            AuthSession.expires_at > now,
-            User.is_active.is_(True),
-        )
-        .limit(1)
-    ).one_or_none()
+    try:
+        row = db.execute(
+            select(
+                User.id,
+                User.username,
+                User.role,
+                User.is_active,
+                User.last_login_at,
+                AuthSession.expires_at.label("session_expires_at"),
+            )
+            .select_from(AuthSession)
+            .join(User, AuthSession.user_id == User.id)
+            .where(
+                AuthSession.session_id_hash == cache_key,
+                AuthSession.invalidated_at.is_(None),
+                AuthSession.expires_at > now,
+                User.is_active.is_(True),
+            )
+            .limit(1)
+        ).one_or_none()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        if is_missing_table_error(exc, "auth_sessions"):
+            forget_cached_session_identity_hash(cache_key)
+            raise InvalidSessionError("Invalid session.") from None
+        raise
     if row is None:
         forget_cached_session_identity_hash(cache_key)
         raise InvalidSessionError("Invalid session.")
@@ -538,6 +557,7 @@ def login(
     audit: AuditContext,
 ) -> LoginResult:
     attempted_at = _now()
+    auth_sessions_available = _auth_sessions_table_available(db)
     rate_limit_decision = register_login_rate_limit_attempt(
         db,
         username=username,
@@ -652,6 +672,7 @@ def login(
         settings=settings,
         audit=audit,
         issued_at=logged_in_at,
+        auth_sessions_available=auth_sessions_available,
     )
     update_last_login(db, user, logged_in_at)
     _cache_session_identity(
@@ -723,12 +744,17 @@ def validate_session(
         )
 
     try:
-        auth_session = get_auth_session_by_hash(
-            db,
-            hash_session_id(session_id),
-        )
+        session_id_hash = hash_session_id(session_id)
     except InvalidSessionIdError:
         raise InvalidSessionError("Invalid session.") from None
+    try:
+        auth_session = get_auth_session_by_hash(db, session_id_hash)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        if is_missing_table_error(exc, "auth_sessions"):
+            forget_cached_session_identity_hash(session_id_hash)
+            raise InvalidSessionError("Invalid session.") from None
+        raise
 
     if auth_session is None or auth_session.invalidated_at is not None:
         raise InvalidSessionError("Invalid session.")

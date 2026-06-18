@@ -210,7 +210,11 @@ def _missing_permissions(
     manifest: ModuleManifestV1,
     current_user_permissions: CurrentUserPermissionInfo,
 ) -> list[str]:
+    if current_user_permissions.is_owner_full_access:
+        return []
     permission_keys = set(current_user_permissions.permission_keys)
+    if "*" in permission_keys:
+        return []
     return [
         permission_key
         for permission_key in manifest.required_permissions

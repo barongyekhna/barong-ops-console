@@ -1454,31 +1454,14 @@ def resolve_effective_permissions(
     user: User,
 ) -> EffectivePermissions:
     role = normalize_role(user.role)
-    enabled_permissions = list_enabled_permissions(db)
 
     if is_owner_role(role):
-        platform_permissions = [
-            permission
-            for permission in enabled_permissions
-            if permission.category in OWNER_PLATFORM_PERMISSION_CATEGORIES
-        ]
-        permission_keys = sorted(
-            permission.permission_key for permission in platform_permissions
-        )
         return EffectivePermissions(
             user_id=user.id,
             role=role,
-            is_owner_full_access=False,
-            permissions=permission_keys,
-            scoped_permissions=[
-                EffectivePermissionScope(
-                    permission_key=permission.permission_key,
-                    scope_type=SCOPE_GLOBAL,
-                    scope_key="*",
-                    expires_at=None,
-                )
-                for permission in platform_permissions
-            ],
+            is_owner_full_access=True,
+            permissions=["*"],
+            scoped_permissions=[],
             is_platform_owner=True,
         )
 
@@ -1544,7 +1527,7 @@ def _current_user_permission_info_from_effective(
         )
     ]
     return CurrentUserPermissionInfo(
-        is_owner_full_access=False,
+        is_owner_full_access=effective.is_owner_full_access,
         permission_keys=effective.permissions,
         assignments=assignments,
         scope_summary=scope_summary,
@@ -1568,30 +1551,17 @@ def resolve_current_user_module_permission_info(
         request_cache.request_material_hits += 1
         return request_cache.materials[cache_key]
 
-    resolution_cache = PermissionResolutionCache(request=request)
     if is_owner_role(role):
-        permission_keys = resolution_cache.list_owner_platform_permission_keys(
-            db,
-            OWNER_PLATFORM_PERMISSION_CATEGORIES,
-        )
-        scoped_permissions = [
-            EffectivePermissionScope(
-                permission_key=permission_key,
-                scope_type=SCOPE_GLOBAL,
-                scope_key="*",
-                expires_at=None,
-            )
-            for permission_key in permission_keys
-        ]
         effective = EffectivePermissions(
             user_id=user.id,
             role=role,
-            is_owner_full_access=False,
-            permissions=permission_keys,
-            scoped_permissions=scoped_permissions,
+            is_owner_full_access=True,
+            permissions=["*"],
+            scoped_permissions=[],
             is_platform_owner=True,
         )
     else:
+        resolution_cache = PermissionResolutionCache(request=request)
         now = _utc_now()
         scope_rows = resolution_cache.list_user_permission_scopes(
             db,

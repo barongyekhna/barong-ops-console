@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.common import ListResponse
@@ -87,17 +88,48 @@ def _assignment_action_response(
     )
 
 
+def _current_user_permission_response(
+    *,
+    user: User,
+    permissions: CurrentUserPermissionsRead,
+) -> CurrentUserPermissionResponse:
+    return CurrentUserPermissionResponse(
+        id=user.id,
+        user_id=user.id,
+        role=user.role,
+        is_owner=is_owner_role(user.role),
+        permission_keys=permissions.permission_keys,
+        permissions=permissions,
+    )
+
+
+def _owner_permissions_me_response(user: User) -> CurrentUserPermissionResponse:
+    permissions = CurrentUserPermissionsRead(
+        is_owner_full_access=True,
+        permission_keys=["*"],
+        assignments=[],
+        scope_summary=[],
+    )
+    return _current_user_permission_response(
+        user=user,
+        permissions=permissions,
+    )
+
+
 @router.get("/me", response_model=CurrentUserPermissionResponse)
 def permissions_me(
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("AUTH", "read")),
 ) -> CurrentUserPermissionResponse:
-    return CurrentUserPermissionResponse(
-        user_id=user.id,
-        role=user.role,
-        permissions=CurrentUserPermissionsRead.model_validate(
-            resolve_current_user_permission_info(db, user)
-        ),
+    if is_owner_role(user.role):
+        return _owner_permissions_me_response(user)
+
+    permissions = CurrentUserPermissionsRead.model_validate(
+        resolve_current_user_permission_info(db, user)
+    )
+    return _current_user_permission_response(
+        user=user,
+        permissions=permissions,
     )
 
 

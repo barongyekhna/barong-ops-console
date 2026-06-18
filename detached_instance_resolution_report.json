@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-06-18T17:05:07Z",
+  "status": "resolved",
+  "primary_error": "sqlalchemy.orm.exc.DetachedInstanceError during permissions response serialization/request middleware reuse",
+  "root_cause": "Authenticated ORM objects were cached on request.state from a short-lived read session. Later middleware and response paths could touch expired or detached User/AuthSession attributes after the session was rolled back or closed.",
+  "resolution": [
+    {
+      "file": "backend/app/services/request_session_cache.py",
+      "summary": "Cached a request-local snapshot of User and AuthSession scalar fields instead of session-bound ORM instances."
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "summary": "Returned a pure Pydantic owner response before invoking permission DB resolution."
+    },
+    {
+      "file": "backend/app/services/auth_service.py",
+      "summary": "Handled missing auth_sessions table by using legacy session compatibility for login and returning InvalidSessionError for invalid non-legacy sessions instead of leaking SQLAlchemy errors."
+    }
+  ],
+  "owner_permission_strategy": {
+    "owner_bypasses_db_permission_chain": true,
+    "owner_permission_keys": ["*"],
+    "is_owner_full_access": true,
+    "detached_orm_objects_returned": false
+  },
+  "legacy_schema_runtime_guards": [
+    {
+      "table": "auth_sessions",
+      "behavior": "Use existing legacy session token flow for login when table is absent; stale non-legacy sessions return authentication failure instead of 500."
+    },
+    {
+      "table": "org_memberships",
+      "behavior": "Use rollout backfill org context when C18 org tables are absent."
+    },
+    {
+      "table": "organizations",
+      "behavior": "Use rollout backfill org context when owner org lookup cannot run on legacy schema."
+    },
+    {
+      "table": "module_bindings",
+      "behavior": "Return empty module scope on legacy schema instead of failing org context build."
+    },
+    {
+      "table": "ops_live_gate_policies",
+      "behavior": "Return an empty policy list so live-gate bootstrap remains readable."
+    }
+  ],
+  "verification": {
+    "python_compileall": "passed",
+    "request_session_snapshot_smoke": "passed",
+    "permissions_me_http_status": 200,
+    "detached_instance_error_after_final_validation": false,
+    "backend_recent_logs_after_final_validation": "only 200 OK entries observed for final permission/bootstrap requests"
+  },
+  "non_changes": {
+    "frontend_changed": false,
+    "db_schema_changed": false,
+    "rbac_core_redesigned": false,
+    "execution_engine_changed": false
+  }
+}

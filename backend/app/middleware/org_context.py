@@ -7,12 +7,13 @@ from uuid import uuid4
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
-from ..db.compatibility import table_exists
+from ..db.compatibility import is_missing_table_error, table_exists
 from ..db.session import managed_read_session
 from ..models.auth_session import AuthSession
 from ..models.org_membership import OrgMembershipRecord
@@ -37,6 +38,7 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
         "/api/app/module/shared/create",
         "/api/app/module/shared/update-orgs",
         "/api/app/module/shared/list",
+        "/api/app/permissions/me",
     )
 )
 ORG_CONTEXT_BUILD_EXEMPT_PATHS = frozenset(
@@ -188,6 +190,14 @@ def _c18_org_tables_available(db: Session) -> bool:
     )
 
 
+def _compat_org_resolution(*, role: str) -> OrgResolution:
+    return OrgResolution(
+        org_id=ROLLOUT_BACKFILL_ORG_ID,
+        role="owner" if role == "owner" else "member",
+        source="c05b_compat_no_c18_tables",
+    )
+
+
 def _owner_org_for_user(
     db: Session,
     *,
@@ -223,14 +233,17 @@ def _resolve_org(
     auth_session: AuthSession,
 ) -> OrgResolution | None:
     user_id = str(user.id)
+    user_role = user.role
     if not _c18_org_tables_available(db):
-        return OrgResolution(
-            org_id=ROLLOUT_BACKFILL_ORG_ID,
-            role="owner" if user.role == "owner" else "member",
-            source="c05b_compat_no_c18_tables",
-        )
+        return _compat_org_resolution(role=user_role)
 
-    memberships = _active_memberships_for_user(db, user_id=user_id)
+    try:
+        memberships = _active_memberships_for_user(db, user_id=user_id)
+    except SQLAlchemyError as exc:
+        if is_missing_table_error(exc, "org_memberships"):
+            db.rollback()
+            return _compat_org_resolution(role=user_role)
+        raise
     memberships_by_org = {membership.org_id: membership for membership in memberships}
 
     session_org_id = _server_state_active_org_id(request, auth_session)
@@ -242,7 +255,13 @@ def _resolve_org(
                 role=_role_for_membership(membership),
                 source="session_or_jwt",
             )
-        owner_org = _owner_org_for_user(db, user_id=user_id)
+        try:
+            owner_org = _owner_org_for_user(db, user_id=user_id)
+        except SQLAlchemyError as exc:
+            if is_missing_table_error(exc, "organizations"):
+                db.rollback()
+                return _compat_org_resolution(role=user_role)
+            raise
         if (
             owner_org is not None
             and owner_org.org_id == session_org_id
@@ -261,7 +280,13 @@ def _resolve_org(
             source="c18c_active_membership",
         )
 
-    owner_org = _owner_org_for_user(db, user_id=user_id)
+    try:
+        owner_org = _owner_org_for_user(db, user_id=user_id)
+    except SQLAlchemyError as exc:
+        if is_missing_table_error(exc, "organizations"):
+            db.rollback()
+            return _compat_org_resolution(role=user_role)
+        raise
     if owner_org is not None:
         return OrgResolution(
             org_id=owner_org.org_id,
@@ -276,7 +301,14 @@ def _module_scope_for_org(db: Session, org_id: str) -> list[str]:
     if not table_exists(db, "module_bindings"):
         return []
     module_ids: list[str] = []
-    for binding in list_module_bindings(db):
+    try:
+        bindings = list_module_bindings(db)
+    except SQLAlchemyError as exc:
+        if is_missing_table_error(exc, "module_bindings"):
+            db.rollback()
+            return []
+        raise
+    for binding in bindings:
         if not binding.enabled:
             continue
         if (

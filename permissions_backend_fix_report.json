@@ -1,0 +1,95 @@
+{
+  "generated_at": "2026-06-18T17:05:07Z",
+  "status": "fixed_and_deployed",
+  "scope": "backend runtime permissions recovery",
+  "constraints_observed": {
+    "frontend_code_changed": false,
+    "database_schema_changed": false,
+    "volumes_deleted": false,
+    "rbac_redesigned": false,
+    "execution_engine_changed": false
+  },
+  "changes": [
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "summary": "Added owner fast path for /permissions/me and returned a stable response with id, role, permission_keys, and is_owner."
+    },
+    {
+      "file": "backend/app/schemas/permission.py",
+      "summary": "Extended CurrentUserPermissionResponse with stable top-level id, is_owner, and permission_keys fields."
+    },
+    {
+      "file": "backend/app/services/permission_service.py",
+      "summary": "Changed owner permission resolution to wildcard full access without DB permission chain resolution."
+    },
+    {
+      "file": "backend/app/services/module_registry.py",
+      "summary": "Treated owner full access and wildcard permissions as satisfying all module permission checks."
+    },
+    {
+      "file": "backend/app/middleware/org_context.py",
+      "summary": "Exempted /api/app/permissions/me from org-context build and added missing-table compatibility for legacy production data."
+    },
+    {
+      "file": "backend/app/middleware/data_isolation.py",
+      "summary": "Exempted /api/app/permissions/me from org data isolation so permissions bootstrap can succeed."
+    }
+  ],
+  "runtime_validation": {
+    "health": {
+      "url": "http://127.0.0.1:8000/health",
+      "http_status": 200
+    },
+    "auth_login": {
+      "url": "https://ops.barongyekhna.com/api/backend/auth/login",
+      "http_status": 200
+    },
+    "auth_me": {
+      "url": "https://ops.barongyekhna.com/api/backend/auth/me",
+      "http_status": 200
+    },
+    "permissions_me": {
+      "url": "https://ops.barongyekhna.com/api/backend/permissions/me",
+      "http_status": 200,
+      "owner_response": {
+        "id": 1,
+        "user_id": 1,
+        "role": "owner",
+        "is_owner": true,
+        "permission_keys": ["*"],
+        "permissions": {
+          "is_owner_full_access": true,
+          "permission_keys": ["*"]
+        }
+      }
+    },
+    "modules_me": {
+      "url": "https://ops.barongyekhna.com/api/backend/modules/me",
+      "http_status": 200,
+      "count": 16,
+      "is_owner_full_access": true,
+      "permission_missing_count": 0
+    },
+    "module_adapters_me": {
+      "url": "https://ops.barongyekhna.com/api/backend/module-adapters/me",
+      "http_status": 200,
+      "count": 5,
+      "is_owner_full_access": true
+    },
+    "execution_providers_me": {
+      "url": "https://ops.barongyekhna.com/api/backend/execution-providers/me",
+      "http_status": 200,
+      "count": 8,
+      "is_owner_full_access": true
+    }
+  },
+  "deployment": {
+    "backend_image_rebuilt": true,
+    "backend_container_recreated": true,
+    "frontend_container_restarted_for_cache_clear": true,
+    "backend_container": "barong-ops-console_console_backend_1",
+    "frontend_container": "barong-ops-console_console_frontend_1",
+    "port_8000_state": "127.0.0.1:8000->8000/tcp",
+    "data_safety": "No database, schema, or volume deletion performed."
+  }
+}

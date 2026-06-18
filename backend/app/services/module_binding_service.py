@@ -8,6 +8,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ..core.roles import is_owner_role
+from ..db.compatibility import is_missing_table_error
 from ..models.org_membership import OrgMembershipRecord
 from ..models.user import User
 from ..schemas.module_binding import (
@@ -112,7 +113,13 @@ def list_module_bindings(db: Session | None = None) -> list[ModuleBinding]:
     with _managed_session(db) as (session, _):
         if not _module_binding_table_exists(session):
             return []
-        return binding_repo.list_module_bindings(session)
+        try:
+            return binding_repo.list_module_bindings(session)
+        except SQLAlchemyError as exc:
+            session.rollback()
+            if is_missing_table_error(exc, "module_bindings"):
+                return []
+            raise
 
 
 def get_module_binding(

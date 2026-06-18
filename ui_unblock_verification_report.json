@@ -1,0 +1,103 @@
+{
+  "generated_at": "2026-06-18T17:05:07Z",
+  "status": "unblocked",
+  "frontend_routes": {
+    "root": {
+      "url": "https://ops.barongyekhna.com/",
+      "http_status": 307,
+      "location": "/login"
+    },
+    "login": {
+      "url": "https://ops.barongyekhna.com/login",
+      "http_status": 200
+    },
+    "dashboard": {
+      "url": "https://ops.barongyekhna.com/dashboard",
+      "http_status": 200
+    }
+  },
+  "backend_endpoints": {
+    "health": {
+      "url": "http://127.0.0.1:8000/health",
+      "http_status": 200
+    },
+    "permissions_me": {
+      "url": "https://ops.barongyekhna.com/api/backend/permissions/me",
+      "http_status": 200
+    },
+    "live_gate_policies": {
+      "url": "https://ops.barongyekhna.com/api/backend/live-gate/policies",
+      "http_status": 200,
+      "count": 0
+    }
+  },
+  "capability_bootstrap": {
+    "url": "https://ops.barongyekhna.com/api/backend/capability/bootstrap",
+    "http_status": 200,
+    "sections": {
+      "modules_registry": {
+        "ok": true,
+        "status": 200,
+        "count": 16
+      },
+      "modules_me": {
+        "ok": true,
+        "status": 200,
+        "count": 16
+      },
+      "module_adapters_registry": {
+        "ok": true,
+        "status": 200,
+        "count": 5
+      },
+      "module_adapters_me": {
+        "ok": true,
+        "status": 200,
+        "count": 5
+      },
+      "execution_providers_registry": {
+        "ok": true,
+        "status": 200,
+        "count": 8
+      },
+      "execution_providers_me": {
+        "ok": true,
+        "status": 200,
+        "count": 8
+      },
+      "live_gate_policies": {
+        "ok": true,
+        "status": 200,
+        "count": 0
+      },
+      "live_gate_readiness": {
+        "ok": true,
+        "status": 200
+      },
+      "live_gate_production_readiness": {
+        "ok": true,
+        "status": 200
+      }
+    }
+  },
+  "owner_ui_permissions": {
+    "role": "owner",
+    "is_owner": true,
+    "is_owner_full_access": true,
+    "permission_keys": ["*"],
+    "modules_visible_count": 16,
+    "module_permission_missing_count": 0,
+    "adapter_permission_missing_count": 0,
+    "execution_provider_permission_missing_count": 0
+  },
+  "ui_fallback_status": {
+    "backend_bootstrap_errors": 0,
+    "permissions_api_errors": 0,
+    "routing_loop_detected_by_http_checks": false,
+    "root_to_login_redirect_ok": true,
+    "fallback_navigation_expected": false
+  },
+  "limitations": {
+    "browser_pixel_spinner_check": "not executed in this environment; validation was performed through route HTTP status, auth flow, capability bootstrap, and backend logs."
+  }
+}

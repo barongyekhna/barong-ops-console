@@ -48,6 +48,7 @@ C18D_TARGET_ORG_PAYLOAD_PATHS = frozenset(("/api/app/module/bind",))
 DATA_ISOLATION_EXEMPT_PATHS = frozenset(
     (
         "/api/control-plane/modules/me",
+        "/api/app/permissions/me",
     )
 )
 

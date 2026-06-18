@@ -6,8 +6,10 @@ from datetime import UTC, datetime
 from uuid import uuid4
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from ..db.compatibility import is_missing_table_error
 from ..models.ops import OpsLiveGatePolicyRecord
 from ..schemas.live_gate import (
     ApprovalUnlockDecision,
@@ -280,13 +282,21 @@ class LiveGatingController:
                 )
                 for index, policy in enumerate(self._policies)
             ]
-        rows = list(
-            self.db.scalars(
-                select(OpsLiveGatePolicyRecord)
-                .where(OpsLiveGatePolicyRecord.org_id.in_((org_id, PLATFORM_ORG_ID)))
-                .order_by(OpsLiveGatePolicyRecord.id.asc())
+        try:
+            rows = list(
+                self.db.scalars(
+                    select(OpsLiveGatePolicyRecord)
+                    .where(
+                        OpsLiveGatePolicyRecord.org_id.in_((org_id, PLATFORM_ORG_ID))
+                    )
+                    .order_by(OpsLiveGatePolicyRecord.id.asc())
+                )
             )
-        )
+        except SQLAlchemyError as exc:
+            if is_missing_table_error(exc, "ops_live_gate_policies"):
+                self.db.rollback()
+                return []
+            raise
         return [self._read_policy(row) for row in rows]
 
     def _global_live_switch(self, *, org_id: str) -> bool:
