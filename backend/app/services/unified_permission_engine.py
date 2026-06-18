@@ -297,8 +297,14 @@ def _assignment_matches_scope(
 
 
 class UnifiedPermissionEngine:
-    def __init__(self, db: Session | None = None) -> None:
+    def __init__(
+        self,
+        db: Session | None = None,
+        *,
+        resolution_cache: object | None = None,
+    ) -> None:
         self.db = db
+        self.resolution_cache = resolution_cache
 
     def decide(self, request: UnifiedPermissionRequest) -> UnifiedPermissionDecision:
         if request.permission_key is not None:
@@ -329,7 +335,10 @@ class UnifiedPermissionEngine:
                 c18f_isolation_applied=True,
             )
 
-        user = self._get_user(user_id)
+        user, membership = self._get_user_org_context(
+            user_id=user_id,
+            org_id=org_id,
+        )
         if user is None:
             return self._deny(
                 request,
@@ -353,7 +362,6 @@ class UnifiedPermissionEngine:
                 c18f_isolation_applied=True,
             )
 
-        membership = self._active_membership(user_id=user_id, org_id=org_id)
         if membership is None:
             return self._deny(
                 request,
@@ -491,7 +499,7 @@ class UnifiedPermissionEngine:
                 c05_assignment_checked=True,
             )
 
-        permission = get_permission_record(db, permission_key)
+        permission = self._get_permission(permission_key)
         if permission is None or not permission.is_enabled:
             return self._deny(
                 request,
@@ -511,9 +519,7 @@ class UnifiedPermissionEngine:
             permission.module_key,
             permission.action,
         )
-        role_defaults_count = len(
-            list_role_default_permissions(db, normalize_role(user.role))
-        )
+        role_defaults_count = len(self._list_role_defaults(normalize_role(user.role)))
         if is_owner_role(user.role):
             if self._owner_permission_allowed(
                 user_id=user_id,
@@ -695,11 +701,49 @@ class UnifiedPermissionEngine:
         return self.db
 
     def _get_user(self, user_id: str) -> User | None:
+        if self.resolution_cache is not None:
+            return self.resolution_cache.get_user(self._require_db(), user_id)
         try:
             user_pk = int(user_id)
         except ValueError:
             return None
         return self._require_db().get(User, user_pk)
+
+    def _get_user_org_context(
+        self,
+        *,
+        user_id: str,
+        org_id: str,
+    ) -> tuple[User | None, OrgMembershipRecord | None]:
+        if self.resolution_cache is not None:
+            context = self.resolution_cache.get_user_org_context(
+                self._require_db(),
+                user_id=user_id,
+                org_id=org_id,
+            )
+            return context.user, context.membership
+        try:
+            user_pk = int(user_id)
+        except ValueError:
+            return None, None
+        row = self._require_db().execute(
+            select(User, OrgMembershipRecord)
+            .select_from(User)
+            .outerjoin(
+                OrgMembershipRecord,
+                (
+                    (OrgMembershipRecord.user_id == user_id)
+                    & (OrgMembershipRecord.org_id == org_id)
+                    & (OrgMembershipRecord.status == "active")
+                ),
+            )
+            .where(User.id == user_pk)
+            .limit(1)
+        ).one_or_none()
+        if row is None:
+            return None, None
+        user, membership = row
+        return user, membership
 
     def _active_membership(
         self,
@@ -707,6 +751,12 @@ class UnifiedPermissionEngine:
         user_id: str,
         org_id: str,
     ) -> OrgMembershipRecord | None:
+        if self.resolution_cache is not None:
+            return self.resolution_cache.get_active_membership(
+                self._require_db(),
+                user_id=user_id,
+                org_id=org_id,
+            )
         return self._require_db().scalar(
             select(OrgMembershipRecord).where(
                 OrgMembershipRecord.user_id == user_id,
@@ -716,10 +766,24 @@ class UnifiedPermissionEngine:
         )
 
     def _module_bound_to_org(self, *, module_id: str, org_id: str) -> bool:
-        try:
-            binding = get_module_binding(module_id, db=self._require_db())
-        except ModuleBindingNotFoundError:
-            return False
+        if self.resolution_cache is not None:
+            request_bound = self.resolution_cache.module_bound_to_org_from_request(
+                module_id=module_id,
+                org_id=org_id,
+            )
+            if request_bound is not None:
+                return request_bound
+            binding = self.resolution_cache.get_module_binding(
+                self._require_db(),
+                module_id,
+            )
+            if binding is None:
+                return False
+        else:
+            try:
+                binding = get_module_binding(module_id, db=self._require_db())
+            except ModuleBindingNotFoundError:
+                return False
         if not binding.enabled:
             return False
         return (
@@ -747,6 +811,35 @@ class UnifiedPermissionEngine:
             return membership is not None
         return False
 
+    def _get_permission(self, permission_key: str) -> PermissionRegistry | None:
+        if self.resolution_cache is not None:
+            return self.resolution_cache.get_permission(
+                self._require_db(),
+                permission_key,
+            )
+        return get_permission_record(self._require_db(), permission_key)
+
+    def _list_role_defaults(self, role: str) -> list[object]:
+        if self.resolution_cache is not None:
+            return self.resolution_cache.list_role_defaults(self._require_db(), role)
+        return list_role_default_permissions(self._require_db(), role)
+
+    def _list_enabled_user_assignments(
+        self,
+        user_id: int,
+    ) -> list[UserPermissionAssignment]:
+        if self.resolution_cache is not None:
+            return self.resolution_cache.list_user_assignments(
+                self._require_db(),
+                user_id=user_id,
+                now=_utc_now(),
+            )
+        return list_enabled_user_assignments(
+            self._require_db(),
+            user_id,
+            now=_utc_now(),
+        )
+
     def _assignment_state(
         self,
         *,
@@ -756,11 +849,7 @@ class UnifiedPermissionEngine:
         scope_key: str,
     ) -> tuple[bool, bool]:
         has_other_scope = False
-        for assignment in list_enabled_user_assignments(
-            self._require_db(),
-            user_id,
-            now=_utc_now(),
-        ):
+        for assignment in self._list_enabled_user_assignments(user_id):
             if assignment.permission_key != permission_key:
                 continue
             if _assignment_matches_scope(

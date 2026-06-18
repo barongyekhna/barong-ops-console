@@ -4,7 +4,7 @@ from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from ..core.config import Settings, get_settings
-from ..core.permissions import SCOPE_GLOBAL
+from ..core.permissions import SCOPE_GLOBAL, SCOPE_ORGANIZATION
 from ..core.roles import is_owner_role
 from ..db.session import get_db
 from ..models.user import User
@@ -17,9 +17,12 @@ from ..services.auth_service import (
     validate_session,
 )
 from ..services.session_seen_buffer import queue_session_seen
-from ..services.permission_service import user_has_permission
+from ..services.permission_decision_engine import PermissionDecisionEngine
+from ..services.request_session_cache import (
+    cache_authenticated_session,
+    get_cached_authenticated_session,
+)
 from ..services.unified_permission_engine import (
-    UnifiedPermissionEngine,
     UnifiedPermissionRequest,
     check_internal_permission,
 )
@@ -93,6 +96,28 @@ def get_current_session(
         )
         raise unauthorized()
 
+    cached_session = get_cached_authenticated_session(
+        request,
+        session_id=session_id,
+    )
+    if cached_session is not None:
+        request.state.user_id = str(cached_session.user.id)
+        set_current_event_context(user_id=str(cached_session.user.id))
+        emit_event(
+            event_type="auth.session.validate",
+            module="system",
+            action="auth.session.validate",
+            source="backend",
+            status="success",
+            context_id=get_audit_context(request).request_id,
+            user_id=str(cached_session.user.id),
+            payload={
+                "outcome": "request_cache_hit",
+                "role": cached_session.user.role,
+            },
+        )
+        return cached_session
+
     try:
         current_session = validate_session(
             db,
@@ -112,6 +137,11 @@ def get_current_session(
         )
         raise unauthorized() from None
     queue_session_seen(current_session.auth_session.session_id_hash)
+    cache_authenticated_session(
+        request,
+        session_id=session_id,
+        current_session=current_session,
+    )
     request.state.user_id = str(current_session.user.id)
     set_current_event_context(user_id=str(current_session.user.id))
     emit_event(
@@ -138,7 +168,7 @@ def require_owner(
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> User:
-    decision = UnifiedPermissionEngine(db).decide_platform_metadata(
+    decision = PermissionDecisionEngine(db, request=request).decide_platform_metadata(
         UnifiedPermissionRequest(
             user_id=user.id,
             org_id=getattr(request.state, "org_id", None),
@@ -162,7 +192,7 @@ def require_owner(
             "module": "ADMIN",
             "action": "admin",
             "role": user.role,
-            "decision_source": "UnifiedPermissionEngine",
+            "decision_source": "PermissionDecisionEngine",
             "denial_code": decision.denial_code,
         },
     )
@@ -209,16 +239,21 @@ def require_permission(
         user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> User:
-        try:
-            has_permission = user_has_permission(
-                db,
-                user,
-                permission_key,
+        module_id, _, action = permission_key.partition(".")
+        decision = PermissionDecisionEngine(db, request=request).decide_permission_key(
+            UnifiedPermissionRequest(
+                user_id=user.id,
+                org_id=scope_key if scope_type == SCOPE_ORGANIZATION else None,
+                module_id=module_id or "permissions",
+                action=action or "read",
+                role=user.role,
                 scope_type=scope_type,
                 scope_key=scope_key,
+                permission_key=permission_key,
+                source="api_require_permission",
             )
-        except ValueError:
-            has_permission = False
+        )
+        has_permission = decision.allowed
 
         emit_event(
             event_type="rbac.permission_check",
@@ -233,6 +268,8 @@ def require_permission(
                 "scope_type": scope_type,
                 "scope_key": scope_key,
                 "role": user.role,
+                "decision_source": "PermissionDecisionEngine",
+                "denial_code": decision.denial_code,
             },
         )
         if not has_permission:
@@ -251,7 +288,7 @@ def require_rbac(module: str, action: str):
         user: User = Depends(get_current_user),
         db: Session = Depends(get_db),
     ) -> User:
-        decision = UnifiedPermissionEngine(db).decide_platform_metadata(
+        decision = PermissionDecisionEngine(db, request=request).decide_platform_metadata(
             UnifiedPermissionRequest(
                 user_id=user.id,
                 org_id=getattr(request.state, "org_id", None),
@@ -275,7 +312,7 @@ def require_rbac(module: str, action: str):
                 "module": module,
                 "action": action,
                 "role": user.role,
-                "decision_source": "UnifiedPermissionEngine",
+                "decision_source": "PermissionDecisionEngine",
                 "denial_code": decision.denial_code,
             },
         )

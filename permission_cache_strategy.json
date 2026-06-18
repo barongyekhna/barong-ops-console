@@ -1,0 +1,85 @@
+{
+  "task": "FIX-BE-05 REQUIRE_RBAC CHAIN OPTIMIZATION",
+  "strategy_version": "v1",
+  "decision_engine": {
+    "class": "PermissionDecisionEngine",
+    "path": "backend/app/services/permission_decision_engine.py",
+    "rule": "All HTTP RBAC permission decisions enter this wrapper before UnifiedPermissionEngine.",
+    "dedup_key_fields": [
+      "mode",
+      "user_id",
+      "org_id",
+      "module_id",
+      "action",
+      "role",
+      "scope_type",
+      "scope_key",
+      "permission_key"
+    ]
+  },
+  "per_request_cache": {
+    "storage": "request.state.permission_cache",
+    "decision_cache": "PermissionRequestCache.decisions",
+    "material_cache": "PermissionRequestCache.materials",
+    "session_cache": "request.state.authenticated_session",
+    "guarantees": [
+      "The same permission decision key is evaluated once per request.",
+      "Downstream middleware and dependencies reuse the cached decision object.",
+      "The same request does not re-query cached user, org membership, permission registry, assignment, role default, or module binding materials."
+    ]
+  },
+  "short_lived_ttl_cache": {
+    "storage": "process-local in backend/app/services/permission_resolution_cache.py",
+    "ttl_seconds": 45,
+    "configured_range_requirement": "30-60 seconds",
+    "max_entries": 4096,
+    "namespaces": {
+      "user_permissions": [
+        "user snapshot",
+        "enabled user assignments",
+        "role default permissions"
+      ],
+      "org_permissions": [
+        "user plus active org membership joined context",
+        "active org membership snapshot"
+      ],
+      "module_permissions": [
+        "permission registry entry",
+        "module binding"
+      ]
+    },
+    "test_namespace_safety": "pytest current-test name is included in cache namespace when present to prevent cross-test stale reads."
+  },
+  "invalidation": {
+    "broad_cache_clear_on_successful_writes": [
+      "permission registry upsert",
+      "user permission grant/update/revoke/disable",
+      "role default permission upsert",
+      "module binding reset/bind",
+      "org membership add/remove/list owner repair",
+      "organization create/update/status transition"
+    ],
+    "reason": "RBAC data changes must not wait for TTL expiry before later requests observe them."
+  },
+  "db_query_optimization": {
+    "org_module": [
+      "Reuse request org_context membership when it matches user_id and org_id.",
+      "Fallback user + active membership resolution uses one joined query.",
+      "Reuse request org_context.module_scope before querying module_bindings."
+    ],
+    "permission_key": [
+      "Permission registry lookup is cached.",
+      "Enabled assignment lookup uses the existing joined assignment/registry query and is cached.",
+      "Role default lookup is cached by normalized role."
+    ],
+    "auth_session": [
+      "Middleware validated session is stored in request.state and reused by later middleware/dependencies."
+    ]
+  },
+  "security_constraints": {
+    "no_owner_bypass_added": true,
+    "permission_semantics_changed": false,
+    "db_schema_changed": false,
+    "auth_model_changed": false
+  }
+}

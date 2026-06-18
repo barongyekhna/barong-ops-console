@@ -28,6 +28,7 @@ from ..schemas.org_membership import (
     generate_membership_id,
 )
 from .auth_service import AuditContext
+from .permission_resolution_cache import clear_permission_ttl_cache
 
 
 class OrgMembershipError(ValueError):
@@ -377,6 +378,7 @@ def add_org_member(
             },
         )
         db.commit()
+        clear_permission_ttl_cache()
     except IntegrityError:
         db.rollback()
         raise OrgMembershipConflictError(
@@ -484,6 +486,7 @@ def remove_org_member(
             },
         )
         db.commit()
+        clear_permission_ttl_cache()
     except ValueError:
         db.rollback()
         raise
@@ -543,4 +546,5 @@ def list_org_members(
         details={"org_id": organization.org_id, "count": len(members)},
     )
     db.commit()
+    clear_permission_ttl_cache()
     return [_record_to_schema(member) for member in members]

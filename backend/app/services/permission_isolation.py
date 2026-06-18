@@ -1,11 +1,12 @@
 from __future__ import annotations
 
+from fastapi import Request
 from sqlalchemy.orm import Session
 
 from ..core.permissions import SCOPE_ORGANIZATION
 from ..schemas.permission import PermissionAction, PermissionDecision
+from .permission_decision_engine import PermissionDecisionEngine
 from .unified_permission_engine import (
-    UnifiedPermissionEngine,
     UnifiedPermissionRequest,
 )
 
@@ -16,8 +17,10 @@ def check_permission(
     org_id: str,
     module_id: str,
     action: PermissionAction | str,
+    *,
+    request: Request | None = None,
 ) -> PermissionDecision:
-    decision = UnifiedPermissionEngine(db).decide(
+    decision = PermissionDecisionEngine(db, request=request).decide(
         UnifiedPermissionRequest(
             user_id=user_id,
             org_id=org_id,

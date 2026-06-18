@@ -24,11 +24,9 @@ from ...services.auth_service import (
     validate_session,
     validate_session_identity_fast,
 )
+from ...services.permission_decision_engine import PermissionDecisionEngine
 from ...services.session_seen_buffer import queue_session_seen
-from ...services.unified_permission_engine import (
-    UnifiedPermissionEngine,
-    UnifiedPermissionRequest,
-)
+from ...services.unified_permission_engine import UnifiedPermissionRequest
 from ..deps import get_audit_context
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
@@ -197,7 +195,10 @@ def logout(
 
     if current_session is not None:
         user = current_session.user
-        decision = UnifiedPermissionEngine(db).decide_platform_metadata(
+        decision = PermissionDecisionEngine(
+            db,
+            request=request,
+        ).decide_platform_metadata(
             UnifiedPermissionRequest(
                 user_id=user.id,
                 org_id=getattr(request.state, "org_id", None),

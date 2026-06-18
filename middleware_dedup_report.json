@@ -1,0 +1,85 @@
+{
+  "task": "FIX-BE-05 REQUIRE_RBAC CHAIN OPTIMIZATION",
+  "status": "implemented",
+  "changed_backend_files": [
+    "backend/app/services/permission_decision_engine.py",
+    "backend/app/services/permission_resolution_cache.py",
+    "backend/app/services/request_session_cache.py",
+    "backend/app/services/unified_permission_engine.py",
+    "backend/app/services/permission_isolation.py",
+    "backend/app/api/deps.py",
+    "backend/app/api/routes/auth.py",
+    "backend/app/api/routes/module_adapters.py",
+    "backend/app/middleware/org_context.py",
+    "backend/app/middleware/permission.py",
+    "backend/app/middleware/data_isolation.py",
+    "backend/app/main.py",
+    "backend/app/services/permission_service.py",
+    "backend/app/services/module_binding_service.py",
+    "backend/app/services/org_membership_service.py",
+    "backend/app/services/organization_lifecycle.py",
+    "tests/backend/test_permission_decision_engine.py"
+  ],
+  "dedup_controls": [
+    {
+      "control": "request-level decision cache",
+      "implementation": "PermissionDecisionEngine caches UnifiedPermissionDecision by normalized decision key.",
+      "effect": "same permission check returns the same decision object and does not re-enter evaluation within the request"
+    },
+    {
+      "control": "request-level session cache",
+      "implementation": "cache_authenticated_session/get_cached_authenticated_session",
+      "effect": "org_context, permission isolation, data isolation, control-plane guard, and route dependencies reuse an already validated session"
+    },
+    {
+      "control": "request-level material cache",
+      "implementation": "PermissionResolutionCache stores user_permissions, org_permissions, and module_permissions under request.state.permission_cache.materials.",
+      "effect": "downstream middleware reuses resolved RBAC materials"
+    },
+    {
+      "control": "short TTL material cache",
+      "implementation": "45 second process-local cache with write invalidation",
+      "effect": "authenticated route bursts avoid repeated permission DB reads across requests"
+    }
+  ],
+  "db_query_reductions": [
+    "Duplicate session validation queries removed after first middleware validation in the request.",
+    "C18F user + active membership lookup collapsed into request org_context reuse or one joined query.",
+    "C18F module binding lookup avoided when org_context.module_scope already proves module binding.",
+    "Permission registry, role defaults, and enabled assignment lookups cached for permission-key checks.",
+    "Direct HTTP route permission decisions now use PermissionDecisionEngine instead of instantiating UnifiedPermissionEngine directly."
+  ],
+  "success_criteria": {
+    "rbac_chain_executed_once_per_same_decision_key_per_request": true,
+    "duplicate_permission_db_queries_eliminated_for_cached_materials": true,
+    "latency_reduced_for_authenticated_routes": "expected from removed duplicate session and RBAC material reads",
+    "middleware_no_longer_stacks_redundant_checks": true
+  },
+  "verification": {
+    "py_compile": {
+      "command": ".venv/bin/python -m py_compile <changed python files>",
+      "result": "passed"
+    },
+    "import_smoke": {
+      "command": ".venv/bin/python -c \"import backend.app.services.permission_resolution_cache; import backend.app.services.module_binding_service; import backend.app.services.permission_decision_engine; import backend.app.api.deps; import backend.app.middleware.permission; print('import ok')\"",
+      "result": "passed"
+    },
+    "pytest_targeted": {
+      "command": ".venv/bin/python -m pytest -q tests/backend/test_permission_decision_engine.py tests/backend/test_permissions_service.py tests/backend/test_permission_isolation_layer.py tests/backend/test_permissions_api.py",
+      "result": "blocked_by_environment",
+      "reason": "Integration tests require BARONG_TEST_DB_READY=1 and an Alembic-managed test DB; default DATABASE_URL points at db:5432 and failed DNS resolution in this shell."
+    },
+    "integration_script": {
+      "command": "scripts/run_backend_tests.sh integration",
+      "result": "partial_pass",
+      "summary": "8 passed, 3 failed, 492 deselected",
+      "rbac_cache_test": "tests/backend/test_permission_decision_engine.py passed",
+      "failures": [
+        "tests/backend/test_owner_bootstrap.py::test_owner_bootstrap_creates_one_owner_and_audit_log",
+        "tests/backend/test_owner_bootstrap.py::test_owner_bootstrap_missing_password_fails_without_sensitive_log_data",
+        "tests/backend/test_pre20_o_alerting_integration.py::test_pre20_o_c17_alert_engine_triggers_all_sinks"
+      ],
+      "failure_class": "DetachedInstanceError after reading ORM rows outside closed sessions; not in RBAC middleware/cache path."
+    }
+  }
+}

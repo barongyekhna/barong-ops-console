@@ -23,6 +23,10 @@ from ..services.data_isolation import (
     without_org_data_isolation,
 )
 from ..services.event_collector import emit_event, set_current_event_context
+from ..services.request_session_cache import (
+    cache_authenticated_session,
+    get_cached_authenticated_session,
+)
 from ..services.session_seen_buffer import queue_session_seen
 
 settings = get_settings()
@@ -226,19 +230,29 @@ async def enforce_org_data_isolation(request: Request, call_next):
         return _security_response(status.HTTP_401_UNAUTHORIZED, "Not authenticated.")
 
     audit = _audit_context(request)
-    with without_org_data_isolation():
-        with managed_read_session() as db:
-            try:
-                current_session = validate_session(
-                    db,
-                    session_id=session_id,
-                    audit=audit,
-                )
-            except InvalidSessionError:
-                return _security_response(
-                    status.HTTP_401_UNAUTHORIZED,
-                    "Not authenticated.",
-                )
+    current_session = get_cached_authenticated_session(
+        request,
+        session_id=session_id,
+    )
+    if current_session is None:
+        with without_org_data_isolation():
+            with managed_read_session() as db:
+                try:
+                    current_session = validate_session(
+                        db,
+                        session_id=session_id,
+                        audit=audit,
+                    )
+                except InvalidSessionError:
+                    return _security_response(
+                        status.HTTP_401_UNAUTHORIZED,
+                        "Not authenticated.",
+                    )
+        cache_authenticated_session(
+            request,
+            session_id=session_id,
+            current_session=current_session,
+        )
 
     queue_session_seen(current_session.auth_session.session_id_hash)
     request.state.user_id = str(current_session.user.id)

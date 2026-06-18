@@ -17,10 +17,8 @@ from ...services.module_adapter_registry import (
     list_adapters_for_user,
 )
 from ...services.execution_unlock_flow import EXECUTION_UNLOCK_FLOW
-from ...services.unified_permission_engine import (
-    UnifiedPermissionEngine,
-    UnifiedPermissionRequest,
-)
+from ...services.permission_decision_engine import PermissionDecisionEngine
+from ...services.unified_permission_engine import UnifiedPermissionRequest
 from ..deps import require_rbac
 
 router = APIRouter(prefix="/module-adapters", tags=["module-adapters"])
@@ -93,7 +91,7 @@ def module_adapter_action_request(
             detail="C18H org context is required for execution routing.",
         )
 
-    permission_engine = UnifiedPermissionEngine(db)
+    permission_engine = PermissionDecisionEngine(db, request=request)
     c18f_decision = permission_engine.decide(
         UnifiedPermissionRequest(
             user_id=user.id,

@@ -23,6 +23,7 @@ from ..repositories.tenant import ROLLOUT_BACKFILL_ORG_ID
 from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
 from ..services.event_collector import emit_event, set_current_event_context
 from ..services.module_binding_service import list_module_bindings
+from ..services.request_session_cache import cache_authenticated_session
 from ..services.session_seen_buffer import queue_session_seen
 
 settings = get_settings()
@@ -378,6 +379,11 @@ async def org_context_middleware(request: Request, call_next):
             )
 
         queue_session_seen(current_session.auth_session.session_id_hash)
+        cache_authenticated_session(
+            request,
+            session_id=session_id,
+            current_session=current_session,
+        )
         request.state.user_id = str(current_session.user.id)
         context, resolution_source = build_org_context(
             db,

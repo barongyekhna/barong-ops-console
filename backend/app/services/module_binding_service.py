@@ -17,6 +17,7 @@ from ..schemas.module_binding import (
     OrgVisibleModulesResponse,
 )
 from .event_collector import emit_event
+from .permission_resolution_cache import clear_permission_ttl_cache
 from ..repositories import module_bindings as binding_repo
 
 
@@ -101,6 +102,7 @@ def reset_module_binding_registry() -> None:
         try:
             binding_repo.clear_module_bindings(db)
             db.commit()
+            clear_permission_ttl_cache()
         except SQLAlchemyError:
             db.rollback()
             raise
@@ -197,6 +199,7 @@ def bind_module_to_org(
                 bound_orgs=bound_orgs,
             )
             session.commit()
+            clear_permission_ttl_cache()
         except Exception:
             session.rollback()
             raise

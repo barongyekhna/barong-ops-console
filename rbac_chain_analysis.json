@@ -1,0 +1,93 @@
+{
+  "task": "FIX-BE-05 REQUIRE_RBAC CHAIN OPTIMIZATION",
+  "scope_guardrails": {
+    "frontend_modified": false,
+    "db_schema_modified": false,
+    "execution_engine_modified": false,
+    "auth_model_modified": false,
+    "optimized_surface": "backend RBAC middleware/dependency chain"
+  },
+  "pre_change_chain": [
+    {
+      "layer": "AUTH",
+      "entrypoints": [
+        "backend/app/middleware/org_context.py::org_context_middleware",
+        "backend/app/middleware/permission.py::enforce_permission_isolation",
+        "backend/app/middleware/data_isolation.py::enforce_org_data_isolation",
+        "backend/app/api/deps.py::get_current_session",
+        "backend/app/main.py::enforce_control_plane_isolation"
+      ],
+      "duplicate_work": [
+        "Same request could validate the same auth session in multiple middleware layers and again in route dependencies.",
+        "Each validation could re-read auth session and user rows."
+      ]
+    },
+    {
+      "layer": "ORG",
+      "entrypoints": [
+        "backend/app/middleware/org_context.py::build_org_context",
+        "backend/app/services/unified_permission_engine.py::decide_org_module"
+      ],
+      "duplicate_work": [
+        "org_context resolved active org membership.",
+        "C18F permission isolation then performed active membership validation again."
+      ]
+    },
+    {
+      "layer": "PERMISSION",
+      "entrypoints": [
+        "backend/app/api/deps.py::require_permission",
+        "backend/app/services/permission_service.py::user_has_permission",
+        "backend/app/services/unified_permission_engine.py::decide_permission_key"
+      ],
+      "duplicate_work": [
+        "permission registry lookup repeated per dependency invocation.",
+        "enabled user assignment resolution repeated per dependency invocation.",
+        "role default lookup repeated even when only count metadata was needed."
+      ]
+    },
+    {
+      "layer": "DATA",
+      "entrypoints": [
+        "backend/app/middleware/data_isolation.py::enforce_org_data_isolation"
+      ],
+      "duplicate_work": [
+        "data isolation reused C18F org_id when available but still revalidated the same session."
+      ]
+    },
+    {
+      "layer": "MODULE",
+      "entrypoints": [
+        "backend/app/middleware/org_context.py::_module_scope_for_org",
+        "backend/app/services/unified_permission_engine.py::_module_bound_to_org"
+      ],
+      "duplicate_work": [
+        "org_context listed visible module bindings for the org.",
+        "C18F permission isolation then fetched the requested module binding again."
+      ]
+    }
+  ],
+  "duplicate_db_query_points": [
+    "auth session validation in org_context, permission, data_isolation, and get_current_session",
+    "User lookup in validate_session and UnifiedPermissionEngine",
+    "Active org membership lookup in org_context and C18F",
+    "Module binding lookup in org_context module_scope and C18F",
+    "Permission registry lookup in require_permission/user_has_permission",
+    "User assignment lookup in each permission-key decision",
+    "Role default lookup in each permission-key decision"
+  ],
+  "post_change_chain": {
+    "single_decision_entrypoint": "backend/app/services/permission_decision_engine.py::PermissionDecisionEngine",
+    "request_decision_cache": "request.state.permission_cache.decisions",
+    "request_session_cache": "request.state.authenticated_session",
+    "material_cache": "backend/app/services/permission_resolution_cache.py::PermissionResolutionCache",
+    "org_module_resolution": "user and active membership resolve through request org_context when present, otherwise one joined query",
+    "module_resolution": "request org_context.module_scope is reused before querying module_bindings",
+    "permission_key_resolution": "user, registry, role defaults, and enabled assignments reuse request cache and 45 second TTL cache"
+  },
+  "remaining_non_duplicate_checks": [
+    "Control-plane C16 admin guard remains a separate boundary from route-specific RBAC checks.",
+    "Semantically different route permissions are evaluated under distinct cache keys.",
+    "Internal system RBAC uses check_internal_permission without request state because it is not part of the HTTP middleware chain."
+  ]
+}

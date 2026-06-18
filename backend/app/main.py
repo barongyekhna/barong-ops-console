@@ -69,15 +69,14 @@ from .services.auth_service import (
     validate_session,
     validate_session_identity_fast,
 )
+from .services.permission_decision_engine import PermissionDecisionEngine
+from .services.request_session_cache import cache_authenticated_session
 from .services.session_seen_buffer import (
     queue_session_seen,
     start_session_seen_flush_worker,
     stop_session_seen_flush_worker,
 )
-from .services.unified_permission_engine import (
-    UnifiedPermissionEngine,
-    UnifiedPermissionRequest,
-)
+from .services.unified_permission_engine import UnifiedPermissionRequest
 
 settings = get_settings()
 
@@ -327,7 +326,15 @@ async def enforce_control_plane_isolation(request: Request, call_next):
             )
 
         queue_session_seen(current_session.auth_session.session_id_hash)
-        decision = UnifiedPermissionEngine(db).decide_platform_metadata(
+        cache_authenticated_session(
+            request,
+            session_id=session_id,
+            current_session=current_session,
+        )
+        decision = PermissionDecisionEngine(
+            db,
+            request=request,
+        ).decide_platform_metadata(
             UnifiedPermissionRequest(
                 user_id=current_session.user.id,
                 org_id=None,
@@ -352,7 +359,7 @@ async def enforce_control_plane_isolation(request: Request, call_next):
                 payload={
                     "reason": "permission_denied",
                     "role": current_session.user.role,
-                    "decision_source": "UnifiedPermissionEngine",
+                    "decision_source": "PermissionDecisionEngine",
                     "denial_code": decision.denial_code,
                 },
             )

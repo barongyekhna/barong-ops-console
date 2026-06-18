@@ -28,6 +28,7 @@ from ..schemas.organization import (
 )
 from ..schemas.org_membership import generate_membership_id
 from .auth_service import AuditContext
+from .permission_resolution_cache import clear_permission_ttl_cache
 
 
 class OrganizationLifecycleError(ValueError):
@@ -261,6 +262,7 @@ def create_organization(
             },
         )
         db.commit()
+        clear_permission_ttl_cache()
     except IntegrityError:
         db.rollback()
         raise OrganizationDuplicateError("Organization already exists.") from None
@@ -337,6 +339,7 @@ def update_organization(
         details={"before": before, "after": after},
     )
     db.commit()
+    clear_permission_ttl_cache()
     db.refresh(organization)
     return _record_to_schema(organization)
 
@@ -450,5 +453,6 @@ def _transition_organization_status(
         },
     )
     db.commit()
+    clear_permission_ttl_cache()
     db.refresh(organization)
     return _record_to_schema(organization)

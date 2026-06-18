@@ -41,9 +41,10 @@ from ..repositories.permissions import (
 from ..repositories.operation_logs import create_operation_log
 from ..schemas.permission import PermissionAssignmentUpdate
 from .auth_service import AuditContext
+from .permission_decision_engine import PermissionDecisionEngine
+from .permission_resolution_cache import clear_permission_ttl_cache
 from .unified_permission_engine import (
     OWNER_PLATFORM_PERMISSION_CATEGORIES,
-    UnifiedPermissionEngine,
     UnifiedPermissionRequest,
 )
 
@@ -642,6 +643,7 @@ def upsert_permission_registry(
         _validate_seed_permissions(seed_permissions),
     )
     db.commit()
+    clear_permission_ttl_cache()
     for permission in permissions:
         db.refresh(permission)
     return permissions
@@ -906,6 +908,7 @@ def grant_user_permission(
         raise PermissionAssignmentDuplicateError(
             "Permission assignment already exists for that user and scope."
         ) from None
+    clear_permission_ttl_cache()
     db.refresh(assignment)
     return PermissionAssignmentActionResult(
         assignment=_build_assignment_view(db, assignment, permission=permission),
@@ -1210,6 +1213,7 @@ def update_user_assignment(
         raise PermissionAssignmentDuplicateError(
             "Permission assignment already exists for that user and scope."
         ) from None
+    clear_permission_ttl_cache()
     db.refresh(assignment)
     return PermissionAssignmentActionResult(
         assignment=_build_assignment_view(db, assignment, permission=permission),
@@ -1326,6 +1330,7 @@ def revoke_user_assignment(
         audit=audit,
     )
     db.commit()
+    clear_permission_ttl_cache()
     db.refresh(assignment)
     return PermissionAssignmentActionResult(
         assignment=_build_assignment_view(db, assignment, permission=permission),
@@ -1365,6 +1370,7 @@ def grant_permission(
         expires_at=expires_at,
     )
     db.commit()
+    clear_permission_ttl_cache()
     db.refresh(assignment)
     return assignment
 
@@ -1378,6 +1384,7 @@ def disable_assignment(
         raise PermissionAssignmentNotFoundError("Permission assignment not found.")
     assignment = disable_assignment_record(db, assignment)
     db.commit()
+    clear_permission_ttl_cache()
     db.refresh(assignment)
     return assignment
 
@@ -1406,6 +1413,7 @@ def revoke_permission(
         raise PermissionAssignmentNotFoundError("Permission assignment not found.")
     assignment = disable_assignment_record(db, assignment)
     db.commit()
+    clear_permission_ttl_cache()
     db.refresh(assignment)
     return assignment
 
@@ -1418,7 +1426,7 @@ def user_has_permission(
     scope_key: str = "*",
 ) -> bool:
     module_id, _, action = permission_key.partition(".")
-    decision = UnifiedPermissionEngine(db).decide(
+    decision = PermissionDecisionEngine(db).decide(
         UnifiedPermissionRequest(
             user_id=user.id,
             org_id=scope_key if scope_type == SCOPE_ORGANIZATION else None,
@@ -1564,5 +1572,6 @@ def upsert_role_default_permission(
         is_enabled=is_enabled,
     )
     db.commit()
+    clear_permission_ttl_cache()
     db.refresh(default_permission)
     return default_permission

@@ -18,6 +18,7 @@ from ..schemas.permission import PermissionAction
 from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
 from ..services.event_collector import emit_event, set_current_event_context
 from ..services.permission_isolation import check_permission
+from ..services.request_session_cache import cache_authenticated_session
 from ..services.session_seen_buffer import queue_session_seen
 
 settings = get_settings()
@@ -255,6 +256,11 @@ async def enforce_permission_isolation(request: Request, call_next):
             )
 
         queue_session_seen(current_session.auth_session.session_id_hash)
+        cache_authenticated_session(
+            request,
+            session_id=session_id,
+            current_session=current_session,
+        )
         request.state.user_id = str(current_session.user.id)
         set_current_event_context(user_id=str(current_session.user.id))
         if not _c18_permission_tables_available(db):
@@ -273,6 +279,7 @@ async def enforce_permission_isolation(request: Request, call_next):
                 context.org_id,
                 context.module_id,
                 context.action,
+                request=request,
             )
             request.state.c18f_permission_decision = decision.model_dump(mode="json")
 
