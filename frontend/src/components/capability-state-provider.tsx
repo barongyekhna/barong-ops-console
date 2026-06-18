@@ -108,6 +108,8 @@ type CapabilityAccessSnapshot = {
   moduleItems: ModuleAccessState[];
 };
 
+type CapabilityLoadResult = "cached" | "fallback" | "loaded" | "stale";
+
 const SAFE_ACCESS_SNAPSHOT: CapabilityAccessSnapshot = {
   adapterAccessItems: [],
   adapterAccessUnknown: true,
@@ -154,6 +156,17 @@ const SAFE_PRODUCTION_READINESS_REPORT: ProductionReadinessReport = {
 
 function safeArray<T>(value: readonly T[] | null | undefined): T[] {
   return Array.isArray(value) ? [...value] : [];
+}
+
+function getCapabilityAuthKey(
+  status: string,
+  user: { id?: number | string | null; role?: string | null; username?: string | null } | null,
+) {
+  if (status !== "authenticated" || !user) {
+    return null;
+  }
+
+  return [user.id ?? "unknown", user.username ?? "", user.role ?? ""].join(":");
 }
 
 function createSafeGraph(liveGate: LiveGateRuntimeState = EMPTY_LIVE_GATE) {
@@ -272,6 +285,10 @@ export function CapabilityStateProvider({
   latestAuthRef.current = { status, user };
   const mountedRef = useRef(false);
   const initStartedRef = useRef(false);
+  const initAuthKeyRef = useRef<string | null>(null);
+  const loadedAuthKeyRef = useRef<string | null>(null);
+  const loadingAuthKeyRef = useRef<string | null>(null);
+  const loadingPromiseRef = useRef<Promise<CapabilityLoadResult> | null>(null);
   const [accessSnapshot, setAccessSnapshot] =
     useState<CapabilityAccessSnapshot>(SAFE_ACCESS_SNAPSHOT);
   const [registryItems, setRegistryItems] = useState<ModuleManifest[]>([]);
@@ -293,6 +310,10 @@ export function CapabilityStateProvider({
     useState<LiveGateApiErrorSummary | null>(SAFE_LIVE_GATE_ERROR);
   const [isLocalLoading, setIsLocalLoading] = useState(false);
   const [isFallbackMode, setIsFallbackMode] = useState(true);
+  const authCacheKey = useMemo(
+    () => getCapabilityAuthKey(status, user),
+    [status, user?.id, user?.role, user?.username],
+  );
 
   const applyFallbackState = useCallback(() => {
     if (!mountedRef.current) {
@@ -312,106 +333,173 @@ export function CapabilityStateProvider({
     setIsFallbackMode(true);
   }, []);
 
-  const loadCapabilityState = useCallback(async () => {
+  const loadCapabilityState = useCallback(async (): Promise<CapabilityLoadResult> => {
     const currentAuth = latestAuthRef.current;
+    const currentAuthKey = getCapabilityAuthKey(
+      currentAuth.status,
+      currentAuth.user,
+    );
 
-    if (currentAuth.status !== "authenticated" || !currentAuth.user) {
+    if (!currentAuthKey) {
       applyFallbackState();
-      setIsLocalLoading(false);
-      return;
-    }
-
-    setIsLocalLoading(true);
-    try {
-      const {
-        adapterAccessResult,
-        adapterRegistryResult,
-        executionAccessResult,
-        executionRegistryResult,
-        moduleAccessResult,
-        policiesResult,
-        productionResult,
-        readinessResult,
-        registryResult,
-      } = await getCapabilityBootstrap();
-
-      if (!mountedRef.current) {
-        return;
-      }
-
-      const hasLoadedState =
-        registryResult.ok ||
-        moduleAccessResult.ok ||
-        adapterRegistryResult.ok ||
-        adapterAccessResult.ok ||
-        executionRegistryResult.ok ||
-        executionAccessResult.ok ||
-        readinessResult.ok ||
-        productionResult.ok ||
-        policiesResult.ok;
-
-      setAccessSnapshot({
-        adapterAccessItems: safeArray(adapterAccessResult?.data?.items),
-        adapterAccessUnknown:
-          adapterAccessResult?.adapter_access_unknown !== false,
-        adapterContracts: safeArray(adapterRegistryResult?.data?.items),
-        adapterError: adapterAccessResult?.error ?? null,
-        adapterMetadataUnavailable: adapterRegistryResult?.ok !== true,
-        adapterRegistryError: adapterRegistryResult?.error ?? null,
-        executionProviderAccessItems: safeArray(
-          executionAccessResult?.data?.items,
-        ),
-        executionProviderAccessUnknown:
-          executionAccessResult?.provider_access_unknown !== false,
-        executionProviderContracts: safeArray(
-          executionRegistryResult?.data?.items,
-        ),
-        executionProviderError: executionAccessResult?.error ?? null,
-        executionProviderMetadataUnavailable:
-          executionRegistryResult?.ok !== true,
-        executionProviderRegistryError: executionRegistryResult?.error ?? null,
-        moduleAccessUnknown:
-          moduleAccessResult?.module_access_unknown !== false,
-        moduleError: moduleAccessResult?.error ?? null,
-        moduleItems: safeArray(moduleAccessResult?.data?.items),
-      });
-      setRegistryItems(safeArray(registryResult?.data?.items));
-      setRegistryUnavailable(registryResult?.ok !== true);
-      setRegistryError(registryResult?.error ?? null);
-      setReadiness(
-        readinessResult?.ok ? readinessResult.data : SAFE_READINESS_REPORT,
-      );
-      setProductionReadiness(
-        productionResult?.ok
-          ? productionResult.data
-          : SAFE_PRODUCTION_READINESS_REPORT,
-      );
-      setPolicies(policiesResult?.ok ? safeArray(policiesResult.data) : []);
-      setReadinessError(readinessResult?.error ?? null);
-      setProductionReadinessError(productionResult?.error ?? null);
-      setPoliciesError(policiesResult?.error ?? null);
-      setIsFallbackMode(!hasLoadedState);
-    } catch {
-      applyFallbackState();
-    } finally {
       if (mountedRef.current) {
         setIsLocalLoading(false);
       }
+      return "fallback";
     }
+
+    // Single-flight rule: if alreadyLoading or alreadyLoaded, return cachedState.
+    if (
+      loadingPromiseRef.current &&
+      loadingAuthKeyRef.current === currentAuthKey
+    ) {
+      return loadingPromiseRef.current;
+    }
+
+    if (loadedAuthKeyRef.current === currentAuthKey) {
+      return "cached";
+    }
+
+    setIsLocalLoading(true);
+    loadingAuthKeyRef.current = currentAuthKey;
+
+    const loadPromise = (async (): Promise<CapabilityLoadResult> => {
+      try {
+        const {
+          adapterAccessResult,
+          adapterRegistryResult,
+          executionAccessResult,
+          executionRegistryResult,
+          moduleAccessResult,
+          policiesResult,
+          productionResult,
+          readinessResult,
+          registryResult,
+        } = await getCapabilityBootstrap();
+
+        if (
+          !mountedRef.current ||
+          getCapabilityAuthKey(
+            latestAuthRef.current.status,
+            latestAuthRef.current.user,
+          ) !== currentAuthKey
+        ) {
+          return "stale";
+        }
+
+        const hasLoadedState =
+          registryResult.ok ||
+          moduleAccessResult.ok ||
+          adapterRegistryResult.ok ||
+          adapterAccessResult.ok ||
+          executionRegistryResult.ok ||
+          executionAccessResult.ok ||
+          readinessResult.ok ||
+          productionResult.ok ||
+          policiesResult.ok;
+
+        setAccessSnapshot({
+          adapterAccessItems: safeArray(adapterAccessResult?.data?.items),
+          adapterAccessUnknown:
+            adapterAccessResult?.adapter_access_unknown !== false,
+          adapterContracts: safeArray(adapterRegistryResult?.data?.items),
+          adapterError: adapterAccessResult?.error ?? null,
+          adapterMetadataUnavailable: adapterRegistryResult?.ok !== true,
+          adapterRegistryError: adapterRegistryResult?.error ?? null,
+          executionProviderAccessItems: safeArray(
+            executionAccessResult?.data?.items,
+          ),
+          executionProviderAccessUnknown:
+            executionAccessResult?.provider_access_unknown !== false,
+          executionProviderContracts: safeArray(
+            executionRegistryResult?.data?.items,
+          ),
+          executionProviderError: executionAccessResult?.error ?? null,
+          executionProviderMetadataUnavailable:
+            executionRegistryResult?.ok !== true,
+          executionProviderRegistryError: executionRegistryResult?.error ?? null,
+          moduleAccessUnknown:
+            moduleAccessResult?.module_access_unknown !== false,
+          moduleError: moduleAccessResult?.error ?? null,
+          moduleItems: safeArray(moduleAccessResult?.data?.items),
+        });
+        setRegistryItems(safeArray(registryResult?.data?.items));
+        setRegistryUnavailable(registryResult?.ok !== true);
+        setRegistryError(registryResult?.error ?? null);
+        setReadiness(
+          readinessResult?.ok ? readinessResult.data : SAFE_READINESS_REPORT,
+        );
+        setProductionReadiness(
+          productionResult?.ok
+            ? productionResult.data
+            : SAFE_PRODUCTION_READINESS_REPORT,
+        );
+        setPolicies(policiesResult?.ok ? safeArray(policiesResult.data) : []);
+        setReadinessError(readinessResult?.error ?? null);
+        setProductionReadinessError(productionResult?.error ?? null);
+        setPoliciesError(policiesResult?.error ?? null);
+        setIsFallbackMode(!hasLoadedState);
+        loadedAuthKeyRef.current = currentAuthKey;
+        return "loaded";
+      } catch {
+        if (
+          mountedRef.current &&
+          getCapabilityAuthKey(
+            latestAuthRef.current.status,
+            latestAuthRef.current.user,
+          ) === currentAuthKey
+        ) {
+          applyFallbackState();
+          loadedAuthKeyRef.current = currentAuthKey;
+        }
+        return "fallback";
+      } finally {
+        if (loadingAuthKeyRef.current === currentAuthKey) {
+          loadingAuthKeyRef.current = null;
+          loadingPromiseRef.current = null;
+        }
+        if (
+          mountedRef.current &&
+          getCapabilityAuthKey(
+            latestAuthRef.current.status,
+            latestAuthRef.current.user,
+          ) === currentAuthKey
+        ) {
+          setIsLocalLoading(false);
+        }
+      }
+    })();
+
+    loadingPromiseRef.current = loadPromise;
+
+    return loadPromise;
   }, [applyFallbackState]);
 
   useEffect(() => {
     mountedRef.current = true;
 
-    if (!initStartedRef.current) {
+    if (!authCacheKey) {
+      initStartedRef.current = false;
+      initAuthKeyRef.current = null;
+      loadedAuthKeyRef.current = null;
+      loadingAuthKeyRef.current = null;
+      loadingPromiseRef.current = null;
+      applyFallbackState();
+      setIsLocalLoading(false);
+    } else if (
+      !initStartedRef.current ||
+      initAuthKeyRef.current !== authCacheKey
+    ) {
       initStartedRef.current = true;
+      initAuthKeyRef.current = authCacheKey;
+      loadedAuthKeyRef.current = null;
       void loadCapabilityState();
     }
 
     return () => {
       mountedRef.current = false;
     };
-  }, [loadCapabilityState]);
+  }, [applyFallbackState, authCacheKey, loadCapabilityState]);
 
   const refresh = useCallback(async () => {
     await loadCapabilityState();

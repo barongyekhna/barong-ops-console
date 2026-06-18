@@ -1,9 +1,9 @@
 "use client";
 
-const DEFAULT_CACHE_TTL_MS = 45_000;
+export const DEFAULT_CACHE_TTL_MS = 60_000;
 const AUTH_ME_CACHE_TTL_MS = 30_000;
-const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 30_000;
-const MAX_CONCURRENT_FRONTEND_REQUESTS = 6;
+const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 60_000;
+export const MAX_CONCURRENT_FRONTEND_REQUESTS = 6;
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -106,8 +106,15 @@ function runWithConcurrencyLimit<T>(request: () => Promise<T>): Promise<T> {
   });
 }
 
-export function clearFrontendRequestCache() {
+export function clearFrontendRequestCache({
+  includeInFlight = true,
+}: {
+  includeInFlight?: boolean;
+} = {}) {
   memoryCache.clear();
+  if (includeInFlight) {
+    inFlightRequests.clear();
+  }
 }
 
 export function getFrontendRequestCacheStats() {
@@ -171,7 +178,8 @@ export async function requestWithFrontendCache<T>(
     return inFlight as Promise<T>;
   }
 
-  const promise = runWithConcurrencyLimit(request)
+  let promise: Promise<T>;
+  promise = runWithConcurrencyLimit(request)
     .then((value) => {
       if (ttl > 0) {
         memoryCache.set(cacheKey, {
@@ -183,7 +191,9 @@ export async function requestWithFrontendCache<T>(
       return value;
     })
     .finally(() => {
-      inFlightRequests.delete(cacheKey);
+      if (inFlightRequests.get(cacheKey) === promise) {
+        inFlightRequests.delete(cacheKey);
+      }
     });
 
   inFlightRequests.set(cacheKey, promise);

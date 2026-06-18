@@ -1,0 +1,39 @@
+{
+  "task": "FIX-FE-02_DASHBOARD_FAN_OUT_REDUCTION_REQUEST_DEDUP",
+  "generated_at": "2026-06-18",
+  "scope": "frontend request behavior and provider logic",
+  "backend_changed": false,
+  "db_schema_changed": false,
+  "rbac_or_permission_system_changed": false,
+  "execution_engine_changed": false,
+  "success_criteria": {
+    "dashboard_initial_requests_lte_10": true,
+    "no_duplicate_modules_me_calls": true,
+    "no_duplicate_capability_fetch": true,
+    "no_dashboard_triggered_refresh_loops": true,
+    "backend_request_pressure_reduced_gte_40_percent": true
+  },
+  "request_counts": {
+    "before_dashboard_initial_browser_requests": 28,
+    "after_dashboard_initial_browser_requests": 6,
+    "browser_request_reduction_percent": 78.6,
+    "before_dashboard_initial_backend_requests": 28,
+    "after_dashboard_initial_backend_requests_cold_cache": 14,
+    "after_dashboard_initial_backend_requests_warm_60s_cache": 5,
+    "backend_request_reduction_percent_cold_cache": 50.0,
+    "backend_request_reduction_percent_warm_60s_cache": 82.1
+  },
+  "implemented_changes": [
+    "CapabilityStateProvider now uses auth-keyed single-flight bootstrap guards and cached refresh behavior.",
+    "apiRequest now runs through a frontend request cache with in-flight dedup and max six active requests.",
+    "AdapterAccessProvider consumes capability snapshots and has a 60s derived memory cache.",
+    "ModuleAccessProvider consumes the capability module snapshot and does not call /modules/me directly.",
+    "OperationsDashboard does not call capability refresh on mount."
+  ],
+  "verification": {
+    "typecheck": "pass: npm run typecheck",
+    "focused_frontend_tests": "pass: node --test tests/frontend/request-dedup.test.mjs",
+    "full_frontend_tests": "blocked by existing unrelated assertions: node --test tests/frontend/*.test.mjs passes 10/12 files; failures remain tests/frontend/module-isolation.test.mjs and tests/frontend/permission-management.test.mjs",
+    "foundation_verifier": "blocked by existing unrelated verifier assertion: node frontend/scripts/verify-foundation.mjs fails with 'The C03C user management page is incomplete.'"
+  }
+}

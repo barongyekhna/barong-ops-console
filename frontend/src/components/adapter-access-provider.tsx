@@ -48,10 +48,73 @@ type AdapterAccessContextValue = {
 const AdapterAccessContext =
   createContext<AdapterAccessContextValue | null>(null);
 
+const ADAPTER_ACCESS_MEMORY_CACHE_TTL_MS = 60_000;
+
+type AdapterAccessCacheEntry = {
+  adapters: ModuleAdapterContract[];
+  expiresAt: number;
+};
+
+const adapterAccessMemoryCache = new Map<string, AdapterAccessCacheEntry>();
+
 function isOwnerFullAccess(
   permissions: { is_owner_full_access?: boolean } | null | undefined,
 ) {
   return permissions?.is_owner_full_access === true;
+}
+
+function adapterAccessCacheKey({
+  accessItems,
+  adapterAccessUnknown,
+  contracts,
+  owner,
+}: {
+  accessItems: ModuleAdapterAccessState[];
+  adapterAccessUnknown: boolean;
+  contracts: ModuleAdapterContract[];
+  owner: boolean;
+}) {
+  return JSON.stringify({
+    accessItems: accessItems.map((item) => [
+      item.adapter_key,
+      item.adapter_access_state,
+      item.hidden,
+      item.locked,
+      item.unavailable,
+      item.visible,
+    ]),
+    adapterAccessUnknown,
+    contracts: contracts.map((adapter) => [
+      adapter.adapter_key,
+      adapter.adapter_status,
+      adapter.module_key,
+    ]),
+    owner,
+  });
+}
+
+function readAdapterAccessMemoryCache(cacheKey: string) {
+  const cached = adapterAccessMemoryCache.get(cacheKey);
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.expiresAt <= Date.now()) {
+    adapterAccessMemoryCache.delete(cacheKey);
+    return null;
+  }
+
+  return cached.adapters;
+}
+
+function writeAdapterAccessMemoryCache(
+  cacheKey: string,
+  adapters: ModuleAdapterContract[],
+) {
+  adapterAccessMemoryCache.set(cacheKey, {
+    adapters,
+    expiresAt: Date.now() + ADAPTER_ACCESS_MEMORY_CACHE_TTL_MS,
+  });
 }
 
 export function AdapterAccessProvider({
@@ -64,8 +127,19 @@ export function AdapterAccessProvider({
 
   const filteredAdapters = useMemo(() => {
     const owner = isOwnerFullAccess(user?.permissions);
+    const cacheKey = adapterAccessCacheKey({
+      accessItems: capabilityState.adapterAccessItems,
+      adapterAccessUnknown: capabilityState.adapterAccessUnknown,
+      contracts: capabilityState.adapterContracts,
+      owner,
+    });
+    const cached = readAdapterAccessMemoryCache(cacheKey);
 
-    return capabilityState.adapterContracts.filter((adapter) =>
+    if (cached) {
+      return cached;
+    }
+
+    const adapters = capabilityState.adapterContracts.filter((adapter) =>
       canExposeAdapterMetadata(
         adapter,
         findAdapterAccessState(
@@ -78,6 +152,9 @@ export function AdapterAccessProvider({
         },
       ),
     );
+    writeAdapterAccessMemoryCache(cacheKey, adapters);
+
+    return adapters;
   }, [
     capabilityState.adapterAccessItems,
     capabilityState.adapterAccessUnknown,

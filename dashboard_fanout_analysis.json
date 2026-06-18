@@ -1,0 +1,123 @@
+{
+  "task": "FIX-FE-02_DASHBOARD_FAN_OUT_REDUCTION_REQUEST_DEDUP",
+  "generated_at": "2026-06-18",
+  "scope": "dashboard initial-load frontend fan-out",
+  "backend_changed": false,
+  "db_schema_changed": false,
+  "rbac_or_permission_system_changed": false,
+  "execution_engine_changed": false,
+  "before": {
+    "dashboard_initial_browser_requests_estimate": 28,
+    "sources": [
+      {
+        "source": "AuthProvider",
+        "count": 1,
+        "requests": ["/auth/me"]
+      },
+      {
+        "source": "CapabilityStateProvider init",
+        "count": 9,
+        "requests": [
+          "/modules/registry",
+          "/modules/me",
+          "/module-adapters/registry",
+          "/module-adapters/me",
+          "/execution-providers/registry",
+          "/execution-providers/me",
+          "/live-gate/readiness",
+          "/live-gate/production-readiness",
+          "/live-gate/policies"
+        ]
+      },
+      {
+        "source": "AdapterAccessProvider init",
+        "count": 4,
+        "requests": [
+          "/module-adapters/registry",
+          "/module-adapters/me",
+          "/execution-providers/registry",
+          "/execution-providers/me"
+        ]
+      },
+      {
+        "source": "ModuleAccessProvider init",
+        "count": 1,
+        "requests": ["/modules/me"]
+      },
+      {
+        "source": "OperationsDashboard capability refresh",
+        "count": 9,
+        "requests": [
+          "/modules/registry",
+          "/modules/me",
+          "/module-adapters/registry",
+          "/module-adapters/me",
+          "/execution-providers/registry",
+          "/execution-providers/me",
+          "/live-gate/readiness",
+          "/live-gate/production-readiness",
+          "/live-gate/policies"
+        ]
+      },
+      {
+        "source": "OperationsDashboard data",
+        "count": 4,
+        "requests": [
+          "/health",
+          "/operation-logs?limit=8&offset=0",
+          "/approval/list?limit=50&offset=0",
+          "/users?limit=1&offset=0"
+        ]
+      }
+    ]
+  },
+  "after": {
+    "dashboard_initial_browser_requests_estimate": 6,
+    "browser_requests": [
+      "/auth/me",
+      "/capability/bootstrap",
+      "/health",
+      "/operation-logs?limit=8&offset=0",
+      "/approval/list?limit=50&offset=0",
+      "/users?limit=1&offset=0"
+    ],
+    "capability_path": "CapabilityStateProvider owns /capability/bootstrap once per authenticated identity.",
+    "adapter_path": "AdapterAccessProvider consumes capability state and makes zero direct API requests.",
+    "module_path": "ModuleAccessProvider consumes capability state and makes zero direct /modules/me requests.",
+    "dashboard_path": "OperationsDashboard consumes provider state and no longer triggers capability refresh on mount.",
+    "success_threshold": "dashboard initial requests <= 10",
+    "threshold_met": true
+  },
+  "duplicate_endpoint_resolution": [
+    {
+      "endpoint": "/modules/me",
+      "before_callers": [
+        "CapabilityStateProvider",
+        "ModuleAccessProvider",
+        "OperationsDashboard capability refresh"
+      ],
+      "after_callers": ["CapabilityStateProvider via /capability/bootstrap"],
+      "duplicate_removed": true
+    },
+    {
+      "endpoint": "/module-adapters/registry",
+      "before_callers": [
+        "CapabilityStateProvider",
+        "AdapterAccessProvider",
+        "OperationsDashboard capability refresh"
+      ],
+      "after_callers": ["CapabilityStateProvider via /capability/bootstrap"],
+      "duplicate_removed": true
+    },
+    {
+      "endpoint": "/execution-providers/registry",
+      "before_callers": [
+        "CapabilityStateProvider",
+        "AdapterAccessProvider",
+        "OperationsDashboard capability refresh"
+      ],
+      "after_callers": ["CapabilityStateProvider via /capability/bootstrap"],
+      "duplicate_removed": true
+    }
+  ]
+}

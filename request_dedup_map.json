@@ -1,98 +1,73 @@
 {
-  "task": "FIX-BE-07_PROVIDER_FAN_OUT_OPTIMIZATION",
+  "task": "FIX-FE-02_DASHBOARD_FAN_OUT_REDUCTION_REQUEST_DEDUP",
   "generated_at": "2026-06-18",
+  "scope": "frontend request behavior only",
+  "backend_changed": false,
+  "db_schema_changed": false,
+  "rbac_or_permission_system_changed": false,
+  "execution_engine_changed": false,
   "dedup_layer": {
     "file": "frontend/src/lib/request-cache.ts",
     "entrypoint": "requestWithFrontendCache",
     "api_integration": "frontend/src/lib/api.ts",
-    "key_format": "METHOD normalized_path?sorted=params body:stable_json_for_non_get",
-    "in_flight_rule": "same method + endpoint + same params reuse one promise",
+    "key_format": "METHOD normalized_path_with_sorted_query body:stable_json_for_non_get",
+    "in_flight_rule": "same method + endpoint + params reuse one promise",
     "max_concurrent_frontend_requests": 6,
-    "overflow_behavior": "queue new requests unless an identical in-flight promise exists",
+    "overflow_behavior": "queue non-duplicate requests after six active frontend requests",
     "error_caching": false,
-    "mutation_behavior": "non-GET requests clear the memory cache before dispatch",
-    "unauthorized_behavior": "401 responses clear the memory cache and dispatch the existing auth unauthorized event"
+    "mutation_behavior": "non-GET requests clear successful GET memory cache and in-flight dedup entries before dispatch",
+    "unauthorized_behavior": "401 responses clear successful GET memory cache and dispatch the existing auth unauthorized event"
   },
-  "memory_cache": {
-    "storage": "process-local/browser memory Map",
-    "default_ttl_ms": 45000,
-    "entries": [
-      {
-        "endpoint_pattern": "/auth/me",
-        "ttl_ms": 30000,
-        "mode": "light cache",
-        "reason": "avoid repeated session identity reads during route transitions and concurrent auth checks"
-      },
-      {
-        "endpoint_pattern": "/capability/bootstrap",
-        "ttl_ms": 30000,
-        "mode": "bootstrap cache",
-        "reason": "avoid repeated provider bootstrap loads during dashboard mount and refresh bursts"
-      },
-      {
-        "endpoint_pattern": "/modules/registry",
-        "ttl_ms": 45000,
-        "mode": "short-lived registry cache"
-      },
-      {
-        "endpoint_pattern": "/modules/me",
-        "ttl_ms": 45000,
-        "mode": "short-lived access cache"
-      },
-      {
-        "endpoint_pattern": "/module-adapters/*",
-        "ttl_ms": 45000,
-        "mode": "short-lived registry/access cache"
-      },
-      {
-        "endpoint_pattern": "/execution-providers/*",
-        "ttl_ms": 45000,
-        "mode": "short-lived registry/access cache"
-      },
-      {
-        "endpoint_pattern": "/permissions/me",
-        "ttl_ms": 45000,
-        "mode": "short-lived permission snapshot cache"
-      },
-      {
-        "endpoint_pattern": "/live-gate/*",
-        "ttl_ms": 45000,
-        "mode": "short-lived readiness cache"
-      }
-    ]
-  },
-  "dedup_targets": [
+  "covered_endpoint_patterns": [
     {
-      "cache_key": "GET /auth/me",
-      "expected_duplicate_behavior": "concurrent AuthProvider/currentUserRequest callers share one promise"
+      "endpoint_pattern": "/modules/registry",
+      "method": "GET",
+      "dedup": "in-flight promise reuse",
+      "success_cache_ttl_ms": 60000
     },
     {
+      "endpoint_pattern": "/modules/me",
+      "method": "GET",
+      "dedup": "in-flight promise reuse",
+      "success_cache_ttl_ms": 60000
+    },
+    {
+      "endpoint_pattern": "/module-adapters/*",
+      "method": "GET",
+      "dedup": "in-flight promise reuse",
+      "success_cache_ttl_ms": 60000
+    },
+    {
+      "endpoint_pattern": "/execution-providers/*",
+      "method": "GET",
+      "dedup": "in-flight promise reuse",
+      "success_cache_ttl_ms": 60000
+    },
+    {
+      "endpoint_pattern": "/live-gate/*",
+      "method": "GET",
+      "dedup": "in-flight promise reuse",
+      "success_cache_ttl_ms": 60000
+    },
+    {
+      "endpoint_pattern": "/capability/bootstrap",
+      "method": "GET",
+      "dedup": "in-flight promise reuse",
+      "success_cache_ttl_ms": 60000
+    }
+  ],
+  "dedup_examples": [
+    {
+      "request_a": "GET /modules/me?a=1&b=2",
+      "request_b": "GET /modules/me?b=2&a=1",
+      "cache_key": "GET /modules/me?a=1&b=2",
+      "behavior": "request_b reuses request_a while in flight and then reads the cached success response within 60s"
+    },
+    {
+      "request_a": "GET /capability/bootstrap",
+      "request_b": "GET /capability/bootstrap",
       "cache_key": "GET /capability/bootstrap",
-      "expected_duplicate_behavior": "provider init and manual refresh bursts share one promise"
-    },
-    {
-      "cache_key": "GET /modules/me",
-      "expected_duplicate_behavior": "fallback callers share one promise and read a 45s success cache"
-    },
-    {
-      "cache_key": "GET /module-adapters/registry",
-      "expected_duplicate_behavior": "fallback callers share one promise and read a 45s success cache"
-    },
-    {
-      "cache_key": "GET /module-adapters/me",
-      "expected_duplicate_behavior": "fallback callers share one promise and read a 45s success cache"
-    },
-    {
-      "cache_key": "GET /execution-providers/registry",
-      "expected_duplicate_behavior": "fallback callers share one promise and read a 45s success cache"
-    },
-    {
-      "cache_key": "GET /execution-providers/me",
-      "expected_duplicate_behavior": "fallback callers share one promise and read a 45s success cache"
-    },
-    {
-      "cache_key": "GET /permissions/me",
-      "expected_duplicate_behavior": "permission snapshot callers share one promise and read a 45s success cache"
+      "behavior": "duplicate provider bootstrap calls share one browser promise and one proxy bootstrap request"
     }
   ]
 }

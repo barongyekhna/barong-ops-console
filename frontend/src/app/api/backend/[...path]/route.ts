@@ -53,7 +53,7 @@ const ALLOWED_LIVE_GATE_GET_PATHS = new Set([
   "live-gate/policies",
 ]);
 const CAPABILITY_BOOTSTRAP_PATH = "capability/bootstrap";
-const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 30_000;
+const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 60_000;
 const CAPABILITY_BOOTSTRAP_MAX_BACKEND_CONCURRENCY = 6;
 const ALLOWED_EXTERNAL_DEPENDENCY_PATHS = new Set([
   "external-dependencies/registry",

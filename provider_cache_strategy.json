@@ -1,0 +1,61 @@
+{
+  "task": "FIX-FE-02_DASHBOARD_FAN_OUT_REDUCTION_REQUEST_DEDUP",
+  "generated_at": "2026-06-18",
+  "scope": "frontend providers only",
+  "providers": [
+    {
+      "provider": "CapabilityStateProvider",
+      "file": "frontend/src/components/capability-state-provider.tsx",
+      "request_owner": true,
+      "primary_request": "/capability/bootstrap",
+      "dedup_strategy": "auth-keyed single-flight refs: loadingPromiseRef, loadingAuthKeyRef, loadedAuthKeyRef",
+      "rule": "if alreadyLoading or alreadyLoaded, return cachedState",
+      "refresh_behavior": "refresh() delegates to the same single-flight loader and returns cached state after initial load",
+      "auth_change_behavior": "new authenticated user identity clears loaded key and performs one bootstrap load"
+    },
+    {
+      "provider": "AdapterAccessProvider",
+      "file": "frontend/src/components/adapter-access-provider.tsx",
+      "request_owner": false,
+      "primary_request": null,
+      "dedup_strategy": "reuses CapabilityStateProvider adapter and execution-provider snapshots",
+      "memory_cache_ttl_ms": 60000,
+      "cache_scope": "derived adapter metadata filtering result",
+      "direct_fetches_removed": [
+        "/module-adapters/registry",
+        "/module-adapters/me",
+        "/execution-providers/registry",
+        "/execution-providers/me"
+      ]
+    },
+    {
+      "provider": "ModuleAccessProvider",
+      "file": "frontend/src/components/module-access-provider.tsx",
+      "request_owner": false,
+      "primary_request": null,
+      "dedup_strategy": "reuses CapabilityStateProvider module snapshot",
+      "direct_fetches_removed": ["/modules/me"],
+      "refresh_behavior": "exposes capability refresh function, which is cached after initial auth-key bootstrap"
+    },
+    {
+      "component": "OperationsDashboard",
+      "file": "frontend/src/components/operations-dashboard.tsx",
+      "request_owner": "dashboard data only",
+      "capability_refresh_on_mount": false,
+      "capability_behavior": "consume provider state only"
+    }
+  ],
+  "shared_request_cache": {
+    "file": "frontend/src/lib/request-cache.ts",
+    "covered_success_cache_ttl_ms": 60000,
+    "max_concurrent_frontend_requests": 6,
+    "dedup_scope": [
+      "/modules/registry",
+      "/modules/me",
+      "/module-adapters/*",
+      "/execution-providers/*",
+      "/live-gate/*",
+      "/capability/bootstrap"
+    ]
+  }
+}
