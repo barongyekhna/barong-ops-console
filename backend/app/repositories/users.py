@@ -116,10 +116,13 @@ def update_user(
     user: User,
     *,
     role: str | None = None,
+    must_change_password: bool | None = None,
     is_active: bool | None = None,
 ) -> User:
     if role is not None:
         user.role = role
+    if must_change_password is not None:
+        user.must_change_password = must_change_password
     if is_active is not None:
         user.is_active = is_active
     db.add(user)

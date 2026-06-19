@@ -34,7 +34,7 @@ type AuthRequestOptions = {
 
 export function roleBypassesPasswordReset(role: string | null | undefined) {
   const normalizedRole = role?.trim().toLowerCase().replace(/\s+/g, "_");
-  return normalizedRole === "owner" || normalizedRole === "super_admin";
+  return normalizedRole === "owner";
 }
 
 export function requiresPasswordChange(

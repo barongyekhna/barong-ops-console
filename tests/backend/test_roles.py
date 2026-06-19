@@ -18,6 +18,11 @@ from backend.app.core.roles import (
     normalize_role,
     validate_assignable_user_role,
 )
+from backend.app.schemas.user import (
+    initial_must_change_password_for_role,
+    must_change_password_required,
+    role_bypasses_password_reset,
+)
 
 
 @pytest.mark.parametrize(
@@ -63,3 +68,33 @@ def test_role_normalization_and_owner_helper() -> None:
     assert normalize_role(" Viewer ") == ROLE_VIEWER
     assert validate_assignable_user_role(" Operator ") == ROLE_OPERATOR
     assert is_owner_role(" Owner ")
+
+
+@pytest.mark.parametrize(
+    ("role", "bypasses_reset", "initial_must_change_password"),
+    [
+        (ROLE_OWNER, True, False),
+        (ROLE_SUPER_ADMIN, False, True),
+        (ROLE_OPERATOR, False, True),
+        (ROLE_VIEWER, False, True),
+        (ROLE_REVIEWER, False, True),
+    ],
+)
+def test_password_reset_policy_only_owner_bypasses_reset(
+    role: str,
+    bypasses_reset: bool,
+    initial_must_change_password: bool,
+) -> None:
+    assert role_bypasses_password_reset(role) is bypasses_reset
+    assert (
+        initial_must_change_password_for_role(role)
+        is initial_must_change_password
+    )
+    assert (
+        must_change_password_required(role=role, must_change_password=True)
+        is initial_must_change_password
+    )
+    assert (
+        must_change_password_required(role=role, must_change_password=False)
+        is False
+    )

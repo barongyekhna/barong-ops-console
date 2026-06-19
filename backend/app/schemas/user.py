@@ -20,7 +20,7 @@ USER_MANAGEMENT_ROLES = (
     "viewer",
     "reviewer",
 )
-PASSWORD_RESET_BYPASS_ROLES = frozenset(("owner", "super_admin"))
+PASSWORD_RESET_BYPASS_ROLES = frozenset(("owner",))
 
 
 def is_user_manager_role(role: str) -> bool:

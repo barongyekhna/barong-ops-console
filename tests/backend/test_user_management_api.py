@@ -122,11 +122,13 @@ def test_users_requires_owner_auth(
     ("role", "expected_must_change_password"),
     [
         (ROLE_OWNER, False),
-        (ROLE_SUPER_ADMIN, False),
+        (ROLE_SUPER_ADMIN, True),
+        (ROLE_OPERATOR, True),
         (ROLE_VIEWER, True),
+        (ROLE_REVIEWER, True),
     ],
 )
-def test_login_password_reset_policy_excludes_privileged_roles(
+def test_login_password_reset_policy_only_owner_bypasses_reset(
     auth_client: TestClient,
     role: str,
     expected_must_change_password: bool,
@@ -269,7 +271,7 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
     assert invalid_role.status_code == 422
 
 
-def test_owner_creates_privileged_users_without_forced_password_reset(
+def test_owner_creates_users_with_owner_only_password_reset_bypass(
     owner_client: TestClient,
 ) -> None:
     owner = create_user_via_api(
@@ -279,7 +281,7 @@ def test_owner_creates_privileged_users_without_forced_password_reset(
     )
     super_admin = create_user_via_api(
         owner_client,
-        username="managed_super_admin_reset_bypass",
+        username="managed_super_admin_reset_required",
         role=ROLE_SUPER_ADMIN,
     )
     viewer = create_user_via_api(
@@ -287,22 +289,55 @@ def test_owner_creates_privileged_users_without_forced_password_reset(
         username="managed_viewer_reset_required",
         role=ROLE_VIEWER,
     )
+    operator = create_user_via_api(
+        owner_client,
+        username="managed_operator_reset_required",
+        role=ROLE_OPERATOR,
+    )
+    reviewer = create_user_via_api(
+        owner_client,
+        username="managed_reviewer_reset_required",
+        role=ROLE_REVIEWER,
+    )
 
     assert owner["must_change_password"] is False
-    assert super_admin["must_change_password"] is False
+    assert super_admin["must_change_password"] is True
     assert viewer["must_change_password"] is True
+    assert operator["must_change_password"] is True
+    assert reviewer["must_change_password"] is True
 
     with SessionLocal() as db:
         stored_owner = db.get(User, owner["id"])
         stored_super_admin = db.get(User, super_admin["id"])
         stored_viewer = db.get(User, viewer["id"])
+        stored_operator = db.get(User, operator["id"])
+        stored_reviewer = db.get(User, reviewer["id"])
 
     assert stored_owner is not None
     assert stored_super_admin is not None
     assert stored_viewer is not None
+    assert stored_operator is not None
+    assert stored_reviewer is not None
     assert stored_owner.must_change_password is False
-    assert stored_super_admin.must_change_password is False
+    assert stored_super_admin.must_change_password is True
     assert stored_viewer.must_change_password is True
+    assert stored_operator.must_change_password is True
+    assert stored_reviewer.must_change_password is True
+
+    converted_owner = owner_client.patch(
+        f"/api/app/users/{owner['id']}",
+        json={"role": ROLE_SUPER_ADMIN},
+    )
+    assert converted_owner.status_code == 200
+    assert converted_owner.json()["role"] == ROLE_SUPER_ADMIN
+    assert converted_owner.json()["must_change_password"] is True
+
+    with SessionLocal() as db:
+        stored_converted_owner = db.get(User, owner["id"])
+
+    assert stored_converted_owner is not None
+    assert stored_converted_owner.role == ROLE_SUPER_ADMIN
+    assert stored_converted_owner.must_change_password is True
 
 
 def test_auth_register_remains_absent(auth_client: TestClient) -> None:

@@ -188,14 +188,28 @@ def update_managed_user(
     if user.id == actor.id and payload.is_active is False:
         raise SelfDisableNotAllowedError("Current owner cannot be disabled.")
 
-    before = {"role": user.role, "is_active": user.is_active}
+    must_change_password = (
+        initial_must_change_password_for_role(role)
+        if role is not None
+        else None
+    )
+    before = {
+        "role": user.role,
+        "must_change_password": user.must_change_password,
+        "is_active": user.is_active,
+    }
     user = update_user_record(
         db,
         user,
         role=role,
+        must_change_password=must_change_password,
         is_active=payload.is_active,
     )
-    after = {"role": user.role, "is_active": user.is_active}
+    after = {
+        "role": user.role,
+        "must_change_password": user.must_change_password,
+        "is_active": user.is_active,
+    }
     _log_user_operation(
         db,
         actor=actor,

@@ -68,7 +68,7 @@ test("auth identity does not carry legacy RBAC permission state", () => {
   assert.match(authSource, /const \{ permissions: _permissions, \.\.\.identity \} = user/);
   assert.match(authSource, /roleBypassesPasswordReset/);
   assert.match(authSource, /normalizedRole === "owner"/);
-  assert.match(authSource, /normalizedRole === "super_admin"/);
+  assert.doesNotMatch(authSource, /normalizedRole === "super_admin"/);
   assert.match(authSource, /requiresPasswordChange/);
   assert.doesNotMatch(providerSource, /permissions\s*:/);
   assert.match(providerSource, /status: AuthStatus/);

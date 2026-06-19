@@ -1,0 +1,77 @@
+{
+  "report": "security_bypass_audit",
+  "date": "2026-06-19",
+  "status": "completed",
+  "finding": {
+    "risk": "super_admin was included in password reset bypass logic",
+    "impact": "super_admin accounts could avoid the forced password reset path",
+    "resolution": "Only owner remains in backend and frontend password reset bypass logic."
+  },
+  "bypass_matrix_after_fix": [
+    {
+      "role": "owner",
+      "bypasses_force_password_reset": true
+    },
+    {
+      "role": "super_admin",
+      "bypasses_force_password_reset": false
+    },
+    {
+      "role": "operator",
+      "bypasses_force_password_reset": false
+    },
+    {
+      "role": "viewer",
+      "bypasses_force_password_reset": false
+    },
+    {
+      "role": "reviewer",
+      "bypasses_force_password_reset": false
+    }
+  ],
+  "audited_surfaces": [
+    {
+      "surface": "backend login and session response",
+      "files": [
+        "backend/app/schemas/user.py",
+        "backend/app/api/routes/auth.py",
+        "backend/app/services/auth_service.py"
+      ],
+      "result": "owner-only bypass helper is used for login and session user payloads"
+    },
+    {
+      "surface": "backend user creation",
+      "files": [
+        "backend/app/services/user_management_service.py",
+        "backend/app/repositories/users.py",
+        "backend/app/schemas/user.py"
+      ],
+      "result": "initial_must_change_password_for_role() now returns true for super_admin and every non-owner role; role updates also recalculate the stored flag"
+    },
+    {
+      "surface": "frontend redirects",
+      "files": [
+        "frontend/src/lib/auth.ts",
+        "frontend/src/components/auth-provider.tsx",
+        "frontend/src/components/auth-guard.tsx",
+        "frontend/src/app/page.tsx",
+        "frontend/src/components/login-form.tsx"
+      ],
+      "result": "requiresPasswordChange() only bypasses owner, so all non-owner roles route to /force-password-reset when the backend flag requires it"
+    },
+    {
+      "surface": "existing database rows",
+      "files": [
+        "backend/alembic/versions/20260619_02_force_password_reset_owner_only.py"
+      ],
+      "result": "migration recalculates must_change_password to false for owner and true for all non-owner rows"
+    }
+  ],
+  "remaining_super_admin_password_reset_references": [
+    {
+      "file": "tests/frontend/auth-flow.test.mjs",
+      "purpose": "negative regression assertion that super_admin is not accepted as a frontend bypass"
+    }
+  ],
+  "conclusion": "No active super_admin password reset bypass remains in backend or frontend policy code."
+}
