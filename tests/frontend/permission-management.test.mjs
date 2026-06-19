@@ -8,11 +8,14 @@ import {
   canShowPermissionManagementEntry,
   createGrantRequestBody,
   detectHighRiskPermission,
+  filterPermissionRegistryForRole,
   filterGrantablePermissionRegistry,
   formatPermissionAssignmentsApiError,
   getAssignmentEmptyStateText,
+  getPermissionDisplayName,
   getPermissionRegistryPath,
   getPermissionTargetMode,
+  getPermissionUiCategory,
   getUserPermissionAssignmentPath,
   getUserPermissionAssignmentsPath,
   normalizePermissionAssignmentListResponse,
@@ -224,9 +227,44 @@ test("permission management copy stays explicit about explicit assignments", () 
   assert.doesNotMatch(ROLE_DEFAULT_PERMISSIONS_NOTICE, /RBAC|role default/i);
 });
 
-test("permission management entry is visible only for owner full access", () => {
+test("permission management entry is visible for owner and super admin UI roles", () => {
   assert.equal(canShowPermissionManagementEntry(ownerPermissions), true);
+  assert.equal(
+    canShowPermissionManagementEntry(nonOwnerPermissions, "super_admin"),
+    true,
+  );
   assert.equal(canShowPermissionManagementEntry(nonOwnerPermissions), false);
+});
+
+test("permission display names and UI groups do not expose raw keys", () => {
+  assert.equal(getPermissionDisplayName(ordinaryPermission), "查看任务权限");
+  assert.equal(
+    getPermissionDisplayName({
+      permission_key: "artifacts.read",
+      permission_name: "Read artifacts",
+    }),
+    "查看文件权限",
+  );
+  assert.equal(getPermissionUiCategory(ordinaryPermission), "feature");
+  assert.equal(getPermissionUiCategory(highRiskPermission), "control_plane");
+});
+
+test("permission registry filtering limits super admin to feature permissions", () => {
+  const registry = [ordinaryPermission, highRiskPermission];
+
+  assert.deepEqual(
+    filterPermissionRegistryForRole(registry, "owner").map(
+      (permission) => permission.permission_key,
+    ),
+    ["jobs.read", "permissions.manage"],
+  );
+  assert.deepEqual(
+    filterPermissionRegistryForRole(registry, "super_admin").map(
+      (permission) => permission.permission_key,
+    ),
+    ["jobs.read"],
+  );
+  assert.deepEqual(filterPermissionRegistryForRole(registry, "viewer"), []);
 });
 
 test("owner target uses full access mode and empty non-owner assignment list shows empty state", () => {

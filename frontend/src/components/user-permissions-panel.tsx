@@ -29,6 +29,7 @@ import {
   filterGrantablePermissionRegistry,
   formatPermissionAssignmentsApiError,
   getAssignmentEmptyStateText,
+  getPermissionDisplayName,
   getPermissionTargetMode,
   grantUserPermissionAssignment,
   listPermissionRegistry,
@@ -138,7 +139,7 @@ function toDateTimeLocalValue(value: string | null | undefined) {
 }
 
 function formatPermissionLabel(permission: PermissionRegistryItem) {
-  return `${permission.permission_key} - ${permission.label}`;
+  return getPermissionDisplayName(permission);
 }
 
 function assignmentRiskLabel(assignment: PermissionAssignment) {
@@ -394,7 +395,7 @@ export function UserPermissionsPanel({
 
     if (
       !window.confirm(
-        `Revoke ${assignment.permission_key}? This will remove the explicit assignment.`,
+        `Revoke ${getPermissionDisplayName(assignment)}? This will remove the explicit assignment.`,
       )
     ) {
       return;
@@ -518,7 +519,7 @@ export function UserPermissionsPanel({
                     onChange={(event) =>
                       setSearchQuery(event.target.value)
                     }
-                    placeholder="key, name, area, category"
+                    placeholder="name, area, category"
                     type="search"
                     value={searchQuery}
                   />
@@ -526,7 +527,7 @@ export function UserPermissionsPanel({
               </label>
 
               <label className="field-group">
-                <span>Permission key</span>
+                <span>Permission</span>
                 <select
                   className="select-shell"
                   disabled={
@@ -777,7 +778,7 @@ export function UserPermissionsPanel({
                         >
                           <tr>
                             <td>
-                              <strong>{assignment.permission_key}</strong>
+                              <strong>{getPermissionDisplayName(assignment)}</strong>
                               <span>
                                 {assignment.permission_name ??
                                   assignment.description ??
@@ -900,7 +901,7 @@ export function UserPermissionsPanel({
                                   <div className="permissions-section-heading">
                                     <h4>Update assignment</h4>
                                     <p>
-                                      Permission key cannot be edited here. Revoke
+                                      Permission cannot be edited here. Revoke
                                       and grant again to change it.
                                     </p>
                                   </div>

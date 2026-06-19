@@ -43,6 +43,81 @@ const HIGH_RISK_MODULES = new Set([
   "production",
   "billing",
 ]);
+const FEATURE_PERMISSION_MODULES = new Set([
+  "agents",
+  "approvals",
+  "artifacts",
+  "jobs",
+  "reviews",
+  "workflows",
+]);
+const FEATURE_PERMISSION_PREFIXES = new Set([
+  "agents",
+  "approvals",
+  "artifacts",
+  "jobs",
+  "reviews",
+  "workflows",
+]);
+const MODULE_DISPLAY_LABELS: Record<string, string> = {
+  adapters: "适配器",
+  agents: "智能体",
+  approvals: "审批",
+  artifacts: "文件",
+  execution: "执行",
+  jobs: "任务",
+  modules: "模块",
+  operation_logs: "操作日志",
+  permissions: "权限配置",
+  production: "生产发布",
+  registry: "注册表",
+  reviews: "评审",
+  roles: "角色",
+  settings: "系统设置",
+  system: "系统",
+  users: "用户",
+  workflows: "工作流",
+};
+const ACTION_DISPLAY_LABELS: Record<string, string> = {
+  admin: "管理",
+  approve: "审批",
+  create: "创建",
+  delete: "删除",
+  execute: "执行",
+  manage: "管理",
+  read: "查看",
+  release: "发布",
+  write: "编辑",
+};
+const PERMISSION_DISPLAY_LABELS: Record<string, string> = {
+  "agents.manage": "管理智能体权限",
+  "agents.read": "查看智能体权限",
+  "approvals.approve": "审批权限",
+  "approvals.read": "查看审批权限",
+  "artifacts.read": "查看文件权限",
+  "execution.manage": "管理执行权限",
+  "jobs.create": "创建任务权限",
+  "jobs.manage": "管理任务权限",
+  "jobs.read": "查看任务权限",
+  "modules.manage": "管理模块权限",
+  "modules.read": "查看模块权限",
+  "operation_logs.read": "查看操作日志权限",
+  "permissions.manage": "管理权限配置权限",
+  "permissions.read": "查看权限配置权限",
+  "production.release": "生产发布权限",
+  "registry.manage": "管理注册表权限",
+  "registry.read": "查看注册表权限",
+  "reviews.approve": "评审审批权限",
+  "reviews.read": "查看评审权限",
+  "roles.read": "查看角色权限",
+  "settings.manage": "管理系统设置权限",
+  "settings.read": "查看系统设置权限",
+  "system.admin": "系统管理权限",
+  "users.manage": "管理用户权限",
+  "users.read": "查看用户权限",
+  "workflows.manage": "管理工作流权限",
+  "workflows.read": "查看工作流权限",
+};
 
 export type PermissionAssignment = {
   id: string;
@@ -122,6 +197,8 @@ export type PermissionRegistryItem = {
   created_at: string | null;
   updated_at: string | null;
 };
+
+export type PermissionUiCategory = "control_plane" | "feature";
 
 export type PermissionGrantFormInput = {
   permission_key: string;
@@ -234,6 +311,134 @@ export function getPermissionRegistryPath(limit = 100, offset = 0) {
     offset: String(offset),
   });
   return `/permissions/registry?${params.toString()}`;
+}
+
+function normalizedPermissionModule(permissionKey: string) {
+  return permissionKey.split(".")[0]?.trim().toLowerCase() ?? "";
+}
+
+function normalizedPermissionAction(permissionKey: string) {
+  const parts = permissionKey.split(".");
+  return parts[parts.length - 1]?.trim().toLowerCase() ?? "";
+}
+
+function permissionModuleLabel(moduleKey: string) {
+  const normalized = moduleKey.trim().toLowerCase();
+  return MODULE_DISPLAY_LABELS[normalized] ?? normalized.replace(/_/g, " ");
+}
+
+function permissionActionLabel(action: string) {
+  const normalized = action.trim().toLowerCase();
+  return ACTION_DISPLAY_LABELS[normalized] ?? normalized.replace(/_/g, " ");
+}
+
+export function getPermissionUiCategory(
+  permission:
+    | Pick<PermissionRegistryItem, "category" | "module_key" | "permission_key">
+    | Pick<PermissionAssignment, "permission_key">
+    | string
+    | null
+    | undefined,
+): PermissionUiCategory {
+  const category =
+    typeof permission === "object" && permission !== null
+      ? "category" in permission
+        ? permission.category.trim().toLowerCase()
+        : ""
+      : "";
+  if (category === "feature" || category === "control_plane") {
+    return category;
+  }
+
+  const permissionKey =
+    typeof permission === "string"
+      ? permission
+      : permission?.permission_key ?? "";
+  const moduleKey =
+    typeof permission === "object" && permission !== null && "module_key" in permission
+      ? permission.module_key
+      : normalizedPermissionModule(permissionKey);
+  const normalizedModule = moduleKey.trim().toLowerCase();
+  const keyPrefix = normalizedPermissionModule(permissionKey);
+
+  return FEATURE_PERMISSION_MODULES.has(normalizedModule) ||
+    FEATURE_PERMISSION_PREFIXES.has(keyPrefix)
+    ? "feature"
+    : "control_plane";
+}
+
+export function getPermissionDisplayName(
+  permission:
+    | Pick<
+        PermissionRegistryItem,
+        "action" | "label" | "module_key" | "permission_key"
+      >
+    | Pick<PermissionAssignment, "permission_key" | "permission_name">
+    | string
+    | null
+    | undefined,
+) {
+  const permissionKey =
+    typeof permission === "string"
+      ? permission
+      : permission?.permission_key ?? "";
+  const mapped = PERMISSION_DISPLAY_LABELS[permissionKey];
+  if (mapped) {
+    return mapped;
+  }
+
+  if (typeof permission === "object" && permission !== null) {
+    if ("permission_name" in permission && permission.permission_name) {
+      return `${permission.permission_name} 权限`;
+    }
+    if ("label" in permission && permission.label) {
+      return `${permission.label} 权限`;
+    }
+  }
+
+  const moduleKey =
+    typeof permission === "object" && permission !== null && "module_key" in permission
+      ? permission.module_key
+      : normalizedPermissionModule(permissionKey);
+  const action =
+    typeof permission === "object" && permission !== null && "action" in permission
+      ? permission.action
+      : normalizedPermissionAction(permissionKey);
+  const moduleLabel = permissionModuleLabel(moduleKey);
+  const actionLabel = permissionActionLabel(action);
+
+  return `${actionLabel}${moduleLabel}权限`;
+}
+
+export function getPermissionCategoryLabel(category: PermissionUiCategory) {
+  return category === "control_plane"
+    ? "Control Plane Permissions"
+    : "Feature Permissions";
+}
+
+export function canViewPermissionCenter(role: string | null | undefined) {
+  const normalized = role?.trim().toLowerCase();
+  return normalized === "owner" || normalized === "super_admin";
+}
+
+export function canManagePermissionAssignments(role: string | null | undefined) {
+  return role?.trim().toLowerCase() === "owner";
+}
+
+export function filterPermissionRegistryForRole(
+  registry: PermissionRegistryItem[],
+  role: string | null | undefined,
+) {
+  const normalized = role?.trim().toLowerCase();
+  if (normalized === "owner") {
+    return registry;
+  }
+  if (normalized === "super_admin") {
+    return registry.filter(
+      (permission) => getPermissionUiCategory(permission) === "feature",
+    );
+  }
+  return [];
 }
 
 export function normalizePermissionAssignment(
@@ -396,6 +601,7 @@ export function matchesPermissionRegistrySearch(
   }
 
   return [
+    getPermissionDisplayName(permission),
     permission.permission_key,
     permission.label,
     permission.description ?? "",
@@ -408,8 +614,12 @@ export function matchesPermissionRegistrySearch(
 
 export function canShowPermissionManagementEntry(
   permissions: FrontendPermissions | null | undefined,
+  role?: string | null,
 ) {
-  return permissions?.is_owner_full_access === true;
+  return (
+    permissions?.is_owner_full_access === true ||
+    role?.trim().toLowerCase() === "super_admin"
+  );
 }
 
 export function getPermissionTargetMode(

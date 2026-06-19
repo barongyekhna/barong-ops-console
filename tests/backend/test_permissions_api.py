@@ -437,4 +437,10 @@ def test_permissions_registry_requires_permissions_read_or_owner(
     assert {"users.manage", "permissions.read", "jobs.create"}.issubset(
         permission_keys
     )
+    categories_by_key = {
+        item["permission_key"]: item["category"]
+        for item in reader_response.json()["items"]
+    }
+    assert categories_by_key["jobs.create"] == "feature"
+    assert categories_by_key["permissions.read"] == "control_plane"
     assert owner_id != viewer_id

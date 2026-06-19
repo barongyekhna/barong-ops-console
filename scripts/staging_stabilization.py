@@ -37,7 +37,7 @@ STAGING_INTEGRATION_REPORT_FILE = REPOSITORY_ROOT / "staging_integration_report.
 ROLLBACK_DRILL_REPORT_FILE = REPOSITORY_ROOT / "rollback_drill_report.json"
 STAGING_OBSERVABILITY_REPORT_FILE = REPOSITORY_ROOT / "staging_observability_report.json"
 
-EXPECTED_ALEMBIC_HEAD = "fix_be_06_modules_me_perf_001"
+EXPECTED_ALEMBIC_HEAD = "permission_ui_support_001"
 PINNED_COMPOSE_VERSION = "1.29.2"
 STAGING_PROJECT = "barong-ops-console-staging"
 STAGING_FRONTEND_URL = "http://127.0.0.1:3100"
@@ -68,7 +68,7 @@ CONTRACTS = (
         "method": "GET",
         "proxy_path": "auth/me",
         "backend_path": "/api/public/auth/me",
-        "response_schema": "AuthenticatedUserWithPermissions",
+        "response_schema": "AuthenticatedUser",
     },
     {
         "method": "POST",

@@ -62,10 +62,13 @@ class ModuleCreate(RegistryCreateBase):
         max_length=128,
         pattern=FOUNDATION_ID_PATTERN,
     )
+    organization_id: str | None = Field(default=None, max_length=40)
 
 
 class ModuleResponse(RegistryResponseBase):
     module_key: str = Field(validation_alias="module_id")
+    display_name: str = Field(validation_alias="name")
+    organization_id: str | None = None
 
 
 class AgentCreate(RegistryCreateBase):

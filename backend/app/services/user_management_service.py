@@ -94,8 +94,14 @@ def list_users(
     *,
     limit: int,
     offset: int,
+    organization_id: str | None = None,
 ) -> UserListResult:
-    items = list_user_records(db, limit=limit, offset=offset)
+    items = list_user_records(
+        db,
+        limit=limit,
+        offset=offset,
+        organization_id=organization_id,
+    )
     return UserListResult(items=items, count=len(items))
 
 

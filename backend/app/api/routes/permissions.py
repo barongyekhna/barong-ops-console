@@ -17,6 +17,7 @@ from ...schemas.permission import (
     PermissionAssignmentRevokeRequest,
     PermissionAssignmentUpdate,
     PermissionRegistryRead,
+    permission_response_category,
 )
 from ...services.permission_service import (
     PermissionAssignmentDuplicateError,
@@ -116,6 +117,27 @@ def _owner_permissions_me_response(user: User) -> CurrentUserPermissionResponse:
     )
 
 
+def _permission_registry_response_item(permission) -> PermissionRegistryRead:
+    return PermissionRegistryRead(
+        id=permission.id,
+        permission_key=permission.permission_key,
+        module_key=permission.module_key,
+        category=permission_response_category(
+            module_key=permission.module_key,
+            permission_key=permission.permission_key,
+        ),
+        action=permission.action,
+        label=permission.label,
+        description=permission.description,
+        risk_level=permission.risk_level,
+        menu_policy=permission.menu_policy,
+        is_system=permission.is_system,
+        is_enabled=permission.is_enabled,
+        created_at=permission.created_at,
+        updated_at=permission.updated_at,
+    )
+
+
 @router.get("/me", response_model=CurrentUserPermissionResponse)
 def permissions_me(
     db: Session = Depends(get_db),
@@ -142,7 +164,10 @@ def permissions_registry(
 ) -> ListResponse[PermissionRegistryRead]:
     del user
     permissions = list_enabled_permissions(db)
-    items = permissions[offset : offset + limit]
+    items = [
+        _permission_registry_response_item(permission)
+        for permission in permissions[offset : offset + limit]
+    ]
     return ListResponse(
         items=items,
         count=len(permissions),

@@ -59,6 +59,11 @@ class ModuleRegistry(
         nullable=False,
         unique=True,
     )
+    organization_id: Mapped[str | None] = mapped_column(
+        String(40),
+        nullable=True,
+        index=True,
+    )
 
 
 class AgentRegistry(

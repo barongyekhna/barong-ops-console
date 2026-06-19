@@ -1,12 +1,12 @@
 {
-  "alembic_head": "fix_be_06_modules_me_perf_001",
+  "alembic_head": "permission_ui_support_001",
   "environment": "staging",
-  "expected_alembic_head": "fix_be_06_modules_me_perf_001",
+  "expected_alembic_head": "permission_ui_support_001",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 13,
-  "migration_hash": "da0a39ef2dd3f31a2bd38423342151784d1611d1475e0fb2b6058df6ee83e7ac",
+  "migration_count": 17,
+  "migration_hash": "e08d7a1a166c86d46e86eb8877f30ac8b8e87306f4c1b27117c860eff48801f9",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -20,9 +20,13 @@
     "pre20_o_concurrency_perf_001",
     "pre20_o_ops_dr_001",
     "pre20_q_live_enable_gate_001",
-    "fix_be_06_modules_me_perf_001"
+    "fix_be_06_modules_me_perf_001",
+    "user_module_full_upgrade_001",
+    "user_module_schema_repair_001",
+    "force_password_reset_owner_only_001",
+    "permission_ui_support_001"
   ],
-  "migration_order_checksum": "9151afa52119b220633cbd72a1adb319d5eeed9f9a89eecbf1e0507b06a76d85",
+  "migration_order_checksum": "96fba699e8bf375e983b1206191b443c9b16e7df3f4bfd63099d99ae439ea259",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -114,6 +118,34 @@
       "down_revision": "pre20_q_live_enable_gate_001",
       "path": "backend/alembic/versions/20260618_01_fix_be_06_modules_me_performance.py",
       "version": "fix_be_06_modules_me_perf_001"
+    },
+    {
+      "applied_at": "2026-06-18T00:00:00Z",
+      "checksum": "50714db5e8afc63eb62b48a08c2465d698600d0b58965fc88bb23c93c4c87d5a",
+      "down_revision": "fix_be_06_modules_me_perf_001",
+      "path": "backend/alembic/versions/20260618_02_user_module_full_upgrade.py",
+      "version": "user_module_full_upgrade_001"
+    },
+    {
+      "applied_at": "2026-06-19T00:00:00Z",
+      "checksum": "e7314ab9b08fd6f34cfb68ffe2bc2f6ca886ea4a9ce6b324b54af01fc3555adf",
+      "down_revision": "user_module_full_upgrade_001",
+      "path": "backend/alembic/versions/20260619_01_user_module_schema_repair.py",
+      "version": "user_module_schema_repair_001"
+    },
+    {
+      "applied_at": "2026-06-19T00:00:00Z",
+      "checksum": "4e9e86fb41a0c9cc7853bb953d7a6b88ef55ee83442c89c802b9ae79eb80276b",
+      "down_revision": "user_module_schema_repair_001",
+      "path": "backend/alembic/versions/20260619_02_force_password_reset_owner_only.py",
+      "version": "force_password_reset_owner_only_001"
+    },
+    {
+      "applied_at": "2026-06-19T00:00:00Z",
+      "checksum": "34195efd45e443e0eed39891d041345fbee94e436acc5d483c5627cabe0fe525",
+      "down_revision": "force_password_reset_owner_only_001",
+      "path": "backend/alembic/versions/20260619_03_permission_ui_support.py",
+      "version": "permission_ui_support_001"
     }
   ]
 }

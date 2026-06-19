@@ -75,11 +75,18 @@ export function isManagedUserRole(role: string): role is ManagedUserRole {
   return MANAGED_USER_ROLES.includes(role as ManagedUserRole);
 }
 
-export function listUsers(limit = 50, offset = 0) {
+export function listUsers(
+  limit = 50,
+  offset = 0,
+  options: { organizationId?: string | null } = {},
+) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   });
+  if (options.organizationId) {
+    params.set("organization_id", options.organizationId);
+  }
 
   return apiRequest<UserListResponse>(`/users?${params.toString()}`, {
     method: "GET",

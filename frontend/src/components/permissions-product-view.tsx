@@ -1,12 +1,36 @@
 "use client";
 
-import { LoaderCircle, RotateCcw } from "lucide-react";
+import {
+  CheckCircle2,
+  LoaderCircle,
+  RotateCcw,
+  Search,
+  ShieldAlert,
+  ShieldCheck,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
-import { UserPermissionsPanel } from "@/components/user-permissions-panel";
+import { useAuth } from "@/components/auth-provider";
 import {
+  HIGH_RISK_CONFIRMATION_TEXT,
+  canManagePermissionAssignments,
+  canViewPermissionCenter,
+  detectHighRiskPermission,
+  filterGrantablePermissionRegistry,
+  filterPermissionRegistryForRole,
+  formatPermissionAssignmentsApiError,
+  getPermissionCategoryLabel,
+  getPermissionDisplayName,
+  getPermissionUiCategory,
+  grantUserPermissionAssignment,
   listPermissionRegistry,
+  listUserPermissionAssignments,
+  revokeUserPermissionAssignment,
+  updateUserPermissionAssignment,
+  type PermissionAssignment,
   type PermissionRegistryItem,
+  type PermissionUiCategory,
 } from "@/lib/permission-management-api";
 import {
   formatUsersApiError,
@@ -14,38 +38,160 @@ import {
   type ManagedUser,
 } from "@/lib/users-api";
 
-export function PermissionsProductView() {
-  const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [registry, setRegistry] = useState<PermissionRegistryItem[]>([]);
-  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState("");
+const ASSIGNMENT_REASON = "Permission center assignment update.";
+const GLOBAL_SCOPE_TYPE = "global";
+const GLOBAL_SCOPE_KEY = "*";
 
-  const selectedUser = useMemo(
-    () => users.find((user) => user.id === selectedUserId) ?? users[0] ?? null,
-    [selectedUserId, users],
+function permissionAssignmentForUser(
+  assignments: PermissionAssignment[],
+  permissionKey: string,
+) {
+  return (
+    assignments.find(
+      (assignment) =>
+        assignment.permission_key === permissionKey &&
+        assignment.scope_type === GLOBAL_SCOPE_TYPE &&
+        assignment.scope_key === GLOBAL_SCOPE_KEY,
+    ) ??
+    assignments.find((assignment) => assignment.permission_key === permissionKey) ??
+    null
+  );
+}
+
+function groupPermissions(
+  permissions: PermissionRegistryItem[],
+  category: PermissionUiCategory,
+) {
+  return permissions.filter(
+    (permission) => getPermissionUiCategory(permission) === category,
+  );
+}
+
+function userSearchText(user: ManagedUser) {
+  return [
+    user.username,
+    user.job_title ?? "",
+    user.organization_id ?? "",
+    user.role,
+  ]
+    .join(" ")
+    .toLowerCase();
+}
+
+function PermissionCard({
+  disabled,
+  onClick,
+  permission,
+}: {
+  disabled?: boolean;
+  onClick?: () => void;
+  permission: PermissionRegistryItem;
+}) {
+  const content = (
+    <>
+      <span className="permissions-card-kicker">
+        {getPermissionCategoryLabel(getPermissionUiCategory(permission))}
+      </span>
+      <strong>{getPermissionDisplayName(permission)}</strong>
+      <small>{permission.description || permission.label}</small>
+      <span
+        className={
+          detectHighRiskPermission(permission)
+            ? "permissions-risk-badge permissions-risk-high"
+            : "permissions-risk-badge"
+        }
+      >
+        {permission.risk_level.toUpperCase()}
+      </span>
+    </>
   );
 
+  if (!onClick) {
+    return <article className="permissions-card">{content}</article>;
+  }
+
+  return (
+    <button
+      className="permissions-card permissions-card-button"
+      disabled={disabled}
+      onClick={onClick}
+      type="button"
+    >
+      {content}
+    </button>
+  );
+}
+
+export function PermissionsProductView() {
+  const { status, user } = useAuth();
+  const role = user?.role ?? "";
+  const canView = status === "authenticated" && canViewPermissionCenter(role);
+  const canWriteAssignments = canManagePermissionAssignments(role);
+  const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [registry, setRegistry] = useState<PermissionRegistryItem[]>([]);
+  const [selectedPermission, setSelectedPermission] =
+    useState<PermissionRegistryItem | null>(null);
+  const [dialogAssignments, setDialogAssignments] = useState<
+    Record<number, PermissionAssignment | null>
+  >({});
+  const [dialogSearchQuery, setDialogSearchQuery] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isDialogLoading, setIsDialogLoading] = useState(false);
+  const [pendingUserId, setPendingUserId] = useState<number | null>(null);
+  const [error, setError] = useState("");
+  const [dialogError, setDialogError] = useState("");
+  const [dialogNotice, setDialogNotice] = useState("");
+
+  const visibleRegistry = useMemo(
+    () =>
+      filterPermissionRegistryForRole(
+        filterGrantablePermissionRegistry(registry),
+        role,
+      ),
+    [registry, role],
+  );
+  const controlPlanePermissions = useMemo(
+    () => groupPermissions(visibleRegistry, "control_plane"),
+    [visibleRegistry],
+  );
+  const featurePermissions = useMemo(
+    () => groupPermissions(visibleRegistry, "feature"),
+    [visibleRegistry],
+  );
+  const assignableUsers = useMemo(
+    () => users.filter((targetUser) => targetUser.role !== "owner"),
+    [users],
+  );
+  const filteredDialogUsers = useMemo(() => {
+    const query = dialogSearchQuery.trim().toLowerCase();
+    if (!query) {
+      return assignableUsers;
+    }
+    return assignableUsers.filter((targetUser) =>
+      userSearchText(targetUser).includes(query),
+    );
+  }, [assignableUsers, dialogSearchQuery]);
+
   const load = useCallback(async () => {
+    if (!canView) {
+      setUsers([]);
+      setRegistry([]);
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
     setError("");
     try {
       const [userResult, registryResult] = await Promise.all([
-        listUsers(),
+        listUsers(100),
         listPermissionRegistry(),
       ]);
       setUsers(userResult.items);
       setRegistry(registryResult);
-      setSelectedUserId((current) => {
-        if (current && userResult.items.some((user) => user.id === current)) {
-          return current;
-        }
-        return userResult.items[0]?.id ?? null;
-      });
     } catch (loadError) {
       setUsers([]);
       setRegistry([]);
-      setSelectedUserId(null);
       setError(
         formatUsersApiError(
           loadError,
@@ -55,11 +201,127 @@ export function PermissionsProductView() {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [canView]);
+
+  const loadDialogAssignments = useCallback(
+    async (permission: PermissionRegistryItem, targetUsers: ManagedUser[]) => {
+      if (!canWriteAssignments) {
+        setDialogAssignments({});
+        setIsDialogLoading(false);
+        return;
+      }
+
+      setIsDialogLoading(true);
+      setDialogError("");
+      setDialogNotice("");
+      try {
+        const rows = await Promise.all(
+          targetUsers.map(async (targetUser) => {
+            const response = await listUserPermissionAssignments(targetUser.id);
+            return [
+              targetUser.id,
+              permissionAssignmentForUser(
+                response.assignments,
+                permission.permission_key,
+              ),
+            ] as const;
+          }),
+        );
+        setDialogAssignments(Object.fromEntries(rows));
+      } catch (assignmentError) {
+        setDialogAssignments({});
+        setDialogError(formatPermissionAssignmentsApiError(assignmentError));
+      } finally {
+        setIsDialogLoading(false);
+      }
+    },
+    [canWriteAssignments],
+  );
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  function openPermissionDialog(permission: PermissionRegistryItem) {
+    setSelectedPermission(permission);
+    setDialogSearchQuery("");
+    setDialogAssignments({});
+    setDialogError("");
+    setDialogNotice("");
+    void loadDialogAssignments(permission, assignableUsers);
+  }
+
+  async function refreshUserAssignment(
+    targetUser: ManagedUser,
+    permission: PermissionRegistryItem,
+  ) {
+    const response = await listUserPermissionAssignments(targetUser.id);
+    const assignment = permissionAssignmentForUser(
+      response.assignments,
+      permission.permission_key,
+    );
+    setDialogAssignments((current) => ({
+      ...current,
+      [targetUser.id]: assignment,
+    }));
+  }
+
+  async function handleUserPermissionToggle(
+    targetUser: ManagedUser,
+    checked: boolean,
+  ) {
+    if (!selectedPermission || !canWriteAssignments) {
+      return;
+    }
+
+    setPendingUserId(targetUser.id);
+    setDialogError("");
+    setDialogNotice("");
+
+    const highRisk = detectHighRiskPermission(selectedPermission);
+    const confirmation = highRisk
+      ? {
+          confirm_high_risk: true,
+          confirmation_text: HIGH_RISK_CONFIRMATION_TEXT,
+        }
+      : {};
+    const assignment = dialogAssignments[targetUser.id] ?? null;
+
+    try {
+      if (checked) {
+        if (assignment?.id) {
+          await updateUserPermissionAssignment(targetUser.id, assignment.id, {
+            enabled: true,
+            reason: ASSIGNMENT_REASON,
+            ...confirmation,
+          });
+        } else {
+          await grantUserPermissionAssignment(targetUser.id, {
+            permission_key: selectedPermission.permission_key,
+            reason: ASSIGNMENT_REASON,
+            scope_key: GLOBAL_SCOPE_KEY,
+            scope_type: GLOBAL_SCOPE_TYPE,
+            ...confirmation,
+          });
+        }
+      } else if (assignment?.id) {
+        await revokeUserPermissionAssignment(targetUser.id, assignment.id, {
+          reason: ASSIGNMENT_REASON,
+        });
+      }
+
+      await refreshUserAssignment(targetUser, selectedPermission);
+      setDialogNotice("Permission assignment updated.");
+    } catch (actionError) {
+      setDialogError(formatPermissionAssignmentsApiError(actionError));
+    } finally {
+      setPendingUserId(null);
+    }
+  }
+
+  if (!canView) {
+    return null;
+  }
 
   return (
     <section className="product-console" aria-label="Permissions">
@@ -68,8 +330,8 @@ export function PermissionsProductView() {
           <span className="eyebrow">Users & Organizations</span>
           <h2>Permissions</h2>
           <p>
-            Permission registry, user assignment list, grants, updates, and
-            revocations from the existing permission APIs.
+            Human-readable permission groups with organization-scoped employee
+            assignment controls.
           </p>
         </div>
         <button
@@ -89,20 +351,20 @@ export function PermissionsProductView() {
 
       <div className="capability-summary-grid">
         <div>
-          <span>Users</span>
+          <span>Employees</span>
           <strong>{users.length}</strong>
         </div>
         <div>
-          <span>Permissions</span>
-          <strong>{registry.length}</strong>
+          <span>Feature</span>
+          <strong>{featurePermissions.length}</strong>
         </div>
         <div>
-          <span>Selected</span>
-          <strong>{selectedUser?.username ?? "Not set"}</strong>
+          <span>Control</span>
+          <strong>{controlPlanePermissions.length}</strong>
         </div>
         <div>
-          <span>API</span>
-          <strong>/permissions</strong>
+          <span>Role</span>
+          <strong>{role || "Unknown"}</strong>
         </div>
       </div>
 
@@ -117,75 +379,189 @@ export function PermissionsProductView() {
             <h2>Permissions are unavailable</h2>
             <p>{error}</p>
           </div>
-          <button className="primary-button" onClick={() => void load()} type="button">
+          <button
+            className="primary-button"
+            onClick={() => void load()}
+            type="button"
+          >
             <RotateCcw aria-hidden="true" size={17} />
             Retry
           </button>
         </section>
       ) : (
-        <div className="product-console-grid">
-          <article className="ops-panel">
-            <div className="ops-panel-heading">
-              <div>
-                <h3>User list</h3>
-                <p>/users and /permissions/users/:user_id/assignments</p>
+        <div className="permissions-product-stack">
+          {role === "owner" ? (
+            <section
+              className="permissions-group-section"
+              aria-label="Control Plane Permissions"
+            >
+              <div className="permissions-section-heading">
+                <h3>Control Plane Permissions</h3>
+                <p>System, execution, module, adapter, and registry access.</p>
               </div>
-              <span className="ops-source">{users.length} users</span>
-            </div>
-            {users.length > 0 ? (
-              <ol className="ops-record-list">
-                {users.map((user) => (
-                  <li key={user.id}>
-                    <span>{user.role}</span>
-                    <strong>{user.username}</strong>
-                    <small>{user.is_active ? "active" : "disabled"}</small>
-                    <button
-                      className="secondary-button"
-                      onClick={() => setSelectedUserId(user.id)}
-                      type="button"
-                    >
-                      Select
-                    </button>
-                  </li>
-                ))}
-              </ol>
-            ) : (
-              <div className="ops-empty-state">
-                <strong>No users returned.</strong>
-                <span>/users</span>
-              </div>
-            )}
-          </article>
+              {controlPlanePermissions.length > 0 ? (
+                <div className="permissions-card-grid">
+                  {controlPlanePermissions.map((permission) => (
+                    <PermissionCard
+                      key={permission.permission_key}
+                      permission={permission}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <div className="ops-empty-state">
+                  <strong>No control plane permissions returned.</strong>
+                  <span>Registry is empty for this group.</span>
+                </div>
+              )}
+            </section>
+          ) : null}
 
-          <article className="ops-panel">
-            <div className="ops-panel-heading">
-              <div>
-                <h3>Registry</h3>
-                <p>/permissions/registry</p>
-              </div>
-              <span className="ops-source">{registry.length} permissions</span>
+          <section
+            className="permissions-group-section"
+            aria-label="Feature Permissions"
+          >
+            <div className="permissions-section-heading">
+              <h3>Feature Permissions</h3>
+              <p>Jobs, workflows, agents, artifacts, reviews, and approvals.</p>
             </div>
-            {registry.length > 0 ? (
-              <ol className="ops-record-list">
-                {registry.slice(0, 12).map((permission) => (
-                  <li key={permission.permission_key}>
-                    <span>{permission.risk_level}</span>
-                    <strong>{permission.permission_key}</strong>
-                    <small>{permission.description}</small>
-                  </li>
+            {featurePermissions.length > 0 ? (
+              <div className="permissions-card-grid">
+                {featurePermissions.map((permission) => (
+                  <PermissionCard
+                    key={permission.permission_key}
+                    disabled={isDialogLoading || pendingUserId !== null}
+                    onClick={() => openPermissionDialog(permission)}
+                    permission={permission}
+                  />
                 ))}
-              </ol>
+              </div>
             ) : (
               <div className="ops-empty-state">
-                <strong>No registry entries returned.</strong>
-                <span>/permissions/registry</span>
+                <strong>No feature permissions returned.</strong>
+                <span>Registry is empty for this group.</span>
               </div>
             )}
-          </article>
+          </section>
         </div>
       )}
 
-      {selectedUser ? <UserPermissionsPanel targetUser={selectedUser} /> : null}
+      {selectedPermission ? (
+        <div
+          aria-labelledby="permission-assignment-title"
+          aria-modal="true"
+          className="permissions-modal-backdrop"
+          role="dialog"
+        >
+          <section className="permissions-modal">
+            <div className="permissions-modal-heading">
+              <div>
+                <span className="eyebrow">Feature Permissions</span>
+                <h3 id="permission-assignment-title">
+                  {getPermissionDisplayName(selectedPermission)}
+                </h3>
+              </div>
+              <button
+                aria-label="Close"
+                className="icon-button"
+                disabled={pendingUserId !== null}
+                onClick={() => setSelectedPermission(null)}
+                title="Close"
+                type="button"
+              >
+                <X aria-hidden="true" size={18} />
+              </button>
+            </div>
+
+            {dialogError ? (
+              <div className="users-alert users-alert-error" role="alert">
+                <ShieldAlert aria-hidden="true" size={18} />
+                <span>{dialogError}</span>
+              </div>
+            ) : null}
+
+            {dialogNotice ? (
+              <div className="users-alert users-alert-success" role="status">
+                <CheckCircle2 aria-hidden="true" size={18} />
+                <span>{dialogNotice}</span>
+              </div>
+            ) : null}
+
+            <label className="field-group">
+              <span>Search employees</span>
+              <span className="input-shell">
+                <Search aria-hidden="true" size={16} />
+                <input
+                  onChange={(event) =>
+                    setDialogSearchQuery(event.target.value)
+                  }
+                  placeholder="employee name"
+                  type="search"
+                  value={dialogSearchQuery}
+                />
+              </span>
+            </label>
+
+            {isDialogLoading ? (
+              <div className="list-state permissions-empty">
+                <LoaderCircle className="spin" aria-hidden="true" size={22} />
+                Loading employees
+              </div>
+            ) : (
+              <div className="permissions-user-list">
+                {filteredDialogUsers.map((targetUser) => {
+                  const assignment = dialogAssignments[targetUser.id] ?? null;
+                  const checked = assignment?.enabled === true;
+                  const isPending = pendingUserId === targetUser.id;
+                  const disabled = !canWriteAssignments || pendingUserId !== null;
+
+                  return (
+                    <label
+                      className="permissions-user-row"
+                      key={targetUser.id}
+                    >
+                      <input
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={(event) =>
+                          void handleUserPermissionToggle(
+                            targetUser,
+                            event.target.checked,
+                          )
+                        }
+                        type="checkbox"
+                      />
+                      <span>
+                        <strong>{targetUser.username}</strong>
+                        <small>
+                          {[targetUser.job_title, targetUser.organization_id]
+                            .filter(Boolean)
+                            .join(" / ") || targetUser.role}
+                        </small>
+                      </span>
+                      {isPending ? (
+                        <LoaderCircle
+                          aria-hidden="true"
+                          className="spin"
+                          size={17}
+                        />
+                      ) : checked ? (
+                        <ShieldCheck aria-hidden="true" size={17} />
+                      ) : null}
+                    </label>
+                  );
+                })}
+                {filteredDialogUsers.length === 0 ? (
+                  <div className="ops-empty-state">
+                    <strong>No employees found.</strong>
+                    <span>Try another name.</span>
+                  </div>
+                ) : null}
+              </div>
+            )}
+          </section>
+        </div>
+      ) : null}
     </section>
   );
 }

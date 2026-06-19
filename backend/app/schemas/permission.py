@@ -9,6 +9,33 @@ from ..core.permissions import (
     validate_scope,
 )
 
+PermissionResponseCategory = Literal["control_plane", "feature"]
+FEATURE_PERMISSION_MODULES = frozenset(
+    {
+        "agents",
+        "approvals",
+        "artifacts",
+        "jobs",
+        "reviews",
+        "workflows",
+    }
+)
+
+
+def permission_response_category(
+    *,
+    module_key: str,
+    permission_key: str,
+) -> PermissionResponseCategory:
+    normalized_module = module_key.strip().lower()
+    permission_prefix = permission_key.split(".", 1)[0].strip().lower()
+    if (
+        normalized_module in FEATURE_PERMISSION_MODULES
+        or permission_prefix in FEATURE_PERMISSION_MODULES
+    ):
+        return "feature"
+    return "control_plane"
+
 
 class PermissionAction(StrEnum):
     READ = "read"
@@ -244,7 +271,7 @@ class PermissionRegistryRead(BaseModel):
     id: UUID
     permission_key: str
     module_key: str
-    category: str
+    category: PermissionResponseCategory
     action: str
     label: str
     description: str | None

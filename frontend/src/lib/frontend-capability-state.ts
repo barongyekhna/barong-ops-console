@@ -285,12 +285,19 @@ function isOwnerFullAccess(
   return permissions?.is_owner_full_access === true;
 }
 
-function isUserManagementAdmin(role: string, moduleKey: string) {
-  return role === "super_admin" && moduleKey === "admin.users";
+function isSuperAdminVisibleAdminModule(role: string, moduleKey: string) {
+  return (
+    role === "super_admin" &&
+    (moduleKey === "admin.users" || moduleKey === "admin.permissions")
+  );
 }
 
 function isOrganizationListModule(moduleKey: string) {
   return moduleKey === "admin.organizations";
+}
+
+function isPermissionManagementModule(moduleKey: string) {
+  return moduleKey === "admin.permissions";
 }
 
 function missingPermissionText(
@@ -360,7 +367,14 @@ export function buildFrontendUiCapabilityGraph({
   const items = navigationGroups
     .flatMap((group) =>
       group.items.map((record) => {
-        const state = stateFromStaticNavigation(record);
+        const hiddenPermissionModule =
+          authStatus === "authenticated" &&
+          isPermissionManagementModule(record.module_key) &&
+          role !== "owner" &&
+          role !== "super_admin";
+        const state = hiddenPermissionModule
+          ? "hidden"
+          : stateFromStaticNavigation(record);
         const reason = staticCapabilityReason(state);
         const routeBound = Boolean(routeByModuleKey.get(record.module_key));
         const item: ProductCapabilityItem = {
@@ -1267,7 +1281,7 @@ export function buildFrontendCapabilityGraph({
         unlock_condition: sourceState.unlock_condition,
       };
 
-      if (owner || isUserManagementAdmin(role, moduleKey)) {
+      if (owner || isSuperAdminVisibleAdminModule(role, moduleKey)) {
         const permissionBlocked =
           navigationState.isHidden ||
           navigationState.isLocked ||
@@ -1280,6 +1294,21 @@ export function buildFrontendCapabilityGraph({
           record,
           routeBound,
         });
+      }
+
+      if (!owner && isPermissionManagementModule(moduleKey)) {
+        return {
+          ...item,
+          badge: null,
+          can_enter: false,
+          org_visibility: "hidden" as const,
+          permission_state: "hidden" as const,
+          reason: "This product area is hidden for the current role.",
+          required_permission: "Owner or super admin role.",
+          sidebar_state: "hidden" as const,
+          state: "hidden" as const,
+          unlock_condition: "Use an available product area from the sidebar.",
+        };
       }
 
       if (isOrganizationListModule(moduleKey)) {

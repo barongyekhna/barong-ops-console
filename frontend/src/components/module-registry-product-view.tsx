@@ -5,6 +5,7 @@ import { Boxes, LoaderCircle, RotateCcw } from "lucide-react";
 import { CapabilityEmptyStateEngine } from "@/components/capability-empty-state";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import { useModuleAccess } from "@/components/module-access-provider";
+import { getPermissionDisplayName } from "@/lib/permission-management";
 
 function displayBinding(value: string) {
   return value && value !== "no_api" ? value : "No API";
@@ -161,7 +162,7 @@ export function ModuleRegistryProductView() {
                 </td>
                 <td>
                   <strong>{item.permission_state}</strong>
-                  <span>{item.required_permission}</span>
+                  <span>{getPermissionDisplayName(item.required_permission)}</span>
                 </td>
                 <td>
                   <strong>{item.adapter_state}</strong>

@@ -34,6 +34,7 @@ def create_db_user(
     password: str,
     role: str = "viewer",
     is_active: bool = True,
+    organization_id: str | None = None,
 ) -> int:
     with SessionLocal() as db:
         user = User(
@@ -41,6 +42,7 @@ def create_db_user(
             password_hash=hash_password(password),
             role=role,
             is_active=is_active,
+            organization_id=organization_id,
         )
         db.add(user)
         db.commit()
@@ -366,6 +368,68 @@ def test_user_list_and_detail_exclude_password_hash(
     assert_no_password_hash(detail.json())
     assert VIEWER_PASSWORD not in json.dumps(listed.json())
     assert VIEWER_PASSWORD not in json.dumps(detail.json())
+
+
+def test_user_list_organization_filter_respects_owner_and_super_admin_scope(
+    auth_client: TestClient,
+    owner_client: TestClient,
+) -> None:
+    org_a = DEFAULT_ORG_ID
+    org_b = "org_22222222222222222222222222222222"
+    super_admin_password = "example-only-super-admin-filter-password"
+    create_db_user(
+        username="filter_super_admin",
+        password=super_admin_password,
+        role=ROLE_SUPER_ADMIN,
+        organization_id=org_a,
+    )
+    create_db_user(
+        username="filter_org_a_viewer",
+        password="example-only-org-a-viewer-password",
+        role=ROLE_VIEWER,
+        organization_id=org_a,
+    )
+    create_db_user(
+        username="filter_org_b_viewer",
+        password="example-only-org-b-viewer-password",
+        role=ROLE_VIEWER,
+        organization_id=org_b,
+    )
+
+    owner_filtered = owner_client.get(f"/api/app/users?organization_id={org_b}")
+    login_response = auth_client.post(
+        "/api/public/auth/login",
+        json={
+            "username": "filter_super_admin",
+            "password": super_admin_password,
+        },
+    )
+    assert login_response.status_code == 200
+    session_id = login_response.cookies.get("barong_ops_session")
+    assert session_id
+    super_admin_headers = {"Cookie": f"barong_ops_session={session_id}"}
+    super_admin_list = auth_client.get(
+        "/api/app/users",
+        headers=super_admin_headers,
+    )
+    super_admin_cross_org = auth_client.get(
+        f"/api/app/users?organization_id={org_b}",
+        headers=super_admin_headers,
+    )
+
+    assert owner_filtered.status_code == 200
+    assert {item["username"] for item in owner_filtered.json()["items"]} == {
+        "filter_org_b_viewer",
+    }
+    assert super_admin_list.status_code == 200
+    assert {
+        item["organization_id"] for item in super_admin_list.json()["items"]
+    } == {org_a}
+    assert "filter_org_b_viewer" not in {
+        item["username"] for item in super_admin_list.json()["items"]
+    }
+    assert super_admin_cross_org.status_code == 200
+    assert super_admin_cross_org.json()["items"] == []
 
 
 def test_user_detail_not_found_returns_404(owner_client: TestClient) -> None:

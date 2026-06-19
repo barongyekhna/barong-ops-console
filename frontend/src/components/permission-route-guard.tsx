@@ -28,10 +28,17 @@ export function PermissionRouteGuard({
   const isOwner = permissionSnapshot.is_owner_full_access === true;
   const isUserManagerRoute =
     pathname === "/users" && user?.role === "super_admin";
+  const isPermissionManagerRoute =
+    pathname === "/permissions" && user?.role === "super_admin";
   const isOrganizationListRoute =
     pathname === "/organizations" && status === "authenticated";
 
-  if (isOwner || isUserManagerRoute || isOrganizationListRoute) {
+  if (
+    isOwner ||
+    isUserManagerRoute ||
+    isPermissionManagerRoute ||
+    isOrganizationListRoute
+  ) {
     return children;
   }
 

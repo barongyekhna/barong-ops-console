@@ -38,7 +38,7 @@ def test_fix042_migration_manifest_locks_head_order_and_hashes() -> None:
     validation = staging.validate_migration_manifest(manifest)
 
     assert validation["status"] == "passed"
-    assert manifest["alembic_head"] == "fix_be_06_modules_me_perf_001"
+    assert manifest["alembic_head"] == "permission_ui_support_001"
     assert manifest["head_locked"] is True
     assert manifest["migration_order"] == [
         "f07_core_001",
@@ -54,6 +54,10 @@ def test_fix042_migration_manifest_locks_head_order_and_hashes() -> None:
         "pre20_o_ops_dr_001",
         "pre20_q_live_enable_gate_001",
         "fix_be_06_modules_me_perf_001",
+        "user_module_full_upgrade_001",
+        "user_module_schema_repair_001",
+        "force_password_reset_owner_only_001",
+        "permission_ui_support_001",
     ]
     assert all(
         entry["version"] and entry["checksum"] and entry["applied_at"]

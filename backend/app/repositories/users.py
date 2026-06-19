@@ -54,8 +54,12 @@ def list_users(
     *,
     limit: int,
     offset: int,
+    organization_id: str | None = None,
 ) -> list[User]:
-    rows = list(db.scalars(_user_select().order_by(User.id).limit(limit + offset)))
+    statement = _user_select().order_by(User.id)
+    if organization_id is not None:
+        statement = statement.where(User.organization_id == organization_id)
+    rows = list(db.scalars(statement.limit(limit + offset)))
     return rows[offset : offset + limit]
 
 

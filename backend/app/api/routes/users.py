@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from ...core.roles import list_standard_role_metadata
+from ...core.roles import is_owner_role, list_standard_role_metadata
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.common import ListResponse
@@ -79,11 +79,26 @@ def require_user_manager(user: User = Depends(get_current_user)) -> User:
 def users(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    organization_id: str | None = Query(default=None, max_length=40),
     db: Session = Depends(get_db),
     owner: User = Depends(require_user_manager),
 ) -> ListResponse[UserResponse]:
-    del owner
-    result = list_users(db, limit=limit, offset=offset)
+    requested_org = organization_id.strip() if organization_id else None
+    requested_org = requested_org or None
+    effective_org = requested_org or None
+    if not is_owner_role(owner.role):
+        effective_org = owner.organization_id
+        if requested_org is not None and requested_org != effective_org:
+            return ListResponse(items=[], count=0, limit=limit, offset=offset)
+        if effective_org is None:
+            return ListResponse(items=[], count=0, limit=limit, offset=offset)
+
+    result = list_users(
+        db,
+        limit=limit,
+        offset=offset,
+        organization_id=effective_org,
+    )
     return ListResponse(
         items=result.items,
         count=result.count,
