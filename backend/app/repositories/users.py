@@ -94,6 +94,7 @@ def create_user(
     role: str,
     job_title: str | None,
     organization_id: str | None,
+    must_change_password: bool,
     is_active: bool,
 ) -> User:
     user = User(
@@ -102,7 +103,7 @@ def create_user(
         role=role,
         job_title=job_title,
         organization_id=organization_id,
-        must_change_password=True,
+        must_change_password=must_change_password,
         is_active=is_active,
     )
     db.add(user)

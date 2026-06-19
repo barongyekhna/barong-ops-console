@@ -16,6 +16,7 @@ from ...schemas.auth import (
     LoginResponse,
     LogoutResponse,
 )
+from ...schemas.user import must_change_password_required
 from ...services.auth_service import (
     AuthenticatedSession,
     AuthenticatedUserIdentity,
@@ -68,6 +69,20 @@ def _identity_response(identity: AuthenticatedUserIdentity) -> AuthenticatedUser
         must_change_password=identity.must_change_password,
         is_active=identity.is_active,
         last_login_at=identity.last_login_at,
+    )
+
+
+def _user_response(user: User) -> AuthenticatedUser:
+    return AuthenticatedUser(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        must_change_password=must_change_password_required(
+            role=user.role,
+            must_change_password=user.must_change_password,
+        ),
+        is_active=user.is_active,
+        last_login_at=user.last_login_at,
     )
 
 
@@ -133,12 +148,13 @@ def login(
         session_id=result.session_id,
         settings=settings,
     )
+    authenticated_user = _user_response(result.user)
     return LoginResponse(
-        user=AuthenticatedUser.model_validate(result.user),
-        require_password_change=result.user.must_change_password,
+        user=authenticated_user,
+        require_password_change=authenticated_user.must_change_password,
         message=(
             "首次登录默认密码为123456，请立即修改密码"
-            if result.user.must_change_password
+            if authenticated_user.must_change_password
             else None
         ),
     )
@@ -206,7 +222,7 @@ def change_password(
             detail=str(exc),
         ) from None
     return ChangePasswordResponse(
-        user=AuthenticatedUser.model_validate(user),
+        user=_user_response(user),
         message="Password changed.",
     )
 

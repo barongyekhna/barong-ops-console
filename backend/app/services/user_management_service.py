@@ -21,6 +21,7 @@ from ..schemas.user import (
     DEFAULT_INITIAL_PASSWORD,
     UserCreate,
     UserUpdate,
+    initial_must_change_password_for_role,
     validate_user_management_role,
 )
 from .auth_service import AuditContext
@@ -139,6 +140,7 @@ def create_managed_user(
             role=role,
             job_title=job_title,
             organization_id=organization_id,
+            must_change_password=initial_must_change_password_for_role(role),
             is_active=payload.is_active,
         )
         _log_user_operation(

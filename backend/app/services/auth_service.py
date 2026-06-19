@@ -37,7 +37,7 @@ from ..repositories.users import (
     update_password_hash,
     update_last_login,
 )
-from ..schemas.user import DEFAULT_INITIAL_PASSWORD
+from ..schemas.user import DEFAULT_INITIAL_PASSWORD, must_change_password_required
 from .event_collector import emit_event
 from .rate_limiter import register_login_rate_limit_attempt
 
@@ -454,7 +454,10 @@ def _authenticated_identity_from_user(
         id=user.id,
         username=user.username,
         role=user.role,
-        must_change_password=user.must_change_password,
+        must_change_password=must_change_password_required(
+            role=user.role,
+            must_change_password=user.must_change_password,
+        ),
         is_active=user.is_active,
         last_login_at=user.last_login_at,
         session_expires_at=expires_at,
@@ -502,7 +505,10 @@ def validate_session_identity_fast(
             id=row.id,
             username=row.username,
             role=row.role,
-            must_change_password=row.must_change_password,
+            must_change_password=must_change_password_required(
+                role=row.role,
+                must_change_password=row.must_change_password,
+            ),
             is_active=row.is_active,
             last_login_at=row.last_login_at,
             session_expires_at=expires_at,
@@ -546,7 +552,10 @@ def validate_session_identity_fast(
         id=row.id,
         username=row.username,
         role=row.role,
-        must_change_password=row.must_change_password,
+        must_change_password=must_change_password_required(
+            role=row.role,
+            must_change_password=row.must_change_password,
+        ),
         is_active=row.is_active,
         last_login_at=row.last_login_at,
         session_expires_at=row.session_expires_at,
@@ -839,7 +848,13 @@ def change_password(
     audit: AuditContext,
     session_id_hash: str | None = None,
 ) -> User:
-    if user.must_change_password and current_password != DEFAULT_INITIAL_PASSWORD:
+    if (
+        must_change_password_required(
+            role=user.role,
+            must_change_password=user.must_change_password,
+        )
+        and current_password != DEFAULT_INITIAL_PASSWORD
+    ):
         create_operation_log(
             db,
             actor_type="user",

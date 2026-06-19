@@ -42,6 +42,7 @@ test("root entry routes authenticated users home and unauthenticated users to lo
   assert.match(rootPageSource, /"use client"/);
   assert.match(rootPageSource, /useAuth/);
   assert.match(rootPageSource, /status === "authenticated"/);
+  assert.match(rootPageSource, /requiresPasswordChange\(user\)/);
   assert.match(rootPageSource, /\/force-password-reset/);
   assert.match(rootPageSource, /\/dashboard/);
   assert.match(rootPageSource, /status === "unauthenticated"/);
@@ -65,9 +66,14 @@ test("auth identity does not carry legacy RBAC permission state", () => {
 
   assert.match(authSource, /permissions\?: unknown/);
   assert.match(authSource, /const \{ permissions: _permissions, \.\.\.identity \} = user/);
+  assert.match(authSource, /roleBypassesPasswordReset/);
+  assert.match(authSource, /normalizedRole === "owner"/);
+  assert.match(authSource, /normalizedRole === "super_admin"/);
+  assert.match(authSource, /requiresPasswordChange/);
   assert.doesNotMatch(providerSource, /permissions\s*:/);
   assert.match(providerSource, /status: AuthStatus/);
   assert.match(providerSource, /user: AuthenticatedUser \| null/);
+  assert.match(providerSource, /requiresPasswordChange\(/);
 });
 
 test("auth guards render without full-page session loading gates", () => {
@@ -86,6 +92,7 @@ test("auth guards render without full-page session loading gates", () => {
   assert.doesNotMatch(publicOnlySource, /LoaderCircle/);
   assert.doesNotMatch(authGuardSource, /LoginScreen/);
   assert.match(authGuardSource, /redirect\("\/login"\)/);
+  assert.match(authGuardSource, /requiresPasswordChange\(user\)/);
   assert.match(authGuardSource, /redirect\("\/force-password-reset"\)/);
   assert.match(authGuardSource, /status !== "authenticated"[\s\S]*return null/);
   assert.doesNotMatch(publicOnlySource, /\/dashboard/);

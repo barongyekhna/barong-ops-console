@@ -20,10 +20,29 @@ USER_MANAGEMENT_ROLES = (
     "viewer",
     "reviewer",
 )
+PASSWORD_RESET_BYPASS_ROLES = frozenset(("owner", "super_admin"))
 
 
 def is_user_manager_role(role: str) -> bool:
     return normalize_role(role) in {"owner", "super_admin"}
+
+
+def role_bypasses_password_reset(role: str | None) -> bool:
+    if role is None:
+        return False
+    return normalize_role(role) in PASSWORD_RESET_BYPASS_ROLES
+
+
+def must_change_password_required(
+    *,
+    role: str | None,
+    must_change_password: bool,
+) -> bool:
+    return bool(must_change_password) and not role_bypasses_password_reset(role)
+
+
+def initial_must_change_password_for_role(role: str | None) -> bool:
+    return not role_bypasses_password_reset(role)
 
 
 def validate_user_management_role(role: str) -> str:

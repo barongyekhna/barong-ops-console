@@ -24,6 +24,7 @@ import {
   changePasswordRequest,
   loginRequest,
   logoutRequest,
+  requiresPasswordChange,
   sessionCheckRequest,
   type AuthenticatedUser,
 } from "@/lib/auth";
@@ -203,7 +204,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setStatus("authenticated");
         return {
           message: result.message,
-          requirePasswordChange: result.require_password_change,
+          requirePasswordChange: requiresPasswordChange(
+            result.user,
+            result.require_password_change,
+          ),
         };
       } catch (error) {
         setUser(null);

@@ -119,6 +119,41 @@ def test_users_requires_owner_auth(
 
 
 @pytest.mark.parametrize(
+    ("role", "expected_must_change_password"),
+    [
+        (ROLE_OWNER, False),
+        (ROLE_SUPER_ADMIN, False),
+        (ROLE_VIEWER, True),
+    ],
+)
+def test_login_password_reset_policy_excludes_privileged_roles(
+    auth_client: TestClient,
+    role: str,
+    expected_must_change_password: bool,
+) -> None:
+    username = f"reset_policy_{role}"
+    password = "example-only-reset-policy-password"
+    create_db_user(username=username, password=password, role=role)
+
+    login_response = auth_client.post(
+        "/api/public/auth/login",
+        json={"username": username, "password": password},
+    )
+
+    assert login_response.status_code == 200
+    payload = login_response.json()
+    assert payload["require_password_change"] is expected_must_change_password
+    assert payload["user"]["must_change_password"] is expected_must_change_password
+
+    me_response = auth_client.get("/api/public/auth/me")
+    assert me_response.status_code == 200
+    assert (
+        me_response.json()["must_change_password"]
+        is expected_must_change_password
+    )
+
+
+@pytest.mark.parametrize(
     "role",
     [ROLE_OWNER, ROLE_SUPER_ADMIN, ROLE_VIEWER, ROLE_OPERATOR, ROLE_REVIEWER],
 )
@@ -232,6 +267,42 @@ def test_owner_creates_user_and_rejects_invalid_create_requests(
     assert duplicate.status_code == 409
     assert missing_org.status_code == 422
     assert invalid_role.status_code == 422
+
+
+def test_owner_creates_privileged_users_without_forced_password_reset(
+    owner_client: TestClient,
+) -> None:
+    owner = create_user_via_api(
+        owner_client,
+        username="managed_owner_reset_bypass",
+        role=ROLE_OWNER,
+    )
+    super_admin = create_user_via_api(
+        owner_client,
+        username="managed_super_admin_reset_bypass",
+        role=ROLE_SUPER_ADMIN,
+    )
+    viewer = create_user_via_api(
+        owner_client,
+        username="managed_viewer_reset_required",
+        role=ROLE_VIEWER,
+    )
+
+    assert owner["must_change_password"] is False
+    assert super_admin["must_change_password"] is False
+    assert viewer["must_change_password"] is True
+
+    with SessionLocal() as db:
+        stored_owner = db.get(User, owner["id"])
+        stored_super_admin = db.get(User, super_admin["id"])
+        stored_viewer = db.get(User, viewer["id"])
+
+    assert stored_owner is not None
+    assert stored_super_admin is not None
+    assert stored_viewer is not None
+    assert stored_owner.must_change_password is False
+    assert stored_super_admin.must_change_password is False
+    assert stored_viewer.must_change_password is True
 
 
 def test_auth_register_remains_absent(auth_client: TestClient) -> None:

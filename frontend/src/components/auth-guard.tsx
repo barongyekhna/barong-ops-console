@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { requiresPasswordChange } from "@/lib/auth";
 
 export function AuthGuard({ children }: { children: ReactNode }) {
   const { status, user } = useAuth();
@@ -16,7 +17,7 @@ export function AuthGuard({ children }: { children: ReactNode }) {
     return null;
   }
 
-  if (user?.must_change_password) {
+  if (requiresPasswordChange(user)) {
     redirect("/force-password-reset");
   }
 

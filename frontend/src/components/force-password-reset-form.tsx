@@ -6,6 +6,7 @@ import { useEffect, useState, type FormEvent } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { ApiError } from "@/lib/api";
+import { requiresPasswordChange } from "@/lib/auth";
 
 const DEFAULT_INITIAL_PASSWORD = "123456";
 const PASSWORD_LENGTH_MESSAGE = "New password must be at least 12 characters.";
@@ -31,10 +32,10 @@ export function ForcePasswordResetForm() {
       router.replace("/login");
       return;
     }
-    if (status === "authenticated" && !user?.must_change_password) {
+    if (status === "authenticated" && !requiresPasswordChange(user)) {
       router.replace("/dashboard");
     }
-  }, [router, status, user?.must_change_password]);
+  }, [router, status, user]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -67,7 +68,7 @@ export function ForcePasswordResetForm() {
     }
   }
 
-  if (status !== "authenticated" || !user?.must_change_password) {
+  if (status !== "authenticated" || !requiresPasswordChange(user)) {
     return null;
   }
 

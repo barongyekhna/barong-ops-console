@@ -32,6 +32,21 @@ type AuthRequestOptions = {
   timeoutMs?: number;
 };
 
+export function roleBypassesPasswordReset(role: string | null | undefined) {
+  const normalizedRole = role?.trim().toLowerCase().replace(/\s+/g, "_");
+  return normalizedRole === "owner" || normalizedRole === "super_admin";
+}
+
+export function requiresPasswordChange(
+  user: Pick<AuthenticatedUser, "role" | "must_change_password"> | null | undefined,
+  fallback = false,
+) {
+  if (!user || roleBypassesPasswordReset(user.role)) {
+    return false;
+  }
+  return fallback || user.must_change_password === true;
+}
+
 function normalizeAuthenticatedUser(
   user: AuthenticatedUserPayload,
 ): AuthenticatedUser {
@@ -39,7 +54,7 @@ function normalizeAuthenticatedUser(
 
   return {
     ...identity,
-    must_change_password: user.must_change_password === true,
+    must_change_password: requiresPasswordChange(user),
   };
 }
 
@@ -59,13 +74,16 @@ export async function loginRequest(
     timeoutMs: options.timeoutMs,
   });
 
+  const normalizedUser = normalizeAuthenticatedUser(response.user);
+
   return {
     ...response,
     message: response.message ?? null,
-    require_password_change:
-      response.require_password_change === true ||
-      response.user.must_change_password === true,
-    user: normalizeAuthenticatedUser(response.user),
+    require_password_change: requiresPasswordChange(
+      normalizedUser,
+      response.require_password_change === true,
+    ),
+    user: normalizedUser,
   };
 }
 
@@ -87,10 +105,12 @@ export async function changePasswordRequest(
     },
   );
 
+  const normalizedUser = normalizeAuthenticatedUser(response.user);
+
   return {
     message: response.message ?? null,
-    require_password_change: response.user.must_change_password === true,
-    user: normalizeAuthenticatedUser(response.user),
+    require_password_change: requiresPasswordChange(normalizedUser),
+    user: normalizedUser,
   };
 }
 

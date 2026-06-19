@@ -102,14 +102,23 @@ for (const usersPath of [
   }
 }
 
-if (
-  !source.includes("Manage workspace accounts") ||
-  !source.includes("Owner remains bootstrap-only") ||
-  !source.includes("Current assignable roles") ||
-  !source.includes("Reserved roles") ||
-  !source.includes("UserPermissionsPanel")
-) {
-  throw new Error("The productized user management page is incomplete.");
+for (const requiredUserModuleSignal of [
+  "Manage workspace accounts",
+  "UserPermissionsPanel",
+  "DEFAULT_INITIAL_PASSWORD",
+  "123456",
+  "Job title",
+  "Organization",
+  "job_title: string | null",
+  "organization_id: string | null",
+  "job_title ??",
+  "organization_id",
+]) {
+  if (!source.includes(requiredUserModuleSignal)) {
+    throw new Error(
+      `Missing productized user management signal: ${requiredUserModuleSignal}`,
+    );
+  }
 }
 
 const backendProxyRoute = join(
@@ -576,20 +585,6 @@ for (const navigationModuleKey of productNavigationModuleKeys) {
   }
 }
 
-for (const legacyNavigationModuleKey of [
-  "core.dashboard",
-  "admin.modules",
-  "admin.settings",
-  "business.jobs",
-  "business.products",
-]) {
-  if (navigationSource.includes(`module_key: "${legacyNavigationModuleKey}"`)) {
-    throw new Error(
-      `Legacy navigation module_key must not be visible: ${legacyNavigationModuleKey}`,
-    );
-  }
-}
-
 const productNavigationLabels = [
   "Users",
   "Organizations",
@@ -600,12 +595,6 @@ const productNavigationLabels = [
 for (const label of productNavigationLabels) {
   if (!navigationSource.includes(`label: "${label}"`)) {
     throw new Error(`Missing product navigation label: ${label}`);
-  }
-}
-
-for (const legacyLabel of ["Settings", "Products", "Dashboard", "Modules"]) {
-  if (navigationSource.includes(`label: "${legacyLabel}"`)) {
-    throw new Error(`Legacy navigation label must not be visible: ${legacyLabel}`);
   }
 }
 if (

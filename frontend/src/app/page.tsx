@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { useAuth } from "@/components/auth-provider";
+import { requiresPasswordChange } from "@/lib/auth";
 
 export default function HomePage() {
   const router = useRouter();
@@ -12,7 +13,7 @@ export default function HomePage() {
   useEffect(() => {
     if (status === "authenticated") {
       router.replace(
-        user?.must_change_password ? "/force-password-reset" : "/dashboard",
+        requiresPasswordChange(user) ? "/force-password-reset" : "/dashboard",
       );
       return;
     }
@@ -20,7 +21,7 @@ export default function HomePage() {
     if (status === "unauthenticated") {
       router.replace("/login");
     }
-  }, [router, status, user?.must_change_password]);
+  }, [router, status, user]);
 
   return null;
 }
