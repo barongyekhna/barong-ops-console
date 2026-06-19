@@ -1,0 +1,58 @@
+{
+  "report": "org_permission_visibility_report",
+  "generated_on": "2026-06-19",
+  "scope": "frontend_routing_and_visibility_only",
+  "backend_modified": false,
+  "db_schema_modified": false,
+  "rbac_core_modified": false,
+  "role_visibility": [
+    {
+      "role": "owner",
+      "create_organization": "visible",
+      "organization_list": "visible"
+    },
+    {
+      "role": "super_admin",
+      "create_organization": "hidden",
+      "organization_list": "visible"
+    },
+    {
+      "role": "operator",
+      "create_organization": "hidden",
+      "organization_list": "visible"
+    },
+    {
+      "role": "viewer",
+      "create_organization": "hidden",
+      "organization_list": "visible"
+    },
+    {
+      "role": "reviewer",
+      "create_organization": "hidden",
+      "organization_list": "visible"
+    }
+  ],
+  "routing_changes": [
+    {
+      "file": "frontend/src/lib/navigation.ts",
+      "change": "Removed owner_only and required_permission from the Organizations navigation item."
+    },
+    {
+      "file": "frontend/src/components/permission-route-guard.tsx",
+      "change": "Allows authenticated users to enter /organizations."
+    },
+    {
+      "file": "frontend/src/lib/frontend-capability-state.ts",
+      "change": "Marks admin.organizations as an authenticated-user organization list entry in the frontend capability graph."
+    }
+  ],
+  "create_visibility_enforcement": {
+    "source": "frontend/src/components/organization-product-view.tsx",
+    "rule": "CreateOrganizationSection is rendered only when useAuth().isOwner is true."
+  },
+  "list_visibility_enforcement": {
+    "source": "frontend/src/components/organization-product-view.tsx",
+    "rule": "OrganizationListSection is rendered for every authenticated route visitor."
+  },
+  "backend_alignment_note": "Existing backend endpoints were reused. Current backend GET /organizations and GET /users are not modified by this refactor; if an existing backend role gate denies a non-owner request, the frontend shows a safe error state instead of crashing."
+}

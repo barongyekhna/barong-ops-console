@@ -289,6 +289,10 @@ function isUserManagementAdmin(role: string, moduleKey: string) {
   return role === "super_admin" && moduleKey === "admin.users";
 }
 
+function isOrganizationListModule(moduleKey: string) {
+  return moduleKey === "admin.organizations";
+}
+
 function missingPermissionText(
   record: ModuleAwareNavigationRecord,
   accessState: ModuleAccessState | null,
@@ -987,6 +991,27 @@ function ownerCapabilityItem({
   };
 }
 
+function organizationListCapabilityItem({
+  item,
+  routeBound,
+}: {
+  item: ProductCapabilityItem;
+  routeBound: boolean;
+}): ProductCapabilityItem {
+  return {
+    ...item,
+    badge: null,
+    can_enter: routeBound,
+    org_visibility: "visible",
+    permission_state: "available",
+    reason: "Organization list is visible to every authenticated user.",
+    required_permission: "Authenticated user session.",
+    sidebar_state: "allowed",
+    state: "allowed",
+    unlock_condition: "Open the organization list.",
+  };
+}
+
 export function deriveFrontendExecutionState({
   adapterAccessItems,
   executionProviderAccessItems,
@@ -1253,6 +1278,13 @@ export function buildFrontendCapabilityGraph({
           item,
           permissionBlocked,
           record,
+          routeBound,
+        });
+      }
+
+      if (isOrganizationListModule(moduleKey)) {
+        return organizationListCapabilityItem({
+          item,
           routeBound,
         });
       }

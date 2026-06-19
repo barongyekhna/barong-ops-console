@@ -66,8 +66,6 @@ export const navigationGroups: NavigationGroup[] = [
         icon: Building2,
         label: "Organizations",
         module_key: "admin.organizations",
-        owner_only: true,
-        required_permission: "organizations.read",
         route_namespace: "/organizations",
         status: "enabled",
       },

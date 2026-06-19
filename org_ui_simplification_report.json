@@ -1,0 +1,60 @@
+{
+  "report": "org_ui_simplification_report",
+  "generated_on": "2026-06-19",
+  "scope": "frontend_ui_only",
+  "backend_modified": false,
+  "db_schema_modified": false,
+  "rbac_core_modified": false,
+  "organization_page_sections": [
+    {
+      "name": "Create Organization",
+      "visibility": "owner_only",
+      "fields": [
+        "organization name"
+      ],
+      "submit_action": "Create",
+      "api": "POST /org/create",
+      "post_success_behavior": "refresh organization list"
+    },
+    {
+      "name": "Organization List",
+      "visibility": "all_authenticated_users",
+      "fields": [
+        "organization name",
+        "super admin"
+      ],
+      "api": "GET /organizations"
+    }
+  ],
+  "removed_ui": [
+    "statistics panels",
+    "organization context panel",
+    "member list panel",
+    "member add/remove actions",
+    "lifecycle update/activate/suspend/delete actions",
+    "type selectors",
+    "owner user ID input",
+    "system/debug/context details",
+    "metadata display or editing"
+  ],
+  "type_field_status": {
+    "visible_ui_field_removed": true,
+    "list_display_removed": true,
+    "api_compatibility_note": "The create request still supplies the existing backend-required org_type value without exposing a UI field."
+  },
+  "safe_states": [
+    "loading state for organization list",
+    "empty state when no organizations exist",
+    "safe error state when existing backend APIs deny or fail",
+    "fallback owner ID display when super admin user details are unavailable"
+  ],
+  "files_changed": [
+    "frontend/src/components/organization-product-view.tsx",
+    "frontend/src/app/globals.css",
+    "frontend/src/lib/users-api.ts",
+    "frontend/src/lib/navigation.ts",
+    "frontend/src/components/permission-route-guard.tsx",
+    "frontend/src/lib/frontend-capability-state.ts",
+    "tests/frontend/module-isolation.test.mjs"
+  ]
+}

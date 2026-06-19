@@ -20,7 +20,7 @@ export function PermissionRouteGuard({
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const { status, user } = useAuth();
   const { getCapabilityForPath, permissionSnapshot } =
     useFrontendCapabilityState();
   const { items, moduleAccessUnknown } = useModuleAccess();
@@ -28,8 +28,10 @@ export function PermissionRouteGuard({
   const isOwner = permissionSnapshot.is_owner_full_access === true;
   const isUserManagerRoute =
     pathname === "/users" && user?.role === "super_admin";
+  const isOrganizationListRoute =
+    pathname === "/organizations" && status === "authenticated";
 
-  if (isOwner || isUserManagerRoute) {
+  if (isOwner || isUserManagerRoute || isOrganizationListRoute) {
     return children;
   }
 

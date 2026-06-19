@@ -1492,6 +1492,10 @@ textarea:focus-visible {
   min-width: 820px;
 }
 
+.organization-table {
+  min-width: 520px;
+}
+
 .product-table .selected-row td {
   background: #f0f7f4;
 }

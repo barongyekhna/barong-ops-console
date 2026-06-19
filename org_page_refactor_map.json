@@ -1,0 +1,60 @@
+{
+  "report": "org_page_refactor_map",
+  "generated_on": "2026-06-19",
+  "scope": "organization_page_frontend_refactor",
+  "before": {
+    "component": "frontend/src/components/organization-product-view.tsx",
+    "ui_blocks": [
+      "command bar",
+      "context statistics",
+      "organization detail",
+      "members",
+      "create organization with type and owner user ID",
+      "lifecycle actions",
+      "member actions"
+    ],
+    "apis_used": [
+      "GET /auth/context",
+      "GET /org/:org_id/members",
+      "POST /org/create",
+      "PATCH /org/:org_id",
+      "POST /org/:org_id/activate",
+      "POST /org/:org_id/suspend",
+      "DELETE /org/:org_id",
+      "POST /org/:org_id/members/add",
+      "POST /org/:org_id/members/remove"
+    ]
+  },
+  "after": {
+    "component": "frontend/src/components/organization-product-view.tsx",
+    "ui_blocks": [
+      "Create Organization",
+      "Organization List"
+    ],
+    "apis_used": [
+      "POST /org/create",
+      "GET /organizations",
+      "GET /users?role=super_admin"
+    ],
+    "display_fields": [
+      "organization name",
+      "super admin"
+    ],
+    "hidden_or_removed_fields": [
+      "type",
+      "metadata",
+      "status",
+      "org id",
+      "owner user ID input",
+      "debug/context fields"
+    ]
+  },
+  "super_admin_mapping": {
+    "primary": "Match users with role=super_admin by organization_id.",
+    "secondary": "Match a super_admin by organization owner_user_id when it references the user id or username.",
+    "fallback": "Display the existing organization owner_user_id as a safe owner identifier when user details cannot be loaded."
+  },
+  "tests_updated": [
+    "tests/frontend/module-isolation.test.mjs"
+  ]
+}

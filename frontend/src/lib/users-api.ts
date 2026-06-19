@@ -86,6 +86,27 @@ export function listUsers(limit = 50, offset = 0) {
   });
 }
 
+export async function listSuperAdminUsers(limit = 100, offset = 0) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+    role: "super_admin",
+  });
+  const result = await apiRequest<UserListResponse>(
+    `/users?${params.toString()}`,
+    {
+      method: "GET",
+    },
+  );
+  const items = result.items.filter((user) => user.role === "super_admin");
+
+  return {
+    ...result,
+    count: items.length,
+    items,
+  };
+}
+
 export function listUserRoles() {
   return apiRequest<UserRolesResponse>("/users/roles", {
     method: "GET",

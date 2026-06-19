@@ -510,7 +510,7 @@ test("owner full access bypasses unavailable route guard decisions", () => {
   assert.equal(unavailableDecision.canEnter, true);
 });
 
-test("missing module access state safely degrades to visible locked entries", () => {
+test("missing module access state safely degrades without hiding entries", () => {
   const adminOrganizations = getNavigationStateForModule(
     noPermissions,
     item("admin.organizations"),
@@ -532,7 +532,8 @@ test("missing module access state safely degrades to visible locked entries", ()
 
   assert.equal(adminOrganizations.moduleAccessUnknown, true);
   assert.equal(adminOrganizations.isVisible, true);
-  assert.equal(adminOrganizations.isLocked, true);
+  assert.equal(adminOrganizations.isLocked, false);
+  assert.equal(adminOrganizations.canEnter, true);
   assert.equal(systemLogs.isVisible, true);
   assert.equal(systemLogs.isHidden, false);
   assert.equal(businessApprovals.isVisible, true);
@@ -678,6 +679,48 @@ test("admin.users and admin.permissions remain owner-only but visible locked", (
   );
 });
 
+test("admin.organizations is visible and enterable for authenticated users", () => {
+  const adminOrganizations = item("admin.organizations");
+  const state = getNavigationStateForModule(
+    noPermissions,
+    adminOrganizations,
+    [],
+    { moduleAccessUnknown: true },
+  );
+
+  assert.equal(adminOrganizations.label, "Organizations");
+  assert.equal(adminOrganizations.module_key, "admin.organizations");
+  assert.equal(adminOrganizations.owner_only, undefined);
+  assert.equal(adminOrganizations.required_permission, undefined);
+  assert.equal(adminOrganizations.denied_behavior, "show_locked");
+  assert.equal(adminOrganizations.category, "admin");
+  assert.equal(state.isVisible, true);
+  assert.equal(state.isLocked, false);
+  assert.equal(state.canEnter, true);
+});
+
+test("organization page keeps only create and list sections", () => {
+  const source = readFileSync(
+    "frontend/src/components/organization-product-view.tsx",
+    "utf8",
+  );
+  const headings = source.match(/<h3 /g) ?? [];
+
+  assert.equal(headings.length, 2);
+  assert.match(source, /Create Organization/);
+  assert.match(source, /Organization List/);
+  assert.match(source, /isOwner \? \(/);
+  assert.doesNotMatch(
+    source,
+    /Lifecycle actions|Member actions|Organization detail/,
+  );
+  assert.doesNotMatch(
+    source,
+    /capability-summary-grid|product-console-grid|ops-dashboard-grid/,
+  );
+  assert.doesNotMatch(source, /<select|Owner user ID|metadata:/);
+});
+
 test("business modules stay locked for users without permission", () => {
   const approvalsState = getNavigationStateForModule(
     noPermissions,
@@ -715,7 +758,6 @@ test("business modules stay locked for users without permission", () => {
 test("owner-only admin entries and system logs stay visible but non-enterable when access is unknown", () => {
   for (const moduleKey of [
     "admin.users",
-    "admin.organizations",
     "admin.permissions",
     "system.operation_logs",
   ]) {
