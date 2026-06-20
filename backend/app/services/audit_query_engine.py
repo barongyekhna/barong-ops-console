@@ -10,6 +10,7 @@ from typing import Any, Iterator
 from uuid import uuid4
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
 from sqlalchemy.orm import Session
 
 from ..models.observability import AuditLogRecord, EventStreamRecord
@@ -321,8 +322,7 @@ class AuditLogWriter:
             metadata_json=self._metadata_payload(payload),
         )
         with self._session() as db:
-            db.add(row)
-            self._commit(db)
+            self._insert_audit_record(db, row)
             return row
 
     def write_event_stream(self, row: EventStreamRecord) -> AuditLogRecord:
@@ -345,9 +345,42 @@ class AuditLogWriter:
             },
         )
         with self._session() as db:
-            db.add(audit)
-            self._commit(db)
+            self._insert_audit_record(db, audit)
             return audit
+
+    def _insert_audit_record(
+        self,
+        db: Session,
+        record: AuditLogRecord,
+    ) -> None:
+        if db.get_bind().dialect.name != "postgresql":
+            db.add(record)
+            self._commit(db)
+            return
+
+        statement = (
+            postgresql_insert(AuditLogRecord)
+            .values(
+                org_id=record.org_id,
+                audit_id=record.audit_id,
+                event_stream_record_id=record.event_stream_record_id,
+                event_id=record.event_id,
+                context_id=record.context_id,
+                trace_id=record.trace_id,
+                module_id=record.module_id,
+                action=record.action,
+                status=record.status,
+                timestamp=record.timestamp,
+                payload=record.payload,
+                metadata_json=record.metadata_json,
+            )
+            .on_conflict_do_nothing()
+            .returning(AuditLogRecord.id)
+        )
+        inserted_id = db.execute(statement).scalar_one_or_none()
+        if inserted_id is not None:
+            record.id = inserted_id
+        self._commit(db)
 
     def query(
         self,
