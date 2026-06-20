@@ -216,6 +216,26 @@ class WorkflowRepository:
             return None
         return approval_workflow_from_record(record)
 
+    def load_by_approval_ids(
+        self,
+        approval_ids: Sequence[str],
+    ) -> dict[str, ApprovalWorkflow]:
+        if not approval_ids:
+            return {}
+        org_id = current_tenant_org_id()
+        rows = list(
+            self.db.scalars(
+                select(ApprovalWorkflowRecord).where(
+                    ApprovalWorkflowRecord.approval_id.in_(tuple(approval_ids)),
+                    ApprovalWorkflowRecord.org_id == org_id,
+                )
+            )
+        )
+        return {
+            record.approval_id: approval_workflow_from_record(record)
+            for record in rows
+        }
+
     def load_record_by_approval_id(
         self,
         approval_id: str,

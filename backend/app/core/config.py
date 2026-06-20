@@ -76,6 +76,15 @@ class Settings(BaseSettings):
         le=3600,
     )
     login_account_lockout_minutes: int = Field(default=15, gt=0, le=1440)
+    db_pool_size: int = Field(default=30, gt=0, le=200)
+    db_max_overflow: int = Field(default=70, ge=0, le=500)
+    db_pool_recycle_seconds: int = Field(default=1200, gt=0, le=86400)
+    db_statement_timeout_ms: int = Field(default=8000, gt=0, le=60000)
+    db_idle_in_transaction_session_timeout_ms: int = Field(
+        default=10000,
+        gt=0,
+        le=60000,
+    )
 
     @field_validator("app_env", mode="before")
     @classmethod
@@ -153,6 +162,11 @@ class Settings(BaseSettings):
         "login_failed_attempt_max_delay_seconds",
         "login_account_lockout_minutes",
         "ops_alert_webhook_timeout_seconds",
+        "db_pool_size",
+        "db_max_overflow",
+        "db_pool_recycle_seconds",
+        "db_statement_timeout_ms",
+        "db_idle_in_transaction_session_timeout_ms",
         mode="before",
     )
     @classmethod
@@ -174,6 +188,11 @@ class Settings(BaseSettings):
             "login_failed_attempt_max_delay_seconds": 60,
             "login_account_lockout_minutes": 15,
             "ops_alert_webhook_timeout_seconds": 5,
+            "db_pool_size": 30,
+            "db_max_overflow": 70,
+            "db_pool_recycle_seconds": 1200,
+            "db_statement_timeout_ms": 8000,
+            "db_idle_in_transaction_session_timeout_ms": 10000,
         }
         return defaults[info.field_name]
 

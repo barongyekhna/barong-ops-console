@@ -35,10 +35,13 @@ from ..repositories.users import (
     reset_login_failures,
     login_lockout_columns_available,
     update_password_hash,
-    update_last_login,
 )
 from ..schemas.user import DEFAULT_INITIAL_PASSWORD, must_change_password_required
 from .event_collector import emit_event
+from .login_side_effects import (
+    LoginSuccessSideEffect,
+    queue_login_success_side_effect,
+)
 from .rate_limiter import register_login_rate_limit_attempt
 
 
@@ -691,7 +694,6 @@ def login(
         issued_at=logged_in_at,
         auth_sessions_available=auth_sessions_available,
     )
-    update_last_login(db, user, logged_in_at)
     _cache_session_identity(
         _authenticated_identity_from_user(
             user=user,
@@ -700,20 +702,18 @@ def login(
         ),
         now=logged_in_at,
     )
-    create_operation_log(
-        db,
-        actor_type="user",
-        actor_id=str(user.id),
-        action="auth.login",
-        target_type="session",
-        target_id=str(auth_session.id),
-        result="success",
-        request_id=audit.request_id,
-        ip_address=audit.ip_address,
-        user_agent=audit.user_agent,
-        details={"outcome": "session_created", "role": user.role},
-    )
     db.commit()
+    queue_login_success_side_effect(
+        LoginSuccessSideEffect(
+            user_id=user.id,
+            auth_session_id=auth_session.id,
+            logged_in_at=logged_in_at,
+            role=user.role,
+            request_id=audit.request_id,
+            ip_address=audit.ip_address,
+            user_agent=audit.user_agent,
+        )
+    )
     emit_event(
         event_type="auth.login",
         module="system",

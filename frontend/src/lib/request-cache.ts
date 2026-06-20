@@ -3,7 +3,7 @@
 export const DEFAULT_CACHE_TTL_MS = 60_000;
 const AUTH_ME_CACHE_TTL_MS = 30_000;
 const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 60_000;
-export const MAX_CONCURRENT_FRONTEND_REQUESTS = 6;
+export const MAX_CONCURRENT_FRONTEND_REQUESTS = 3;
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -67,6 +67,10 @@ function cacheTtlForPath(path: string) {
   }
 
   if (
+    normalizedPath === "/dashboard/overview" ||
+    normalizedPath.startsWith("/dashboard/overview?") ||
+    normalizedPath === "/dashboard/activity" ||
+    normalizedPath.startsWith("/dashboard/activity?") ||
     normalizedPath === "/modules/registry" ||
     normalizedPath === "/modules/me" ||
     normalizedPath === "/modules" ||

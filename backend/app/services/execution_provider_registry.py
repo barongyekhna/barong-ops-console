@@ -625,8 +625,14 @@ def build_execution_provider_access_state(
 def list_execution_providers_for_user(
     db: Session,
     user: User,
+    *,
+    request: object | None = None,
 ) -> tuple[CurrentUserPermissionInfo, list[ExecutionProviderAccessRead]]:
-    current_user_permissions = resolve_current_user_permission_info(db, user)
+    current_user_permissions = resolve_current_user_permission_info(
+        db,
+        user,
+        request=request,
+    )
     return (
         current_user_permissions,
         [

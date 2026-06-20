@@ -16,6 +16,8 @@ const ALLOWED_PUBLIC_POST_PATHS = new Set([
 ]);
 const ALLOWED_APP_LIST_PATHS = new Set([
   "artifacts",
+  "dashboard/activity",
+  "dashboard/overview",
   "reviews",
   "errors",
   "memory-events",
@@ -73,6 +75,7 @@ const ALLOWED_LIVE_GATE_GET_PATHS = new Set([
   "live-gate/policies",
 ]);
 const CAPABILITY_BOOTSTRAP_PATH = "capability/bootstrap";
+const CAPABILITY_BOOTSTRAP_BACKEND_PATH = `${CONTROL_PLANE_API_PREFIX}/${CAPABILITY_BOOTSTRAP_PATH}`;
 const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 60_000;
 const CAPABILITY_BOOTSTRAP_MAX_BACKEND_CONCURRENCY = 6;
 const ALLOWED_EXTERNAL_DEPENDENCY_PATHS = new Set([
@@ -742,6 +745,39 @@ async function runCapabilityBootstrapTargets(request: NextRequest) {
   return payload;
 }
 
+async function fetchCapabilityBootstrapBatch(
+  request: NextRequest,
+): Promise<Record<string, CapabilityBootstrapEntry> | null> {
+  try {
+    const targetUrl = new URL(CAPABILITY_BOOTSTRAP_BACKEND_PATH, getApiBaseUrl());
+    const headers = new Headers({ Accept: "application/json" });
+    const cookie = request.headers.get("cookie");
+
+    if (cookie) {
+      headers.set("Cookie", cookie);
+    }
+
+    const backendResponse = await fetch(targetUrl, {
+      cache: "no-store",
+      headers,
+      method: "GET",
+      signal: request.signal,
+    });
+    if (!backendResponse.ok) {
+      return null;
+    }
+
+    const payload = await readBackendJson(backendResponse);
+    if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+      return null;
+    }
+
+    return payload as Record<string, CapabilityBootstrapEntry>;
+  } catch {
+    return null;
+  }
+}
+
 async function capabilityBootstrapRequest(request: NextRequest) {
   const cacheKey = getCapabilityBootstrapCacheKey(request);
   const cached = readCapabilityBootstrapCache(cacheKey);
@@ -755,7 +791,14 @@ async function capabilityBootstrapRequest(request: NextRequest) {
     return Response.json(await inFlight);
   }
 
-  const promise = runCapabilityBootstrapTargets(request).finally(() => {
+  const promise = (async () => {
+    const batched = await fetchCapabilityBootstrapBatch(request);
+    if (batched) {
+      return batched;
+    }
+
+    return runCapabilityBootstrapTargets(request);
+  })().finally(() => {
     capabilityBootstrapInFlight.delete(cacheKey);
   });
   capabilityBootstrapInFlight.set(cacheKey, promise);

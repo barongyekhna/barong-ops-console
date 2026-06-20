@@ -659,8 +659,14 @@ def build_adapter_access_state(
 def list_adapters_for_user(
     db: Session,
     user: User,
+    *,
+    request: object | None = None,
 ) -> tuple[CurrentUserPermissionInfo, list[ModuleAdapterAccessRead]]:
-    current_user_permissions = resolve_current_user_permission_info(db, user)
+    current_user_permissions = resolve_current_user_permission_info(
+        db,
+        user,
+        request=request,
+    )
     return (
         current_user_permissions,
         [

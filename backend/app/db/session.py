@@ -14,11 +14,13 @@ from ..services.data_isolation import (
 
 settings = get_settings()
 
-POOL_SIZE = 20
-MAX_OVERFLOW = 30
-POOL_RECYCLE_SECONDS = 1800
-STATEMENT_TIMEOUT_MS = 5000
-IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = 10_000
+POOL_SIZE = settings.db_pool_size
+MAX_OVERFLOW = settings.db_max_overflow
+POOL_RECYCLE_SECONDS = settings.db_pool_recycle_seconds
+STATEMENT_TIMEOUT_MS = settings.db_statement_timeout_ms
+IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS = (
+    settings.db_idle_in_transaction_session_timeout_ms
+)
 
 
 def _postgres_runtime_options() -> str:

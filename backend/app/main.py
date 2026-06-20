@@ -13,11 +13,13 @@ from .api.routes.artifacts import router as artifacts_router
 from .api.routes.auth import router as auth_router
 from .api.routes.callback_handler import router as callback_handler_router
 from .api.routes.capability_bindings import router as capability_bindings_router
+from .api.routes.capability_bootstrap import router as capability_bootstrap_router
 from .api.routes.contacts import router as contacts_router
 from .api.routes.conversations import router as conversations_router
 from .api.routes.cross_org_communication import (
     router as cross_org_communication_router,
 )
+from .api.routes.dashboard import router as dashboard_router
 from .api.routes.errors import router as errors_router
 from .api.routes.external_dependencies import router as external_dependencies_router
 from .api.routes.execution_providers import router as execution_providers_router
@@ -74,6 +76,10 @@ from .services.auth_service import (
     InvalidSessionError,
     validate_session,
     validate_session_identity_fast,
+)
+from .services.login_side_effects import (
+    start_login_side_effect_worker,
+    stop_login_side_effect_worker,
 )
 from .services.permission_decision_engine import PermissionDecisionEngine
 from .services.request_session_cache import cache_authenticated_session
@@ -195,10 +201,12 @@ def enforce_production_migration_safety() -> None:
 
         enforce_migration_safety(engine, app_env=settings.app_env)
     start_session_seen_flush_worker()
+    start_login_side_effect_worker()
 
 
 @app.on_event("shutdown")
 def flush_deferred_session_seen_updates() -> None:
+    stop_login_side_effect_worker()
     stop_session_seen_flush_worker()
 
 
@@ -474,6 +482,7 @@ app.include_router(security_firewall_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(auth_router, prefix=PUBLIC_API_PREFIX)
 
 app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(dashboard_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approval_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(artifacts_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(reviews_router, prefix=APPLICATION_API_PREFIX)
@@ -506,6 +515,7 @@ app.include_router(external_dependencies_router, prefix=CONTROL_PLANE_API_PREFIX
 app.include_router(ai_execution_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(model_locks_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(capability_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(capability_bootstrap_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_allocations_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(workflow_registry_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(webhook_gateway_router, prefix=CONTROL_PLANE_API_PREFIX)

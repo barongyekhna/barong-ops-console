@@ -69,6 +69,23 @@ type DashboardState = {
   usersError?: string | null;
 };
 
+type BatchEntry<T> = {
+  data?: T | null;
+  detail?: unknown;
+  ok?: boolean;
+  status?: number | null;
+};
+
+type DashboardOverviewResponse = {
+  health?: BatchEntry<HealthResponse>;
+  users?: BatchEntry<ListResponse<UserRecord>>;
+};
+
+type DashboardActivityResponse = {
+  approvals?: BatchEntry<ListResponse<ApprovalRecord>>;
+  operation_logs?: BatchEntry<ListResponse<OperationLogRecord>>;
+};
+
 const EMPTY_DASHBOARD_STATE: DashboardState = {
   approvals: null,
   approvalsError: "",
@@ -124,6 +141,28 @@ function safeItems<T>(response: ListResponse<T> | null | undefined): T[] {
   return Array.isArray(response?.items)
     ? response.items.filter((item): item is T => item !== null && item !== undefined)
     : [];
+}
+
+function batchData<T>(entry: BatchEntry<T> | null | undefined): T | null {
+  return entry?.ok === true ? entry.data ?? null : null;
+}
+
+function batchError(entry: BatchEntry<unknown> | null | undefined, fallback: string) {
+  if (entry?.ok === true) {
+    return "";
+  }
+  if (typeof entry?.detail === "string" && entry.detail.trim().length > 0) {
+    return textValue(entry.detail, fallback);
+  }
+  if (
+    entry?.detail &&
+    typeof entry.detail === "object" &&
+    "detail" in entry.detail &&
+    typeof entry.detail.detail === "string"
+  ) {
+    return textValue(entry.detail.detail, fallback);
+  }
+  return fallback;
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -223,7 +262,7 @@ export function OperationsDashboard() {
     const generation = loadGenerationRef.current + 1;
     loadGenerationRef.current = generation;
     abortControllerRef.current = controller;
-    let pendingRequests = 4;
+    let pendingRequests = 2;
 
     const applyState = (patch: DashboardState) => {
       if (
@@ -272,49 +311,54 @@ export function OperationsDashboard() {
     setIsLoading(true);
 
     void loadResource(
-      apiRequest<HealthResponse>("/health", {
+      apiRequest<DashboardOverviewResponse>("/dashboard/overview?limit=1&offset=0", {
         method: "GET",
         signal: controller.signal,
       }),
-      (health) => ({ health: health ?? null, healthError: "" }),
-      (healthError) => ({ health: null, healthError }),
-      "System health is unavailable.",
+      (overview) => ({
+        health: batchData(overview.health),
+        healthError: batchError(
+          overview.health,
+          "System health is unavailable.",
+        ),
+        users: batchData(overview.users),
+        usersError: batchError(overview.users, "Users are unavailable."),
+      }),
+      (error) => ({
+        health: null,
+        healthError: error,
+        users: null,
+        usersError: error,
+      }),
+      "Dashboard overview is unavailable.",
     );
     void loadResource(
-      apiRequest<ListResponse<OperationLogRecord>>(
-        "/operation-logs?limit=8&offset=0",
+      apiRequest<DashboardActivityResponse>(
+        "/dashboard/activity?log_limit=8&log_offset=0&approval_limit=50&approval_offset=0",
         {
           method: "GET",
           signal: controller.signal,
         },
       ),
-      (operationLogs) => ({
-        logsError: "",
-        operationLogs: operationLogs ?? null,
+      (activity) => ({
+        approvals: batchData(activity.approvals),
+        approvalsError: batchError(
+          activity.approvals,
+          "Approvals are unavailable.",
+        ),
+        logsError: batchError(
+          activity.operation_logs,
+          "Logs are unavailable.",
+        ),
+        operationLogs: batchData(activity.operation_logs),
       }),
-      (logsError) => ({ logsError, operationLogs: null }),
-      "Logs are unavailable.",
-    );
-    void loadResource(
-      apiRequest<ListResponse<ApprovalRecord>>(
-        "/approval/list?limit=50&offset=0",
-        {
-          method: "GET",
-          signal: controller.signal,
-        },
-      ),
-      (approvals) => ({ approvals: approvals ?? null, approvalsError: "" }),
-      (approvalsError) => ({ approvals: null, approvalsError }),
-      "Approvals are unavailable.",
-    );
-    void loadResource(
-      apiRequest<ListResponse<UserRecord>>("/users?limit=1&offset=0", {
-        method: "GET",
-        signal: controller.signal,
+      (error) => ({
+        approvals: null,
+        approvalsError: error,
+        logsError: error,
+        operationLogs: null,
       }),
-      (users) => ({ users: users ?? null, usersError: "" }),
-      (usersError) => ({ users: null, usersError }),
-      "Users are unavailable.",
+      "Dashboard activity is unavailable.",
     );
   }, []);
 

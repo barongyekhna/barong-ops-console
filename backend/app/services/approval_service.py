@@ -92,7 +92,7 @@ ROLE_ALLOWED_ACTIONS: dict[ApprovalActorRole, tuple[ApprovalBoundaryAction, ...]
     "user": ("request", "read", "list"),
     "system": ("auto_approve",),
 }
-APPROVAL_LIST_CANDIDATE_LIMIT = 1000
+APPROVAL_LIST_CANDIDATE_LIMIT = 50
 APPROVAL_REJECT_REASON_MIN_LENGTH = 15
 APPROVAL_APPROVE_DEFAULT_REASON = "审批人已同意该申请。"
 
@@ -354,8 +354,10 @@ def _module_visible_to_employee(
     *,
     user: User,
     module_key: str,
+    permission_keys: set[str] | None = None,
 ) -> bool:
-    permission_keys = _scoped_permission_keys_for_user(db, user)
+    if permission_keys is None:
+        permission_keys = _scoped_permission_keys_for_user(db, user)
     if "*" in permission_keys:
         return True
     tokens = module_permission_tokens(permission_keys)
@@ -368,6 +370,7 @@ def _record_visible_to_actor(
     user: User,
     actor: ApprovalActor,
     record: ApprovalRequestRecord,
+    permission_keys: set[str] | None = None,
 ) -> bool:
     if actor.actor_role == "system":
         return True
@@ -376,7 +379,12 @@ def _record_visible_to_actor(
         return actor.actor_role == "owner"
     if actor.actor_role in {"owner", "admin"}:
         return True
-    return _module_visible_to_employee(db, user=user, module_key=record.module_key)
+    return _module_visible_to_employee(
+        db,
+        user=user,
+        module_key=record.module_key,
+        permission_keys=permission_keys,
+    )
 
 
 def _ensure_record_visible(
@@ -611,6 +619,32 @@ class ApprovalService:
         _ensure_action(actor, "list")
         statuses = (status,) if status is not None else None
         categories = (category,) if category is not None else None
+        permission_keys = (
+            _scoped_permission_keys_for_user(self.db, user)
+            if actor.actor_role == "user"
+            else None
+        )
+        visibility_cache: dict[tuple[str, str, str], bool] = {}
+
+        def visible(record: ApprovalRequestRecord) -> bool:
+            cache_key = (
+                actor.actor_role,
+                _record_category(record),
+                record.module_key,
+            )
+            cached = visibility_cache.get(cache_key)
+            if cached is not None:
+                return cached
+            result = _record_visible_to_actor(
+                self.db,
+                user=user,
+                actor=actor,
+                record=record,
+                permission_keys=permission_keys,
+            )
+            visibility_cache[cache_key] = result
+            return result
+
         if actor.actor_role == "admin":
             categories = (FEATURE_CATEGORY,)
         if actor.actor_role == "user":
@@ -624,12 +658,7 @@ class ApprovalService:
             records = [
                 record
                 for record in records
-                if _record_visible_to_actor(
-                    self.db,
-                    user=user,
-                    actor=actor,
-                    record=record,
-                )
+                if visible(record)
             ][offset : offset + limit]
         else:
             records = self.approval_repo.query_records(
@@ -639,17 +668,13 @@ class ApprovalService:
                 offset=offset,
             )
         items: list[ApprovalListItem] = []
+        workflows = self.workflow_repo.load_by_approval_ids(
+            [record.approval_id for record in records]
+        )
         for record in records:
-            if not _record_visible_to_actor(
-                self.db,
-                user=user,
-                actor=actor,
-                record=record,
-            ):
+            if not visible(record):
                 continue
-            workflow = self.workflow_repo.load_by_approval_id(
-                record.approval_id
-            )
+            workflow = workflows.get(record.approval_id)
             items.append(_list_item(record, workflow))
         return items
 

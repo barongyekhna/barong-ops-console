@@ -1501,8 +1501,40 @@ def resolve_effective_permissions(
 def resolve_current_user_permission_info(
     db: Session,
     user: User,
+    *,
+    request: object | None = None,
 ) -> CurrentUserPermissionInfo:
-    effective = resolve_effective_permissions(db, user)
+    role = normalize_role(user.role)
+    if request is None or is_owner_role(role):
+        effective = resolve_effective_permissions(db, user)
+        return _current_user_permission_info_from_effective(effective)
+
+    resolution_cache = PermissionResolutionCache(request=request)
+    now = _utc_now()
+    scope_rows = resolution_cache.list_user_permission_scopes(
+        db,
+        user_id=user.id,
+        now=now,
+    )
+    scoped_permissions = [
+        EffectivePermissionScope(
+            permission_key=row.permission_key,
+            scope_type=row.scope_type,
+            scope_key=row.scope_key,
+            expires_at=row.expires_at,
+        )
+        for row in scope_rows
+    ]
+    effective = EffectivePermissions(
+        user_id=user.id,
+        role=role,
+        is_owner_full_access=False,
+        permissions=sorted(
+            {permission.permission_key for permission in scoped_permissions}
+        ),
+        scoped_permissions=scoped_permissions,
+        is_platform_owner=False,
+    )
     return _current_user_permission_info_from_effective(effective)
 
 

@@ -1,0 +1,253 @@
+from __future__ import annotations
+
+from collections.abc import Callable
+from typing import Any
+
+from fastapi import APIRouter, Depends, Request
+from fastapi.encoders import jsonable_encoder
+from sqlalchemy.orm import Session
+
+from ...db.session import get_db
+from ...models.user import User
+from ...schemas.execution_provider import (
+    ExecutionProviderAccessListResponse,
+    ExecutionProviderRead,
+    ExecutionProviderRegistryResponse,
+)
+from ...schemas.live_gate import LiveGatePolicyRead
+from ...schemas.module import (
+    ModuleAccessListResponse,
+    ModuleManifestRead,
+    ModuleRegistryResponse,
+)
+from ...schemas.module_adapter import (
+    ModuleAdapterAccessListResponse,
+    ModuleAdapterRead,
+    ModuleAdapterRegistryResponse,
+)
+from ...services.execution_provider_registry import (
+    list_execution_provider_contracts,
+    list_execution_providers_for_user,
+)
+from ...services.live_gating_controller import PLATFORM_ORG_ID, LiveGatingController
+from ...services.module_adapter_registry import (
+    list_adapter_contracts,
+    list_adapters_for_user,
+)
+from ...services.module_registry import list_module_manifests, list_modules_for_user
+from ...services.permission_decision_engine import PermissionDecisionEngine
+from ...services.pre_live_validation import PreLiveValidationEngine
+from ...services.production_readiness import ProductionReadinessEngine
+from ...services.unified_permission_engine import UnifiedPermissionRequest
+from ..deps import require_cached_control_plane_admin
+
+router = APIRouter(prefix="/capability", tags=["capability-bootstrap"])
+
+CapabilityEntry = dict[str, Any]
+
+
+def _entry(*, ok: bool, status: int, data: Any = None, detail: Any = None) -> CapabilityEntry:
+    return {
+        "data": jsonable_encoder(data) if ok else None,
+        "detail": None if ok else detail,
+        "ok": ok,
+        "status": status,
+    }
+
+
+def _can_read_target(
+    *,
+    db: Session,
+    request: Request,
+    user: User,
+    module_id: str,
+    action: str,
+) -> bool:
+    decision = PermissionDecisionEngine(db, request=request).decide_platform_metadata(
+        UnifiedPermissionRequest(
+            user_id=user.id,
+            org_id=getattr(request.state, "org_id", None),
+            module_id=module_id,
+            action=action,
+            role=user.role,
+            scope_type="global",
+            scope_key="*",
+            source="capability_bootstrap_batch",
+        )
+    )
+    return decision.allowed
+
+
+def _target_entry(
+    *,
+    db: Session,
+    request: Request,
+    user: User,
+    module_id: str,
+    action: str,
+    loader: Callable[[], Any],
+) -> CapabilityEntry:
+    if not _can_read_target(
+        db=db,
+        request=request,
+        user=user,
+        module_id=module_id,
+        action=action,
+    ):
+        return _entry(
+            ok=False,
+            status=403,
+            detail="Permission denied.",
+        )
+
+    try:
+        return _entry(ok=True, status=200, data=loader())
+    except Exception:
+        return _entry(
+            ok=False,
+            status=500,
+            detail="Capability bootstrap subrequest failed.",
+        )
+
+
+@router.get("/bootstrap")
+def capability_bootstrap(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_cached_control_plane_admin),
+) -> dict[str, CapabilityEntry]:
+    def modules_registry() -> ModuleRegistryResponse:
+        manifests = list_module_manifests()
+        items = [
+            ModuleManifestRead.model_validate(manifest.model_dump())
+            for manifest in manifests
+        ]
+        return ModuleRegistryResponse(items=items, count=len(items))
+
+    def modules_me() -> ModuleAccessListResponse:
+        permission_info, items = list_modules_for_user(db, user, request=request)
+        return ModuleAccessListResponse(
+            user_id=user.id,
+            role=user.role,
+            is_owner_full_access=permission_info.is_owner_full_access,
+            items=items,
+            count=len(items),
+        )
+
+    def module_adapters_registry() -> ModuleAdapterRegistryResponse:
+        adapters = list_adapter_contracts()
+        items = [
+            ModuleAdapterRead.model_validate(adapter.model_dump())
+            for adapter in adapters
+        ]
+        return ModuleAdapterRegistryResponse(items=items, count=len(items))
+
+    def module_adapters_me() -> ModuleAdapterAccessListResponse:
+        permission_info, items = list_adapters_for_user(db, user, request=request)
+        return ModuleAdapterAccessListResponse(
+            user_id=user.id,
+            role=user.role,
+            is_owner_full_access=permission_info.is_owner_full_access,
+            items=items,
+            count=len(items),
+        )
+
+    def execution_providers_registry() -> ExecutionProviderRegistryResponse:
+        providers = list_execution_provider_contracts()
+        items = [
+            ExecutionProviderRead.model_validate(provider.model_dump())
+            for provider in providers
+        ]
+        return ExecutionProviderRegistryResponse(items=items, count=len(items))
+
+    def execution_providers_me() -> ExecutionProviderAccessListResponse:
+        permission_info, items = list_execution_providers_for_user(
+            db,
+            user,
+            request=request,
+        )
+        return ExecutionProviderAccessListResponse(
+            user_id=user.id,
+            role=user.role,
+            is_owner_full_access=permission_info.is_owner_full_access,
+            items=items,
+            count=len(items),
+        )
+
+    def live_gate_policies() -> list[LiveGatePolicyRead]:
+        return LiveGatingController(db).list_policies(org_id=PLATFORM_ORG_ID)
+
+    return {
+        "modules_registry": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="REGISTRY",
+            action="admin",
+            loader=modules_registry,
+        ),
+        "modules_me": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="C16",
+            action="admin",
+            loader=modules_me,
+        ),
+        "module_adapters_registry": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="C14",
+            action="admin",
+            loader=module_adapters_registry,
+        ),
+        "module_adapters_me": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="C14",
+            action="admin",
+            loader=module_adapters_me,
+        ),
+        "execution_providers_registry": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="C09",
+            action="execute",
+            loader=execution_providers_registry,
+        ),
+        "execution_providers_me": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="C09",
+            action="execute",
+            loader=execution_providers_me,
+        ),
+        "live_gate_readiness": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="GOVERNANCE",
+            action="admin",
+            loader=lambda: PreLiveValidationEngine(db).run(),
+        ),
+        "live_gate_production_readiness": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="GOVERNANCE",
+            action="admin",
+            loader=lambda: ProductionReadinessEngine(db).run(),
+        ),
+        "live_gate_policies": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="GOVERNANCE",
+            action="admin",
+            loader=live_gate_policies,
+        ),
+    }
