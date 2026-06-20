@@ -590,7 +590,7 @@ const productNavigationLabels = [
   "Organizations",
   "Permissions",
   "Logs",
-  "Approvals",
+  "审批",
 ];
 for (const label of productNavigationLabels) {
   if (!navigationSource.includes(`label: "${label}"`)) {
