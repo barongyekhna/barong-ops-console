@@ -19,6 +19,7 @@ from ...schemas.permission import (
     PermissionRegistryRead,
     permission_response_category,
 )
+from ...services.api_request_guard import guarded_heavy_api_request
 from ...services.permission_service import (
     PermissionAssignmentDuplicateError,
     PermissionAssignmentHighRiskConfirmationError,
@@ -140,9 +141,11 @@ def _permission_registry_response_item(permission) -> PermissionRegistryRead:
 
 @router.get("/me", response_model=CurrentUserPermissionResponse)
 def permissions_me(
+    guard: None = Depends(guarded_heavy_api_request("permissions.me")),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("AUTH", "read")),
 ) -> CurrentUserPermissionResponse:
+    del guard
     if is_owner_role(user.role):
         return _owner_permissions_me_response(user)
 
@@ -159,10 +162,11 @@ def permissions_me(
 def permissions_registry(
     limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    guard: None = Depends(guarded_heavy_api_request("permissions.registry")),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C16", "admin")),
 ) -> ListResponse[PermissionRegistryRead]:
-    del user
+    del guard, user
     permissions = list_enabled_permissions(db)
     items = [
         _permission_registry_response_item(permission)
@@ -182,10 +186,11 @@ def permissions_registry(
 )
 def user_permission_assignments(
     user_id: int,
+    guard: None = Depends(guarded_heavy_api_request("permissions.assignments")),
     db: Session = Depends(get_db),
     owner: User = Depends(require_owner),
 ) -> PermissionAssignmentListResponse:
-    del owner
+    del guard, owner
     try:
         result = list_user_permission_assignments(db, user_id=user_id)
     except Exception as exc:

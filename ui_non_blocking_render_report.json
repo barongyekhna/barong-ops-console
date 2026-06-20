@@ -1,0 +1,31 @@
+{
+  "report": "ui_non_blocking_render_report",
+  "generated_at": "2026-06-20T00:00:00Z",
+  "changes": [
+    {
+      "surface": "Dashboard",
+      "before": "Startup data used all-settled aggregation before committing page state.",
+      "after": "Each dashboard API result updates its own state fragment; failed APIs show fallback panels while the rest of the dashboard renders."
+    },
+    {
+      "surface": "Jobs page",
+      "before": "List loading/error could block the main list region and used the default 5000ms request timeout.",
+      "after": "The jobs list renders cached or empty state on failure, keeps create/detail areas available, and GET /jobs... requests default to 15000ms."
+    },
+    {
+      "surface": "Capability and module providers",
+      "before": "Capability bootstrap could remain active after route/provider changes.",
+      "after": "Capability bootstrap is abortable; ModuleAccessProvider remains derived from capability state and does not block sidebar on jobs."
+    }
+  ],
+  "non_blocking_guarantees": {
+    "sidebar_depends_on_jobs": false,
+    "dashboard_depends_on_permissions": false,
+    "jobs_failure_blocks_entire_ui": false,
+    "api_timeout_blocks_initial_render": false
+  },
+  "verified_by": [
+    "npm run typecheck",
+    "npm test -- --test-name-pattern='request|jobs|dashboard'"
+  ]
+}

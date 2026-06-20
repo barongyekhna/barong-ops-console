@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 
 import {
   DEFAULT_CACHE_TTL_MS,
+  JOBS_CACHE_TTL_MS,
   MAX_CONCURRENT_FRONTEND_REQUESTS,
   clearFrontendRequestCache,
   getFrontendRequestCacheStats,
@@ -166,7 +167,46 @@ test("capability and access providers use bootstrap cache instead of duplicate f
   assert.doesNotMatch(moduleProviderSource, /listMyModules|apiRequest|\/modules\/me/);
   assert.match(requestCacheSource, /normalizedPath === "\/modules\/registry"/);
   assert.match(requestCacheSource, /normalizedPath === "\/modules\/me"/);
+  assert.match(requestCacheSource, /normalizedPath === "\/jobs"/);
+  assert.equal(JOBS_CACHE_TTL_MS, 15_000);
   assert.match(requestCacheSource, /normalizedPath\.startsWith\("\/module-adapters\/"\)/);
   assert.match(requestCacheSource, /normalizedPath\.startsWith\("\/execution-providers\/"\)/);
   assert.match(requestCacheSource, /normalizedPath\.startsWith\("\/live-gate\/"\)/);
+});
+
+test("jobs console uses extended timeout retry and empty-state fallback", () => {
+  const apiSource = readFileSync("frontend/src/lib/api.ts", "utf8");
+  const jobsPageSource = readFileSync(
+    "frontend/src/app/(console)/jobs/page.tsx",
+    "utf8",
+  );
+  const consoleSource = readFileSync(
+    "frontend/src/components/product-resource-console.tsx",
+    "utf8",
+  );
+
+  assert.match(apiSource, /JOBS_API_TIMEOUT_MS\s*=\s*15_000/);
+  assert.match(apiSource, /pathname === "\/jobs"/);
+  assert.match(apiSource, /pathname\.startsWith\("\/jobs\/"\)/);
+  assert.match(jobsPageSource, /timeoutMs:\s*15_000/);
+  assert.match(jobsPageSource, /retryLimit:\s*1/);
+  assert.match(jobsPageSource, /fallbackToEmptyOnError:\s*true/);
+  assert.match(consoleSource, /EMPTY_LIST_PAYLOAD/);
+  assert.match(consoleSource, /fallbackToEmptyOnListError/);
+  assert.match(consoleSource, /AbortController/);
+  assert.match(consoleSource, /isApiAbortError/);
+});
+
+test("dashboard initial load renders partial state without all-settled blocking", () => {
+  const dashboardSource = readFileSync(
+    "frontend/src/components/operations-dashboard.tsx",
+    "utf8",
+  );
+
+  assert.match(dashboardSource, /EMPTY_DASHBOARD_STATE/);
+  assert.match(dashboardSource, /loadResource/);
+  assert.match(dashboardSource, /AbortController/);
+  assert.doesNotMatch(dashboardSource, /Promise\.allSettled/);
+  assert.doesNotMatch(dashboardSource, /DashboardState \| null/);
+  assert.doesNotMatch(dashboardSource, /state === null/);
 });

@@ -8,6 +8,11 @@ import {
   type UserModuleAdaptersResponse,
 } from "@/lib/module-adapter";
 
+type ModuleAdapterRequestOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 export type ModuleAdapterApiErrorSummary = {
   status: number | null;
   message: string;
@@ -124,12 +129,14 @@ export function userModuleAdaptersResultFromError(
   };
 }
 
-export async function listModuleAdapterRegistry(): Promise<
-  ModuleAdapterApiResult<ModuleAdapterRegistryResponse>
-> {
+export async function listModuleAdapterRegistry(
+  options: ModuleAdapterRequestOptions = {},
+): Promise<ModuleAdapterApiResult<ModuleAdapterRegistryResponse>> {
   try {
     const response = await apiRequest<unknown>("/module-adapters/registry", {
       method: "GET",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
     });
     return moduleAdapterRegistryResultFromResponse(response);
   } catch (error) {
@@ -137,12 +144,14 @@ export async function listModuleAdapterRegistry(): Promise<
   }
 }
 
-export async function listMyModuleAdapters(): Promise<
-  ModuleAdapterApiResult<UserModuleAdaptersResponse>
-> {
+export async function listMyModuleAdapters(
+  options: ModuleAdapterRequestOptions = {},
+): Promise<ModuleAdapterApiResult<UserModuleAdaptersResponse>> {
   try {
     const response = await apiRequest<unknown>("/module-adapters/me", {
       method: "GET",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
     });
     return userModuleAdaptersResultFromResponse(response);
   } catch (error) {

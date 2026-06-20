@@ -119,6 +119,11 @@ export default function JobsPage() {
         { key: "status", label: "Status" },
       ]}
       idKey="job_id"
+      listRequest={{
+        fallbackToEmptyOnError: true,
+        retryLimit: 1,
+        timeoutMs: 15_000,
+      }}
       relatedLists={[
         {
           endpoint: (record) => `/jobs/${record.job_id}/events?limit=20&offset=0`,

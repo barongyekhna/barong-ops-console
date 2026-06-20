@@ -8,6 +8,11 @@ import {
   type UserExecutionProvidersResponse,
 } from "@/lib/execution-provider";
 
+type ExecutionProviderRequestOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 export type ExecutionProviderApiErrorSummary = {
   status: number | null;
   message: string;
@@ -126,12 +131,14 @@ export function userExecutionProvidersResultFromError(
   };
 }
 
-export async function getExecutionProviderRegistry(): Promise<
-  ExecutionProviderApiResult<ExecutionProviderRegistryResponse>
-> {
+export async function getExecutionProviderRegistry(
+  options: ExecutionProviderRequestOptions = {},
+): Promise<ExecutionProviderApiResult<ExecutionProviderRegistryResponse>> {
   try {
     const response = await apiRequest<unknown>("/execution-providers/registry", {
       method: "GET",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
     });
     return executionProviderRegistryResultFromResponse(response);
   } catch (error) {
@@ -139,12 +146,14 @@ export async function getExecutionProviderRegistry(): Promise<
   }
 }
 
-export async function getMyExecutionProviders(): Promise<
-  ExecutionProviderApiResult<UserExecutionProvidersResponse>
-> {
+export async function getMyExecutionProviders(
+  options: ExecutionProviderRequestOptions = {},
+): Promise<ExecutionProviderApiResult<UserExecutionProvidersResponse>> {
   try {
     const response = await apiRequest<unknown>("/execution-providers/me", {
       method: "GET",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
     });
     return userExecutionProvidersResultFromResponse(response);
   } catch (error) {

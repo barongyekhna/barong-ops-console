@@ -1,0 +1,52 @@
+{
+  "report": "backend_latency_stabilization_report",
+  "generated_at": "2026-06-20T00:00:00Z",
+  "backend_changes": [
+    {
+      "component": "backend/app/services/api_request_guard.py",
+      "behavior": "In-memory per-session throttle and duplicate in-flight request guard for read-heavy API endpoints."
+    },
+    {
+      "component": "backend/app/api/routes/jobs.py",
+      "protected_reads": [
+        "GET /jobs",
+        "GET /jobs/{job_id}",
+        "GET /jobs/{job_id}/events"
+      ]
+    },
+    {
+      "component": "backend/app/api/routes/modules.py",
+      "protected_reads": [
+        "GET /modules",
+        "GET /modules/registry",
+        "GET /modules/me",
+        "GET /modules/{module_key}"
+      ]
+    },
+    {
+      "component": "backend/app/api/routes/permissions.py",
+      "protected_reads": [
+        "GET /permissions/me",
+        "GET /permissions/registry",
+        "GET /permissions/users/{user_id}/assignments"
+      ]
+    }
+  ],
+  "defaults": {
+    "session_burst_limit": 12,
+    "window_seconds": 1.0,
+    "duplicate_in_flight_status": 429,
+    "retry_after_seconds": 1
+  },
+  "safety": {
+    "backend_rewrite": false,
+    "db_schema_change": false,
+    "rbac_change": false,
+    "write_path_guarding": false
+  },
+  "verified_by": [
+    ".venv/bin/python -m py_compile backend/app/services/api_request_guard.py backend/app/api/routes/jobs.py backend/app/api/routes/modules.py backend/app/api/routes/permissions.py",
+    ".venv/bin/python -m pytest tests/backend/test_api_request_guard.py"
+  ],
+  "integration_test_note": "Selected backend API integration tests could not run in this environment because DATABASE_URL resolves to host db, which is not reachable from the current sandbox."
+}

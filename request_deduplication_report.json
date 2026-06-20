@@ -1,0 +1,30 @@
+{
+  "report": "request_deduplication_report",
+  "generated_at": "2026-06-20T00:00:00Z",
+  "frontend": {
+    "deduplication": "requestWithFrontendCache deduplicates identical in-flight GET requests by normalized method/path/body key.",
+    "batching": "/capability/bootstrap batches module, adapter, execution-provider, and live-gate bootstrap reads through the Next proxy.",
+    "concurrency_limit": 6,
+    "abort_support_added": [
+      "CapabilityStateProvider bootstrap load",
+      "Dashboard initial load",
+      "ProductResourceConsole list/detail/related requests",
+      "Next backend proxy fetch and capability bootstrap fan-out fetch"
+    ],
+    "new_cache_ttls": {
+      "jobs": 15000,
+      "modules": 60000,
+      "permissions": 60000
+    }
+  },
+  "jobs_fetch": {
+    "timeout_ms": 15000,
+    "default_scope": "All frontend GET /jobs and /jobs/* requests default to 15000ms unless a caller overrides timeoutMs.",
+    "retry_limit": 1,
+    "fallback": "Keep cached list payload when present; otherwise render empty list payload and keep UI interactive."
+  },
+  "verified_by": [
+    "npm run typecheck",
+    "npm test -- --test-name-pattern='request|jobs|dashboard'"
+  ]
+}

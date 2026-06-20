@@ -604,6 +604,7 @@ async function proxyRequest(
       cache: "no-store",
       headers,
       method: request.method,
+      signal: request.signal,
     });
     const responseHeaders = new Headers();
     const backendContentType = backendResponse.headers.get("content-type");
@@ -697,6 +698,7 @@ async function fetchCapabilityBootstrapTarget(
       cache: "no-store",
       headers,
       method: "GET",
+      signal: request.signal,
     });
     const payload = await readBackendJson(backendResponse);
 

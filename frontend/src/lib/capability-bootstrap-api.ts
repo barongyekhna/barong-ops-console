@@ -77,6 +77,11 @@ type CapabilityBootstrapPayload = {
   modules_registry?: CapabilityBootstrapEntry;
 };
 
+type CapabilityBootstrapOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 export type CapabilityBootstrapResult = {
   adapterAccessResult: ModuleAdapterApiResult<UserModuleAdaptersResponse>;
   adapterRegistryResult: ModuleAdapterApiResult<ModuleAdapterRegistryResponse>;
@@ -125,7 +130,9 @@ function dataOrError<T>(
   return fromError(entryError(entry));
 }
 
-async function fallbackCapabilityBootstrap(): Promise<CapabilityBootstrapResult> {
+async function fallbackCapabilityBootstrap(
+  options: CapabilityBootstrapOptions = {},
+): Promise<CapabilityBootstrapResult> {
   const [
     registryResult,
     moduleAccessResult,
@@ -137,15 +144,15 @@ async function fallbackCapabilityBootstrap(): Promise<CapabilityBootstrapResult>
     productionResult,
     policiesResult,
   ] = await Promise.all([
-    listModuleRegistry(),
-    listMyModules(),
-    listModuleAdapterRegistry(),
-    listMyModuleAdapters(),
-    getExecutionProviderRegistry(),
-    getMyExecutionProviders(),
-    getPreLiveReadiness(),
-    getProductionReadiness(),
-    listLiveGatePolicies(),
+    listModuleRegistry(options),
+    listMyModules(options),
+    listModuleAdapterRegistry(options),
+    listMyModuleAdapters(options),
+    getExecutionProviderRegistry(options),
+    getMyExecutionProviders(options),
+    getPreLiveReadiness(options),
+    getProductionReadiness(options),
+    listLiveGatePolicies(options),
   ]);
 
   return {
@@ -161,11 +168,17 @@ async function fallbackCapabilityBootstrap(): Promise<CapabilityBootstrapResult>
   };
 }
 
-export async function getCapabilityBootstrap(): Promise<CapabilityBootstrapResult> {
+export async function getCapabilityBootstrap(
+  options: CapabilityBootstrapOptions = {},
+): Promise<CapabilityBootstrapResult> {
   try {
     const payload = await apiRequest<CapabilityBootstrapPayload>(
       "/capability/bootstrap",
-      { method: "GET" },
+      {
+        method: "GET",
+        signal: options.signal,
+        timeoutMs: options.timeoutMs,
+      },
     );
 
     return {
@@ -220,6 +233,6 @@ export async function getCapabilityBootstrap(): Promise<CapabilityBootstrapResul
       throw error;
     }
 
-    return fallbackCapabilityBootstrap();
+    return fallbackCapabilityBootstrap(options);
   }
 }

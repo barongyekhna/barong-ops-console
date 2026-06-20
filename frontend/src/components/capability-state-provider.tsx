@@ -13,7 +13,7 @@ import {
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { isApiAbortError } from "@/lib/api";
+import { ApiRequestAbortedError, isApiAbortError } from "@/lib/api";
 import {
   getCapabilityBootstrap,
   type CapabilityBootstrapResult,
@@ -275,6 +275,7 @@ export function CapabilityStateProvider({
   const loadedAuthKeyRef = useRef<string | null>(null);
   const loadingPromiseRef = useRef<Promise<void> | null>(null);
   const latestAuthKeyRef = useRef<string | null>(null);
+  const bootstrapAbortControllerRef = useRef<AbortController | null>(null);
   const authKey = useMemo(
     () => authIdentityKey({ status, user }),
     [status, user?.id, user?.role, user?.username],
@@ -288,11 +289,23 @@ export function CapabilityStateProvider({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadRetryNonce, setLoadRetryNonce] = useState(0);
 
+  const abortCapabilityBootstrap = useCallback((message: string) => {
+    const controller = bootstrapAbortControllerRef.current;
+    bootstrapAbortControllerRef.current = null;
+
+    if (controller && !controller.signal.aborted) {
+      controller.abort(new ApiRequestAbortedError(message));
+    }
+  }, []);
+
   const loadCapabilityState = useCallback(
     async ({ force = false }: { force?: boolean } = {}) => {
       const currentAuthKey = authIdentityKey({ status, user });
 
       if (!currentAuthKey) {
+        abortCapabilityBootstrap(
+          "Capability bootstrap was aborted because auth is unavailable.",
+        );
         loadedAuthKeyRef.current = null;
         loadingAuthKeyRef.current = null;
         loadingPromiseRef.current = null;
@@ -318,12 +331,20 @@ export function CapabilityStateProvider({
       setIsLoading(true);
       setLoadError(null);
       loadingAuthKeyRef.current = currentAuthKey;
+      abortCapabilityBootstrap(
+        "Capability bootstrap was replaced by a newer request.",
+      );
+      const controller = new AbortController();
+      bootstrapAbortControllerRef.current = controller;
 
-      const loadPromise = getCapabilityBootstrap()
+      const loadPromise = getCapabilityBootstrap({
+        signal: controller.signal,
+      })
         .then((result) => {
           if (
             !mountedRef.current ||
-            latestAuthKeyRef.current !== currentAuthKey
+            latestAuthKeyRef.current !== currentAuthKey ||
+            controller.signal.aborted
           ) {
             return;
           }
@@ -334,7 +355,8 @@ export function CapabilityStateProvider({
         .catch((error) => {
           if (
             !mountedRef.current ||
-            latestAuthKeyRef.current !== currentAuthKey
+            latestAuthKeyRef.current !== currentAuthKey ||
+            controller.signal.aborted
           ) {
             return;
           }
@@ -365,6 +387,9 @@ export function CapabilityStateProvider({
           );
         })
         .finally(() => {
+          if (bootstrapAbortControllerRef.current === controller) {
+            bootstrapAbortControllerRef.current = null;
+          }
           if (loadingAuthKeyRef.current === currentAuthKey) {
             loadingAuthKeyRef.current = null;
             loadingPromiseRef.current = null;
@@ -380,7 +405,7 @@ export function CapabilityStateProvider({
       loadingPromiseRef.current = loadPromise;
       return loadPromise;
     },
-    [status, user],
+    [abortCapabilityBootstrap, status, user],
   );
 
   useEffect(() => {
@@ -388,9 +413,18 @@ export function CapabilityStateProvider({
     void loadCapabilityState();
 
     return () => {
+      abortCapabilityBootstrap(
+        "Capability bootstrap was aborted because the provider changed.",
+      );
       mountedRef.current = false;
     };
-  }, [authKey, loadCapabilityState, loadRetryNonce, pathname]);
+  }, [
+    abortCapabilityBootstrap,
+    authKey,
+    loadCapabilityState,
+    loadRetryNonce,
+    pathname,
+  ]);
 
   const refresh = useCallback(async () => {
     await loadCapabilityState({ force: true });

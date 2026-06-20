@@ -24,6 +24,7 @@ from ...services.foundation_service import (
     invalid_reference,
     not_found,
 )
+from ...services.api_request_guard import guarded_heavy_api_request
 from ..deps import get_audit_context, require_rbac
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
@@ -34,10 +35,11 @@ def jobs(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     cursor: str | None = Query(default=None, pattern=r"^\d+$"),
+    guard: None = Depends(guarded_heavy_api_request("jobs.list")),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("OPERATIONS", "read")),
 ) -> ListResponse[JobResponse]:
-    del user
+    del guard, user
     items = list_jobs(db, limit=limit, offset=offset, cursor=cursor)
     next_cursor = str(items[-1].id) if len(items) == limit else None
     return ListResponse(
@@ -53,10 +55,11 @@ def jobs(
 @router.get("/{job_id}", response_model=JobResponse)
 def job_detail(
     job_id: str,
+    guard: None = Depends(guarded_heavy_api_request("jobs.detail")),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("OPERATIONS", "read")),
 ) -> JobResponse:
-    del user
+    del guard, user
     job = get_job(db, job_id)
     if job is None:
         raise not_found("Job", job_id)
@@ -108,10 +111,11 @@ def job_events(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     cursor: str | None = Query(default=None, pattern=r"^\d+$"),
+    guard: None = Depends(guarded_heavy_api_request("jobs.events")),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("OPERATIONS", "read")),
 ) -> ListResponse[JobEventResponse]:
-    del user
+    del guard, user
     if get_job(db, job_id) is None:
         raise not_found("Job", job_id)
     items = list_job_events(

@@ -9,6 +9,7 @@ export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 
 const API_PROXY_BASE = "/api/backend";
 export const DEFAULT_API_TIMEOUT_MS = 5_000;
+export const JOBS_API_TIMEOUT_MS = 15_000;
 const DEFAULT_API_RETRY_LIMIT = 1;
 const RETRYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -45,9 +46,23 @@ type ApiRequestOptions = Omit<RequestInit, "body"> & {
   timeoutMs?: number;
 };
 
-function normalizeTimeoutMs(timeoutMs: number | undefined) {
+function defaultTimeoutMsForPath(path: string, method: string) {
+  const pathname = new URL(path, "https://frontend.local").pathname;
+
+  if (method === "GET" && (pathname === "/jobs" || pathname.startsWith("/jobs/"))) {
+    return JOBS_API_TIMEOUT_MS;
+  }
+
+  return DEFAULT_API_TIMEOUT_MS;
+}
+
+function normalizeTimeoutMs(
+  timeoutMs: number | undefined,
+  path: string,
+  method: string,
+) {
   if (typeof timeoutMs !== "number" || !Number.isFinite(timeoutMs)) {
-    return DEFAULT_API_TIMEOUT_MS;
+    return defaultTimeoutMsForPath(path, method);
   }
 
   return Math.max(1, Math.floor(timeoutMs));
@@ -178,7 +193,7 @@ export async function apiRequest<T>(
   } = options;
   const method = (fetchOptions.method ?? "GET").toUpperCase();
   const headers = new Headers(fetchOptions.headers);
-  const timeoutMs = normalizeTimeoutMs(timeoutMsOption);
+  const timeoutMs = normalizeTimeoutMs(timeoutMsOption, path, method);
   const retryLimit = normalizeRetryLimit(retryLimitOption);
   const requestStartedAt = Date.now();
   const routeAbortGeneration = activeRouteAbortGeneration;

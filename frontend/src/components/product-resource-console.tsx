@@ -11,10 +11,16 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
-import { ApiError, apiRequest } from "@/lib/api";
+import {
+  ApiError,
+  ApiRequestAbortedError,
+  apiRequest,
+  isApiAbortError,
+} from "@/lib/api";
 
 type ProductRecord = Record<string, unknown>;
 
@@ -64,6 +70,12 @@ export type ProductRelatedList = {
   title: string;
 };
 
+type ProductListRequestOptions = {
+  fallbackToEmptyOnError?: boolean;
+  retryLimit?: number;
+  timeoutMs?: number;
+};
+
 type ProductResourceConsoleProps = {
   actions?: ProductResourceAction[];
   create?: ProductResourceCreateConfig;
@@ -76,6 +88,7 @@ type ProductResourceConsoleProps = {
   eyebrow: string;
   fields: ProductRecordField[];
   idKey: string;
+  listRequest?: ProductListRequestOptions;
   relatedLists?: ProductRelatedList[];
   requiredPermission: string;
   title: string;
@@ -86,6 +99,13 @@ type ListPayload = {
   items: ProductRecord[];
   limit: number;
   offset: number;
+};
+
+const EMPTY_LIST_PAYLOAD: ListPayload = {
+  count: 0,
+  items: [],
+  limit: 0,
+  offset: 0,
 };
 
 function isRecord(value: unknown): value is ProductRecord {
@@ -341,23 +361,55 @@ function RelatedRecords({
   const [payload, setPayload] = useState<ListPayload | null>(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const endpoint = useMemo(() => list.endpoint(record), [list, record]);
 
   const load = useCallback(async () => {
+    const previousController = abortControllerRef.current;
+    if (previousController && !previousController.signal.aborted) {
+      previousController.abort(
+        new ApiRequestAbortedError("Related records request was replaced."),
+      );
+    }
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setIsLoading(true);
     setError("");
     try {
-      setPayload(normalizeListPayload(await apiRequest<unknown>(endpoint)));
+      setPayload(
+        normalizeListPayload(
+          await apiRequest<unknown>(endpoint, {
+            signal: controller.signal,
+          }),
+        ),
+      );
     } catch (requestError) {
+      if (isApiAbortError(requestError)) {
+        return;
+      }
       setPayload(null);
       setError(errorMessage(requestError, "Related records are unavailable."));
     } finally {
-      setIsLoading(false);
+      if (abortControllerRef.current === controller) {
+        abortControllerRef.current = null;
+        setIsLoading(false);
+      }
     }
   }, [endpoint]);
 
   useEffect(() => {
     void load();
+
+    return () => {
+      const controller = abortControllerRef.current;
+      if (controller && !controller.signal.aborted) {
+        controller.abort(
+          new ApiRequestAbortedError("Related records request was aborted."),
+        );
+      }
+      abortControllerRef.current = null;
+    };
   }, [load]);
 
   return (
@@ -427,6 +479,7 @@ export function ProductResourceConsole({
   eyebrow,
   fields,
   idKey,
+  listRequest,
   relatedLists = [],
   requiredPermission,
   title,
@@ -439,6 +492,10 @@ export function ProductResourceConsole({
   const [detailError, setDetailError] = useState("");
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [notice, setNotice] = useState("");
+  const listAbortControllerRef = useRef<AbortController | null>(null);
+  const detailAbortControllerRef = useRef<AbortController | null>(null);
+  const fallbackToEmptyOnListError =
+    listRequest?.fallbackToEmptyOnError === true;
 
   const items = payload?.items ?? [];
   const selectedRecord = useMemo(
@@ -450,10 +507,28 @@ export function ProductResourceConsole({
   const activeDetail = detail ?? selectedRecord;
 
   const load = useCallback(async () => {
+    const previousController = listAbortControllerRef.current;
+    if (previousController && !previousController.signal.aborted) {
+      previousController.abort(
+        new ApiRequestAbortedError(`${title} list request was replaced.`),
+      );
+    }
+
+    const controller = new AbortController();
+    listAbortControllerRef.current = controller;
     setIsLoading(true);
     setError("");
     try {
-      const result = normalizeListPayload(await apiRequest<unknown>(endpoint));
+      const result = normalizeListPayload(
+        await apiRequest<unknown>(endpoint, {
+          retryLimit: listRequest?.retryLimit,
+          signal: controller.signal,
+          timeoutMs: listRequest?.timeoutMs,
+        }),
+      );
+      if (controller.signal.aborted) {
+        return;
+      }
       setPayload(result);
       setSelectedId((current) => {
         if (
@@ -465,32 +540,76 @@ export function ProductResourceConsole({
         return result.items[0] ? recordId(result.items[0], idKey, 0) : null;
       });
     } catch (requestError) {
-      setPayload(null);
-      setSelectedId(null);
+      if (isApiAbortError(requestError)) {
+        return;
+      }
+      if (fallbackToEmptyOnListError) {
+        setPayload((current) => current ?? EMPTY_LIST_PAYLOAD);
+        setSelectedId((current) => current);
+      } else {
+        setPayload(null);
+        setSelectedId(null);
+      }
       setError(errorMessage(requestError, `${title} are unavailable.`));
     } finally {
-      setIsLoading(false);
+      if (listAbortControllerRef.current === controller) {
+        listAbortControllerRef.current = null;
+        setIsLoading(false);
+      }
     }
-  }, [endpoint, idKey, title]);
+  }, [
+    endpoint,
+    fallbackToEmptyOnListError,
+    idKey,
+    listRequest?.retryLimit,
+    listRequest?.timeoutMs,
+    title,
+  ]);
 
   const loadDetail = useCallback(
     async (record: ProductRecord | null) => {
       if (!record || !detailEndpoint) {
+        const previousController = detailAbortControllerRef.current;
+        if (previousController && !previousController.signal.aborted) {
+          previousController.abort(
+            new ApiRequestAbortedError("Detail request was cleared."),
+          );
+        }
+        detailAbortControllerRef.current = null;
         setDetail(record);
         setDetailError("");
         setIsDetailLoading(false);
         return;
       }
 
+      const previousController = detailAbortControllerRef.current;
+      if (previousController && !previousController.signal.aborted) {
+        previousController.abort(
+          new ApiRequestAbortedError("Detail request was replaced."),
+        );
+      }
+
+      const controller = new AbortController();
+      detailAbortControllerRef.current = controller;
       setIsDetailLoading(true);
       setDetailError("");
       try {
-        setDetail(await apiRequest<ProductRecord>(detailEndpoint(record)));
+        setDetail(
+          await apiRequest<ProductRecord>(detailEndpoint(record), {
+            signal: controller.signal,
+          }),
+        );
       } catch (requestError) {
+        if (isApiAbortError(requestError)) {
+          return;
+        }
         setDetail(record);
         setDetailError(errorMessage(requestError, "Detail is unavailable."));
       } finally {
-        setIsDetailLoading(false);
+        if (detailAbortControllerRef.current === controller) {
+          detailAbortControllerRef.current = null;
+          setIsDetailLoading(false);
+        }
       }
     },
     [detailEndpoint],
@@ -498,10 +617,28 @@ export function ProductResourceConsole({
 
   useEffect(() => {
     void load();
-  }, [load]);
+
+    return () => {
+      const controller = listAbortControllerRef.current;
+      if (controller && !controller.signal.aborted) {
+        controller.abort(
+          new ApiRequestAbortedError(`${title} list request was aborted.`),
+        );
+      }
+      listAbortControllerRef.current = null;
+    };
+  }, [load, title]);
 
   useEffect(() => {
     void loadDetail(selectedRecord);
+
+    return () => {
+      const controller = detailAbortControllerRef.current;
+      if (controller && !controller.signal.aborted) {
+        controller.abort(new ApiRequestAbortedError("Detail request was aborted."));
+      }
+      detailAbortControllerRef.current = null;
+    };
   }, [loadDetail, selectedRecord]);
 
   async function submitCreate(values: ProductRecord) {
@@ -542,6 +679,12 @@ export function ProductResourceConsole({
   const selectedLabel = selectedRecord
     ? recordId(selectedRecord, idKey)
     : "No selection";
+  const showBlockingListLoading =
+    isLoading && payload === null && !fallbackToEmptyOnListError;
+  const showBlockingListError =
+    error.length > 0 && payload === null && !fallbackToEmptyOnListError;
+  const showInlineListWarning =
+    error.length > 0 && !showBlockingListError;
 
   return (
     <section className="product-console" aria-label={title}>
@@ -591,12 +734,18 @@ export function ProductResourceConsole({
         </p>
       ) : null}
 
-      {isLoading ? (
+      {showInlineListWarning ? (
+        <p className="ops-warning product-notice" role="status">
+          {error}
+        </p>
+      ) : null}
+
+      {showBlockingListLoading ? (
         <section className="list-state" aria-label={`Loading ${title}`}>
           <LoaderCircle className="spin" aria-hidden="true" size={22} />
           <span>Loading records</span>
         </section>
-      ) : error ? (
+      ) : showBlockingListError ? (
         <section className="list-state list-error" role="alert">
           <div>
             <h2>{title} are unavailable</h2>
@@ -618,7 +767,12 @@ export function ProductResourceConsole({
               <span className="ops-source">{items.length} shown</span>
             </div>
 
-            {items.length === 0 ? (
+            {isLoading && items.length === 0 ? (
+              <div className="ops-empty-state" role="status">
+                <strong>Loading records</strong>
+                <span>{endpoint}</span>
+              </div>
+            ) : items.length === 0 ? (
               <div className="ops-empty-state">
                 <strong>{emptyTitle}</strong>
                 <span>{emptyDescription}</span>

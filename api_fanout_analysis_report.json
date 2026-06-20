@@ -1,0 +1,45 @@
+{
+  "report": "api_fanout_analysis_report",
+  "generated_at": "2026-06-20T00:00:00Z",
+  "scope": [
+    "AuthProvider",
+    "CapabilityStateProvider",
+    "ModuleAccessProvider",
+    "Dashboard initial load",
+    "Jobs resource console",
+    "Backend /jobs /modules /permissions"
+  ],
+  "findings": [
+    {
+      "area": "Capability bootstrap",
+      "before": "CapabilityStateProvider consumed /capability/bootstrap batching but did not own an AbortController for the bootstrap request.",
+      "after": "CapabilityStateProvider now aborts replaced, unauthenticated, route-changed, and unmounted bootstrap loads."
+    },
+    {
+      "area": "Module access",
+      "before": "ModuleAccessProvider already derived from CapabilityStateProvider and did not make independent /modules/me calls.",
+      "after": "The existing derivation remains unchanged; request fan-out remains centralized in capability bootstrap."
+    },
+    {
+      "area": "Dashboard initial load",
+      "before": "Dashboard used Promise.allSettled and updated state only after all startup requests settled.",
+      "after": "Dashboard starts independent requests and commits each result/error separately without waiting for all requests."
+    },
+    {
+      "area": "Jobs list",
+      "before": "Jobs used the default frontend request timeout and blocking list error state.",
+      "after": "Jobs list uses 15000ms timeout, one retry, request cache, and cached/empty fallback."
+    },
+    {
+      "area": "Backend protection",
+      "before": "The target endpoints relied on normal auth/RBAC and repository execution only.",
+      "after": "Read-heavy target endpoints have session-scoped burst throttling and duplicate in-flight request rejection."
+    }
+  ],
+  "risk_controls": {
+    "backend_business_logic_modified": false,
+    "db_schema_modified": false,
+    "rbac_modified": false,
+    "write_endpoints_throttled": false
+  }
+}

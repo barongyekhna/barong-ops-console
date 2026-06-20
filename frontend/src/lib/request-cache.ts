@@ -3,6 +3,7 @@
 export const DEFAULT_CACHE_TTL_MS = 60_000;
 const AUTH_ME_CACHE_TTL_MS = 30_000;
 const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 60_000;
+export const JOBS_CACHE_TTL_MS = 15_000;
 export const MAX_CONCURRENT_FRONTEND_REQUESTS = 6;
 
 type CacheEntry<T> = {
@@ -67,9 +68,21 @@ function cacheTtlForPath(path: string) {
   }
 
   if (
+    normalizedPath === "/jobs" ||
+    normalizedPath.startsWith("/jobs?") ||
+    /^\/jobs\/[^/?]+\/events(?:\?|$)/.test(normalizedPath)
+  ) {
+    return JOBS_CACHE_TTL_MS;
+  }
+
+  if (
     normalizedPath === "/modules/registry" ||
     normalizedPath === "/modules/me" ||
+    normalizedPath === "/modules" ||
+    normalizedPath.startsWith("/modules?") ||
     normalizedPath === "/permissions/me" ||
+    normalizedPath === "/permissions/registry" ||
+    normalizedPath.startsWith("/permissions/registry?") ||
     normalizedPath.startsWith("/module-adapters/") ||
     normalizedPath.startsWith("/execution-providers/") ||
     normalizedPath.startsWith("/live-gate/")

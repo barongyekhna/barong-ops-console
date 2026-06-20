@@ -10,6 +10,11 @@ import {
   type ProductionReadinessReport,
 } from "@/lib/live-gate";
 
+type LiveGateRequestOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 export type LiveGateApiErrorSummary = {
   status: number | null;
   message: string;
@@ -149,12 +154,14 @@ export function liveGatePoliciesResultFromError(
   };
 }
 
-export async function getPreLiveReadiness(): Promise<
-  LiveGateApiResult<PreLiveValidationReport>
-> {
+export async function getPreLiveReadiness(
+  options: LiveGateRequestOptions = {},
+): Promise<LiveGateApiResult<PreLiveValidationReport>> {
   try {
     const response = await apiRequest<unknown>("/live-gate/readiness", {
       method: "GET",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
     });
     return preLiveReadinessResultFromResponse(response);
   } catch (error) {
@@ -162,13 +169,17 @@ export async function getPreLiveReadiness(): Promise<
   }
 }
 
-export async function getProductionReadiness(): Promise<
-  LiveGateApiResult<ProductionReadinessReport>
-> {
+export async function getProductionReadiness(
+  options: LiveGateRequestOptions = {},
+): Promise<LiveGateApiResult<ProductionReadinessReport>> {
   try {
     const response = await apiRequest<unknown>(
       "/live-gate/production-readiness",
-      { method: "GET" },
+      {
+        method: "GET",
+        signal: options.signal,
+        timeoutMs: options.timeoutMs,
+      },
     );
     return productionReadinessResultFromResponse(response);
   } catch (error) {
@@ -176,12 +187,14 @@ export async function getProductionReadiness(): Promise<
   }
 }
 
-export async function listLiveGatePolicies(): Promise<
-  LiveGateApiResult<LiveGatePolicyRead[]>
-> {
+export async function listLiveGatePolicies(
+  options: LiveGateRequestOptions = {},
+): Promise<LiveGateApiResult<LiveGatePolicyRead[]>> {
   try {
     const response = await apiRequest<unknown>("/live-gate/policies", {
       method: "GET",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
     });
     return liveGatePoliciesResultFromResponse(response);
   } catch (error) {

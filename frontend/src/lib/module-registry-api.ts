@@ -8,6 +8,11 @@ import {
   type UserModulesResponse,
 } from "@/lib/module-registry";
 
+type ModuleRegistryRequestOptions = {
+  signal?: AbortSignal;
+  timeoutMs?: number;
+};
+
 export type ModuleApiErrorSummary = {
   status: number | null;
   message: string;
@@ -121,12 +126,14 @@ export function userModulesResultFromError(
   };
 }
 
-export async function listModuleRegistry(): Promise<
-  ModuleApiResult<ModuleRegistryResponse>
-> {
+export async function listModuleRegistry(
+  options: ModuleRegistryRequestOptions = {},
+): Promise<ModuleApiResult<ModuleRegistryResponse>> {
   try {
     const response = await apiRequest<unknown>("/modules/registry", {
       method: "GET",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
     });
     return moduleRegistryResultFromResponse(response);
   } catch (error) {
@@ -134,12 +141,14 @@ export async function listModuleRegistry(): Promise<
   }
 }
 
-export async function listMyModules(): Promise<
-  ModuleApiResult<UserModulesResponse>
-> {
+export async function listMyModules(
+  options: ModuleRegistryRequestOptions = {},
+): Promise<ModuleApiResult<UserModulesResponse>> {
   try {
     const response = await apiRequest<unknown>("/modules/me", {
       method: "GET",
+      signal: options.signal,
+      timeoutMs: options.timeoutMs,
     });
     return userModulesResultFromResponse(response);
   } catch (error) {

@@ -16,6 +16,7 @@ from ...services.foundation_service import (
     conflict,
     not_found,
 )
+from ...services.api_request_guard import guarded_heavy_api_request
 from ...services.module_registry import (
     list_module_manifests,
     list_modules_for_user,
@@ -33,19 +34,21 @@ router = APIRouter(prefix="/modules", tags=["modules"])
 def modules(
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
+    guard: None = Depends(guarded_heavy_api_request("modules.list")),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ListResponse[ModuleResponse]:
-    del user
+    del guard, user
     items = list_modules(db, limit=limit, offset=offset)
     return ListResponse(items=items, count=len(items), limit=limit, offset=offset)
 
 
 @router.get("/registry", response_model=ModuleRegistryResponse)
 def module_registry(
+    guard: None = Depends(guarded_heavy_api_request("modules.registry")),
     user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ModuleRegistryResponse:
-    del user
+    del guard, user
     manifests = list_module_manifests()
     items = [
         ModuleManifestRead.model_validate(manifest.model_dump())
@@ -57,9 +60,11 @@ def module_registry(
 @router.get("/me", response_model=ModuleAccessListResponse)
 def modules_me(
     request: Request,
+    guard: None = Depends(guarded_heavy_api_request("modules.me")),
     db: Session = Depends(get_db),
     user: User = Depends(require_cached_control_plane_admin),
 ) -> ModuleAccessListResponse:
+    del guard
     permission_info, items = list_modules_for_user(db, user, request=request)
     return ModuleAccessListResponse(
         user_id=user.id,
@@ -73,10 +78,11 @@ def modules_me(
 @router.get("/{module_key}", response_model=ModuleResponse)
 def module_detail(
     module_key: str,
+    guard: None = Depends(guarded_heavy_api_request("modules.detail")),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ModuleResponse:
-    del user
+    del guard, user
     module = get_module(db, module_key)
     if module is None:
         raise not_found("Module", module_key)

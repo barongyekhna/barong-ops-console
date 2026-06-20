@@ -10,11 +10,16 @@ import {
   ShieldCheck,
   UsersRound,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
-import { ApiError, apiRequest } from "@/lib/api";
+import {
+  ApiError,
+  ApiRequestAbortedError,
+  apiRequest,
+  isApiAbortError,
+} from "@/lib/api";
 
 type HealthResponse = {
   status?: string | null;
@@ -62,6 +67,17 @@ type DashboardState = {
   logsError?: string | null;
   users?: ListResponse<UserRecord> | null;
   usersError?: string | null;
+};
+
+const EMPTY_DASHBOARD_STATE: DashboardState = {
+  approvals: null,
+  approvalsError: "",
+  health: null,
+  healthError: "",
+  operationLogs: null,
+  logsError: "",
+  users: null,
+  usersError: "",
 };
 
 const ENGINEERING_LABEL_PREFIX = "C";
@@ -189,75 +205,129 @@ function FallbackNotice({
 export function OperationsDashboard() {
   const { user } = useAuth();
   const capabilityState = useFrontendCapabilityState();
-  const [state, setState] = useState<DashboardState | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [state, setState] = useState<DashboardState>(EMPTY_DASHBOARD_STATE);
+  const [isLoading, setIsLoading] = useState(false);
   const [hasLoadingTimedOut, setHasLoadingTimedOut] = useState(false);
+  const loadGenerationRef = useRef(0);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
+    const previousController = abortControllerRef.current;
+    if (previousController && !previousController.signal.aborted) {
+      previousController.abort(
+        new ApiRequestAbortedError("Dashboard load was replaced."),
+      );
+    }
+
+    const controller = new AbortController();
+    const generation = loadGenerationRef.current + 1;
+    loadGenerationRef.current = generation;
+    abortControllerRef.current = controller;
+    let pendingRequests = 4;
+
+    const applyState = (patch: DashboardState) => {
+      if (
+        controller.signal.aborted ||
+        loadGenerationRef.current !== generation
+      ) {
+        return;
+      }
+
+      setState((current) => ({
+        ...current,
+        ...patch,
+      }));
+    };
+
+    const markSettled = () => {
+      pendingRequests -= 1;
+      if (
+        pendingRequests <= 0 &&
+        abortControllerRef.current === controller
+      ) {
+        abortControllerRef.current = null;
+        setIsLoading(false);
+      }
+    };
+
+    const loadResource = async <T,>(
+      request: Promise<T>,
+      onSuccess: (value: T) => DashboardState,
+      onError: (message: string) => DashboardState,
+      fallbackMessage: string,
+    ) => {
+      try {
+        const value = await request;
+        applyState(onSuccess(value));
+      } catch (error) {
+        if (!isApiAbortError(error)) {
+          applyState(onError(errorMessage(error, fallbackMessage)));
+        }
+      } finally {
+        markSettled();
+      }
+    };
+
+    setHasLoadingTimedOut(false);
     setIsLoading(true);
 
-    try {
-      const [health, operationLogs, approvals, users] =
-        await Promise.allSettled([
-          apiRequest<HealthResponse>("/health", { method: "GET" }),
-          apiRequest<ListResponse<OperationLogRecord>>(
-            "/operation-logs?limit=8&offset=0",
-            { method: "GET" },
-          ),
-          apiRequest<ListResponse<ApprovalRecord>>(
-            "/approval/list?limit=50&offset=0",
-            { method: "GET" },
-          ),
-          apiRequest<ListResponse<UserRecord>>("/users?limit=1&offset=0", {
-            method: "GET",
-          }),
-        ]);
-
-      setState({
-        approvals: approvals.status === "fulfilled" ? approvals.value ?? null : null,
-        approvalsError:
-          approvals.status === "rejected"
-            ? errorMessage(approvals.reason, "Approvals are unavailable.")
-            : "",
-        health: health.status === "fulfilled" ? health.value ?? null : null,
-        healthError:
-          health.status === "rejected"
-            ? errorMessage(health.reason, "System health is unavailable.")
-            : "",
-        operationLogs:
-          operationLogs.status === "fulfilled"
-            ? operationLogs.value ?? null
-            : null,
-        logsError:
-          operationLogs.status === "rejected"
-            ? errorMessage(operationLogs.reason, "Logs are unavailable.")
-            : "",
-        users: users.status === "fulfilled" ? users.value ?? null : null,
-        usersError:
-          users.status === "rejected"
-            ? errorMessage(users.reason, "Users are unavailable.")
-            : "",
-      });
-    } catch (error) {
-      const message = errorMessage(error, "Dashboard data is unavailable.");
-
-      setState({
-        approvals: null,
-        approvalsError: message,
-        health: null,
-        healthError: message,
-        operationLogs: null,
-        logsError: message,
-        users: null,
-        usersError: message,
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    void loadResource(
+      apiRequest<HealthResponse>("/health", {
+        method: "GET",
+        signal: controller.signal,
+      }),
+      (health) => ({ health: health ?? null, healthError: "" }),
+      (healthError) => ({ health: null, healthError }),
+      "System health is unavailable.",
+    );
+    void loadResource(
+      apiRequest<ListResponse<OperationLogRecord>>(
+        "/operation-logs?limit=8&offset=0",
+        {
+          method: "GET",
+          signal: controller.signal,
+        },
+      ),
+      (operationLogs) => ({
+        logsError: "",
+        operationLogs: operationLogs ?? null,
+      }),
+      (logsError) => ({ logsError, operationLogs: null }),
+      "Logs are unavailable.",
+    );
+    void loadResource(
+      apiRequest<ListResponse<ApprovalRecord>>(
+        "/approval/list?limit=50&offset=0",
+        {
+          method: "GET",
+          signal: controller.signal,
+        },
+      ),
+      (approvals) => ({ approvals: approvals ?? null, approvalsError: "" }),
+      (approvalsError) => ({ approvals: null, approvalsError }),
+      "Approvals are unavailable.",
+    );
+    void loadResource(
+      apiRequest<ListResponse<UserRecord>>("/users?limit=1&offset=0", {
+        method: "GET",
+        signal: controller.signal,
+      }),
+      (users) => ({ users: users ?? null, usersError: "" }),
+      (usersError) => ({ users: null, usersError }),
+      "Users are unavailable.",
+    );
   }, []);
 
   useEffect(() => {
     void load();
+
+    return () => {
+      const controller = abortControllerRef.current;
+      if (controller && !controller.signal.aborted) {
+        controller.abort(new ApiRequestAbortedError("Dashboard load was aborted."));
+      }
+      abortControllerRef.current = null;
+    };
   }, [load]);
 
   useEffect(() => {
@@ -275,7 +345,7 @@ export function OperationsDashboard() {
     };
   }, [isLoading]);
 
-  const safeState = state ?? {};
+  const safeState = state;
   const safeOrgContext = {
     role: textValue(capabilityState?.orgContext?.role, "Unknown"),
     state: textValue(capabilityState?.orgContext?.state, "unknown"),
@@ -307,7 +377,7 @@ export function OperationsDashboard() {
   const executionMode = normalizeExecutionMode(
     capabilityState?.liveGate?.execution_mode,
   );
-  const loadingFallbackActive = hasLoadingTimedOut || state === null;
+  const loadingFallbackActive = hasLoadingTimedOut || isLoading;
   const activeLoading = isLoading && !hasLoadingTimedOut;
   const capabilityLoading =
     capabilityState?.isLoading === true &&
