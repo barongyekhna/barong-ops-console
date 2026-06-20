@@ -47,6 +47,7 @@ services:
       POSTGRES_DB: ""
       POSTGRES_PASSWORD: ""
       POSTGRES_USER: ""
+      UVICORN_WORKERS: "1"
     depends_on:
       console_postgres:
         condition: service_healthy

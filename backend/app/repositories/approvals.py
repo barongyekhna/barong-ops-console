@@ -4,8 +4,10 @@ from collections.abc import Sequence
 from datetime import datetime
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from ..db.compatibility import is_missing_table_error
 from ..models.approval import (
     ApprovalDecisionRecord,
     ApprovalRequestRecord,
@@ -38,7 +40,6 @@ def _request_values(request: ApprovalRequest) -> dict[str, object]:
         "request_time": request.request_time,
         "risk_level": request.risk_level,
         "execution_type": request.execution_type,
-        "category": request.category,
         "status": request.status,
         "reason": request.reason,
         "reviewer_id": request.reviewer_id,
@@ -71,8 +72,7 @@ def approval_request_from_record(
         module_key=record.module_key,
         action_key=record.action_key,
         adapter_key=record.adapter_key,
-        explicit_category=getattr(record, "category", None)
-        or payload.get("category"),
+        explicit_category=payload.get("category"),
     )
     payload.setdefault("organization_id", record.org_id)
     payload["category"] = category
@@ -166,9 +166,9 @@ class ApprovalRepository:
         if statuses:
             statement = statement.where(ApprovalRequestRecord.status.in_(statuses))
         if categories:
-            statement = statement.where(
-                ApprovalRequestRecord.category.in_(categories)
-            )
+            category_filter = frozenset(categories)
+        else:
+            category_filter = None
         if requester_id is not None:
             statement = statement.where(
                 ApprovalRequestRecord.requester_id == requester_id
@@ -176,7 +176,25 @@ class ApprovalRepository:
         statement = statement.order_by(ApprovalRequestRecord.id.desc()).limit(
             limit + offset
         )
-        rows = list(self.db.scalars(statement))
+        try:
+            rows = list(self.db.scalars(statement))
+        except SQLAlchemyError as exc:
+            self.db.rollback()
+            if is_missing_table_error(exc, "approval_requests"):
+                return []
+            raise
+        if category_filter is not None:
+            rows = [
+                record
+                for record in rows
+                if approval_category_from_keys(
+                    module_key=record.module_key,
+                    action_key=record.action_key,
+                    adapter_key=record.adapter_key,
+                    explicit_category=dict(record.request_payload).get("category"),
+                )
+                in category_filter
+            ]
         return rows[offset : offset + limit]
 
 

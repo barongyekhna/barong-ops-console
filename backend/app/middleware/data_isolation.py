@@ -201,7 +201,18 @@ async def enforce_org_data_isolation(request: Request, call_next):
         return await call_next(request)
 
     if _c05b_schema_without_c18_data_isolation():
-        return await call_next(request)
+        org_context = get_org_context(request)
+        if org_context is None:
+            return await call_next(request)
+        context = OrgDataIsolationUserContext(
+            org_id=org_context.org_id,
+            user_id=org_context.user_id,
+            role=org_context.role,
+            source="c05b_schema_compat_org_context",
+            strict=False,
+        )
+        with org_data_isolation_context(context):
+            return await call_next(request)
 
     org_id, source = _resolve_org_id(request)
     if org_id is None:

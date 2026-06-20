@@ -110,6 +110,12 @@ class _CachedSessionIdentity:
 
 LEGACY_SESSION_PREFIX = "legacy-v1"
 LEGACY_SESSION_HASH_MARKER = "legacy-v1:c05b-compat"
+LEGACY_SESSION_COMPAT_REVISIONS = frozenset(
+    (
+        "c05b_permissions_001",
+        "user_module_schema_repair_001",
+    )
+)
 SESSION_IDENTITY_CACHE_TTL_SECONDS = 5
 SESSION_IDENTITY_CACHE_MAX_ENTRIES = 4096
 _session_identity_cache: dict[str, _CachedSessionIdentity] = {}
@@ -284,6 +290,14 @@ def _record_login_rate_limit(
 
 
 def _auth_sessions_table_available(db: Session) -> bool:
+    try:
+        rows = db.execute(text("SELECT version_num FROM alembic_version"))
+        revisions = {str(row[0]) for row in rows if row[0]}
+    except SQLAlchemyError:
+        db.rollback()
+        revisions = set()
+    if revisions & LEGACY_SESSION_COMPAT_REVISIONS:
+        return False
     if not table_exists(db, "auth_sessions"):
         return False
     try:

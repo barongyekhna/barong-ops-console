@@ -8,7 +8,12 @@ from sqlalchemy import Engine, inspect, text
 
 from ..core.environments import is_production_like
 
-PRODUCTION_COMPATIBILITY_BASELINE_REVISIONS = frozenset(("c05b_permissions_001",))
+PRODUCTION_COMPATIBILITY_BASELINE_REVISIONS = frozenset(
+    (
+        "c05b_permissions_001",
+        "user_module_schema_repair_001",
+    )
+)
 
 
 class MigrationSafetyError(RuntimeError):

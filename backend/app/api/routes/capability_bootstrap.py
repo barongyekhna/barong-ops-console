@@ -9,11 +9,6 @@ from sqlalchemy.orm import Session
 
 from ...db.session import get_db
 from ...models.user import User
-from ...schemas.execution_provider import (
-    ExecutionProviderAccessListResponse,
-    ExecutionProviderRead,
-    ExecutionProviderRegistryResponse,
-)
 from ...schemas.live_gate import LiveGatePolicyRead
 from ...schemas.module import (
     ModuleAccessListResponse,
@@ -25,10 +20,6 @@ from ...schemas.module_adapter import (
     ModuleAdapterRead,
     ModuleAdapterRegistryResponse,
 )
-from ...services.execution_provider_registry import (
-    list_execution_provider_contracts,
-    list_execution_providers_for_user,
-)
 from ...services.live_gating_controller import PLATFORM_ORG_ID, LiveGatingController
 from ...services.module_adapter_registry import (
     list_adapter_contracts,
@@ -36,8 +27,6 @@ from ...services.module_adapter_registry import (
 )
 from ...services.module_registry import list_module_manifests, list_modules_for_user
 from ...services.permission_decision_engine import PermissionDecisionEngine
-from ...services.pre_live_validation import PreLiveValidationEngine
-from ...services.production_readiness import ProductionReadinessEngine
 from ...services.unified_permission_engine import UnifiedPermissionRequest
 from ..deps import require_cached_control_plane_admin
 
@@ -53,6 +42,10 @@ def _entry(*, ok: bool, status: int, data: Any = None, detail: Any = None) -> Ca
         "ok": ok,
         "status": status,
     }
+
+
+def _deferred_entry(detail: str) -> CapabilityEntry:
+    return _entry(ok=False, status=503, detail=detail)
 
 
 def _can_read_target(
@@ -152,28 +145,6 @@ def capability_bootstrap(
             count=len(items),
         )
 
-    def execution_providers_registry() -> ExecutionProviderRegistryResponse:
-        providers = list_execution_provider_contracts()
-        items = [
-            ExecutionProviderRead.model_validate(provider.model_dump())
-            for provider in providers
-        ]
-        return ExecutionProviderRegistryResponse(items=items, count=len(items))
-
-    def execution_providers_me() -> ExecutionProviderAccessListResponse:
-        permission_info, items = list_execution_providers_for_user(
-            db,
-            user,
-            request=request,
-        )
-        return ExecutionProviderAccessListResponse(
-            user_id=user.id,
-            role=user.role,
-            is_owner_full_access=permission_info.is_owner_full_access,
-            items=items,
-            count=len(items),
-        )
-
     def live_gate_policies() -> list[LiveGatePolicyRead]:
         return LiveGatingController(db).list_policies(org_id=PLATFORM_ORG_ID)
 
@@ -210,37 +181,17 @@ def capability_bootstrap(
             action="admin",
             loader=module_adapters_me,
         ),
-        "execution_providers_registry": _target_entry(
-            db=db,
-            request=request,
-            user=user,
-            module_id="C09",
-            action="execute",
-            loader=execution_providers_registry,
+        "execution_providers_registry": _deferred_entry(
+            "Execution provider registry is deferred from capability bootstrap."
         ),
-        "execution_providers_me": _target_entry(
-            db=db,
-            request=request,
-            user=user,
-            module_id="C09",
-            action="execute",
-            loader=execution_providers_me,
+        "execution_providers_me": _deferred_entry(
+            "Execution provider access is deferred from capability bootstrap."
         ),
-        "live_gate_readiness": _target_entry(
-            db=db,
-            request=request,
-            user=user,
-            module_id="GOVERNANCE",
-            action="admin",
-            loader=lambda: PreLiveValidationEngine(db).run(),
+        "live_gate_readiness": _deferred_entry(
+            "Live gate readiness is deferred from capability bootstrap."
         ),
-        "live_gate_production_readiness": _target_entry(
-            db=db,
-            request=request,
-            user=user,
-            module_id="GOVERNANCE",
-            action="admin",
-            loader=lambda: ProductionReadinessEngine(db).run(),
+        "live_gate_production_readiness": _deferred_entry(
+            "Production readiness is deferred from capability bootstrap."
         ),
         "live_gate_policies": _target_entry(
             db=db,
