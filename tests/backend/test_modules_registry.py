@@ -193,6 +193,7 @@ def owner_permission_info(*permission_keys: str) -> CurrentUserPermissionInfo:
 
 def test_modules_registry_api_requires_login_and_owner_can_read(
     auth_client: TestClient,
+    monkeypatch,
 ) -> None:
     seed_permission_registry()
     unauth_registry = auth_client.get("/api/control-plane/modules/registry")
@@ -218,6 +219,27 @@ def test_modules_registry_api_requires_login_and_owner_can_read(
     )
     assert "password_hash" not in json.dumps(registry_payload, sort_keys=True)
     assert me.json()["is_owner_full_access"] is False
+
+    def fail_user_modules(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("controlled modules/me failure")
+
+    monkeypatch.setattr(
+        "backend.app.api.routes.modules.list_modules_for_user",
+        fail_user_modules,
+    )
+    fallback_me = auth_client.get(
+        "/api/control-plane/modules/me",
+        headers=auth_headers(owner_token),
+    )
+
+    assert fallback_me.status_code == 200
+    fallback_payload = fallback_me.json()
+    assert fallback_payload["degraded"] is True
+    assert fallback_payload["source"] == "snapshot"
+    assert {"admin.users", "admin.permissions", "core.dashboard"}.issubset(
+        {item["module_key"] for item in fallback_payload["items"]}
+    )
 
 
 def test_static_module_registry_validation_rules() -> None:

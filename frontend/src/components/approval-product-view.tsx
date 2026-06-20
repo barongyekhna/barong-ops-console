@@ -12,7 +12,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type SetStateAction,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -180,17 +188,26 @@ function ApprovalSection({
 
       {state.error ? (
         <div className="approval-empty approval-empty-error" role="alert">
-          <strong>审批列表暂时不可用</strong>
+          <strong>
+            {state.data === null ? "审批列表暂时不可用" : "审批列表降级显示"}
+          </strong>
           <span>{state.error}</span>
+          {state.data !== null ? (
+            <span>正在显示上一次成功加载的审批列表。</span>
+          ) : null}
         </div>
-      ) : state.loading && state.data === null ? (
+      ) : null}
+
+      {state.loading && state.data === null ? (
         <div className="approval-empty" role="status">
           <LoaderCircle aria-hidden="true" className="spin" size={18} />
           <span>正在加载审批</span>
         </div>
-      ) : (
+      ) : null}
+
+      {state.data !== null && (!state.loading || items.length > 0) ? (
         <ApprovalListRows items={items} />
-      )}
+      ) : null}
     </section>
   );
 }
@@ -206,7 +223,7 @@ export function ApprovalConsoleView() {
   const loadSection = useCallback(
     async (
       category: ApprovalCategory,
-      setter: (state: ApprovalSectionState) => void,
+      setter: Dispatch<SetStateAction<ApprovalSectionState>>,
       abortRef: { current: AbortController | null },
     ) => {
       const previous = abortRef.current;
@@ -215,7 +232,7 @@ export function ApprovalConsoleView() {
       }
       const controller = new AbortController();
       abortRef.current = controller;
-      setter({ data: null, error: "", loading: true });
+      setter((current) => ({ ...current, error: "", loading: true }));
       try {
         const data = await listApprovals({
           category,
@@ -229,11 +246,11 @@ export function ApprovalConsoleView() {
         if (isApiAbortError(error)) {
           return;
         }
-        setter({
-          data: null,
+        setter((current) => ({
+          data: current.data,
           error: errorText(error, "审批列表加载失败。"),
           loading: false,
-        });
+        }));
       } finally {
         if (abortRef.current === controller) {
           abortRef.current = null;
@@ -316,7 +333,7 @@ export function ApprovalMoreView() {
   const [state, setState] = useState<ApprovalSectionState>(EMPTY_SECTION);
 
   const load = useCallback(async () => {
-    setState({ data: null, error: "", loading: true });
+    setState((current) => ({ ...current, error: "", loading: true }));
     try {
       const data = await listApprovals({
         category,
@@ -324,11 +341,11 @@ export function ApprovalMoreView() {
       });
       setState({ data, error: "", loading: false });
     } catch (error) {
-      setState({
-        data: null,
+      setState((current) => ({
+        data: current.data,
         error: errorText(error, "审批列表加载失败。"),
         loading: false,
-      });
+      }));
     }
   }, [category]);
 
@@ -386,7 +403,6 @@ export function ApprovalDetailView() {
     try {
       setDetail(await getApprovalDetail(approvalId));
     } catch (requestError) {
-      setDetail(null);
       setError(errorText(requestError, "审批详情加载失败。"));
     } finally {
       setLoading(false);

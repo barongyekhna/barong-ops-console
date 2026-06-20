@@ -1,7 +1,10 @@
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from ...core.roles import is_owner_role, list_standard_role_metadata
+from ...core.roles import normalize_role
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.common import ListResponse
@@ -29,9 +32,18 @@ from ...services.user_management_service import (
     reset_managed_user_password,
     update_managed_user,
 )
+from ...services.api_stability import (
+    api_snapshot_key,
+    degraded_snapshot,
+    get_api_snapshot,
+    raise_structured_api_error,
+    save_api_snapshot,
+    stable_read_failure,
+)
 from ..deps import get_audit_context, get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])
+logger = logging.getLogger(__name__)
 
 
 def _raise_user_management_error(exc: Exception) -> None:
@@ -77,34 +89,98 @@ def require_user_manager(user: User = Depends(get_current_user)) -> User:
 
 @router.get("", response_model=ListResponse[UserResponse])
 def users(
+    request: Request,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     organization_id: str | None = Query(default=None, max_length=40),
+    role: str | None = Query(default=None, max_length=40),
     db: Session = Depends(get_db),
     owner: User = Depends(require_user_manager),
 ) -> ListResponse[UserResponse]:
     requested_org = organization_id.strip() if organization_id else None
     requested_org = requested_org or None
+    requested_role = normalize_role(role) if role and role.strip() else None
     effective_org = requested_org or None
     if not is_owner_role(owner.role):
-        effective_org = owner.organization_id
+        org_context = getattr(request.state, "org_context", None)
+        context_org_id = getattr(org_context, "org_id", None)
+        effective_org = context_org_id or owner.organization_id
         if requested_org is not None and requested_org != effective_org:
             return ListResponse(items=[], count=0, limit=limit, offset=offset)
         if effective_org is None:
-            return ListResponse(items=[], count=0, limit=limit, offset=offset)
+            cache_key = api_snapshot_key(
+                "users.list",
+                owner.id,
+                owner.role,
+                requested_org,
+                requested_role,
+                limit,
+                offset,
+            )
+            snapshot = get_api_snapshot(cache_key)
+            if snapshot is not None:
+                return degraded_snapshot(
+                    snapshot,
+                    code="users_org_context_missing",
+                    message="User list is using the last successful snapshot because organization context is unavailable.",
+                    request=request,
+                )
+            raise_structured_api_error(
+                code="users_org_context_missing",
+                message="Organization context is required to list managed users.",
+                request=request,
+                retryable=True,
+            )
 
-    result = list_users(
-        db,
-        limit=limit,
-        offset=offset,
-        organization_id=effective_org,
+    cache_key = api_snapshot_key(
+        "users.list",
+        owner.id,
+        owner.role,
+        effective_org,
+        requested_role,
+        limit,
+        offset,
     )
-    return ListResponse(
-        items=result.items,
-        count=result.count,
-        limit=limit,
-        offset=offset,
-    )
+
+    try:
+        result = list_users(
+            db,
+            limit=limit,
+            offset=offset,
+            organization_id=effective_org,
+            role=requested_role,
+        )
+        response = ListResponse(
+            items=[UserResponse.model_validate(item) for item in result.items],
+            count=result.count,
+            limit=limit,
+            offset=offset,
+        )
+        save_api_snapshot(cache_key, response)
+        return response
+    except Exception as exc:
+        db.rollback()
+        stable_read_failure(
+            logger=logger,
+            route="/users",
+            exc=exc,
+            request=request,
+            code="users_list_failed",
+        )
+        snapshot = get_api_snapshot(cache_key)
+        if snapshot is not None:
+            return degraded_snapshot(
+                snapshot,
+                code="users_list_failed",
+                message="User list is using the last successful snapshot because the live read failed.",
+                request=request,
+            )
+        raise_structured_api_error(
+            code="users_list_failed",
+            message="User list is temporarily unavailable.",
+            request=request,
+            retryable=True,
+        )
 
 
 @router.post(

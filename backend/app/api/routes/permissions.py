@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
@@ -19,6 +20,15 @@ from ...schemas.permission import (
     PermissionRegistryRead,
     permission_response_category,
 )
+from ...services.api_stability import (
+    api_error_info,
+    api_snapshot_key,
+    degraded_snapshot,
+    get_api_snapshot,
+    raise_structured_api_error,
+    save_api_snapshot,
+    stable_read_failure,
+)
 from ...services.api_request_guard import guarded_heavy_api_request
 from ...services.permission_service import (
     PermissionAssignmentDuplicateError,
@@ -38,10 +48,12 @@ from ...services.permission_service import (
     resolve_current_user_permission_info,
     revoke_user_assignment,
     update_user_assignment,
+    upsert_permission_registry,
 )
 from ..deps import get_audit_context, require_owner, require_rbac
 
 router = APIRouter(prefix="/permissions", tags=["permissions"])
+logger = logging.getLogger(__name__)
 
 
 def _raise_permission_assignment_error(exc: Exception) -> None:
@@ -160,6 +172,7 @@ def permissions_me(
 
 @router.get("/registry", response_model=ListResponse[PermissionRegistryRead])
 def permissions_registry(
+    request: Request,
     limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     guard: None = Depends(guarded_heavy_api_request("permissions.registry")),
@@ -167,17 +180,59 @@ def permissions_registry(
     user: User = Depends(require_rbac("C16", "admin")),
 ) -> ListResponse[PermissionRegistryRead]:
     del guard, user
-    permissions = list_enabled_permissions(db)
-    items = [
-        _permission_registry_response_item(permission)
-        for permission in permissions[offset : offset + limit]
-    ]
-    return ListResponse(
-        items=items,
-        count=len(permissions),
-        limit=limit,
-        offset=offset,
-    )
+    cache_key = api_snapshot_key("permissions.registry", limit, offset)
+    try:
+        permissions = list_enabled_permissions(db)
+        if not permissions:
+            upsert_permission_registry(db)
+            permissions = list_enabled_permissions(db)
+        items = [
+            _permission_registry_response_item(permission)
+            for permission in permissions[offset : offset + limit]
+        ]
+        response = ListResponse(
+            items=items,
+            count=len(permissions),
+            limit=limit,
+            offset=offset,
+            degraded=not bool(permissions),
+            error=(
+                api_error_info(
+                    code="permission_registry_empty",
+                    message="Permission registry is empty after seed repair.",
+                    request=request,
+                    retryable=True,
+                )
+                if not permissions
+                else None
+            ),
+        )
+        if permissions:
+            save_api_snapshot(cache_key, response)
+        return response
+    except Exception as exc:
+        db.rollback()
+        stable_read_failure(
+            logger=logger,
+            route="/permissions/registry",
+            exc=exc,
+            request=request,
+            code="permission_registry_failed",
+        )
+        snapshot = get_api_snapshot(cache_key)
+        if snapshot is not None:
+            return degraded_snapshot(
+                snapshot,
+                code="permission_registry_failed",
+                message="Permission registry is using the last successful snapshot because the live read failed.",
+                request=request,
+            )
+        raise_structured_api_error(
+            code="permission_registry_failed",
+            message="Permission registry is temporarily unavailable.",
+            request=request,
+            retryable=True,
+        )
 
 
 @router.get(

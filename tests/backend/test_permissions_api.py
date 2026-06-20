@@ -388,6 +388,7 @@ def test_permissions_me_returns_owner_platform_scoped_permissions(
 
 def test_permissions_registry_requires_permissions_read_or_owner(
     auth_client: TestClient,
+    monkeypatch,
 ) -> None:
     seed_permission_registry()
     owner_id = create_permission_api_user(
@@ -444,3 +445,24 @@ def test_permissions_registry_requires_permissions_read_or_owner(
     assert categories_by_key["artifacts.read"] == "feature"
     assert categories_by_key["permissions.read"] == "control_plane"
     assert owner_id != viewer_id
+
+    def fail_registry_read(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("controlled permission registry failure")
+
+    monkeypatch.setattr(
+        "backend.app.api.routes.permissions.list_enabled_permissions",
+        fail_registry_read,
+    )
+    fallback_response = auth_client.get(
+        "/api/app/permissions/registry",
+        headers=auth_headers(owner_token),
+    )
+
+    assert fallback_response.status_code == 200
+    fallback_payload = fallback_response.json()
+    assert fallback_payload["degraded"] is True
+    assert fallback_payload["source"] == "snapshot"
+    assert {"users.manage", "permissions.read", "artifacts.read"}.issubset(
+        {item["permission_key"] for item in fallback_payload["items"]}
+    )

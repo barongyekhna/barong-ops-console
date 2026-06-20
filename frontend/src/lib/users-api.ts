@@ -42,6 +42,8 @@ export type UserListResponse = {
   count: number;
   limit: number;
   offset: number;
+  degraded?: boolean;
+  source?: string;
 };
 
 export type OrganizationOption = {
@@ -57,6 +59,8 @@ export type OrganizationListResponse = {
   count: number;
   limit: number;
   offset: number;
+  degraded?: boolean;
+  source?: string;
 };
 
 export type CreateUserPayload = {

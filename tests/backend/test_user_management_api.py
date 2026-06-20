@@ -370,6 +370,56 @@ def test_user_list_and_detail_exclude_password_hash(
     assert VIEWER_PASSWORD not in json.dumps(detail.json())
 
 
+def test_user_list_role_filter_returns_super_admins(
+    owner_client: TestClient,
+) -> None:
+    create_user_via_api(
+        owner_client,
+        username="managed_super_admin_filter",
+        role=ROLE_SUPER_ADMIN,
+    )
+    create_user_via_api(
+        owner_client,
+        username="managed_viewer_filter",
+        role=ROLE_VIEWER,
+    )
+
+    response = owner_client.get("/api/app/users?role=super_admin&limit=100")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["count"] == 1
+    assert [item["username"] for item in payload["items"]] == [
+        "managed_super_admin_filter"
+    ]
+
+
+def test_user_list_falls_back_to_snapshot_on_live_read_failure(
+    owner_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    created = create_user_via_api(
+        owner_client,
+        username="managed_snapshot_user",
+        role=ROLE_VIEWER,
+    )
+    first = owner_client.get("/api/app/users")
+    assert first.status_code == 200
+
+    def fail_list_users(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("controlled user list failure")
+
+    monkeypatch.setattr("backend.app.api.routes.users.list_users", fail_list_users)
+    second = owner_client.get("/api/app/users")
+
+    assert second.status_code == 200
+    payload = second.json()
+    assert payload["degraded"] is True
+    assert payload["source"] == "snapshot"
+    assert created["username"] in {item["username"] for item in payload["items"]}
+
+
 def test_user_list_organization_filter_respects_owner_and_super_admin_scope(
     auth_client: TestClient,
     owner_client: TestClient,

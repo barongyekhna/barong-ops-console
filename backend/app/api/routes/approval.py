@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import TypeVar
 
@@ -27,10 +28,19 @@ from ...services.approval_service import (
     ApprovalService,
     ApprovalServiceError,
 )
+from ...services.api_stability import (
+    api_snapshot_key,
+    degraded_snapshot,
+    get_api_snapshot,
+    raise_structured_api_error,
+    save_api_snapshot,
+    stable_read_failure,
+)
 from ..deps import get_audit_context, get_current_user, require_rbac
 
 router = APIRouter(prefix="/approval", tags=["approval"])
 ResultT = TypeVar("ResultT")
+logger = logging.getLogger(__name__)
 
 
 def _service_http_error(exc: ApprovalServiceError) -> HTTPException:
@@ -107,6 +117,7 @@ def approval_request_create(
 
 @router.get("/list", response_model=ListResponse[ApprovalListItem])
 def approval_list(
+    request: Request,
     status_filter: ApprovalRequestStatus | None = Query(
         default=None,
         alias="status",
@@ -118,21 +129,57 @@ def approval_list(
     user: User = Depends(get_current_user),
 ) -> ListResponse[ApprovalListItem]:
     service = ApprovalService(db)
-    items = _run_read(
-        lambda: service.list_approvals(
+    cache_key = api_snapshot_key(
+        "approval.list",
+        user.id,
+        user.role,
+        getattr(request.state, "org_id", None),
+        status_filter,
+        category,
+        limit,
+        offset,
+    )
+    try:
+        items = service.list_approvals(
             user=user,
             status=status_filter,
             category=category,
             limit=limit,
             offset=offset,
         )
-    )
-    return ListResponse(
-        items=items,
-        count=len(items),
-        limit=limit,
-        offset=offset,
-    )
+        response = ListResponse(
+            items=items,
+            count=len(items),
+            limit=limit,
+            offset=offset,
+        )
+        save_api_snapshot(cache_key, response)
+        return response
+    except ApprovalServiceError as exc:
+        raise _service_http_error(exc) from None
+    except Exception as exc:
+        db.rollback()
+        stable_read_failure(
+            logger=logger,
+            route="/approval/list",
+            exc=exc,
+            request=request,
+            code="approval_list_failed",
+        )
+        snapshot = get_api_snapshot(cache_key)
+        if snapshot is not None:
+            return degraded_snapshot(
+                snapshot,
+                code="approval_list_failed",
+                message="Approval list is using the last successful snapshot because the live read failed.",
+                request=request,
+            )
+        raise_structured_api_error(
+            code="approval_list_failed",
+            message="Approval list is temporarily unavailable.",
+            request=request,
+            retryable=True,
+        )
 
 
 @router.get("/{approval_id}", response_model=ApprovalDetailResponse)

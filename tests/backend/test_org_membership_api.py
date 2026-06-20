@@ -96,6 +96,29 @@ def test_c18c_membership_api_routes_are_registered() -> None:
     assert ("/api/app/org/{org_id}/members", ("GET",)) in routes
 
 
+def test_c18c_membership_api_falls_back_to_snapshot_on_live_read_failure(
+    owner_client,
+    monkeypatch,
+) -> None:
+    org_id = "org_11111111111111111111111111111111"
+    first = owner_client.get(f"/api/app/org/{org_id}/members")
+    assert first.status_code == 200, first.text
+    assert any(item["role"] == "owner" for item in first.json())
+
+    def fail_list_org_members(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("controlled org members failure")
+
+    monkeypatch.setattr(
+        "backend.app.api.org_membership.list_org_members",
+        fail_list_org_members,
+    )
+    second = owner_client.get(f"/api/app/org/{org_id}/members")
+
+    assert second.status_code == 200
+    assert second.json() == first.json()
+
+
 def test_c18c_owner_admin_member_management_permissions(
     membership_tables: None,
 ) -> None:

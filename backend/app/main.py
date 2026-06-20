@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
@@ -91,6 +93,7 @@ from .services.session_seen_buffer import (
 from .services.unified_permission_engine import UnifiedPermissionRequest
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
 
 PUBLIC_API_PREFIX = "/api/public"
 APPLICATION_API_PREFIX = "/api/app"
@@ -282,7 +285,12 @@ async def sanitized_unhandled_exception_handler(
     request: Request,
     exc: Exception,
 ):
-    del exc
+    logger.error(
+        "Unhandled API exception path=%s request_id=%s",
+        request.url.path,
+        getattr(request.state, "context_id", None),
+        exc_info=(type(exc), exc, exc.__traceback__),
+    )
     detail = (
         _production_error_detail(
             request,

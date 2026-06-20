@@ -43,6 +43,7 @@ class ApprovalRequestRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Bas
     )
     risk_level: Mapped[str] = mapped_column(String(50), nullable=False)
     execution_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    category: Mapped[str] = mapped_column(String(50), nullable=False, default="feature")
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     reviewer_id: Mapped[int | None] = mapped_column(

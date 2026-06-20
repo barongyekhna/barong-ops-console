@@ -2,6 +2,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from .common import ApiErrorInfo
+
 
 ModuleCategory = Literal[
     "core",
@@ -136,6 +138,9 @@ class ModuleManifestRead(ModuleManifestV1):
 class ModuleRegistryResponse(BaseModel):
     items: list[ModuleManifestRead]
     count: int = Field(ge=0)
+    degraded: bool = False
+    source: str = "live"
+    error: ApiErrorInfo | None = None
 
 
 class ModuleAccessRead(BaseModel):
@@ -161,3 +166,6 @@ class ModuleAccessListResponse(BaseModel):
     is_owner_full_access: bool
     items: list[ModuleAccessRead]
     count: int = Field(ge=0)
+    degraded: bool = False
+    source: str = "live"
+    error: ApiErrorInfo | None = None

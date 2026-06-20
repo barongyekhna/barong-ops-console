@@ -103,6 +103,13 @@ def reject_sensitive_data(value: Any) -> Any:
 ItemT = TypeVar("ItemT")
 
 
+class ApiErrorInfo(BaseModel):
+    code: str
+    message: str
+    request_id: str | None = None
+    retryable: bool = True
+
+
 class ListResponse(BaseModel, Generic[ItemT]):
     items: list[ItemT]
     count: int = Field(ge=0)
@@ -110,3 +117,6 @@ class ListResponse(BaseModel, Generic[ItemT]):
     offset: int = Field(ge=0)
     cursor: str | None = None
     next_cursor: str | None = None
+    degraded: bool = False
+    source: str = "live"
+    error: ApiErrorInfo | None = None

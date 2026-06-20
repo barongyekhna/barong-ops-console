@@ -266,6 +266,40 @@ def test_user_role_lists_only_permitted_feature_module_and_cannot_approve(
     assert approved.status_code == 403
 
 
+def test_approval_list_falls_back_to_snapshot_on_live_read_failure(
+    owner_client: TestClient,
+    monkeypatch,
+) -> None:
+    created = owner_client.post(
+        "/api/app/approval/request",
+        json=approval_payload(
+            approval_id="approval-api-snapshot",
+            execution_id="execution-api-snapshot",
+        ),
+    )
+    first = owner_client.get("/api/app/approval/list")
+    assert created.status_code == 201, created.text
+    assert first.status_code == 200, first.text
+
+    def fail_list_approvals(*args, **kwargs):
+        del args, kwargs
+        raise RuntimeError("controlled approval list failure")
+
+    monkeypatch.setattr(
+        "backend.app.api.routes.approval.ApprovalService.list_approvals",
+        fail_list_approvals,
+    )
+    second = owner_client.get("/api/app/approval/list")
+
+    assert second.status_code == 200
+    payload = second.json()
+    assert payload["degraded"] is True
+    assert payload["source"] == "snapshot"
+    assert "approval-api-snapshot" in {
+        item["approval_id"] for item in payload["items"]
+    }
+
+
 def test_control_plane_approval_is_owner_only(
     auth_client: TestClient,
 ) -> None:

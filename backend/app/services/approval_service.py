@@ -92,7 +92,7 @@ ROLE_ALLOWED_ACTIONS: dict[ApprovalActorRole, tuple[ApprovalBoundaryAction, ...]
     "user": ("request", "read", "list"),
     "system": ("auto_approve",),
 }
-APPROVAL_LIST_CANDIDATE_LIMIT = 50
+APPROVAL_LIST_SCAN_LIMIT = 500
 APPROVAL_REJECT_REASON_MIN_LENGTH = 15
 APPROVAL_APPROVE_DEFAULT_REASON = "审批人已同意该申请。"
 
@@ -647,19 +647,21 @@ class ApprovalService:
 
         if actor.actor_role == "admin":
             categories = (FEATURE_CATEGORY,)
+        requires_post_filter_pagination = (
+            actor.actor_role == "user" or categories is not None
+        )
         if actor.actor_role == "user":
             categories = (FEATURE_CATEGORY,)
+
+        if requires_post_filter_pagination:
             records = self.approval_repo.query_records(
                 statuses=statuses,
                 categories=categories,
-                limit=APPROVAL_LIST_CANDIDATE_LIMIT,
+                limit=APPROVAL_LIST_SCAN_LIMIT,
                 offset=0,
             )
-            records = [
-                record
-                for record in records
-                if visible(record)
-            ][offset : offset + limit]
+            records = [record for record in records if visible(record)]
+            records = records[offset : offset + limit]
         else:
             records = self.approval_repo.query_records(
                 statuses=statuses,

@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated, NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
@@ -21,10 +22,18 @@ from ..services.org_membership_service import (
     list_org_members,
     remove_org_member,
 )
+from ..services.api_stability import (
+    api_snapshot_key,
+    get_api_snapshot,
+    raise_structured_api_error,
+    save_api_snapshot,
+    stable_read_failure,
+)
 from .deps import get_audit_context, get_current_user
 
 router = APIRouter(prefix="/org", tags=["organization-membership"])
 OrgIdPath = Annotated[str, Path(pattern=ORG_ID_PATTERN.pattern)]
+logger = logging.getLogger(__name__)
 
 
 def _raise_membership_error(exc: Exception) -> NoReturn:
@@ -104,12 +113,42 @@ def org_members_list(
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ) -> list[OrgMembership]:
+    cache_key = api_snapshot_key("org.members", org_id, actor.id)
     try:
-        return list_org_members(
+        members = list_org_members(
             db,
             org_id=org_id,
             actor=actor,
             audit=get_audit_context(request),
         )
+        save_api_snapshot(cache_key, members)
+        return members
     except Exception as exc:
-        _raise_membership_error(exc)
+        if isinstance(
+            exc,
+            (
+                OrgMembershipOrganizationNotFoundError,
+                OrgMembershipUserNotFoundError,
+                OrgMembershipNotFoundError,
+                OrgMembershipPermissionDeniedError,
+                OrgMembershipConflictError,
+            ),
+        ):
+            _raise_membership_error(exc)
+        db.rollback()
+        stable_read_failure(
+            logger=logger,
+            route="/org/{org_id}/members",
+            exc=exc,
+            request=request,
+            code="org_members_failed",
+        )
+        snapshot = get_api_snapshot(cache_key)
+        if snapshot is not None:
+            return snapshot
+        raise_structured_api_error(
+            code="org_members_failed",
+            message="Organization members are temporarily unavailable.",
+            request=request,
+            retryable=True,
+        )

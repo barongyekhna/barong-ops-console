@@ -182,25 +182,35 @@ export function PermissionsProductView() {
 
     setIsLoading(true);
     setError("");
+    const loadErrors: string[] = [];
     try {
-      const [userResult, registryResult] = await Promise.all([
-        listUsers(100),
-        listPermissionRegistry(),
-      ]);
+      const userResult = await listUsers(100);
       setUsers(userResult.items);
-      setRegistry(registryResult);
     } catch (loadError) {
-      setUsers([]);
-      setRegistry([]);
-      setError(
+      loadErrors.push(
         formatUsersApiError(
           loadError,
-          "Permission center data could not be loaded.",
+          "Permission center users could not be loaded.",
         ),
       );
-    } finally {
-      setIsLoading(false);
     }
+
+    try {
+      const registryResult = await listPermissionRegistry();
+      setRegistry(registryResult);
+    } catch (loadError) {
+      loadErrors.push(
+        formatUsersApiError(
+          loadError,
+          "Permission registry could not be loaded.",
+        ),
+      );
+    }
+
+    if (loadErrors.length > 0) {
+      setError(loadErrors.join(" "));
+    }
+    setIsLoading(false);
   }, [canView]);
 
   const loadDialogAssignments = useCallback(
@@ -214,26 +224,31 @@ export function PermissionsProductView() {
       setIsDialogLoading(true);
       setDialogError("");
       setDialogNotice("");
-      try {
-        const rows = await Promise.all(
-          targetUsers.map(async (targetUser) => {
-            const response = await listUserPermissionAssignments(targetUser.id);
-            return [
-              targetUser.id,
-              permissionAssignmentForUser(
-                response.assignments,
-                permission.permission_key,
-              ),
-            ] as const;
-          }),
-        );
-        setDialogAssignments(Object.fromEntries(rows));
-      } catch (assignmentError) {
-        setDialogAssignments({});
-        setDialogError(formatPermissionAssignmentsApiError(assignmentError));
-      } finally {
-        setIsDialogLoading(false);
+      const rows: Record<number, PermissionAssignment | null> = {};
+      let failedCount = 0;
+      let lastError: unknown = null;
+      for (const targetUser of targetUsers) {
+        try {
+          const response = await listUserPermissionAssignments(targetUser.id);
+          rows[targetUser.id] = permissionAssignmentForUser(
+            response.assignments,
+            permission.permission_key,
+          );
+        } catch (assignmentError) {
+          failedCount += 1;
+          lastError = assignmentError;
+        }
       }
+      setDialogAssignments((current) => ({
+        ...current,
+        ...rows,
+      }));
+      if (failedCount > 0) {
+        setDialogError(
+          `${formatPermissionAssignmentsApiError(lastError)} Showing loaded employees where available.`,
+        );
+      }
+      setIsDialogLoading(false);
     },
     [canWriteAssignments],
   );
@@ -368,16 +383,25 @@ export function PermissionsProductView() {
         </div>
       </div>
 
-      {isLoading ? (
+      {isLoading && registry.length === 0 && users.length === 0 ? (
         <section className="list-state">
           <LoaderCircle className="spin" aria-hidden="true" size={22} />
           <span>Loading permission center</span>
         </section>
-      ) : error ? (
+      ) : null}
+
+      {error ? (
         <section className="list-state list-error" role="alert">
           <div>
-            <h2>Permissions are unavailable</h2>
+            <h2>
+              {registry.length > 0 || users.length > 0
+                ? "Permissions are degraded"
+                : "Permissions are unavailable"}
+            </h2>
             <p>{error}</p>
+            {registry.length > 0 || users.length > 0 ? (
+              <p>Showing the last successful permission center data.</p>
+            ) : null}
           </div>
           <button
             className="primary-button"
@@ -388,7 +412,10 @@ export function PermissionsProductView() {
             Retry
           </button>
         </section>
-      ) : (
+      ) : null}
+
+      {(!error || registry.length > 0 || users.length > 0) &&
+      (!isLoading || registry.length > 0 || users.length > 0) ? (
         <div className="permissions-product-stack">
           {role === "owner" ? (
             <section
@@ -444,7 +471,7 @@ export function PermissionsProductView() {
             )}
           </section>
         </div>
-      )}
+      ) : null}
 
       {selectedPermission ? (
         <div

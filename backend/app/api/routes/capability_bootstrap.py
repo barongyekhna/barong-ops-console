@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Callable
 from typing import Any
 
@@ -31,6 +32,7 @@ from ...services.unified_permission_engine import UnifiedPermissionRequest
 from ..deps import require_cached_control_plane_admin
 
 router = APIRouter(prefix="/capability", tags=["capability-bootstrap"])
+logger = logging.getLogger(__name__)
 
 CapabilityEntry = dict[str, Any]
 
@@ -96,6 +98,12 @@ def _target_entry(
     try:
         return _entry(ok=True, status=200, data=loader())
     except Exception:
+        logger.exception(
+            "Capability bootstrap subrequest failed module=%s action=%s request_id=%s",
+            module_id,
+            action,
+            getattr(request.state, "context_id", None),
+        )
         return _entry(
             ok=False,
             status=500,

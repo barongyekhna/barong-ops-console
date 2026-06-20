@@ -172,7 +172,6 @@ export function UserManagementPanel() {
     try {
       setRoleCatalog(await listUserRoles());
     } catch (error) {
-      setRoleCatalog(null);
       setRoleCatalogError(
         formatUsersApiError(
           error,
@@ -198,7 +197,6 @@ export function UserManagementPanel() {
       const result = await listOrganizations();
       setOrganizations(result.items);
     } catch (error) {
-      setOrganizations([]);
       setOrganizationsError(
         formatUsersApiError(
           error,
@@ -226,7 +224,6 @@ export function UserManagementPanel() {
         const result = await listUsers();
         setUsers(result.items);
       } catch (error) {
-        setUsers([]);
         setListError(
           formatUsersApiError(
             error,
@@ -817,7 +814,7 @@ export function UserManagementPanel() {
           </button>
         </div>
 
-        {isLoading ? (
+        {isLoading && users.length === 0 ? (
           <div className="list-state" aria-label="Loading users">
             <LoaderCircle className="spin" aria-hidden="true" size={22} />
             Loading users
@@ -827,8 +824,15 @@ export function UserManagementPanel() {
         {!isLoading && listError ? (
           <div className="list-state list-error" role="alert">
             <div>
-              <h2>User API request failed</h2>
+              <h2>
+                {users.length > 0
+                  ? "User API is degraded"
+                  : "User API request failed"}
+              </h2>
               <p>{listError}</p>
+              {users.length > 0 ? (
+                <p>Showing the last successful user list.</p>
+              ) : null}
             </div>
             <button
               className="primary-button"
@@ -841,7 +845,7 @@ export function UserManagementPanel() {
           </div>
         ) : null}
 
-        {!isLoading && !listError ? (
+        {(!isLoading || users.length > 0) && (!listError || users.length > 0) ? (
           <div className="users-table-scroll">
             <table className="users-table">
               <thead>

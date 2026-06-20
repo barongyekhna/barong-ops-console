@@ -10,6 +10,7 @@ from ..repositories.auth_sessions import invalidate_active_sessions_for_user
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.organizations import get_organization
 from ..repositories.users import (
+    count_users as count_user_records,
     create_user as create_user_record,
     get_user_by_id,
     get_user_by_username,
@@ -95,14 +96,21 @@ def list_users(
     limit: int,
     offset: int,
     organization_id: str | None = None,
+    role: str | None = None,
 ) -> UserListResult:
     items = list_user_records(
         db,
         limit=limit,
         offset=offset,
         organization_id=organization_id,
+        role=role,
     )
-    return UserListResult(items=items, count=len(items))
+    count = count_user_records(
+        db,
+        organization_id=organization_id,
+        role=role,
+    )
+    return UserListResult(items=items, count=count)
 
 
 def get_managed_user(db: Session, user_id: int) -> User:

@@ -247,6 +247,14 @@ export async function apiRequest<T>(
               const payload = (await response.json()) as { detail?: unknown };
               if (typeof payload.detail === "string") {
                 message = payload.detail;
+              } else if (
+                typeof payload.detail === "object" &&
+                payload.detail !== null &&
+                "message" in payload.detail &&
+                typeof (payload.detail as { message?: unknown }).message ===
+                  "string"
+              ) {
+                message = (payload.detail as { message: string }).message;
               }
             } catch {
               // Keep the stable fallback when the backend does not return JSON.

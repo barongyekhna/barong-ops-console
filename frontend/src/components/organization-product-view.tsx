@@ -165,19 +165,32 @@ function OrganizationListSection({
 
       {listError ? (
         <div className="ops-empty-state" role="alert">
-          <strong>Organization list is unavailable.</strong>
+          <strong>
+            {organizations.length > 0
+              ? "Organization list is degraded."
+              : "Organization list is unavailable."}
+          </strong>
           <span>{listError}</span>
+          {organizations.length > 0 ? (
+            <span>Showing the last successful organization list.</span>
+          ) : null}
         </div>
-      ) : isLoading ? (
+      ) : null}
+
+      {isLoading && organizations.length === 0 ? (
         <div className="list-state" aria-label="Loading organizations">
           Loading organizations.
         </div>
-      ) : organizations.length === 0 ? (
+      ) : null}
+
+      {!isLoading && !listError && organizations.length === 0 ? (
         <div className="ops-empty-state" role="status">
           <strong>No organizations found.</strong>
           <span>No organization records are available.</span>
         </div>
-      ) : (
+      ) : null}
+
+      {organizations.length > 0 ? (
         <div className="users-table-scroll">
           <table className="users-table organization-table">
             <thead>
@@ -198,7 +211,7 @@ function OrganizationListSection({
             </tbody>
           </table>
         </div>
-      )}
+      ) : null}
 
       {superAdminError && !listError ? (
         <p className="ops-warning" role="status">
@@ -276,31 +289,25 @@ export function OrganizationProductView() {
       setListError("");
       setSuperAdminError("");
 
-      const [organizationResult, superAdminResult] =
-        await Promise.allSettled([
-          listOrganizations(),
-          listSuperAdminUsers(),
-        ]);
-
-      if (organizationResult.status === "fulfilled") {
-        setOrganizations(organizationResult.value.items);
-      } else {
-        setOrganizations([]);
+      try {
+        const organizationResult = await listOrganizations();
+        setOrganizations(organizationResult.items);
+      } catch (error) {
         setListError(
           messageFromError(
-            organizationResult.reason,
+            error,
             "Organizations could not be loaded.",
           ),
         );
       }
 
-      if (superAdminResult.status === "fulfilled") {
-        setSuperAdmins(superAdminResult.value.items);
-      } else {
-        setSuperAdmins([]);
+      try {
+        const superAdminResult = await listSuperAdminUsers();
+        setSuperAdmins(superAdminResult.items);
+      } catch (error) {
         setSuperAdminError(
           messageFromError(
-            superAdminResult.reason,
+            error,
             "Super admin names could not be loaded; showing organization owner IDs.",
           ),
         );

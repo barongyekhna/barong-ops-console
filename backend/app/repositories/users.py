@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import inspect, select
+from sqlalchemy import func, inspect, select
 from sqlalchemy.orm import Session, load_only
 
 from ..db.compatibility import table_exists
@@ -55,12 +55,29 @@ def list_users(
     limit: int,
     offset: int,
     organization_id: str | None = None,
+    role: str | None = None,
 ) -> list[User]:
     statement = _user_select().order_by(User.id)
     if organization_id is not None:
         statement = statement.where(User.organization_id == organization_id)
+    if role is not None:
+        statement = statement.where(User.role == role)
     rows = list(db.scalars(statement.limit(limit + offset)))
     return rows[offset : offset + limit]
+
+
+def count_users(
+    db: Session,
+    *,
+    organization_id: str | None = None,
+    role: str | None = None,
+) -> int:
+    statement = select(func.count()).select_from(User)
+    if organization_id is not None:
+        statement = statement.where(User.organization_id == organization_id)
+    if role is not None:
+        statement = statement.where(User.role == role)
+    return int(db.scalar(statement) or 0)
 
 
 def get_owner(db: Session) -> User | None:

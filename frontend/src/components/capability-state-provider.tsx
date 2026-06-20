@@ -160,6 +160,67 @@ function isRouteChangeAbort(error: unknown) {
   );
 }
 
+function preservePreviousResult<
+  T extends { ok: boolean; data: unknown; error: unknown },
+>(previous: T | null | undefined, next: T): T {
+  if (next.ok || !previous?.ok) {
+    return next;
+  }
+
+  return {
+    ...next,
+    data: previous.data,
+  };
+}
+
+function mergeCapabilityBootstrap(
+  previous: CapabilityBootstrapResult | null,
+  next: CapabilityBootstrapResult,
+): CapabilityBootstrapResult {
+  if (!previous) {
+    return next;
+  }
+
+  return {
+    adapterAccessResult: preservePreviousResult(
+      previous.adapterAccessResult,
+      next.adapterAccessResult,
+    ),
+    adapterRegistryResult: preservePreviousResult(
+      previous.adapterRegistryResult,
+      next.adapterRegistryResult,
+    ),
+    executionAccessResult: preservePreviousResult(
+      previous.executionAccessResult,
+      next.executionAccessResult,
+    ),
+    executionRegistryResult: preservePreviousResult(
+      previous.executionRegistryResult,
+      next.executionRegistryResult,
+    ),
+    moduleAccessResult: preservePreviousResult(
+      previous.moduleAccessResult,
+      next.moduleAccessResult,
+    ),
+    policiesResult: preservePreviousResult(
+      previous.policiesResult,
+      next.policiesResult,
+    ),
+    productionResult: preservePreviousResult(
+      previous.productionResult,
+      next.productionResult,
+    ),
+    readinessResult: preservePreviousResult(
+      previous.readinessResult,
+      next.readinessResult,
+    ),
+    registryResult: preservePreviousResult(
+      previous.registryResult,
+      next.registryResult,
+    ),
+  };
+}
+
 function createContextValue({
   authStatus,
   bootstrap,
@@ -349,7 +410,7 @@ export function CapabilityStateProvider({
             return;
           }
 
-          setBootstrap(result);
+          setBootstrap((current) => mergeCapabilityBootstrap(current, result));
           loadedAuthKeyRef.current = currentAuthKey;
         })
         .catch((error) => {
@@ -369,7 +430,6 @@ export function CapabilityStateProvider({
 
           if (isApiAbortError(error)) {
             loadedAuthKeyRef.current = null;
-            setBootstrap(null);
             setLoadError(
               error instanceof Error
                 ? error.message
@@ -379,7 +439,6 @@ export function CapabilityStateProvider({
           }
 
           loadedAuthKeyRef.current = null;
-          setBootstrap(null);
           setLoadError(
             error instanceof Error
               ? error.message
