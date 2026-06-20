@@ -16,6 +16,7 @@ from ..core.roles import (
 )
 from ..models.approval import ApprovalDecisionRecord, ApprovalRequestRecord
 from ..models.user import User
+from ..repositories.tenant import tenant_org_id_for_create
 from ..repositories.approvals import (
     ApprovalRepository,
     DecisionRepository,
@@ -26,6 +27,7 @@ from ..schemas.approval import (
     C12D_APPROVAL_SAFETY_GUARANTEES,
     ApprovalActorRole,
     ApprovalActorType,
+    ApprovalCategory,
     ApprovalContextFact,
     ApprovalContextSnapshot,
     ApprovalDecision,
@@ -43,11 +45,23 @@ from ..schemas.approval import (
     ApprovalWorkflow,
 )
 from ..schemas.common import reject_sensitive_data
+from ..schemas.storage_layer import StorageRecordEnvelope
+from .auth_service import AuditContext
+from .audit_query_engine import AuditLogWriter
 from .approval_workflow_engine import (
     ApprovalWorkflowEngine,
     ApprovalWorkflowTransitionError,
 )
+from .approval_productization import (
+    CONTROL_PLANE_CATEGORY,
+    FEATURE_CATEGORY,
+    approval_category_from_keys,
+    approval_display_info,
+    module_key_matches_permission_tokens,
+    module_permission_tokens,
+)
 from .c12_approval_unlock import C12ApprovalUnlockTokenController
+from .permission_service import resolve_effective_permissions
 
 
 ApprovalBoundaryAction = Literal[
@@ -75,9 +89,12 @@ REQUESTER_ROLE_FACT_KEYS = frozenset(
 ROLE_ALLOWED_ACTIONS: dict[ApprovalActorRole, tuple[ApprovalBoundaryAction, ...]] = {
     "owner": ("request", "read", "list", "approve", "reject", "auto_approve"),
     "admin": ("read", "list", "approve", "reject"),
-    "user": ("request",),
+    "user": ("request", "read", "list"),
     "system": ("auto_approve",),
 }
+APPROVAL_LIST_CANDIDATE_LIMIT = 1000
+APPROVAL_REJECT_REASON_MIN_LENGTH = 15
+APPROVAL_APPROVE_DEFAULT_REASON = "审批人已同意该申请。"
 
 
 class ApprovalServiceError(ValueError):
@@ -201,17 +218,42 @@ def _source_refs(payload: ApprovalRequestCreate) -> tuple[str, ...]:
     return tuple(deduped)
 
 
+def _approval_category(payload: ApprovalRequestCreate) -> ApprovalCategory:
+    return approval_category_from_keys(
+        module_key=payload.module_key,
+        action_key=payload.action_key,
+        adapter_key=payload.adapter_key,
+        explicit_category=payload.category,
+    )
+
+
+def _ensure_category_request_allowed(
+    actor: ApprovalActor,
+    category: ApprovalCategory,
+) -> None:
+    if category == CONTROL_PLANE_CATEGORY and actor.actor_role not in {
+        "owner",
+        "system",
+    }:
+        raise ApprovalPermissionDeniedError(
+            "主控审批仅允许 owner 创建或处理。"
+        )
+
+
 def _build_approval_request(
     payload: ApprovalRequestCreate,
     *,
     actor: ApprovalActor,
     event_time: datetime,
+    organization_id: str,
+    category: ApprovalCategory,
 ) -> ApprovalRequest:
     approval_id = payload.approval_id or _new_id("approval")
     snapshot = ApprovalContextSnapshot(
         snapshot_id=_new_id("approval-snapshot"),
         captured_at=event_time,
         execution_id=payload.execution_id,
+        organization_id=organization_id,
         module_key=payload.module_key,
         adapter_key=payload.adapter_key,
         action_key=payload.action_key,
@@ -224,6 +266,7 @@ def _build_approval_request(
     return ApprovalRequest(
         approval_id=approval_id,
         execution_id=payload.execution_id,
+        organization_id=organization_id,
         module_key=payload.module_key,
         adapter_key=payload.adapter_key,
         action_key=payload.action_key,
@@ -231,6 +274,7 @@ def _build_approval_request(
         request_time=event_time,
         risk_level=payload.risk_level,
         execution_type=payload.execution_type,
+        category=category,
         reason=payload.reason,
         context_snapshot=snapshot,
     )
@@ -257,9 +301,16 @@ def _list_item(
     request: ApprovalRequestRecord,
     workflow: ApprovalWorkflow | None,
 ) -> ApprovalListItem:
+    category = approval_category_from_keys(
+        module_key=request.module_key,
+        action_key=request.action_key,
+        adapter_key=request.adapter_key,
+        explicit_category=getattr(request, "category", None),
+    )
     return ApprovalListItem(
         approval_id=request.approval_id,
         execution_id=request.execution_id,
+        organization_id=request.org_id,
         module_key=request.module_key,
         adapter_key=request.adapter_key,
         action_key=request.action_key,
@@ -267,11 +318,95 @@ def _list_item(
         request_time=request.request_time,
         risk_level=cast(ApprovalRiskLevel, request.risk_level),
         execution_type=cast(ApprovalExecutionType, request.execution_type),
+        category=category,
         status=cast(ApprovalRequestStatus, request.status),
         reviewer_id=request.reviewer_id,
         workflow_id=workflow.workflow_id if workflow is not None else None,
         workflow_state=workflow.state if workflow is not None else None,
+        display=approval_display_info(
+            module_key=request.module_key,
+            action_key=request.action_key,
+            category=category,
+            status=request.status,
+            risk_level=request.risk_level,
+        ),
     )
+
+
+def _record_category(record: ApprovalRequestRecord) -> ApprovalCategory:
+    return approval_category_from_keys(
+        module_key=record.module_key,
+        action_key=record.action_key,
+        adapter_key=record.adapter_key,
+        explicit_category=getattr(record, "category", None),
+    )
+
+
+def _scoped_permission_keys_for_user(db: Session, user: User) -> set[str]:
+    effective = resolve_effective_permissions(db, user)
+    if effective.is_owner_full_access:
+        return {"*"}
+    return set(effective.permissions)
+
+
+def _module_visible_to_employee(
+    db: Session,
+    *,
+    user: User,
+    module_key: str,
+) -> bool:
+    permission_keys = _scoped_permission_keys_for_user(db, user)
+    if "*" in permission_keys:
+        return True
+    tokens = module_permission_tokens(permission_keys)
+    return module_key_matches_permission_tokens(module_key, tokens)
+
+
+def _record_visible_to_actor(
+    db: Session,
+    *,
+    user: User,
+    actor: ApprovalActor,
+    record: ApprovalRequestRecord,
+) -> bool:
+    if actor.actor_role == "system":
+        return True
+    category = _record_category(record)
+    if category == CONTROL_PLANE_CATEGORY:
+        return actor.actor_role == "owner"
+    if actor.actor_role in {"owner", "admin"}:
+        return True
+    return _module_visible_to_employee(db, user=user, module_key=record.module_key)
+
+
+def _ensure_record_visible(
+    db: Session,
+    *,
+    user: User,
+    actor: ApprovalActor,
+    record: ApprovalRequestRecord,
+) -> None:
+    if not _record_visible_to_actor(db, user=user, actor=actor, record=record):
+        raise ApprovalPermissionDeniedError("当前用户不能查看该审批。")
+
+
+def _decision_reason(
+    payload: ApprovalDecisionAction,
+    *,
+    status: Literal["approved", "rejected"],
+) -> str:
+    reason = payload.reason.strip()
+    if status == "rejected":
+        if len(reason) < APPROVAL_REJECT_REASON_MIN_LENGTH:
+            raise ApprovalInvalidRequestError(
+                "拒绝原因至少需要 15 个字符。"
+            )
+        return reason
+    return reason or APPROVAL_APPROVE_DEFAULT_REASON
+
+
+def _audit_status(status: Literal["approved", "rejected"]) -> Literal["success", "failed"]:
+    return "success" if status == "approved" else "failed"
 
 
 class WorkflowService:
@@ -393,6 +528,18 @@ class ApprovalService:
         actor = approval_actor_for_user(user)
         if actor.actor_role != "system":
             _ensure_action(actor, "request")
+        category = _approval_category(payload)
+        _ensure_category_request_allowed(actor, category)
+        if (
+            actor.actor_role == "user"
+            and category == FEATURE_CATEGORY
+            and not _module_visible_to_employee(
+                self.db,
+                user=user,
+                module_key=payload.module_key,
+            )
+        ):
+            raise ApprovalPermissionDeniedError("当前用户不能创建该模块审批。")
 
         if payload.approval_id is not None:
             existing = self.approval_repo.load_record(payload.approval_id)
@@ -409,10 +556,13 @@ class ApprovalService:
             )
 
         event_time = _utc_now()
+        organization_id = tenant_org_id_for_create()
         request = _build_approval_request(
             payload,
             actor=actor,
             event_time=event_time,
+            organization_id=organization_id,
+            category=category,
         )
         workflow = self.workflow_service.create_workflow(
             request,
@@ -433,6 +583,7 @@ class ApprovalService:
         return self._detail_response(
             workflow.approval_id,
             actor=actor,
+            user=user,
             workflow=workflow,
             execution_unlock=execution_unlock,
         )
@@ -445,26 +596,57 @@ class ApprovalService:
     ) -> ApprovalDetailResponse:
         actor = approval_actor_for_user(user)
         _ensure_action(actor, "read")
-        return self._detail_response(approval_id, actor=actor)
+        return self._detail_response(approval_id, actor=actor, user=user)
 
     def list_approvals(
         self,
         *,
         user: User,
         status: ApprovalRequestStatus | None,
+        category: ApprovalCategory | None = None,
         limit: int,
         offset: int,
     ) -> list[ApprovalListItem]:
         actor = approval_actor_for_user(user)
         _ensure_action(actor, "list")
         statuses = (status,) if status is not None else None
-        records = self.approval_repo.query_records(
-            statuses=statuses,
-            limit=limit,
-            offset=offset,
-        )
+        categories = (category,) if category is not None else None
+        if actor.actor_role == "admin":
+            categories = (FEATURE_CATEGORY,)
+        if actor.actor_role == "user":
+            categories = (FEATURE_CATEGORY,)
+            records = self.approval_repo.query_records(
+                statuses=statuses,
+                categories=categories,
+                limit=APPROVAL_LIST_CANDIDATE_LIMIT,
+                offset=0,
+            )
+            records = [
+                record
+                for record in records
+                if _record_visible_to_actor(
+                    self.db,
+                    user=user,
+                    actor=actor,
+                    record=record,
+                )
+            ][offset : offset + limit]
+        else:
+            records = self.approval_repo.query_records(
+                statuses=statuses,
+                categories=categories,
+                limit=limit,
+                offset=offset,
+            )
         items: list[ApprovalListItem] = []
         for record in records:
+            if not _record_visible_to_actor(
+                self.db,
+                user=user,
+                actor=actor,
+                record=record,
+            ):
+                continue
             workflow = self.workflow_repo.load_by_approval_id(
                 record.approval_id
             )
@@ -477,12 +659,14 @@ class ApprovalService:
         payload: ApprovalDecisionAction,
         *,
         user: User,
+        audit: AuditContext | None = None,
     ) -> ApprovalDetailResponse:
         return self._manual_decision(
             approval_id,
             payload=payload,
             user=user,
             status="approved",
+            audit=audit,
         )
 
     def reject(
@@ -491,12 +675,14 @@ class ApprovalService:
         payload: ApprovalDecisionAction,
         *,
         user: User,
+        audit: AuditContext | None = None,
     ) -> ApprovalDetailResponse:
         return self._manual_decision(
             approval_id,
             payload=payload,
             user=user,
             status="rejected",
+            audit=audit,
         )
 
     def _manual_decision(
@@ -506,6 +692,7 @@ class ApprovalService:
         payload: ApprovalDecisionAction,
         user: User,
         status: Literal["approved", "rejected"],
+        audit: AuditContext | None,
     ) -> ApprovalDetailResponse:
         actor = approval_actor_for_user(user)
         action: ApprovalBoundaryAction = (
@@ -517,16 +704,31 @@ class ApprovalService:
             raise ApprovalNotFoundError(
                 f"Approval '{approval_id}' was not found."
             )
+        _ensure_record_visible(self.db, user=user, actor=actor, record=request)
+        if _record_category(request) == CONTROL_PLANE_CATEGORY and (
+            actor.actor_role != "owner"
+        ):
+            raise ApprovalPermissionDeniedError("主控审批仅允许 owner 处理。")
+        reason = _decision_reason(payload, status=status)
+        event_time = _utc_now()
         decision = ApprovalDecision(
             status=status,
-            reason=payload.reason,
+            reason=reason,
             decision_source="user",
         )
         workflow = self.workflow_service.apply_manual_decision(
             approval_id,
             decision=decision,
             actor=actor,
-            event_time=_utc_now(),
+            event_time=event_time,
+        )
+        self._write_decision_audit_log(
+            request,
+            actor=actor,
+            status=status,
+            reason=reason,
+            event_time=event_time,
+            audit=audit,
         )
         self.db.flush()
         execution_unlock = self._sync_unlock_binding(
@@ -536,6 +738,7 @@ class ApprovalService:
         return self._detail_response(
             workflow.approval_id,
             actor=actor,
+            user=user,
             workflow=workflow,
             execution_unlock=execution_unlock,
         )
@@ -545,6 +748,7 @@ class ApprovalService:
         approval_id: str,
         *,
         actor: ApprovalActor,
+        user: User,
         workflow: ApprovalWorkflow | None = None,
         execution_unlock=None,
     ) -> ApprovalDetailResponse:
@@ -553,6 +757,7 @@ class ApprovalService:
             raise ApprovalNotFoundError(
                 f"Approval '{approval_id}' was not found."
             )
+        _ensure_record_visible(self.db, user=user, actor=actor, record=request_record)
         if workflow is None:
             workflow = self.workflow_repo.load_by_approval_id(approval_id)
         if workflow is None:
@@ -570,9 +775,70 @@ class ApprovalService:
             approval=approval_request_from_record(request_record),
             workflow=workflow,
             decisions=[_decision_response(record) for record in decisions],
+            display=approval_display_info(
+                module_key=request_record.module_key,
+                action_key=request_record.action_key,
+                category=_record_category(request_record),
+                status=request_record.status,
+                risk_level=request_record.risk_level,
+            ),
             permission_boundary=actor.permission_boundary(),
             execution_unlock=execution_unlock,
             safety=ApprovalSafetyBoundaryResponse(),
+        )
+
+    def _write_decision_audit_log(
+        self,
+        request_record: ApprovalRequestRecord,
+        *,
+        actor: ApprovalActor,
+        status: Literal["approved", "rejected"],
+        reason: str,
+        event_time: datetime,
+        audit: AuditContext | None,
+    ) -> None:
+        category = _record_category(request_record)
+        event_type = f"approval.{status}"
+        context_id = (
+            audit.request_id
+            if audit is not None and audit.request_id
+            else request_record.approval_id
+        )
+        payload = {
+            "action": event_type,
+            "approval_action": "approve" if status == "approved" else "reject",
+            "approval_id": request_record.approval_id,
+            "organization_id": request_record.org_id,
+            "user_id": actor.user_id,
+            "module": request_record.module_key,
+            "module_key": request_record.module_key,
+            "category": category,
+            "reason": reason if status == "rejected" else "",
+            "decision_reason": reason,
+            "decision_status": status,
+            "timestamp": event_time.isoformat(),
+            "metadata": {
+                "audit_family": "system_approval",
+                "approval_category": category,
+                "actor_role": actor.actor_role,
+            },
+        }
+        record = StorageRecordEnvelope(
+            entity_type="EventRaw",
+            tier="L1_hot",
+            backend_targets=("postgresql",),
+            context_id=context_id,
+            trace_id=request_record.execution_id,
+            event_id=f"approval-audit-{uuid4()}",
+            user_id=str(actor.user_id),
+            module="system",
+            event_type=event_type,
+            timestamp=event_time,
+            status=_audit_status(status),
+            payload=payload,
+        )
+        AuditLogWriter(self.db, org_id=request_record.org_id).write_storage_record(
+            record,
         )
 
     def _sync_unlock_binding(

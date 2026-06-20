@@ -70,6 +70,7 @@ def test_create_workflow_auto_applies_c12b_decision() -> None:
 
     workflow = engine.create_workflow(
         approval_request(
+            module_key="business.products",
             requester_role="owner",
             risk_level="low",
             execution_type="mock",

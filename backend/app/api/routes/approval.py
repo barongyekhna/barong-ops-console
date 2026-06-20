@@ -3,13 +3,14 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import TypeVar
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.approval import (
+    ApprovalCategory,
     ApprovalDecisionAction,
     ApprovalDetailResponse,
     ApprovalListItem,
@@ -26,7 +27,7 @@ from ...services.approval_service import (
     ApprovalService,
     ApprovalServiceError,
 )
-from ..deps import require_rbac
+from ..deps import get_audit_context, get_current_user, require_rbac
 
 router = APIRouter(prefix="/approval", tags=["approval"])
 ResultT = TypeVar("ResultT")
@@ -110,16 +111,18 @@ def approval_list(
         default=None,
         alias="status",
     ),
+    category: ApprovalCategory | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
-    user: User = Depends(require_rbac("GOVERNANCE", "read")),
+    user: User = Depends(get_current_user),
 ) -> ListResponse[ApprovalListItem]:
     service = ApprovalService(db)
     items = _run_read(
         lambda: service.list_approvals(
             user=user,
             status=status_filter,
+            category=category,
             limit=limit,
             offset=offset,
         )
@@ -136,7 +139,7 @@ def approval_list(
 def approval_detail(
     approval_id: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_rbac("GOVERNANCE", "read")),
+    user: User = Depends(get_current_user),
 ) -> ApprovalDetailResponse:
     service = ApprovalService(db)
     return _run_read(lambda: service.get_approval(approval_id, user=user))
@@ -144,6 +147,7 @@ def approval_detail(
 
 @router.post("/{approval_id}/approve", response_model=ApprovalDetailResponse)
 def approval_approve(
+    request: Request,
     approval_id: str,
     payload: ApprovalDecisionAction,
     db: Session = Depends(get_db),
@@ -152,12 +156,18 @@ def approval_approve(
     service = ApprovalService(db)
     return _run_write(
         db,
-        lambda: service.approve(approval_id, payload, user=user),
+        lambda: service.approve(
+            approval_id,
+            payload,
+            user=user,
+            audit=get_audit_context(request),
+        ),
     )
 
 
 @router.post("/{approval_id}/reject", response_model=ApprovalDetailResponse)
 def approval_reject(
+    request: Request,
     approval_id: str,
     payload: ApprovalDecisionAction,
     db: Session = Depends(get_db),
@@ -166,5 +176,10 @@ def approval_reject(
     service = ApprovalService(db)
     return _run_write(
         db,
-        lambda: service.reject(approval_id, payload, user=user),
+        lambda: service.reject(
+            approval_id,
+            payload,
+            user=user,
+            audit=get_audit_context(request),
+        ),
     )

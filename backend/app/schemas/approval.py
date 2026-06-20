@@ -29,6 +29,7 @@ ApprovalDecisionSource = Literal[
     "user",
     "global",
 ]
+ApprovalCategory = Literal["control_plane", "feature"]
 ApprovalActorRole = Literal["owner", "admin", "user", "system"]
 ApprovalActorType = Literal["user", "system"]
 ApprovalContextSource = Literal[
@@ -108,6 +109,7 @@ class ApprovalContextSnapshot(BaseModel):
     snapshot_id: str = Field(min_length=1, max_length=180)
     captured_at: datetime
     execution_id: str = Field(min_length=1, max_length=128)
+    organization_id: str | None = Field(default=None, max_length=40)
     module_key: str = Field(min_length=1, max_length=128)
     adapter_key: str = Field(min_length=1, max_length=180)
     action_key: str = Field(min_length=1, max_length=180)
@@ -145,6 +147,7 @@ class ApprovalRequest(BaseModel):
     )
     approval_id: str = Field(min_length=1, max_length=128)
     execution_id: str = Field(min_length=1, max_length=128)
+    organization_id: str | None = Field(default=None, max_length=40)
     module_key: str = Field(min_length=1, max_length=128)
     adapter_key: str = Field(min_length=1, max_length=180)
     action_key: str = Field(min_length=1, max_length=180)
@@ -152,6 +155,7 @@ class ApprovalRequest(BaseModel):
     request_time: datetime
     risk_level: ApprovalRiskLevel
     execution_type: ApprovalExecutionType
+    category: ApprovalCategory = "feature"
     status: ApprovalRequestStatus = APPROVAL_REQUEST_INITIAL_STATUS
     reason: str = Field(min_length=1, max_length=1000)
     reviewer_id: int | None = Field(default=None, gt=0)
@@ -215,6 +219,7 @@ class ApprovalRequestCreate(BaseModel):
         max_length=128,
     )
     execution_id: str = Field(min_length=1, max_length=128)
+    category: ApprovalCategory | None = None
     module_key: str = Field(min_length=1, max_length=128)
     adapter_key: str = Field(min_length=1, max_length=180)
     action_key: str = Field(min_length=1, max_length=180)
@@ -235,7 +240,7 @@ class ApprovalRequestCreate(BaseModel):
 class ApprovalDecisionAction(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    reason: str = Field(min_length=1, max_length=1000)
+    reason: str = Field(default="", max_length=1000)
 
 
 class ApprovalDecisionRecordResponse(BaseModel):
@@ -267,10 +272,21 @@ class ApprovalSafetyBoundaryResponse(BaseModel):
     no_permission_bypass: Literal[True] = True
 
 
+class ApprovalDisplayInfo(BaseModel):
+    title: str
+    category_label: str
+    module_label: str
+    action_label: str
+    status_label: str
+    risk_label: str
+    summary: str
+
+
 class ApprovalDetailResponse(BaseModel):
     approval: ApprovalRequest
     workflow: ApprovalWorkflow
     decisions: list[ApprovalDecisionRecordResponse]
+    display: ApprovalDisplayInfo
     permission_boundary: ApprovalPermissionBoundaryResponse
     execution_unlock: ApprovalUnlockDecision | None = None
     safety: ApprovalSafetyBoundaryResponse = Field(
@@ -281,6 +297,7 @@ class ApprovalDetailResponse(BaseModel):
 class ApprovalListItem(BaseModel):
     approval_id: str
     execution_id: str
+    organization_id: str | None = None
     module_key: str
     adapter_key: str
     action_key: str
@@ -288,10 +305,12 @@ class ApprovalListItem(BaseModel):
     request_time: datetime
     risk_level: ApprovalRiskLevel
     execution_type: ApprovalExecutionType
+    category: ApprovalCategory = "feature"
     status: ApprovalRequestStatus
     reviewer_id: int | None
     workflow_id: str | None = None
     workflow_state: ApprovalWorkflowState | None = None
+    display: ApprovalDisplayInfo
 
 
 def _enforce_module_switch_before_c12(module_key: str) -> None:

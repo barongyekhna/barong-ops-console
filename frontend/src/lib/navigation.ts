@@ -89,7 +89,7 @@ export const navigationGroups: NavigationGroup[] = [
         denied_behavior: "show_locked",
         href: "/approvals",
         icon: ClipboardCheck,
-        label: "Approvals",
+        label: "审批",
         module_key: "business.approvals",
         required_permission: "reviews.read",
         route_namespace: "/approvals",

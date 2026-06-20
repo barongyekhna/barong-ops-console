@@ -11,7 +11,9 @@ from ..models.approval import (
     ApprovalRequestRecord,
     ApprovalWorkflowRecord,
 )
+from ..services.approval_productization import approval_category_from_keys
 from ..schemas.approval import (
+    ApprovalCategory,
     ApprovalDecision,
     ApprovalDecisionSource,
     ApprovalDecisionStatus,
@@ -36,6 +38,7 @@ def _request_values(request: ApprovalRequest) -> dict[str, object]:
         "request_time": request.request_time,
         "risk_level": request.risk_level,
         "execution_type": request.execution_type,
+        "category": request.category,
         "status": request.status,
         "reason": request.reason,
         "reviewer_id": request.reviewer_id,
@@ -63,7 +66,20 @@ def _workflow_values(workflow: ApprovalWorkflow) -> dict[str, object]:
 def approval_request_from_record(
     record: ApprovalRequestRecord,
 ) -> ApprovalRequest:
-    return ApprovalRequest.model_validate(record.request_payload)
+    payload = dict(record.request_payload)
+    category = approval_category_from_keys(
+        module_key=record.module_key,
+        action_key=record.action_key,
+        adapter_key=record.adapter_key,
+        explicit_category=getattr(record, "category", None)
+        or payload.get("category"),
+    )
+    payload.setdefault("organization_id", record.org_id)
+    payload["category"] = category
+    context_snapshot = payload.get("context_snapshot")
+    if isinstance(context_snapshot, dict):
+        context_snapshot.setdefault("organization_id", record.org_id)
+    return ApprovalRequest.model_validate(payload)
 
 
 def approval_workflow_from_record(
@@ -139,6 +155,7 @@ class ApprovalRepository:
         self,
         *,
         statuses: Sequence[ApprovalRequestStatus] | None = None,
+        categories: Sequence[ApprovalCategory] | None = None,
         requester_id: int | None = None,
         limit: int,
         offset: int,
@@ -148,6 +165,10 @@ class ApprovalRepository:
         )
         if statuses:
             statement = statement.where(ApprovalRequestRecord.status.in_(statuses))
+        if categories:
+            statement = statement.where(
+                ApprovalRequestRecord.category.in_(categories)
+            )
         if requester_id is not None:
             statement = statement.where(
                 ApprovalRequestRecord.requester_id == requester_id

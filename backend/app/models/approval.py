@@ -22,6 +22,12 @@ class ApprovalRequestRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Bas
         Index("ix_approval_requests_org_id_created_at", "org_id", "created_at"),
         Index("ix_approval_requests_org_id_status", "org_id", "status"),
         Index("ix_approval_requests_org_id_module_key", "org_id", "module_key"),
+        Index(
+            "ix_approval_requests_org_id_category_status",
+            "org_id",
+            "category",
+            "status",
+        ),
     )
 
     approval_id: Mapped[str] = mapped_column(
@@ -43,6 +49,12 @@ class ApprovalRequestRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Bas
     )
     risk_level: Mapped[str] = mapped_column(String(50), nullable=False)
     execution_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    category: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        default="feature",
+        server_default="feature",
+    )
     status: Mapped[str] = mapped_column(String(50), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
     reviewer_id: Mapped[int | None] = mapped_column(

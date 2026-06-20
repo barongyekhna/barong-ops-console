@@ -215,7 +215,7 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["admin.users", "Users"],
   ["admin.organizations", "Organizations"],
   ["admin.permissions", "Permissions"],
-  ["business.approvals", "Approvals"],
+  ["business.approvals", "审批"],
   ["business.reviews", "Reviews"],
   ["business.artifacts", "Artifacts"],
   ["core.dashboard", "Dashboard"],
