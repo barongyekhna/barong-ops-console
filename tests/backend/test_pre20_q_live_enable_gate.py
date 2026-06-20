@@ -79,7 +79,7 @@ def router_context() -> dict[str, object]:
         "c05_permission_result": {
             "decision": "allow",
             "reason": "test C05 allow",
-            "permission_key": "jobs.create",
+            "permission_key": "modules.read",
         },
     }
 
@@ -159,7 +159,7 @@ def test_execution_unlock_flow_denies_live_without_db_backed_c12_token() -> None
             "c05_permission_result": {
                 "decision": "allow",
                 "reason": "test C05 allow",
-                "permission_key": "jobs.create",
+                "permission_key": "modules.read",
             },
         },
         db=None,

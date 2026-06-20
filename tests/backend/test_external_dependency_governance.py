@@ -140,7 +140,7 @@ def n8n_request() -> ExecutionRequestContractV1:
         "provider_type": "future_live_provider",
         "status": "requested",
         "risk_level": "medium",
-        "required_permission": "jobs.create",
+        "required_permission": "modules.read",
         "approval_status": "not_required",
         "secret_binding_status": "not_required",
         "artifact_refs": [],

@@ -50,14 +50,14 @@ const ordinaryPermission = {
   action: "read",
   category: "business",
   created_at: null,
-  description: "View jobs.",
-  id: "permission-jobs-read",
+  description: "View artifacts.",
+  id: "permission-artifacts-read",
   is_enabled: true,
   is_system: true,
-  label: "Read jobs",
+  label: "Read artifacts",
   menu_policy: "show_locked",
-  module_key: "jobs",
-  permission_key: "jobs.read",
+  module_key: "artifacts",
+  permission_key: "artifacts.read",
   risk_level: "low",
   updated_at: null,
 };
@@ -212,13 +212,13 @@ test("filters wildcard and disabled permissions from grant options", () => {
       ...ordinaryPermission,
       id: "disabled",
       is_enabled: false,
-      permission_key: "jobs.manage",
+      permission_key: "artifacts.manage",
     },
   ]);
 
   assert.deepEqual(
     grantable.map((permission) => permission.permission_key),
-    ["jobs.read"],
+    ["artifacts.read"],
   );
 });
 
@@ -237,7 +237,7 @@ test("permission management entry is visible for owner and super admin UI roles"
 });
 
 test("permission display names and UI groups do not expose raw keys", () => {
-  assert.equal(getPermissionDisplayName(ordinaryPermission), "查看任务权限");
+  assert.equal(getPermissionDisplayName(ordinaryPermission), "查看文件权限");
   assert.equal(
     getPermissionDisplayName({
       permission_key: "artifacts.read",
@@ -256,13 +256,13 @@ test("permission registry filtering limits super admin to feature permissions", 
     filterPermissionRegistryForRole(registry, "owner").map(
       (permission) => permission.permission_key,
     ),
-    ["jobs.read", "permissions.manage"],
+    ["artifacts.read", "permissions.manage"],
   );
   assert.deepEqual(
     filterPermissionRegistryForRole(registry, "super_admin").map(
       (permission) => permission.permission_key,
     ),
-    ["jobs.read"],
+    ["artifacts.read"],
   );
   assert.deepEqual(filterPermissionRegistryForRole(registry, "viewer"), []);
 });
@@ -306,9 +306,9 @@ test("normal grant validation builds the expected frontend payload and API body"
     enabled: true,
     expires_at: "2026-07-11T00:00",
     permission: ordinaryPermission,
-    permission_key: " jobs.read ",
+    permission_key: " artifacts.read ",
     reason: "",
-    scope_id: "jobs",
+    scope_id: "artifacts",
     scope_type: "module",
   });
 
@@ -318,18 +318,18 @@ test("normal grant validation builds the expected frontend payload and API body"
     confirmation_text: null,
     enabled: true,
     expires_at: "2026-07-11T00:00",
-    permission_key: "jobs.read",
+    permission_key: "artifacts.read",
     reason: null,
-    scope_id: "jobs",
+    scope_id: "artifacts",
     scope_type: "module",
   });
   assert.deepEqual(createGrantRequestBody(result.payload), {
     confirm_high_risk: false,
     confirmation_text: null,
     expires_at: "2026-07-11T00:00",
-    permission_key: "jobs.read",
+    permission_key: "artifacts.read",
     reason: null,
-    scope_id: "jobs",
+    scope_id: "artifacts",
     scope_type: "module",
   });
 });
@@ -438,7 +438,7 @@ test("assignment response normalization safely downgrades missing fields", () =>
   assert.deepEqual(
     normalizePermissionAssignmentListResponse(
       {
-        assignments: [{ enabled: true, permission_key: "jobs.read" }],
+        assignments: [{ enabled: true, permission_key: "artifacts.read" }],
       },
       7,
     ),
@@ -454,7 +454,7 @@ test("assignment response normalization safely downgrades missing fields", () =>
           high_risk: false,
           id: "",
           is_enabled: true,
-          permission_key: "jobs.read",
+          permission_key: "artifacts.read",
           permission_name: null,
           reason: null,
           risk_level: null,

@@ -14,8 +14,6 @@ from tests.backend.foundation_helpers import (
 F10_LIST_PATHS = (
     "/api/control-plane/modules",
     "/api/control-plane/agents",
-    "/api/control-plane/workflows",
-    "/api/app/jobs",
     "/api/app/artifacts",
     "/api/app/reviews",
     "/api/app/errors",
@@ -23,6 +21,14 @@ F10_LIST_PATHS = (
     "/api/app/context-packets",
     "/api/app/memory-summaries",
     "/api/app/operation-logs",
+)
+
+REMOVED_MODULE_PATHS = (
+    "/api/control-plane/workflows",
+    "/api/control-plane/workflows/demo.workflow",
+    "/api/app/jobs",
+    "/api/app/jobs/demo.job",
+    "/api/app/jobs/demo.job/events",
 )
 
 
@@ -50,6 +56,16 @@ def test_owner_can_access_f10_lists(
         assert response.json()["items"] == []
 
 
+@pytest.mark.parametrize("path", REMOVED_MODULE_PATHS)
+def test_jobs_and_workflows_routes_are_removed(
+    owner_client: TestClient,
+    path: str,
+) -> None:
+    response = owner_client.get(path)
+
+    assert response.status_code == 404
+
+
 def test_create_module_and_duplicate_conflict(
     owner_client: TestClient,
 ) -> None:
@@ -74,7 +90,7 @@ def test_create_module_and_duplicate_conflict(
     assert log.result == "success"
 
 
-def test_create_demo_agent_and_workflow_metadata(
+def test_create_demo_agent_metadata(
     owner_client: TestClient,
 ) -> None:
     create_module(owner_client)
@@ -88,30 +104,17 @@ def test_create_demo_agent_and_workflow_metadata(
             "allowed_module_keys": ["demo.module"],
         },
     )
-    workflow = owner_client.post(
-        "/api/control-plane/workflows",
-        json={
-            "workflow_key": "demo.workflow",
-            "name": "Demo workflow",
-            "status": "demo",
-            "engine": "metadata_only",
-            "endpoint_ref": "foundation://metadata-only",
-        },
-    )
 
     assert agent.status_code == 201
     assert agent.json()["agent_key"] == "demo.agent"
-    assert workflow.status_code == 201
-    assert workflow.json()["workflow_key"] == "demo.workflow"
-    assert workflow.json()["endpoint_ref"] == "foundation://metadata-only"
 
-    serialized = json.dumps([agent.json(), workflow.json()]).lower()
+    serialized = json.dumps([agent.json()]).lower()
     assert "password_hash" not in serialized
     assert '"token"' not in serialized
     assert '"secret"' not in serialized
 
 
-def test_workflow_rejects_network_endpoint_and_sensitive_contract(
+def test_workflows_api_access_layer_is_removed(
     owner_client: TestClient,
 ) -> None:
     network_endpoint = owner_client.post(
@@ -131,5 +134,5 @@ def test_workflow_rejects_network_endpoint_and_sensitive_contract(
         },
     )
 
-    assert network_endpoint.status_code == 422
-    assert credential_contract.status_code == 422
+    assert network_endpoint.status_code == 404
+    assert credential_contract.status_code == 404

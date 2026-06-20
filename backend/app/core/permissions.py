@@ -16,6 +16,7 @@ SCOPE_FACTORY = "factory"
 SCOPE_DEPARTMENT = "department"
 SCOPE_ORGANIZATION = "organization"
 SCOPE_MODULE = "module"
+RETIRED_PERMISSION_PREFIXES = ("jobs.", "workflows.")
 
 PERMISSION_KEY_PATTERN = re.compile(
     r"^[a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)+$"
@@ -102,36 +103,6 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "description": "Grant, disable, or change scoped user permission assignments.",
         "risk_level": RISK_LEVEL_CRITICAL,
         "menu_policy": MENU_POLICY_HIDE_WHEN_DENIED,
-    },
-    {
-        "permission_key": "jobs.read",
-        "module_key": "jobs",
-        "category": "business",
-        "action": "read",
-        "label": "Read jobs",
-        "description": "View automation jobs and their safe metadata.",
-        "risk_level": RISK_LEVEL_LOW,
-        "menu_policy": MENU_POLICY_SHOW_LOCKED,
-    },
-    {
-        "permission_key": "jobs.create",
-        "module_key": "jobs",
-        "category": "business",
-        "action": "create",
-        "label": "Create jobs",
-        "description": "Create allowed automation jobs in an assigned scope.",
-        "risk_level": RISK_LEVEL_MEDIUM,
-        "menu_policy": MENU_POLICY_SHOW_LOCKED,
-    },
-    {
-        "permission_key": "jobs.manage",
-        "module_key": "jobs",
-        "category": "business",
-        "action": "manage",
-        "label": "Manage jobs",
-        "description": "Manage job lifecycle state for allowed automation jobs.",
-        "risk_level": RISK_LEVEL_HIGH,
-        "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
         "permission_key": "reviews.read",

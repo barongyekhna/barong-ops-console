@@ -57,31 +57,6 @@ MODULE_SWITCH_DEPENDENCY_GRAPH_V1: tuple[dict[str, Any], ...] = (
         reason="Agent registry depends on module registry.",
     ),
     _dependency(
-        parent_module_key="admin.modules",
-        child_module_key="admin.workflows",
-        reason="Workflow registry depends on module registry.",
-    ),
-    _dependency(
-        parent_module_key="business.jobs",
-        child_module_key="experimental.foundation_demo",
-        reason="Foundation demo depends on jobs metadata.",
-    ),
-    _dependency(
-        parent_module_key="business.jobs",
-        child_module_key="integration.n8n_test_bridge",
-        reason="n8n test bridge depends on jobs metadata.",
-    ),
-    _dependency(
-        parent_module_key="business.jobs",
-        child_module_key="business.artifacts",
-        reason="Artifacts depend on jobs metadata.",
-    ),
-    _dependency(
-        parent_module_key="business.jobs",
-        child_module_key="business.reviews",
-        reason="Reviews depend on jobs metadata.",
-    ),
-    _dependency(
         parent_module_key="system.operation_logs",
         child_module_key="system.errors",
         reason="Error review depends on operation log access.",

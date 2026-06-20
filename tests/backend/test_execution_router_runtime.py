@@ -83,7 +83,7 @@ def test_execution_router_future_live_is_selected_but_gated() -> None:
         module_id="integration.n8n_test_bridge",
         action="integration.n8n_test_bridge.test_run.declare",
         payload={"execution_mode": "live"},
-        context=router_context("jobs.create"),
+        context=router_context("modules.read"),
     )
 
     assert response.accepted is False
@@ -121,7 +121,7 @@ def test_c15_dispatch_pipeline_runs_c15a_c15f_then_router() -> None:
             "execution_mode": "staging",
             "action": "integration.n8n_test_bridge.test_run.declare",
         },
-        context=router_context("jobs.create"),
+        context=router_context("modules.read"),
     )
 
     assert result.status == "accepted"

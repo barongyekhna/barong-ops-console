@@ -11,9 +11,7 @@ import {
   LockKeyhole,
   Package,
   Settings,
-  Sparkles,
   UserRoundCog,
-  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import type {
@@ -86,28 +84,6 @@ export const navigationGroups: NavigationGroup[] = [
   {
     label: "Business Modules",
     items: [
-      {
-        category: "business",
-        denied_behavior: "show_locked",
-        href: "/jobs",
-        icon: Sparkles,
-        label: "Jobs",
-        module_key: "business.jobs",
-        required_permission: "jobs.read",
-        route_namespace: "/jobs",
-        status: "enabled",
-      },
-      {
-        category: "admin",
-        denied_behavior: "show_locked",
-        href: "/workflows",
-        icon: Workflow,
-        label: "Workflows",
-        module_key: "admin.workflows",
-        required_permission: "modules.read",
-        route_namespace: "/workflows",
-        status: "sealed",
-      },
       {
         category: "business",
         denied_behavior: "show_locked",

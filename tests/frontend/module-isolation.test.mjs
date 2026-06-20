@@ -167,7 +167,7 @@ const registryItems = [
     category: "experimental",
     denied_behavior: "hide_when_denied",
     module_key: "experimental.foundation_demo",
-    required_permissions: ["jobs.create"],
+    required_permissions: ["modules.read"],
     route_namespace: "/foundation-demo",
     status: "enabled",
   }),
@@ -176,7 +176,7 @@ const registryItems = [
     denied_behavior: "hide_when_denied",
     external_dependencies: ["n8n"],
     module_key: "integration.n8n_test_bridge",
-    required_permissions: ["jobs.create"],
+    required_permissions: ["modules.read"],
     route_namespace: "/n8n-test",
     status: "adapter_pending",
   }),
@@ -203,22 +203,6 @@ const registryItems = [
     required_permissions: ["organizations.read"],
     route_namespace: "/organizations",
     status: "enabled",
-  }),
-  manifest({
-    category: "business",
-    denied_behavior: "show_locked",
-    module_key: "business.jobs",
-    required_permissions: ["jobs.read"],
-    route_namespace: "/jobs",
-    status: "enabled",
-  }),
-  manifest({
-    category: "admin",
-    denied_behavior: "show_locked",
-    module_key: "admin.workflows",
-    required_permissions: ["modules.read"],
-    route_namespace: "/workflows",
-    status: "sealed",
   }),
   manifest({
     category: "business",
@@ -467,7 +451,8 @@ test("productized routes are visible while diagnostics stay out of navigation", 
   assert.equal(item("experimental.foundation_demo"), undefined);
   assert.equal(item("integration.n8n_test_bridge"), undefined);
   assert.equal(item("business.products").href, "/products");
-  assert.equal(item("business.jobs").href, "/jobs");
+  assert.equal(item("business.jobs"), undefined);
+  assert.equal(item("admin.workflows"), undefined);
   assert.equal(item("core.dashboard").href, "/dashboard");
   assert.equal(item("admin.settings").href, "/settings");
 });
@@ -962,8 +947,6 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "admin.users",
     "admin.organizations",
     "admin.permissions",
-    "business.jobs",
-    "admin.workflows",
     "business.approvals",
     "business.reviews",
     "business.artifacts",

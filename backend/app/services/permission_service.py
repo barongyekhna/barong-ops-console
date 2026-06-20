@@ -25,6 +25,7 @@ from ..models.permission import (
 from ..models.user import User
 from ..repositories.permissions import (
     disable_assignment as disable_assignment_record,
+    disable_retired_permission_registry_entries,
     get_permission as get_permission_record,
     get_user_assignment,
     get_user_assignment_by_id,
@@ -645,13 +646,20 @@ def upsert_permission_registry(
     seed_permissions: list[PermissionDefinition] | tuple[PermissionDefinition, ...]
     = BASE_PERMISSION_REGISTRY_SEED,
 ) -> list[PermissionRegistry]:
+    validated_permissions = _validate_seed_permissions(seed_permissions)
     permissions = upsert_permission_registry_records(
         db,
-        _validate_seed_permissions(seed_permissions),
+        validated_permissions,
+    )
+    retired_permissions = disable_retired_permission_registry_entries(
+        db,
+        active_permission_keys={
+            permission["permission_key"] for permission in validated_permissions
+        },
     )
     db.commit()
     clear_permission_ttl_cache()
-    for permission in permissions:
+    for permission in [*permissions, *retired_permissions]:
         db.refresh(permission)
     return permissions
 

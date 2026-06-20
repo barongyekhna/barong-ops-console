@@ -56,7 +56,7 @@ def test_permission_registry_seed_upsert_is_idempotent(
         core_permissions = {
             "users.manage",
             "permissions.manage",
-            "jobs.create",
+            "modules.read",
         }
 
         assert permission_count == len(BASE_PERMISSION_REGISTRY_SEED)
@@ -118,7 +118,7 @@ def test_owner_has_platform_admin_scope_without_assignment_bypass(
         assert effective.is_platform_owner is True
         assert "users.manage" in effective.permissions
         assert "production.release" in effective.permissions
-        assert "jobs.read" not in effective.permissions
+        assert "artifacts.read" not in effective.permissions
 
 
 def test_super_admin_requires_assignment_and_scope_matches(
@@ -205,10 +205,10 @@ def test_disabled_and_expired_assignments_do_not_apply(
         grant_permission(
             db,
             user_id=user_id,
-            permission_key="jobs.create",
+            permission_key="modules.read",
             expires_at=expired_at,
         )
-        assert not user_has_permission(db, user, "jobs.create")
+        assert not user_has_permission(db, user, "modules.read")
 
 
 def test_role_default_permissions_do_not_grant_effective_access(

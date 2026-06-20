@@ -32,18 +32,18 @@ def permissions_test_users_manage(
     return {"user_id": user.id}
 
 
-@permission_test_router.get("/api/app/jobs-read-global")
-def permissions_test_jobs_read_global(
-    user: User = Depends(require_permission("jobs.read")),
+@permission_test_router.get("/api/app/artifacts-read-global")
+def permissions_test_artifacts_read_global(
+    user: User = Depends(require_permission("artifacts.read")),
 ) -> dict[str, int]:
     return {"user_id": user.id}
 
 
-@permission_test_router.get("/api/app/jobs-read-company-independent-site")
-def permissions_test_jobs_read_company_independent_site(
+@permission_test_router.get("/api/app/artifacts-read-company-independent-site")
+def permissions_test_artifacts_read_company_independent_site(
     user: User = Depends(
         require_permission(
-            "jobs.read",
+            "artifacts.read",
             scope_type="company",
             scope_key="independent_site",
         )
@@ -194,14 +194,14 @@ def test_require_permission_assignment_allows_non_owner(
     auth_client: TestClient,
 ) -> None:
     user_id = create_permission_api_user(
-        username="c05c_operator_jobs_read",
+        username="c05c_operator_artifacts_read",
         role="operator",
     )
-    grant_test_permission(user_id=user_id, permission_key="jobs.read")
-    token = login_token(auth_client, username="c05c_operator_jobs_read")
+    grant_test_permission(user_id=user_id, permission_key="artifacts.read")
+    token = login_token(auth_client, username="c05c_operator_artifacts_read")
 
     response = auth_client.get(
-        f"{TEST_ROUTE_PREFIX}/jobs-read-global",
+        f"{TEST_ROUTE_PREFIX}/artifacts-read-global",
         headers=auth_headers(token),
     )
 
@@ -213,28 +213,28 @@ def test_require_permission_scope_does_not_promote_to_global(
     auth_client: TestClient,
 ) -> None:
     user_id = create_permission_api_user(
-        username="c05c_operator_scoped_jobs_read",
+        username="c05c_operator_scoped_artifacts_read",
         role="operator",
     )
     grant_test_permission(
         user_id=user_id,
-        permission_key="jobs.read",
+        permission_key="artifacts.read",
         scope_type="company",
         scope_key="independent_site",
     )
-    token = login_token(auth_client, username="c05c_operator_scoped_jobs_read")
+    token = login_token(auth_client, username="c05c_operator_scoped_artifacts_read")
 
     global_response = auth_client.get(
-        f"{TEST_ROUTE_PREFIX}/jobs-read-global",
+        f"{TEST_ROUTE_PREFIX}/artifacts-read-global",
         headers=auth_headers(token),
     )
     scoped_response = auth_client.get(
-        f"{TEST_ROUTE_PREFIX}/jobs-read-company-independent-site",
+        f"{TEST_ROUTE_PREFIX}/artifacts-read-company-independent-site",
         headers=auth_headers(token),
     )
 
     assert global_response.status_code == 403
-    assert global_response.json()["detail"] == "Missing permission: jobs.read"
+    assert global_response.json()["detail"] == "Missing permission: artifacts.read"
     assert scoped_response.status_code == 200
 
 
@@ -299,8 +299,8 @@ def test_auth_me_omits_explicit_assignments_for_non_owner(
         username="c05c_viewer_auth_me",
         role="viewer",
     )
-    grant_test_permission(user_id=user_id, permission_key="jobs.read")
     grant_test_permission(user_id=user_id, permission_key="artifacts.read")
+    grant_test_permission(user_id=user_id, permission_key="reviews.read")
     with SessionLocal() as db:
         upsert_role_default_permission(
             db,
@@ -329,7 +329,7 @@ def test_auth_me_omits_role_default_permissions(
         upsert_role_default_permission(
             db,
             role="viewer",
-            permission_key="jobs.read",
+            permission_key="artifacts.read",
         )
     token = login_token(auth_client, username="c05c_viewer_role_default_only")
 
@@ -346,7 +346,7 @@ def test_permissions_me_returns_current_user_effective_permissions(
         username="c05c_operator_permissions_me",
         role="operator",
     )
-    grant_test_permission(user_id=user_id, permission_key="jobs.read")
+    grant_test_permission(user_id=user_id, permission_key="artifacts.read")
     token = login_token(auth_client, username="c05c_operator_permissions_me")
 
     response = auth_client.get(
@@ -359,7 +359,7 @@ def test_permissions_me_returns_current_user_effective_permissions(
     assert payload["user_id"] == user_id
     assert payload["role"] == "operator"
     assert payload["permissions"]["is_owner_full_access"] is False
-    assert payload["permissions"]["permission_keys"] == ["jobs.read"]
+    assert payload["permissions"]["permission_keys"] == ["artifacts.read"]
 
 
 def test_permissions_me_returns_owner_platform_scoped_permissions(
@@ -383,7 +383,7 @@ def test_permissions_me_returns_owner_platform_scoped_permissions(
     permission_keys = response.json()["permissions"]["permission_keys"]
     assert "*" not in permission_keys
     assert "permissions.read" in permission_keys
-    assert "jobs.read" not in permission_keys
+    assert "artifacts.read" not in permission_keys
 
 
 def test_permissions_registry_requires_permissions_read_or_owner(
@@ -434,13 +434,13 @@ def test_permissions_registry_requires_permissions_read_or_owner(
     permission_keys = {
         item["permission_key"] for item in reader_response.json()["items"]
     }
-    assert {"users.manage", "permissions.read", "jobs.create"}.issubset(
+    assert {"users.manage", "permissions.read", "artifacts.read"}.issubset(
         permission_keys
     )
     categories_by_key = {
         item["permission_key"]: item["category"]
         for item in reader_response.json()["items"]
     }
-    assert categories_by_key["jobs.create"] == "feature"
+    assert categories_by_key["artifacts.read"] == "feature"
     assert categories_by_key["permissions.read"] == "control_plane"
     assert owner_id != viewer_id

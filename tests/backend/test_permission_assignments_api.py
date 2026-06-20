@@ -77,7 +77,7 @@ def grant_assignment(
     *,
     owner_token: str,
     user_id: int,
-    permission_key: str = "jobs.read",
+    permission_key: str = "artifacts.read",
     reason: str = "C06B test grant.",
     **extra: object,
 ) -> dict[str, object]:
@@ -129,8 +129,8 @@ def test_owner_lists_assignments_and_owner_target_platform_role_note(
     assert payload["is_owner_full_access"] is False
     assert len(payload["assignments"]) == 1
     assignment = payload["assignments"][0]
-    assert assignment["permission_key"] == "jobs.read"
-    assert assignment["permission_name"] == "Read jobs"
+    assert assignment["permission_key"] == "artifacts.read"
+    assert assignment["permission_name"] == "Read artifacts"
     assert assignment["scope_type"] == "global"
     assert assignment["scope_id"] == "*"
     assert assignment["enabled"] is True
@@ -183,7 +183,7 @@ def test_non_owner_and_super_admin_cannot_manage_assignments(
         grant_response = auth_client.post(
             f"/api/app/permissions/users/{viewer_id}/assignments",
             headers=auth_headers(token),
-            json={"permission_key": "jobs.create", "reason": "blocked"},
+            json={"permission_key": "modules.read", "reason": "blocked"},
         )
         update_response = auth_client.patch(
             f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
@@ -224,7 +224,7 @@ def test_owner_grant_validation_and_permissions_me_effect(
         auth_client,
         owner_token=owner_token,
         user_id=viewer_id,
-        permission_key="jobs.read",
+        permission_key="artifacts.read",
     )
     assignment = granted["assignment"]
     me_response = auth_client.get(
@@ -234,12 +234,12 @@ def test_owner_grant_validation_and_permissions_me_effect(
     duplicate = auth_client.post(
         f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
-        json={"permission_key": "jobs.read", "reason": "duplicate"},
+        json={"permission_key": "artifacts.read", "reason": "duplicate"},
     )
     missing_permission = auth_client.post(
         f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
-        json={"permission_key": "jobs.archive", "reason": "missing"},
+        json={"permission_key": "artifacts.archive", "reason": "missing"},
     )
     wildcard = auth_client.post(
         f"/api/app/permissions/users/{viewer_id}/assignments",
@@ -249,13 +249,13 @@ def test_owner_grant_validation_and_permissions_me_effect(
     owner_target = auth_client.post(
         f"/api/app/permissions/users/{owner_id}/assignments",
         headers=auth_headers(owner_token),
-        json={"permission_key": "jobs.read", "reason": "owner target"},
+        json={"permission_key": "artifacts.read", "reason": "owner target"},
     )
 
-    assert assignment["permission_key"] == "jobs.read"
+    assert assignment["permission_key"] == "artifacts.read"
     assert assignment["granted_by_user_id"] == owner_id
     assert me_response.status_code == 200
-    assert "jobs.read" in me_response.json()["permissions"]["permission_keys"]
+    assert "artifacts.read" in me_response.json()["permissions"]["permission_keys"]
     assert duplicate.status_code == 409
     assert missing_permission.status_code == 400
     assert wildcard.status_code == 400
@@ -386,7 +386,7 @@ def test_owner_updates_assignment_and_effective_permissions(
         auth_client,
         owner_token=owner_token,
         user_id=viewer_id,
-        permission_key="jobs.read",
+        permission_key="artifacts.read",
     )
     assignment_id = granted["assignment"]["id"]
 
@@ -405,7 +405,7 @@ def test_owner_updates_assignment_and_effective_permissions(
         json={
             "enabled": True,
             "scope_type": "module",
-            "scope_id": "jobs",
+            "scope_id": "artifacts",
             "reason": "Enable module-scoped access.",
         },
     )
@@ -430,18 +430,18 @@ def test_owner_updates_assignment_and_effective_permissions(
     permission_key_update = auth_client.patch(
         f"/api/app/permissions/users/{viewer_id}/assignments/{assignment_id}",
         headers=auth_headers(owner_token),
-        json={"permission_key": "jobs.create", "reason": "not allowed"},
+        json={"permission_key": "modules.read", "reason": "not allowed"},
     )
 
     assert disabled.status_code == 200
     assert disabled.json()["assignment"]["enabled"] is False
-    assert "jobs.read" not in disabled_me.json()["permissions"]["permission_keys"]
+    assert "artifacts.read" not in disabled_me.json()["permissions"]["permission_keys"]
     assert enabled_scoped.status_code == 200
     assert enabled_scoped.json()["assignment"]["scope_type"] == "module"
-    assert enabled_scoped.json()["assignment"]["scope_id"] == "jobs"
+    assert enabled_scoped.json()["assignment"]["scope_id"] == "artifacts"
     assert expired.status_code == 200
     assert expired.json()["assignment"]["effective"] is False
-    assert "jobs.read" not in expired_me.json()["permissions"]["permission_keys"]
+    assert "artifacts.read" not in expired_me.json()["permissions"]["permission_keys"]
     assert mismatched_user.status_code == 404
     assert permission_key_update.status_code == 400
 
@@ -464,7 +464,7 @@ def test_revoke_soft_disables_assignment_removes_effective_permission_and_logs(
         auth_client,
         owner_token=owner_token,
         user_id=viewer_id,
-        permission_key="jobs.create",
+        permission_key="modules.read",
     )
     assignment_id = granted["assignment"]["id"]
 
@@ -481,7 +481,7 @@ def test_revoke_soft_disables_assignment_removes_effective_permission_and_logs(
 
     assert revoked.status_code == 200
     assert revoked.json()["assignment"]["enabled"] is False
-    assert "jobs.create" not in me_response.json()["permissions"]["permission_keys"]
+    assert "modules.read" not in me_response.json()["permissions"]["permission_keys"]
     with SessionLocal() as db:
         stored = db.get(UserPermissionAssignment, assignment_id)
         assert stored is not None
@@ -529,7 +529,7 @@ def test_security_boundaries_remain_owner_only_without_role_default_grants(
     super_admin_grant = auth_client.post(
         f"/api/app/permissions/users/{super_admin_id}/assignments",
         headers=auth_headers(super_admin_token),
-        json={"permission_key": "jobs.read", "reason": "blocked"},
+        json={"permission_key": "artifacts.read", "reason": "blocked"},
     )
     super_admin_users = auth_client.get(
         "/api/app/users",

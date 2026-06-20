@@ -15,9 +15,7 @@ FEATURE_PERMISSION_MODULES = frozenset(
         "agents",
         "approvals",
         "artifacts",
-        "jobs",
         "reviews",
-        "workflows",
     }
 )
 

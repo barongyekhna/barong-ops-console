@@ -111,7 +111,7 @@ export default function ArtifactsPage() {
         submitLabel: "Register artifact",
         title: "Register artifact",
       }}
-      description="Register, inspect, and route artifact metadata into review workflows."
+      description="Register, inspect, and route artifact metadata into review queues."
       detailEndpoint={(record) => `/artifacts/${record.artifact_id}`}
       detailFields={[
         { key: "artifact_id", label: "Artifact" },

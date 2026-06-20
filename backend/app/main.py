@@ -32,7 +32,6 @@ from .api.routes.health import (
     lightweight_health_response,
     router as health_router,
 )
-from .api.routes.jobs import router as jobs_router
 from .api.routes.live_gate import router as live_gate_router
 from .api.routes.memory import router as memory_router
 from .api.routes.messages import router as messages_router
@@ -56,7 +55,6 @@ from .api.routes.security_firewall import router as security_firewall_router
 from .api.routes.users import router as users_router
 from .api.routes.webhook_gateway import router as webhook_gateway_router
 from .api.routes.workflow_registry import router as workflow_registry_router
-from .api.routes.workflows import router as workflows_router
 from .api.module_binding import router as module_binding_router
 from .api.module_visibility import router as module_visibility_router
 from .api.org import router as org_router
@@ -455,7 +453,6 @@ app.include_router(security_firewall_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(auth_router, prefix=PUBLIC_API_PREFIX)
 
 app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
-app.include_router(jobs_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approval_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(artifacts_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(reviews_router, prefix=APPLICATION_API_PREFIX)
@@ -478,7 +475,6 @@ app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)
 
 app.include_router(modules_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)
-app.include_router(workflows_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(foundation_demo_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(n8n_test_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_adapters_router, prefix=CONTROL_PLANE_API_PREFIX)

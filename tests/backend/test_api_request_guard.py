@@ -10,7 +10,7 @@ from backend.app.services.api_request_guard import (
 )
 
 
-def request_for(path: str = "/api/app/jobs", query: str = "limit=50&offset=0"):
+def request_for(path: str = "/api/app/operation-logs", query: str = "limit=50&offset=0"):
     return SimpleNamespace(
         client=SimpleNamespace(host="127.0.0.1"),
         cookies={"barong_ops_session": "session-token"},
@@ -28,14 +28,14 @@ def test_api_request_guard_rejects_parallel_duplicate_request() -> None:
     first = enter_heavy_api_request(
         request_for(),
         settings=settings(),
-        scope="jobs.list",
+        scope="operation_logs.list",
     )
 
     with pytest.raises(HTTPException) as exc_info:
         enter_heavy_api_request(
             request_for(),
             settings=settings(),
-            scope="jobs.list",
+            scope="operation_logs.list",
         )
 
     assert exc_info.value.status_code == 429
@@ -45,7 +45,7 @@ def test_api_request_guard_rejects_parallel_duplicate_request() -> None:
     second = enter_heavy_api_request(
         request_for(),
         settings=settings(),
-        scope="jobs.list",
+        scope="operation_logs.list",
     )
     exit_heavy_api_request(second)
 
@@ -56,7 +56,7 @@ def test_api_request_guard_throttles_session_burst() -> None:
     first = enter_heavy_api_request(
         request_for(query="limit=50&offset=0"),
         settings=settings(),
-        scope="jobs.list",
+        scope="operation_logs.list",
         limit=2,
         window_seconds=10,
     )
@@ -64,7 +64,7 @@ def test_api_request_guard_throttles_session_burst() -> None:
     second = enter_heavy_api_request(
         request_for(query="limit=50&offset=50"),
         settings=settings(),
-        scope="jobs.list",
+        scope="operation_logs.list",
         limit=2,
         window_seconds=10,
     )
@@ -74,7 +74,7 @@ def test_api_request_guard_throttles_session_burst() -> None:
         enter_heavy_api_request(
             request_for(query="limit=50&offset=100"),
             settings=settings(),
-            scope="jobs.list",
+            scope="operation_logs.list",
             limit=2,
             window_seconds=10,
         )

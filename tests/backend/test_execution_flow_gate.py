@@ -162,7 +162,7 @@ def test_c13e_gate_blocks_c14_unknown_external_dependency() -> None:
                 action_key="integration.n8n_test_bridge.test_run.declare",
                 provider_key="future.live_provider",
                 provider_type="future_live_provider",
-                required_permission="jobs.create",
+                required_permission="modules.read",
             )
         )
 

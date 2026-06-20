@@ -9,7 +9,6 @@ export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 
 const API_PROXY_BASE = "/api/backend";
 export const DEFAULT_API_TIMEOUT_MS = 5_000;
-export const JOBS_API_TIMEOUT_MS = 15_000;
 const DEFAULT_API_RETRY_LIMIT = 1;
 const RETRYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -47,12 +46,8 @@ type ApiRequestOptions = Omit<RequestInit, "body"> & {
 };
 
 function defaultTimeoutMsForPath(path: string, method: string) {
-  const pathname = new URL(path, "https://frontend.local").pathname;
-
-  if (method === "GET" && (pathname === "/jobs" || pathname.startsWith("/jobs/"))) {
-    return JOBS_API_TIMEOUT_MS;
-  }
-
+  void path;
+  void method;
   return DEFAULT_API_TIMEOUT_MS;
 }
 

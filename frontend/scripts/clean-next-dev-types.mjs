@@ -7,3 +7,7 @@ rmSync(join(frontendRoot, ".next", "dev", "types"), {
   force: true,
   recursive: true,
 });
+rmSync(join(frontendRoot, ".next", "types"), {
+  force: true,
+  recursive: true,
+});

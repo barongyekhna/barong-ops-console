@@ -15,7 +15,6 @@ const ALLOWED_PUBLIC_POST_PATHS = new Set([
   "auth/logout",
 ]);
 const ALLOWED_APP_LIST_PATHS = new Set([
-  "jobs",
   "artifacts",
   "reviews",
   "errors",
@@ -27,13 +26,11 @@ const ALLOWED_APP_LIST_PATHS = new Set([
 const ALLOWED_CONTROL_PLANE_LIST_PATHS = new Set([
   "modules",
   "agents",
-  "workflows",
 ]);
 const ALLOWED_APP_RESOURCE_PATHS = new Set([
   "artifacts",
   "context-packets",
   "errors",
-  "jobs",
   "memory-events",
   "memory-summaries",
   "reviews",
@@ -42,14 +39,12 @@ const ALLOWED_APP_CREATE_RESOURCE_PATHS = new Set([
   "artifacts",
   "context-packets",
   "errors",
-  "jobs",
   "memory-events",
   "reviews",
 ]);
 const ALLOWED_CONTROL_PLANE_RESOURCE_PATHS = new Set([
   "agents",
   "modules",
-  "workflows",
 ]);
 const ALLOWED_USER_ACTIONS = new Set([
   "disable",
@@ -332,14 +327,6 @@ function isAllowedAppResourcePath(method: string, path: string[]) {
 
   if (path.length === 2) {
     return method === "GET";
-  }
-
-  if (
-    resource === "jobs" &&
-    path.length === 3 &&
-    path[2] === "events"
-  ) {
-    return method === "GET" || method === "POST";
   }
 
   if (

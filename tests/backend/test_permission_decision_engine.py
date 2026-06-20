@@ -46,7 +46,7 @@ def test_permission_decision_engine_deduplicates_request_and_ttl_queries(
         grant_permission(
             db,
             user_id=user_id,
-            permission_key="jobs.read",
+            permission_key="artifacts.read",
             reason="permission cache test",
         )
 
@@ -64,12 +64,12 @@ def test_permission_decision_engine_deduplicates_request_and_ttl_queries(
             permission_request = UnifiedPermissionRequest(
                 user_id=user_id,
                 org_id=None,
-                module_id="jobs",
+                module_id="artifacts",
                 action="read",
                 role="operator",
                 scope_type=SCOPE_GLOBAL,
                 scope_key="*",
-                permission_key="jobs.read",
+                permission_key="artifacts.read",
                 source="test_permission_decision_cache",
             )
             permission_engine = PermissionDecisionEngine(db, request=request)

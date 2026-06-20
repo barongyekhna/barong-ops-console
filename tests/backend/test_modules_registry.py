@@ -565,10 +565,12 @@ def test_owner_and_non_owner_module_access_states(
         if access["category"] in {"admin", "system"}:
             assert access["visible"] is False
             assert access["access_state"] == "hidden"
-    assert viewer_items["business.jobs"]["visible"] is True
-    assert viewer_items["business.jobs"]["locked"] is True
-    assert viewer_items["business.jobs"]["access_state"] == "locked"
-    assert "jobs.read" in viewer_items["business.jobs"]["missing_permissions"]
+    assert "business.jobs" not in viewer_items
+    assert "admin.workflows" not in viewer_items
+    assert viewer_items["business.artifacts"]["visible"] is True
+    assert viewer_items["business.artifacts"]["locked"] is True
+    assert viewer_items["business.artifacts"]["access_state"] == "locked"
+    assert "artifacts.read" in viewer_items["business.artifacts"]["missing_permissions"]
     assert viewer_items["core.dashboard"]["access_state"] == "available"
 
 
@@ -612,7 +614,7 @@ def test_role_defaults_and_super_admin_do_not_grant_module_access(
         upsert_role_default_permission(
             db,
             role="viewer",
-            permission_key="jobs.read",
+            permission_key="artifacts.read",
         )
     viewer_token = login_token(
         auth_client,
@@ -636,7 +638,7 @@ def test_role_defaults_and_super_admin_do_not_grant_module_access(
     assert super_admin_response.status_code == 200
     viewer_items = access_items_by_key(viewer_response.json())
     super_admin_items = access_items_by_key(super_admin_response.json())
-    assert viewer_items["business.jobs"]["access_state"] == "locked"
+    assert viewer_items["business.artifacts"]["access_state"] == "locked"
     assert super_admin_items["admin.users"]["access_state"] == "hidden"
     assert super_admin_items["admin.permissions"]["access_state"] == "hidden"
     assert super_admin_items["admin.modules"]["access_state"] == "hidden"
@@ -665,7 +667,7 @@ def test_c07b_regressions_users_register_assignments_and_permissions_me(
     grant_response = auth_client.post(
         f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
-        json={"permission_key": "jobs.read", "reason": "C07B regression."},
+        json={"permission_key": "artifacts.read", "reason": "C07B regression."},
     )
     assignments_response = auth_client.get(
         f"/api/app/permissions/users/{viewer_id}/assignments",
@@ -686,9 +688,9 @@ def test_c07b_regressions_users_register_assignments_and_permissions_me(
     assert assignments_response.status_code == 200
     assert assignments_response.json()["user_id"] == viewer_id
     assert permissions_me.status_code == 200
-    assert "jobs.read" in permissions_me.json()["permissions"]["permission_keys"]
+    assert "artifacts.read" in permissions_me.json()["permissions"]["permission_keys"]
     assert modules_me.status_code == 200
-    assert access_items_by_key(modules_me.json())["business.jobs"][
+    assert access_items_by_key(modules_me.json())["business.artifacts"][
         "access_state"
     ] == "available"
     assert owner_id != viewer_id

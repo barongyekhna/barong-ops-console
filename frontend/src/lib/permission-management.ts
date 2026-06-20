@@ -47,17 +47,13 @@ const FEATURE_PERMISSION_MODULES = new Set([
   "agents",
   "approvals",
   "artifacts",
-  "jobs",
   "reviews",
-  "workflows",
 ]);
 const FEATURE_PERMISSION_PREFIXES = new Set([
   "agents",
   "approvals",
   "artifacts",
-  "jobs",
   "reviews",
-  "workflows",
 ]);
 const MODULE_DISPLAY_LABELS: Record<string, string> = {
   adapters: "适配器",
@@ -65,7 +61,6 @@ const MODULE_DISPLAY_LABELS: Record<string, string> = {
   approvals: "审批",
   artifacts: "文件",
   execution: "执行",
-  jobs: "任务",
   modules: "模块",
   operation_logs: "操作日志",
   permissions: "权限配置",
@@ -76,7 +71,6 @@ const MODULE_DISPLAY_LABELS: Record<string, string> = {
   settings: "系统设置",
   system: "系统",
   users: "用户",
-  workflows: "工作流",
 };
 const ACTION_DISPLAY_LABELS: Record<string, string> = {
   admin: "管理",
@@ -96,9 +90,6 @@ const PERMISSION_DISPLAY_LABELS: Record<string, string> = {
   "approvals.read": "查看审批权限",
   "artifacts.read": "查看文件权限",
   "execution.manage": "管理执行权限",
-  "jobs.create": "创建任务权限",
-  "jobs.manage": "管理任务权限",
-  "jobs.read": "查看任务权限",
   "modules.manage": "管理模块权限",
   "modules.read": "查看模块权限",
   "operation_logs.read": "查看操作日志权限",
@@ -115,8 +106,6 @@ const PERMISSION_DISPLAY_LABELS: Record<string, string> = {
   "system.admin": "系统管理权限",
   "users.manage": "管理用户权限",
   "users.read": "查看用户权限",
-  "workflows.manage": "管理工作流权限",
-  "workflows.read": "查看工作流权限",
 };
 
 export type PermissionAssignment = {

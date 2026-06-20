@@ -644,7 +644,7 @@ def test_role_defaults_super_admin_and_pending_disabled_adapter_access(
         upsert_role_default_permission(
             db,
             role="viewer",
-            permission_key="jobs.create",
+            permission_key="modules.read",
         )
         upsert_role_default_permission(
             db,
@@ -776,7 +776,7 @@ def test_c08b_regressions_modules_permissions_assignments_users_register(
     grant_response = auth_client.post(
         f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
-        json={"permission_key": "jobs.read", "reason": "C08B regression."},
+        json={"permission_key": "artifacts.read", "reason": "C08B regression."},
     )
     assignments_response = auth_client.get(
         f"/api/app/permissions/users/{viewer_id}/assignments",
@@ -797,7 +797,7 @@ def test_c08b_regressions_modules_permissions_assignments_users_register(
     assert assignments_response.status_code == 200
     assert assignments_response.json()["user_id"] == viewer_id
     assert permissions_me_after.status_code == 200
-    assert "jobs.read" in permissions_me_after.json()["permissions"][
+    assert "artifacts.read" in permissions_me_after.json()["permissions"][
         "permission_keys"
     ]
     assert owner_id != viewer_id

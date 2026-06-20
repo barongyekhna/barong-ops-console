@@ -4,7 +4,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..core.permissions import PermissionDefinition
+from ..core.permissions import PermissionDefinition, RETIRED_PERMISSION_PREFIXES
 from ..models.permission import (
     PermissionRegistry,
     RoleDefaultPermission,
@@ -88,6 +88,31 @@ def upsert_permission_registry(
 
     db.flush()
     return permissions
+
+
+def disable_retired_permission_registry_entries(
+    db: Session,
+    *,
+    active_permission_keys: set[str],
+    retired_prefixes: tuple[str, ...] = RETIRED_PERMISSION_PREFIXES,
+) -> list[PermissionRegistry]:
+    retired_permissions: list[PermissionRegistry] = []
+    for permission in list_permissions(db):
+        if permission.permission_key in active_permission_keys:
+            continue
+        if not permission.is_enabled:
+            continue
+        if not any(
+            permission.permission_key.startswith(prefix)
+            for prefix in retired_prefixes
+        ):
+            continue
+        permission.is_enabled = False
+        db.add(permission)
+        retired_permissions.append(permission)
+
+    db.flush()
+    return retired_permissions
 
 
 def list_user_assignments(

@@ -56,7 +56,7 @@ def test_modules_me_permission_info_uses_request_material_cache(
             assert user_id == 2001
             return [
                 SimpleNamespace(
-                    permission_key="jobs.read",
+                    permission_key="artifacts.read",
                     scope_type="global",
                     scope_key="*",
                     expires_at=None,
@@ -84,7 +84,7 @@ def test_modules_me_permission_info_uses_request_material_cache(
 
     cache = get_permission_request_cache(request)
     assert first is second
-    assert first.permission_keys == ["jobs.read"]
+    assert first.permission_keys == ["artifacts.read"]
     assert calls["scopes"] == 1
     assert cache is not None
     assert cache.request_material_hits == 1

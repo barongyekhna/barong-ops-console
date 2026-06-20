@@ -467,7 +467,7 @@ def test_execution_provider_contract_rejects_invalid_shapes_and_drifts() -> None
         validate_execution_provider_contracts([invalid_action])
 
     permission_drift = copy.deepcopy(valid)
-    permission_drift["required_permissions"] = ["jobs.read"]
+    permission_drift["required_permissions"] = ["artifacts.read"]
     with pytest.raises(ValueError, match="required_permission"):
         validate_execution_provider_contracts([permission_drift])
 
@@ -755,7 +755,7 @@ def test_role_defaults_super_admin_and_direct_access_state_do_not_grant_executio
         upsert_role_default_permission(
             db,
             role="viewer",
-            permission_key="jobs.create",
+            permission_key="modules.read",
         )
         upsert_role_default_permission(
             db,
@@ -916,7 +916,7 @@ def test_c09b_regressions_c08_c07_c05_c06_users_and_register(
     grant_response = auth_client.post(
         f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=owner_headers,
-        json={"permission_key": "jobs.read", "reason": "C09B regression."},
+        json={"permission_key": "artifacts.read", "reason": "C09B regression."},
     )
     assignments_response = auth_client.get(
         f"/api/app/permissions/users/{viewer_id}/assignments",
@@ -938,7 +938,7 @@ def test_c09b_regressions_c08_c07_c05_c06_users_and_register(
     assert assignments_response.status_code == 200
     assert assignments_response.json()["user_id"] == viewer_id
     assert permissions_me_after.status_code == 200
-    assert "jobs.read" in permissions_me_after.json()["permissions"][
+    assert "artifacts.read" in permissions_me_after.json()["permissions"][
         "permission_keys"
     ]
     assert viewer_users.status_code == 403
