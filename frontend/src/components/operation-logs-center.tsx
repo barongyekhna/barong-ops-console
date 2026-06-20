@@ -25,7 +25,6 @@ type OperationLogRecord = {
   action?: string;
   target_type?: string;
   target_id?: string;
-  job_id?: string | null;
   result?: string;
   error_code?: string | null;
   request_id?: string | null;
@@ -43,7 +42,6 @@ function traceKey(log: OperationLogRecord) {
     stringValue(details.trace_id) ??
     stringValue(details.context_id) ??
     stringValue(log.request_id) ??
-    stringValue(log.job_id) ??
     null
   );
 }
@@ -234,7 +232,7 @@ export function OperationLogsCenter() {
           <div className="ops-panel-heading">
             <div>
               <h3>Traces</h3>
-              <p>Trace groups derived from trace, context, request, or job IDs.</p>
+              <p>Trace groups derived from trace, context, or request IDs.</p>
             </div>
             <span className="ops-source">Trace groups</span>
           </div>
@@ -250,7 +248,7 @@ export function OperationLogsCenter() {
               <div>
                 <CircleAlert aria-hidden="true" size={17} />
                 <strong>No trace groups found.</strong>
-                <span>Logs need trace, context, request, or job IDs.</span>
+                <span>Logs need trace, context, or request IDs.</span>
               </div>
             ) : null}
           </div>

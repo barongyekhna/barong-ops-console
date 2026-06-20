@@ -127,7 +127,6 @@ export default function ApprovalsPage() {
         { key: "approval.module_key", label: "Module" },
         { key: "approval.action_key", label: "Action" },
         { key: "approval.status", label: "Status" },
-        { key: "workflow.state", label: "Workflow state" },
         { key: "permission_boundary.actor_role", label: "Actor role" },
         { key: "permission_boundary.allowed_actions", label: "Allowed actions" },
         { key: "safety.no_execution", label: "No execution" },

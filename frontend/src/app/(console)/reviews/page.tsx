@@ -36,7 +36,7 @@ export default function ReviewsPage() {
         },
       ]}
       create={{
-        description: "Create a review against an existing job or artifact.",
+        description: "Create a review against an existing artifact.",
         endpoint: "/reviews",
         fields: [
           {
@@ -46,12 +46,9 @@ export default function ReviewsPage() {
             required: true,
           },
           {
-            key: "job_id",
-            label: "Job ID",
-          },
-          {
             key: "artifact_id",
             label: "Artifact ID",
+            required: true,
           },
           {
             defaultValue: "governance_review",
@@ -73,7 +70,6 @@ export default function ReviewsPage() {
       detailEndpoint={(record) => `/reviews/${record.review_id}`}
       detailFields={[
         { key: "review_id", label: "Review" },
-        { key: "job_id", label: "Job" },
         { key: "artifact_id", label: "Artifact" },
         { key: "review_type", label: "Type" },
         { key: "risk_level", label: "Risk" },
@@ -82,7 +78,7 @@ export default function ReviewsPage() {
         { key: "comment", label: "Comment" },
         { key: "decided_at", label: "Decided" },
       ]}
-      emptyDescription="Create reviews from jobs, artifacts, or the form below."
+      emptyDescription="Create reviews from artifacts or the form below."
       emptyTitle="No reviews waiting."
       endpoint="/reviews?limit=50&offset=0"
       eyebrow="Governance"

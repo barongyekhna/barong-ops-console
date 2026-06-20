@@ -1,0 +1,74 @@
+{
+  "generated_at_utc": "2026-06-20T10:06:07Z",
+  "local_build_cache": {
+    "frontend_next_jobs_paths_found": false,
+    "frontend_next_workflows_paths_found": false,
+    "root_dockerignore_excludes_frontend_next": true,
+    "frontend_dockerignore_excludes_next": true,
+    "docker_build_used_no_cache": true,
+    "docker_build_context_old_route_source_present": false
+  },
+  "local_verification": {
+    "npm_run_typecheck": {
+      "status": "pass"
+    },
+    "npm_run_test": {
+      "status": "pass",
+      "tests": 13
+    },
+    "npm_run_verify": {
+      "status": "pass",
+      "message": "Frontend foundation checks passed."
+    }
+  },
+  "docker_build": {
+    "frontend_no_cache_build": true,
+    "frontend_image": "sha256:8c7545df6ebacb494c8b7747529cbc74180cd653afb2565bf1c619a3692e527c",
+    "frontend_image_tag": "barong-ops-console_console_frontend:latest",
+    "frontend_container": "barong-ops-console_console_frontend_1",
+    "dockerfile_test_step_note": "Dockerfile npm run test step reported 0 tests because of the existing container test path layout; local npm run test executed 13 tests and passed.",
+    "docker_verify_status": "pass",
+    "docker_typecheck_status": "pass",
+    "docker_build_status": "pass",
+    "next_build_routes": [
+      "/",
+      "/_not-found",
+      "/agents",
+      "/api/backend/[...path]",
+      "/approvals",
+      "/artifacts",
+      "/dashboard",
+      "/errors",
+      "/force-password-reset",
+      "/login",
+      "/memory-events",
+      "/modules",
+      "/operation-logs",
+      "/organizations",
+      "/permissions",
+      "/products",
+      "/reviews",
+      "/settings",
+      "/users"
+    ],
+    "jobs_route_present": false,
+    "workflows_route_present": false
+  },
+  "runtime_frontend": {
+    "container_status": "running",
+    "active_image": "sha256:8c7545df6ebacb494c8b7747529cbc74180cd653afb2565bf1c619a3692e527c",
+    "curl_http_127_0_0_1_3000_root": 200,
+    "curl_http_127_0_0_1_3000_jobs": 404,
+    "curl_http_127_0_0_1_3000_workflows": 404,
+    "container_next_server_jobs_paths_found": false,
+    "container_next_server_workflows_paths_found": false,
+    "container_build_jobs_or_workflows_labels_or_hrefs_found": false,
+    "container_build_job_id_or_workflow_key_fields_found": false
+  },
+  "cleanup_notes": [
+    "docker-compose up --force-recreate hit a docker-compose 1.29 ContainerConfig compatibility error after renaming the old frontend container.",
+    "The exited old frontend container was removed, then console_frontend was started with --no-deps from the new no-cache image.",
+    "No backend image rebuild, DB migration, DB schema change, volume reset, or Postgres restart was performed."
+  ],
+  "status": "pass"
+}

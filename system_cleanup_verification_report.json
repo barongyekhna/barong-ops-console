@@ -1,0 +1,156 @@
+{
+  "generated_at_utc": "2026-06-20T10:06:07Z",
+  "objective": "SAFE SYSTEM STABILIZATION FOR JOBS/WORKFLOWS REMOVAL",
+  "git": {
+    "branch": "master",
+    "head": "14ccc3fb34afef1913844e06f4fee4302fa53929",
+    "working_tree_status": [
+      "M backend/app/main.py",
+      "M frontend/src/app/(console)/agents/page.tsx",
+      "M frontend/src/app/(console)/approvals/page.tsx",
+      "M frontend/src/app/(console)/artifacts/page.tsx",
+      "M frontend/src/app/(console)/errors/page.tsx",
+      "M frontend/src/app/(console)/memory-events/page.tsx",
+      "M frontend/src/app/(console)/reviews/page.tsx",
+      "M frontend/src/components/operation-logs-center.tsx",
+      "M frontend/src/lib/frontend-capability-state.ts",
+      "?? frontend_build_consistency_report.json",
+      "?? jobs_workflows_removal_final_status.json",
+      "?? system_cleanup_verification_report.json"
+    ]
+  },
+  "constraints": {
+    "database_modified": false,
+    "db_schema_modified": false,
+    "migration_executed": false,
+    "backend_image_rebuilt_this_run": false,
+    "backend_container_restarted": true,
+    "docker_volumes_reset": false,
+    "postgres_containers_restarted": false,
+    "rbac_core_engine_modified": false
+  },
+  "source_state": {
+    "frontend_jobs_directory_exists": false,
+    "frontend_workflows_directory_exists": false,
+    "backend_legacy_jobs_route_file_exists": false,
+    "backend_legacy_workflows_route_file_exists": false,
+    "backend_legacy_jobs_or_workflows_router_imports_found": false,
+    "backend_removed_path_guard_in_source": true,
+    "frontend_navigation_jobs_or_workflows_entries_found": false,
+    "frontend_console_routes_jobs_or_workflows_found": false,
+    "frontend_legacy_form_fields_found": false,
+    "retained_non_legacy_frontend_matches": [
+      "frontend/src/components/user-management-panel.tsx: Job title is a user employment/profile field, not the removed Jobs module.",
+      "frontend/src/app/api/backend/[...path]/route.ts: module-workflow-bindings and payload-standardization/workflow-mapping are retained internal control-plane capabilities, not /api/control-plane/workflows."
+    ],
+    "retained_backend_system_workflow_routes": [
+      "backend/app/api/routes/workflow_registry.py",
+      "backend/app/api/routes/module_workflow_bindings.py"
+    ],
+    "retained_workflow_routes_reason": "These are internal system capability APIs and are distinct from the removed legacy /api/control-plane/workflows access layer."
+  },
+  "runtime_state": {
+    "backend_health": {
+      "url": "http://127.0.0.1:8000/health",
+      "status_code": 200,
+      "body": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "api_app_jobs": {
+      "url": "http://127.0.0.1:8000/api/app/jobs",
+      "expected_status_code": 404,
+      "actual_status_code": 404,
+      "body": {
+        "detail": "Not found."
+      },
+      "status": "pass"
+    },
+    "api_app_jobs_child": {
+      "url": "http://127.0.0.1:8000/api/app/jobs/demo.job",
+      "expected_status_code": 404,
+      "actual_status_code": 404,
+      "status": "pass"
+    },
+    "api_control_plane_workflows": {
+      "url": "http://127.0.0.1:8000/api/control-plane/workflows",
+      "expected_status_code": 404,
+      "actual_status_code": 404,
+      "body": {
+        "detail": "Not found."
+      },
+      "status": "pass"
+    },
+    "api_control_plane_workflows_child": {
+      "url": "http://127.0.0.1:8000/api/control-plane/workflows/demo.workflow",
+      "expected_status_code": 404,
+      "actual_status_code": 404,
+      "status": "pass"
+    },
+    "frontend_root": {
+      "url": "http://127.0.0.1:3000/",
+      "status_code": 200,
+      "status": "pass"
+    },
+    "frontend_jobs": {
+      "url": "http://127.0.0.1:3000/jobs",
+      "expected_status_code": 404,
+      "actual_status_code": 404,
+      "status": "pass"
+    },
+    "frontend_workflows": {
+      "url": "http://127.0.0.1:3000/workflows",
+      "expected_status_code": 404,
+      "actual_status_code": 404,
+      "status": "pass"
+    }
+  },
+  "docker_state": {
+    "active_backend_image": "sha256:65cbe5a9c0de7b65a60cde2b9bac935f519ce5b0478693f65b2aabe473ed45ed",
+    "active_backend_image_tag": "barong-ops-console_console_backend:latest",
+    "active_frontend_image": "sha256:8c7545df6ebacb494c8b7747529cbc74180cd653afb2565bf1c619a3692e527c",
+    "active_frontend_image_tag": "barong-ops-console_console_frontend:latest",
+    "inactive_backend_cleanup_image": "sha256:6ea229f1f4e627856fe4fb4b21c084ea1304879579dbfa9ddeb6f8118878f2cb",
+    "inactive_backend_cleanup_image_tag": "barong-ops-console_console_backend:cleanup-build-20260620",
+    "inactive_backend_cleanup_image_active": false,
+    "backend_runtime_container_patched": true,
+    "backend_runtime_patch_persistence": "Active in the current running container and present in source. Because backend image rebuild was prohibited, recreating the backend container from the old image would require reapplying the runtime patch or rebuilding backend when allowed.",
+    "frontend_rebuilt_no_cache": true,
+    "frontend_container_recreated": true,
+    "frontend_recreate_method": "docker-compose up --force-recreate hit docker-compose 1.29 ContainerConfig compatibility error; the exited old frontend container was removed and console_frontend was started with --no-deps.",
+    "frontend_next_server_jobs_paths_found": false,
+    "frontend_next_server_workflows_paths_found": false,
+    "frontend_build_literal_scan_jobs_or_workflows_found": false
+  },
+  "verification": {
+    "python_compile_backend_main_source": "pass",
+    "python_compile_backend_main_runtime_container": "pass",
+    "npm_run_typecheck": "pass",
+    "npm_run_test": {
+      "status": "pass",
+      "tests": 13
+    },
+    "npm_run_verify": {
+      "status": "pass",
+      "message": "Frontend foundation checks passed."
+    },
+    "docker_frontend_build_no_cache": "pass",
+    "docker_frontend_build_routes_include_jobs": false,
+    "docker_frontend_build_routes_include_workflows": false,
+    "backend_recent_logs_since_5m": "Only 404 disabled-route checks and 200 health check; no new exception."
+  },
+  "actions_performed": [
+    "Added source-level backend removed-module 404 middleware in backend/app/main.py for /api/app/jobs and /api/control-plane/workflows.",
+    "Patched the running backend container with the same soft-disable guard and restarted only the backend container; backend image was not rebuilt.",
+    "Removed frontend Jobs/Workflows UI remnants from agents, reviews, errors, memory events, artifacts, approvals, operation logs, and capability icon mapping.",
+    "Removed the artifact create panel because backend artifact creation still requires a historical job_id schema field and DB/schema changes were prohibited.",
+    "Ran frontend typecheck, test, and verify successfully.",
+    "Built console_frontend with Docker --no-cache and recreated only the frontend container with --no-deps.",
+    "Verified backend disabled API endpoints and frontend removed routes with runtime curl checks."
+  ],
+  "overall_status": "pass",
+  "blocking_issue": null
+}

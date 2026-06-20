@@ -6,7 +6,7 @@ export default function MemoryEventsPage() {
   return (
     <ProductResourceConsole
       create={{
-        description: "Record a memory event for an existing subject or job.",
+        description: "Record a memory event for an existing subject.",
         endpoint: "/memory-events",
         fields: [
           {
@@ -22,7 +22,7 @@ export default function MemoryEventsPage() {
             required: true,
           },
           {
-            defaultValue: "job",
+            defaultValue: "system",
             key: "subject_type",
             label: "Subject type",
             required: true,
@@ -31,10 +31,6 @@ export default function MemoryEventsPage() {
             key: "subject_id",
             label: "Subject ID",
             required: true,
-          },
-          {
-            key: "job_id",
-            label: "Job ID",
           },
           {
             defaultValue: "normal_demo",
@@ -65,12 +61,11 @@ export default function MemoryEventsPage() {
         { key: "event_type", label: "Type" },
         { key: "subject_type", label: "Subject type" },
         { key: "subject_id", label: "Subject ID" },
-        { key: "job_id", label: "Job" },
         { key: "importance", label: "Importance" },
         { key: "payload", label: "Payload" },
         { key: "created_at", label: "Created" },
       ]}
-      emptyDescription="Memory events appear here when system or job context is recorded."
+      emptyDescription="Memory events appear here when system context is recorded."
       emptyTitle="No memory events recorded."
       endpoint="/memory-events?limit=50&offset=0"
       eyebrow="System"

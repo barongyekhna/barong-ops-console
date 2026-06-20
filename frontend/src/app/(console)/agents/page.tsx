@@ -6,7 +6,7 @@ export default function AgentsPage() {
   return (
     <ProductResourceConsole
       create={{
-        description: "Register a foundation agent and its allowed module/workflow scope.",
+        description: "Register a foundation agent and its allowed module scope.",
         endpoint: "/agents",
         fields: [
           {
@@ -45,11 +45,6 @@ export default function AgentsPage() {
               placeholder: "business.products",
               type: "csv",
             },
-          {
-            key: "allowed_workflow_keys",
-            label: "Allowed workflows",
-            type: "csv",
-          },
         ],
         submitLabel: "Create agent",
         title: "Create agent",
@@ -62,10 +57,9 @@ export default function AgentsPage() {
         { key: "status", label: "Status" },
         { key: "risk_level", label: "Risk" },
         { key: "allowed_module_keys", label: "Allowed modules" },
-        { key: "allowed_workflow_keys", label: "Allowed workflows" },
         { key: "created_at", label: "Created" },
       ]}
-      emptyDescription="Register an agent to connect it to module and workflow metadata."
+      emptyDescription="Register an agent to connect it to module metadata."
       emptyTitle="No automation records yet."
       endpoint="/agents?limit=50&offset=0"
       eyebrow="Extensions"

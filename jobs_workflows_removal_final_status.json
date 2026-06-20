@@ -1,0 +1,80 @@
+{
+  "generated_at_utc": "2026-06-20T10:06:07Z",
+  "constraints": {
+    "db_schema_modified": false,
+    "migration_executed": false,
+    "backend_image_rebuilt_this_run": false,
+    "frontend_image_rebuilt_no_cache": true,
+    "rbac_core_engine_modified": false
+  },
+  "jobs_module": {
+    "frontend_source_removed": true,
+    "frontend_route_directory_exists": false,
+    "frontend_navigation_entry_found": false,
+    "frontend_runtime_removed": true,
+    "frontend_runtime_status_code": 404,
+    "backend_legacy_route_file_removed": true,
+    "backend_legacy_router_import_found": false,
+    "backend_source_removed_path_short_circuit_added": true,
+    "backend_runtime_soft_disable_active": true,
+    "backend_runtime_status_code": 404,
+    "backend_runtime_child_status_code": 404,
+    "expected_backend_runtime_status_code": 404,
+    "api_exposure": false
+  },
+  "workflows_module": {
+    "frontend_source_removed": true,
+    "frontend_route_directory_exists": false,
+    "frontend_navigation_entry_found": false,
+    "frontend_runtime_removed": true,
+    "frontend_runtime_status_code": 404,
+    "backend_legacy_route_file_removed": true,
+    "backend_legacy_router_import_found": false,
+    "backend_source_removed_path_short_circuit_added": true,
+    "backend_runtime_soft_disable_active": true,
+    "backend_runtime_status_code": 404,
+    "backend_runtime_child_status_code": 404,
+    "expected_backend_runtime_status_code": 404,
+    "api_exposure": false
+  },
+  "frontend_cleanup": {
+    "sidebar_jobs_or_workflows_labels_found": false,
+    "sidebar_jobs_or_workflows_hrefs_found": false,
+    "route_artifacts_jobs_or_workflows_found": false,
+    "legacy_imports_found": false,
+    "legacy_state_providers_found": false,
+    "legacy_form_fields_found": false,
+    "runtime_build_jobs_or_workflows_labels_found": false,
+    "runtime_build_job_id_or_workflow_key_fields_found": false
+  },
+  "backend_runtime_checks": {
+    "curl_http_127_0_0_1_8000_api_app_jobs": 404,
+    "curl_http_127_0_0_1_8000_api_app_jobs_demo_job": 404,
+    "curl_http_127_0_0_1_8000_api_control_plane_workflows": 404,
+    "curl_http_127_0_0_1_8000_api_control_plane_workflows_demo_workflow": 404,
+    "curl_http_127_0_0_1_8000_health": 200
+  },
+  "frontend_runtime_checks": {
+    "curl_http_127_0_0_1_3000_jobs": 404,
+    "curl_http_127_0_0_1_3000_workflows": 404,
+    "curl_http_127_0_0_1_3000_root": 200
+  },
+  "retained_non_legacy_surfaces": {
+    "user_job_title_field_retained": true,
+    "approval_workflow_engine_retained": true,
+    "workflow_registry_system_retained": true,
+    "module_workflow_binding_system_retained": true,
+    "payload_standardization_workflow_mapping_retained": true,
+    "reason": "These are profile/internal system capability fields and not Jobs/Workflows modules, sidebar entries, frontend routes, or /api/control-plane/workflows exposure."
+  },
+  "runtime_persistence_note": "The current backend container is patched and returns 404. The backend image was intentionally not rebuilt, so a future backend container recreation from the old image would require reapplying the runtime patch or rebuilding backend when allowed.",
+  "final_status": "pass",
+  "success_criteria": {
+    "no_jobs_api_exposure": true,
+    "no_workflows_api_exposure": true,
+    "frontend_clean": true,
+    "backend_stable": true,
+    "no_migration_crash": true,
+    "system_consistent": true
+  }
+}

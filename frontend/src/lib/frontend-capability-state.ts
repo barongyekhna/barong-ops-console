@@ -7,12 +7,12 @@ import {
   ClipboardCheck,
   Database,
   FileText,
+  GitBranch,
   LayoutDashboard,
   LockKeyhole,
   Package,
   Settings,
   UserRoundCog,
-  Workflow,
   type LucideIcon,
 } from "lucide-react";
 
@@ -174,12 +174,12 @@ const ICONS: Record<string, LucideIcon> = {
   ClipboardCheck,
   Database,
   FileText,
+  GitBranch,
   LayoutDashboard,
   LockKeyhole,
   Package,
   Settings,
   UserRoundCog,
-  Workflow,
 };
 
 const GROUP_ORDER = new Map([

@@ -209,6 +209,17 @@ def _is_control_plane_path(path: str) -> bool:
     )
 
 
+def _is_removed_module_path(path: str) -> bool:
+    removed_prefixes = (
+        f"{APPLICATION_API_PREFIX}/jobs",
+        f"{CONTROL_PLANE_API_PREFIX}/workflows",
+    )
+    return any(
+        path == prefix or path.startswith(f"{prefix}/")
+        for prefix in removed_prefixes
+    )
+
+
 def _control_plane_denied_response(
     *,
     status_code: int,
@@ -435,6 +446,16 @@ async def short_circuit_auth_me(request: Request, call_next):
 async def short_circuit_lightweight_health(request: Request, call_next):
     if is_lightweight_health_path(request.url.path):
         return lightweight_health_response()
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def short_circuit_removed_modules(request: Request, call_next):
+    if _is_removed_module_path(request.url.path):
+        return _json_security_response(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Not found.",
+        )
     return await call_next(request)
 
 

@@ -6,7 +6,7 @@ export default function ErrorsPage() {
   return (
     <ProductResourceConsole
       create={{
-        description: "Record a system issue against a job, module, workflow, or correlation ID.",
+        description: "Record a system issue against a module or correlation ID.",
         endpoint: "/errors",
         fields: [
           {
@@ -51,17 +51,9 @@ export default function ErrorsPage() {
             type: "textarea",
           },
           {
-            key: "job_id",
-            label: "Job ID",
-          },
-          {
             defaultValue: "business.products",
             key: "module_key",
             label: "Module key",
-          },
-          {
-            key: "workflow_key",
-            label: "Workflow key",
           },
           {
             key: "correlation_id",
@@ -85,9 +77,7 @@ export default function ErrorsPage() {
         { key: "severity", label: "Severity" },
         { key: "status", label: "Status" },
         { key: "message", label: "Message" },
-        { key: "job_id", label: "Job" },
         { key: "module_key", label: "Module" },
-        { key: "workflow_key", label: "Workflow" },
         { key: "correlation_id", label: "Correlation" },
         { key: "details", label: "Details" },
       ]}
