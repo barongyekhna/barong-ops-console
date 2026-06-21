@@ -11,6 +11,7 @@ from sqlalchemy import inspect
 from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
+from ..core.session_cookies import get_session_id_from_request
 from ..db.compatibility import table_exists
 from ..db.session import managed_read_session
 from ..middleware.org_context import get_org_context
@@ -245,7 +246,7 @@ async def enforce_org_data_isolation(request: Request, call_next):
             "org_id must come from the authenticated server context.",
         )
 
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     if session_id is None:
         return _security_response(status.HTTP_401_UNAUTHORIZED, "Not authenticated.")
 

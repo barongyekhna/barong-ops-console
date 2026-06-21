@@ -1,0 +1,67 @@
+{
+  "generated_at_utc": "2026-06-21T05:45:05Z",
+  "single_root_cause": "The running backend was still executing the old login path while two PostgreSQL containers were attached to the same console_postgres_data volume and the same console_postgres network alias. During /auth/login, the old synchronous lockout-column reflection hit PostgreSQL catalog/index error 'column is not in index', returning HTTP 500. The frontend surfaced that failure as a credentials-style sign-in error.",
+  "responsible_layer": "runtime deployment and database container topology, with a backend login-path resilience gap",
+  "not_the_cause": [
+    "The configured owner user exists in the current production database.",
+    "The configured owner password matches the stored owner password hash.",
+    "The rebuilt frontend no longer uses /auth/me as the login success criterion.",
+    "RBAC core engine was not involved."
+  ],
+  "remediation": [
+    {
+      "action": "Stopped duplicate PostgreSQL container",
+      "target": "barong-ops-console-prod_console_postgres_1",
+      "data_deleted": false,
+      "schema_changed": false
+    },
+    {
+      "action": "Repaired PostgreSQL system indexes",
+      "command": "REINDEX SYSTEM barong_ops_console",
+      "data_deleted": false,
+      "schema_changed": false
+    },
+    {
+      "action": "Hardened login lockout compatibility check",
+      "file": "backend/app/repositories/users.py",
+      "detail": "SQLAlchemy reflection errors now degrade to lockout columns unavailable instead of failing login."
+    },
+    {
+      "action": "Rebuilt and recreated active backend/frontend containers",
+      "project": "barong-ops-console",
+      "services": [
+        "console_backend",
+        "console_frontend"
+      ],
+      "rollback_tag_suffix": "rollback-authfix-20260621053101"
+    }
+  ],
+  "validation": {
+    "direct_backend_login": {
+      "status": 200,
+      "has_session_token": true,
+      "auth_complete": true,
+      "username": "barongyekhna",
+      "role": "owner"
+    },
+    "frontend_proxy_login": {
+      "status": 200,
+      "has_session_token": true,
+      "auth_complete": true,
+      "username": "barongyekhna",
+      "role": "owner"
+    },
+    "auth_me_after_login_token": {
+      "status": 200,
+      "username": "barongyekhna",
+      "role": "owner"
+    },
+    "wrong_password": {
+      "status": 401,
+      "treated_as_auth_failure_only": true
+    },
+    "login_side_effect_queue_pending": 0,
+    "backend_internal_error_after_fix": false
+  },
+  "remaining_operational_note": "Single-login responses now return successfully and consistently. Occasional latency variation remains due to Argon2 password verification CPU cost; this is distinct from the previous false 401/500/login-state problem."
+}

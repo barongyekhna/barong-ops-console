@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "scope": "LOGIN SYSTEM FULL ROOT CAUSE AUDIT + ONE-SHOT FIX",
+  "constraints_honored": {
+    "rbac_core_engine_modified": false,
+    "db_schema_modified": false,
+    "db_reset_or_user_data_deleted": false,
+    "changed_area": "auth flow, session transport, frontend auth state"
+  },
+  "primary_root_cause": {
+    "id": "session_transport_mismatch",
+    "summary": "The frontend treated the login response session_token as authenticated state, but subsequent API authentication still depended on cookie propagation through the browser and Next proxy. When the cookie was missing, stale, blocked by SameSite/Secure/Path behavior, or not forwarded, the backend returned 401 even though the frontend had a valid login token.",
+    "responsible_layer": "shared auth session boundary: frontend API client/proxy and backend session resolver",
+    "not_responsible": "RBAC core engine"
+  },
+  "secondary_causes": [
+    {
+      "id": "login_response_contract_incomplete",
+      "summary": "Login did not consistently expose a complete ready-to-use auth state to the frontend: user.id, user.role, user.organization_id, session_token, and auth_complete=true."
+    },
+    {
+      "id": "auth_me_blocking_login_state",
+      "summary": "/auth/me was used as a login confirmation path. A slow or failed /auth/me request could override a successful login and show Unable to sign in."
+    },
+    {
+      "id": "global_unauthorized_side_effects",
+      "summary": "401 responses from /auth/login and /auth/me could trigger global unauthenticated state transitions instead of being treated as local login or supplemental hydration failures."
+    },
+    {
+      "id": "login_hot_path_overwork",
+      "summary": "Login previously included side effects in the synchronous response path, including audit and login bookkeeping writes, increasing timeout risk under load."
+    },
+    {
+      "id": "capability_bootstrap_cookie_only_cache_key",
+      "summary": "Capability bootstrap caching was keyed by cookie only, so token-only sessions could collapse into an anonymous cache key."
+    }
+  ],
+  "audit_findings": {
+    "frontend_login_flow": {
+      "login_form_submit": "Single-submit guard is present; overlapping login submissions are blocked.",
+      "auth_provider_state_transition": "Login response now sets authenticated state directly. Background hydration is supplemental.",
+      "token_storage": "session_token is persisted with authComplete=true and user identity in localStorage.",
+      "redirect_logic": "Successful login redirects immediately to dashboard or force-password-reset.",
+      "risk_before_fix": "Valid login could be replaced by /auth/me failure or global unauthorized handling."
+    },
+    "backend_login_api": {
+      "hot_path": "Password verify, user lookup, lightweight session creation, response.",
+      "response_contract": "Returns user.id, user.role, user.organization_id, session_token, auth_complete=true.",
+      "deferred_work": "Login success/failure side effects are queued outside the response path.",
+      "risk_before_fix": "Synchronous side effects increased timeout exposure."
+    },
+    "session_cookie_mechanism": {
+      "cookie_policy": "Cookie remains supported and HttpOnly.",
+      "token_policy": "X-Session-Token is now a first-class session transport and is resolved before cookie fallback.",
+      "proxy_forwarding": "Next backend proxy forwards X-Session-Token to FastAPI."
+    },
+    "auth_me_behavior": {
+      "login_gate": false,
+      "supplemental_only_after_login": true,
+      "failure_effect": "Does not clear authenticated state when a valid login snapshot already exists."
+    },
+    "api_failure_paths": {
+      "auth_failure_401": "Login form treats 401 from /auth/login as invalid credentials.",
+      "timeout_or_backend_failure": "Login form shows service unavailable instead of invalid credentials.",
+      "global_unauthorized": "Suppressed for /auth/login and /auth/me."
+    }
+  },
+  "root_cause_decision": {
+    "primary": "session_transport_mismatch",
+    "frontend_responsibility": "The API client did not consistently attach the login response session_token to subsequent requests, and auth state could rely on /auth/me hydration.",
+    "backend_responsibility": "Auth dependencies and middlewares read only the session cookie, so a valid session_token from login could not authenticate follow-up requests.",
+    "final_classification": "shared frontend/backend auth-session flow defect"
+  }
+}

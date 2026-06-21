@@ -21,7 +21,11 @@ export function PermissionRouteGuard({
 }) {
   const pathname = usePathname();
   const { status, user } = useAuth();
-  const { getCapabilityForPath, permissionSnapshot } =
+  const {
+    getCapabilityForPath,
+    isLoading: capabilityStateLoading,
+    permissionSnapshot,
+  } =
     useFrontendCapabilityState();
   const { items, moduleAccessUnknown } = useModuleAccess();
   const capability = getCapabilityForPath(pathname);
@@ -38,6 +42,13 @@ export function PermissionRouteGuard({
     isUserManagerRoute ||
     isPermissionManagerRoute ||
     isOrganizationListRoute
+  ) {
+    return children;
+  }
+
+  if (
+    status === "authenticated" &&
+    (capabilityStateLoading || moduleAccessUnknown)
   ) {
     return children;
   }

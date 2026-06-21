@@ -1,0 +1,47 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "validated_contract": {
+    "login_success_primary_signal": "session_token",
+    "auth_complete_required": true,
+    "auth_me_required_for_login": false,
+    "cookie_required_for_login_persistence": false,
+    "token_forwarding_required": true
+  },
+  "expected_runtime_behavior": {
+    "valid_credentials": "POST /auth/login returns user, session_token, auth_complete=true; frontend stores sessionToken and immediately enters authenticated UI.",
+    "invalid_credentials": "POST /auth/login returns 401 and the frontend shows credentials error only for that case.",
+    "backend_timeout_or_unavailable": "Frontend shows service unavailable and does not label the failure as invalid credentials.",
+    "auth_me_failure_after_login": "The token-backed authenticated state remains active; /auth/me is ignored as a login gate.",
+    "refresh_after_login": "Stored sessionToken restores authenticated state before background identity hydration."
+  },
+  "verification_commands": {
+    "passed": [
+      "npm run --prefix frontend typecheck",
+      "node --test tests/frontend/auth-flow.test.mjs",
+      ".venv/bin/python -m pytest tests/backend/test_session_cookie_policy.py -q",
+      "npm run --prefix frontend test:unit",
+      ".venv/bin/python -m py_compile backend/app/core/session_cookies.py backend/app/schemas/auth.py backend/app/repositories/users.py backend/app/services/auth_service.py backend/app/api/deps.py backend/app/api/routes/auth.py backend/app/main.py backend/app/services/api_request_guard.py backend/app/middleware/permission.py backend/app/middleware/org_context.py backend/app/middleware/data_isolation.py tests/backend/test_session_cookie_policy.py tests/backend/test_auth_api.py",
+      "git diff --check"
+    ],
+    "blocked_by_environment": [
+      {
+        "command": ".venv/bin/python -m pytest tests/backend/test_auth_api.py -q",
+        "reason": "The sandbox cannot resolve PostgreSQL host db, so DB-backed login integration tests cannot complete here. No DB reset, schema migration, or data deletion was attempted."
+      }
+    ]
+  },
+  "consistency_assertions_added": [
+    "Stored AuthProvider sessions are valid with authComplete=true and sessionToken even when user metadata is absent.",
+    "AuthProvider supplementalOnly is based on sessionTokenRef.current !== null.",
+    "Frontend API attaches X-Session-Token.",
+    "Next proxy forwards X-Session-Token.",
+    "Backend resolver prefers X-Session-Token over Bearer over cookie."
+  ],
+  "success_criteria_status": {
+    "login_enters_dashboard_after_valid_login": "implemented; live DB validation blocked in this sandbox",
+    "no_false_401_errors": "implemented by token-forwarding and backend token resolver",
+    "login_success_immediately_reflects_in_ui": "implemented by AuthProvider token-backed state update",
+    "auth_state_consistent_after_refresh": "implemented by token-only stored auth gate",
+    "no_auth_me_login_dependency": true
+  }
+}

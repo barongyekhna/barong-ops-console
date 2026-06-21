@@ -1,9 +1,10 @@
-import { apiRequest } from "@/lib/api";
+import { ApiError, apiRequest } from "@/lib/api";
 
 export type AuthenticatedUser = {
   id: number;
   username: string;
   role: string;
+  organization_id: string | null;
   must_change_password: boolean;
   is_active: boolean;
   last_login_at: string | null;
@@ -16,14 +17,18 @@ type AuthenticatedUserPayload = AuthenticatedUser & {
 type SessionUserPayload = AuthenticatedUserPayload;
 
 type LoginResponsePayload = {
+  auth_complete?: boolean;
   message?: string | null;
   require_password_change?: boolean;
+  session_token?: string;
   user: AuthenticatedUserPayload;
 };
 
 type LoginResponse = {
+  auth_complete: true;
   message: string | null;
   require_password_change: boolean;
+  session_token: string;
   user: AuthenticatedUser;
 };
 
@@ -54,6 +59,8 @@ function normalizeAuthenticatedUser(
 
   return {
     ...identity,
+    organization_id: identity.organization_id ?? null,
+    last_login_at: identity.last_login_at ?? null,
     must_change_password: requiresPasswordChange(user),
   };
 }
@@ -70,21 +77,28 @@ export async function loginRequest(
   const response = await apiRequest<LoginResponsePayload>("/auth/login", {
     body: { username, password },
     method: "POST",
+    retryLimit: 0,
     signal: options.signal,
     timeoutMs: options.timeoutMs,
   });
+
+  if (response.auth_complete !== true || !response.session_token) {
+    throw new ApiError("Login session was not established.", 503);
+  }
 
   const normalizedUser = normalizeAuthenticatedUser(response.user);
 
   return {
     ...response,
+    auth_complete: true,
     message: response.message ?? null,
     require_password_change: requiresPasswordChange(
       normalizedUser,
       response.require_password_change === true,
     ),
+    session_token: response.session_token,
     user: normalizedUser,
-  };
+  } satisfies LoginResponse;
 }
 
 export async function changePasswordRequest(

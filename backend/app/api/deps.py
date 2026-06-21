@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..core.config import Settings, get_settings
 from ..core.permissions import SCOPE_GLOBAL, SCOPE_ORGANIZATION
 from ..core.roles import is_owner_role
+from ..core.session_cookies import get_session_id_from_request
 from ..db.session import get_db
 from ..models.user import User
 from ..schemas.common import contains_runtime_address_data
@@ -82,7 +83,7 @@ def get_current_session(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> AuthenticatedSession:
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     if session_id is None:
         audit = get_audit_context(request)
         emit_event(
@@ -92,7 +93,7 @@ def get_current_session(
             source="backend",
             status="failed",
             context_id=audit.request_id,
-            payload={"outcome": "missing_session_cookie"},
+            payload={"outcome": "missing_session"},
         )
         raise unauthorized()
 

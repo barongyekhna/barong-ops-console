@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 const PUBLIC_API_PREFIX = "/api/public";
 const APPLICATION_API_PREFIX = "/api/app";
 const CONTROL_PLANE_API_PREFIX = "/api/control-plane";
+const SESSION_TOKEN_HEADER = "x-session-token";
 
 const ALLOWED_PUBLIC_GET_PATHS = new Set([
   "health",
@@ -220,6 +221,18 @@ const capabilityBootstrapInFlight = new Map<
   string,
   Promise<Record<string, CapabilityBootstrapEntry>>
 >();
+
+function applySessionHeaders(headers: Headers, request: NextRequest) {
+  const cookie = request.headers.get("cookie");
+  const sessionToken = request.headers.get(SESSION_TOKEN_HEADER);
+
+  if (cookie) {
+    headers.set("Cookie", cookie);
+  }
+  if (sessionToken) {
+    headers.set("X-Session-Token", sessionToken);
+  }
+}
 
 function getApiBaseUrl() {
   const configuredUrl =
@@ -577,12 +590,9 @@ async function proxyRequest(
     const headers = new Headers({
       Accept: "application/json",
     });
-    const cookie = request.headers.get("cookie");
     const contentType = request.headers.get("content-type");
 
-    if (cookie) {
-      headers.set("Cookie", cookie);
-    }
+    applySessionHeaders(headers, request);
     if (contentType) {
       headers.set("Content-Type", contentType);
     }
@@ -624,7 +634,9 @@ async function proxyRequest(
 }
 
 function getCapabilityBootstrapCacheKey(request: NextRequest) {
-  return request.headers.get("cookie") ?? "anonymous";
+  const cookie = request.headers.get("cookie") ?? "";
+  const sessionToken = request.headers.get(SESSION_TOKEN_HEADER) ?? "";
+  return `cookie:${cookie}|token:${sessionToken}`;
 }
 
 function readCapabilityBootstrapCache(cacheKey: string) {
@@ -678,11 +690,8 @@ async function fetchCapabilityBootstrapTarget(
   try {
     const targetUrl = new URL(backendApiPath, getApiBaseUrl());
     const headers = new Headers({ Accept: "application/json" });
-    const cookie = request.headers.get("cookie");
 
-    if (cookie) {
-      headers.set("Cookie", cookie);
-    }
+    applySessionHeaders(headers, request);
 
     const backendResponse = await fetch(targetUrl, {
       cache: "no-store",
@@ -751,11 +760,8 @@ async function fetchCapabilityBootstrapBatch(
   try {
     const targetUrl = new URL(CAPABILITY_BOOTSTRAP_BACKEND_PATH, getApiBaseUrl());
     const headers = new Headers({ Accept: "application/json" });
-    const cookie = request.headers.get("cookie");
 
-    if (cookie) {
-      headers.set("Cookie", cookie);
-    }
+    applySessionHeaders(headers, request);
 
     const backendResponse = await fetch(targetUrl, {
       cache: "no-store",

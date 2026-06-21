@@ -8,6 +8,8 @@ import {
 export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 
 const API_PROXY_BASE = "/api/backend";
+const AUTH_SESSION_STORAGE_KEY = "barong-auth-session";
+const SESSION_TOKEN_HEADER = "X-Session-Token";
 export const DEFAULT_API_TIMEOUT_MS = 5_000;
 const DEFAULT_API_RETRY_LIMIT = 1;
 const RETRYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
@@ -176,6 +178,39 @@ function isRetryableError(error: unknown, method: string) {
   return error instanceof TypeError;
 }
 
+function shouldDispatchUnauthorized(path: string) {
+  const normalizedPath = new URL(path, "https://frontend.local").pathname;
+  return normalizedPath !== "/auth/login" && normalizedPath !== "/auth/me";
+}
+
+function storedSessionToken() {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  try {
+    const rawValue = window.localStorage.getItem(AUTH_SESSION_STORAGE_KEY);
+    if (!rawValue) {
+      return null;
+    }
+    const parsed = JSON.parse(rawValue) as {
+      authComplete?: unknown;
+      sessionToken?: unknown;
+    };
+    if (
+      parsed.authComplete === true &&
+      typeof parsed.sessionToken === "string" &&
+      parsed.sessionToken
+    ) {
+      return parsed.sessionToken;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
 export async function apiRequest<T>(
   path: string,
   options: ApiRequestOptions = {},
@@ -197,6 +232,11 @@ export async function apiRequest<T>(
 
   if (body !== undefined) {
     headers.set("Content-Type", "application/json");
+  }
+
+  const sessionToken = storedSessionToken();
+  if (sessionToken && !headers.has(SESSION_TOKEN_HEADER)) {
+    headers.set(SESSION_TOKEN_HEADER, sessionToken);
   }
 
   return requestWithFrontendCache<T>(
@@ -236,7 +276,11 @@ export async function apiRequest<T>(
             signal: controller.signal,
           });
 
-          if (response.status === 401 && typeof window !== "undefined") {
+          if (
+            response.status === 401 &&
+            typeof window !== "undefined" &&
+            shouldDispatchUnauthorized(path)
+          ) {
             clearFrontendRequestCache();
             window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
           }

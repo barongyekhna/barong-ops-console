@@ -16,6 +16,7 @@ class AuthenticatedUser(BaseModel):
     id: int
     username: str
     role: str
+    organization_id: str | None
     must_change_password: bool
     is_active: bool
     last_login_at: datetime | None
@@ -36,6 +37,8 @@ class AuthContextResponse(BaseModel):
 
 class LoginResponse(BaseModel):
     user: AuthenticatedUser
+    session_token: str
+    auth_complete: bool = True
     require_password_change: bool = False
     message: str | None = None
 

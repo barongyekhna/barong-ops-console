@@ -1,0 +1,74 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "session_contract": {
+    "login_response_required_fields": [
+      "user.id",
+      "user.role",
+      "user.organization_id",
+      "session_token",
+      "auth_complete"
+    ],
+    "auth_complete_required_value": true,
+    "primary_auth_signal": "session_token",
+    "transport_header": "X-Session-Token",
+    "cookie_support": "retained as fallback compatibility"
+  },
+  "backend_consistency": {
+    "resolver": "backend/app/core/session_cookies.py:get_session_id_from_request",
+    "resolution_order": [
+      "X-Session-Token",
+      "Authorization: Bearer",
+      "auth session cookie"
+    ],
+    "call_sites": [
+      "backend/app/api/deps.py:get_current_session",
+      "backend/app/api/routes/auth.py:_current_identity_fast",
+      "backend/app/api/routes/auth.py:logout",
+      "backend/app/main.py:_auth_me_payload",
+      "backend/app/main.py:enforce_control_plane_isolation",
+      "backend/app/middleware/org_context.py:org_context_middleware",
+      "backend/app/middleware/permission.py:enforce_permission_isolation",
+      "backend/app/middleware/data_isolation.py:enforce_org_data_isolation",
+      "backend/app/services/api_request_guard.py:_session_identity"
+    ],
+    "rbac_engine_changed": false,
+    "schema_changed": false
+  },
+  "frontend_consistency": {
+    "stored_snapshot_key": "barong-auth-session",
+    "snapshot_fields": [
+      "authComplete",
+      "sessionToken",
+      "user"
+    ],
+    "api_client": "frontend/src/lib/api.ts attaches X-Session-Token when a complete snapshot exists",
+    "proxy": "frontend/src/app/api/backend/[...path]/route.ts forwards X-Session-Token and includes token in capability bootstrap cache key",
+    "auth_provider": "frontend/src/components/auth-provider.tsx treats /auth/me as supplemental after login"
+  },
+  "failure_handling": {
+    "invalid_credentials": {
+      "status": 401,
+      "source": "/auth/login",
+      "frontend_message_class": "authentication failure"
+    },
+    "timeout_or_backend_unavailable": {
+      "statuses": [
+        "request timeout",
+        503
+      ],
+      "frontend_message_class": "service unavailable",
+      "not_treated_as_invalid_credentials": true
+    },
+    "auth_me_failure_after_login": {
+      "clears_authenticated_state": false,
+      "effect": "supplemental refresh failure is ignored for login gating"
+    }
+  },
+  "stability_expectations": {
+    "no_overlapping_login_requests": true,
+    "login_retry_disabled": true,
+    "login_redirect_waits_for_auth_me": false,
+    "dashboard_reachable_after_valid_login": "expected with reachable backend DB and valid credentials",
+    "remaining_external_dependency": "database availability and valid credentials are still required for live login"
+  }
+}

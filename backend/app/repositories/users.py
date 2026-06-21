@@ -1,6 +1,7 @@
 from datetime import datetime
 
 from sqlalchemy import func, inspect, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, load_only
 
 from ..db.compatibility import table_exists
@@ -20,6 +21,16 @@ C05B_USER_COLUMNS = (
     User.created_at,
     User.updated_at,
 )
+LOGIN_USER_COLUMNS = (
+    User.id,
+    User.username,
+    User.password_hash,
+    User.role,
+    User.organization_id,
+    User.must_change_password,
+    User.is_active,
+    User.last_login_at,
+)
 LOGIN_LOCKOUT_COLUMNS = (
     "failed_login_count",
     "last_failed_login_at",
@@ -32,12 +43,15 @@ def _user_select():
 
 
 def login_lockout_columns_available(db: Session) -> bool:
-    if not table_exists(db, "users"):
+    try:
+        if not table_exists(db, "users"):
+            return False
+        columns = {
+            column["name"]
+            for column in inspect(db.get_bind()).get_columns("users")
+        }
+    except SQLAlchemyError:
         return False
-    columns = {
-        column["name"]
-        for column in inspect(db.get_bind()).get_columns("users")
-    }
     return set(LOGIN_LOCKOUT_COLUMNS).issubset(columns)
 
 
@@ -47,6 +61,14 @@ def get_user_by_id(db: Session, user_id: int) -> User | None:
 
 def get_user_by_username(db: Session, username: str) -> User | None:
     return db.scalar(_user_select().where(User.username == username))
+
+
+def get_login_user_by_username(db: Session, username: str) -> User | None:
+    return db.scalar(
+        select(User)
+        .options(load_only(*LOGIN_USER_COLUMNS))
+        .where(User.username == username)
+    )
 
 
 def list_users(

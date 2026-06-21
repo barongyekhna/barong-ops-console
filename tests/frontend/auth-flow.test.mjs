@@ -49,9 +49,12 @@ test("root entry routes authenticated users home and unauthenticated users to lo
   assert.match(rootPageSource, /router\.replace\("\/login"\)/);
   assert.doesNotMatch(rootPageSource, /LoginScreen/);
   assert.doesNotMatch(rootPageSource, /PublicOnly/);
+  assert.match(publicOnlySource, /useAuth/);
+  assert.match(publicOnlySource, /status === "authenticated"/);
+  assert.match(publicOnlySource, /router\.replace\(/);
+  assert.match(publicOnlySource, /\/dashboard/);
   assert.match(loginFormSource, /\/force-password-reset/);
   assert.match(loginFormSource, /\/dashboard/);
-  assert.doesNotMatch(publicOnlySource, /router\.replace\("\/dashboard"\)/);
   assert.doesNotMatch(rootPageSource, /\/users/);
   assert.doesNotMatch(loginFormSource, /\/users/);
   assert.doesNotMatch(publicOnlySource, /\/users/);
@@ -65,6 +68,9 @@ test("auth identity does not carry legacy RBAC permission state", () => {
   );
 
   assert.match(authSource, /permissions\?: unknown/);
+  assert.match(authSource, /organization_id: string \| null/);
+  assert.match(authSource, /auth_complete: true/);
+  assert.match(authSource, /session_token: string/);
   assert.match(authSource, /const \{ permissions: _permissions, \.\.\.identity \} = user/);
   assert.match(authSource, /roleBypassesPasswordReset/);
   assert.match(authSource, /normalizedRole === "owner"/);
@@ -95,7 +101,7 @@ test("auth guards render without full-page session loading gates", () => {
   assert.match(authGuardSource, /requiresPasswordChange\(user\)/);
   assert.match(authGuardSource, /redirect\("\/force-password-reset"\)/);
   assert.match(authGuardSource, /status !== "authenticated"[\s\S]*return null/);
-  assert.doesNotMatch(publicOnlySource, /\/dashboard/);
+  assert.match(publicOnlySource, /\/dashboard/);
 });
 
 test("auth initialization and route changes reset transient auth state", () => {
@@ -107,10 +113,80 @@ test("auth initialization and route changes reset transient auth state", () => {
   assert.match(providerSource, /BACKGROUND_SESSION_CHECK_TIMEOUT_MS = 1_500/);
   assert.match(providerSource, /resetAuthState/);
   assert.match(providerSource, /LOGIN_PATHNAME = "\/login"/);
-  assert.match(providerSource, /pathname === LOGIN_PATHNAME[\s\S]*resetAuthState\(\)/);
+  assert.doesNotMatch(
+    providerSource,
+    /if \(pathname === LOGIN_PATHNAME\) \{\s*resetAuthState\(\);/,
+  );
+  assert.match(providerSource, /pathname === LOGIN_PATHNAME[\s\S]*sessionTokenRef\.current[\s\S]*setStatus\("authenticated"\)/);
   assert.match(providerSource, /abortSessionCheck/);
+  assert.match(providerSource, /AUTH_SESSION_STORAGE_KEY = "barong-auth-session"/);
+  assert.match(providerSource, /readStoredAuthSession/);
+  assert.match(providerSource, /user: AuthenticatedUser \| null/);
+  assert.match(providerSource, /const user =[\s\S]*typeof parsed\.user\.id === "number"[\s\S]*: null/);
+  assert.match(providerSource, /initialAuthSession[\s\S]*\? "authenticated"/);
   assert.match(providerSource, /sessionCheckRequest\(\{[\s\S]*signal: controller\.signal/);
+  assert.match(providerSource, /const supplementalOnly = sessionTokenRef\.current !== null/);
+  assert.doesNotMatch(providerSource, /const supplementalOnly =[\s\S]*authSnapshotRef\.current\.user/);
+  assert.match(providerSource, /if \(supplementalOnly\) \{[\s\S]*return;/);
+  assert.match(providerSource, /const handleUnauthorized = \(\) => \{[\s\S]*sessionTokenRef\.current[\s\S]*setStatus\("authenticated"\)/);
   assert.match(providerSource, /catch \(error\)[\s\S]*clearSession\(\);/);
+});
+
+test("authenticated route guards do not block on user or capability hydration", () => {
+  const providerSource = readFileSync(
+    "frontend/src/components/auth-provider.tsx",
+    "utf8",
+  );
+  const capabilitySource = readFileSync(
+    "frontend/src/components/capability-state-provider.tsx",
+    "utf8",
+  );
+  const permissionGuardSource = readFileSync(
+    "frontend/src/components/permission-route-guard.tsx",
+    "utf8",
+  );
+
+  assert.match(providerSource, /initialAuthSession \? "authenticated" : "checking"/);
+  assert.match(capabilitySource, /return "token-authenticated"/);
+  assert.doesNotMatch(capabilitySource, /status !== "authenticated" \|\| !user/);
+  assert.match(permissionGuardSource, /capabilityStateLoading \|\| moduleAccessUnknown/);
+  assert.match(permissionGuardSource, /return children;/);
+});
+
+test("login uses one backend attempt and separates auth from backend failures", () => {
+  const apiSource = readFileSync("frontend/src/lib/api.ts", "utf8");
+  const authSource = readFileSync("frontend/src/lib/auth.ts", "utf8");
+  const proxySource = readFileSync(
+    "frontend/src/app/api/backend/[...path]/route.ts",
+    "utf8",
+  );
+  const providerSource = readFileSync(
+    "frontend/src/components/auth-provider.tsx",
+    "utf8",
+  );
+  const loginFormSource = readFileSync(
+    "frontend/src/components/login-form.tsx",
+    "utf8",
+  );
+
+  assert.match(authSource, /retryLimit: 0/);
+  assert.match(authSource, /response\.auth_complete !== true \|\| !response\.session_token/);
+  assert.match(apiSource, /const SESSION_TOKEN_HEADER = "X-Session-Token"/);
+  assert.match(apiSource, /function storedSessionToken\(\)/);
+  assert.match(apiSource, /headers\.set\(SESSION_TOKEN_HEADER, sessionToken\)/);
+  assert.match(apiSource, /normalizedPath !== "\/auth\/login" && normalizedPath !== "\/auth\/me"/);
+  assert.match(proxySource, /const SESSION_TOKEN_HEADER = "x-session-token"/);
+  assert.match(proxySource, /function applySessionHeaders\(/);
+  assert.match(proxySource, /headers\.set\("X-Session-Token", sessionToken\)/);
+  assert.match(proxySource, /cookie:\$\{cookie\}\|token:\$\{sessionToken\}/);
+  assert.match(providerSource, /loginInFlightRef/);
+  assert.match(providerSource, /if \(loginInFlightRef\.current\)/);
+  assert.match(providerSource, /writeStoredAuthSession\(\{[\s\S]*sessionToken: result\.session_token/);
+  assert.match(loginFormSource, /isSubmittingRef/);
+  assert.match(loginFormSource, /loginError instanceof ApiError && loginError\.status === 401/);
+  assert.match(loginFormSource, /Sign-in service is unavailable/);
+  assert.doesNotMatch(loginFormSource, /took longer than expected/i);
+  assert.doesNotMatch(loginFormSource, /Promise\.race/);
 });
 
 test("dashboard page has explicit unauthenticated access control", () => {
@@ -137,6 +213,6 @@ test("login route renders independently from public-only auth readiness", () => 
     "utf8",
   );
 
-  assert.match(loginPageSource, /return <LoginScreen \/>/);
-  assert.doesNotMatch(loginPageSource, /PublicOnly/);
+  assert.match(loginPageSource, /<PublicOnly>/);
+  assert.match(loginPageSource, /<LoginScreen \/>/);
 });

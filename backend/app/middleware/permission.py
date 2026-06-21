@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
+from ..core.session_cookies import get_session_id_from_request
 from ..db.compatibility import table_exists
 from ..db.session import managed_read_session
 from ..middleware.org_context import get_org_context
@@ -206,7 +207,7 @@ async def enforce_permission_isolation(request: Request, call_next):
     request.state.module_id = context.module_id
     request.state.permission_action = context.action
     audit = _audit_context(request)
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     if session_id is None:
         emit_event(
             event_type="permission_isolation.check",

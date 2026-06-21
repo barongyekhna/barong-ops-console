@@ -20,6 +20,11 @@ from backend.app.services.auth_service import (
     login as login_user,
     validate_session,
 )
+from backend.app.services.login_side_effects import (
+    flush_login_side_effects,
+    pending_login_side_effect_count,
+    stop_login_side_effect_worker,
+)
 from backend.app.services.session_seen_buffer import (
     clear_session_seen_buffer,
     flush_session_seen_updates,
@@ -101,7 +106,7 @@ def aware(value):
     return value
 
 
-def test_login_returns_session_cookie_updates_user_and_writes_audit_log(
+def test_login_returns_session_cookie_and_defers_login_side_effects(
     auth_client: TestClient,
 ) -> None:
     owner_id = create_test_owner()
@@ -112,9 +117,12 @@ def test_login_returns_session_cookie_updates_user_and_writes_audit_log(
 
     assert "access_token" not in payload
     assert "token_type" not in payload
+    assert payload["auth_complete"] is True
+    assert payload["session_token"] == raw_session_id
     assert payload["user"]["id"] == owner_id
     assert payload["user"]["username"] == USERNAME
     assert payload["user"]["role"] == "owner"
+    assert payload["user"]["organization_id"] is None
     assert payload["user"]["is_active"] is True
     assert "password_hash" not in json.dumps(payload)
 
@@ -123,6 +131,17 @@ def test_login_returns_session_cookie_updates_user_and_writes_audit_log(
         auth_session = db.scalar(
             select(AuthSession).where(AuthSession.user_id == owner_id)
         )
+
+    assert owner is not None
+    assert auth_session is not None
+    assert auth_session.session_id_hash == hash_session_id(raw_session_id)
+    assert auth_session.invalidated_at is None
+    assert auth_session.expires_at is not None
+
+    flush_login_side_effects()
+
+    with SessionLocal() as db:
+        owner = db.get(User, owner_id)
         operation_log = db.scalar(
             select(OperationLog).where(
                 OperationLog.action == "auth.login",
@@ -132,12 +151,66 @@ def test_login_returns_session_cookie_updates_user_and_writes_audit_log(
 
     assert owner is not None
     assert owner.last_login_at is not None
-    assert auth_session is not None
-    assert auth_session.session_id_hash == hash_session_id(raw_session_id)
-    assert auth_session.invalidated_at is None
-    assert auth_session.expires_at is not None
     assert operation_log is not None
     assert operation_log.actor_id == str(owner_id)
+
+
+def test_login_hot_path_writes_only_auth_session(
+    clean_auth_tables: None,
+    test_settings,
+) -> None:
+    del clean_auth_tables
+    owner_id = create_test_owner()
+    stop_login_side_effect_worker()
+    statements: list[str] = []
+
+    def collect_statement(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        del conn, cursor, parameters, context, executemany
+        statements.append(statement)
+
+    event.listen(engine, "before_cursor_execute", collect_statement)
+    try:
+        with SessionLocal() as db:
+            result = login_user(
+                db,
+                username=USERNAME,
+                password=PASSWORD,
+                settings=test_settings,
+                audit=service_audit_context("test-login-hot-path"),
+            )
+            assert result.user.id == owner_id
+            assert result.session_id
+    finally:
+        event.remove(engine, "before_cursor_execute", collect_statement)
+
+    write_statements = [
+        statement.strip().lower()
+        for statement in statements
+        if statement.lstrip().upper().startswith(("INSERT", "UPDATE", "DELETE"))
+    ]
+    assert len(write_statements) == 1
+    assert "insert into auth_sessions" in write_statements[0]
+    assert not any(
+        "operation_logs" in statement.lower() for statement in statements
+    )
+    assert not any(
+        "security_rate_limit_buckets" in statement.lower()
+        for statement in statements
+    )
+    assert not any(
+        "org_memberships" in statement.lower() for statement in statements
+    )
+    assert not any("permission" in statement.lower() for statement in statements)
+    assert pending_login_side_effect_count() >= 1
+
+    flush_login_side_effects()
 
 
 def test_login_cookie_is_http_compatible_in_development(
@@ -209,6 +282,8 @@ def test_login_failure_is_uniform_and_audited_without_secrets(
     assert wrong_password_response.status_code == 401
     assert unknown_user_response.status_code == 401
     assert wrong_password_response.json() == unknown_user_response.json()
+
+    flush_login_side_effects()
 
     with SessionLocal() as db:
         operation_logs = list(

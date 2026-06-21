@@ -5,19 +5,22 @@ import { useRouter } from "next/navigation";
 import { useRef, useState, type FormEvent } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { ApiTimeoutError } from "@/lib/api";
+import { ApiError, ApiRequestAbortedError, ApiTimeoutError } from "@/lib/api";
 
-const LOGIN_ERROR =
+const LOGIN_AUTH_ERROR =
   "Unable to sign in. Check your credentials and try again.";
-const LOGIN_TIMEOUT_ERROR =
-  "Sign-in took longer than expected. Please try again.";
-const LOGIN_REQUEST_TIMEOUT_MS = 2_000;
+const LOGIN_BACKEND_ERROR =
+  "Sign-in service is unavailable. Please try again.";
+const LOGIN_ERROR = "Unable to sign in. Please try again.";
+const LOGIN_REQUEST_TIMEOUT_MS = 8_000;
 
-class LoginRequestTimeoutError extends Error {
-  constructor() {
-    super("The sign-in request timed out.");
-    this.name = "LoginRequestTimeoutError";
-  }
+function isBackendLoginFailure(error: unknown) {
+  return (
+    error instanceof ApiTimeoutError ||
+    error instanceof ApiRequestAbortedError ||
+    (error instanceof ApiError && error.status !== 401) ||
+    error instanceof TypeError
+  );
 }
 
 export function LoginForm() {
@@ -27,63 +30,39 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const submissionIdRef = useRef(0);
+  const isSubmittingRef = useRef(false);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const submissionId = submissionIdRef.current + 1;
-    submissionIdRef.current = submissionId;
-    const controller = new AbortController();
-    let timeoutId: number | undefined;
+
+    if (isSubmittingRef.current) {
+      return;
+    }
+
+    isSubmittingRef.current = true;
 
     setError("");
     setIsSubmitting(true);
 
     try {
-      const timeoutPromise = new Promise<never>((_, reject) => {
-        timeoutId = window.setTimeout(() => {
-          const timeoutError = new LoginRequestTimeoutError();
-          controller.abort(timeoutError);
-          reject(timeoutError);
-        }, LOGIN_REQUEST_TIMEOUT_MS);
+      const result = await login(username.trim(), password, {
+        timeoutMs: LOGIN_REQUEST_TIMEOUT_MS,
       });
-
-      const result = await Promise.race([
-        login(username.trim(), password, {
-          signal: controller.signal,
-          timeoutMs: LOGIN_REQUEST_TIMEOUT_MS,
-        }),
-        timeoutPromise,
-      ]);
-
-      if (submissionIdRef.current !== submissionId) {
-        return;
-      }
 
       router.replace(
         result.requirePasswordChange ? "/force-password-reset" : "/dashboard",
       );
     } catch (loginError) {
-      if (submissionIdRef.current !== submissionId) {
-        return;
-      }
-
-      if (
-        loginError instanceof LoginRequestTimeoutError ||
-        loginError instanceof ApiTimeoutError
-      ) {
-        setError(LOGIN_TIMEOUT_ERROR);
+      if (loginError instanceof ApiError && loginError.status === 401) {
+        setError(LOGIN_AUTH_ERROR);
+      } else if (isBackendLoginFailure(loginError)) {
+        setError(LOGIN_BACKEND_ERROR);
       } else {
         setError(LOGIN_ERROR);
       }
     } finally {
-      if (timeoutId !== undefined) {
-        window.clearTimeout(timeoutId);
-      }
-
-      if (submissionIdRef.current === submissionId) {
-        setIsSubmitting(false);
-      }
+      isSubmittingRef.current = false;
+      setIsSubmitting(false);
     }
   }
 

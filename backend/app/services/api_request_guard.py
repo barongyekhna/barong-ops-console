@@ -10,6 +10,7 @@ from typing import Iterator
 from fastapi import Depends, HTTPException, Request, status
 
 from ..core.config import Settings, get_settings
+from ..core.session_cookies import get_session_id_from_request
 
 DEFAULT_HEAVY_REQUEST_LIMIT = 12
 DEFAULT_HEAVY_REQUEST_WINDOW_SECONDS = 1.0
@@ -31,7 +32,7 @@ def _stable_identity(value: str) -> str:
 
 
 def _session_identity(request: Request, settings: Settings) -> str:
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     if session_id:
         return f"session:{_stable_identity(session_id)}"
 

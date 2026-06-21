@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
+from ..core.session_cookies import get_session_id_from_request
 from ..db.compatibility import is_missing_table_error, table_exists
 from ..db.session import managed_read_session
 from ..models.auth_session import AuthSession
@@ -395,7 +396,7 @@ async def org_context_middleware(request: Request, call_next):
     if request.url.path in ORG_CONTEXT_BUILD_EXEMPT_PATHS:
         return await call_next(request)
 
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     if session_id is None:
         if _requires_org_context(request):
             return _security_response(

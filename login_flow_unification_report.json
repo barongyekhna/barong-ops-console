@@ -1,0 +1,35 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "scope": "LOGIN FLOW UNIFICATION",
+  "unified_contract": {
+    "login_success": "auth_complete === true and session_token is a non-empty string",
+    "frontend_source_of_truth": "barong-auth-session.sessionToken",
+    "background_identity_source": "/auth/me",
+    "background_capability_source": "/capability/bootstrap and lazy module/permission APIs"
+  },
+  "frontend_flow_after_fix": [
+    "Login form submits one request only.",
+    "loginRequest requires auth_complete=true and session_token.",
+    "AuthProvider writes sessionToken immediately.",
+    "AuthProvider sets status=authenticated immediately.",
+    "Login form redirects immediately to dashboard or force-password-reset.",
+    "/auth/me runs only as supplemental background hydration.",
+    "Capability, permission, module, approval, and user data load lazily after auth state is established."
+  ],
+  "login_page_behavior": {
+    "file": "frontend/src/app/login/page.tsx",
+    "change": "Login page is wrapped in PublicOnly.",
+    "effect": "If a session token already exists, /login redirects to the authenticated destination instead of rendering a login form or clearing state."
+  },
+  "public_only_behavior": {
+    "file": "frontend/src/components/public-only.tsx",
+    "authenticated": "Redirect to /dashboard or /force-password-reset.",
+    "unauthenticated_or_checking": "Render public children without clearing auth storage."
+  },
+  "error_handling": {
+    "401_from_login": "credentials failure",
+    "timeout_or_backend_failure": "service failure, not invalid credentials",
+    "401_from_background_fetch": "does not clear token-backed auth state"
+  },
+  "backend_changes_in_this_step": "none"
+}

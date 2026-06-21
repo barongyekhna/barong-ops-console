@@ -68,6 +68,7 @@ from .core.auth_paths import is_auth_me_path
 from .core.config import get_settings
 from .core.environments import is_production_like
 from .core.security_headers import apply_security_headers
+from .core.session_cookies import get_session_id_from_request
 from .db.session import managed_read_session
 from .middleware.event_collector import capture_audit_events
 from .middleware.data_isolation import enforce_org_data_isolation
@@ -138,7 +139,7 @@ def _json_ok_security_response(content: object) -> JSONResponse:
 
 
 def _auth_me_payload(request: Request) -> dict[str, object] | None:
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     if session_id is None:
         return None
 
@@ -154,6 +155,7 @@ def _auth_me_payload(request: Request) -> dict[str, object] | None:
                 "id": identity.id,
                 "username": identity.username,
                 "role": identity.role,
+                "organization_id": identity.organization_id,
                 "must_change_password": identity.must_change_password,
                 "is_active": identity.is_active,
                 "last_login_at": identity.last_login_at,
@@ -320,7 +322,7 @@ async def enforce_control_plane_isolation(request: Request, call_next):
         context_id=audit.request_id,
         payload={"path": request.url.path, "method": request.method},
     )
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     if session_id is None:
         emit_event(
             event_type="control_plane.exit",

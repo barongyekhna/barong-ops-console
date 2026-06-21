@@ -1,0 +1,63 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "scope": "FINAL AUTH SYSTEM ROOT CAUSE ANALYSIS + ONE-SHOT FIX",
+  "constraints_honored": {
+    "rbac_core_engine_modified": false,
+    "db_schema_modified": false,
+    "db_reset": false,
+    "user_data_deleted": false,
+    "allowed_change_area": "auth flow, session transport, frontend auth state"
+  },
+  "single_root_cause": {
+    "id": "frontend_auth_state_machine_multiple_sources_of_truth",
+    "summary": "The login flow had more than one effective success standard. Backend login could return a valid session_token, but the frontend auth state machine could still let user snapshot validation, /auth/me hydration, cookie-only transport, or global unauthorized handling overwrite the authenticated state.",
+    "why_backend_login_success_looked_like_frontend_failure": "POST /auth/login succeeded and created a session, but follow-up state checks were not purely token-based. If cookie propagation or /auth/me failed, or if the persisted user snapshot was incomplete, the frontend could clear auth state and show Unable to sign in even though the login token was valid.",
+    "responsible_layer": "frontend auth-state-machine with backend session transport compatibility",
+    "not_responsible": "RBAC core engine"
+  },
+  "audited_flow": {
+    "frontend_login_flow": {
+      "login_form_submit": "Single-flight submit is enforced; overlapping login requests are blocked.",
+      "auth_provider_state_machine_before_final_fix": "Authenticated state could depend on session_token plus a valid user object and /auth/me behavior.",
+      "auth_provider_state_machine_after_final_fix": "Authenticated state is based on authComplete=true plus sessionToken only. user is optional supplemental identity.",
+      "session_token_storage": "The session token is stored in barong-auth-session with authComplete=true and optional user metadata.",
+      "redirect_logic": "Successful login redirects immediately to dashboard or force-password-reset without waiting for /auth/me.",
+      "auth_me_usage": "/auth/me is background hydration only and cannot clear a token-backed authenticated state."
+    },
+    "backend_login_api": {
+      "endpoint": "POST /auth/login",
+      "success_response_contract": {
+        "user": "included",
+        "session_token": "included",
+        "auth_complete": true
+      },
+      "session_creation": "Lightweight auth session creation is committed before response.",
+      "side_effects": "Login success/failure bookkeeping and operation logs are queued outside the response path.",
+      "cookie": "Still set for compatibility.",
+      "token": "Returned in response and accepted on follow-up requests."
+    },
+    "session_token_consistency": {
+      "frontend_primary_signal": "session_token",
+      "request_transport": "X-Session-Token",
+      "backend_resolution_order": [
+        "X-Session-Token",
+        "Authorization: Bearer",
+        "auth session cookie"
+      ],
+      "cookie_conflict_handling": "Header token wins over cookie to prevent stale cookie from overriding a fresh login token.",
+      "next_proxy": "Forwards X-Session-Token to FastAPI and includes token in capability bootstrap cache key."
+    },
+    "auth_me_behavior": {
+      "blocks_login": false,
+      "used_as_login_decision": false,
+      "failure_logs_out_token_backed_session": false,
+      "purpose": "supplemental identity refresh"
+    }
+  },
+  "final_root_cause_decision": {
+    "single_root_cause": "frontend_auth_state_machine_multiple_sources_of_truth",
+    "frontend_responsibility": "Primary. The UI could reject or clear a valid login because it treated non-token signals as login authority.",
+    "backend_responsibility": "Supporting. The backend session resolver and proxy needed to accept the same session_token that login returned.",
+    "auth_state_machine_responsibility": "Primary implementation fault."
+  }
+}

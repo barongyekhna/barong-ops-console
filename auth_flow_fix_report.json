@@ -1,0 +1,98 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "scope": "FINAL AUTH FLOW CONSISTENCY FIX",
+  "backend_changes": [
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "summary": "POST /auth/login returns a complete auth state with user identity, session_token, auth_complete=true, require_password_change, and message."
+    },
+    {
+      "file": "backend/app/schemas/auth.py",
+      "summary": "LoginResponse and AuthenticatedUser schemas include session_token, auth_complete, and organization_id."
+    },
+    {
+      "file": "backend/app/services/auth_service.py",
+      "summary": "Login hot path is limited to user lookup, password verification, lightweight session creation, and commit. Login side effects are queued."
+    },
+    {
+      "file": "backend/app/core/session_cookies.py",
+      "summary": "Added get_session_id_from_request to resolve X-Session-Token or Bearer token before cookie fallback."
+    },
+    {
+      "file": "backend/app/api/deps.py",
+      "summary": "Authenticated API dependencies now use the unified session resolver."
+    },
+    {
+      "file": "backend/app/main.py",
+      "summary": "/auth/me short-circuit and control-plane isolation now use the unified session resolver."
+    },
+    {
+      "file": "backend/app/middleware/org_context.py",
+      "summary": "Org context middleware now authenticates with the unified session resolver without changing RBAC logic."
+    },
+    {
+      "file": "backend/app/middleware/permission.py",
+      "summary": "Permission isolation middleware now receives the same resolved session id without changing permission decisions."
+    },
+    {
+      "file": "backend/app/middleware/data_isolation.py",
+      "summary": "Data isolation middleware now uses the same resolved session id."
+    },
+    {
+      "file": "backend/app/services/api_request_guard.py",
+      "summary": "Heavy-request guard session identity now uses token-aware session resolution."
+    }
+  ],
+  "frontend_changes": [
+    {
+      "file": "frontend/src/lib/auth.ts",
+      "summary": "loginRequest disables retry, enforces auth_complete=true and session_token, and normalizes organization_id."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "Login success is based on session_token/auth_complete. Auth state is persisted as a token snapshot. /auth/me is background hydration and cannot block an already authenticated session."
+    },
+    {
+      "file": "frontend/src/components/login-form.tsx",
+      "summary": "Login submission is single-flight and separates 401 invalid credentials from timeout/backend failures."
+    },
+    {
+      "file": "frontend/src/lib/api.ts",
+      "summary": "API requests attach X-Session-Token from the authenticated snapshot and suppress global unauthorized handling for /auth/login and /auth/me."
+    },
+    {
+      "file": "frontend/src/app/api/backend/[...path]/route.ts",
+      "summary": "Next proxy forwards X-Session-Token to the backend and keys capability bootstrap cache by both cookie and token."
+    }
+  ],
+  "behavior_after_fix": {
+    "login_success_rule": "backend auth_complete=true plus session_token means frontend authenticated",
+    "redirect_rule": "login success redirects immediately without waiting for /auth/me",
+    "hydration_rule": "/auth/me refreshes supplemental identity only",
+    "permission_loading_rule": "permission and org context remain lazy and outside the login success decision",
+    "error_rule": "401 from /auth/login is invalid credentials; timeout/backend failures are service errors"
+  },
+  "success_criteria_mapping": {
+    "login_success_stable": "single login attempt, no overlapping requests, token becomes request auth header",
+    "no_false_401_on_valid_login": "backend accepts X-Session-Token across auth dependencies and middlewares",
+    "auth_state_consistent_after_refresh": "stored auth snapshot restores authenticated state and background /auth/me cannot clear it on supplemental failure",
+    "auth_me_does_not_block_login": true,
+    "backend_no_longer_blocks_login_path": "login side effects are async and auth context/permission loading is not in the login response path"
+  },
+  "verification": {
+    "passed": [
+      ".venv/bin/python -m py_compile backend/app/core/session_cookies.py backend/app/schemas/auth.py backend/app/repositories/users.py backend/app/services/auth_service.py backend/app/api/deps.py backend/app/api/routes/auth.py backend/app/main.py backend/app/services/api_request_guard.py backend/app/middleware/permission.py backend/app/middleware/org_context.py backend/app/middleware/data_isolation.py tests/backend/test_auth_api.py",
+      ".venv/bin/python -m pytest tests/backend/test_session_cookie_policy.py -q",
+      "node --test tests/frontend/auth-flow.test.mjs",
+      "npm run --prefix frontend typecheck",
+      "npm run --prefix frontend test:unit",
+      "git diff --check"
+    ],
+    "blocked": [
+      {
+        "command": ".venv/bin/python -m pytest tests/backend/test_auth_api.py -q",
+        "reason": "The sandbox cannot resolve PostgreSQL host db: [Errno -3] Temporary failure in name resolution. No DB reset or schema change was attempted."
+      }
+    ]
+  }
+}

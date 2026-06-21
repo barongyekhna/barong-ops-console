@@ -1,4 +1,5 @@
 from fastapi import Response
+from starlette.requests import Request
 
 from backend.app.core.config import Settings
 from backend.app.core.environments import (
@@ -10,9 +11,21 @@ from backend.app.core.environments import (
 )
 from backend.app.core.session_cookies import (
     clear_session_cookie,
+    get_session_id_from_request,
     get_session_cookie_policy,
     set_session_cookie,
 )
+
+
+def _request(headers: list[tuple[bytes, bytes]]) -> Request:
+    return Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "path": "/",
+            "headers": headers,
+        }
+    )
 
 
 def test_env_fallback_is_used_when_app_env_is_absent(monkeypatch) -> None:
@@ -107,3 +120,34 @@ def test_set_and_clear_cookie_share_policy_attributes() -> None:
     assert "samesite=lax" in clear_cookie
     assert "domain=console.example.test" in clear_cookie
     assert "path=/api/backend" in clear_cookie
+
+
+def test_session_token_header_is_primary_session_signal() -> None:
+    settings = Settings(auth_session_cookie_name="barong_ops_session")
+    request = _request(
+        [
+            (b"x-session-token", b"header-session"),
+            (b"cookie", b"barong_ops_session=cookie-session"),
+        ]
+    )
+
+    assert get_session_id_from_request(request, settings=settings) == "header-session"
+
+
+def test_bearer_token_falls_back_before_cookie() -> None:
+    settings = Settings(auth_session_cookie_name="barong_ops_session")
+    request = _request(
+        [
+            (b"authorization", b"Bearer bearer-session"),
+            (b"cookie", b"barong_ops_session=cookie-session"),
+        ]
+    )
+
+    assert get_session_id_from_request(request, settings=settings) == "bearer-session"
+
+
+def test_session_cookie_remains_compatibility_fallback() -> None:
+    settings = Settings(auth_session_cookie_name="barong_ops_session")
+    request = _request([(b"cookie", b"barong_ops_session=cookie-session")])
+
+    assert get_session_id_from_request(request, settings=settings) == "cookie-session"

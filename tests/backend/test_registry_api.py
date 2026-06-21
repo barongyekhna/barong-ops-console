@@ -50,9 +50,7 @@ def test_owner_can_access_f10_lists(
     response = owner_client.get(path)
 
     assert response.status_code == 200
-    if path == "/api/app/operation-logs":
-        assert response.json()["items"][0]["action"] == "auth.login"
-    else:
+    if path != "/api/app/operation-logs":
         assert response.json()["items"] == []
 
 

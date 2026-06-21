@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from fastapi import Response
+from fastapi import Request, Response
 
 from .config import Settings
 from .environments import (
@@ -9,6 +9,9 @@ from .environments import (
     is_staging,
     normalize_environment,
 )
+
+SESSION_TOKEN_HEADER = "x-session-token"
+SESSION_TOKEN_MAX_LENGTH = 512
 
 
 @dataclass(frozen=True)
@@ -93,3 +96,34 @@ def clear_session_cookie(response: Response, *, settings: Settings) -> None:
         path=policy.path,
         domain=policy.domain,
     )
+
+
+def _safe_session_token(value: str | None) -> str | None:
+    if value is None:
+        return None
+    candidate = value.strip()
+    if not candidate or len(candidate) > SESSION_TOKEN_MAX_LENGTH:
+        return None
+    if any(character.isspace() for character in candidate):
+        return None
+    return candidate
+
+
+def get_session_id_from_request(
+    request: Request,
+    *,
+    settings: Settings,
+) -> str | None:
+    header_session_id = _safe_session_token(request.headers.get(SESSION_TOKEN_HEADER))
+    if header_session_id is not None:
+        return header_session_id
+
+    authorization = request.headers.get("authorization")
+    if authorization is not None:
+        scheme, separator, token = authorization.partition(" ")
+        if separator and scheme.lower() == "bearer":
+            bearer_session_id = _safe_session_token(token)
+            if bearer_session_id is not None:
+                return bearer_session_id
+
+    return _safe_session_token(request.cookies.get(settings.auth_session_cookie_name))

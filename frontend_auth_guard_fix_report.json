@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "scope": "FRONTEND AUTH GUARD FIX",
+  "guard_changes": [
+    {
+      "file": "frontend/src/components/auth-guard.tsx",
+      "status": "already token-compatible",
+      "summary": "Protected layout gate uses authenticated status. Password reset check remains supplemental and does not block when user is not hydrated."
+    },
+    {
+      "file": "frontend/src/components/dashboard-access-control.tsx",
+      "status": "already token-compatible",
+      "summary": "Dashboard gate uses authenticated status only."
+    },
+    {
+      "file": "frontend/src/components/public-only.tsx",
+      "status": "fixed",
+      "summary": "Authenticated users are redirected away from login without clearing auth state."
+    },
+    {
+      "file": "frontend/src/components/capability-state-provider.tsx",
+      "status": "fixed",
+      "summary": "Capability bootstrap no longer requires a hydrated user object; authenticated token-only state uses a token-authenticated key."
+    },
+    {
+      "file": "frontend/src/components/permission-route-guard.tsx",
+      "status": "fixed",
+      "summary": "When capability or module access state is loading or unknown, authenticated users are allowed through instead of being blocked by permission/module bootstrap."
+    }
+  ],
+  "non_blocking_background_modules": {
+    "permissions": "lazy/non-blocking; failure does not affect auth state",
+    "approvals": "lazy/non-blocking; failure does not affect auth state",
+    "modules": "lazy/non-blocking; loading/unknown state does not block authenticated routing",
+    "users": "lazy/non-blocking; user hydration is not an auth gate"
+  },
+  "verification": {
+    "passed": [
+      "npm run --prefix frontend typecheck",
+      "node --test tests/frontend/auth-flow.test.mjs",
+      "npm run --prefix frontend test:unit",
+      "git diff --check"
+    ],
+    "not_run": [
+      {
+        "command": "backend DB-backed auth integration tests",
+        "reason": "This step was constrained to frontend auth state machine and guards; previous DB-backed auth tests are blocked in this sandbox by unresolved PostgreSQL host db."
+      }
+    ]
+  },
+  "expected_user_visible_result": {
+    "valid_login_enters_dashboard": true,
+    "no_auth_me_login_gate": true,
+    "no_permission_bootstrap_login_gate": true,
+    "refresh_preserves_login_from_token": true,
+    "no_auth_state_flicker_from_background_fetch": true
+  }
+}

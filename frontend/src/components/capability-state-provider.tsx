@@ -74,13 +74,23 @@ function authIdentityKey({
   user,
 }: {
   status: string;
-  user: { id?: number | string | null; role?: string | null; username?: string | null } | null;
+  user: {
+    id?: number | string | null;
+    role?: string | null;
+    username?: string | null;
+  } | null;
 }) {
-  if (status !== "authenticated" || !user) {
+  if (status !== "authenticated") {
     return null;
   }
 
-  return [user.id ?? "unknown", user.username ?? "", user.role ?? ""].join(":");
+  if (!user) {
+    return "token-authenticated";
+  }
+
+  return [user.id ?? "unknown", user.username ?? "", user.role ?? ""].join(
+    ":",
+  );
 }
 
 function permissionsFromBootstrap({

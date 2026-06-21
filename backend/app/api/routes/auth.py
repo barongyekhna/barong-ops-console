@@ -2,7 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ...core.config import Settings, get_settings
-from ...core.session_cookies import clear_session_cookie, set_session_cookie
+from ...core.session_cookies import (
+    clear_session_cookie,
+    get_session_id_from_request,
+    set_session_cookie,
+)
 from ...db.session import get_db, get_read_db
 from ...middleware.org_context import build_org_context
 from ...models.auth_session import AuthSession
@@ -49,7 +53,7 @@ def _current_identity_fast(
     db: Session = Depends(get_read_db),
     settings: Settings = Depends(get_settings),
 ) -> AuthenticatedUserIdentity:
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     if session_id is None:
         raise _not_authenticated()
     try:
@@ -66,6 +70,7 @@ def _identity_response(identity: AuthenticatedUserIdentity) -> AuthenticatedUser
         id=identity.id,
         username=identity.username,
         role=identity.role,
+        organization_id=identity.organization_id,
         must_change_password=identity.must_change_password,
         is_active=identity.is_active,
         last_login_at=identity.last_login_at,
@@ -77,6 +82,7 @@ def _user_response(user: User) -> AuthenticatedUser:
         id=user.id,
         username=user.username,
         role=user.role,
+        organization_id=user.organization_id,
         must_change_password=must_change_password_required(
             role=user.role,
             must_change_password=user.must_change_password,
@@ -91,6 +97,7 @@ def _identity_user(identity: AuthenticatedUserIdentity) -> User:
         username=identity.username,
         password_hash="",
         role=identity.role,
+        organization_id=identity.organization_id,
         must_change_password=identity.must_change_password,
         is_active=identity.is_active,
     )
@@ -151,6 +158,8 @@ def login(
     authenticated_user = _user_response(result.user)
     return LoginResponse(
         user=authenticated_user,
+        session_token=result.session_id,
+        auth_complete=True,
         require_password_change=authenticated_user.must_change_password,
         message=(
             "首次登录默认密码为123456，请立即修改密码"
@@ -234,7 +243,7 @@ def logout(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> LogoutResponse:
-    session_id = request.cookies.get(settings.auth_session_cookie_name)
+    session_id = get_session_id_from_request(request, settings=settings)
     current_session = None
     audit = get_audit_context(request)
 

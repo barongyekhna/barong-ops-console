@@ -30,19 +30,17 @@ from ..repositories.auth_sessions import (
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.users import (
     get_user_by_id,
-    get_user_by_username,
-    record_failed_login,
-    reset_login_failures,
-    login_lockout_columns_available,
+    get_login_user_by_username,
     update_password_hash,
 )
 from ..schemas.user import DEFAULT_INITIAL_PASSWORD, must_change_password_required
 from .event_collector import emit_event
 from .login_side_effects import (
+    LoginFailureSideEffect,
     LoginSuccessSideEffect,
+    queue_login_failure_side_effect,
     queue_login_success_side_effect,
 )
-from .rate_limiter import register_login_rate_limit_attempt
 
 
 class InvalidCredentialsError(ValueError):
@@ -89,6 +87,7 @@ class AuthenticatedUserIdentity:
     id: int
     username: str
     role: str
+    organization_id: str | None
     must_change_password: bool
     is_active: bool
     last_login_at: datetime | None
@@ -471,6 +470,7 @@ def _authenticated_identity_from_user(
         id=user.id,
         username=user.username,
         role=user.role,
+        organization_id=user.organization_id,
         must_change_password=must_change_password_required(
             role=user.role,
             must_change_password=user.must_change_password,
@@ -511,6 +511,7 @@ def validate_session_identity_fast(
                 User.id,
                 User.username,
                 User.role,
+                User.organization_id,
                 User.must_change_password,
                 User.is_active,
                 User.last_login_at,
@@ -522,6 +523,7 @@ def validate_session_identity_fast(
             id=row.id,
             username=row.username,
             role=row.role,
+            organization_id=row.organization_id,
             must_change_password=must_change_password_required(
                 role=row.role,
                 must_change_password=row.must_change_password,
@@ -540,6 +542,7 @@ def validate_session_identity_fast(
                 User.id,
                 User.username,
                 User.role,
+                User.organization_id,
                 User.must_change_password,
                 User.is_active,
                 User.last_login_at,
@@ -569,6 +572,7 @@ def validate_session_identity_fast(
         id=row.id,
         username=row.username,
         role=row.role,
+        organization_id=row.organization_id,
         must_change_password=must_change_password_required(
             role=row.role,
             must_change_password=row.must_change_password,
@@ -591,67 +595,8 @@ def login(
     audit: AuditContext,
 ) -> LoginResult:
     attempted_at = _now()
-    auth_sessions_available = _auth_sessions_table_available(db)
-    rate_limit_decision = register_login_rate_limit_attempt(
-        db,
-        username=username,
-        audit=audit,
-        settings=settings,
-        now=attempted_at,
-    )
-    if not rate_limit_decision.allowed:
-        _record_login_rate_limit(
-            db,
-            audit=audit,
-            reason=rate_limit_decision.reason or "distributed_rate_limit",
-            retry_after_seconds=rate_limit_decision.retry_after_seconds or 1,
-        )
-        emit_event(
-            event_type="auth.login",
-            module="system",
-            action="auth.login",
-            source="backend",
-            status="failed",
-            context_id=audit.request_id,
-            payload={
-                "outcome": "rate_limited",
-                "reason": rate_limit_decision.reason,
-            },
-        )
-        raise LoginRateLimitError(
-            retry_after_seconds=rate_limit_decision.retry_after_seconds or 1
-        )
-
-    user = get_user_by_username(db, username)
+    user = get_login_user_by_username(db, username)
     password_matches = False
-
-    login_lockout_available = login_lockout_columns_available(db)
-
-    if user is not None and login_lockout_available:
-        retry_after = _user_retry_after_seconds(
-            user,
-            settings=settings,
-            now=attempted_at,
-        )
-        if retry_after is not None:
-            _record_login_rate_limit(
-                db,
-                audit=audit,
-                reason="user_backoff_or_lockout",
-                retry_after_seconds=retry_after,
-                user=user,
-            )
-            emit_event(
-                event_type="auth.login",
-                module="system",
-                action="auth.login",
-                source="backend",
-                status="failed",
-                context_id=audit.request_id,
-                user_id=str(user.id),
-                payload={"outcome": "rate_limited", "reason": "user_backoff"},
-            )
-            raise LoginRateLimitError(retry_after_seconds=retry_after)
 
     if user is None:
         hash_password(password)
@@ -659,54 +604,25 @@ def login(
         password_matches = verify_password(password, user.password_hash)
 
     if user is None or not password_matches or not user.is_active:
-        if user is not None and login_lockout_available:
-            record_failed_login(
-                db,
-                user,
+        queue_login_failure_side_effect(
+            LoginFailureSideEffect(
+                user_id=user.id if user is not None else None,
                 failed_at=attempted_at,
-                locked_until=_lockout_until_for_failure(
-                    user,
-                    settings=settings,
-                    failed_at=attempted_at,
-                ),
+                request_id=audit.request_id,
+                ip_address=audit.ip_address,
+                user_agent=audit.user_agent,
             )
-        create_operation_log(
-            db,
-            actor_type="anonymous",
-            actor_id="anonymous",
-            action="auth.login",
-            target_type="session",
-            target_id="current",
-            result="failure",
-            error_code="invalid_credentials",
-            request_id=audit.request_id,
-            ip_address=audit.ip_address,
-            user_agent=audit.user_agent,
-            details={"outcome": "invalid_credentials"},
-        )
-        db.commit()
-        emit_event(
-            event_type="auth.login",
-            module="system",
-            action="auth.login",
-            source="backend",
-            status="failed",
-            context_id=audit.request_id,
-            user_id=str(user.id) if user is not None else None,
-            payload={"outcome": "invalid_credentials"},
         )
         raise InvalidCredentialsError("Invalid username or password.")
 
     logged_in_at = _now()
-    if login_lockout_available:
-        reset_login_failures(db, user)
     session_id, auth_session = _new_session(
         db,
         user=user,
         settings=settings,
         audit=audit,
         issued_at=logged_in_at,
-        auth_sessions_available=auth_sessions_available,
+        auth_sessions_available=True,
     )
     _cache_session_identity(
         _authenticated_identity_from_user(
@@ -727,16 +643,6 @@ def login(
             ip_address=audit.ip_address,
             user_agent=audit.user_agent,
         )
-    )
-    emit_event(
-        event_type="auth.login",
-        module="system",
-        action="auth.login",
-        source="backend",
-        status="success",
-        context_id=audit.request_id,
-        user_id=str(user.id),
-        payload={"outcome": "session_created", "role": user.role},
     )
     return LoginResult(
         session_id=session_id,

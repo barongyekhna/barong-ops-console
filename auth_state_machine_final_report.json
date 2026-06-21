@@ -1,0 +1,60 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "scope": "FINAL AUTH STATE MACHINE CONSISTENCY REBUILD",
+  "constraints_honored": {
+    "backend_login_api_rewritten": false,
+    "rbac_core_engine_modified": false,
+    "db_schema_modified": false,
+    "db_reset": false,
+    "user_data_deleted": false,
+    "changed_area": "frontend auth state machine and auth guards"
+  },
+  "single_auth_success_standard": {
+    "required": [
+      "session_token exists",
+      "auth_complete === true"
+    ],
+    "not_allowed_as_login_gate": [
+      "/auth/me",
+      "user hydration",
+      "permission loading",
+      "module loading",
+      "approval loading"
+    ]
+  },
+  "state_machine_changes": [
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "Initial auth status now treats any stored authComplete sessionToken as authenticated, including on /login."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "Stored auth state validates only authComplete and sessionToken. user is optional supplemental metadata."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "/auth/me refresh is supplemental. If a session token exists, /auth/me failure preserves authenticated status."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "Route changes cannot move a token-backed session into unauthenticated/checking state."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "Global unauthorized events from background requests do not reset a token-backed session."
+    }
+  ],
+  "race_condition_resolution": {
+    "login_vs_route_change": "sessionTokenRef is set before redirect and route-change handling preserves authenticated status when a token exists.",
+    "login_vs_auth_me": "login aborts pending session checks and /auth/me cannot override token-backed auth.",
+    "background_401_vs_auth_state": "background 401 events no longer roll back a token-backed session.",
+    "refresh_flicker": "stored token initializes authenticated immediately, so refresh does not start in checking state."
+  },
+  "result": {
+    "login_success_immediately_authenticated": true,
+    "auth_me_blocks_login": false,
+    "user_required_for_authenticated_state": false,
+    "permissions_required_for_authenticated_state": false,
+    "ui_logout_requires_explicit_logout_or_missing_token": true
+  }
+}

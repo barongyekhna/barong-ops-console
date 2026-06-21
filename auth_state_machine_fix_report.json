@@ -1,0 +1,76 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "scope": "AUTH STATE MACHINE ONE-SHOT FIX",
+  "unified_login_success_standard": {
+    "rule": "login success = auth_complete true and session_token present",
+    "forbidden_rule_removed": "login success cannot depend on /auth/me",
+    "user_identity_role": "supplemental metadata only; not the login gate"
+  },
+  "frontend_state_machine_changes": [
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "Stored auth sessions now require only authComplete=true and sessionToken. user is optional and may be null without invalidating auth state."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "refresh() now treats any existing sessionToken as supplementalOnly, so /auth/me failure cannot clear a token-backed authenticated state."
+    },
+    {
+      "file": "frontend/src/components/auth-provider.tsx",
+      "summary": "login() writes the token snapshot and sets authenticated immediately after login response validation."
+    },
+    {
+      "file": "frontend/src/lib/auth.ts",
+      "summary": "loginRequest disables retry and rejects only when auth_complete is not true or session_token is missing."
+    },
+    {
+      "file": "frontend/src/lib/api.ts",
+      "summary": "API requests attach X-Session-Token from the token snapshot and do not dispatch global unauthorized for /auth/login or /auth/me."
+    },
+    {
+      "file": "frontend/src/components/login-form.tsx",
+      "summary": "Login form distinguishes 401 invalid credentials from timeout/backend failures and blocks overlapping submits."
+    }
+  ],
+  "backend_session_changes": [
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "summary": "Login response includes user, session_token, and auth_complete=true."
+    },
+    {
+      "file": "backend/app/core/session_cookies.py",
+      "summary": "Unified session resolver accepts X-Session-Token first, Bearer second, cookie fallback last."
+    },
+    {
+      "file": "backend/app/api/deps.py",
+      "summary": "Authenticated dependencies use the unified session resolver."
+    },
+    {
+      "file": "backend/app/main.py",
+      "summary": "The /auth/me short-circuit and control-plane isolation use the unified session resolver."
+    },
+    {
+      "file": "backend/app/middleware/org_context.py",
+      "summary": "Org context middleware uses the unified resolver without changing org/RBAC rules."
+    },
+    {
+      "file": "backend/app/middleware/permission.py",
+      "summary": "Permission isolation receives the same resolved session id without RBAC engine changes."
+    },
+    {
+      "file": "backend/app/middleware/data_isolation.py",
+      "summary": "Data isolation uses the same resolved session id."
+    }
+  ],
+  "race_condition_fixes": {
+    "overlapping_login_requests": "blocked by LoginForm isSubmittingRef and AuthProvider loginInFlightRef",
+    "login_vs_auth_me": "login increments session check generation and aborts pending session checks",
+    "auth_me_late_failure": "cannot clear auth when sessionToken exists",
+    "route_change_abort": "transient checks are aborted on route change without clearing token-backed auth"
+  },
+  "rbac_and_schema_constraints": {
+    "rbac_core_engine_modified": false,
+    "db_schema_modified": false,
+    "feature_removed": false
+  }
+}
