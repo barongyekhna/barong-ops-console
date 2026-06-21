@@ -10,12 +10,12 @@ const CAPABILITY_BADGE_LABELS: Record<
   Exclude<ProductCapabilityBadge, null>,
   string
 > = {
-  adapter_pending: "Setup needed",
-  backend_unavailable: "Unavailable",
-  locked: "Locked",
-  mock: "Preview",
-  no_execution: "Setup needed",
-  read_only: "Limited",
+  adapter_pending: "配置中",
+  backend_unavailable: "暂不可用",
+  locked: "受限",
+  mock: "预览",
+  no_execution: "待配置",
+  read_only: "部分可用",
 };
 
 export function CapabilitySidebarEngine({
@@ -32,12 +32,12 @@ export function CapabilitySidebarEngine({
     uiState,
   } = useFrontendCapabilityState();
   const footerLabel = isLoading
-    ? "Loading workspace"
+    ? "正在加载工作台"
     : uiState === "fallback"
-      ? "Fallback mode"
+      ? "准备中"
       : uiState === "degraded"
-        ? "Degraded mode"
-        : `${sidebarItems.length} product areas`;
+        ? "部分信息待刷新"
+        : `${sidebarItems.length} 个功能区`;
 
   return (
     <>

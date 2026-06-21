@@ -25,12 +25,11 @@ import {
   isApiAbortError,
 } from "@/lib/api";
 import {
+  listAllReviewOrganizationCatalog,
   listReviewAuditActions,
   listReviewAuditEmployees,
   listReviewAuditModuleRegistry,
   listReviewAuditOrganizations,
-  listReviewOrganizationCatalog,
-  listReviewOrganizationEmployees,
   REVIEW_AUDIT_PAGE_LIMIT,
   type ReviewAuditAction,
   type ReviewAuditEmployee,
@@ -113,7 +112,7 @@ function reviewErrorText(error: unknown, fallback: string) {
       return "当前账号无权查看审批审计。";
     }
     if (error.status >= 500) {
-      return "审批审计服务暂时不可用。";
+      return "";
     }
   }
   return fallback;
@@ -334,8 +333,7 @@ export function ReviewAuditView() {
     catalogAbortRef.current = controller;
     setCatalogLoading(true);
     try {
-      const data = await listReviewOrganizationCatalog({
-        offset: 0,
+      const data = await listAllReviewOrganizationCatalog({
         signal: controller.signal,
       });
       if (!controller.signal.aborted) {
@@ -367,7 +365,10 @@ export function ReviewAuditView() {
     setEmployeeLoading(true);
     setEmployeeError("");
     try {
-      const data = await listReviewOrganizationEmployees({
+      const data = await listReviewAuditEmployees({
+        filters: {
+          employee: detailEmployeeSearch,
+        },
         offset: 0,
         organizationId,
         signal: controller.signal,
@@ -387,14 +388,14 @@ export function ReviewAuditView() {
         return;
       }
       setEmployees(EMPTY_EMPLOYEES);
-      setEmployeeError(reviewErrorText(error, "员工列表暂时不可用。"));
+        setEmployeeError(reviewErrorText(error, "员工列表暂时不可用。"));
     } finally {
       if (employeeAbortRef.current === controller) {
         employeeAbortRef.current = null;
         setEmployeeLoading(false);
       }
     }
-  }, [selectedUserId]);
+  }, [detailEmployeeSearch, selectedUserId]);
 
   const loadModules = useCallback(async () => {
     setModuleLoading(true);
@@ -565,10 +566,10 @@ export function ReviewAuditView() {
   }, [canUse, loadModules, status]);
 
   useEffect(() => {
-    if (status === "authenticated" && canUse && employeeOrganizationId) {
+    if (status === "authenticated" && canUse && employeeOrganizationId && !filterMode) {
       void loadEmployees(employeeOrganizationId);
     }
-  }, [canUse, employeeOrganizationId, loadEmployees, status]);
+  }, [canUse, employeeOrganizationId, filterMode, loadEmployees, status]);
 
   useEffect(() => {
     if (

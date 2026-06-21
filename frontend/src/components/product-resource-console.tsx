@@ -430,7 +430,7 @@ function RelatedRecords({
           ) : (
             <RotateCcw aria-hidden="true" size={15} />
           )}
-          Refresh
+          刷新
         </button>
       </div>
 
@@ -711,20 +711,12 @@ export function ProductResourceConsole({
 
       <div className="capability-summary-grid">
         <div>
-          <span>Records</span>
+          <span>记录</span>
           <strong>{payload?.count ?? 0}</strong>
         </div>
         <div>
-          <span>Selected</span>
+          <span>已选择</span>
           <strong>{selectedLabel}</strong>
-        </div>
-        <div>
-          <span>API</span>
-          <strong>{endpoint}</strong>
-        </div>
-        <div>
-          <span>Permission</span>
-          <strong>{requiredPermission}</strong>
         </div>
       </div>
 

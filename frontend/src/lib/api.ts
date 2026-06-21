@@ -183,6 +183,47 @@ function shouldDispatchUnauthorized(path: string) {
   return normalizedPath !== "/auth/login" && normalizedPath !== "/auth/me";
 }
 
+function fallbackErrorMessageForStatus(status: number) {
+  if (status === 401) {
+    return "请重新登录后继续。";
+  }
+  if (status === 403) {
+    return "当前账号无权执行此操作。";
+  }
+  if (status === 404) {
+    return "没有找到对应内容。";
+  }
+  if (status === 409) {
+    return "当前操作与已有数据冲突。";
+  }
+  if (status === 422) {
+    return "请检查填写内容后再提交。";
+  }
+  if (status === 429) {
+    return "操作太频繁，请稍后再试。";
+  }
+  if (status >= 500) {
+    return "服务暂时不可用，请稍后再试。";
+  }
+  return "请求未完成，请稍后再试。";
+}
+
+function isTechnicalErrorMessage(message: string) {
+  const normalized = message.trim().toLowerCase();
+  return (
+    normalized === "not authenticated." ||
+    normalized === "not authenticated" ||
+    normalized === "internal server error." ||
+    normalized === "internal server error" ||
+    normalized === "forbidden." ||
+    normalized === "forbidden" ||
+    normalized === "invalid request." ||
+    normalized === "invalid request" ||
+    normalized === "request failed." ||
+    normalized === "request failed"
+  );
+}
+
 function storedSessionToken() {
   if (typeof window === "undefined") {
     return null;
@@ -286,7 +327,7 @@ export async function apiRequest<T>(
           }
 
           if (!response.ok) {
-            let message = "The request could not be completed.";
+            let message = fallbackErrorMessageForStatus(response.status);
             try {
               const payload = (await response.json()) as { detail?: unknown };
               if (typeof payload.detail === "string") {
@@ -302,6 +343,9 @@ export async function apiRequest<T>(
               }
             } catch {
               // Keep the stable fallback when the backend does not return JSON.
+            }
+            if (isTechnicalErrorMessage(message)) {
+              message = fallbackErrorMessageForStatus(response.status);
             }
             throw new ApiError(message, response.status);
           }

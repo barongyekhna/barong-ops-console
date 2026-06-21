@@ -252,6 +252,7 @@ def test_static_module_registry_validation_rules() -> None:
     assert {"admin.users", "admin.permissions", "business.products"}.issubset(
         set(module_keys)
     )
+    assert "business.artifacts" not in module_keys
     assert {
         "module_key",
         "display_name",
@@ -589,10 +590,10 @@ def test_owner_and_non_owner_module_access_states(
             assert access["access_state"] == "hidden"
     assert "business.jobs" not in viewer_items
     assert "admin.workflows" not in viewer_items
-    assert viewer_items["business.artifacts"]["visible"] is True
-    assert viewer_items["business.artifacts"]["locked"] is True
-    assert viewer_items["business.artifacts"]["access_state"] == "locked"
-    assert "artifacts.read" in viewer_items["business.artifacts"]["missing_permissions"]
+    assert viewer_items["business.reviews"]["visible"] is True
+    assert viewer_items["business.reviews"]["locked"] is True
+    assert viewer_items["business.reviews"]["access_state"] == "locked"
+    assert "reviews.read" in viewer_items["business.reviews"]["missing_permissions"]
     assert viewer_items["core.dashboard"]["access_state"] == "available"
 
 
@@ -607,9 +608,6 @@ def test_planned_adapter_pending_and_unavailable_modules_are_not_executable(
 
     assert response.status_code == 200
     items = access_items_by_key(response.json())
-    assert items["business.products"]["status"] == "planned"
-    assert items["business.products"]["access_state"] == "locked"
-    assert items["business.products"]["executable"] is False
     assert items["admin.settings"]["status"] == "planned"
     assert items["admin.settings"]["access_state"] == "planned"
     assert items["admin.settings"]["executable"] is False
@@ -636,7 +634,7 @@ def test_role_defaults_and_super_admin_do_not_grant_module_access(
         upsert_role_default_permission(
             db,
             role="viewer",
-            permission_key="artifacts.read",
+            permission_key="reviews.read",
         )
     viewer_token = login_token(
         auth_client,
@@ -660,7 +658,7 @@ def test_role_defaults_and_super_admin_do_not_grant_module_access(
     assert super_admin_response.status_code == 200
     viewer_items = access_items_by_key(viewer_response.json())
     super_admin_items = access_items_by_key(super_admin_response.json())
-    assert viewer_items["business.artifacts"]["access_state"] == "locked"
+    assert viewer_items["business.reviews"]["access_state"] == "locked"
     assert super_admin_items["admin.users"]["access_state"] == "hidden"
     assert super_admin_items["admin.permissions"]["access_state"] == "hidden"
     assert super_admin_items["admin.modules"]["access_state"] == "hidden"
@@ -689,7 +687,7 @@ def test_c07b_regressions_users_register_assignments_and_permissions_me(
     grant_response = auth_client.post(
         f"/api/app/permissions/users/{viewer_id}/assignments",
         headers=auth_headers(owner_token),
-        json={"permission_key": "artifacts.read", "reason": "C07B regression."},
+        json={"permission_key": "reviews.read", "reason": "C07B regression."},
     )
     assignments_response = auth_client.get(
         f"/api/app/permissions/users/{viewer_id}/assignments",
@@ -710,9 +708,9 @@ def test_c07b_regressions_users_register_assignments_and_permissions_me(
     assert assignments_response.status_code == 200
     assert assignments_response.json()["user_id"] == viewer_id
     assert permissions_me.status_code == 200
-    assert "artifacts.read" in permissions_me.json()["permissions"]["permission_keys"]
+    assert "reviews.read" in permissions_me.json()["permissions"]["permission_keys"]
     assert modules_me.status_code == 200
-    assert access_items_by_key(modules_me.json())["business.artifacts"][
+    assert access_items_by_key(modules_me.json())["business.reviews"][
         "access_state"
     ] == "available"
     assert owner_id != viewer_id

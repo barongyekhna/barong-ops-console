@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterable
 
 from ..schemas.approval import ApprovalCategory, ApprovalDisplayInfo
+from .module_registry import get_module_manifest
 
 CONTROL_PLANE_CATEGORY: ApprovalCategory = "control_plane"
 FEATURE_CATEGORY: ApprovalCategory = "feature"
@@ -29,9 +30,6 @@ CONTROL_PLANE_MARKERS = (
 C_SERIES_PATTERN = re.compile(r"^(?:c|C)(?:-?series|[0-9]{1,3}[a-zA-Z]?)")
 
 ACTION_LABELS = {
-    "business.products.placeholder.prepare": "准备产品上架草稿",
-    "business.products.prepare": "准备产品上架草稿",
-    "business.products.submit": "提交产品上架审批",
     "business.reviews.decision": "提交业务评审结论",
     "admin.permissions.manage": "调整权限配置",
     "admin.users.manage": "调整用户或账号配置",
@@ -42,9 +40,7 @@ ACTION_LABELS = {
 
 MODULE_LABELS = {
     "business.approvals": "审批",
-    "business.products": "产品",
     "business.reviews": "评审",
-    "business.artifacts": "资料",
     "admin.permissions": "权限",
     "admin.users": "用户",
     "admin.modules": "模块",
@@ -106,6 +102,9 @@ def approval_risk_label(risk_level: str) -> str:
 def approval_module_label(module_key: str, category: str) -> str:
     if module_key in MODULE_LABELS:
         return MODULE_LABELS[module_key]
+    manifest = get_module_manifest(module_key)
+    if manifest is not None and manifest.display_name.strip():
+        return manifest.display_name.strip()
     lowered = module_key.lower()
     if category == CONTROL_PLANE_CATEGORY:
         if "permission" in lowered:
@@ -115,13 +114,9 @@ def approval_module_label(module_key: str, category: str) -> str:
         if "architecture" in lowered or lowered.startswith(("c", "system.")):
             return "系统架构"
         return "系统主控"
-    if lowered.startswith("k") or "knowledge" in lowered:
-        return "知识"
-    if lowered.startswith("p") or "product" in lowered:
-        return "产品"
     if lowered.startswith("business."):
-        return "业务"
-    return "业务"
+        return "业务模块"
+    return "业务模块"
 
 
 def approval_action_label(action_key: str, module_key: str, category: str) -> str:
@@ -137,10 +132,6 @@ def approval_action_label(action_key: str, module_key: str, category: str) -> st
         if "architecture" in lowered or "system" in lowered:
             return "提交系统架构变更"
         return "提交系统级操作审批"
-    if "knowledge" in lowered or lowered.startswith("k"):
-        return "提交知识内容审批"
-    if "product" in lowered or lowered.startswith("p"):
-        return "准备产品上架草稿"
     if "review" in lowered:
         return "提交业务评审审批"
     return "提交业务模块审批"

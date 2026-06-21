@@ -51,7 +51,7 @@ export default function ErrorsPage() {
             type: "textarea",
           },
           {
-            defaultValue: "business.products",
+            defaultValue: "business.reviews",
             key: "module_key",
             label: "Module key",
           },

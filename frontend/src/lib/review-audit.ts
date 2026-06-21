@@ -5,6 +5,8 @@ import {
 } from "@/lib/module-registry";
 
 export const REVIEW_AUDIT_PAGE_LIMIT = 10;
+export const REVIEW_AUDIT_EMPLOYEE_LIMIT = 100;
+export const REVIEW_ORGANIZATION_CATALOG_LIMIT = 100;
 
 export type ReviewAuditOrganization = {
   organization_id: string;
@@ -194,9 +196,13 @@ function appendFilters(params: URLSearchParams, filters: ReviewAuditFilters) {
   }
 }
 
-function pageParams(offset: number, filters: ReviewAuditFilters) {
+function pageParams(
+  offset: number,
+  filters: ReviewAuditFilters,
+  limit = REVIEW_AUDIT_PAGE_LIMIT,
+) {
   const params = new URLSearchParams({
-    limit: "100",
+    limit: String(limit),
     offset: String(Math.max(0, offset)),
   });
   appendFilters(params, filters);
@@ -248,7 +254,7 @@ export async function listReviewOrganizationCatalog({
   signal?: AbortSignal;
 }) {
   const params = new URLSearchParams({
-    limit: String(REVIEW_AUDIT_PAGE_LIMIT),
+    limit: String(REVIEW_ORGANIZATION_CATALOG_LIMIT),
     offset: String(Math.max(0, offset)),
   });
   return normalizeListResponse(
@@ -259,6 +265,35 @@ export async function listReviewOrganizationCatalog({
     }),
     normalizeOrganization,
   );
+}
+
+export async function listAllReviewOrganizationCatalog({
+  signal,
+}: {
+  signal?: AbortSignal;
+} = {}) {
+  const items: ReviewAuditOrganization[] = [];
+  let offset = 0;
+  let lastResponse: ReviewAuditListResponse<ReviewAuditOrganization> | null = null;
+
+  while (true) {
+    const response = await listReviewOrganizationCatalog({ offset, signal });
+    items.push(...response.items);
+    lastResponse = response;
+
+    if (response.items.length < REVIEW_ORGANIZATION_CATALOG_LIMIT) {
+      break;
+    }
+    offset += REVIEW_ORGANIZATION_CATALOG_LIMIT;
+  }
+
+  return {
+    count: items.length,
+    degraded: lastResponse?.degraded ?? false,
+    items,
+    limit: REVIEW_ORGANIZATION_CATALOG_LIMIT,
+    offset: 0,
+  };
 }
 
 export async function listReviewOrganizationEmployees({
@@ -273,11 +308,13 @@ export async function listReviewOrganizationEmployees({
   signal?: AbortSignal;
 }) {
   const params = new URLSearchParams({
-    limit: "100",
+    limit: String(REVIEW_AUDIT_EMPLOYEE_LIMIT),
     offset: String(Math.max(0, offset)),
     organization_id: organizationId,
   });
-  void employee;
+  if (employee?.trim()) {
+    params.set("employee", employee.trim());
+  }
   return normalizeListResponse(
     await apiRequest<unknown>(`/users?${params.toString()}`, {
       method: "GET",
@@ -302,7 +339,7 @@ export async function listReviewAuditEmployees({
   const params = pageParams(offset, {
     ...filters,
     organizationId: undefined,
-  });
+  }, REVIEW_AUDIT_EMPLOYEE_LIMIT);
   return normalizeListResponse(
     await apiRequest<unknown>(
       `/reviews/organizations/${encodeURIComponent(organizationId)}/users?${params.toString()}`,

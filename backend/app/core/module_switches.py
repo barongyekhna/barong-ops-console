@@ -105,7 +105,7 @@ def _module_keys_by_navigation_group(group: str) -> tuple[str, ...]:
     )
 
 
-MODULE_SWITCH_GROUP_POLICIES_V1: tuple[dict[str, Any], ...] = (
+_MODULE_SWITCH_GROUP_POLICY_CANDIDATES: tuple[dict[str, Any], ...] = (
     _group_policy(
         group_key="category.core",
         module_keys=_module_keys_by_category("core"),
@@ -150,6 +150,12 @@ MODULE_SWITCH_GROUP_POLICIES_V1: tuple[dict[str, Any], ...] = (
         group_key="navigation.governance",
         module_keys=_module_keys_by_navigation_group("Governance"),
     ),
+)
+
+MODULE_SWITCH_GROUP_POLICIES_V1: tuple[dict[str, Any], ...] = tuple(
+    policy
+    for policy in _MODULE_SWITCH_GROUP_POLICY_CANDIDATES
+    if policy["module_keys"]
 )
 
 

@@ -42,7 +42,7 @@ export default function AgentsPage() {
             {
               key: "allowed_module_keys",
               label: "Allowed modules",
-              placeholder: "business.products",
+              placeholder: "business.reviews",
               type: "csv",
             },
         ],

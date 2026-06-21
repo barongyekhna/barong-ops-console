@@ -23,29 +23,10 @@ from .data_isolation import without_org_data_isolation
 APPROVAL_ACTION_STATUSES = ("approved", "rejected")
 DEFAULT_REVIEW_AUDIT_LIMIT = 10
 MAX_REVIEW_AUDIT_LIMIT = 10
+DEFAULT_REVIEW_AUDIT_EMPLOYEE_LIMIT = 100
+MAX_REVIEW_AUDIT_EMPLOYEE_LIMIT = 100
 
-MODULE_FILTER_TOKENS: dict[str, tuple[str, ...]] = {
-    "product": ("product", "products", "p"),
-    "products": ("product", "products", "p"),
-    "产品": ("product", "products", "p"),
-    "artifact": ("artifact", "artifacts", "file"),
-    "artifacts": ("artifact", "artifacts", "file"),
-    "资料": ("artifact", "artifacts", "file"),
-    "review": ("review", "reviews"),
-    "reviews": ("review", "reviews"),
-    "评审": ("review", "reviews"),
-    "permission": ("permission", "permissions", "rbac"),
-    "permissions": ("permission", "permissions", "rbac"),
-    "权限": ("permission", "permissions", "rbac"),
-    "user": ("user", "users", "account"),
-    "users": ("user", "users", "account"),
-    "用户": ("user", "users", "account"),
-    "module": ("module", "modules"),
-    "modules": ("module", "modules"),
-    "模块": ("module", "modules"),
-    "business": ("business",),
-    "业务": ("business",),
-}
+MODULE_FILTER_TOKENS: dict[str, tuple[str, ...]] = {}
 
 
 @dataclass(frozen=True)
@@ -311,20 +292,20 @@ def _related_object_type(record: ApprovalRequestRecord | None) -> str:
         explicit_category=record.category,
     )
     module_label = approval_module_label(record.module_key, category)
-    if module_label in {"产品", "资料", "知识"}:
+    if module_label not in {"业务模块", "系统主控"}:
         return module_label
     if record.execution_id:
-        return "Job"
-    return "Module"
+        return "执行任务"
+    return "业务模块"
 
 
 def _related_object(record: ApprovalRequestRecord | None) -> str:
     if record is None:
         return "审批记录"
     object_type = _related_object_type(record)
-    if object_type == "Job" and record.execution_id:
+    if object_type == "执行任务" and record.execution_id:
         return record.execution_id
-    if object_type != "Module":
+    if object_type != "业务模块":
         return f"{object_type}审批"
     category = approval_category_from_keys(
         module_key=record.module_key,
@@ -425,4 +406,3 @@ def list_review_audit_actions(
             )
         )
     return items
-

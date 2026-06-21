@@ -9,6 +9,25 @@ import { CapabilitySidebarEngine } from "@/components/capability-sidebar-engine"
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import { pageTitles } from "@/lib/navigation";
 
+function roleLabel(role: string | null | undefined) {
+  if (role === "owner") {
+    return "所有者";
+  }
+  if (role === "super_admin" || role === "admin") {
+    return "组织管理员";
+  }
+  if (role === "reviewer") {
+    return "审核员";
+  }
+  if (role === "operator") {
+    return "操作员";
+  }
+  if (role === "viewer") {
+    return "查看员";
+  }
+  return "成员";
+}
+
 export function ConsoleShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -34,7 +53,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   }
 
   const currentCapability = getCapabilityForPath(pathname);
-  const title = pageTitles[pathname] ?? currentCapability?.label ?? "Workspace";
+  const title = pageTitles[pathname] ?? currentCapability?.label ?? "工作台";
   const showFallbackBanner =
     capabilityState.isLoading || capabilityState.uiState === "fallback";
 
@@ -78,7 +97,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               <Menu aria-hidden="true" size={20} />
             </button>
             <div>
-              <span className="eyebrow">Workspace</span>
+              <span className="eyebrow">工作台</span>
               <h1>{title}</h1>
             </div>
           </div>
@@ -86,7 +105,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           <div className="account-area">
             <div className="account-copy">
               <strong>{user?.username}</strong>
-              <span>{user?.role}</span>
+              <span>{roleLabel(user?.role)}</span>
             </div>
             <button
               className="logout-button"
@@ -95,7 +114,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               type="button"
             >
               <LogOut aria-hidden="true" size={17} />
-              {isLoggingOut ? "Signing out" : "Logout"}
+              {isLoggingOut ? "正在退出" : "退出"}
             </button>
           </div>
         </header>
@@ -108,15 +127,15 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               role="status"
             >
               <div>
-                <strong>System initializing</strong>
-                <span>Fallback mode active</span>
+                <strong>系统正在准备</strong>
+                <span>部分信息稍后刷新</span>
               </div>
               <button
                 className="secondary-button"
                 onClick={() => void capabilityState.refresh()}
                 type="button"
               >
-                Try refresh
+                刷新
               </button>
             </section>
           ) : null}

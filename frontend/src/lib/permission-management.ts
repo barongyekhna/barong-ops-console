@@ -9,6 +9,10 @@ export const ROLE_DEFAULT_PERMISSIONS_NOTICE =
 export const EMPTY_ASSIGNMENTS_NOTICE = "No explicit assignments yet.";
 
 const GLOBAL_PERMISSION_WILDCARD = "*";
+const REMOVED_PERMISSION_KEYS = new Set([
+  "artifacts.read",
+  "artifacts.manage",
+]);
 const HIGH_RISK_PERMISSION_KEYS = new Set([
   "users.manage",
   "permissions.manage",
@@ -46,20 +50,17 @@ const HIGH_RISK_MODULES = new Set([
 const FEATURE_PERMISSION_MODULES = new Set([
   "agents",
   "approvals",
-  "artifacts",
   "reviews",
 ]);
 const FEATURE_PERMISSION_PREFIXES = new Set([
   "agents",
   "approvals",
-  "artifacts",
   "reviews",
 ]);
 const MODULE_DISPLAY_LABELS: Record<string, string> = {
   adapters: "适配器",
   agents: "智能体",
   approvals: "审批",
-  artifacts: "文件",
   execution: "执行",
   modules: "模块",
   operation_logs: "操作日志",
@@ -88,7 +89,6 @@ const PERMISSION_DISPLAY_LABELS: Record<string, string> = {
   "agents.read": "查看智能体权限",
   "approvals.approve": "审批权限",
   "approvals.read": "查看审批权限",
-  "artifacts.read": "查看文件权限",
   "execution.manage": "管理执行权限",
   "modules.manage": "管理模块权限",
   "modules.read": "查看模块权限",
@@ -418,12 +418,15 @@ export function filterPermissionRegistryForRole(
   registry: PermissionRegistryItem[],
   role: string | null | undefined,
 ) {
+  const activeRegistry = registry.filter(
+    (permission) => !REMOVED_PERMISSION_KEYS.has(permission.permission_key),
+  );
   const normalized = role?.trim().toLowerCase();
   if (normalized === "owner") {
-    return registry;
+    return activeRegistry;
   }
   if (normalized === "super_admin") {
-    return registry.filter(
+    return activeRegistry.filter(
       (permission) => getPermissionUiCategory(permission) === "feature",
     );
   }
@@ -576,7 +579,8 @@ export function filterGrantablePermissionRegistry(
   return registry.filter(
     (permission) =>
       permission.is_enabled !== false &&
-      !isWildcardPermissionKey(permission.permission_key),
+      !isWildcardPermissionKey(permission.permission_key) &&
+      !REMOVED_PERMISSION_KEYS.has(permission.permission_key),
   );
 }
 

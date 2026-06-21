@@ -78,8 +78,8 @@ def seed_approval_decision(
     org_id: str,
     status: str,
     reason: str,
-    module_key: str = "business.products",
-    action_key: str = "business.products.submit",
+    module_key: str = "business.reviews",
+    action_key: str = "business.reviews.decision",
 ) -> None:
     now = datetime.now(timezone.utc)
     with SessionLocal() as db:
@@ -274,7 +274,7 @@ def test_review_audit_owner_cross_org_and_super_admin_scope(
     registry_module_keys = {
         item["module_key"] for item in module_registry.json()["items"]
     }
-    assert {"admin.permissions", "business.products"}.issubset(
+    assert {"admin.permissions", "business.reviews"}.issubset(
         registry_module_keys
     )
     assert owner_users.status_code == 200, owner_users.text

@@ -1,5 +1,4 @@
 import {
-  Archive,
   Bot,
   Boxes,
   Building2,
@@ -10,7 +9,6 @@ import {
   GitBranch,
   LayoutDashboard,
   LockKeyhole,
-  Package,
   Settings,
   UserRoundCog,
   type LucideIcon,
@@ -166,7 +164,6 @@ export type FrontendCapabilityGraph = {
 };
 
 const ICONS: Record<string, LucideIcon> = {
-  Archive,
   Bot,
   Boxes,
   Building2,
@@ -177,7 +174,6 @@ const ICONS: Record<string, LucideIcon> = {
   GitBranch,
   LayoutDashboard,
   LockKeyhole,
-  Package,
   Settings,
   UserRoundCog,
 };
@@ -200,7 +196,6 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["admin.permissions", "Users & Organizations"],
   ["business.approvals", "Business Modules"],
   ["business.reviews", "Business Modules"],
-  ["business.artifacts", "Business Modules"],
   ["core.dashboard", "System Modules"],
   ["admin.modules", "System Modules"],
   ["admin.settings", "System Modules"],
@@ -208,7 +203,6 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["system.memory_events", "System Modules"],
   ["system.operation_logs", "System Modules"],
   ["admin.agents", "Extensions"],
-  ["business.products", "Extensions"],
 ]);
 
 const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
@@ -217,7 +211,6 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["admin.permissions", "Permissions"],
   ["business.approvals", "审批"],
   ["business.reviews", "审批审计"],
-  ["business.artifacts", "Artifacts"],
   ["core.dashboard", "Dashboard"],
   ["admin.modules", "Modules"],
   ["admin.settings", "Settings"],
@@ -225,7 +218,6 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["system.memory_events", "Memory Events"],
   ["system.operation_logs", "Logs"],
   ["admin.agents", "Agents"],
-  ["business.products", "Products"],
 ]);
 
 const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
@@ -234,7 +226,6 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["admin.permissions", 30],
   ["business.approvals", 10],
   ["business.reviews", 20],
-  ["business.artifacts", 30],
   ["core.dashboard", 10],
   ["admin.modules", 20],
   ["admin.settings", 30],
@@ -242,7 +233,6 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["system.memory_events", 50],
   ["system.operation_logs", 60],
   ["admin.agents", 10],
-  ["business.products", 20],
 ]);
 
 const INTERNAL_EXERCISE_MODULE_KEY = [
@@ -1219,20 +1209,23 @@ export function buildFrontendCapabilityGraph({
     }
   >();
 
-  for (const record of navigationModuleRecords) {
-    sourceMap.set(record.module_key, {
-      manifest: registryByModule.get(record.module_key) ?? null,
-      moduleKey: record.module_key,
-      record,
-    });
-  }
-
-  for (const manifest of registryItems) {
-    if (!sourceMap.has(manifest.module_key)) {
+  if (registryItems.length > 0) {
+    for (const manifest of registryItems) {
+      if (manifest.navigation.default_visible === false) {
+        continue;
+      }
       sourceMap.set(manifest.module_key, {
         manifest,
         moduleKey: manifest.module_key,
         record: routeByModuleKey.get(manifest.module_key) ?? recordFromManifest(manifest),
+      });
+    }
+  } else {
+    for (const record of navigationModuleRecords) {
+      sourceMap.set(record.module_key, {
+        manifest: registryByModule.get(record.module_key) ?? null,
+        moduleKey: record.module_key,
+        record,
       });
     }
   }

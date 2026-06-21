@@ -51,10 +51,10 @@ const STATE_ICON: Record<ProductEmptyStateName, LucideIcon> = {
 };
 
 const STATE_LABEL: Record<ProductEmptyStateName, string> = {
-  missing_feature: "Missing feature",
-  no_data: "No data",
-  no_organization: "No organization",
-  no_permission: "No permission",
+  missing_feature: "暂不可用",
+  no_data: "暂无数据",
+  no_organization: "暂无组织",
+  no_permission: "无权访问",
 };
 
 const DEFAULT_NEXT_ACTION: Record<
@@ -63,19 +63,19 @@ const DEFAULT_NEXT_ACTION: Record<
 > = {
   missing_feature: {
     href: "/dashboard",
-    label: "Open dashboard",
+    label: "返回首页",
   },
   no_data: {
     href: "",
-    label: "Refresh",
+    label: "刷新",
   },
   no_organization: {
     href: "/organizations",
-    label: "Open organizations",
+    label: "查看组织",
   },
   no_permission: {
     href: "/users",
-    label: "Open users",
+    label: "查看用户",
   },
 };
 
@@ -116,15 +116,15 @@ function reasonForState({
   }
 
   if (productState === "no_data") {
-    return "There are no records to show yet.";
+    return "暂无可显示记录。";
   }
   if (productState === "no_permission") {
-    return "Your account does not have access to this area.";
+    return "当前账号无权访问该区域。";
   }
   if (productState === "no_organization") {
-    return "Choose or create an organization before using this area.";
+    return "请先选择或创建组织。";
   }
-  return "This product area is not available yet.";
+  return "该功能暂时不可用。";
 }
 
 function NextAction({

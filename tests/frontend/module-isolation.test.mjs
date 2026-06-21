@@ -221,14 +221,6 @@ const registryItems = [
     status: "enabled",
   }),
   manifest({
-    category: "business",
-    denied_behavior: "show_locked",
-    module_key: "business.artifacts",
-    required_permissions: ["artifacts.read"],
-    route_namespace: "/artifacts",
-    status: "enabled",
-  }),
-  manifest({
     category: "core",
     denied_behavior: "show_locked",
     module_key: "core.dashboard",
@@ -282,14 +274,6 @@ const registryItems = [
     required_permissions: ["modules.read"],
     route_namespace: "/agents",
     status: "sealed",
-  }),
-  manifest({
-    category: "business",
-    denied_behavior: "show_locked",
-    module_key: "business.products",
-    required_permissions: ["products.read"],
-    route_namespace: "/products",
-    status: "planned",
   }),
 ];
 
@@ -450,7 +434,8 @@ test("productized routes are visible while diagnostics stay out of navigation", 
   assert.equal(canEnterModuleRoute(unavailableApprovals), true);
   assert.equal(item("experimental.foundation_demo"), undefined);
   assert.equal(item("integration.n8n_test_bridge"), undefined);
-  assert.equal(item("business.products").href, "/products");
+  assert.equal(item("business.products"), undefined);
+  assert.equal(item("business.artifacts"), undefined);
   assert.equal(item("business.jobs"), undefined);
   assert.equal(item("admin.workflows"), undefined);
   assert.equal(item("core.dashboard").href, "/dashboard");
@@ -949,7 +934,6 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "admin.permissions",
     "business.approvals",
     "business.reviews",
-    "business.artifacts",
     "core.dashboard",
     "admin.modules",
     "admin.settings",
@@ -957,7 +941,6 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "system.memory_events",
     "system.operation_logs",
     "admin.agents",
-    "business.products",
   ]);
   for (const legacyKey of [
     "experimental.foundation_demo",

@@ -2,6 +2,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from backend.app.db.session import SessionLocal
+from backend.app.models.artifact import Artifact
 from backend.app.models.operation_log import OperationLog
 from tests.backend.foundation_helpers import create_job, create_module
 
@@ -11,10 +12,13 @@ def prepare_job(client: TestClient) -> None:
     create_job(client)
 
 
-def test_artifact_registers_metadata_without_file_upload(
+def test_artifacts_api_access_layer_is_removed_without_deleting_data(
     owner_client: TestClient,
 ) -> None:
     prepare_job(owner_client)
+
+    with SessionLocal() as db:
+        before_count = db.query(Artifact).count()
 
     response = owner_client.post(
         "/api/app/artifacts",
@@ -29,22 +33,12 @@ def test_artifact_registers_metadata_without_file_upload(
             "metadata": {"uploaded": False},
         },
     )
-    blocked_network_ref = owner_client.post(
-        "/api/app/artifacts",
-        json={
-            "artifact_id": "demo.network-artifact",
-            "job_id": "demo.job",
-            "module_key": "demo.module",
-            "artifact_type": "demo_report",
-            "name": "Blocked storage reference",
-            "storage_ref": "s3://example-bucket/object",
-        },
-    )
+    list_response = owner_client.get("/api/app/artifacts")
 
-    assert response.status_code == 201
-    assert response.json()["storage_provider"] == "metadata_only"
-    assert response.json()["metadata"]["uploaded"] is False
-    assert blocked_network_ref.status_code == 422
+    assert response.status_code == 404
+    assert list_response.status_code == 404
+    with SessionLocal() as db:
+        assert db.query(Artifact).count() == before_count
 
 
 def test_review_creation_and_demo_decision_are_audited(

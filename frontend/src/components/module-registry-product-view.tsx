@@ -5,10 +5,41 @@ import { Boxes, LoaderCircle, RotateCcw } from "lucide-react";
 import { CapabilityEmptyStateEngine } from "@/components/capability-empty-state";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import { useModuleAccess } from "@/components/module-access-provider";
-import { getPermissionDisplayName } from "@/lib/permission-management";
 
-function displayBinding(value: string) {
-  return value && value !== "no_api" ? value : "No API";
+function humanState(value: string) {
+  const labels: Record<string, string> = {
+    adapter_pending: "配置中",
+    allowed: "可用",
+    backend_unavailable: "暂不可用",
+    forbidden: "无权访问",
+    hidden: "已隐藏",
+    mock: "预览",
+    no_execution: "待配置",
+    partial: "部分可用",
+  };
+  return labels[value] ?? "暂不可用";
+}
+
+function humanVisibility(value: string) {
+  const labels: Record<string, string> = {
+    active: "正常",
+    backend_unavailable: "暂不可用",
+    hidden: "不可见",
+    unknown: "确认中",
+    unavailable: "暂不可见",
+    visible: "可见",
+  };
+  return labels[value] ?? "确认中";
+}
+
+function humanExecutionMode(value: string) {
+  const labels: Record<string, string> = {
+    live: "已启用",
+    mock: "预览",
+    off: "未启用",
+    shadow: "试运行",
+  };
+  return labels[value] ?? "确认中";
 }
 
 export function ModuleRegistryProductView() {
@@ -41,31 +72,30 @@ export function ModuleRegistryProductView() {
         action={
           <button className="primary-button" onClick={() => void refresh()}>
             <RotateCcw aria-hidden="true" size={17} />
-            Retry
+            重试
           </button>
         }
         icon={Boxes}
-        reason={registryError?.message ?? "Product areas are unavailable."}
-        required_execution_mode="View access is available."
-        required_module_state="Product areas must be available."
-        required_org_state="Active workspace access is required."
-        required_permission="modules.read"
+        reason={registryError?.message ?? "功能区暂时不可用。"}
+        required_execution_mode="查看功能区。"
+        required_module_state="功能区可用。"
+        required_org_state="组织状态正常。"
+        required_permission="查看功能区。"
         state="missing_feature"
-        title="Product areas are unavailable"
-        unlock_condition="Try again after product areas are available."
+        title="功能区暂时不可用"
+        unlock_condition="稍后重试。"
       />
     );
   }
 
   return (
-    <section className="module-registry-workspace" aria-label="Product areas">
+    <section className="module-registry-workspace" aria-label="功能区">
       <div className="registry-command-bar">
         <div>
-          <span className="eyebrow">Product areas</span>
-          <h2>Workspace product area map</h2>
+          <span className="eyebrow">功能区</span>
+          <h2>工作台功能区</h2>
           <p>
-            Workspace visibility, access state, service mapping, and action
-            readiness for product areas.
+            查看当前工作台可用功能、可见范围和操作准备情况。
           </p>
         </div>
         <button
@@ -79,53 +109,53 @@ export function ModuleRegistryProductView() {
           ) : (
             <RotateCcw aria-hidden="true" size={17} />
           )}
-          Refresh
+          刷新
         </button>
       </div>
 
       <div className="capability-summary-grid">
         <div>
-          <span>Total areas</span>
+          <span>功能区</span>
           <strong>{items.length}</strong>
         </div>
         <div>
-          <span>Allowed</span>
+          <span>可用</span>
           <strong>{allowedCount}</strong>
         </div>
         <div>
-          <span>Partial</span>
+          <span>配置中</span>
           <strong>{partialCount}</strong>
         </div>
         <div>
-          <span>Hidden</span>
+          <span>已隐藏</span>
           <strong>{hiddenCount}</strong>
         </div>
         <div>
-          <span>Org visible</span>
+          <span>组织可见</span>
           <strong>{visibleCount}</strong>
         </div>
         <div>
-          <span>Module metadata</span>
+          <span>注册状态</span>
           <strong>
             {moduleAccess.moduleAccessUnknown
-              ? "Unknown"
+              ? "确认中"
               : moduleAccess.items.length}
           </strong>
         </div>
         <div>
-          <span>Org state</span>
-          <strong>{orgContext.state}</strong>
+          <span>组织状态</span>
+          <strong>{humanVisibility(orgContext.state)}</strong>
         </div>
         <div>
-          <span>Action mode</span>
-          <strong>{executionState.execution_mode}</strong>
+          <span>操作状态</span>
+          <strong>{humanExecutionMode(executionState.execution_mode)}</strong>
         </div>
       </div>
 
       {registryUnavailable ? (
         <p className="ops-warning">
           {registryError?.message ??
-            "Product area details are unavailable; navigation remains available."}
+            "功能区详情暂时不可用，已保留可用导航。"}
         </p>
       ) : null}
 
@@ -133,13 +163,11 @@ export function ModuleRegistryProductView() {
         <table className="module-registry-table">
           <thead>
             <tr>
-              <th>Area</th>
-              <th>Product state</th>
-              <th>Org visibility</th>
-              <th>Permission</th>
-              <th>Setup</th>
-              <th>Actions</th>
-              <th>API mapping</th>
+              <th>功能区</th>
+              <th>状态</th>
+              <th>可见范围</th>
+              <th>准备情况</th>
+              <th>操作状态</th>
             </tr>
           </thead>
           <tbody>
@@ -147,38 +175,25 @@ export function ModuleRegistryProductView() {
               <tr key={item.module_key}>
                 <td>
                   <strong>{item.label}</strong>
-                  <span>{item.module_key}</span>
-                  <small>{item.description || item.route_namespace}</small>
+                  <small>{item.description || "暂无说明"}</small>
                 </td>
                 <td>
                   <span className={`capability-state-pill ${item.state}`}>
-                    {item.state}
+                    {humanState(item.state)}
                   </span>
-                  <small>{item.module_status}</small>
+                  <small>{item.reason}</small>
                 </td>
                 <td>
-                  <strong>{item.org_visibility}</strong>
+                  <strong>{humanVisibility(item.org_visibility)}</strong>
                   <span>{item.required_org_state}</span>
                 </td>
                 <td>
-                  <strong>{item.permission_state}</strong>
-                  <span>{getPermissionDisplayName(item.required_permission)}</span>
-                </td>
-                <td>
-                  <strong>{item.adapter_state}</strong>
+                  <strong>{humanState(item.state)}</strong>
                   <span>{item.required_module_state}</span>
                 </td>
                 <td>
-                  <strong>{item.execution_mode}</strong>
+                  <strong>{humanExecutionMode(item.execution_mode)}</strong>
                   <span>{item.blocked_reason}</span>
-                </td>
-                <td>
-                  <strong>{displayBinding(item.api_binding.api_namespace)}</strong>
-                  <span>
-                    {item.route_bound
-                      ? item.api_binding.route_namespace
-                      : "No frontend route"}
-                  </span>
                 </td>
               </tr>
             ))}

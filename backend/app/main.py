@@ -12,7 +12,6 @@ from .api.routes.ai_execution_bindings import router as ai_execution_bindings_ro
 from .api.routes.approval import plural_router as approvals_router
 from .api.routes.approval import router as approval_router
 from .api.routes.attachments import router as attachments_router
-from .api.routes.artifacts import router as artifacts_router
 from .api.routes.auth import router as auth_router
 from .api.routes.callback_handler import router as callback_handler_router
 from .api.routes.capability_bindings import router as capability_bindings_router
@@ -225,6 +224,7 @@ def _is_control_plane_path(path: str) -> bool:
 
 def _is_removed_module_path(path: str) -> bool:
     removed_prefixes = (
+        f"{APPLICATION_API_PREFIX}/artifacts",
         f"{APPLICATION_API_PREFIX}/jobs",
         f"{CONTROL_PLANE_API_PREFIX}/workflows",
     )
@@ -496,7 +496,6 @@ app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(dashboard_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approval_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approvals_router, prefix=APPLICATION_API_PREFIX)
-app.include_router(artifacts_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(reviews_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(errors_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(memory_router, prefix=APPLICATION_API_PREFIX)

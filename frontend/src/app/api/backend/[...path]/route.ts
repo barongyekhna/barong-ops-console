@@ -16,7 +16,6 @@ const ALLOWED_PUBLIC_POST_PATHS = new Set([
   "auth/logout",
 ]);
 const ALLOWED_APP_LIST_PATHS = new Set([
-  "artifacts",
   "dashboard/activity",
   "dashboard/overview",
   "reviews",
@@ -32,7 +31,6 @@ const ALLOWED_CONTROL_PLANE_LIST_PATHS = new Set([
   "agents",
 ]);
 const ALLOWED_APP_RESOURCE_PATHS = new Set([
-  "artifacts",
   "context-packets",
   "errors",
   "memory-events",
@@ -40,7 +38,6 @@ const ALLOWED_APP_RESOURCE_PATHS = new Set([
   "reviews",
 ]);
 const ALLOWED_APP_CREATE_RESOURCE_PATHS = new Set([
-  "artifacts",
   "context-packets",
   "errors",
   "memory-events",

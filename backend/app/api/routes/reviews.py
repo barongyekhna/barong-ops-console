@@ -29,6 +29,8 @@ from ...schemas.reviews import (
 )
 from ...services.review_audit import (
     DEFAULT_REVIEW_AUDIT_LIMIT,
+    DEFAULT_REVIEW_AUDIT_EMPLOYEE_LIMIT,
+    MAX_REVIEW_AUDIT_EMPLOYEE_LIMIT,
     MAX_REVIEW_AUDIT_LIMIT,
     ReviewAuditFilters,
     ReviewAuditScope,
@@ -226,9 +228,9 @@ def review_audit_users(
     start_date: date | None = Query(default=None),
     end_date: date | None = Query(default=None),
     limit: int = Query(
-        default=DEFAULT_REVIEW_AUDIT_LIMIT,
+        default=DEFAULT_REVIEW_AUDIT_EMPLOYEE_LIMIT,
         ge=1,
-        le=MAX_REVIEW_AUDIT_LIMIT,
+        le=MAX_REVIEW_AUDIT_EMPLOYEE_LIMIT,
     ),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),

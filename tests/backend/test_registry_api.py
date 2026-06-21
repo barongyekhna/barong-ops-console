@@ -14,7 +14,6 @@ from tests.backend.foundation_helpers import (
 F10_LIST_PATHS = (
     "/api/control-plane/modules",
     "/api/control-plane/agents",
-    "/api/app/artifacts",
     "/api/app/reviews",
     "/api/app/errors",
     "/api/app/memory-events",
@@ -26,6 +25,8 @@ F10_LIST_PATHS = (
 REMOVED_MODULE_PATHS = (
     "/api/control-plane/workflows",
     "/api/control-plane/workflows/demo.workflow",
+    "/api/app/artifacts",
+    "/api/app/artifacts/demo.artifact",
     "/api/app/jobs",
     "/api/app/jobs/demo.job",
     "/api/app/jobs/demo.job/events",
