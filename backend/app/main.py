@@ -9,6 +9,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from .api.deps import get_audit_context
 from .api.routes.agents import router as agents_router
 from .api.routes.ai_execution_bindings import router as ai_execution_bindings_router
+from .api.routes.approval import plural_router as approvals_router
 from .api.routes.approval import router as approval_router
 from .api.routes.attachments import router as attachments_router
 from .api.routes.artifacts import router as artifacts_router
@@ -494,6 +495,7 @@ app.include_router(auth_router, prefix=PUBLIC_API_PREFIX)
 app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(dashboard_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approval_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(approvals_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(artifacts_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(reviews_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(errors_router, prefix=APPLICATION_API_PREFIX)

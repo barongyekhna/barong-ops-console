@@ -1,11 +1,5 @@
 from __future__ import annotations
 
-from concurrent.futures import (
-    Future,
-    ThreadPoolExecutor,
-    TimeoutError as FutureTimeoutError,
-)
-from contextvars import copy_context
 from dataclasses import dataclass
 import logging
 from collections.abc import Callable
@@ -17,7 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from ...db.session import get_db, managed_read_session
+from ...db.session import get_db
 from ...models.user import User
 from ...schemas.approval import (
     ApprovalCategory,
@@ -49,14 +43,10 @@ from ...services.api_stability import (
 from ..deps import get_audit_context, get_current_user, require_rbac
 
 router = APIRouter(prefix="/approval", tags=["approval"])
+plural_router = APIRouter(prefix="/approvals", tags=["approval"])
 ResultT = TypeVar("ResultT")
 logger = logging.getLogger(__name__)
-APPROVAL_LIST_TIMEOUT_SECONDS = 2.0
 APPROVAL_LIST_DB_STATEMENT_TIMEOUT_MS = 1800
-_APPROVAL_LIST_EXECUTOR = ThreadPoolExecutor(
-    max_workers=4,
-    thread_name_prefix="approval-list",
-)
 
 
 @dataclass(frozen=True)
@@ -145,6 +135,7 @@ def _apply_approval_list_statement_timeout(db: Session) -> None:
 
 def _approval_list_live_read(
     *,
+    db: Session,
     user: _ApprovalListUser,
     status_filter: ApprovalRequestStatus | None,
     category: ApprovalCategory | None,
@@ -152,53 +143,80 @@ def _approval_list_live_read(
     offset: int,
     cursor: str | None,
 ) -> ListResponse[ApprovalListItem]:
-    with managed_read_session() as db:
-        _apply_approval_list_statement_timeout(db)
-        service = ApprovalService(db)
-        page = service.list_approval_page(
-            user=cast(User, user),
-            status=status_filter,
+    _apply_approval_list_statement_timeout(db)
+    service = ApprovalService(db)
+    page = service.list_approval_page(
+        user=cast(User, user),
+        status=status_filter,
+        category=category,
+        limit=limit,
+        offset=offset,
+        cursor=cursor,
+    )
+    return ListResponse(
+        items=page.items,
+        count=len(page.items),
+        limit=limit,
+        offset=offset,
+        cursor=cursor,
+        next_cursor=page.next_cursor,
+    )
+
+
+def _approval_list_response(
+    *,
+    request: Request,
+    status_filter: ApprovalRequestStatus | None,
+    category: ApprovalCategory | None,
+    limit: int,
+    offset: int,
+    cursor: str | None,
+    user: User,
+    db: Session,
+    route: str,
+) -> ListResponse[ApprovalListItem] | JSONResponse:
+    list_user = _ApprovalListUser(id=user.id, role=user.role)
+    cache_key = api_snapshot_key(
+        "approval.list",
+        user.id,
+        user.role,
+        getattr(request.state, "org_id", None),
+        status_filter,
+        category,
+        limit,
+        offset,
+        cursor,
+    )
+    try:
+        response = _approval_list_live_read(
+            db=db,
+            user=list_user,
+            status_filter=status_filter,
             category=category,
             limit=limit,
             offset=offset,
             cursor=cursor,
         )
-        return ListResponse(
-            items=page.items,
-            count=len(page.items),
-            limit=limit,
-            offset=offset,
-            cursor=cursor,
-            next_cursor=page.next_cursor,
-        )
-
-
-def _log_timed_out_approval_list(
-    future: Future[ListResponse[ApprovalListItem]],
-) -> None:
-    try:
-        future.result()
+        save_api_snapshot(cache_key, response)
+        return response
+    except ApprovalServiceError as exc:
+        raise _service_http_error(exc) from None
     except Exception as exc:
-        logger.warning(
-            "Timed-out approval list worker finished with an error: %s",
-            exc,
-            exc_info=True,
+        stable_read_failure(
+            logger=logger,
+            route=route,
+            exc=exc,
+            request=request,
+            code="approval_list_failed",
         )
-
-
-def _run_approval_list_with_timeout(
-    operation: Callable[[], ListResponse[ApprovalListItem]],
-) -> ListResponse[ApprovalListItem] | JSONResponse:
-    context = copy_context()
-    future = _APPROVAL_LIST_EXECUTOR.submit(context.run, operation)
-    try:
-        return future.result(timeout=APPROVAL_LIST_TIMEOUT_SECONDS)
-    except FutureTimeoutError:
-        future.add_done_callback(_log_timed_out_approval_list)
-        logger.warning(
-            "Approval list exceeded %.1fs timeout; returning degraded response.",
-            APPROVAL_LIST_TIMEOUT_SECONDS,
-        )
+        snapshot = get_api_snapshot(cache_key)
+        if snapshot is not None:
+            return degraded_snapshot(
+                snapshot,
+                code="approval_list_failed",
+                message="Approval list is using the last successful snapshot because the live read failed.",
+                request=request,
+            )
         return _approval_list_degraded_response()
 
 
@@ -235,53 +253,50 @@ def approval_list(
     offset: int = Query(default=0, ge=0),
     cursor: str | None = Query(default=None),
     user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> ListResponse[ApprovalListItem] | JSONResponse:
-    list_user = _ApprovalListUser(id=user.id, role=user.role)
-    cache_key = api_snapshot_key(
-        "approval.list",
-        user.id,
-        user.role,
-        getattr(request.state, "org_id", None),
-        status_filter,
-        category,
-        limit,
-        offset,
-        cursor,
+    return _approval_list_response(
+        request=request,
+        status_filter=status_filter,
+        category=category,
+        limit=limit,
+        offset=offset,
+        cursor=cursor,
+        user=user,
+        db=db,
+        route="/approval/list",
     )
-    try:
-        response = _run_approval_list_with_timeout(
-            lambda: _approval_list_live_read(
-                user=list_user,
-                status_filter=status_filter,
-                category=category,
-                limit=limit,
-                offset=offset,
-                cursor=cursor,
-            )
-        )
-        if isinstance(response, JSONResponse):
-            return response
-        save_api_snapshot(cache_key, response)
-        return response
-    except ApprovalServiceError as exc:
-        raise _service_http_error(exc) from None
-    except Exception as exc:
-        stable_read_failure(
-            logger=logger,
-            route="/approval/list",
-            exc=exc,
-            request=request,
-            code="approval_list_failed",
-        )
-        snapshot = get_api_snapshot(cache_key)
-        if snapshot is not None:
-            return degraded_snapshot(
-                snapshot,
-                code="approval_list_failed",
-                message="Approval list is using the last successful snapshot because the live read failed.",
-                request=request,
-            )
-        return _approval_list_degraded_response()
+
+
+@plural_router.get("/list", response_model=ListResponse[ApprovalListItem])
+def approvals_list(
+    request: Request,
+    status_filter: ApprovalRequestStatus | None = Query(
+        default=None,
+        alias="status",
+    ),
+    category: ApprovalCategory | None = Query(default=None),
+    limit: int = Query(
+        default=APPROVAL_LIST_DEFAULT_LIMIT,
+        ge=1,
+        le=APPROVAL_LIST_MAX_LIMIT,
+    ),
+    offset: int = Query(default=0, ge=0),
+    cursor: str | None = Query(default=None),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> ListResponse[ApprovalListItem] | JSONResponse:
+    return _approval_list_response(
+        request=request,
+        status_filter=status_filter,
+        category=category,
+        limit=limit,
+        offset=offset,
+        cursor=cursor,
+        user=user,
+        db=db,
+        route="/approvals/list",
+    )
 
 
 @router.get("/{approval_id}", response_model=ApprovalDetailResponse)

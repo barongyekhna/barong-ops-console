@@ -25,6 +25,7 @@ const ALLOWED_APP_LIST_PATHS = new Set([
   "operation-logs",
   "organizations",
   "approval/list",
+  "approvals/list",
 ]);
 const ALLOWED_CONTROL_PLANE_LIST_PATHS = new Set([
   "modules",
