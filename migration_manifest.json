@@ -1,12 +1,12 @@
 {
-  "alembic_head": "permission_ui_support_001",
+  "alembic_head": "approval_list_perf_001",
   "environment": "staging",
-  "expected_alembic_head": "permission_ui_support_001",
+  "expected_alembic_head": "approval_list_perf_001",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 17,
-  "migration_hash": "e08d7a1a166c86d46e86eb8877f30ac8b8e87306f4c1b27117c860eff48801f9",
+  "migration_count": 19,
+  "migration_hash": "5408da2f84f1997548cc24c9f690859034160b53fde6892715922cde99f645f8",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -23,10 +23,12 @@
     "fix_be_06_modules_me_perf_001",
     "user_module_full_upgrade_001",
     "user_module_schema_repair_001",
-    "force_password_reset_owner_only_001",
-    "permission_ui_support_001"
+    "force_pwd_owner_only_001",
+    "permission_ui_support_001",
+    "approval_productization_001",
+    "approval_list_perf_001"
   ],
-  "migration_order_checksum": "96fba699e8bf375e983b1206191b443c9b16e7df3f4bfd63099d99ae439ea259",
+  "migration_order_checksum": "54dce18333434ede82faeb92d91bae53fc9b5f3c02f80f6b6d36e0ba37979c99",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -135,17 +137,31 @@
     },
     {
       "applied_at": "2026-06-19T00:00:00Z",
-      "checksum": "4e9e86fb41a0c9cc7853bb953d7a6b88ef55ee83442c89c802b9ae79eb80276b",
+      "checksum": "71dae5fa153f5399089532bf893aaaf7134cf8843e31ad597eeede14af3e4878",
       "down_revision": "user_module_schema_repair_001",
       "path": "backend/alembic/versions/20260619_02_force_password_reset_owner_only.py",
-      "version": "force_password_reset_owner_only_001"
+      "version": "force_pwd_owner_only_001"
     },
     {
       "applied_at": "2026-06-19T00:00:00Z",
-      "checksum": "34195efd45e443e0eed39891d041345fbee94e436acc5d483c5627cabe0fe525",
-      "down_revision": "force_password_reset_owner_only_001",
+      "checksum": "1a576d1ce3354385d636618bab657d1ce06d22b8e2d907638f7f52a7dc8bbae5",
+      "down_revision": "force_pwd_owner_only_001",
       "path": "backend/alembic/versions/20260619_03_permission_ui_support.py",
       "version": "permission_ui_support_001"
+    },
+    {
+      "applied_at": "2026-06-20T00:00:00Z",
+      "checksum": "b3b6c14f86abbf2d43bc1d3041afa0f0adc241487988ee8e9a94f3abd4558bf2",
+      "down_revision": "permission_ui_support_001",
+      "path": "backend/alembic/versions/20260620_01_approval_productization.py",
+      "version": "approval_productization_001"
+    },
+    {
+      "applied_at": "2026-06-21T00:00:00Z",
+      "checksum": "02b9595b3cdb3a322df965cc8b1047d9e7f4c39353e1c461b48c3a13fa28e318",
+      "down_revision": "approval_productization_001",
+      "path": "backend/alembic/versions/20260621_01_approval_list_performance.py",
+      "version": "approval_list_perf_001"
     }
   ]
 }

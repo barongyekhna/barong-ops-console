@@ -100,7 +100,7 @@ export const navigationGroups: NavigationGroup[] = [
         denied_behavior: "show_locked",
         href: "/reviews",
         icon: ClipboardCheck,
-        label: "Reviews",
+        label: "审批审计",
         module_key: "business.reviews",
         required_permission: "reviews.read",
         route_namespace: "/reviews",

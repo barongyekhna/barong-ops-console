@@ -81,7 +81,7 @@ def test_permission_registry_seed_upsert_is_idempotent(
             db.commit()
 
 
-def test_owner_has_platform_admin_scope_without_assignment_bypass(
+def test_owner_has_platform_admin_scope_without_assignments(
     clean_auth_tables: None,
 ) -> None:
     owner_id = create_permission_test_user(
@@ -114,10 +114,9 @@ def test_owner_has_platform_admin_scope_without_assignment_bypass(
             scope_type="factory",
             scope_key="factory_a",
         )
-        assert effective.is_owner_full_access is False
+        assert effective.is_owner_full_access is True
         assert effective.is_platform_owner is True
-        assert "users.manage" in effective.permissions
-        assert "production.release" in effective.permissions
+        assert effective.permissions == ["*"]
         assert "artifacts.read" not in effective.permissions
 
 

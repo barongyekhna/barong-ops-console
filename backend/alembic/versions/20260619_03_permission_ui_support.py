@@ -1,7 +1,7 @@
 """permission ui support fields
 
 Revision ID: permission_ui_support_001
-Revises: force_password_reset_owner_only_001
+Revises: force_pwd_owner_only_001
 Create Date: 2026-06-19
 
 """
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 from sqlalchemy import inspect
 
 revision: str = "permission_ui_support_001"
-down_revision: str | Sequence[str] | None = "force_password_reset_owner_only_001"
+down_revision: str | Sequence[str] | None = "force_pwd_owner_only_001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

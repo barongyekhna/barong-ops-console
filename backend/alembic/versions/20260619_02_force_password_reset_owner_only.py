@@ -1,6 +1,6 @@
 """force password reset owner-only bypass
 
-Revision ID: force_password_reset_owner_only_001
+Revision ID: force_pwd_owner_only_001
 Revises: user_module_schema_repair_001
 Create Date: 2026-06-19
 
@@ -11,7 +11,7 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy import inspect
 
-revision: str = "force_password_reset_owner_only_001"
+revision: str = "force_pwd_owner_only_001"
 down_revision: str | Sequence[str] | None = "user_module_schema_repair_001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None

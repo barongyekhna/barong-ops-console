@@ -160,11 +160,15 @@ def test_pre20_o_c17_alert_engine_triggers_all_sinks(
     assert {"webhook", "log", "ops_dashboard"}.issubset(delivery_sink_types)
 
     with SessionLocal() as db:
-        alert_rows = tuple(db.scalars(select(OpsAlertRecord)))
-        delivery_rows = tuple(db.scalars(select(OpsAlertDeliveryRecord)))
+        alert_rows = tuple(
+            db.execute(select(OpsAlertRecord.rule_id, OpsAlertRecord.payload))
+        )
+        delivery_rows = tuple(
+            db.scalars(select(OpsAlertDeliveryRecord.sink_type))
+        )
 
     assert {row.rule_id for row in alert_rows} == rule_ids
-    assert {row.sink_type for row in delivery_rows}.issuperset(
+    assert set(delivery_rows).issuperset(
         {"webhook", "log", "ops_dashboard"}
     )
     assert any(row.payload["anomaly_count"] >= 1 for row in alert_rows)

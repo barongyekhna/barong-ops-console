@@ -14,6 +14,7 @@ def request_for(path: str = "/api/app/operation-logs", query: str = "limit=50&of
     return SimpleNamespace(
         client=SimpleNamespace(host="127.0.0.1"),
         cookies={"barong_ops_session": "session-token"},
+        headers={},
         method="GET",
         url=SimpleNamespace(path=path, query=query),
     )

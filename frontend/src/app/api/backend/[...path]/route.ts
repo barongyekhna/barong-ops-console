@@ -44,7 +44,6 @@ const ALLOWED_APP_CREATE_RESOURCE_PATHS = new Set([
   "context-packets",
   "errors",
   "memory-events",
-  "reviews",
 ]);
 const ALLOWED_CONTROL_PLANE_RESOURCE_PATHS = new Set([
   "agents",
@@ -346,12 +345,33 @@ function isAllowedAppResourcePath(method: string, path: string[]) {
     return method === "GET";
   }
 
+  return false;
+}
+
+function isAllowedReviewAuditPath(method: string, path: string[]) {
+  if (method !== "GET" || path[0] !== "reviews") {
+    return false;
+  }
+
+  if (path[1] !== "organizations") {
+    return false;
+  }
+
+  if (path.length === 2) {
+    return true;
+  }
+
+  if (path.length === 4 && path[3] === "users") {
+    return true;
+  }
+
   if (
-    resource === "reviews" &&
-    path.length === 3 &&
-    path[2] === "decision"
+    path.length === 6 &&
+    path[3] === "users" &&
+    isIntegerPathSegment(path[4]) &&
+    path[5] === "actions"
   ) {
-    return method === "POST";
+    return true;
   }
 
   return false;
@@ -504,6 +524,7 @@ export function getBackendApiPath(method: string, path: string[]) {
 
   if (
     (method === "GET" && ALLOWED_APP_LIST_PATHS.has(requestedPath)) ||
+    isAllowedReviewAuditPath(method, path) ||
     isAllowedAppResourcePath(method, path) ||
     isAllowedApprovalPath(method, path) ||
     isAllowedOrgPath(method, path) ||

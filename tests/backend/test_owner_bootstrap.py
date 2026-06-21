@@ -32,19 +32,24 @@ def test_owner_bootstrap_creates_one_owner_and_audit_log(
                 OperationLog.action == "auth.owner_bootstrap"
             )
         )
+        assert owner is not None
+        assert operation_log is not None
+        owner_username = owner.username
+        owner_is_active = owner.is_active
+        owner_password_hash = owner.password_hash
+        operation_log_result = operation_log.result
+        operation_log_details = operation_log.details
 
     assert result == "created"
-    assert owner is not None
-    assert owner.username == OWNER_USERNAME
-    assert owner.is_active is True
-    assert owner.password_hash != OWNER_PASSWORD
-    assert verify_password(OWNER_PASSWORD, owner.password_hash)
-    assert operation_log is not None
-    assert operation_log.result == "success"
+    assert owner_username == OWNER_USERNAME
+    assert owner_is_active is True
+    assert owner_password_hash != OWNER_PASSWORD
+    assert verify_password(OWNER_PASSWORD, owner_password_hash)
+    assert operation_log_result == "success"
 
-    serialized_log = json.dumps(operation_log.details, sort_keys=True)
+    serialized_log = json.dumps(operation_log_details, sort_keys=True)
     assert OWNER_PASSWORD not in serialized_log
-    assert owner.password_hash not in serialized_log
+    assert owner_password_hash not in serialized_log
     assert "password_hash" not in serialized_log
 
 
@@ -98,10 +103,12 @@ def test_owner_bootstrap_missing_password_fails_without_sensitive_log_data(
                 OperationLog.action == "auth.owner_bootstrap"
             )
         )
+        assert operation_log is not None
+        operation_log_result = operation_log.result
+        operation_log_details = operation_log.details
 
     assert user_count == 0
-    assert operation_log is not None
-    assert operation_log.result == "failure"
-    serialized_log = json.dumps(operation_log.details, sort_keys=True)
+    assert operation_log_result == "failure"
+    serialized_log = json.dumps(operation_log_details, sort_keys=True)
     assert "password" not in serialized_log.lower()
     assert "hash" not in serialized_log.lower()

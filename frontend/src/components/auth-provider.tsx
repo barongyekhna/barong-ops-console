@@ -284,10 +284,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const handleUnauthorized = () => {
-      if (sessionTokenRef.current) {
-        setStatus("authenticated");
-        return;
-      }
       resetAuthState();
     };
 

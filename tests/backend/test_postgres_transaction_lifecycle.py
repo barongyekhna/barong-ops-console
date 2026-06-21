@@ -37,10 +37,10 @@ def test_postgres_engine_enforces_statement_and_idle_transaction_timeouts() -> N
 
     options = kwargs["connect_args"]["options"]
 
-    assert "-c statement_timeout=5000" in options
+    assert "-c statement_timeout=8000" in options
     assert "-c idle_in_transaction_session_timeout=10000" in options
     assert kwargs["pool_pre_ping"] is True
-    assert kwargs["pool_recycle"] == 1800
+    assert kwargs["pool_recycle"] == 1200
 
 
 def test_get_db_commits_and_closes_on_success(monkeypatch: pytest.MonkeyPatch) -> None:

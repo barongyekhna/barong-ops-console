@@ -1,12 +1,14 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
+from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.organization import OrganizationRecord
 from ...models.user import User
 from ...repositories.organizations import list_organizations as list_org_records
 from ...schemas.common import ListResponse
 from ...schemas.organization import Organization, OrganizationMetadata
+from ...services.data_isolation import without_org_data_isolation
 from .users import require_user_manager
 
 router = APIRouter(prefix="/organizations", tags=["organizations"])
@@ -32,8 +34,11 @@ def organizations(
     db: Session = Depends(get_db),
     actor: User = Depends(require_user_manager),
 ) -> ListResponse[Organization]:
-    del actor
-    records = list_org_records(db, limit=limit, offset=offset)
+    if is_owner_role(actor.role):
+        with without_org_data_isolation():
+            records = list_org_records(db, limit=limit, offset=offset)
+    else:
+        records = list_org_records(db, limit=limit, offset=offset)
     return ListResponse(
         items=[_record_to_schema(record) for record in records],
         count=len(records),

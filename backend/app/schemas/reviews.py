@@ -56,3 +56,37 @@ class ReviewResponse(BaseModel):
     decided_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+
+class ReviewAuditOrganization(BaseModel):
+    organization_id: str
+    organization_name: str
+    organization_type: str
+    employee_count: int = Field(ge=0)
+    action_count: int = Field(ge=0)
+    latest_action_at: datetime | None = None
+
+
+class ReviewAuditEmployee(BaseModel):
+    user_id: int
+    employee_name: str
+    employee_role: str
+    job_title: str | None = None
+    action_count: int = Field(ge=0)
+    latest_action_at: datetime | None = None
+
+
+class ReviewAuditAction(BaseModel):
+    audit_id: str
+    organization_id: str
+    organization_name: str
+    user_id: int
+    employee_name: str
+    approval_module: str
+    operation_type: Literal["同意", "拒绝"]
+    status: Literal["approved", "rejected"]
+    rejection_reason: str | None = None
+    action_time: datetime
+    related_object_type: str
+    related_object: str
+    summary: str

@@ -216,7 +216,7 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["admin.organizations", "Organizations"],
   ["admin.permissions", "Permissions"],
   ["business.approvals", "审批"],
-  ["business.reviews", "Reviews"],
+  ["business.reviews", "审批审计"],
   ["business.artifacts", "Artifacts"],
   ["core.dashboard", "Dashboard"],
   ["admin.modules", "Modules"],
@@ -282,6 +282,14 @@ function isSuperAdminVisibleAdminModule(role: string, moduleKey: string) {
     role === "super_admin" &&
     (moduleKey === "admin.users" || moduleKey === "admin.permissions")
   );
+}
+
+function isReviewAuditModule(moduleKey: string) {
+  return moduleKey === "business.reviews";
+}
+
+function canSeeReviewAudit(role: string) {
+  return role === "owner" || role === "super_admin";
 }
 
 function isOrganizationListModule(moduleKey: string) {
@@ -364,9 +372,15 @@ export function buildFrontendUiCapabilityGraph({
           isPermissionManagementModule(record.module_key) &&
           role !== "owner" &&
           role !== "super_admin";
+        const hiddenReviewAuditModule =
+          authStatus === "authenticated" &&
+          isReviewAuditModule(record.module_key) &&
+          !canSeeReviewAudit(role);
         const state = hiddenPermissionModule
           ? "hidden"
-          : stateFromStaticNavigation(record);
+          : hiddenReviewAuditModule
+            ? "hidden"
+            : stateFromStaticNavigation(record);
         const reason = staticCapabilityReason(state);
         const routeBound = Boolean(routeByModuleKey.get(record.module_key));
         const item: ProductCapabilityItem = {
@@ -1018,6 +1032,44 @@ function organizationListCapabilityItem({
   };
 }
 
+function reviewAuditCapabilityItem({
+  item,
+  routeBound,
+  visible,
+}: {
+  item: ProductCapabilityItem;
+  routeBound: boolean;
+  visible: boolean;
+}): ProductCapabilityItem {
+  if (!visible) {
+    return {
+      ...item,
+      badge: null,
+      can_enter: false,
+      org_visibility: "hidden",
+      permission_state: "hidden",
+      reason: "This product area is hidden for the current role.",
+      required_permission: "Owner or super admin role.",
+      sidebar_state: "hidden",
+      state: "hidden",
+      unlock_condition: "Use an available product area from the sidebar.",
+    };
+  }
+
+  return {
+    ...item,
+    badge: null,
+    can_enter: routeBound,
+    org_visibility: "visible",
+    permission_state: "available",
+    reason: "Review audit is available for this role.",
+    required_permission: "Owner or super admin role.",
+    sidebar_state: "allowed",
+    state: "allowed",
+    unlock_condition: "Open review audit.",
+  };
+}
+
 export function deriveFrontendExecutionState({
   adapterAccessItems,
   executionProviderAccessItems,
@@ -1272,6 +1324,14 @@ export function buildFrontendCapabilityGraph({
         state,
         unlock_condition: sourceState.unlock_condition,
       };
+
+      if (isReviewAuditModule(moduleKey)) {
+        return reviewAuditCapabilityItem({
+          item,
+          routeBound,
+          visible: owner || canSeeReviewAudit(role),
+        });
+      }
 
       if (owner || isSuperAdminVisibleAdminModule(role, moduleKey)) {
         const permissionBlocked =

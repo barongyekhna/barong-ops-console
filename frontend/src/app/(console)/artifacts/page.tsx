@@ -5,42 +5,7 @@ import { ProductResourceConsole } from "@/components/product-resource-console";
 export default function ArtifactsPage() {
   return (
     <ProductResourceConsole
-      actions={[
-        {
-          buildPayload: (values, record) => ({
-            ...values,
-            artifact_id: record.artifact_id,
-            status: "pending_demo",
-          }),
-          description: "Create a review request for the selected artifact.",
-          endpoint: "/reviews",
-          fields: [
-            {
-              key: "review_id",
-              label: "Review ID",
-              placeholder: "demo.artifact.review",
-              required: true,
-            },
-            {
-              defaultValue: "artifact_review",
-              key: "review_type",
-              label: "Review type",
-              required: true,
-            },
-            {
-              defaultValue: "low",
-              key: "risk_level",
-              label: "Risk level",
-              required: true,
-            },
-          ],
-          key: "artifact-review",
-          label: "Request review",
-          submitLabel: "Request review",
-          title: "Artifact review",
-        },
-      ]}
-      description="Inspect and route artifact metadata into review queues."
+      description="Inspect artifact metadata and storage references."
       detailEndpoint={(record) => `/artifacts/${record.artifact_id}`}
       detailFields={[
         { key: "artifact_id", label: "Artifact" },

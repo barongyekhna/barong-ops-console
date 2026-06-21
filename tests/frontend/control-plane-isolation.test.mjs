@@ -20,6 +20,25 @@ test("backend proxy maps public and app paths to non-control-plane APIs", () => 
     "/api/app/approval/list",
   );
   assert.equal(
+    getBackendApiPath("GET", ["reviews", "organizations"]),
+    "/api/app/reviews/organizations",
+  );
+  assert.equal(
+    getBackendApiPath("GET", ["reviews", "module-registry"]),
+    "/api/app/reviews/module-registry",
+  );
+  assert.equal(
+    getBackendApiPath("GET", [
+      "reviews",
+      "organizations",
+      "org_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "users",
+      "42",
+      "actions",
+    ]),
+    "/api/app/reviews/organizations/org_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/users/42/actions",
+  );
+  assert.equal(
     getBackendApiPath("GET", ["operation-logs"]),
     "/api/app/operation-logs",
   );
@@ -71,4 +90,9 @@ test("backend proxy denies direct control-plane namespace and unsafe callbacks",
   assert.equal(getBackendApiPath("POST", ["callback-handler", "receiver"]), null);
   assert.equal(getBackendApiPath("POST", ["execution", "submit"]), null);
   assert.equal(getBackendApiPath("POST", ["n8n-test", "run"]), null);
+  assert.equal(getBackendApiPath("POST", ["reviews"]), null);
+  assert.equal(
+    getBackendApiPath("POST", ["reviews", "demo.review", "decision"]),
+    null,
+  );
 });
