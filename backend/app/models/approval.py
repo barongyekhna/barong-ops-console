@@ -21,6 +21,25 @@ class ApprovalRequestRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Bas
     __table_args__ = (
         Index("ix_approval_requests_org_id_created_at", "org_id", "created_at"),
         Index("ix_approval_requests_org_id_status", "org_id", "status"),
+        Index(
+            "ix_approval_requests_org_id_status_created_at",
+            "org_id",
+            "status",
+            "created_at",
+        ),
+        Index(
+            "ix_approval_requests_org_id_category_created_at",
+            "org_id",
+            "category",
+            "created_at",
+        ),
+        Index(
+            "ix_approval_requests_org_id_category_status_created_at",
+            "org_id",
+            "category",
+            "status",
+            "created_at",
+        ),
         Index("ix_approval_requests_org_id_module_key", "org_id", "module_key"),
     )
 
@@ -69,6 +88,7 @@ class ApprovalWorkflowRecord(OrgScopedMixin, PrimaryKeyMixin, TimestampMixin, Ba
     __table_args__ = (
         Index("ix_approval_workflows_org_id_created_at", "org_id", "created_at"),
         Index("ix_approval_workflows_org_id_state", "org_id", "state"),
+        Index("ix_approval_workflows_org_id_approval_id", "org_id", "approval_id"),
     )
 
     workflow_id: Mapped[str] = mapped_column(

@@ -1,3 +1,5 @@
+import time
+
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -297,6 +299,83 @@ def test_approval_list_falls_back_to_snapshot_on_live_read_failure(
     assert payload["source"] == "snapshot"
     assert "approval-api-snapshot" in {
         item["approval_id"] for item in payload["items"]
+    }
+
+
+def test_approval_list_timeout_returns_degraded_response(
+    owner_client: TestClient,
+    monkeypatch,
+) -> None:
+    from backend.app.api.routes import approval as approval_route
+
+    def slow_live_read(**kwargs):
+        del kwargs
+        time.sleep(0.05)
+
+    monkeypatch.setattr(approval_route, "APPROVAL_LIST_TIMEOUT_SECONDS", 0.01)
+    monkeypatch.setattr(
+        approval_route,
+        "_approval_list_live_read",
+        slow_live_read,
+    )
+
+    response = owner_client.get("/api/app/approval/list")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "degraded",
+        "data": [],
+        "message": "approvals temporarily unavailable",
+    }
+
+
+def test_approval_list_uses_batch_workflow_preload_and_rejects_large_limit(
+    owner_client: TestClient,
+    monkeypatch,
+) -> None:
+    from backend.app.repositories.approvals import WorkflowRepository
+
+    for index in range(2):
+        created = owner_client.post(
+            "/api/app/approval/request",
+            json=approval_payload(
+                approval_id=f"approval-api-batch-{index}",
+                execution_id=f"execution-api-batch-{index}",
+            ),
+        )
+        assert created.status_code == 201, created.text
+
+    calls: list[tuple[str, ...]] = []
+    original_batch_loader = WorkflowRepository.load_by_approval_ids
+
+    def spy_batch_loader(self, approval_ids):
+        calls.append(tuple(approval_ids))
+        return original_batch_loader(self, approval_ids)
+
+    def fail_per_record_loader(self, approval_id):
+        del self, approval_id
+        raise AssertionError("approval list must not load workflow per record")
+
+    monkeypatch.setattr(
+        WorkflowRepository,
+        "load_by_approval_ids",
+        spy_batch_loader,
+    )
+    monkeypatch.setattr(
+        WorkflowRepository,
+        "load_by_approval_id",
+        fail_per_record_loader,
+    )
+
+    listed = owner_client.get("/api/app/approval/list?limit=2")
+    oversized = owner_client.get("/api/app/approval/list?limit=1000")
+
+    assert listed.status_code == 200, listed.text
+    assert oversized.status_code == 422
+    assert len(calls) == 1
+    assert set(calls[0]) == {
+        "approval-api-batch-0",
+        "approval-api-batch-1",
     }
 
 

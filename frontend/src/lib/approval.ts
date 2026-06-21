@@ -1,11 +1,16 @@
 import { apiRequest } from "@/lib/api";
 
+export const APPROVAL_LIST_DEFAULT_LIMIT = 50;
+export const APPROVAL_LIST_MAX_LIMIT = 100;
+export const APPROVAL_LIST_TIMEOUT_MS = 2_000;
+
 export type ApprovalCategory = "control_plane" | "feature";
 export type ApprovalStatus =
   | "pending"
   | "approved"
   | "rejected"
   | "auto_approved";
+export type ApprovalListAvailability = "ok" | "degraded";
 
 export type ApprovalDisplayInfo = {
   title: string;
@@ -27,9 +32,15 @@ export type ApprovalListItem = {
 
 export type ApprovalListResponse = {
   count: number;
+  cursor: string | null;
+  degraded: boolean;
   items: ApprovalListItem[];
   limit: number;
+  message: string;
+  next_cursor: string | null;
   offset: number;
+  source: string;
+  status: ApprovalListAvailability;
 };
 
 export type ApprovalDecisionRecord = {
@@ -63,6 +74,10 @@ function stringValue(value: unknown, fallback = "") {
 
 function numberValue(value: unknown, fallback = 0) {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function booleanValue(value: unknown, fallback = false) {
+  return typeof value === "boolean" ? value : fallback;
 }
 
 function normalizeCategory(value: unknown): ApprovalCategory {
@@ -121,16 +136,48 @@ function normalizeListItem(value: unknown): ApprovalListItem | null {
 
 function normalizeListResponse(value: unknown): ApprovalListResponse {
   const record = isRecord(value) ? value : {};
-  const items = Array.isArray(record.items)
-    ? record.items.map(normalizeListItem).filter((item): item is ApprovalListItem => item !== null)
-    : [];
+  const rawItems = Array.isArray(record.items)
+    ? record.items
+    : Array.isArray(record.data)
+      ? record.data
+      : [];
+  const items = rawItems
+    .map(normalizeListItem)
+    .filter((item): item is ApprovalListItem => item !== null);
+  const degraded =
+    record.status === "degraded" || booleanValue(record.degraded, false);
+  const error = isRecord(record.error) ? record.error : {};
+  const message =
+    stringValue(record.message) ||
+    stringValue(error.message) ||
+    (degraded ? "approvals temporarily unavailable" : "");
 
   return {
     count: numberValue(record.count, items.length),
+    cursor: typeof record.cursor === "string" ? record.cursor : null,
+    degraded,
     items,
-    limit: numberValue(record.limit, items.length),
+    limit: numberValue(record.limit, items.length || APPROVAL_LIST_DEFAULT_LIMIT),
+    message,
+    next_cursor:
+      typeof record.next_cursor === "string" ? record.next_cursor : null,
     offset: numberValue(record.offset, 0),
+    source: stringValue(record.source, degraded ? "degraded" : "live"),
+    status: degraded ? "degraded" : "ok",
   };
+}
+
+function normalizeListLimit(limit: number | undefined) {
+  if (typeof limit !== "number" || !Number.isFinite(limit)) {
+    return APPROVAL_LIST_DEFAULT_LIMIT;
+  }
+  return Math.max(1, Math.min(APPROVAL_LIST_MAX_LIMIT, Math.floor(limit)));
+}
+
+function appendCursor(params: URLSearchParams, cursor: string | undefined) {
+  if (typeof cursor === "string" && cursor.trim()) {
+    params.set("cursor", cursor.trim());
+  }
 }
 
 function normalizeDecision(value: unknown): ApprovalDecisionRecord | null {
@@ -179,25 +226,30 @@ export function normalizeApprovalDetail(value: unknown): ApprovalDetail {
 export async function listApprovals({
   category,
   limit,
+  cursor,
   offset = 0,
   signal,
 }: {
   category?: ApprovalCategory;
-  limit: number;
+  cursor?: string;
+  limit?: number;
   offset?: number;
   signal?: AbortSignal;
 }) {
   const params = new URLSearchParams({
-    limit: String(limit),
+    limit: String(normalizeListLimit(limit)),
     offset: String(offset),
   });
   if (category) {
     params.set("category", category);
   }
+  appendCursor(params, cursor);
   return normalizeListResponse(
     await apiRequest<unknown>(`/approval/list?${params.toString()}`, {
       method: "GET",
+      retryLimit: 0,
       signal,
+      timeoutMs: APPROVAL_LIST_TIMEOUT_MS,
     }),
   );
 }

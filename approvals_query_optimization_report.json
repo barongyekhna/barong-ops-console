@@ -1,0 +1,39 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "api": "GET /approval/list",
+  "pagination": {
+    "default_limit": 50,
+    "max_limit": 100,
+    "oversized_limit_behavior": "FastAPI validation rejects limit > 100 with HTTP 422.",
+    "cursor": "Optional cursor is supported as created_at|id and applied before OFFSET/LIMIT.",
+    "returned_page_size": "At most the requested limit, capped at 100."
+  },
+  "query_path": {
+    "approval_query": "Tenant scoped by org_id, filtered by status/category/module tokens when provided, ordered by created_at DESC and id DESC, with SQL OFFSET/LIMIT.",
+    "workflow_query": "One batched IN query for all approval_ids returned by the page.",
+    "permission_query": "At most one effective-permission resolution per list call for employee users.",
+    "python_post_filtering": "Only a non-DB exact module-token safety check remains for employee users."
+  },
+  "indexes_added": [
+    "ix_approval_requests_org_id_status_created_at",
+    "ix_approval_requests_org_id_category_created_at",
+    "ix_approval_requests_org_id_category_status_created_at",
+    "ix_approval_workflows_org_id_approval_id"
+  ],
+  "migration": "backend/alembic/versions/20260621_01_approval_list_performance.py",
+  "blocking_protection": {
+    "route_timeout_seconds": 2.0,
+    "postgres_statement_timeout_ms": 1800,
+    "fallback_response": {
+      "status": "degraded",
+      "data": [],
+      "message": "approvals temporarily unavailable"
+    }
+  },
+  "verification": {
+    "python_compileall": "passed",
+    "route_timeout_helper": "passed: returned JSONResponse 200 with degraded payload",
+    "backend_pytest": "blocked: default Postgres hostname db is not resolvable in this workspace",
+    "temporary_sqlite_pytest": "interrupted: no output after 90 seconds"
+  }
+}

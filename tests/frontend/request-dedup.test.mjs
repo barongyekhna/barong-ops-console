@@ -209,3 +209,21 @@ test("dashboard initial load renders partial state without all-settled blocking"
   assert.doesNotMatch(dashboardSource, /DashboardState \| null/);
   assert.doesNotMatch(dashboardSource, /state === null/);
 });
+
+test("approval list requests are bounded and render degraded state", () => {
+  const approvalApiSource = readFileSync("frontend/src/lib/approval.ts", "utf8");
+  const approvalViewSource = readFileSync(
+    "frontend/src/components/approval-product-view.tsx",
+    "utf8",
+  );
+
+  assert.match(approvalApiSource, /APPROVAL_LIST_DEFAULT_LIMIT\s*=\s*50/);
+  assert.match(approvalApiSource, /APPROVAL_LIST_MAX_LIMIT\s*=\s*100/);
+  assert.match(approvalApiSource, /APPROVAL_LIST_TIMEOUT_MS\s*=\s*2_000/);
+  assert.match(approvalApiSource, /retryLimit:\s*0/);
+  assert.match(approvalApiSource, /record\.status === "degraded"/);
+  assert.match(approvalViewSource, /ApiTimeoutError/);
+  assert.match(approvalViewSource, /approvalListErrorText/);
+  assert.match(approvalViewSource, /data\.status === "degraded"/);
+  assert.doesNotMatch(approvalViewSource, /setInterval/);
+});

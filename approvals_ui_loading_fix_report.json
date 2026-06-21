@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "frontend_scope": [
+    "frontend/src/lib/approval.ts",
+    "frontend/src/components/approval-product-view.tsx"
+  ],
+  "fixes": {
+    "request_timeout": {
+      "timeout_ms": 2000,
+      "retry_limit": 0,
+      "reason": "Approval list must not retry forever or hold the page in loading state."
+    },
+    "degraded_payload_support": {
+      "supported_shapes": [
+        "ListResponse with degraded=true",
+        "{ status: 'degraded', data: [], message: 'approvals temporarily unavailable' }"
+      ],
+      "ui_behavior": "Shows degraded/unavailable state and stops loading."
+    },
+    "timeout_handling": {
+      "finding": "ApiTimeoutError inherits from the abort error class, so treating all abort-like errors as silent cancellation could leave the spinner active.",
+      "fix": "Timeouts are handled separately and set loading=false with a degraded message."
+    }
+  },
+  "expected_user_outcome": {
+    "infinite_spinner": false,
+    "ui_blocks_render": false,
+    "partial_data_allowed": true,
+    "empty_degraded_state_renders": true
+  },
+  "verification": {
+    "frontend_typecheck": "passed",
+    "frontend_target_test": "passed: approval list requests are bounded and render degraded state",
+    "json_reports": "passed"
+  }
+}

@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import and_, func, or_, select
 from sqlalchemy.orm import Session
 
 from ..models.approval import (
@@ -23,6 +24,42 @@ from ..schemas.approval import (
     ApprovalWorkflowState,
 )
 from .tenant import current_tenant_org_id, tenant_org_id_for_create
+
+
+@dataclass(frozen=True)
+class ApprovalRequestCursor:
+    created_at: datetime
+    id: int
+
+
+def encode_approval_request_cursor(record: ApprovalRequestRecord) -> str:
+    return f"{record.created_at.isoformat()}|{record.id}"
+
+
+def decode_approval_request_cursor(
+    cursor: str | None,
+) -> ApprovalRequestCursor | None:
+    if cursor is None or not cursor.strip():
+        return None
+    created_at_value, separator, record_id_value = cursor.strip().partition("|")
+    if separator != "|":
+        raise ValueError("Invalid approval list cursor.")
+    try:
+        created_at = datetime.fromisoformat(created_at_value)
+        record_id = int(record_id_value)
+    except ValueError as exc:
+        raise ValueError("Invalid approval list cursor.") from exc
+    if record_id <= 0:
+        raise ValueError("Invalid approval list cursor.")
+    return ApprovalRequestCursor(created_at=created_at, id=record_id)
+
+
+def _escape_like(value: str) -> str:
+    return (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
 
 
 def _request_values(request: ApprovalRequest) -> dict[str, object]:
@@ -155,9 +192,11 @@ class ApprovalRepository:
         *,
         statuses: Sequence[ApprovalRequestStatus] | None = None,
         categories: Sequence[ApprovalCategory] | None = None,
+        module_tokens: Sequence[str] | None = None,
         requester_id: int | None = None,
         limit: int,
         offset: int,
+        cursor: ApprovalRequestCursor | None = None,
     ) -> list[ApprovalRequestRecord]:
         statement = select(ApprovalRequestRecord).where(
             ApprovalRequestRecord.org_id == current_tenant_org_id()
@@ -165,36 +204,56 @@ class ApprovalRepository:
         if statuses:
             statement = statement.where(ApprovalRequestRecord.status.in_(statuses))
         if categories:
-            category_filter = frozenset(categories)
             statement = statement.where(
-                ApprovalRequestRecord.category.in_(tuple(category_filter))
+                ApprovalRequestRecord.category.in_(tuple(frozenset(categories)))
             )
-        else:
-            category_filter = None
+        if module_tokens:
+            normalized_tokens = tuple(
+                sorted(
+                    {
+                        token.strip().lower()
+                        for token in module_tokens
+                        if token.strip()
+                    }
+                )
+            )
+            if normalized_tokens:
+                module_key = func.lower(ApprovalRequestRecord.module_key)
+                module_filters = []
+                for token in normalized_tokens:
+                    escaped = _escape_like(token)
+                    module_filters.extend(
+                        (
+                            module_key == token,
+                            module_key.like(f"{escaped}.%", escape="\\"),
+                            module_key.like(f"%.{escaped}", escape="\\"),
+                            module_key.like(f"%.{escaped}.%", escape="\\"),
+                        )
+                    )
+                statement = statement.where(or_(*module_filters))
         if requester_id is not None:
             statement = statement.where(
                 ApprovalRequestRecord.requester_id == requester_id
             )
-        statement = statement.order_by(ApprovalRequestRecord.id.desc()).limit(
-            limit + offset
-        )
-        rows = list(self.db.scalars(statement))
-        if category_filter is not None:
-            rows = [
-                record
-                for record in rows
-                if (
-                    getattr(record, "category", None)
-                    or approval_category_from_keys(
-                        module_key=record.module_key,
-                        action_key=record.action_key,
-                        adapter_key=record.adapter_key,
-                        explicit_category=dict(record.request_payload).get("category"),
-                    )
+        if cursor is not None:
+            statement = statement.where(
+                or_(
+                    ApprovalRequestRecord.created_at < cursor.created_at,
+                    and_(
+                        ApprovalRequestRecord.created_at == cursor.created_at,
+                        ApprovalRequestRecord.id < cursor.id,
+                    ),
                 )
-                in category_filter
-            ]
-        return rows[offset : offset + limit]
+            )
+        statement = (
+            statement.order_by(
+                ApprovalRequestRecord.created_at.desc(),
+                ApprovalRequestRecord.id.desc(),
+            )
+            .offset(offset)
+            .limit(limit)
+        )
+        return list(self.db.scalars(statement))
 
 
 class WorkflowRepository:
@@ -300,11 +359,12 @@ class WorkflowRepository:
             statement = statement.where(
                 ApprovalWorkflowRecord.approval_id == approval_id
             )
-        statement = statement.order_by(ApprovalWorkflowRecord.id.desc()).limit(
-            limit + offset
+        statement = (
+            statement.order_by(ApprovalWorkflowRecord.id.desc())
+            .offset(offset)
+            .limit(limit)
         )
-        rows = list(self.db.scalars(statement))
-        return rows[offset : offset + limit]
+        return list(self.db.scalars(statement))
 
 
 class DecisionRepository:
@@ -390,8 +450,9 @@ class DecisionRepository:
             statement = statement.where(
                 ApprovalDecisionRecord.decision_source.in_(sources)
             )
-        statement = statement.order_by(ApprovalDecisionRecord.id.asc()).limit(
-            limit + offset
+        statement = (
+            statement.order_by(ApprovalDecisionRecord.id.asc())
+            .offset(offset)
+            .limit(limit)
         )
-        rows = list(self.db.scalars(statement))
-        return rows[offset : offset + limit]
+        return list(self.db.scalars(statement))

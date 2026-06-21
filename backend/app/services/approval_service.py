@@ -22,6 +22,8 @@ from ..repositories.approvals import (
     DecisionRepository,
     WorkflowRepository,
     approval_request_from_record,
+    decode_approval_request_cursor,
+    encode_approval_request_cursor,
 )
 from ..schemas.approval import (
     C12D_APPROVAL_SAFETY_GUARANTEES,
@@ -92,7 +94,8 @@ ROLE_ALLOWED_ACTIONS: dict[ApprovalActorRole, tuple[ApprovalBoundaryAction, ...]
     "user": ("request", "read", "list"),
     "system": ("auto_approve",),
 }
-APPROVAL_LIST_SCAN_LIMIT = 500
+APPROVAL_LIST_DEFAULT_LIMIT = 50
+APPROVAL_LIST_MAX_LIMIT = 100
 APPROVAL_REJECT_REASON_MIN_LENGTH = 15
 APPROVAL_APPROVE_DEFAULT_REASON = "审批人已同意该申请。"
 
@@ -138,6 +141,20 @@ class ApprovalActor:
             allowed_actions=tuple(self.allowed_actions),
             full_access=self.full_access,
         )
+
+
+@dataclass(frozen=True)
+class ApprovalListVisibility:
+    categories: tuple[ApprovalCategory, ...] | None
+    permission_keys: frozenset[str] | None = None
+    module_tokens: frozenset[str] | None = None
+    empty: bool = False
+
+
+@dataclass(frozen=True)
+class ApprovalListPage:
+    items: list[ApprovalListItem]
+    next_cursor: str | None
 
 
 def _utc_now() -> datetime:
@@ -417,6 +434,65 @@ def _audit_status(status: Literal["approved", "rejected"]) -> Literal["success",
     return "success" if status == "approved" else "failed"
 
 
+def _approval_list_visibility(
+    db: Session,
+    *,
+    user: User,
+    actor: ApprovalActor,
+    category: ApprovalCategory | None,
+) -> ApprovalListVisibility:
+    if actor.actor_role == "system":
+        return ApprovalListVisibility(
+            categories=(category,) if category is not None else None,
+        )
+    if actor.actor_role == "owner":
+        return ApprovalListVisibility(
+            categories=(category,) if category is not None else None,
+        )
+    if actor.actor_role == "admin":
+        if category == CONTROL_PLANE_CATEGORY:
+            return ApprovalListVisibility(categories=(), empty=True)
+        return ApprovalListVisibility(categories=(FEATURE_CATEGORY,))
+
+    if category == CONTROL_PLANE_CATEGORY:
+        return ApprovalListVisibility(categories=(), empty=True)
+
+    permission_keys = frozenset(_scoped_permission_keys_for_user(db, user))
+    if "*" in permission_keys:
+        return ApprovalListVisibility(
+            categories=(FEATURE_CATEGORY,),
+            permission_keys=permission_keys,
+        )
+
+    module_tokens = frozenset(module_permission_tokens(permission_keys))
+    if not module_tokens:
+        return ApprovalListVisibility(
+            categories=(FEATURE_CATEGORY,),
+            permission_keys=permission_keys,
+            module_tokens=module_tokens,
+            empty=True,
+        )
+    return ApprovalListVisibility(
+        categories=(FEATURE_CATEGORY,),
+        permission_keys=permission_keys,
+        module_tokens=module_tokens,
+    )
+
+
+def _record_matches_visibility(
+    record: ApprovalRequestRecord,
+    visibility: ApprovalListVisibility,
+) -> bool:
+    if visibility.empty:
+        return False
+    if visibility.module_tokens is None or "*" in (visibility.permission_keys or ()):
+        return True
+    return module_key_matches_permission_tokens(
+        record.module_key,
+        visibility.module_tokens,
+    )
+
+
 class WorkflowService:
     def __init__(
         self,
@@ -614,71 +690,71 @@ class ApprovalService:
         category: ApprovalCategory | None = None,
         limit: int,
         offset: int,
+        cursor: str | None = None,
     ) -> list[ApprovalListItem]:
+        return self.list_approval_page(
+            user=user,
+            status=status,
+            category=category,
+            limit=limit,
+            offset=offset,
+            cursor=cursor,
+        ).items
+
+    def list_approval_page(
+        self,
+        *,
+        user: User,
+        status: ApprovalRequestStatus | None,
+        category: ApprovalCategory | None = None,
+        limit: int,
+        offset: int,
+        cursor: str | None = None,
+    ) -> ApprovalListPage:
         actor = approval_actor_for_user(user)
         _ensure_action(actor, "list")
+        normalized_limit = min(max(1, limit), APPROVAL_LIST_MAX_LIMIT)
+        normalized_offset = max(0, offset)
         statuses = (status,) if status is not None else None
-        categories = (category,) if category is not None else None
-        permission_keys = (
-            _scoped_permission_keys_for_user(self.db, user)
-            if actor.actor_role == "user"
-            else None
+        try:
+            decoded_cursor = decode_approval_request_cursor(cursor)
+        except ValueError as exc:
+            raise ApprovalInvalidRequestError(str(exc)) from None
+        visibility = _approval_list_visibility(
+            self.db,
+            user=user,
+            actor=actor,
+            category=category,
         )
-        visibility_cache: dict[tuple[str, str, str], bool] = {}
+        if visibility.empty:
+            return ApprovalListPage(items=[], next_cursor=None)
 
-        def visible(record: ApprovalRequestRecord) -> bool:
-            cache_key = (
-                actor.actor_role,
-                _record_category(record),
-                record.module_key,
-            )
-            cached = visibility_cache.get(cache_key)
-            if cached is not None:
-                return cached
-            result = _record_visible_to_actor(
-                self.db,
-                user=user,
-                actor=actor,
-                record=record,
-                permission_keys=permission_keys,
-            )
-            visibility_cache[cache_key] = result
-            return result
-
-        if actor.actor_role == "admin":
-            categories = (FEATURE_CATEGORY,)
-        requires_post_filter_pagination = (
-            actor.actor_role == "user" or categories is not None
+        records = self.approval_repo.query_records(
+            statuses=statuses,
+            categories=visibility.categories,
+            module_tokens=tuple(visibility.module_tokens or ()),
+            limit=normalized_limit,
+            offset=normalized_offset,
+            cursor=decoded_cursor,
         )
-        if actor.actor_role == "user":
-            categories = (FEATURE_CATEGORY,)
-
-        if requires_post_filter_pagination:
-            records = self.approval_repo.query_records(
-                statuses=statuses,
-                categories=categories,
-                limit=APPROVAL_LIST_SCAN_LIMIT,
-                offset=0,
-            )
-            records = [record for record in records if visible(record)]
-            records = records[offset : offset + limit]
-        else:
-            records = self.approval_repo.query_records(
-                statuses=statuses,
-                categories=categories,
-                limit=limit,
-                offset=offset,
-            )
+        visible_records = [
+            record
+            for record in records
+            if _record_matches_visibility(record, visibility)
+        ]
         items: list[ApprovalListItem] = []
         workflows = self.workflow_repo.load_by_approval_ids(
-            [record.approval_id for record in records]
+            [record.approval_id for record in visible_records]
         )
-        for record in records:
-            if not visible(record):
-                continue
+        for record in visible_records:
             workflow = workflows.get(record.approval_id)
             items.append(_list_item(record, workflow))
-        return items
+        next_cursor = (
+            encode_approval_request_cursor(visible_records[-1])
+            if len(visible_records) == normalized_limit
+            else None
+        )
+        return ApprovalListPage(items=items, next_cursor=next_cursor)
 
     def approve(
         self,

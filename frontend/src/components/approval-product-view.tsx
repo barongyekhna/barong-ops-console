@@ -35,6 +35,7 @@ import {
 } from "@/lib/approval";
 import {
   ApiRequestAbortedError,
+  ApiTimeoutError,
   isApiAbortError,
 } from "@/lib/api";
 
@@ -53,8 +54,30 @@ const PREVIEW_LIMIT = 5;
 const FULL_LIST_LIMIT = 50;
 const REJECT_REASON_MIN_LENGTH = 15;
 
+function emptyApprovalListResponse(): ApprovalListResponse {
+  return {
+    count: 0,
+    cursor: null,
+    degraded: false,
+    items: [],
+    limit: 0,
+    message: "",
+    next_cursor: null,
+    offset: 0,
+    source: "local",
+    status: "ok",
+  };
+}
+
 function errorText(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function approvalListErrorText(error: unknown) {
+  if (error instanceof ApiTimeoutError) {
+    return "approvals temporarily unavailable";
+  }
+  return errorText(error, "approvals temporarily unavailable");
 }
 
 function formatDate(value: string) {
@@ -145,6 +168,8 @@ function ApprovalSection({
   const items = state.data?.items ?? [];
   const showMore = isOwner && items.length >= PREVIEW_LIMIT;
   const Icon = icon === "control" ? ShieldCheck : Layers3;
+  const hasDegradedEmptyData =
+    state.data?.status === "degraded" && items.length === 0;
 
   return (
     <section
@@ -205,7 +230,9 @@ function ApprovalSection({
         </div>
       ) : null}
 
-      {state.data !== null && (!state.loading || items.length > 0) ? (
+      {state.data !== null &&
+      !hasDegradedEmptyData &&
+      (!state.loading || items.length > 0) ? (
         <ApprovalListRows items={items} />
       ) : null}
     </section>
@@ -240,15 +267,19 @@ export function ApprovalConsoleView() {
           signal: controller.signal,
         });
         if (!controller.signal.aborted) {
-          setter({ data, error: "", loading: false });
+          setter({
+            data,
+            error: data.status === "degraded" ? data.message : "",
+            loading: false,
+          });
         }
       } catch (error) {
-        if (isApiAbortError(error)) {
+        if (isApiAbortError(error) && !(error instanceof ApiTimeoutError)) {
           return;
         }
         setter((current) => ({
           data: current.data,
-          error: errorText(error, "审批列表加载失败。"),
+          error: approvalListErrorText(error),
           loading: false,
         }));
       } finally {
@@ -262,7 +293,11 @@ export function ApprovalConsoleView() {
 
   const loadControl = useCallback(() => {
     if (!isOwner) {
-      setControl({ data: { count: 0, items: [], limit: 0, offset: 0 }, error: "", loading: false });
+      setControl({
+        data: emptyApprovalListResponse(),
+        error: "",
+        loading: false,
+      });
       return;
     }
     void loadSection("control_plane", setControl, controlAbortRef);
@@ -339,11 +374,15 @@ export function ApprovalMoreView() {
         category,
         limit: FULL_LIST_LIMIT,
       });
-      setState({ data, error: "", loading: false });
+      setState({
+        data,
+        error: data.status === "degraded" ? data.message : "",
+        loading: false,
+      });
     } catch (error) {
       setState((current) => ({
         data: current.data,
-        error: errorText(error, "审批列表加载失败。"),
+        error: approvalListErrorText(error),
         loading: false,
       }));
     }

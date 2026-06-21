@@ -1,0 +1,42 @@
+{
+  "generated_at": "2026-06-21T00:00:00Z",
+  "scope": "GET /approval/list",
+  "root_cause": {
+    "n_plus_one_workflow_lookup": {
+      "status": "prevented",
+      "finding": "The list path must use WorkflowRepository.load_by_approval_ids() once for the returned page and must not call load_by_approval_id() in a per-record loop.",
+      "fix": "ApprovalService.list_approval_page() batches workflow preload after the approval page has been selected."
+    },
+    "permission_resolution": {
+      "status": "fixed",
+      "finding": "Employee visibility previously depended on a wide approval scan followed by per-record visibility checks. Permission keys were cached, but pagination still happened after filtering.",
+      "fix": "The service resolves effective permission keys once, derives module tokens once, pushes category/module constraints into the approval query, and applies only a non-DB exact safety check to returned records."
+    },
+    "wide_default_pull": {
+      "status": "fixed",
+      "finding": "The repository implemented pagination as SQL limit = limit + offset followed by Python slicing, and employee/category paths used a fixed scan of 500 records.",
+      "fix": "ApprovalRepository.query_records() now uses SQL OFFSET/LIMIT directly. The 500-record scan path was removed."
+    },
+    "blocking_read": {
+      "status": "fixed",
+      "finding": "A synchronous DB read could occupy the request path until the database returned or timed out.",
+      "fix": "The route executes the live list read in an isolated read session via a bounded executor and returns degraded data after 2 seconds."
+    }
+  },
+  "files_changed": [
+    "backend/app/repositories/approvals.py",
+    "backend/app/services/approval_service.py",
+    "backend/app/api/routes/approval.py",
+    "backend/app/models/approval.py",
+    "backend/alembic/versions/20260621_01_approval_list_performance.py",
+    "frontend/src/lib/approval.ts",
+    "frontend/src/components/approval-product-view.tsx",
+    "tests/backend/test_approval_api.py",
+    "tests/frontend/request-dedup.test.mjs"
+  ],
+  "constraints_respected": {
+    "rbac_core_modified": false,
+    "db_schema_rebuilt": false,
+    "approval_data_deleted": false
+  }
+}
