@@ -1,0 +1,62 @@
+{
+  "generated_at": "2026-06-22T04:06:03Z",
+  "status": "pass",
+  "cache_cleanup": {
+    "removed_next_build_cache_before_rebuild": "frontend/.next",
+    "removed_empty_artifacts_route_directory": "frontend/src/app/(console)/artifacts",
+    "source_artifacts_route_directories_after_cleanup": 0,
+    "built_artifacts_route_directories_after_rebuild": 0
+  },
+  "frontend_rebuild": {
+    "local_npm_build": "pass",
+    "local_npm_typecheck": "pass",
+    "local_npm_test": {
+      "status": "pass",
+      "tests": 13
+    },
+    "docker_frontend_build": "pass",
+    "generated_routes": [
+      "/",
+      "/agents",
+      "/api/backend/[...path]",
+      "/approvals",
+      "/approvals/[approvalId]",
+      "/approvals/more",
+      "/dashboard",
+      "/errors",
+      "/force-password-reset",
+      "/login",
+      "/memory-events",
+      "/modules",
+      "/operation-logs",
+      "/organizations",
+      "/permissions",
+      "/reviews",
+      "/settings",
+      "/users"
+    ],
+    "generated_artifacts_route": false
+  },
+  "sidebar_and_ui_checks": {
+    "source_artifacts_menu_references": 0,
+    "reviews_page_status_code": 200,
+    "reviews_page_artifacts_text_count": 0,
+    "reviews_page_not_authenticated_text_count": 0,
+    "reviews_page_review_id_text_count": 0,
+    "root_page_artifacts_text_count": 0,
+    "reviews_page_component": "ReviewAuditView"
+  },
+  "residual_non_ui_artifact_terms": [
+    {
+      "location": "frontend/src/lib/permission-management.ts",
+      "purpose": "hidden denylist for removed artifact permission keys",
+      "ui_exposed": false
+    },
+    {
+      "location": "frontend/src/lib/execution-provider.ts",
+      "purpose": "generic execution artifact policy fields, not the removed Artifacts module",
+      "ui_exposed": false
+    }
+  ],
+  "result": "no artifacts route, menu item, page output, or cached artifacts page remains"
+}

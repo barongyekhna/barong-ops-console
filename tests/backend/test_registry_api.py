@@ -51,7 +51,10 @@ def test_owner_can_access_f10_lists(
     response = owner_client.get(path)
 
     assert response.status_code == 200
-    if path != "/api/app/operation-logs":
+    if path == "/api/app/reviews":
+        assert response.json()["module"] == "approval_audit"
+        assert response.json()["legacy_review_items_enabled"] is False
+    elif path != "/api/app/operation-logs":
         assert response.json()["items"] == []
 
 

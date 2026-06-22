@@ -214,6 +214,12 @@ test("filters wildcard and disabled permissions from grant options", () => {
       is_enabled: false,
       permission_key: "reviews.manage",
     },
+    {
+      ...ordinaryPermission,
+      id: "removed-artifacts",
+      module_key: "artifacts",
+      permission_key: "artifacts.read",
+    },
   ]);
 
   assert.deepEqual(
@@ -250,7 +256,13 @@ test("permission display names and UI groups do not expose raw keys", () => {
 });
 
 test("permission registry filtering limits super admin to feature permissions", () => {
-  const registry = [ordinaryPermission, highRiskPermission];
+  const removedArtifactPermission = {
+    ...ordinaryPermission,
+    id: "removed-artifacts",
+    module_key: "artifacts",
+    permission_key: "artifacts.read",
+  };
+  const registry = [ordinaryPermission, highRiskPermission, removedArtifactPermission];
 
   assert.deepEqual(
     filterPermissionRegistryForRole(registry, "owner").map(

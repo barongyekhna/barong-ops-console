@@ -1,0 +1,53 @@
+{
+  "generated_at": "2026-06-22T04:06:03Z",
+  "status": "pass",
+  "removed_or_unregistered_routes": {
+    "artifacts": {
+      "route_file_deleted": "backend/app/api/routes/artifacts.py",
+      "runtime_registered": false,
+      "api_status": 404
+    },
+    "reviews_legacy": {
+      "removed_handlers": [
+        "GET /api/app/reviews legacy ReviewResponse list",
+        "GET /api/app/reviews/{review_id}",
+        "POST /api/app/reviews",
+        "POST /api/app/reviews/{review_id}/decision"
+      ],
+      "runtime_registered": false,
+      "replacement": "GET /api/app/reviews approval audit overview"
+    }
+  },
+  "remaining_reviews_routes": [
+    "GET /api/app/reviews",
+    "GET /api/app/reviews/module-registry",
+    "GET /api/app/reviews/organizations",
+    "GET /api/app/reviews/organizations/{organization_id}/users",
+    "GET /api/app/reviews/organizations/{organization_id}/users/{user_id}/actions"
+  ],
+  "metadata_alignment": {
+    "business.reviews_display_name": "Approval Audit",
+    "business.reviews_data_boundary_reads": [
+      "approval_decisions",
+      "approval_requests"
+    ],
+    "business.reviews_legacy_review_items_boundary_removed": true,
+    "artifacts_module_manifest_present": false
+  },
+  "verification": {
+    "container_route_registry_check": "pass",
+    "container_pytest_route_unregistration": "1 passed",
+    "backend_compileall": "pass",
+    "api_backend_reviews_status": 200,
+    "api_backend_artifacts_status": 404,
+    "api_frontend_reviews_status": 200,
+    "api_frontend_artifacts_status": 404
+  },
+  "constraints_observed": {
+    "rbac_core_engine_modified": false,
+    "database_reset": false,
+    "schema_migration": false,
+    "database_data_deleted": false
+  },
+  "result": "legacy artifacts route and legacy reviews route surface are unregistered from runtime"
+}

@@ -1,0 +1,105 @@
+{
+  "generated_at": "2026-06-22T04:06:03Z",
+  "status": "pass",
+  "scope": "production and staging runtime after clean redeploy",
+  "constraints_observed": {
+    "rbac_core_engine_modified": false,
+    "database_reset": false,
+    "schema_migration": false,
+    "named_volumes_deleted": false
+  },
+  "backend_route_registry": {
+    "artifacts_registered": false,
+    "reviews_legacy_registered": false,
+    "reviews_registered_routes": [
+      {
+        "path": "/api/app/reviews",
+        "methods": [
+          "GET"
+        ],
+        "handler": "review_audit_overview"
+      },
+      {
+        "path": "/api/app/reviews/module-registry",
+        "methods": [
+          "GET"
+        ],
+        "handler": "review_audit_module_registry"
+      },
+      {
+        "path": "/api/app/reviews/organizations",
+        "methods": [
+          "GET"
+        ],
+        "handler": "review_audit_organizations"
+      },
+      {
+        "path": "/api/app/reviews/organizations/{organization_id}/users",
+        "methods": [
+          "GET"
+        ],
+        "handler": "review_audit_users"
+      },
+      {
+        "path": "/api/app/reviews/organizations/{organization_id}/users/{user_id}/actions",
+        "methods": [
+          "GET"
+        ],
+        "handler": "review_audit_actions"
+      }
+    ]
+  },
+  "api_verification": {
+    "backend_direct": {
+      "GET /api/app/reviews": {
+        "status_code": 200,
+        "module": "approval_audit",
+        "legacy_review_items_enabled": false,
+        "contains_legacy_items_key": false,
+        "contains_review_id_key": false
+      },
+      "GET /api/app/artifacts": {
+        "status_code": 404,
+        "body_detail": "Not found."
+      }
+    },
+    "frontend_proxy": {
+      "GET /api/backend/reviews": {
+        "status_code": 200,
+        "module": "approval_audit",
+        "legacy_review_items_enabled": false,
+        "contains_legacy_items_key": false,
+        "contains_review_id_key": false
+      },
+      "GET /api/backend/artifacts": {
+        "status_code": 404,
+        "body_detail": "Not found."
+      }
+    },
+    "review_audit_children": {
+      "GET /api/app/reviews/organizations": 200,
+      "GET /api/app/reviews/module-registry": 200
+    }
+  },
+  "docker_runtime": {
+    "stopped_running_container_count": 20,
+    "builder_prune_reclaimed": "0B",
+    "image_prune_reclaimed": "10.68GB",
+    "compose_cli": "docker-compose 1.29.2",
+    "project_names": [
+      "barong-ops-console-prod",
+      "barong-ops-console-staging"
+    ],
+    "production_stack": {
+      "frontend": "up on 127.0.0.1:3000",
+      "backend": "up on 127.0.0.1:8000",
+      "postgres": "up healthy"
+    },
+    "staging_stack": {
+      "frontend": "up on 127.0.0.1:3100",
+      "backend": "up on 127.0.0.1:8100",
+      "postgres": "up healthy"
+    }
+  },
+  "result": "artifacts disabled/404 and reviews synchronized to approval audit structure"
+}

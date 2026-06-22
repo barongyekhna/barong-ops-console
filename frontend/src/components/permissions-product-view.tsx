@@ -450,7 +450,7 @@ export function PermissionsProductView() {
           >
             <div className="permissions-section-heading">
               <h3>Feature Permissions</h3>
-              <p>Agents, artifacts, reviews, and approvals.</p>
+              <p>Agents, reviews, and approvals.</p>
             </div>
             {featurePermissions.length > 0 ? (
               <div className="permissions-card-grid">

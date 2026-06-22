@@ -90,3 +90,19 @@ class ReviewAuditAction(BaseModel):
     related_object_type: str
     related_object: str
     summary: str
+
+
+class ReviewAuditEntrypoint(BaseModel):
+    method: Literal["GET"] = "GET"
+    path: str
+    description: str
+
+
+class ReviewAuditOverview(BaseModel):
+    module: Literal["approval_audit"] = "approval_audit"
+    source: Literal["approval_decisions"] = "approval_decisions"
+    legacy_review_items_enabled: Literal[False] = False
+    scope_role: str
+    organization_id: str | None
+    owner_scope: bool
+    entrypoints: list[ReviewAuditEntrypoint]

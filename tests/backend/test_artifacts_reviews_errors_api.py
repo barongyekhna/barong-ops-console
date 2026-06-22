@@ -1,9 +1,9 @@
 from fastapi.testclient import TestClient
-from sqlalchemy import select
 
 from backend.app.db.session import SessionLocal
 from backend.app.models.artifact import Artifact
 from backend.app.models.operation_log import OperationLog
+from backend.app.models.review import ReviewItem
 from tests.backend.foundation_helpers import create_job, create_module
 
 
@@ -41,10 +41,18 @@ def test_artifacts_api_access_layer_is_removed_without_deleting_data(
         assert db.query(Artifact).count() == before_count
 
 
-def test_review_creation_and_demo_decision_are_audited(
+def test_legacy_review_creation_and_demo_decision_are_removed_without_deleting_data(
     owner_client: TestClient,
 ) -> None:
     prepare_job(owner_client)
+
+    with SessionLocal() as db:
+        before_review_count = db.query(ReviewItem).count()
+        before_log_count = (
+            db.query(OperationLog)
+            .filter(OperationLog.target_id == "demo.review")
+            .count()
+        )
 
     created = owner_client.post(
         "/api/app/reviews",
@@ -61,28 +69,67 @@ def test_review_creation_and_demo_decision_are_audited(
             "comment": "Demo approval only.",
         },
     )
+    detail = owner_client.get("/api/app/reviews/demo.review")
 
-    assert created.status_code == 201
-    assert decided.status_code == 200
-    assert decided.json()["status"] == "approved_demo"
-    assert decided.json()["decision"] == "approve_demo"
+    assert created.status_code == 405
+    assert decided.status_code == 404
+    assert detail.status_code == 404
 
     with SessionLocal() as db:
-        actions = set(
-            db.scalars(
-                select(OperationLog.action).where(
-                    OperationLog.target_id == "demo.review"
-                )
-            )
+        assert db.query(ReviewItem).count() == before_review_count
+        assert (
+            db.query(OperationLog)
+            .filter(OperationLog.target_id == "demo.review")
+            .count()
+            == before_log_count
         )
-        decision_log = db.scalar(
-            select(OperationLog).where(
-                OperationLog.action == "review.decision_demo"
-            )
-        )
-    assert actions == {"review.create_demo", "review.decision_demo"}
-    assert decision_log is not None
-    assert decision_log.details["downstream_triggered"] is False
+
+
+def test_reviews_root_returns_approval_audit_overview(
+    owner_client: TestClient,
+) -> None:
+    response = owner_client.get("/api/app/reviews")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["module"] == "approval_audit"
+    assert payload["source"] == "approval_decisions"
+    assert payload["legacy_review_items_enabled"] is False
+    assert "items" not in payload
+    assert "review_id" not in payload
+    assert {
+        entry["path"]
+        for entry in payload["entrypoints"]
+    } == {
+        "/reviews/organizations",
+        "/reviews/module-registry",
+        "/reviews/organizations/{organization_id}/users",
+        "/reviews/organizations/{organization_id}/users/{user_id}/actions",
+    }
+
+
+def test_artifact_and_legacy_review_routes_are_not_registered() -> None:
+    from backend.app.main import app
+
+    route_methods = {
+        (route.path, tuple(sorted(getattr(route, "methods", ()) or ())))
+        for route in app.routes
+    }
+
+    assert all(
+        not path.startswith("/api/app/artifacts")
+        for path, _methods in route_methods
+    )
+    assert ("/api/app/reviews", ("GET",)) in route_methods
+    assert ("/api/app/reviews/{review_id}", ("GET",)) not in route_methods
+    assert (
+        "/api/app/reviews/{review_id}/decision",
+        ("POST",),
+    ) not in route_methods
+    assert not any(
+        path == "/api/app/reviews" and methods == ("POST",)
+        for path, methods in route_methods
+    )
 
 
 def test_system_error_records_only_demo_error_metadata(

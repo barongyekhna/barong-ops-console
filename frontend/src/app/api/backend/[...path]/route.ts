@@ -35,7 +35,6 @@ const ALLOWED_APP_RESOURCE_PATHS = new Set([
   "errors",
   "memory-events",
   "memory-summaries",
-  "reviews",
 ]);
 const ALLOWED_APP_CREATE_RESOURCE_PATHS = new Set([
   "context-packets",
@@ -348,6 +347,10 @@ function isAllowedAppResourcePath(method: string, path: string[]) {
 function isAllowedReviewAuditPath(method: string, path: string[]) {
   if (method !== "GET" || path[0] !== "reviews") {
     return false;
+  }
+
+  if (path.length === 2 && path[1] === "module-registry") {
+    return true;
   }
 
   if (path[1] !== "organizations") {
