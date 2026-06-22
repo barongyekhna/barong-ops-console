@@ -1,0 +1,30 @@
+{
+  "generated_at": "2026-06-22",
+  "status": "blocked",
+  "blocked_stage": "deployment_restart",
+  "summary": "All implementation and validation checks passed, but the deployment restart command failed because the requested Docker container names do not exist in the local Docker daemon.",
+  "passed_checks": {
+    "audit_reports_generated": true,
+    "module_registry_audit_machine_json_valid": true,
+    "api_key_system_audit_machine_json_valid": true,
+    "module_execution_pipeline_report_json_valid": true,
+    "module_integration_standard_json_valid": true,
+    "ui_owner_term_scan": "passed_no_所有者_matches",
+    "backend_unit_tests": "197 passed, 361 deselected",
+    "backend_integration_tests": "18 passed, 540 deselected",
+    "frontend_verify": "passed",
+    "frontend_tests": "13 passed",
+    "frontend_typecheck": "passed",
+    "frontend_build": "passed"
+  },
+  "failed_command": {
+    "command": "docker restart barong-ops-console_console_backend_1 barong-ops-console_console_frontend_1",
+    "exit_code": 1,
+    "stderr": [
+      "Error response from daemon: No such container: barong-ops-console_console_backend_1",
+      "Error response from daemon: No such container: barong-ops-console_console_frontend_1"
+    ]
+  },
+  "deployment_restarted": false,
+  "next_required_action": "Confirm the actual backend and frontend Docker container names before any further restart attempt."
+}

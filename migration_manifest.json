@@ -1,12 +1,12 @@
 {
-  "alembic_head": "approval_list_perf_001",
+  "alembic_head": "module_api_key_orch_001",
   "environment": "staging",
-  "expected_alembic_head": "approval_list_perf_001",
+  "expected_alembic_head": "module_api_key_orch_001",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 19,
-  "migration_hash": "5408da2f84f1997548cc24c9f690859034160b53fde6892715922cde99f645f8",
+  "migration_count": 20,
+  "migration_hash": "c76e185b4acbaf2b7fd947e7c5f2e369cc60a0f22f9c62d6797526a1d8e91b04",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -26,9 +26,10 @@
     "force_pwd_owner_only_001",
     "permission_ui_support_001",
     "approval_productization_001",
-    "approval_list_perf_001"
+    "approval_list_perf_001",
+    "module_api_key_orch_001"
   ],
-  "migration_order_checksum": "54dce18333434ede82faeb92d91bae53fc9b5f3c02f80f6b6d36e0ba37979c99",
+  "migration_order_checksum": "c4ee6fde96beeebe2325fbff9c1fc319ec815f1b0091ba616dda8d4782dd506d",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -162,6 +163,13 @@
       "down_revision": "approval_productization_001",
       "path": "backend/alembic/versions/20260621_01_approval_list_performance.py",
       "version": "approval_list_perf_001"
+    },
+    {
+      "applied_at": "2026-06-22T00:00:00Z",
+      "checksum": "d97afb63bccf539e47dc4cf06c61059da8729ee0b66f67e07c91821a8e800de7",
+      "down_revision": "approval_list_perf_001",
+      "path": "backend/alembic/versions/20260622_01_module_control_api_key_orchestration.py",
+      "version": "module_api_key_orch_001"
     }
   ]
 }

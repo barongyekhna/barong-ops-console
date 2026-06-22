@@ -199,7 +199,7 @@ function normalizeExecutionMode(value: unknown): "mock" | "staging" | "live" {
 function roleLabel(role: unknown) {
   const labels: Record<string, string> = {
     operator: "操作员",
-    owner: "所有者",
+    owner: "owner",
     reviewer: "审核员",
     super_admin: "组织管理员",
     viewer: "查看员",

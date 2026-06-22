@@ -1,0 +1,56 @@
+{
+  "checked_at": "2026-06-22T14:58:00Z",
+  "system": "api_key_orchestration",
+  "overall_status": "broken_flow",
+  "storage": {
+    "api_key_records_table_present": true,
+    "api_key_module_bindings_table_present": true,
+    "active_api_key_count": 0,
+    "active_binding_count": 0
+  },
+  "routes": {
+    "frontend_proxy_api_key_list": {
+      "path": "/api/backend/api-key-orchestration/keys",
+      "status": 200,
+      "count": 0
+    },
+    "frontend_proxy_api_key_bindings": {
+      "path": "/api/backend/api-key-orchestration/bindings",
+      "status": 200,
+      "count": 0
+    },
+    "frontend_proxy_organizations": {
+      "path": "/api/backend/organizations?limit=100&offset=0",
+      "status": 200,
+      "count": 2
+    }
+  },
+  "frontend": {
+    "organization_dropdown_source": "backend listOrganizations(100, 0)",
+    "hardcoded_organization_data": false,
+    "plaintext_key_display": false,
+    "key_hash_prefix_display": false,
+    "module_id_display_in_binding_summary": false
+  },
+  "security": {
+    "plaintext_key_returned_to_frontend": false,
+    "backend_envelope_storage": true,
+    "org_mismatch_guard": true,
+    "injection_context_function_exists": true
+  },
+  "execution_chain": {
+    "injection_function": "backend/app/services/api_key_orchestration.py::resolve_module_api_key_for_injection",
+    "production_module_references_found": 0,
+    "test_references_found": 2,
+    "status": "broken_flow",
+    "reason": "No production module execution path calls the API key injection function."
+  },
+  "validation": {
+    "frontend_typecheck": "pass",
+    "frontend_verify": "pass",
+    "frontend_tests": "pass",
+    "frontend_build": "pass",
+    "backend_focused_tests": "blocked_missing_isolated_test_db"
+  },
+  "deployment_allowed": false
+}

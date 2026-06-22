@@ -681,7 +681,7 @@ function stateFromSources({
         ...base,
         reason: "当前账号无权访问该功能区。",
         state: "forbidden" as const,
-        unlock_condition: "请联系所有者开通访问权限。",
+        unlock_condition: "请联系owner开通访问权限。",
       };
     }
 
@@ -689,7 +689,7 @@ function stateFromSources({
       ...base,
       reason: "该功能区对当前账号不可见。",
       state: "hidden" as const,
-      unlock_condition: "请联系所有者确认访问范围。",
+      unlock_condition: "请联系owner确认访问范围。",
     };
   }
 
@@ -698,7 +698,7 @@ function stateFromSources({
       ...base,
       reason: "当前账号无权访问该功能区。",
       state: "forbidden" as const,
-      unlock_condition: "请联系所有者开通访问权限。",
+      unlock_condition: "请联系owner开通访问权限。",
     };
   }
 
@@ -725,7 +725,7 @@ function stateFromSources({
       ...base,
       reason: "暂时无法确认当前账号访问范围。",
       state: "partial" as const,
-      unlock_condition: "请刷新页面或联系所有者。",
+      unlock_condition: "请刷新页面或联系owner。",
     };
   }
 
@@ -748,7 +748,7 @@ function stateFromSources({
       ...base,
       reason: "该功能区对当前组织不可见。",
       state: "hidden" as const,
-      unlock_condition: "请联系所有者确认访问范围。",
+      unlock_condition: "请联系owner确认访问范围。",
     };
   }
 
@@ -757,7 +757,7 @@ function stateFromSources({
       ...base,
       reason: "当前账号无权访问该功能区。",
       state: "forbidden" as const,
-      unlock_condition: "请联系所有者开通访问权限。",
+      unlock_condition: "请联系owner开通访问权限。",
     };
   }
 
@@ -802,7 +802,7 @@ function stateFromSources({
       reason: "该功能区的操作能力尚未启用。",
       required_execution_mode: "需要先启用操作能力。",
       state: "no_execution" as const,
-      unlock_condition: "请联系所有者完成配置。",
+      unlock_condition: "请联系owner完成配置。",
     };
   }
 
@@ -817,7 +817,7 @@ function stateFromSources({
         : "该功能区目前仅可预览。",
       required_execution_mode: "需要先启用操作能力。",
       state: executionProviderAccessUnknown ? "partial" as const : "mock" as const,
-      unlock_condition: "请联系所有者完成配置。",
+      unlock_condition: "请联系owner完成配置。",
     };
   }
 
@@ -976,10 +976,10 @@ function ownerCapabilityItem({
     org_visibility: "visible",
     permission_state: "available",
     reason: permissionBlocked
-      ? "所有者拥有全部访问权限。"
+      ? "owner拥有全部访问权限。"
       : item.reason,
     required_permission: permissionBlocked
-      ? "所有者全部权限。"
+      ? "owner全部权限。"
       : item.required_permission,
     sidebar_state: permissionBlocked
       ? sidebarStateForState(state)
@@ -1029,7 +1029,7 @@ function reviewAuditCapabilityItem({
       org_visibility: "hidden",
       permission_state: "hidden",
       reason: "该功能区对当前角色不可见。",
-      required_permission: "需要所有者或组织管理员权限。",
+      required_permission: "需要owner或组织管理员权限。",
       sidebar_state: "hidden",
       state: "hidden",
       unlock_condition: "请使用左侧已开放功能。",
@@ -1043,7 +1043,7 @@ function reviewAuditCapabilityItem({
     org_visibility: "visible",
     permission_state: "available",
     reason: "当前角色可查看审批审计。",
-    required_permission: "需要所有者或组织管理员权限。",
+    required_permission: "需要owner或组织管理员权限。",
     sidebar_state: "allowed",
     state: "allowed",
     unlock_condition: "打开审批审计。",
@@ -1339,7 +1339,7 @@ export function buildFrontendCapabilityGraph({
           org_visibility: "hidden" as const,
           permission_state: "hidden" as const,
           reason: "该功能区对当前角色不可见。",
-          required_permission: "需要所有者或组织管理员权限。",
+          required_permission: "需要owner或组织管理员权限。",
           sidebar_state: "hidden" as const,
           state: "hidden" as const,
           unlock_condition: "请使用左侧已开放功能。",
@@ -1360,11 +1360,11 @@ export function buildFrontendCapabilityGraph({
           badge: "locked" as const,
           org_visibility: "visible" as const,
           permission_state: "locked" as const,
-          reason: "该功能区需要所有者权限。",
-          required_permission: "需要所有者权限。",
+          reason: "该功能区需要owner权限。",
+          required_permission: "需要owner权限。",
           sidebar_state: "forbidden" as const,
           state: "forbidden" as const,
-          unlock_condition: "请联系所有者开通访问权限。",
+          unlock_condition: "请联系owner开通访问权限。",
         };
       }
 

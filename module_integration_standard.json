@@ -1,0 +1,58 @@
+{
+  "generated_at": "2026-06-22",
+  "module_id": {
+    "required": true,
+    "source": "manifest.module_key",
+    "format": "lowercase dot-separated namespace"
+  },
+  "org_id_binding": {
+    "required": true,
+    "control_state_key": ["org_id", "module_id"],
+    "auto_registration": "manifest modules are registered for non-deleted organizations when Module Control Center is read",
+    "mutating_body_org_id_allowed": false,
+    "owner_control_org_id_source": "path parameter plus backend owner-only validation"
+  },
+  "api_key_dependency_rules": {
+    "key_alias_required_for_external_calls": true,
+    "binding_key": ["org_id", "module_id", "key_id"],
+    "cross_org_binding_allowed": false,
+    "deleted_key_injection_allowed": false,
+    "disabled_key_injection_allowed": false
+  },
+  "execution_pipeline": [
+    "validate module_id exists in manifest registry",
+    "validate org_id/module_id control state",
+    "generate prompt or payload",
+    "resolve org_id/module_id/key_alias binding",
+    "inject key in backend memory only",
+    "execute backend provider request",
+    "return normalized result without key material"
+  ],
+  "error_handling": {
+    "runtime_status_values": ["active", "error", "disabled"],
+    "owner_error_display_fields": [
+      "runtime_error_code",
+      "runtime_error_message",
+      "last_error_at"
+    ],
+    "secret_in_error_message_allowed": false
+  },
+  "security_isolation": {
+    "frontend_key_value_access": false,
+    "safe_api_key_response_fields": [
+      "key_id",
+      "org_id",
+      "name",
+      "url",
+      "key_hash_prefix",
+      "status",
+      "assigned_module_ids"
+    ],
+    "forbidden_response_fields": [
+      "key_value",
+      "encrypted_key_value",
+      "key_fingerprint"
+    ],
+    "rbac_core_modification_allowed": false
+  }
+}

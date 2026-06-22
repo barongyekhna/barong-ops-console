@@ -1,0 +1,36 @@
+{
+  "checked_at": "2026-06-22T14:58:00Z",
+  "status": "partial",
+  "frontend_workspace": {
+    "module_control_component_uses_backend": true,
+    "api_key_component_uses_backend": true,
+    "organization_dropdown_uses_backend": true,
+    "mock_modules_removed_from_owner_ui": true,
+    "technical_key_hash_hidden": true,
+    "module_id_hidden_in_key_binding_summary": true,
+    "module_center_timeout_ms": 45000,
+    "module_toggle_timeout_ms": 30000
+  },
+  "production_runtime": {
+    "frontend_proxy_organizations_status": 200,
+    "frontend_proxy_api_key_list_status": 200,
+    "frontend_proxy_api_key_bindings_status": 200,
+    "frontend_proxy_module_center_status": 200,
+    "frontend_proxy_module_center_elapsed_ms": 27306,
+    "frontend_proxy_module_toggle_status": 200
+  },
+  "consistency": {
+    "backend_db_module_rows": 30,
+    "frontend_module_center_rows": 30,
+    "backend_api_key_count": 0,
+    "frontend_api_key_count": 0,
+    "backend_binding_count": 0,
+    "frontend_binding_count": 0,
+    "diff": []
+  },
+  "not_deployed": {
+    "workspace_frontend_fixes_built": true,
+    "production_frontend_recreated": false,
+    "reason": "Deployment rules require all checks to pass; API key execution flow and backend tests did not pass."
+  }
+}

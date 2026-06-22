@@ -1,0 +1,145 @@
+{
+  "generated_at": "2026-06-22",
+  "source_commands": [
+    "docker ps -a",
+    "docker ps -a | grep barong",
+    "docker inspect --format ...",
+    "docker network ls | grep barong"
+  ],
+  "runtime_unchanged": true,
+  "restart_executed": false,
+  "rebuild_executed": false,
+  "prune_executed": false,
+  "discovered_console_targets": {
+    "production": {
+      "frontend_container_name": "barong-ops-console-prod_console_frontend_1",
+      "backend_container_name": "barong-ops-console-prod_console_backend_1",
+      "compose_project": "barong-ops-console-prod",
+      "network_name": "barong-ops-console-prod",
+      "frontend_port": "127.0.0.1:3000->3000/tcp",
+      "backend_port": "127.0.0.1:8000->8000/tcp"
+    },
+    "staging": {
+      "frontend_container_name": "barong-ops-console-staging_console_staging_frontend_1",
+      "backend_container_name": "barong-ops-console-staging_console_staging_backend_1",
+      "compose_project": "barong-ops-console-staging",
+      "network_name": "barong-ops-console-staging",
+      "frontend_port": "127.0.0.1:3100->3000/tcp",
+      "backend_port": "127.0.0.1:8100->8000/tcp"
+    }
+  },
+  "barong_networks": [
+    {
+      "network_name": "barong-media-net",
+      "driver": "bridge",
+      "scope": "local"
+    },
+    {
+      "network_name": "barong-ops-console-prod",
+      "driver": "bridge",
+      "scope": "local"
+    },
+    {
+      "network_name": "barong-ops-console-staging",
+      "driver": "bridge",
+      "scope": "local"
+    },
+    {
+      "network_name": "barong_default",
+      "driver": "bridge",
+      "scope": "local"
+    }
+  ],
+  "containers": [
+    {
+      "container_name": "barong-ops-console-prod_console_frontend_1",
+      "image": "barong-ops-console-prod_console_frontend",
+      "status": "running",
+      "health": "none",
+      "ports": "127.0.0.1:3000->3000/tcp",
+      "compose_project": "barong-ops-console-prod",
+      "compose_service": "console_frontend",
+      "networks": ["barong-ops-console-prod"]
+    },
+    {
+      "container_name": "barong-ops-console-prod_console_backend_1",
+      "image": "barong-ops-console-prod_console_backend",
+      "status": "running",
+      "health": "none",
+      "ports": "127.0.0.1:8000->8000/tcp",
+      "compose_project": "barong-ops-console-prod",
+      "compose_service": "console_backend",
+      "networks": ["barong-ops-console-prod"]
+    },
+    {
+      "container_name": "barong-ops-console-prod_console_postgres_1",
+      "image": "postgres:17.5-alpine",
+      "status": "running",
+      "health": "healthy",
+      "ports": "5432/tcp",
+      "compose_project": "barong-ops-console-prod",
+      "compose_service": "console_postgres",
+      "networks": ["barong-ops-console-prod"]
+    },
+    {
+      "container_name": "barong-ops-console-staging_console_staging_frontend_1",
+      "image": "barong-ops-console-staging_console_staging_frontend",
+      "status": "running",
+      "health": "none",
+      "ports": "127.0.0.1:3100->3000/tcp",
+      "compose_project": "barong-ops-console-staging",
+      "compose_service": "console_staging_frontend",
+      "networks": ["barong-ops-console-staging"]
+    },
+    {
+      "container_name": "barong-ops-console-staging_console_staging_backend_1",
+      "image": "barong-ops-console-staging_console_staging_backend",
+      "status": "running",
+      "health": "none",
+      "ports": "127.0.0.1:8100->8000/tcp",
+      "compose_project": "barong-ops-console-staging",
+      "compose_service": "console_staging_backend",
+      "networks": ["barong-ops-console-staging"]
+    },
+    {
+      "container_name": "barong-ops-console-staging_console_staging_postgres_1",
+      "image": "postgres:17.5-alpine",
+      "status": "running",
+      "health": "healthy",
+      "ports": "5432/tcp",
+      "compose_project": "barong-ops-console-staging",
+      "compose_service": "console_staging_postgres",
+      "networks": ["barong-ops-console-staging"]
+    },
+    {
+      "container_name": "barong_n8n_1",
+      "image": "n8nio/n8n:latest",
+      "status": "running",
+      "health": "none",
+      "ports": "0.0.0.0:5680->5678/tcp, [::]:5680->5678/tcp",
+      "compose_project": "barong",
+      "compose_service": "n8n",
+      "networks": ["barong_default"]
+    },
+    {
+      "container_name": "barong_postgres_1",
+      "image": "postgres:13",
+      "status": "running",
+      "health": "none",
+      "ports": "0.0.0.0:5434->5432/tcp, [::]:5434->5432/tcp",
+      "compose_project": "barong",
+      "compose_service": "postgres",
+      "networks": ["barong_default"]
+    },
+    {
+      "container_name": "barong_redis_1",
+      "image": "redis:6-alpine",
+      "status": "running",
+      "health": "none",
+      "ports": "0.0.0.0:6381->6379/tcp, [::]:6381->6379/tcp",
+      "compose_project": "barong",
+      "compose_service": "redis",
+      "networks": ["barong_default"]
+    }
+  ]
+}

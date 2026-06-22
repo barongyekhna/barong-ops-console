@@ -194,7 +194,7 @@ export function formatUsersApiError(error: unknown, fallback: string) {
     return "请重新登录后再管理账号。";
   }
   if (error.status === 403) {
-    return "仅所有者和组织管理员可以管理账号。";
+    return "仅owner和组织管理员可以管理账号。";
   }
   if (error.status === 409) {
     return "该用户名已存在，请更换后重试。";

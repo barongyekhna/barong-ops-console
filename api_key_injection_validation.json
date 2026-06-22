@@ -1,0 +1,96 @@
+{
+  "report": "api_key_injection_validation",
+  "generated_at": "2026-06-22T15:25:00Z",
+  "api_key_gate": {
+    "storage_service": "backend/app/services/api_key_orchestration.py",
+    "resolver": "resolve_module_api_key_for_injection",
+    "gate_wrapper": "backend/app/services/module_execution_gate.py:_resolve_key",
+    "resolver_lines": "253-292",
+    "safe_reject_codes": {
+      "missing_binding_or_unusable_key": "API_KEY_BINDING_MISSING",
+      "orchestration_resolution_failure": "API_KEY_INJECTION_FAILED"
+    },
+    "frontend_exposure": "API key value is not exposed by route responses; execution context redaction returns header_value as ***."
+  },
+  "wired_module_dependencies": [
+    {
+      "module": "foundation_demo",
+      "control_module_id": "experimental.foundation_demo",
+      "required_keys": [],
+      "result": "no key injection required"
+    },
+    {
+      "module": "n8n_test_bridge",
+      "control_module_id": "integration.n8n_test_bridge",
+      "required_keys": [
+        {
+          "step_name": "dispatch",
+          "key_alias": "n8n",
+          "injected_header": "Authorization"
+        }
+      ],
+      "result": "dispatch step receives injected Authorization header from backend resolver"
+    }
+  ],
+  "n8n_execution_injection": {
+    "route_file": "backend/app/api/routes/n8n_test.py",
+    "route_lines": "49-62",
+    "service_file": "backend/app/services/n8n_test_service.py",
+    "service_lines": "258-389",
+    "flow": [
+      "route calls require_module_execution_ready with {'dispatch': 'n8n'}",
+      "gate resolves org and module control state",
+      "gate calls resolve_module_api_key_for_injection for integration.n8n_test_bridge and alias n8n",
+      "service reads execution_context.key_for_step('dispatch')",
+      "service builds backend-only Authorization header",
+      "service passes injected headers to the mock dispatcher boundary",
+      "operation logs store step/alias/injected metadata only, not secret value"
+    ]
+  },
+  "direct_validation_results": {
+    "missing_binding": {
+      "observed_code": "API_KEY_BINDING_MISSING",
+      "observed_status_code": 403,
+      "result": "passed"
+    },
+    "deleted_key": {
+      "observed_code": "API_KEY_BINDING_MISSING",
+      "observed_status_code": 403,
+      "result": "passed"
+    },
+    "enabled_injection": {
+      "control_module_id": "integration.n8n_test_bridge",
+      "requested_module_id": "n8n_test_bridge",
+      "step_name": "dispatch",
+      "key_alias": "n8n",
+      "header_name": "Authorization",
+      "header_value_matches_expected": true,
+      "header_value_redacted": "***",
+      "result": "passed"
+    }
+  },
+  "test_coverage_added": [
+    {
+      "file": "tests/backend/test_n8n_test_bridge_api.py",
+      "test": "test_n8n_run_without_bound_key_fails_safely",
+      "purpose": "missing binding safe reject before job creation"
+    },
+    {
+      "file": "tests/backend/test_n8n_test_bridge_api.py",
+      "test": "test_removed_n8n_key_fails_safely",
+      "purpose": "deleted key disables active binding and execution rejects safely"
+    },
+    {
+      "file": "tests/backend/test_n8n_test_bridge_api.py",
+      "test": "test_configured_run_creates_mock_registry_job_and_safe_payload",
+      "purpose": "successful route path uses real API key orchestration endpoints and verifies injected Authorization header at backend boundary"
+    }
+  ],
+  "security_notes": [
+    "No API key value is returned from API key orchestration read models.",
+    "ModuleExecutionKey.redacted() masks header_value.",
+    "n8n operation logs record credential step, alias, and injected=true only.",
+    "No frontend file was modified for this task."
+  ],
+  "status": "implemented_with_environment_limited_fastapi_validation"
+}

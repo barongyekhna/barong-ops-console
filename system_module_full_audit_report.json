@@ -1,0 +1,42 @@
+{
+  "checked_at": "2026-06-22T14:58:00Z",
+  "scope": "Module Control Center full audit",
+  "status": "control_plane_functional_execution_gate_missing",
+  "module_registry_complete": true,
+  "org_module_binding_correct": true,
+  "module_enable_disable_effective": "state_persists_but_execution_gate_missing",
+  "module_status_available": true,
+  "module_error_display_supported": true,
+  "mock_modules_present": false,
+  "production_data": {
+    "active_organizations": 2,
+    "registered_modules_per_org": 15,
+    "module_control_rows": 30,
+    "active_rows": 30,
+    "error_rows": 0
+  },
+  "frontend_displayed_modules_source": "backend module-control center response",
+  "frontend_backend_diff": {
+    "missing_in_frontend_source": [],
+    "extra_in_frontend_source": [],
+    "note": "Runtime UI rendering was validated by route data and source binding; no browser screenshot was taken."
+  },
+  "functional_tests": {
+    "view_status": "pass",
+    "enable_module": "pass_restored",
+    "disable_module": "pass_restored",
+    "detect_module_error": "supported_no_current_error_rows",
+    "latency_risk": "module center read 22-29s; workspace frontend timeout raised to 45s"
+  },
+  "execution_chain": {
+    "required": "module -> org -> permission -> execution -> logs",
+    "actual": "module -> org control state exists; production execution routes do not read module_control_states",
+    "status": "not_functional"
+  },
+  "deployment_blockers": [
+    "Module disable state is not enforced by production module execution routes.",
+    "Backend focused integration tests were blocked because isolated Alembic test DB is not initialized.",
+    "API key execution chain is not connected to production module execution."
+  ],
+  "container_restart_executed": false
+}

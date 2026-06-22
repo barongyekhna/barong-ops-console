@@ -50,6 +50,7 @@ from ..schemas.registry import AgentCreate, ModuleCreate, WorkflowCreate
 from ..schemas.reviews import ReviewCreate, ReviewResponse
 from .auth_service import AuditContext
 from .event_collector import record_workflow_event
+from .module_execution_gate import ModuleExecutionContext
 from .n8n_test_http_client import build_n8n_test_mock_response
 
 ALLOWED_TERMINAL_STATUSES = {"completed_demo", "failed"}
@@ -132,8 +133,10 @@ def _workflow_payload(timeout_seconds: int) -> WorkflowCreate:
 
 
 def _serialize_job(job: AutomationJob) -> N8nTestJobResponse:
+    payload = JobResponse.model_validate(job).model_dump()
+    payload["org_id"] = job.org_id
     return N8nTestJobResponse(
-        **JobResponse.model_validate(job).model_dump(),
+        **payload,
         run_type=N8N_TEST_RUN_TYPE,
     )
 
@@ -142,6 +145,7 @@ def _serialize_artifact(
     artifact: object,
 ) -> N8nTestArtifactResponse:
     payload = ArtifactResponse.model_validate(artifact).model_dump()
+    payload["org_id"] = getattr(artifact, "org_id")
     return N8nTestArtifactResponse(**payload, title=payload["name"])
 
 
@@ -149,6 +153,7 @@ def _serialize_memory_event(
     memory_event: object,
 ) -> N8nTestMemoryEventResponse:
     payload = MemoryEventResponse.model_validate(memory_event).model_dump()
+    payload["org_id"] = getattr(memory_event, "org_id")
     summary = str(payload["payload"].get("summary", "n8n test event."))
     return N8nTestMemoryEventResponse(**payload, summary=summary)
 
@@ -260,9 +265,17 @@ def run_n8n_test(
     user: User,
     audit: AuditContext,
     settings: Settings,
+    execution_context: ModuleExecutionContext,
 ) -> dict[str, Any]:
     run_id = _new_id("run")
     actor_id = str(user.id)
+    dispatch_key = execution_context.key_for_step("dispatch")
+    injected_headers = {dispatch_key.header_name: dispatch_key.header_value}
+    dispatch_binding = {
+        "step": dispatch_key.step_name,
+        "alias": dispatch_key.key_alias,
+        "injected": True,
+    }
     _ensure_registry(
         db,
         timeout_seconds=settings.n8n_test_request_timeout_seconds,
@@ -286,6 +299,8 @@ def run_n8n_test(
                 "external_webhook_kind": "blocked_c11b_mock_only",
                 "mock_only": True,
                 "external_http_allowed": False,
+                "dispatch_binding": dispatch_binding,
+                "control_module_id": execution_context.control_module_id,
                 "real_business_task": False,
             },
             correlation_id=run_id,
@@ -334,6 +349,8 @@ def run_n8n_test(
             "external_http_attempted": False,
             "external_http_allowed": False,
             "mock_only": True,
+            "dispatch_step": "dispatch",
+            "dispatch_injected": True,
         },
     )
     _audit(
@@ -351,6 +368,8 @@ def run_n8n_test(
             "run_id": run_id,
             "mock_only": True,
             "external_http_attempted": False,
+            "dispatch_step": "dispatch",
+            "dispatch_injected": True,
         },
     )
 
@@ -363,7 +382,10 @@ def run_n8n_test(
         "external_http_attempted": False,
         "webhook_triggered": False,
     }
-    mock_status_code = build_n8n_test_mock_response(payload=mock_payload)
+    mock_status_code = build_n8n_test_mock_response(
+        payload=mock_payload,
+        injected_headers=injected_headers,
+    )
     record_workflow_event(
         event_type="n8n.workflow.dispatch",
         action="n8n.workflow.dispatch",
@@ -376,6 +398,8 @@ def run_n8n_test(
             "job_id": job_id,
             "mock_status_code": mock_status_code,
             "external_dispatch_blocked": True,
+            "dispatch_step": "dispatch",
+            "dispatch_injected": True,
         },
     )
 
@@ -392,6 +416,7 @@ def run_n8n_test(
             "external_http_attempted": False,
             "webhook_triggered": False,
             "blocked_by": "c11b_external_execution_lock",
+            "dispatch_binding": dispatch_binding,
         },
     )
 
@@ -506,6 +531,7 @@ def run_n8n_test(
             "webhook_triggered": False,
             "mock_only": True,
             "blocked_by": "c11b_external_execution_lock",
+            "dispatch_binding": dispatch_binding,
         },
     )
     db.commit()

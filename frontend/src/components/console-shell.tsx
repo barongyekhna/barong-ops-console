@@ -11,7 +11,7 @@ import { pageTitles } from "@/lib/navigation";
 
 function roleLabel(role: string | null | undefined) {
   if (role === "owner") {
-    return "所有者";
+    return "owner";
   }
   if (role === "super_admin" || role === "admin") {
     return "组织管理员";

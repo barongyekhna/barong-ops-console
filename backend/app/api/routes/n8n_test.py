@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from ...core.config import Settings, get_settings
 from ...db.session import get_db
 from ...models.user import User
+from ...repositories.n8n_test import N8N_TEST_MODULE_KEY
 from ...schemas.n8n_test import (
     N8nTestCallbackRequest,
     N8nTestCallbackResponse,
@@ -23,6 +24,10 @@ from ...services.n8n_test_service import (
     get_latest_n8n_test,
     process_n8n_test_callback,
     run_n8n_test,
+)
+from ...services.module_execution_gate import (
+    ModuleExecutionGateError,
+    require_module_execution_ready,
 )
 from ..deps import get_audit_context, require_internal_rbac, require_rbac
 
@@ -40,12 +45,27 @@ def n8n_test_run(
     user: User = Depends(require_rbac("C15", "execute")),
     settings: Settings = Depends(get_settings),
 ) -> N8nTestRunResponse:
-    result = run_n8n_test(
-        db,
-        user=user,
-        audit=get_audit_context(request),
-        settings=settings,
-    )
+    try:
+        execution_context = require_module_execution_ready(
+            db,
+            module_id=N8N_TEST_MODULE_KEY,
+            user=user,
+            request=request,
+            key_requirements={"dispatch": "n8n"},
+        )
+        result = run_n8n_test(
+            db,
+            user=user,
+            audit=get_audit_context(request),
+            settings=settings,
+            execution_context=execution_context,
+        )
+    except ModuleExecutionGateError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": str(exc)},
+            headers={"X-Barong-Error-Code": exc.code},
+        ) from None
     return N8nTestRunResponse.model_validate(result)
 
 

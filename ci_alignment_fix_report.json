@@ -1,0 +1,45 @@
+{
+  "generated_at": "2026-06-22T17:55:50Z",
+  "status": "PASS",
+  "scope": "CI and pytest alignment for final module system",
+  "fixes_applied": [
+    {
+      "area": "test database readiness",
+      "change": "scripts/run_backend_tests.sh now waits for a real SQLAlchemy connection to the mapped PostgreSQL port and retries Alembic startup."
+    },
+    {
+      "area": "CI PostgreSQL timeout",
+      "change": "Integration test environments set DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS=60000 to avoid PostgreSQL idle-in-transaction disconnects during slow test runs."
+    },
+    {
+      "area": "response serialization",
+      "change": "Foundation and n8n derived response serializers preserve internal org_id while final API schemas still exclude org_id from output."
+    },
+    {
+      "area": "API key payload validation",
+      "change": "n8n job payload metadata was renamed from credential fields to dispatch_binding to comply with sensitive-field rejection."
+    },
+    {
+      "area": "SQLAlchemy session lifecycle",
+      "change": "Tests snapshot ORM fields inside active sessions before assertions."
+    }
+  ],
+  "verification": {
+    "python_compile": "passed",
+    "shell_syntax": "passed",
+    "diff_check": "passed",
+    "backend_unit": "197 passed, 365 deselected, 4 warnings",
+    "backend_integration": "41 passed, 521 deselected, 20 warnings",
+    "target_module_integration": "29 passed, 533 deselected, 20 warnings",
+    "db_dns_error": false,
+    "detached_instance_error": false,
+    "foundation_500_mismatch": false,
+    "n8n_validation_error": false
+  },
+  "runtime_containers_detected": {
+    "backend": "barong-ops-console-prod_console_backend_1",
+    "frontend": "barong-ops-console-prod_console_frontend_1",
+    "requested_backend_name_exists": false,
+    "requested_frontend_name_exists": false
+  }
+}

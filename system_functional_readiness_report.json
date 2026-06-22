@@ -1,0 +1,34 @@
+{
+  "checked_at": "2026-06-22T14:58:00Z",
+  "overall_readiness": "not_ready_for_restart",
+  "conditions": {
+    "module_system_functional": false,
+    "api_key_system_functional": false,
+    "no_mock_data": true,
+    "no_ui_inconsistency_found_in_touched_ui": true,
+    "backend_tests_pass": false,
+    "frontend_build_pass": true
+  },
+  "verification_results": {
+    "frontend_typecheck": "pass",
+    "frontend_verify": "pass",
+    "frontend_tests": "pass_13_tests",
+    "frontend_build": "pass",
+    "backend_focused_tests": "error_missing_BARONG_TEST_DB_READY_and_isolated_test_db",
+    "module_center_runtime": "pass_slow",
+    "module_toggle_runtime": "pass_state_persisted_and_restored",
+    "module_toggle_execution_enforcement": "fail_no_production_execution_gate_reference",
+    "api_key_routes_runtime": "pass_empty",
+    "api_key_execution_runtime": "fail_no_production_injection_callers"
+  },
+  "deployment": {
+    "allowed": false,
+    "backend_restart_executed": false,
+    "frontend_restart_executed": false,
+    "blocked_by": [
+      "API key injection is not wired into production module execution.",
+      "Module disable state is not wired into production module execution.",
+      "Backend integration tests did not pass in current environment."
+    ]
+  }
+}

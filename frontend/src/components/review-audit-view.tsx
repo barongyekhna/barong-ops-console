@@ -109,7 +109,7 @@ function formatDate(value: string | null | undefined) {
 function roleLabel(role: string) {
   const normalized = role.trim().toLowerCase();
   if (normalized === "owner") {
-    return "所有者";
+    return "owner";
   }
   if (normalized === "super_admin" || normalized === "admin") {
     return "管理员";
@@ -750,7 +750,7 @@ export function ReviewAuditView() {
         </span>
         <div>
           <h2>无法查看审批审计</h2>
-          <p>该区域仅对所有者和组织管理员开放。</p>
+          <p>该区域仅对owner和组织管理员开放。</p>
         </div>
       </section>
     );

@@ -50,7 +50,7 @@ const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
     c04_status: "bootstrap_only",
     description: "拥有全部权限。",
     human_or_agent: "human",
-    label: "所有者",
+    label: "owner",
     name: "owner",
   },
   {
@@ -127,7 +127,7 @@ function isOwnerRole(role: string) {
 function roleLabel(role: string) {
   const labels: Record<string, string> = {
     operator: "操作员",
-    owner: "所有者",
+    owner: "owner",
     reviewer: "审核员",
     super_admin: "组织管理员",
     viewer: "查看员",
@@ -383,7 +383,7 @@ export function UserManagementPanel() {
       return;
     }
     if (!isOwnerRole(createRole) && !createOrganizationId) {
-      setActionError("非所有者账号必须选择组织。");
+      setActionError("非owner账号必须选择组织。");
       return;
     }
 
@@ -571,7 +571,7 @@ export function UserManagementPanel() {
         <div>
           <h2>无权管理用户</h2>
           <p>
-            仅所有者和组织管理员可以管理工作台账号。
+            仅owner和组织管理员可以管理工作台账号。
           </p>
         </div>
       </section>
@@ -1123,7 +1123,7 @@ export function UserManagementPanel() {
             </form>
           ) : (
             <p className="users-muted-note">
-              所有者和保留角色仅用于查看，不能在这里修改。
+              owner和保留角色仅用于查看，不能在这里修改。
             </p>
           )}
         </section>

@@ -1,0 +1,44 @@
+{
+  "checked_at": "2026-06-22T14:58:00Z",
+  "scope": "API Key Orchestration System full audit",
+  "status": "management_layer_available_execution_flow_broken",
+  "tables": {
+    "api_key_records": true,
+    "api_key_module_bindings": true
+  },
+  "production_counts": {
+    "active_api_keys": 0,
+    "active_bindings": 0
+  },
+  "frontend": {
+    "organization_dropdown_fetch": "listOrganizations(100, 0)",
+    "organization_dropdown_status": 200,
+    "organization_dropdown_count": 2,
+    "api_key_list_status": 200,
+    "api_key_binding_list_status": 200,
+    "hardcoded_dropdown_data": false,
+    "plaintext_key_exposure": false
+  },
+  "backend": {
+    "owner_only_routes": true,
+    "create_key_route_exists": true,
+    "edit_key_route_exists": true,
+    "delete_key_route_exists": true,
+    "assign_key_to_module_route_exists": true,
+    "secure_isolation_layer_exists": true,
+    "org_cross_contamination_guard_exists": true
+  },
+  "execution_flow": {
+    "required_flow": "module -> api key -> backend execution -> response",
+    "actual_flow": "module management and key binding exist, but production modules do not call the injection resolver",
+    "production_references_to_injection_resolver": 0,
+    "status": "broken_flow"
+  },
+  "functional_tests": {
+    "add_key": "route_exists_not_executed_to_avoid_persisting_fake_key",
+    "bind_key_to_module": "route_exists_not_executed_to_avoid_persisting_fake_binding",
+    "select_organization": "pass",
+    "use_key_in_backend_execution_flow": "fail_no_production_module_integration"
+  },
+  "container_restart_executed": false
+}

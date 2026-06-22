@@ -126,6 +126,7 @@ def _serialize_workflow(workflow: object) -> FoundationDemoWorkflowResponse:
 
 def _serialize_job(job: object) -> FoundationDemoJobResponse:
     payload = JobResponse.model_validate(job).model_dump()
+    payload["org_id"] = getattr(job, "org_id")
     return FoundationDemoJobResponse(
         **payload,
         job_type=FOUNDATION_DEMO_JOB_TYPE,
@@ -136,6 +137,7 @@ def _serialize_artifact(
     artifact: object,
 ) -> FoundationDemoArtifactResponse:
     payload = ArtifactResponse.model_validate(artifact).model_dump()
+    payload["org_id"] = getattr(artifact, "org_id")
     return FoundationDemoArtifactResponse(
         **payload,
         title=payload["name"],
@@ -146,6 +148,7 @@ def _serialize_memory_event(
     memory_event: object,
 ) -> FoundationDemoMemoryEventResponse:
     payload = MemoryEventResponse.model_validate(memory_event).model_dump()
+    payload["org_id"] = getattr(memory_event, "org_id")
     summary = payload["payload"].get("summary", "Foundation demo event.")
     return FoundationDemoMemoryEventResponse(
         **payload,
@@ -200,6 +203,7 @@ def _record_failed_run(
     audit: AuditContext,
     run_id: str,
     exception_type: str,
+    exception_message: str,
 ) -> None:
     error_id = _new_id("error")
     db.add(
@@ -214,6 +218,7 @@ def _record_failed_run(
             details={
                 "run_id": run_id,
                 "exception_type": exception_type,
+                "exception_message": exception_message[:500],
                 "real_business_effect": False,
             },
             correlation_id=run_id,
@@ -569,6 +574,7 @@ def run_foundation_demo(
                 audit=audit,
                 run_id=run_id,
                 exception_type=type(exc).__name__,
+                exception_message=str(exc),
             )
         except Exception:
             db.rollback()

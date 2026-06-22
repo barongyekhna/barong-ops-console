@@ -1,0 +1,25 @@
+{
+  "checked_at": "2026-06-22T14:58:00Z",
+  "system": "module_control_center",
+  "failure_scope": "deployment_gate",
+  "module_system_runtime_status": "functional_with_latency_risk",
+  "root_causes": [
+    {
+      "severity": "blocking_for_deployment",
+      "code": "module_disable_not_execution_enforced",
+      "detail": "Module control state persists, but production module execution routes do not read module_control_states, so disabled modules are not proven to be blocked."
+    },
+    {
+      "severity": "blocking_for_deployment",
+      "code": "backend_tests_not_passed",
+      "detail": "Focused backend integration tests require BARONG_TEST_DB_READY=1 after Alembic upgrade on an isolated test database. This environment was not prepared, so backend tests did not pass."
+    },
+    {
+      "severity": "warning",
+      "code": "module_center_latency_high",
+      "detail": "Production module center read took 22-29s. Workspace frontend timeout was raised, but backend route should still be optimized before final seal."
+    }
+  ],
+  "data_loss_risk": "none_observed",
+  "restart_allowed": false
+}

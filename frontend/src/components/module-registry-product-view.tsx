@@ -1,11 +1,48 @@
 "use client";
 
-import { Boxes, LoaderCircle, RotateCcw } from "lucide-react";
-import { useMemo, useState } from "react";
+import {
+  Boxes,
+  KeyRound,
+  LoaderCircle,
+  Plus,
+  RotateCcw,
+  Save,
+  Trash2,
+} from "lucide-react";
+import {
+  type FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 
 import { CapabilityEmptyStateEngine } from "@/components/capability-empty-state";
+import { useAuth } from "@/components/auth-provider";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import { useModuleAccess } from "@/components/module-access-provider";
+import { ApiError } from "@/lib/api";
+import {
+  createApiKey,
+  createApiKeyBinding,
+  deleteApiKey,
+  deleteApiKeyBinding,
+  listApiKeyBindings,
+  listApiKeys,
+  updateApiKey,
+  type ApiKeyBindingRecord,
+  type ApiKeyRecord,
+} from "@/lib/api-key-orchestration-api";
+import {
+  listModuleControlCenter,
+  updateModuleControlState,
+  type ModuleControlCenterResponse,
+  type ModuleControlState,
+} from "@/lib/module-control-api";
+import {
+  listOrganizations,
+  type OrganizationOption,
+} from "@/lib/users-api";
 
 const MODULE_PAGE_LIMIT = 10;
 const MODULE_DESCRIPTIONS: Record<string, string> = {
@@ -79,7 +116,23 @@ function moduleReadinessText(value: string) {
   return "暂不可用";
 }
 
-export function ModuleRegistryProductView() {
+function messageFromError(error: unknown, fallback: string) {
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "请重新登录后再操作。";
+    }
+    if (error.status === 403) {
+      return "当前账号无权执行此操作。";
+    }
+    if (error.status >= 500) {
+      return "服务暂时不可用，请稍后重试。";
+    }
+    return error.message || fallback;
+  }
+  return fallback;
+}
+
+function ReadOnlyModuleRegistryView() {
   const {
     executionState,
     isLoading: isCapabilityLoading,
@@ -270,4 +323,727 @@ export function ModuleRegistryProductView() {
       </div>
     </section>
   );
+}
+
+function runtimeStatusLabel(status: string) {
+  if (status === "active") {
+    return "运行中";
+  }
+  if (status === "error") {
+    return "异常";
+  }
+  return "已停用";
+}
+
+function keyStatusLabel(status: string) {
+  if (status === "active") {
+    return "可用";
+  }
+  if (status === "disabled") {
+    return "已停用";
+  }
+  return "已删除";
+}
+
+function organizationLabel(organization: OrganizationOption) {
+  return organization.org_name.trim() || "未命名组织";
+}
+
+function OwnerModuleControlCenter() {
+  const [controlCenter, setControlCenter] =
+    useState<ModuleControlCenterResponse | null>(null);
+  const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
+  const [bindings, setBindings] = useState<ApiKeyBindingRecord[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [keyForm, setKeyForm] = useState({
+    key_value: "",
+    name: "",
+    org_id: "",
+    url: "",
+  });
+  const [bindingForm, setBindingForm] = useState({
+    key_alias: "default",
+    key_id: "",
+    module_id: "",
+    org_id: "",
+  });
+  const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    key_value: "",
+    name: "",
+    url: "",
+  });
+
+  const refresh = useCallback(async () => {
+    setIsLoading(true);
+    setError("");
+    try {
+      const [center, keys, keyBindings, organizationsResponse] = await Promise.all([
+        listModuleControlCenter(),
+        listApiKeys(),
+        listApiKeyBindings(),
+        listOrganizations(100, 0),
+      ]);
+      setControlCenter(center);
+      setApiKeys(keys.items);
+      setBindings(keyBindings.items);
+      setOrganizations(organizationsResponse.items);
+
+      const firstOrg =
+        organizationsResponse.items[0]?.org_id || center.organizations[0]?.org_id || "";
+
+      setKeyForm((current) => ({
+        ...current,
+        org_id:
+          current.org_id &&
+          organizationsResponse.items.some((item) => item.org_id === current.org_id)
+            ? current.org_id
+            : firstOrg,
+      }));
+      setBindingForm((current) => {
+        const selectedOrg =
+          current.org_id &&
+          organizationsResponse.items.some((item) => item.org_id === current.org_id)
+            ? current.org_id
+            : firstOrg;
+        const orgModules =
+          center.organizations.find((group) => group.org_id === selectedOrg)
+            ?.modules ?? [];
+        const orgKeys = keys.items.filter((key) => key.org_id === selectedOrg);
+
+        return {
+          key_alias: current.key_alias || "default",
+          key_id:
+            current.key_id && orgKeys.some((key) => key.key_id === current.key_id)
+              ? current.key_id
+              : orgKeys[0]?.key_id || "",
+          module_id:
+            current.module_id &&
+            orgModules.some((module) => module.module_id === current.module_id)
+              ? current.module_id
+              : orgModules[0]?.module_id || "",
+          org_id: selectedOrg,
+        };
+      });
+    } catch (loadError) {
+      setError(messageFromError(loadError, "加载失败，请稍后重试。"));
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
+
+  const selectedOrgModules = useMemo(() => {
+    const orgId = bindingForm.org_id || keyForm.org_id;
+    return (
+      controlCenter?.organizations.find((group) => group.org_id === orgId)
+        ?.modules ?? []
+    );
+  }, [bindingForm.org_id, controlCenter, keyForm.org_id]);
+
+  const availableKeysForOrg = useMemo(
+    () => apiKeys.filter((key) => key.org_id === bindingForm.org_id),
+    [apiKeys, bindingForm.org_id],
+  );
+
+  const formOrganizations = useMemo<OrganizationOption[]>(() => {
+    if (organizations.length > 0) {
+      return organizations;
+    }
+    return (
+      controlCenter?.organizations.map((group) => ({
+        org_id: group.org_id,
+        org_name: group.org_name,
+        org_type: "",
+        owner_user_id: "",
+        status: "active",
+      })) ?? []
+    );
+  }, [controlCenter, organizations]);
+
+  const moduleNameById = useMemo(() => {
+    const names = new Map<string, string>();
+    for (const group of controlCenter?.organizations ?? []) {
+      for (const module of group.modules) {
+        names.set(module.module_id, module.display_name);
+      }
+    }
+    return names;
+  }, [controlCenter]);
+
+  function handleKeyOrganizationChange(orgId: string) {
+    setKeyForm((current) => ({
+      ...current,
+      org_id: orgId,
+    }));
+  }
+
+  function handleBindingOrganizationChange(orgId: string) {
+    const modules =
+      controlCenter?.organizations.find((group) => group.org_id === orgId)
+        ?.modules ?? [];
+    const keys = apiKeys.filter((key) => key.org_id === orgId);
+    setBindingForm((current) => ({
+      ...current,
+      key_id: keys[0]?.key_id || "",
+      module_id: modules[0]?.module_id || "",
+      org_id: orgId,
+    }));
+  }
+
+  async function toggleModule(module: ModuleControlState) {
+    setIsSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      await updateModuleControlState({
+        enabled: !module.enabled,
+        moduleId: module.module_id,
+        orgId: module.org_id,
+      });
+      await refresh();
+      setNotice("模块状态已更新。");
+    } catch (toggleError) {
+      setError(messageFromError(toggleError, "模块状态更新失败。"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function submitKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      await createApiKey(keyForm);
+      setKeyForm((current) => ({ ...current, key_value: "", name: "", url: "" }));
+      await refresh();
+      setNotice("密钥已新增。");
+    } catch (createError) {
+      setError(messageFromError(createError, "密钥新增失败。"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  function startEditKey(key: ApiKeyRecord) {
+    setEditingKeyId(key.key_id);
+    setEditForm({ key_value: "", name: key.name, url: key.url });
+  }
+
+  async function saveKeyEdit(keyId: string) {
+    setIsSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      const payload = {
+        name: editForm.name,
+        url: editForm.url,
+        ...(editForm.key_value ? { key_value: editForm.key_value } : {}),
+      };
+      await updateApiKey(keyId, payload);
+      setEditingKeyId(null);
+      setEditForm({ key_value: "", name: "", url: "" });
+      await refresh();
+      setNotice("密钥已更新。");
+    } catch (updateError) {
+      setError(messageFromError(updateError, "密钥更新失败。"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function removeKey(keyId: string) {
+    setIsSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      await deleteApiKey(keyId);
+      await refresh();
+      setNotice("密钥已删除。");
+    } catch (deleteError) {
+      setError(messageFromError(deleteError, "密钥删除失败。"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function submitBinding(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      await createApiKeyBinding(bindingForm);
+      await refresh();
+      setNotice("模块绑定已更新。");
+    } catch (bindingError) {
+      setError(messageFromError(bindingError, "模块绑定失败。"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function removeBinding(bindingId: string) {
+    setIsSaving(true);
+    setNotice("");
+    setError("");
+    try {
+      await deleteApiKeyBinding(bindingId);
+      await refresh();
+      setNotice("模块绑定已移除。");
+    } catch (bindingError) {
+      setError(messageFromError(bindingError, "模块绑定移除失败。"));
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const organizationCount = controlCenter?.organization_count ?? 0;
+  const moduleCount = controlCenter?.module_count ?? 0;
+  const activeModuleCount =
+    controlCenter?.organizations.reduce(
+      (sum, group) => sum + group.modules.filter((module) => module.enabled).length,
+      0,
+    ) ?? 0;
+  const errorModuleCount =
+    controlCenter?.organizations.reduce(
+      (sum, group) =>
+        sum + group.modules.filter((module) => module.runtime_status === "error").length,
+      0,
+    ) ?? 0;
+
+  return (
+    <section className="module-registry-workspace" aria-label="模块管理中心">
+      <div className="registry-command-bar">
+        <div>
+          <span className="eyebrow">owner</span>
+          <h2>模块管理中心</h2>
+          <p>按组织管理模块开关、运行状态和密钥绑定。</p>
+        </div>
+        <button
+          className="secondary-button"
+          disabled={isLoading || isSaving}
+          onClick={() => void refresh()}
+          type="button"
+        >
+          {isLoading ? (
+            <LoaderCircle className="spin" aria-hidden="true" size={17} />
+          ) : (
+            <RotateCcw aria-hidden="true" size={17} />
+          )}
+          刷新
+        </button>
+      </div>
+
+      <div className="capability-summary-grid">
+        <div>
+          <span>组织</span>
+          <strong>{organizationCount}</strong>
+        </div>
+        <div>
+          <span>模块</span>
+          <strong>{moduleCount}</strong>
+        </div>
+        <div>
+          <span>运行中</span>
+          <strong>{activeModuleCount}</strong>
+        </div>
+        <div>
+          <span>异常</span>
+          <strong>{errorModuleCount}</strong>
+        </div>
+        <div>
+          <span>密钥</span>
+          <strong>{apiKeys.length}</strong>
+        </div>
+        <div>
+          <span>绑定</span>
+          <strong>{bindings.length}</strong>
+        </div>
+      </div>
+
+      {error ? (
+        <p className="ops-warning" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {notice ? (
+        <p className="ops-warning product-notice" role="status">
+          {notice}
+        </p>
+      ) : null}
+
+      <div className="module-control-org-list">
+        {controlCenter?.organizations.map((group) => (
+          <section className="ops-panel ops-panel-wide" key={group.org_id}>
+            <div className="ops-panel-heading">
+              <div>
+                <h3>{group.org_name}</h3>
+                <p>当前组织已同步真实模块清单。</p>
+              </div>
+              <span className="ops-source">{group.modules.length} 个模块</span>
+            </div>
+            <div className="module-control-card-grid">
+              {group.modules.map((module) => (
+                <article className="module-control-card" key={module.module_id}>
+                  <div className="module-control-card-top">
+                    <div>
+                      <strong>{module.display_name}</strong>
+                      <span>{moduleDescription(module.module_id)}</span>
+                    </div>
+                    <span
+                      className={`module-control-status ${module.runtime_status}`}
+                    >
+                      {runtimeStatusLabel(module.runtime_status)}
+                    </span>
+                  </div>
+                  <div className="module-control-card-bottom">
+                    <label className="module-toggle">
+                      <input
+                        checked={module.enabled}
+                        disabled={isSaving}
+                        onChange={() => void toggleModule(module)}
+                        type="checkbox"
+                      />
+                      <span aria-hidden="true" />
+                    </label>
+                    <span>{module.enabled ? "已启用" : "已停用"}</span>
+                  </div>
+                  {module.runtime_error_message ? (
+                    <p className="module-error-badge">
+                      运行异常：{module.runtime_error_message}
+                    </p>
+                  ) : null}
+                </article>
+              ))}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      <section className="ops-panel ops-panel-wide">
+        <div className="ops-panel-heading">
+          <div>
+            <h3>密钥管理</h3>
+            <p>密钥只写入后端，前端不会显示明文。</p>
+          </div>
+          <KeyRound aria-hidden="true" size={18} />
+        </div>
+
+        <form className="api-key-form" onSubmit={submitKey}>
+          <label className="field-group">
+            <span>组织</span>
+            <span className="input-shell">
+              <select
+                onChange={(event) => handleKeyOrganizationChange(event.target.value)}
+                required
+                value={keyForm.org_id}
+              >
+                {formOrganizations.map((organization) => (
+                  <option key={organization.org_id} value={organization.org_id}>
+                    {organizationLabel(organization)}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <label className="field-group">
+            <span>名称</span>
+            <span className="input-shell">
+              <input
+                onChange={(event) =>
+                  setKeyForm((current) => ({
+                    ...current,
+                    name: event.target.value,
+                  }))
+                }
+                required
+                value={keyForm.name}
+              />
+            </span>
+          </label>
+          <label className="field-group">
+            <span>服务地址</span>
+            <span className="input-shell">
+              <input
+                onChange={(event) =>
+                  setKeyForm((current) => ({
+                    ...current,
+                    url: event.target.value,
+                  }))
+                }
+                placeholder="https://api.example.com"
+                required
+                type="url"
+                value={keyForm.url}
+              />
+            </span>
+          </label>
+          <label className="field-group">
+            <span>密钥</span>
+            <span className="input-shell">
+              <input
+                autoComplete="off"
+                onChange={(event) =>
+                  setKeyForm((current) => ({
+                    ...current,
+                    key_value: event.target.value,
+                  }))
+                }
+                required
+                type="password"
+                value={keyForm.key_value}
+              />
+            </span>
+          </label>
+          <button className="primary-button" disabled={isSaving} type="submit">
+            <Plus aria-hidden="true" size={17} />
+            新增密钥
+          </button>
+        </form>
+
+        <div className="module-registry-table-scroll">
+          <table className="module-registry-table api-key-table">
+            <thead>
+              <tr>
+                <th>密钥</th>
+                <th>服务地址</th>
+                <th>名称</th>
+                <th>已绑定模块</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              {apiKeys.map((key) => {
+                const isEditing = editingKeyId === key.key_id;
+                return (
+                  <tr key={key.key_id}>
+                    <td>
+                      <strong>已加密保存</strong>
+                      <small>{keyStatusLabel(key.status)}</small>
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <span className="input-shell compact-input-shell">
+                          <input
+                            onChange={(event) =>
+                              setEditForm((current) => ({
+                                ...current,
+                                url: event.target.value,
+                              }))
+                            }
+                            type="url"
+                            value={editForm.url}
+                          />
+                        </span>
+                      ) : (
+                        <span>{key.url}</span>
+                      )}
+                    </td>
+                    <td>
+                      {isEditing ? (
+                        <div className="api-key-edit-stack">
+                          <span className="input-shell compact-input-shell">
+                            <input
+                              onChange={(event) =>
+                                setEditForm((current) => ({
+                                  ...current,
+                                  name: event.target.value,
+                                }))
+                              }
+                              value={editForm.name}
+                            />
+                          </span>
+                          <span className="input-shell compact-input-shell">
+                            <input
+                              autoComplete="off"
+                              onChange={(event) =>
+                                setEditForm((current) => ({
+                                  ...current,
+                                  key_value: event.target.value,
+                                }))
+                              }
+                              placeholder="留空表示不更换"
+                              type="password"
+                              value={editForm.key_value}
+                            />
+                          </span>
+                        </div>
+                      ) : (
+                        <strong>{key.name}</strong>
+                      )}
+                    </td>
+                    <td>
+                      <span>
+                        {key.assigned_module_ids
+                          .map((moduleId) => moduleNameById.get(moduleId) ?? "已绑定模块")
+                          .join("、") || "未绑定"}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="module-control-action-row">
+                        {isEditing ? (
+                          <button
+                            className="secondary-button icon-button"
+                            disabled={isSaving}
+                            onClick={() => void saveKeyEdit(key.key_id)}
+                            title="保存"
+                            type="button"
+                          >
+                            <Save aria-hidden="true" size={16} />
+                          </button>
+                        ) : (
+                          <button
+                            className="secondary-button"
+                            disabled={isSaving}
+                            onClick={() => startEditKey(key)}
+                            type="button"
+                          >
+                            编辑
+                          </button>
+                        )}
+                        <button
+                          className="secondary-button icon-button"
+                          disabled={isSaving}
+                          onClick={() => void removeKey(key.key_id)}
+                          title="删除"
+                          type="button"
+                        >
+                          <Trash2 aria-hidden="true" size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        <form className="api-key-binding-form" onSubmit={submitBinding}>
+          <label className="field-group">
+            <span>组织</span>
+            <span className="input-shell">
+              <select
+                onChange={(event) => handleBindingOrganizationChange(event.target.value)}
+                required
+                value={bindingForm.org_id}
+              >
+                {formOrganizations.map((organization) => (
+                  <option key={organization.org_id} value={organization.org_id}>
+                    {organizationLabel(organization)}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <label className="field-group">
+            <span>模块</span>
+            <span className="input-shell">
+              <select
+                onChange={(event) =>
+                  setBindingForm((current) => ({
+                    ...current,
+                    module_id: event.target.value,
+                  }))
+                }
+                required
+                value={bindingForm.module_id}
+              >
+                {selectedOrgModules.map((module) => (
+                  <option key={module.module_id} value={module.module_id}>
+                    {module.display_name}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <label className="field-group">
+            <span>密钥</span>
+            <span className="input-shell">
+              <select
+                onChange={(event) =>
+                  setBindingForm((current) => ({
+                    ...current,
+                    key_id: event.target.value,
+                  }))
+                }
+                required
+                value={bindingForm.key_id}
+              >
+                {availableKeysForOrg.map((key) => (
+                  <option key={key.key_id} value={key.key_id}>
+                    {key.name}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <label className="field-group">
+            <span>用途名称</span>
+            <span className="input-shell">
+              <input
+                onChange={(event) =>
+                  setBindingForm((current) => ({
+                    ...current,
+                    key_alias: event.target.value,
+                  }))
+                }
+                required
+                value={bindingForm.key_alias}
+              />
+            </span>
+          </label>
+          <button
+            className="primary-button"
+            disabled={isSaving || !bindingForm.key_id || !bindingForm.module_id}
+            type="submit"
+          >
+            <Save aria-hidden="true" size={17} />
+            绑定
+          </button>
+        </form>
+
+        {bindings.length > 0 ? (
+          <div className="api-key-binding-list">
+            {bindings.map((binding) => (
+              <div className="api-key-binding-chip" key={binding.binding_id}>
+                <span>{moduleNameById.get(binding.module_id) ?? "已绑定模块"}</span>
+                <strong>{binding.key_name}</strong>
+                <small>{binding.key_alias}</small>
+                <button
+                  className="secondary-button icon-button"
+                  disabled={isSaving}
+                  onClick={() => void removeBinding(binding.binding_id)}
+                  title="移除"
+                  type="button"
+                >
+                  <Trash2 aria-hidden="true" size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </section>
+    </section>
+  );
+}
+
+export function ModuleRegistryProductView() {
+  const { user } = useAuth();
+
+  if (user?.role === "owner") {
+    return <OwnerModuleControlCenter />;
+  }
+
+  return <ReadOnlyModuleRegistryView />;
 }

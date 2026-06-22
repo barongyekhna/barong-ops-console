@@ -38,7 +38,7 @@ def test_fix042_migration_manifest_locks_head_order_and_hashes() -> None:
     validation = staging.validate_migration_manifest(manifest)
 
     assert validation["status"] == "passed"
-    assert manifest["alembic_head"] == "approval_list_perf_001"
+    assert manifest["alembic_head"] == "module_api_key_orch_001"
     assert manifest["head_locked"] is True
     assert manifest["migration_order"] == [
         "f07_core_001",
@@ -60,6 +60,7 @@ def test_fix042_migration_manifest_locks_head_order_and_hashes() -> None:
         "permission_ui_support_001",
         "approval_productization_001",
         "approval_list_perf_001",
+        "module_api_key_orch_001",
     ]
     assert all(
         entry["version"] and entry["checksum"] and entry["applied_at"]

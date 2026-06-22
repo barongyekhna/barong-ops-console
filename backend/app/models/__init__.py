@@ -5,6 +5,7 @@ from .approval import (
     ApprovalRequestRecord,
     ApprovalWorkflowRecord,
 )
+from .api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
 from .contact_identity import ContactIdentityRecord
 from .context import ContextPacket
 from .error import SystemError
@@ -19,6 +20,7 @@ from .execution_state import (
 from .job import AutomationJob, JobEvent
 from .memory import AgentMemoryAccessLog, MemoryEvent, MemorySummary
 from .module_binding import ModuleBindingRecord
+from .module_control import ModuleControlStateRecord
 from .message import MessageRecord
 from .observability import (
     AnomalyEventRecord,
@@ -53,6 +55,8 @@ __all__ = [
     "AgentMemoryAccessLog",
     "AgentRegistry",
     "AnomalyEventRecord",
+    "ApiKeyModuleBindingRecord",
+    "ApiKeyRecord",
     "ApprovalDecisionRecord",
     "ApprovalRequestRecord",
     "ApprovalWorkflowRecord",
@@ -74,6 +78,7 @@ __all__ = [
     "MemorySummary",
     "MessageRecord",
     "ModuleBindingRecord",
+    "ModuleControlStateRecord",
     "ModuleRegistry",
     "OperationLog",
     "OpsAlertDeliveryRecord",

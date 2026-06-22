@@ -51,6 +51,7 @@ class Settings(BaseSettings):
         le=60,
     )
     webhook_gateway_signing_secret: SecretStr | None = None
+    api_key_encryption_secret: SecretStr | None = None
     webhook_gateway_signature_tolerance_seconds: int = Field(
         default=300,
         gt=0,
@@ -133,6 +134,7 @@ class Settings(BaseSettings):
         "control_plane_stealth_mode",
         "ops_alert_webhook_url",
         "auth_session_cookie_domain",
+        "api_key_encryption_secret",
         mode="before",
     )
     @classmethod

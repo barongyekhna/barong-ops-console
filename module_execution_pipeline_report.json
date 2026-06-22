@@ -1,0 +1,153 @@
+{
+  "generated_at": "2026-06-22",
+  "registered_module_count": 15,
+  "module_families": {
+    "k_series": {
+      "status": "not_registered",
+      "matched_modules": [],
+      "required_api_keys": [],
+      "note": "No real K-series module manifest was found in backend/app/core/modules.py."
+    },
+    "p_series": {
+      "status": "not_registered",
+      "matched_modules": [],
+      "required_api_keys": [],
+      "note": "No real P-series module manifest was found in backend/app/core/modules.py."
+    },
+    "gmc": {
+      "status": "not_registered",
+      "matched_modules": [],
+      "required_api_keys": [],
+      "note": "No GMC module manifest was found."
+    },
+    "seo": {
+      "status": "not_registered",
+      "matched_modules": [],
+      "required_api_keys": [],
+      "note": "No SEO module manifest was found."
+    },
+    "future_modules": {
+      "status": "registered_as_planned_or_adapter_pending",
+      "matched_modules": [
+        "integration.n8n_test_bridge",
+        "admin.settings",
+        "business.products"
+      ]
+    }
+  },
+  "modules": [
+    {
+      "module_id": "core.dashboard",
+      "status": "sealed",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["read module control state", "render local dashboard shell"]
+    },
+    {
+      "module_id": "experimental.foundation_demo",
+      "status": "enabled",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["validate module switch", "write demo-only metadata", "return local result"]
+    },
+    {
+      "module_id": "integration.n8n_test_bridge",
+      "status": "adapter_pending",
+      "external_dependencies": ["n8n"],
+      "required_api_keys": [],
+      "execution_steps": ["validate module switch", "detect disabled C14E n8n binding", "block live external execution"]
+    },
+    {
+      "module_id": "admin.users",
+      "status": "sealed",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["require owner/user management permission", "execute local user lifecycle API"]
+    },
+    {
+      "module_id": "admin.organizations",
+      "status": "enabled",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["require organization lifecycle access", "execute local organization API"]
+    },
+    {
+      "module_id": "admin.permissions",
+      "status": "sealed",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["require permission management access", "execute local permission assignment API"]
+    },
+    {
+      "module_id": "admin.modules",
+      "status": "sealed",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["require module registry access", "read manifests", "read owner control state when owner"]
+    },
+    {
+      "module_id": "admin.agents",
+      "status": "sealed",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["require registry access", "read local agent registry"]
+    },
+    {
+      "module_id": "admin.settings",
+      "status": "planned",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["show planned metadata", "block live execution"]
+    },
+    {
+      "module_id": "business.products",
+      "status": "planned",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["show planned metadata", "block live execution until adapter/provider exists"]
+    },
+    {
+      "module_id": "business.approvals",
+      "status": "enabled",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["validate module switch", "use local approval workflow APIs"]
+    },
+    {
+      "module_id": "business.reviews",
+      "status": "enabled",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["validate module switch", "read local review/audit APIs"]
+    },
+    {
+      "module_id": "system.errors",
+      "status": "enabled",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["validate module switch", "read local error records"]
+    },
+    {
+      "module_id": "system.memory_events",
+      "status": "enabled",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["validate module switch", "read local memory event records"]
+    },
+    {
+      "module_id": "system.operation_logs",
+      "status": "sealed",
+      "external_dependencies": [],
+      "required_api_keys": [],
+      "execution_steps": ["validate module switch", "read local operation logs"]
+    }
+  ],
+  "api_key_injection_pipeline": [
+    "module generates execution payload or prompt",
+    "module declares required key_alias such as serper/openai/deepseek",
+    "backend resolves org_id + module_id + key_alias binding",
+    "backend rejects missing, disabled, deleted, or cross-org keys",
+    "backend injects key only inside server-side request context",
+    "module receives provider result without exposing key material to frontend"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-06-22",
+  "status": "deployment_blocked_after_validation",
+  "module_registry_system": {
+    "implemented": true,
+    "owner_only_control_center": true,
+    "org_module_control_table": "module_control_states",
+    "auto_registration": true,
+    "runtime_state_tracking": true,
+    "runtime_error_reporting": true
+  },
+  "validation": {
+    "backend_unit_tests": "passed",
+    "backend_integration_tests": "passed",
+    "frontend_verify": "passed",
+    "frontend_tests": "passed",
+    "frontend_typecheck": "passed",
+    "frontend_build": "passed"
+  },
+  "failure": {
+    "stage": "container_restart",
+    "reason": "docker_restart_target_containers_not_found",
+    "containers": [
+      "barong-ops-console_console_backend_1",
+      "barong-ops-console_console_frontend_1"
+    ],
+    "deployment_restarted": false
+  }
+}

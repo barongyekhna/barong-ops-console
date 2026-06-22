@@ -98,7 +98,7 @@ function categoryTitle(category: ApprovalCategory) {
 
 function categoryDescription(category: ApprovalCategory) {
   return category === "control_plane"
-    ? "系统级操作、权限变更、模块接入等需要所有者确认的审批。"
+    ? "系统级操作、权限变更、模块接入等需要owner确认的审批。"
     : "业务模块提交后的审批。";
 }
 

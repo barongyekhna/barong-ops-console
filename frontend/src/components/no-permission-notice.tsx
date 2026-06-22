@@ -23,10 +23,10 @@ export function NoPermissionNotice({
       required_execution_mode="操作必须符合账号权限。"
       required_module_state="功能区需要可用。"
       required_org_state="需要组织访问权限。"
-      required_permission="需要所有者开通访问权限。"
+      required_permission="需要owner开通访问权限。"
       state="no_permission"
       title={title}
-      unlock_condition="请联系所有者开通访问权限。"
+      unlock_condition="请联系owner开通访问权限。"
     />
   );
 }
@@ -42,10 +42,10 @@ export function ModuleUnavailableNotice({
       required_execution_mode="操作能力需要先启用。"
       required_module_state="功能区需要可用。"
       required_org_state="需要组织访问权限。"
-      required_permission="需要所有者开通访问权限。"
+      required_permission="需要owner开通访问权限。"
       state="missing_feature"
       title={title}
-      unlock_condition="请联系所有者完成配置。"
+      unlock_condition="请联系owner完成配置。"
     />
   );
 }

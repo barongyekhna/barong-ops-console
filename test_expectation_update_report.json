@@ -1,0 +1,40 @@
+{
+  "generated_at": "2026-06-22T17:55:50Z",
+  "status": "PASS",
+  "scope": "Updated pytest expectations for execution-gated module architecture",
+  "updated_expectations": [
+    {
+      "test_area": "foundation demo execution gate",
+      "expectation": "Disabled module execution returns 403 MODULE_DISABLED and creates no job."
+    },
+    {
+      "test_area": "n8n execution gate",
+      "expectation": "Missing or deleted key binding returns 403 API_KEY_BINDING_MISSING and fails safely."
+    },
+    {
+      "test_area": "n8n request payload schema",
+      "expectation": "Request/job payloads contain only non-sensitive execution metadata; key material is injected only inside backend execution."
+    },
+    {
+      "test_area": "ORM assertion lifecycle",
+      "expectation": "Tests copy primitive field snapshots before closing SQLAlchemy sessions."
+    },
+    {
+      "test_area": "test DB lifecycle",
+      "expectation": "Integration tests run only after Alembic on an isolated reachable PostgreSQL database; unavailable DB skips gracefully outside integration mode."
+    }
+  ],
+  "tests_aligned": [
+    "tests/backend/test_foundation_demo_api.py",
+    "tests/backend/test_n8n_test_bridge_api.py",
+    "tests/backend/test_module_control_api_key_orchestration.py",
+    "tests/backend/conftest.py",
+    "scripts/run_backend_tests.sh",
+    ".github/workflows/ci.yml"
+  ],
+  "verification": {
+    "backend_unit": "197 passed",
+    "backend_integration": "41 passed",
+    "target_module_integration": "29 passed"
+  }
+}

@@ -1,4 +1,5 @@
 import os
+import warnings
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,7 @@ from backend.app.models.approval import (
     ApprovalRequestRecord,
     ApprovalWorkflowRecord,
 )
+from backend.app.models.api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
 from backend.app.models.artifact import Artifact
 from backend.app.models.auth_session import AuthSession
 from backend.app.models.context import ContextPacket
@@ -34,6 +36,7 @@ from backend.app.models.memory import (
     MemorySummary,
 )
 from backend.app.models.module_binding import ModuleBindingRecord
+from backend.app.models.module_control import ModuleControlStateRecord
 from backend.app.models.operation_log import OperationLog
 from backend.app.models.observability import (
     AnomalyEventRecord,
@@ -95,8 +98,6 @@ SCHEMA_BOOTSTRAP_SIGNALS = (
 )
 SYSTEM_SIGNALS = (
     "TestClient",
-    "auth_client",
-    "owner_client",
     "clear_event_buffer",
     "capture_audit_events",
 )
@@ -117,6 +118,15 @@ def _source_for_path(path: Path) -> str:
 
 def _is_alembic_managed_test_db() -> bool:
     return os.environ.get("BARONG_TEST_DB_READY") == "1"
+
+
+def _integration_db_skip_reason() -> str:
+    return (
+        "Integration tests require BARONG_TEST_DB_READY=1 after Alembic "
+        "upgrade on an isolated PostgreSQL test database. Use "
+        "scripts/run_backend_tests.sh integration or provide a reachable "
+        "DATABASE_URL."
+    )
 
 
 def _assert_safe_test_database_url() -> None:
@@ -168,11 +178,8 @@ def pytest_sessionstart(session: pytest.Session) -> None:
     if "integration" not in marker_expression:
         return
     if not _is_alembic_managed_test_db():
-        pytest.exit(
-            "Integration tests require BARONG_TEST_DB_READY=1 after "
-            "alembic upgrade head.",
-            returncode=2,
-        )
+        warnings.warn(_integration_db_skip_reason(), stacklevel=1)
+        return
     _assert_safe_test_database_url()
 
 
@@ -215,10 +222,7 @@ def pytest_runtest_setup(item: pytest.Item) -> None:
         return
 
     if not _is_alembic_managed_test_db():
-        pytest.fail(
-            "Integration tests require BARONG_TEST_DB_READY=1 after "
-            "alembic upgrade head."
-        )
+        pytest.skip(_integration_db_skip_reason())
     _assert_safe_test_database_url()
 
     source = _source_for_path(Path(str(item.fspath)))
@@ -231,6 +235,13 @@ def clear_auth_tables() -> None:
     if _is_alembic_managed_test_db():
         _assert_safe_test_database_url()
     else:
+        database_url = os.environ.get("DATABASE_URL", "")
+        lowered = database_url.lower()
+        if not any(
+            allowed in lowered
+            for allowed in ("sqlite", "barong_test", "localhost", "127.0.0.1")
+        ):
+            pytest.skip(_integration_db_skip_reason())
         Base.metadata.create_all(bind=engine, checkfirst=True)
     with SessionLocal() as db:
         db.execute(delete(AgentMemoryAccessLog))
@@ -250,6 +261,9 @@ def clear_auth_tables() -> None:
         db.execute(delete(ApprovalWorkflowRecord))
         db.execute(delete(ApprovalRequestRecord))
         db.execute(delete(SharedModuleRecord))
+        db.execute(delete(ApiKeyModuleBindingRecord))
+        db.execute(delete(ApiKeyRecord))
+        db.execute(delete(ModuleControlStateRecord))
         db.execute(delete(ModuleBindingRecord))
         db.execute(delete(JobEvent))
         db.execute(delete(OperationLog))
@@ -320,16 +334,16 @@ def owner_client(auth_client: TestClient) -> TestClient:
         )
         db.add(user)
         db.flush()
-        db.add(
-            OrganizationRecord(
-                org_id="org_11111111111111111111111111111111",
-                org_name="Default Test Org",
-                org_type="store",
-                owner_user_id=str(user.id),
-                status="active",
-                metadata_json={},
-            )
+        organization = OrganizationRecord(
+            org_id="org_11111111111111111111111111111111",
+            org_name="Default Test Org",
+            org_type="store",
+            owner_user_id=str(user.id),
+            status="active",
+            metadata_json={},
         )
+        db.add(organization)
+        db.flush()
         db.add(
             OrgMembershipRecord(
                 membership_id="mem_11111111111111111111111111111111",

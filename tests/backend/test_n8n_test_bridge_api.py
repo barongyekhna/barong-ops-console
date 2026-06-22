@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from backend.app.core.config import Settings
 from backend.app.db.session import SessionLocal
+from backend.app.models.api_keys import ApiKeyRecord
 from backend.app.main import app
 from backend.app.models.artifact import Artifact
 from backend.app.models.error import SystemError
@@ -22,11 +23,14 @@ from backend.app.models.registry import (
 )
 from backend.app.models.review import ReviewItem
 
+pytestmark = pytest.mark.integration
+
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 TEST_WEBHOOK_URL = (
     "https://n8n-test.example.invalid/webhook-test/barong-demo"
 )
 TEST_CALLBACK_SECRET = "f12-example-callback-value-not-for-production"
+DEFAULT_ORG_ID = "org_11111111111111111111111111111111"
 CALLBACK_PAYLOAD = {
     "run_type": "n8n_test_bridge",
     "test_mode": True,
@@ -60,6 +64,32 @@ def install_mock_dispatch_capture(
     )
 
 
+def bind_n8n_execution_key(owner_client: TestClient) -> dict[str, Any]:
+    created = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{DEFAULT_ORG_ID}/keys",
+        json={
+            "name": "n8n-dispatch",
+            "url": "https://n8n.example.invalid",
+            "key_value": "n8n-secret-value",
+        },
+    )
+    assert created.status_code == 201, created.text
+    key = created.json()["item"]
+
+    bound = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{DEFAULT_ORG_ID}/bindings",
+        json={
+            "module_id": "integration.n8n_test_bridge",
+            "key_id": key["key_id"],
+            "key_alias": "n8n",
+        },
+    )
+    assert bound.status_code == 201, bound.text
+    return key
+
+
 def create_waiting_test_job(
     owner_client: TestClient,
     test_settings: Settings,
@@ -67,6 +97,7 @@ def create_waiting_test_job(
     captured: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     configure_test_bridge(test_settings)
+    bind_n8n_execution_key(owner_client)
     mock_dispatch = captured if captured is not None else {}
     install_mock_dispatch_capture(monkeypatch, mock_dispatch)
     response = owner_client.post("/api/control-plane/n8n-test/run")
@@ -96,6 +127,8 @@ def test_owner_can_access_latest_n8n_test(
 def test_unconfigured_webhook_returns_mock_only_result_without_external_request(
     owner_client: TestClient,
 ) -> None:
+    key = bind_n8n_execution_key(owner_client)
+
     response = owner_client.post("/api/control-plane/n8n-test/run")
 
     assert response.status_code == 201
@@ -117,12 +150,86 @@ def test_unconfigured_webhook_returns_mock_only_result_without_external_request(
                 OperationLog.result == "success",
             )
         )
+        api_key = db.scalar(
+            select(ApiKeyRecord).where(ApiKeyRecord.key_id == key["key_id"])
+        )
+        mock_log_details = (
+            None if mock_log is None else dict(mock_log.details or {})
+        )
+        api_key_last_used_at = None if api_key is None else api_key.last_used_at
 
     assert job_count == 1
-    assert mock_log is not None
-    assert mock_log.details["external_http_attempted"] is False
-    assert mock_log.details["webhook_triggered"] is False
-    assert mock_log.details["mock_only"] is True
+    assert mock_log_details is not None
+    assert mock_log_details["external_http_attempted"] is False
+    assert mock_log_details["webhook_triggered"] is False
+    assert mock_log_details["mock_only"] is True
+    assert api_key_last_used_at is not None
+
+
+def test_n8n_run_without_bound_key_fails_safely(
+    owner_client: TestClient,
+) -> None:
+    response = owner_client.post("/api/control-plane/n8n-test/run")
+
+    assert response.status_code == 403
+    assert response.headers["x-barong-error-code"] == "API_KEY_BINDING_MISSING"
+    assert response.json()["detail"]["code"] == "API_KEY_BINDING_MISSING"
+    with SessionLocal() as db:
+        job_count = db.scalar(
+            select(func.count()).select_from(AutomationJob).where(
+                AutomationJob.module_id == "n8n_test_bridge"
+            )
+        )
+
+    assert job_count == 0
+
+
+def test_removed_n8n_key_fails_safely(
+    owner_client: TestClient,
+) -> None:
+    key = bind_n8n_execution_key(owner_client)
+    deleted = owner_client.delete(
+        f"/api/control-plane/api-key-orchestration/keys/{key['key_id']}"
+    )
+    assert deleted.status_code == 200, deleted.text
+
+    response = owner_client.post("/api/control-plane/n8n-test/run")
+
+    assert response.status_code == 403
+    assert response.headers["x-barong-error-code"] == "API_KEY_BINDING_MISSING"
+    assert response.json()["detail"]["code"] == "API_KEY_BINDING_MISSING"
+
+
+def test_disabled_n8n_module_blocks_execution(
+    owner_client: TestClient,
+) -> None:
+    bind_n8n_execution_key(owner_client)
+    disabled = owner_client.patch(
+        "/api/control-plane/module-control/organizations/"
+        f"{DEFAULT_ORG_ID}/registry-entries/integration.n8n_test_bridge",
+        json={"enabled": False},
+    )
+    assert disabled.status_code == 200, disabled.text
+
+    response = owner_client.post("/api/control-plane/n8n-test/run")
+
+    assert response.status_code == 403
+    assert response.headers["x-barong-error-code"] == "MODULE_DISABLED"
+    assert response.json()["detail"]["code"] == "MODULE_DISABLED"
+    with SessionLocal() as db:
+        job_count = db.scalar(
+            select(func.count()).select_from(AutomationJob).where(
+                AutomationJob.module_id == "n8n_test_bridge"
+            )
+        )
+
+    assert job_count == 0
+    restored = owner_client.patch(
+        "/api/control-plane/module-control/organizations/"
+        f"{DEFAULT_ORG_ID}/registry-entries/integration.n8n_test_bridge",
+        json={"enabled": True},
+    )
+    assert restored.status_code == 200, restored.text
 
 
 def test_configured_run_creates_mock_registry_job_and_safe_payload(
@@ -139,6 +246,9 @@ def test_configured_run_creates_mock_registry_job_and_safe_payload(
     )
 
     mock_payload = captured["payload"]
+    assert captured["injected_headers"] == {
+        "Authorization": "Bearer n8n-secret-value"
+    }
     assert set(mock_payload) == {
         "job_id",
         "test_mode",
@@ -199,16 +309,41 @@ def test_configured_run_creates_mock_registry_job_and_safe_payload(
                 AutomationJob.job_id == payload["job"]["job_id"]
             )
         )
+        module_status = None if module is None else module.status
+        agent_status = None if agent is None else agent.status
+        workflow_snapshot = (
+            None
+            if workflow is None
+            else {
+                "status": workflow.status,
+                "endpoint_ref": workflow.endpoint_ref,
+            }
+        )
+        job_snapshot = (
+            None
+            if job is None
+            else {
+                "status": job.status,
+                "input_payload": dict(job.input_payload or {}),
+            }
+        )
 
-    assert module is not None and module.status == "demo"
-    assert agent is not None and agent.status == "demo"
-    assert workflow is not None and workflow.status == "demo"
-    assert workflow.endpoint_ref.startswith("demo://")
-    assert TEST_WEBHOOK_URL not in workflow.endpoint_ref
-    assert job is not None and job.status == "completed_demo"
-    assert job.input_payload["mock_only"] is True
-    assert job.input_payload["external_http_allowed"] is False
-    assert job.input_payload["real_business_task"] is False
+    assert module_status == "demo"
+    assert agent_status == "demo"
+    assert workflow_snapshot is not None
+    assert workflow_snapshot["status"] == "demo"
+    assert workflow_snapshot["endpoint_ref"].startswith("demo://")
+    assert TEST_WEBHOOK_URL not in workflow_snapshot["endpoint_ref"]
+    assert job_snapshot is not None
+    assert job_snapshot["status"] == "completed_demo"
+    assert job_snapshot["input_payload"]["mock_only"] is True
+    assert job_snapshot["input_payload"]["external_http_allowed"] is False
+    assert job_snapshot["input_payload"]["real_business_task"] is False
+    assert job_snapshot["input_payload"]["dispatch_binding"] == {
+        "step": "dispatch",
+        "alias": "n8n",
+        "injected": True,
+    }
 
 
 @pytest.mark.parametrize("provided_secret", [None, "wrong-test-value"])
@@ -259,10 +394,14 @@ def test_callback_rejects_missing_or_wrong_secret_without_leaking_it(
             )
             .order_by(OperationLog.id.desc())
         )
+        job_status = None if job is None else job.status
+        failure_log_details = (
+            None if failure_log is None else dict(failure_log.details or {})
+        )
 
-    assert job is not None and job.status == "completed_demo"
-    assert failure_log is not None
-    serialized_log = json.dumps(failure_log.details).lower()
+    assert job_status == "completed_demo"
+    assert failure_log_details is not None
+    serialized_log = json.dumps(failure_log_details).lower()
     assert TEST_CALLBACK_SECRET.lower() not in serialized_log
     if provided_secret is not None:
         assert provided_secret not in serialized_log
@@ -341,19 +480,43 @@ def test_authorized_callback_on_mock_completed_job_returns_existing_snapshot(
                 select(OperationLog).where(OperationLog.job_id == job_id)
             )
         )
+        job_snapshot = (
+            None
+            if job is None
+            else {
+                "status": job.status,
+                "finished": job.finished_at is not None,
+            }
+        )
+        latest_event_status = events[-1].to_status if events else None
+        artifact_snapshot = (
+            None
+            if artifact is None
+            else {
+                "storage_provider": artifact.storage_provider,
+                "metadata": dict(artifact.artifact_metadata or {}),
+            }
+        )
+        review_status = None if review is None else review.status
+        memory_created_by_type = (
+            None if memory_event is None else memory_event.created_by_type
+        )
+        operation_log_details = [
+            dict(operation_log.details or {}) for operation_log in operation_logs
+        ]
 
-    assert job is not None and job.status == "completed_demo"
-    assert job.finished_at is not None
-    assert events[-1].to_status == "completed_demo"
-    assert artifact is not None
-    assert artifact.storage_provider == "demo_metadata"
-    assert artifact.artifact_metadata["external_storage"] is False
-    assert artifact.artifact_metadata["external_http_attempted"] is False
-    assert review is not None and review.status == "pending_demo"
-    assert memory_event is not None
-    assert memory_event.created_by_type == "mock_dispatcher"
+    assert job_snapshot is not None
+    assert job_snapshot["status"] == "completed_demo"
+    assert job_snapshot["finished"] is True
+    assert latest_event_status == "completed_demo"
+    assert artifact_snapshot is not None
+    assert artifact_snapshot["storage_provider"] == "demo_metadata"
+    assert artifact_snapshot["metadata"]["external_storage"] is False
+    assert artifact_snapshot["metadata"]["external_http_attempted"] is False
+    assert review_status == "pending_demo"
+    assert memory_created_by_type == "mock_dispatcher"
     serialized_logs = json.dumps(
-        [operation_log.details for operation_log in operation_logs]
+        operation_log_details
     ).lower()
     assert TEST_CALLBACK_SECRET.lower() not in serialized_logs
     assert "secret" not in serialized_logs
@@ -419,6 +582,7 @@ def test_external_webhook_failure_path_is_removed(
     monkeypatch,
 ) -> None:
     configure_test_bridge(test_settings)
+    bind_n8n_execution_key(owner_client)
 
     response = owner_client.post("/api/control-plane/n8n-test/run")
 
@@ -442,13 +606,27 @@ def test_external_webhook_failure_path_is_removed(
                 OperationLog.result == "success",
             )
         )
+        job_snapshot = (
+            None
+            if job is None
+            else {
+                "status": job.status,
+                "finished": job.finished_at is not None,
+            }
+        )
+        system_error_exists = system_error is not None
+        mock_log_details = (
+            None if mock_log is None else dict(mock_log.details or {})
+        )
 
-    assert job is not None and job.status == "completed_demo"
-    assert job.finished_at is not None
+    assert job_snapshot is not None
+    assert job_snapshot["status"] == "completed_demo"
+    assert job_snapshot["finished"] is True
     assert system_error is None
-    assert mock_log is not None
-    assert mock_log.details["external_http_attempted"] is False
-    assert mock_log.details["webhook_triggered"] is False
+    assert system_error_exists is False
+    assert mock_log_details is not None
+    assert mock_log_details["external_http_attempted"] is False
+    assert mock_log_details["webhook_triggered"] is False
 
 
 def test_n8n_test_bridge_has_no_real_integration_or_registration_surface() -> None:

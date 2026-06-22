@@ -5,7 +5,7 @@ from backend.app.db.session import engine
 
 pytestmark = pytest.mark.integration
 
-ALEMBIC_HEAD = "approval_list_perf_001"
+ALEMBIC_HEAD = "module_api_key_orch_001"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",
@@ -14,6 +14,9 @@ REQUIRED_ALEMBIC_TABLES = {
     "organizations",
     "org_memberships",
     "module_bindings",
+    "module_control_states",
+    "api_key_records",
+    "api_key_module_bindings",
     "execution_callbacks",
     "callback_state",
     "callback_state_transitions",

@@ -63,6 +63,34 @@ wait_for_db() {
     exit 1
 }
 
+wait_for_database_url() {
+    for _ in {1..60}; do
+        if DATABASE_URL="$DATABASE_URL" "$python_bin" -c 'import os; from sqlalchemy import create_engine, text; engine = create_engine(os.environ["DATABASE_URL"], pool_pre_ping=True); connection = engine.connect(); connection.execute(text("select 1")); connection.close(); engine.dispose()' >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 1
+    done
+
+    echo "Timed out waiting for mapped test PostgreSQL connection." >&2
+    docker logs "$db_container" >&2 || true
+    exit 1
+}
+
+run_alembic_upgrade() {
+    local attempt
+
+    for attempt in {1..5}; do
+        if "$python_bin" -m alembic -c backend/alembic.ini upgrade head; then
+            return 0
+        fi
+        sleep "$attempt"
+    done
+
+    echo "Alembic upgrade failed after retries." >&2
+    docker logs "$db_container" >&2 || true
+    exit 1
+}
+
 with_test_db() {
     local marker_expr="$1"
     local db_port
@@ -84,6 +112,10 @@ with_test_db() {
         -e POSTGRES_DB="$db_name" \
         -e POSTGRES_USER="$db_user" \
         -e POSTGRES_PASSWORD="$db_password" \
+        --health-cmd "pg_isready -U ${db_user} -d ${db_name}" \
+        --health-interval 2s \
+        --health-timeout 5s \
+        --health-retries 30 \
         -p 127.0.0.1::5432 \
         "$postgres_image" >/dev/null
 
@@ -92,9 +124,11 @@ with_test_db() {
     db_port="$(docker port "$db_container" 5432/tcp | sed 's/.*://')"
     export DATABASE_URL="postgresql+psycopg://${db_user}:${db_password}@127.0.0.1:${db_port}/${db_name}"
     export BARONG_TEST_DB_READY=1
+    export DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS="${DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS:-60000}"
 
     assert_safe_database_url "$DATABASE_URL"
-    "$python_bin" -m alembic -c backend/alembic.ini upgrade head
+    wait_for_database_url
+    run_alembic_upgrade
     run_pytest "$marker_expr"
 }
 

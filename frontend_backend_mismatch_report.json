@@ -1,0 +1,33 @@
+{
+  "checked_at": "2026-06-22T14:58:00Z",
+  "status": "partial_mismatch",
+  "mismatches": [
+    {
+      "code": "workspace_fix_not_deployed",
+      "detail": "Frontend workspace fixes passed build but were not deployed to production because deployment gates failed."
+    },
+    {
+      "code": "module_control_not_execution_enforced",
+      "detail": "Frontend can toggle module control state, but backend production execution routes do not consume module_control_states."
+    },
+    {
+      "code": "api_key_execution_not_connected",
+      "detail": "Frontend can manage keys and bindings, but backend production module execution does not consume those bindings."
+    }
+  ],
+  "matches": [
+    {
+      "code": "module_counts_match",
+      "detail": "Backend DB and frontend proxy module center both report 30 module rows."
+    },
+    {
+      "code": "api_key_counts_match",
+      "detail": "Backend DB and frontend proxy API key routes both report 0 active keys and 0 active bindings."
+    },
+    {
+      "code": "organization_dropdown_real",
+      "detail": "Frontend proxy organizations route returned 2 real organizations."
+    }
+  ],
+  "restart_allowed": false
+}

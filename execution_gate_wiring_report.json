@@ -1,0 +1,107 @@
+{
+  "report": "execution_gate_wiring_report",
+  "generated_at": "2026-06-22T15:25:00Z",
+  "scope": "SYSTEM EXECUTION GATE WIRING FIX",
+  "constraints_observed": {
+    "ui_changes": false,
+    "db_rebuild": false,
+    "rbac_core_changes": false,
+    "container_restart": false,
+    "production_database_mutation": false
+  },
+  "execution_entrypoints_scanned": [
+    {
+      "entrypoint": "POST /api/control-plane/foundation-demo/run",
+      "route_file": "backend/app/api/routes/foundation_demo.py",
+      "route_lines": "30-61",
+      "service_call": "run_foundation_demo",
+      "module_id_used_by_execution": "foundation_demo",
+      "control_module_id": "experimental.foundation_demo",
+      "status": "wired"
+    },
+    {
+      "entrypoint": "POST /api/control-plane/n8n-test/run",
+      "route_file": "backend/app/api/routes/n8n_test.py",
+      "route_lines": "42-69",
+      "service_call": "run_n8n_test",
+      "module_id_used_by_execution": "n8n_test_bridge",
+      "control_module_id": "integration.n8n_test_bridge",
+      "status": "wired"
+    }
+  ],
+  "execution_entrypoints_not_wired_reason": [
+    {
+      "path": "backend/app/services/pre_live_validation.py",
+      "reason": "readiness report runner, not a module execution endpoint"
+    },
+    {
+      "path": "backend/app/services/production_readiness.py",
+      "reason": "readiness report runner, not a module execution endpoint"
+    }
+  ],
+  "new_execution_gate_service": {
+    "file": "backend/app/services/module_execution_gate.py",
+    "public_function": "require_module_execution_ready",
+    "core_lines": "295-345",
+    "pipeline": [
+      "resolve org context",
+      "map legacy execution module id to control module id",
+      "ensure registered module control state exists",
+      "block disabled module with 403 MODULE_DISABLED",
+      "resolve required API keys per step",
+      "return ModuleExecutionContext with redacted key helpers",
+      "emit module.execution_gate audit event"
+    ],
+    "legacy_module_id_mapping": {
+      "foundation_demo": "experimental.foundation_demo",
+      "n8n_test_bridge": "integration.n8n_test_bridge"
+    },
+    "error_codes": [
+      "MODULE_DISABLED",
+      "MODULE_NOT_REGISTERED",
+      "ORG_CONTEXT_REQUIRED",
+      "API_KEY_BINDING_MISSING",
+      "API_KEY_INJECTION_FAILED"
+    ]
+  },
+  "route_behavior": {
+    "disabled_module": {
+      "http_status": 403,
+      "header": "X-Barong-Error-Code",
+      "code": "MODULE_DISABLED",
+      "job_created_before_block": false
+    },
+    "missing_api_key_binding": {
+      "http_status": 403,
+      "header": "X-Barong-Error-Code",
+      "code": "API_KEY_BINDING_MISSING",
+      "job_created_before_block": false
+    }
+  },
+  "verification": {
+    "py_compile": {
+      "command": ".venv/bin/python -m py_compile backend/app/services/module_execution_gate.py backend/app/api/routes/foundation_demo.py backend/app/api/routes/n8n_test.py backend/app/services/n8n_test_service.py backend/app/services/n8n_test_http_client.py tests/backend/test_foundation_demo_api.py tests/backend/test_n8n_test_bridge_api.py",
+      "status": "passed"
+    },
+    "service_direct_validation": {
+      "command": "PYTHONPATH=. .venv/bin/python -u /tmp/execution_gate_direct_validation.py",
+      "status": "passed",
+      "notes": "Used a temporary SQLite DB and in-memory capture for gate event writes to avoid SQLite single-writer locking. Module state, API key storage, module-key binding, resolver, and gate logic were real service calls."
+    },
+    "target_fastapi_tests": {
+      "command": ".venv/bin/python -m pytest tests/backend/test_foundation_demo_api.py tests/backend/test_n8n_test_bridge_api.py -q",
+      "status": "blocked_by_environment",
+      "failure": "Default DATABASE_URL points at db:5432 and DNS resolution failed in the current sandbox: Temporary failure in name resolution.",
+      "result_summary": "2 passed, 21 errors before assertions due database connection setup."
+    },
+    "sqlite_fastapi_attempt": {
+      "command": "DATABASE_URL=sqlite:////tmp/barong_test_exec_gate_20260622.db .venv/bin/python -m pytest tests/backend/test_foundation_demo_api.py tests/backend/test_n8n_test_bridge_api.py -q",
+      "status": "not_counted",
+      "reason": "FastAPI/TestClient suite did not complete in a reasonable time under SQLite; production runtime uses PostgreSQL."
+    }
+  },
+  "deployment": {
+    "executed": false,
+    "reason": "Latest request did not request deployment, and full FastAPI target tests were not complete in the current DB environment."
+  }
+}

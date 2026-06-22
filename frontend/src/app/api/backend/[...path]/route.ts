@@ -58,6 +58,9 @@ const ALLOWED_MODULE_REGISTRY_PATHS = new Set([
   "modules/registry",
   "modules/me",
 ]);
+const ALLOWED_MODULE_CONTROL_GET_PATHS = new Set([
+  "module-control/center",
+]);
 const ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS = new Set([
   "module-adapters/registry",
   "module-adapters/me",
@@ -160,6 +163,7 @@ const ALLOWED_RESULT_NORMALIZATION_GET_PATHS = new Set([
 const ALLOWED_RESULT_NORMALIZATION_POST_PATHS = new Set([
   "result-normalization/normalize",
 ]);
+const API_KEY_ID_PATTERN = /^(?:key|akb)_[0-9a-f]{32}$/;
 const BLOCKED_SECURITY_ISOLATION_FIRST_SEGMENTS = new Set([
   "webhook",
   "n8n",
@@ -488,6 +492,63 @@ function isAllowedPermissionPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedModuleControlPath(method: string, path: string[]) {
+  if (method === "GET" && ALLOWED_MODULE_CONTROL_GET_PATHS.has(path.join("/"))) {
+    return true;
+  }
+
+  return (
+    method === "PATCH" &&
+    path.length === 5 &&
+    path[0] === "module-control" &&
+    path[1] === "organizations" &&
+    path[3] === "registry-entries" &&
+    path[2].startsWith("org_") &&
+    path[4].includes(".")
+  );
+}
+
+function isAllowedApiKeyOrchestrationPath(method: string, path: string[]) {
+  if (path[0] !== "api-key-orchestration") {
+    return false;
+  }
+
+  if (path.length === 2 && path[1] === "keys") {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 3 &&
+    path[1] === "keys" &&
+    API_KEY_ID_PATTERN.test(path[2])
+  ) {
+    return method === "PATCH" || method === "DELETE";
+  }
+
+  if (path.length === 2 && path[1] === "bindings") {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "organizations" &&
+    path[2].startsWith("org_") &&
+    (path[3] === "keys" || path[3] === "bindings")
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 3 &&
+    path[1] === "bindings" &&
+    API_KEY_ID_PATTERN.test(path[2])
+  ) {
+    return method === "DELETE";
+  }
+
+  return false;
+}
+
 type BackendApiLayer = "public" | "app" | "control-plane";
 
 function apiLayerPrefix(layer: BackendApiLayer) {
@@ -538,6 +599,8 @@ export function getBackendApiPath(method: string, path: string[]) {
     (method === "GET" && ALLOWED_CONTROL_PLANE_LIST_PATHS.has(requestedPath)) ||
     isAllowedControlPlaneResourcePath(method, path) ||
     (method === "GET" && ALLOWED_MODULE_REGISTRY_PATHS.has(requestedPath)) ||
+    isAllowedModuleControlPath(method, path) ||
+    isAllowedApiKeyOrchestrationPath(method, path) ||
     (method === "GET" &&
       ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS.has(requestedPath)) ||
     (method === "GET" &&

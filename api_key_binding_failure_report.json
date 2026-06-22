@@ -1,0 +1,29 @@
+{
+  "generated_at": "2026-06-22",
+  "status": "deployment_blocked_after_validation",
+  "api_key_orchestration_system": {
+    "implemented": true,
+    "owner_only_routes": true,
+    "storage_table": "api_key_records",
+    "binding_table": "api_key_module_bindings",
+    "backend_only_injection": true,
+    "frontend_secret_exposure": false,
+    "cross_org_binding_rejected": true,
+    "deleted_or_disabled_key_injection_rejected": true
+  },
+  "validation": {
+    "api_key_never_exposed_test": "passed",
+    "module_key_binding_test": "passed",
+    "cross_org_binding_test": "passed",
+    "backend_injection_resolver_test": "passed"
+  },
+  "failure": {
+    "stage": "container_restart",
+    "reason": "docker_restart_target_containers_not_found",
+    "containers": [
+      "barong-ops-console_console_backend_1",
+      "barong-ops-console_console_frontend_1"
+    ],
+    "deployment_restarted": false
+  }
+}

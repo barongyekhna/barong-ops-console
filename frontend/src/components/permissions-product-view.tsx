@@ -43,7 +43,7 @@ const GLOBAL_SCOPE_KEY = "*";
 
 function roleLabel(role: string) {
   if (role === "owner") {
-    return "所有者";
+    return "owner";
   }
   if (role === "super_admin") {
     return "组织管理员";
@@ -436,7 +436,7 @@ export function PermissionsProductView() {
             >
               <div className="permissions-section-heading">
                 <h3>系统权限</h3>
-                <p>仅所有者可查看和管理。</p>
+                <p>仅owner可查看和管理。</p>
               </div>
               {controlPlanePermissions.length > 0 ? (
                 <div className="permissions-card-grid">

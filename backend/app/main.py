@@ -8,6 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .api.deps import get_audit_context
 from .api.routes.agents import router as agents_router
+from .api.routes.api_key_orchestration import router as api_key_orchestration_router
 from .api.routes.ai_execution_bindings import router as ai_execution_bindings_router
 from .api.routes.approval import plural_router as approvals_router
 from .api.routes.approval import router as approval_router
@@ -40,6 +41,7 @@ from .api.routes.live_gate import router as live_gate_router
 from .api.routes.memory import router as memory_router
 from .api.routes.messages import router as messages_router
 from .api.routes.model_locks import router as model_locks_router
+from .api.routes.module_control import router as module_control_router
 from .api.routes.module_allocations import router as module_allocations_router
 from .api.routes.module_adapters import router as module_adapters_router
 from .api.routes.modules import router as modules_router
@@ -519,8 +521,10 @@ app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(foundation_demo_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(n8n_test_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_adapters_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(module_control_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_workflow_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(execution_providers_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(api_key_orchestration_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(execution_prompts_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(external_dependencies_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(ai_execution_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)

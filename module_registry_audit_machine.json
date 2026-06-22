@@ -1,0 +1,65 @@
+{
+  "generated_at": "2026-06-22",
+  "scope": ["backend", "frontend", "tests", "docs"],
+  "module_registry": {
+    "exists": true,
+    "source_files": [
+      "backend/app/core/modules.py",
+      "backend/app/services/module_registry.py",
+      "backend/app/api/routes/modules.py",
+      "frontend/src/lib/module-registry-api.ts",
+      "frontend/src/components/module-registry-product-view.tsx"
+    ],
+    "registered_module_count": 15,
+    "registered_modules": [
+      "core.dashboard",
+      "experimental.foundation_demo",
+      "integration.n8n_test_bridge",
+      "admin.users",
+      "admin.organizations",
+      "admin.permissions",
+      "admin.modules",
+      "admin.agents",
+      "admin.settings",
+      "business.products",
+      "business.approvals",
+      "business.reviews",
+      "system.errors",
+      "system.memory_events",
+      "system.operation_logs"
+    ]
+  },
+  "module_enable_disable": {
+    "pre_existing_static_switches": true,
+    "pre_existing_owner_ui": false,
+    "implemented_owner_org_control": true,
+    "new_table": "module_control_states",
+    "new_routes": [
+      "GET /api/control-plane/module-control/center",
+      "PATCH /api/control-plane/module-control/organizations/{org_id}/registry-entries/{module_id}"
+    ]
+  },
+  "org_based_module_binding": {
+    "pre_existing_partial": true,
+    "implemented_control_center_org_grouping": true,
+    "binding_key": ["org_id", "module_id"]
+  },
+  "runtime_state_tracking": {
+    "implemented": true,
+    "states": ["active", "error", "disabled"],
+    "fields": [
+      "enabled",
+      "runtime_status",
+      "runtime_error_code",
+      "runtime_error_message",
+      "last_error_at"
+    ]
+  },
+  "runtime_error_reporting": {
+    "implemented": true,
+    "display_surface": "frontend owner Module Control Center error badge"
+  },
+  "rbac_core_modified": false,
+  "data_reset_required": false,
+  "historical_data_deleted": false
+}

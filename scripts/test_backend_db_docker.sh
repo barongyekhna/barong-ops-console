@@ -23,6 +23,7 @@ trap cleanup EXIT
 "${compose[@]}" up --detach "${wait_args[@]}" db
 "${compose[@]}" run --rm backend sh -c '
     python -m pytest \
+        -c backend/pytest.ini \
         tests/backend/test_health.py \
         tests/backend/test_db_config.py \
         tests/backend/test_alembic_config.py \
@@ -30,7 +31,8 @@ trap cleanup EXIT
         tests/backend/test_security.py &&
     python -m alembic -c backend/alembic.ini upgrade head &&
     python -m alembic -c backend/alembic.ini current &&
-    python -m pytest \
+    BARONG_TEST_DB_READY=1 python -m pytest \
+        -c backend/pytest.ini \
         tests/backend/test_auth_api.py \
         tests/backend/test_user_management_api.py \
         tests/backend/test_owner_bootstrap.py \

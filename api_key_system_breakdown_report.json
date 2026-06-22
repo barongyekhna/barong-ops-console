@@ -1,0 +1,27 @@
+{
+  "checked_at": "2026-06-22T14:58:00Z",
+  "system": "api_key_orchestration",
+  "status": "broken_flow",
+  "working_parts": [
+    "Database tables exist.",
+    "Owner-only key list and binding list routes return 200.",
+    "Frontend organization dropdown fetches real backend organizations.",
+    "Key plaintext is not exposed to frontend responses.",
+    "Backend injection resolver exists."
+  ],
+  "broken_parts": [
+    {
+      "code": "no_production_module_injection_callers",
+      "detail": "resolve_module_api_key_for_injection is not called by any production module execution path."
+    },
+    {
+      "code": "no_real_keys_in_production",
+      "detail": "Production has 0 active keys and 0 active bindings, so external provider execution cannot be verified without adding real owner-provided keys."
+    },
+    {
+      "code": "add_bind_not_persist_tested",
+      "detail": "Add/bind routes were not executed with fake values because the user explicitly forbids fake API key UI/data and the route writes persistent rows."
+    }
+  ],
+  "restart_allowed": false
+}
