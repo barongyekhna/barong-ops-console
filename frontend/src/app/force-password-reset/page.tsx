@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ForcePasswordResetForm } from "@/components/force-password-reset-form";
 
 export const metadata: Metadata = {
-  title: "Change Password",
+  title: "修改密码",
 };
 
 export default function ForcePasswordResetPage() {

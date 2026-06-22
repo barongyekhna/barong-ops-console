@@ -48,22 +48,26 @@ function traceKey(log: OperationLogRecord) {
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
-    return "Not recorded";
+    return "未记录";
   }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
   }
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof ApiError
-    ? error.message
-    : "Logs are unavailable right now.";
+  if (error instanceof ApiError && error.status === 401) {
+    return "请重新登录后再操作。";
+  }
+  if (error instanceof ApiError && error.status === 403) {
+    return "当前账号无权访问。";
+  }
+  return "加载失败，请稍后重试。";
 }
 
 function isFailedLog(log: OperationLogRecord) {
@@ -71,7 +75,8 @@ function isFailedLog(log: OperationLogRecord) {
 }
 
 function actionLabel(log: OperationLogRecord) {
-  return log.action ?? log.target_type ?? "Unknown operation";
+  void log;
+  return "操作记录";
 }
 
 export function OperationLogsCenter() {
@@ -130,9 +135,9 @@ export function OperationLogsCenter() {
 
   if (isLoading) {
     return (
-      <section className="list-state" aria-label="Loading logs">
+      <section className="list-state" aria-label="正在加载操作记录">
         <LoaderCircle className="spin" aria-hidden="true" size={22} />
-        <span>Loading logs</span>
+        <span>正在加载</span>
       </section>
     );
   }
@@ -143,30 +148,29 @@ export function OperationLogsCenter() {
         action={
           <button className="primary-button" onClick={() => void load()}>
             <RotateCcw aria-hidden="true" size={17} />
-            Retry
+            重试
           </button>
         }
         reason={error}
-        required_execution_mode="View access must be available."
-        required_module_state="Logs must be available for this workspace."
-        required_org_state="Active workspace access is required."
+        required_execution_mode="可查看。"
+        required_module_state="功能区可用。"
+        required_org_state="组织状态正常。"
         required_permission="operation_logs.read"
         state="missing_feature"
-        title="Logs are unavailable"
-        unlock_condition="Try again after logs are available."
+        title="加载失败，请稍后重试"
+        unlock_condition="稍后重试。"
       />
     );
   }
 
   return (
-    <section className="observability-workspace" aria-label="Logs">
+    <section className="observability-workspace" aria-label="操作记录">
       <div className="registry-command-bar">
         <div>
-          <span className="eyebrow">Logs</span>
-          <h2>Operations, traces, alerts, and signals</h2>
+          <span className="eyebrow">系统</span>
+          <h2>操作记录</h2>
           <p>
-            Review recent operations, trace groups, alert candidates, and
-            unusual activity signals in one place.
+            查看最近操作的整体状态，不展示内部请求标识。
           </p>
         </div>
         <button
@@ -176,25 +180,25 @@ export function OperationLogsCenter() {
           type="button"
         >
           <RotateCcw aria-hidden="true" size={17} />
-          Refresh
+          刷新
         </button>
       </div>
 
       <div className="capability-summary-grid">
         <div>
-          <span>Operation logs</span>
+          <span>操作记录</span>
           <strong>{result?.count ?? 0}</strong>
         </div>
         <div>
-          <span>Trace groups</span>
+          <span>关联组</span>
           <strong>{traces.length}</strong>
         </div>
         <div>
-          <span>Alerts</span>
+          <span>异常</span>
           <strong>{failedLogs.length}</strong>
         </div>
         <div>
-          <span>Anomaly signals</span>
+          <span>风险信号</span>
           <strong>{actionCounts.length + (missingTraceCount > 0 ? 1 : 0)}</strong>
         </div>
       </div>
@@ -203,26 +207,24 @@ export function OperationLogsCenter() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>Operation logs</h3>
-              <p>Recent durable operation records from the backend.</p>
+              <h3>最近操作</h3>
+              <p>仅展示业务状态和时间。</p>
             </div>
-            <span className="ops-source">/operation-logs</span>
+            <span className="ops-source">当前页</span>
           </div>
           <ol className="ops-record-list">
             {logs.slice(0, 8).map((log) => (
               <li key={log.operation_id ?? `${log.action}-${log.created_at}`}>
-                <span>{log.result ?? "unknown"}</span>
-                <strong>{actionLabel(log)}</strong>
-                <small>
-                  {log.target_type ?? "target"} / {formatDate(log.created_at)}
-                </small>
+                <span>{isFailedLog(log) ? "异常" : "完成"}</span>
+                <strong>操作记录</strong>
+                <small>{formatDate(log.created_at)}</small>
               </li>
             ))}
             {logs.length === 0 ? (
               <li>
-                <span>empty</span>
-                <strong>No operation logs recorded.</strong>
-                <small>Activity will appear here when work is completed.</small>
+                <span>暂无</span>
+                <strong>暂无数据</strong>
+                <small>有操作后会显示在这里。</small>
               </li>
             ) : null}
           </ol>
@@ -231,24 +233,24 @@ export function OperationLogsCenter() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>Traces</h3>
-              <p>Trace groups derived from trace, context, or request IDs.</p>
+              <h3>关联分组</h3>
+              <p>按可用关联信息统计。</p>
             </div>
-            <span className="ops-source">Trace groups</span>
+            <span className="ops-source">已汇总</span>
           </div>
           <div className="ops-trace-grid">
             {traces.slice(0, 8).map(([key, log]) => (
               <div key={key ?? log.operation_id}>
                 <FileSearch aria-hidden="true" size={17} />
-                <strong>{key}</strong>
-                <span>{actionLabel(log)}</span>
+                <strong>关联记录</strong>
+                <span>{formatDate(log.created_at)}</span>
               </div>
             ))}
             {traces.length === 0 ? (
               <div>
                 <CircleAlert aria-hidden="true" size={17} />
-                <strong>No trace groups found.</strong>
-                <span>Logs need trace, context, or request IDs.</span>
+                <strong>暂无数据</strong>
+                <span>当前没有可显示的关联分组。</span>
               </div>
             ) : null}
           </div>
@@ -257,24 +259,24 @@ export function OperationLogsCenter() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>Alerts</h3>
-              <p>Alert candidates from failed operation records.</p>
+              <h3>异常</h3>
+              <p>来自失败操作的待关注记录。</p>
             </div>
-            <span className="ops-source">Alert candidates</span>
+            <span className="ops-source">待关注</span>
           </div>
           <ol className="ops-record-list">
             {failedLogs.slice(0, 6).map((log) => (
               <li key={log.operation_id ?? `${log.action}-${log.error_code}`}>
-                <span>{log.error_code ?? "error"}</span>
-                <strong>{actionLabel(log)}</strong>
-                <small>{traceKey(log) ?? "No trace ID"}</small>
+                <span>异常</span>
+                <strong>操作失败</strong>
+                <small>{formatDate(log.created_at)}</small>
               </li>
             ))}
             {failedLogs.length === 0 ? (
               <li>
-                <span>clear</span>
-                <strong>No alert candidates in the latest page.</strong>
-                <small>Failed logs and error codes appear here.</small>
+                <span>正常</span>
+                <strong>暂无异常</strong>
+                <small>失败操作会显示在这里。</small>
               </li>
             ) : null}
           </ol>
@@ -283,31 +285,31 @@ export function OperationLogsCenter() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>Anomaly signals</h3>
-              <p>Signals derived from repeated actions and missing trace data.</p>
+              <h3>风险信号</h3>
+              <p>根据重复操作和缺失关联信息汇总。</p>
             </div>
-            <span className="ops-source">Activity signals</span>
+            <span className="ops-source">已汇总</span>
           </div>
           <ol className="ops-record-list">
-            {actionCounts.slice(0, 5).map(([action, count]) => (
-              <li key={action}>
-                <span>volume</span>
-                <strong>{action}</strong>
-                <small>{count} records in the latest page</small>
+            {actionCounts.slice(0, 5).map(([actionKey, count]) => (
+              <li key={actionKey}>
+                <span>频次</span>
+                <strong>重复操作</strong>
+                <small>当前页 {count} 条</small>
               </li>
             ))}
             {missingTraceCount > 0 ? (
               <li>
-                <span>trace</span>
-                <strong>Missing trace correlation</strong>
-                <small>{missingTraceCount} records have no trace key.</small>
+                <span>关联</span>
+                <strong>缺少关联信息</strong>
+                <small>{missingTraceCount} 条记录缺少关联信息。</small>
               </li>
             ) : null}
             {actionCounts.length === 0 && missingTraceCount === 0 ? (
               <li>
-                <span>clear</span>
-                <strong>No anomaly signals in the latest page.</strong>
-                <small>Repeated actions and missing trace data appear here.</small>
+                <span>正常</span>
+                <strong>暂无风险信号</strong>
+                <small>重复操作或缺失关联信息会显示在这里。</small>
               </li>
             ) : null}
           </ol>
@@ -316,13 +318,13 @@ export function OperationLogsCenter() {
 
       <div className="observability-band">
         <Bell aria-hidden="true" size={18} />
-        <span>Operation logs</span>
+        <span>操作记录</span>
         <Activity aria-hidden="true" size={18} />
-        <span>Traces</span>
+        <span>关联</span>
         <CircleAlert aria-hidden="true" size={18} />
-        <span>Alerts</span>
+        <span>异常</span>
         <FileSearch aria-hidden="true" size={18} />
-        <span>Anomaly signals</span>
+        <span>信号</span>
       </div>
     </section>
   );

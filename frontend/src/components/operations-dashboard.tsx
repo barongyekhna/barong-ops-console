@@ -15,7 +15,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/auth-provider";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
 import {
-  ApiError,
   ApiRequestAbortedError,
   apiRequest,
   isApiAbortError,
@@ -102,22 +101,22 @@ const DASHBOARD_LOADING_FALLBACK_MS = 2000;
 const ENGINEERING_LABEL_REPLACEMENTS: Array<[RegExp, string]> = [
   [
     new RegExp(`\\b${ENGINEERING_LABEL_PREFIX}17(?: Durable Observability)?\\b`, "g"),
-    "Logs",
+    "操作记录",
   ],
   [
     new RegExp(
       `\\b${ENGINEERING_LABEL_PREFIX}18(?: Scope Adapter| Tenant Consistency)?\\b`,
       "g",
     ),
-    "Organizations",
+    "组织",
   ],
   [
     new RegExp(`\\b${ENGINEERING_LABEL_PREFIX}12(?: Approval Gate)?\\b`, "g"),
-    "Approvals",
+    "审批",
   ],
 ];
 
-function textValue(value: unknown, fallback = "Unknown") {
+function textValue(value: unknown, fallback = "暂无数据") {
   const text = typeof value === "string" ? value.trim() : "";
   const safeText = text.length > 0 ? text : fallback;
 
@@ -151,39 +150,26 @@ function batchError(entry: BatchEntry<unknown> | null | undefined, fallback: str
   if (entry?.ok === true) {
     return "";
   }
-  if (typeof entry?.detail === "string" && entry.detail.trim().length > 0) {
-    return textValue(entry.detail, fallback);
-  }
-  if (
-    entry?.detail &&
-    typeof entry.detail === "object" &&
-    "detail" in entry.detail &&
-    typeof entry.detail.detail === "string"
-  ) {
-    return textValue(entry.detail.detail, fallback);
-  }
   return fallback;
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof ApiError || error instanceof Error) {
-    return textValue(error.message, fallback);
-  }
+  void error;
 
   return fallback;
 }
 
 function formatDate(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) {
-    return "Not recorded";
+    return "暂无记录";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return textValue(value, "Not recorded");
+    return "暂无记录";
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -210,6 +196,37 @@ function normalizeExecutionMode(value: unknown): "mock" | "staging" | "live" {
   return value === "staging" || value === "live" ? value : "mock";
 }
 
+function roleLabel(role: unknown) {
+  const labels: Record<string, string> = {
+    operator: "操作员",
+    owner: "所有者",
+    reviewer: "审核员",
+    super_admin: "组织管理员",
+    viewer: "查看员",
+  };
+  return typeof role === "string" ? labels[role] ?? "成员" : "成员";
+}
+
+function executionModeLabel(mode: "mock" | "staging" | "live") {
+  const labels = {
+    live: "已启用",
+    mock: "预览",
+    staging: "试运行",
+  };
+  return labels[mode];
+}
+
+function healthLabel(value: unknown) {
+  const normalized = optionalText(value).toLowerCase();
+  if (["ok", "healthy", "available", "operational"].includes(normalized)) {
+    return "正常";
+  }
+  if (normalized) {
+    return "需关注";
+  }
+  return "确认中";
+}
+
 function FallbackNotice({
   detail,
   isLoading,
@@ -221,9 +238,9 @@ function FallbackNotice({
 }) {
   return (
     <div aria-live="polite" className="ops-empty-state" role="status">
-      <strong>System initializing</strong>
-      <span>Fallback mode active</span>
-      <span>{textValue(detail, "System initializing")}</span>
+      <strong>暂无数据</strong>
+      <span>系统正在准备，请稍后刷新。</span>
+      <span>{textValue(detail, "加载失败，请稍后重试。")}</span>
       <button
         className="secondary-button"
         disabled={isLoading}
@@ -235,7 +252,7 @@ function FallbackNotice({
         ) : (
           <RotateCcw aria-hidden="true" size={15} />
         )}
-        Try refresh
+        刷新
       </button>
     </div>
   );
@@ -254,7 +271,7 @@ export function OperationsDashboard() {
     const previousController = abortControllerRef.current;
     if (previousController && !previousController.signal.aborted) {
       previousController.abort(
-        new ApiRequestAbortedError("Dashboard load was replaced."),
+        new ApiRequestAbortedError("首页请求已替换。"),
       );
     }
 
@@ -319,10 +336,10 @@ export function OperationsDashboard() {
         health: batchData(overview.health),
         healthError: batchError(
           overview.health,
-          "System health is unavailable.",
+          "加载失败，请稍后重试。",
         ),
         users: batchData(overview.users),
-        usersError: batchError(overview.users, "Users are unavailable."),
+        usersError: batchError(overview.users, "加载失败，请稍后重试。"),
       }),
       (error) => ({
         health: null,
@@ -330,7 +347,7 @@ export function OperationsDashboard() {
         users: null,
         usersError: error,
       }),
-      "Dashboard overview is unavailable.",
+      "加载失败，请稍后重试。",
     );
     void loadResource(
       apiRequest<DashboardActivityResponse>(
@@ -344,11 +361,11 @@ export function OperationsDashboard() {
         approvals: batchData(activity.approvals),
         approvalsError: batchError(
           activity.approvals,
-          "Approvals are unavailable.",
+          "加载失败，请稍后重试。",
         ),
         logsError: batchError(
           activity.operation_logs,
-          "Logs are unavailable.",
+          "加载失败，请稍后重试。",
         ),
         operationLogs: batchData(activity.operation_logs),
       }),
@@ -358,7 +375,7 @@ export function OperationsDashboard() {
         logsError: error,
         operationLogs: null,
       }),
-      "Dashboard activity is unavailable.",
+      "加载失败，请稍后重试。",
     );
   }, []);
 
@@ -368,7 +385,7 @@ export function OperationsDashboard() {
     return () => {
       const controller = abortControllerRef.current;
       if (controller && !controller.signal.aborted) {
-        controller.abort(new ApiRequestAbortedError("Dashboard load was aborted."));
+        controller.abort(new ApiRequestAbortedError("首页请求已取消。"));
       }
       abortControllerRef.current = null;
     };
@@ -391,7 +408,7 @@ export function OperationsDashboard() {
 
   const safeState = state;
   const safeOrgContext = {
-    role: textValue(capabilityState?.orgContext?.role, "Unknown"),
+    role: roleLabel(capabilityState?.orgContext?.role),
     state: textValue(capabilityState?.orgContext?.state, "unknown"),
     visibleModules: safeNumber(capabilityState?.orgContext?.visible_modules, 0),
   };
@@ -417,7 +434,7 @@ export function OperationsDashboard() {
   const usersError = optionalText(safeState.usersError);
   const approvalsError = optionalText(safeState.approvalsError);
   const logsError = optionalText(safeState.logsError);
-  const healthStatus = textValue(safeState.health?.status, "System initializing");
+  const healthStatus = healthLabel(safeState.health?.status);
   const executionMode = normalizeExecutionMode(
     capabilityState?.liveGate?.execution_mode,
   );
@@ -433,28 +450,28 @@ export function OperationsDashboard() {
   const hasApprovalData =
     safeState.approvals !== null && safeState.approvals !== undefined;
   const hasOrganizationData = safeOrgContext.state === "active";
-  const healthDetail = healthError || "System initializing";
-  const userDetail = usersError || "System initializing";
-  const approvalDetail = approvalsError || "System initializing";
-  const logDetail = logsError || "System initializing";
+  const healthDetail = healthError || "暂无数据";
+  const userDetail = usersError || "暂无数据";
+  const approvalDetail = approvalsError || "暂无数据";
+  const logDetail = logsError || "暂无数据";
   const approvalQueue = approvalItems
     .filter((approval) => optionalText(approval.status).toLowerCase() === "pending")
     .slice(0, 5);
   const systemStatus = useMemo(() => {
     if (healthError.length > 0) {
-      return "No data available";
+      return "暂无数据";
     }
     if (!hasHealthData && activeLoading) {
-      return "System initializing";
+      return "确认中";
     }
     if (!hasHealthData && loadingFallbackActive) {
-      return "Fallback mode active";
+      return "准备中";
     }
     if (failedLogs > 0 || logsError.length > 0 || approvalsError.length > 0) {
-      return "Review";
+      return "需关注";
     }
 
-    return "Operational";
+    return "正常";
   }, [
     approvalsError,
     activeLoading,
@@ -466,41 +483,41 @@ export function OperationsDashboard() {
   ]);
   const metricCards = [
     {
-      detail: healthError || textValue(safeState.health?.database, "System initializing"),
+      detail: healthError || "服务状态已汇总",
       icon: CheckCircle2,
-      label: "System Health",
-      value: healthError ? "No data available" : healthStatus,
+      label: "系统状态",
+      value: healthError ? "暂无数据" : healthStatus,
     },
     {
-      detail: usersError || "Workspace accounts",
+      detail: usersError || "工作台账号",
       icon: UsersRound,
-      label: "Users Overview",
+      label: "用户概览",
       value: users,
     },
     {
       detail:
-        orgs > 0 ? "Active workspace" : "No data available",
+        orgs > 0 ? "组织访问正常" : "暂无数据",
       icon: Building2,
-      label: "Organizations Overview",
+      label: "组织概览",
       value: orgs,
     },
     {
-      detail: `${approvals} total requests`,
+      detail: `共 ${approvals} 条`,
       icon: ClipboardCheck,
-      label: "Approvals Queue",
-      value: approvalsError ? "No data available" : pendingApprovals,
+      label: "待办审批",
+      value: approvalsError ? "暂无数据" : pendingApprovals,
     },
     {
-      detail: `${failedLogs} need review`,
+      detail: `${failedLogs} 条需关注`,
       icon: FileText,
-      label: "Logs",
-      value: logsError ? "No data available" : logs.length,
+      label: "近期操作",
+      value: logsError ? "暂无数据" : logs.length,
     },
     {
-      detail: "Current mode",
+      detail: "当前状态",
       icon: ShieldCheck,
-      label: "Execution Status",
-      value: executionMode,
+      label: "操作状态",
+      value: executionModeLabel(executionMode),
     },
   ];
 
@@ -508,11 +525,10 @@ export function OperationsDashboard() {
     <div className="ops-dashboard">
       <div className="ops-dashboard-header">
         <div>
-          <span className="eyebrow">Operations Hub</span>
-          <h2>Product operations hub</h2>
+          <span className="eyebrow">首页</span>
+          <h2>工作台概览</h2>
           <p>
-            Monitor System Health, Users Overview, Organizations Overview,
-            Approvals Queue, Logs, and Execution Status from one stable view.
+            查看账号、组织、审批和系统状态。
           </p>
         </div>
         <button
@@ -526,11 +542,11 @@ export function OperationsDashboard() {
           ) : (
             <RotateCcw aria-hidden="true" size={17} />
           )}
-          Refresh
+          刷新
         </button>
       </div>
 
-      <section className="ops-metric-grid" aria-label="Operations metrics">
+      <section className="ops-metric-grid" aria-label="工作台指标">
         {metricCards.map(({ detail, icon: Icon, label, value }) => (
           <article className="ops-metric-card" key={label}>
             <Icon aria-hidden="true" size={19} />
@@ -545,8 +561,8 @@ export function OperationsDashboard() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>System Health Card</h3>
-              <p>Current service availability and product readiness.</p>
+              <h3>系统状态</h3>
+              <p>当前系统可用性。</p>
             </div>
           </div>
           {healthError || !hasHealthData ? (
@@ -558,27 +574,23 @@ export function OperationsDashboard() {
           ) : (
             <dl className="ops-readiness-list">
               <div>
-                <dt>Status</dt>
+                <dt>状态</dt>
                 <dd>{healthStatus}</dd>
               </div>
               <div>
-                <dt>Service</dt>
-                <dd>{textValue(safeState.health?.service)}</dd>
+                <dt>服务</dt>
+                <dd>{healthStatus}</dd>
               </div>
               <div>
-                <dt>Database</dt>
-                <dd>{textValue(safeState.health?.database)}</dd>
+                <dt>业务可用性</dt>
+                <dd>{hasHealthData ? "可用" : "确认中"}</dd>
               </div>
               <div>
-                <dt>External services</dt>
-                <dd>{textValue(safeState.health?.external_services)}</dd>
+                <dt>数据状态</dt>
+                <dd>{hasHealthData ? "已同步" : "暂无数据"}</dd>
               </div>
               <div>
-                <dt>Version</dt>
-                <dd>{textValue(safeState.health?.version)}</dd>
-              </div>
-              <div>
-                <dt>Overall</dt>
+                <dt>总体</dt>
                 <dd>{systemStatus}</dd>
               </div>
             </dl>
@@ -588,8 +600,8 @@ export function OperationsDashboard() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>Users Overview</h3>
-              <p>User access and account coverage for this workspace.</p>
+              <h3>用户概览</h3>
+              <p>当前工作台账号情况。</p>
             </div>
           </div>
           {usersError && !hasUsersData && !currentUser ? (
@@ -601,29 +613,29 @@ export function OperationsDashboard() {
           ) : (
             <dl className="ops-readiness-list">
               <div>
-                <dt>Users</dt>
+                <dt>用户数</dt>
                 <dd>{users}</dd>
               </div>
               <div>
-                <dt>Loaded</dt>
+                <dt>本页加载</dt>
                 <dd>{userItems.length}</dd>
               </div>
               <div>
-                <dt>Current role</dt>
-                <dd>{textValue(currentUser?.role)}</dd>
+                <dt>当前角色</dt>
+                <dd>{roleLabel(currentUser?.role)}</dd>
               </div>
               <div>
-                <dt>Account</dt>
+                <dt>当前账号</dt>
                 <dd>{textValue(currentUser?.username)}</dd>
               </div>
               <div>
-                <dt>Status</dt>
+                <dt>状态</dt>
                 <dd>
                   {usersError
-                    ? "Limited view"
+                    ? "部分可见"
                     : currentUser?.is_active === false
-                      ? "Inactive"
-                      : "Available"}
+                      ? "已停用"
+                      : "正常"}
                 </dd>
               </div>
             </dl>
@@ -633,32 +645,32 @@ export function OperationsDashboard() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>Organizations Overview</h3>
-              <p>Workspace organization access and visibility status.</p>
+              <h3>组织概览</h3>
+              <p>当前账号的组织访问状态。</p>
             </div>
           </div>
           {hasOrganizationData ? (
             <dl className="ops-readiness-list">
               <div>
-                <dt>Organizations</dt>
+                <dt>组织</dt>
                 <dd>{orgs}</dd>
               </div>
               <div>
-                <dt>Access</dt>
-                <dd>Active</dd>
+                <dt>访问状态</dt>
+                <dd>正常</dd>
               </div>
               <div>
-                <dt>Role</dt>
+                <dt>角色</dt>
                 <dd>{safeOrgContext.role}</dd>
               </div>
               <div>
-                <dt>Visible areas</dt>
+                <dt>可见功能区</dt>
                 <dd>{safeOrgContext.visibleModules}</dd>
               </div>
             </dl>
           ) : (
             <FallbackNotice
-              detail="System initializing"
+              detail="暂无数据"
               isLoading={activeLoading}
               onRetry={() => void load()}
             />
@@ -668,8 +680,8 @@ export function OperationsDashboard() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>Approvals Queue</h3>
-              <p>Requests waiting for review and completed decisions.</p>
+              <h3>待办审批</h3>
+              <p>待处理和已处理的审批数量。</p>
             </div>
           </div>
           {approvalsError || !hasApprovalData ? (
@@ -682,30 +694,29 @@ export function OperationsDashboard() {
             <>
               <dl className="ops-readiness-list">
                 <div>
-                  <dt>Pending</dt>
+                  <dt>待处理</dt>
                   <dd>{pendingApprovals}</dd>
                 </div>
                 <div>
-                  <dt>Approved</dt>
+                  <dt>已同意</dt>
                   <dd>{approvedApprovals}</dd>
                 </div>
                 <div>
-                  <dt>Rejected</dt>
+                  <dt>已拒绝</dt>
                   <dd>{rejectedApprovals}</dd>
                 </div>
                 <div>
-                  <dt>Total</dt>
+                  <dt>全部</dt>
                   <dd>{approvals}</dd>
                 </div>
               </dl>
               {approvalQueue.length > 0 ? (
-                <ol className="ops-record-list" aria-label="Approvals queue">
+                <ol className="ops-record-list" aria-label="待办审批">
                   {approvalQueue.map((approval, index) => (
                     <li key={`approval-${index}`}>
-                      <span>{textValue(approval.status, "pending")}</span>
-                      <strong>Approval request</strong>
+                      <span>待处理</span>
+                      <strong>审批事项</strong>
                       <small>
-                        {textValue(approval.risk_level, "Standard risk")} /{" "}
                         {formatDate(approval.request_time)}
                       </small>
                     </li>
@@ -713,7 +724,7 @@ export function OperationsDashboard() {
                 </ol>
               ) : (
                 <FallbackNotice
-                  detail="System initializing"
+                  detail="暂无数据"
                   isLoading={activeLoading}
                   onRetry={() => void load()}
                 />
@@ -725,8 +736,8 @@ export function OperationsDashboard() {
         <article className="ops-panel ops-panel-wide">
           <div className="ops-panel-heading">
             <div>
-              <h3>Logs</h3>
-              <p>Recent product activity and completed work.</p>
+              <h3>近期操作</h3>
+              <p>最近完成的工作台操作。</p>
             </div>
           </div>
           {logsError || logs.length === 0 ? (
@@ -736,13 +747,12 @@ export function OperationsDashboard() {
               onRetry={() => void load()}
             />
           ) : (
-            <ol className="ops-record-list" aria-label="Recent logs">
+            <ol className="ops-record-list" aria-label="近期操作">
               {logs.slice(0, 8).map((log, index) => (
                 <li key={`log-${index}`}>
-                  <span>{textValue(log.result, "recorded")}</span>
-                  <strong>{textValue(log.action, "Log entry")}</strong>
+                  <span>{optionalText(log.result).toLowerCase() === "error" ? "需关注" : "已记录"}</span>
+                  <strong>操作记录</strong>
                   <small>
-                    {textValue(log.target_type, "Workspace")} /{" "}
                     {formatDate(log.created_at)}
                   </small>
                 </li>
@@ -754,31 +764,31 @@ export function OperationsDashboard() {
         <article className="ops-panel">
           <div className="ops-panel-heading">
             <div>
-              <h3>Execution Status</h3>
-              <p>Current product execution mode exposed to operators.</p>
+              <h3>操作状态</h3>
+              <p>当前工作台操作能力。</p>
             </div>
           </div>
           <dl className="ops-readiness-list">
             <div>
-              <dt>Current mode</dt>
-              <dd>{executionMode}</dd>
+              <dt>当前状态</dt>
+              <dd>{executionModeLabel(executionMode)}</dd>
             </div>
             <div>
-              <dt>Safe fallback</dt>
-              <dd>mock</dd>
+              <dt>安全模式</dt>
+              <dd>已启用</dd>
             </div>
             <div>
-              <dt>Available modes</dt>
-              <dd>mock / staging / live</dd>
+              <dt>可用性</dt>
+              <dd>{capabilityFallbackActive ? "准备中" : "可用"}</dd>
             </div>
             <div>
-              <dt>State</dt>
+              <dt>状态</dt>
               <dd>
                 {capabilityFallbackActive
-                  ? "Fallback mode active"
+                  ? "准备中"
                   : capabilityLoading
-                    ? "System initializing"
-                    : "Available"}
+                    ? "确认中"
+                    : "正常"}
               </dd>
             </div>
           </dl>

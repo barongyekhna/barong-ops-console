@@ -681,13 +681,13 @@ def validate_error_format() -> dict[str, Any]:
         {
             "id": "proxy_not_found_detail_shape",
             "status": "passed"
-            if '{ detail: "Not found." }' in proxy_route
+            if '{ detail: "暂无数据。" }' in proxy_route
             else "failed",
         },
         {
             "id": "proxy_unavailable_detail_shape",
             "status": "passed"
-            if "Backend API service is unavailable." in proxy_route
+            if "加载失败，请稍后重试。" in proxy_route
             else "failed",
         },
     ]

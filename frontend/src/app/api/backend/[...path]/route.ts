@@ -599,11 +599,11 @@ async function proxyRequest(
   const backendApiPath = getBackendApiPath(request.method, path);
 
   if (isBlockedSecurityIsolationPath(path)) {
-    return Response.json({ detail: "Not found." }, { status: 404 });
+    return Response.json({ detail: "暂无数据。" }, { status: 404 });
   }
 
   if (backendApiPath === null) {
-    return Response.json({ detail: "Not found." }, { status: 404 });
+    return Response.json({ detail: "暂无数据。" }, { status: 404 });
   }
 
   try {
@@ -649,7 +649,7 @@ async function proxyRequest(
     });
   } catch {
     return Response.json(
-      { detail: "Backend API service is unavailable." },
+      { detail: "加载失败，请稍后重试。" },
       { status: 503 },
     );
   }
@@ -702,7 +702,7 @@ async function fetchCapabilityBootstrapTarget(
       target.key,
       {
         data: null,
-        detail: "Capability bootstrap target is not allowed.",
+        detail: "加载失败，请稍后重试。",
         ok: false,
         status: 404,
       },
@@ -737,7 +737,7 @@ async function fetchCapabilityBootstrapTarget(
       target.key,
       {
         data: null,
-        detail: "Backend API service is unavailable.",
+        detail: "加载失败，请稍后重试。",
         ok: false,
         status: 503,
       },

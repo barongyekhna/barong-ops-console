@@ -1,0 +1,137 @@
+{
+  "backend_registry_module_keys": [
+    "core.dashboard",
+    "experimental.foundation_demo",
+    "integration.n8n_test_bridge",
+    "admin.users",
+    "admin.organizations",
+    "admin.permissions",
+    "admin.modules",
+    "admin.agents",
+    "admin.settings",
+    "business.products",
+    "business.approvals",
+    "business.reviews",
+    "system.errors",
+    "system.memory_events",
+    "system.operation_logs"
+  ],
+  "basis": "Generated from current source plus productization edits in this run.",
+  "frontend_navigation_modules": [
+    {
+      "href": "/users",
+      "label": "用户管理",
+      "module_key": "admin.users"
+    },
+    {
+      "href": "/organizations",
+      "label": "组织管理",
+      "module_key": "admin.organizations"
+    },
+    {
+      "href": "/permissions",
+      "label": "权限管理",
+      "module_key": "admin.permissions"
+    },
+    {
+      "href": "/approvals",
+      "label": "审批",
+      "module_key": "business.approvals"
+    },
+    {
+      "href": "/reviews",
+      "label": "审批审计",
+      "module_key": "business.reviews"
+    },
+    {
+      "href": "/dashboard",
+      "label": "首页",
+      "module_key": "core.dashboard"
+    },
+    {
+      "href": "/modules",
+      "label": "功能区",
+      "module_key": "admin.modules"
+    },
+    {
+      "href": "/settings",
+      "label": "设置",
+      "module_key": "admin.settings"
+    },
+    {
+      "href": "/errors",
+      "label": "异常记录",
+      "module_key": "system.errors"
+    },
+    {
+      "href": "/memory-events",
+      "label": "运行记录",
+      "module_key": "system.memory_events"
+    },
+    {
+      "href": "/operation-logs",
+      "label": "操作记录",
+      "module_key": "system.operation_logs"
+    },
+    {
+      "href": "/agents",
+      "label": "自动化助手",
+      "module_key": "admin.agents"
+    }
+  ],
+  "frontend_registry_alignment": {
+    "backend_registry_modules_not_in_product_navigation": [
+      "business.products",
+      "experimental.foundation_demo",
+      "integration.n8n_test_bridge"
+    ],
+    "hidden_technical_modules": [
+      "admin.agents",
+      "admin.permissions",
+      "admin.settings",
+      "experimental.foundation_demo",
+      "integration.n8n_test_bridge",
+      "system.errors",
+      "system.memory_events",
+      "system.operation_logs"
+    ],
+    "navigation_modules_not_in_backend_registry": []
+  },
+  "generated_at": "2026-06-22T05:39:24.687113+00:00",
+  "modified_frontend_files": [
+    "frontend/src/lib/navigation.ts",
+    "frontend/src/lib/frontend-capability-state.ts",
+    "frontend/src/components/user-management-panel.tsx",
+    "frontend/src/components/organization-product-view.tsx",
+    "frontend/src/components/module-registry-product-view.tsx",
+    "frontend/src/components/review-audit-view.tsx",
+    "frontend/src/components/approval-product-view.tsx",
+    "frontend/src/components/operations-dashboard.tsx",
+    "frontend/src/app/(console)/dashboard/page.tsx",
+    "frontend/src/app/(console)/users/page.tsx",
+    "frontend/src/app/(console)/organizations/page.tsx",
+    "frontend/src/app/api/backend/[...path]/route.ts"
+  ],
+  "productized_target_modules": [
+    "admin.modules",
+    "admin.organizations",
+    "admin.users",
+    "business.approvals",
+    "business.reviews"
+  ],
+  "ui_productization_controls": {
+    "error_messages": [
+      "暂无数据",
+      "加载失败，请稍后重试"
+    ],
+    "language": "目标页面、首页、导航、空状态和错误兜底已中文化。",
+    "pagination_default": 10,
+    "technical_fields_hidden": [
+      "用户页移除了权限面板入口和用户 ID 展示。",
+      "组织页不再展示 owner_user_id，未匹配时显示业务文案。",
+      "功能区页不展示 module_key/api_namespace/route_namespace/reason 原文。",
+      "审计页不展示 related_object_type/related_object。",
+      "技术运维模块从产品导航隐藏，保留在后端暴露报告。"
+    ]
+  }
+}

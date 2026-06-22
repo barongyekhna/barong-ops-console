@@ -19,7 +19,6 @@ import {
   detectHighRiskPermission,
   filterGrantablePermissionRegistry,
   filterPermissionRegistryForRole,
-  formatPermissionAssignmentsApiError,
   getPermissionCategoryLabel,
   getPermissionDisplayName,
   getPermissionUiCategory,
@@ -41,6 +40,20 @@ import {
 const ASSIGNMENT_REASON = "Permission center assignment update.";
 const GLOBAL_SCOPE_TYPE = "global";
 const GLOBAL_SCOPE_KEY = "*";
+
+function roleLabel(role: string) {
+  if (role === "owner") {
+    return "所有者";
+  }
+  if (role === "super_admin") {
+    return "组织管理员";
+  }
+  return "普通用户";
+}
+
+function riskLabel(permission: PermissionRegistryItem) {
+  return detectHighRiskPermission(permission) ? "高风险" : "常规";
+}
 
 function permissionAssignmentForUser(
   assignments: PermissionAssignment[],
@@ -93,7 +106,7 @@ function PermissionCard({
         {getPermissionCategoryLabel(getPermissionUiCategory(permission))}
       </span>
       <strong>{getPermissionDisplayName(permission)}</strong>
-      <small>{permission.description || permission.label}</small>
+      <small>按当前账号范围控制访问。</small>
       <span
         className={
           detectHighRiskPermission(permission)
@@ -101,7 +114,7 @@ function PermissionCard({
             : "permissions-risk-badge"
         }
       >
-        {permission.risk_level.toUpperCase()}
+        {riskLabel(permission)}
       </span>
     </>
   );
@@ -190,7 +203,7 @@ export function PermissionsProductView() {
       loadErrors.push(
         formatUsersApiError(
           loadError,
-          "Permission center users could not be loaded.",
+          "加载用户失败，请稍后重试。",
         ),
       );
     }
@@ -202,7 +215,7 @@ export function PermissionsProductView() {
       loadErrors.push(
         formatUsersApiError(
           loadError,
-          "Permission registry could not be loaded.",
+          "加载权限失败，请稍后重试。",
         ),
       );
     }
@@ -244,9 +257,8 @@ export function PermissionsProductView() {
         ...rows,
       }));
       if (failedCount > 0) {
-        setDialogError(
-          `${formatPermissionAssignmentsApiError(lastError)} Showing loaded employees where available.`,
-        );
+        void lastError;
+        setDialogError("部分员工权限加载失败，已显示可用员工。");
       }
       setIsDialogLoading(false);
     },
@@ -326,9 +338,10 @@ export function PermissionsProductView() {
       }
 
       await refreshUserAssignment(targetUser, selectedPermission);
-      setDialogNotice("Permission assignment updated.");
+      setDialogNotice("权限已更新。");
     } catch (actionError) {
-      setDialogError(formatPermissionAssignmentsApiError(actionError));
+      void actionError;
+      setDialogError("操作失败，请稍后重试。");
     } finally {
       setPendingUserId(null);
     }
@@ -339,14 +352,13 @@ export function PermissionsProductView() {
   }
 
   return (
-    <section className="product-console" aria-label="Permissions">
+    <section className="product-console" aria-label="权限管理">
       <div className="registry-command-bar">
         <div>
-          <span className="eyebrow">Users & Organizations</span>
-          <h2>Permissions</h2>
+          <span className="eyebrow">账号与组织</span>
+          <h2>权限管理</h2>
           <p>
-            Human-readable permission groups with organization-scoped employee
-            assignment controls.
+            管理员工可访问的功能范围。
           </p>
         </div>
         <button
@@ -360,33 +372,33 @@ export function PermissionsProductView() {
           ) : (
             <RotateCcw aria-hidden="true" size={17} />
           )}
-          Refresh
+          刷新
         </button>
       </div>
 
       <div className="capability-summary-grid">
         <div>
-          <span>Employees</span>
+          <span>员工</span>
           <strong>{users.length}</strong>
         </div>
         <div>
-          <span>Feature</span>
+          <span>功能权限</span>
           <strong>{featurePermissions.length}</strong>
         </div>
         <div>
-          <span>Control</span>
+          <span>系统权限</span>
           <strong>{controlPlanePermissions.length}</strong>
         </div>
         <div>
-          <span>Role</span>
-          <strong>{role || "Unknown"}</strong>
+          <span>当前角色</span>
+          <strong>{roleLabel(role)}</strong>
         </div>
       </div>
 
       {isLoading && registry.length === 0 && users.length === 0 ? (
         <section className="list-state">
           <LoaderCircle className="spin" aria-hidden="true" size={22} />
-          <span>Loading permission center</span>
+          <span>正在加载权限</span>
         </section>
       ) : null}
 
@@ -395,12 +407,12 @@ export function PermissionsProductView() {
           <div>
             <h2>
               {registry.length > 0 || users.length > 0
-                ? "Permissions are degraded"
-                : "Permissions are unavailable"}
+                ? "部分数据加载失败"
+                : "加载失败，请稍后重试"}
             </h2>
             <p>{error}</p>
             {registry.length > 0 || users.length > 0 ? (
-              <p>Showing the last successful permission center data.</p>
+              <p>正在显示上一次成功加载的数据。</p>
             ) : null}
           </div>
           <button
@@ -409,7 +421,7 @@ export function PermissionsProductView() {
             type="button"
           >
             <RotateCcw aria-hidden="true" size={17} />
-            Retry
+            重试
           </button>
         </section>
       ) : null}
@@ -420,11 +432,11 @@ export function PermissionsProductView() {
           {role === "owner" ? (
             <section
               className="permissions-group-section"
-              aria-label="Control Plane Permissions"
+              aria-label="系统权限"
             >
               <div className="permissions-section-heading">
-                <h3>Control Plane Permissions</h3>
-                <p>System, execution, module, adapter, and registry access.</p>
+                <h3>系统权限</h3>
+                <p>仅所有者可查看和管理。</p>
               </div>
               {controlPlanePermissions.length > 0 ? (
                 <div className="permissions-card-grid">
@@ -437,8 +449,8 @@ export function PermissionsProductView() {
                 </div>
               ) : (
                 <div className="ops-empty-state">
-                  <strong>No control plane permissions returned.</strong>
-                  <span>Registry is empty for this group.</span>
+                  <strong>暂无数据</strong>
+                  <span>当前没有可显示的系统权限。</span>
                 </div>
               )}
             </section>
@@ -446,11 +458,11 @@ export function PermissionsProductView() {
 
           <section
             className="permissions-group-section"
-            aria-label="Feature Permissions"
+            aria-label="功能权限"
           >
             <div className="permissions-section-heading">
-              <h3>Feature Permissions</h3>
-              <p>Agents, reviews, and approvals.</p>
+              <h3>功能权限</h3>
+              <p>控制员工可访问的业务功能。</p>
             </div>
             {featurePermissions.length > 0 ? (
               <div className="permissions-card-grid">
@@ -465,8 +477,8 @@ export function PermissionsProductView() {
               </div>
             ) : (
               <div className="ops-empty-state">
-                <strong>No feature permissions returned.</strong>
-                <span>Registry is empty for this group.</span>
+                <strong>暂无数据</strong>
+                <span>当前没有可显示的功能权限。</span>
               </div>
             )}
           </section>
@@ -483,17 +495,17 @@ export function PermissionsProductView() {
           <section className="permissions-modal">
             <div className="permissions-modal-heading">
               <div>
-                <span className="eyebrow">Feature Permissions</span>
+                <span className="eyebrow">功能权限</span>
                 <h3 id="permission-assignment-title">
                   {getPermissionDisplayName(selectedPermission)}
                 </h3>
               </div>
               <button
-                aria-label="Close"
+                aria-label="关闭"
                 className="icon-button"
                 disabled={pendingUserId !== null}
                 onClick={() => setSelectedPermission(null)}
-                title="Close"
+                title="关闭"
                 type="button"
               >
                 <X aria-hidden="true" size={18} />
@@ -515,14 +527,14 @@ export function PermissionsProductView() {
             ) : null}
 
             <label className="field-group">
-              <span>Search employees</span>
+              <span>搜索员工</span>
               <span className="input-shell">
                 <Search aria-hidden="true" size={16} />
                 <input
                   onChange={(event) =>
                     setDialogSearchQuery(event.target.value)
                   }
-                  placeholder="employee name"
+                  placeholder="员工姓名"
                   type="search"
                   value={dialogSearchQuery}
                 />
@@ -532,7 +544,7 @@ export function PermissionsProductView() {
             {isDialogLoading ? (
               <div className="list-state permissions-empty">
                 <LoaderCircle className="spin" aria-hidden="true" size={22} />
-                Loading employees
+                正在加载员工
               </div>
             ) : (
               <div className="permissions-user-list">
@@ -580,8 +592,8 @@ export function PermissionsProductView() {
                 })}
                 {filteredDialogUsers.length === 0 ? (
                   <div className="ops-empty-state">
-                    <strong>No employees found.</strong>
-                    <span>Try another name.</span>
+                    <strong>暂无数据</strong>
+                    <span>请更换搜索条件。</span>
                   </div>
                 ) : null}
               </div>

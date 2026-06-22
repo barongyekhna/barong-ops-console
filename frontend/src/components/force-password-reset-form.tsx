@@ -9,13 +9,13 @@ import { ApiError } from "@/lib/api";
 import { requiresPasswordChange } from "@/lib/auth";
 
 const DEFAULT_INITIAL_PASSWORD = "123456";
-const PASSWORD_LENGTH_MESSAGE = "New password must be at least 12 characters.";
+const PASSWORD_LENGTH_MESSAGE = "新密码至少需要 12 个字符。";
 
 function messageFromError(error: unknown) {
-  if (error instanceof ApiError || error instanceof Error) {
-    return error.message || "Password could not be changed.";
+  if (error instanceof ApiError && error.status === 401) {
+    return "请重新登录后再操作。";
   }
-  return "Password could not be changed.";
+  return "密码修改失败，请稍后重试。";
 }
 
 export function ForcePasswordResetForm() {
@@ -42,7 +42,7 @@ export function ForcePasswordResetForm() {
     setError("");
 
     if (currentPassword !== DEFAULT_INITIAL_PASSWORD) {
-      setError("Current password must match the initial default password.");
+      setError("当前密码必须与初始密码一致。");
       return;
     }
     if (newPassword.length < 12) {
@@ -50,7 +50,7 @@ export function ForcePasswordResetForm() {
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError("New password and confirmation must match.");
+      setError("两次输入的新密码必须一致。");
       return;
     }
 
@@ -74,23 +74,23 @@ export function ForcePasswordResetForm() {
 
   return (
     <main className="force-reset-page">
-      <section className="force-reset-panel" aria-label="Force password reset">
+      <section className="force-reset-panel" aria-label="修改密码">
         <div className="force-reset-heading">
           <span className="force-reset-icon">
             <LockKeyhole aria-hidden="true" size={22} />
           </span>
           <div>
-            <span className="eyebrow">Password reset</span>
-            <h1>Change password</h1>
+            <span className="eyebrow">密码重置</span>
+            <h1>修改密码</h1>
             <small>
-              ⚠️ 首次登录默认密码为 123456，请修改后继续使用系统
+              首次登录默认密码为 123456，请修改后继续使用系统
             </small>
           </div>
         </div>
 
         <form className="force-reset-form" onSubmit={handleSubmit}>
           <label className="field-group">
-            <span>Current password</span>
+            <span>当前密码</span>
             <span className="input-shell">
               <input
                 autoComplete="current-password"
@@ -103,7 +103,7 @@ export function ForcePasswordResetForm() {
           </label>
 
           <label className="field-group">
-            <span>New password</span>
+            <span>新密码</span>
             <span className="input-shell">
               <input
                 autoComplete="new-password"
@@ -117,7 +117,7 @@ export function ForcePasswordResetForm() {
           </label>
 
           <label className="field-group">
-            <span>Confirm password</span>
+            <span>确认新密码</span>
             <span className="input-shell">
               <input
                 autoComplete="new-password"
@@ -144,7 +144,7 @@ export function ForcePasswordResetForm() {
             ) : (
               <ArrowRight aria-hidden="true" size={18} />
             )}
-            Continue
+            继续
           </button>
         </form>
       </section>

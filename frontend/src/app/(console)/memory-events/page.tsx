@@ -6,40 +6,39 @@ export default function MemoryEventsPage() {
   return (
     <ProductResourceConsole
       create={{
-        description: "Record a memory event for an existing subject.",
+        description: "记录一条运行上下文事件。",
         endpoint: "/memory-events",
         fields: [
           {
             key: "memory_event_id",
-            label: "Memory event ID",
-            placeholder: "demo.memory.event",
+            label: "记录编号",
             required: true,
           },
           {
             defaultValue: "observation",
             key: "event_type",
-            label: "Event type",
+            label: "事件类型",
             required: true,
           },
           {
             defaultValue: "system",
             key: "subject_type",
-            label: "Subject type",
+            label: "对象类型",
             required: true,
           },
           {
             key: "subject_id",
-            label: "Subject ID",
+            label: "对象编号",
             required: true,
           },
           {
             defaultValue: "normal_demo",
             key: "importance",
-            label: "Importance",
+            label: "重要程度",
             options: [
-              { label: "Low", value: "low_demo" },
-              { label: "Normal", value: "normal_demo" },
-              { label: "High", value: "high_demo" },
+              { label: "低", value: "low_demo" },
+              { label: "普通", value: "normal_demo" },
+              { label: "高", value: "high_demo" },
             ],
             required: true,
             type: "select",
@@ -47,37 +46,33 @@ export default function MemoryEventsPage() {
           {
             defaultValue: "{}",
             key: "payload",
-            label: "Payload",
+            label: "内容",
             type: "json",
           },
         ],
-        submitLabel: "Record event",
-        title: "Record memory event",
+        submitLabel: "记录",
+        title: "记录事件",
       }}
-      description="Inspect and record memory event metadata through the existing memory-events API."
+      description="查看和记录运行上下文事件。"
       detailEndpoint={(record) => `/memory-events/${record.memory_event_id}`}
       detailFields={[
-        { key: "memory_event_id", label: "Event" },
-        { key: "event_type", label: "Type" },
-        { key: "subject_type", label: "Subject type" },
-        { key: "subject_id", label: "Subject ID" },
-        { key: "importance", label: "Importance" },
-        { key: "payload", label: "Payload" },
-        { key: "created_at", label: "Created" },
+        { key: "event_type", label: "事件类型" },
+        { key: "subject_type", label: "对象类型" },
+        { key: "importance", label: "重要程度" },
+        { key: "created_at", label: "创建时间" },
       ]}
-      emptyDescription="Memory events appear here when system context is recorded."
-      emptyTitle="No memory events recorded."
+      emptyDescription="当前没有可显示的运行记录。"
+      emptyTitle="暂无数据"
       endpoint="/memory-events?limit=50&offset=0"
-      eyebrow="System"
+      eyebrow="系统"
       fields={[
-        { key: "memory_event_id", label: "Event" },
-        { key: "event_type", label: "Type" },
-        { key: "subject_type", label: "Subject" },
-        { key: "importance", label: "Importance" },
+        { key: "event_type", label: "事件类型" },
+        { key: "subject_type", label: "对象类型" },
+        { key: "importance", label: "重要程度" },
       ]}
       idKey="memory_event_id"
       requiredPermission="operation_logs.read"
-      title="Memory Events"
+      title="运行记录"
     />
   );
 }

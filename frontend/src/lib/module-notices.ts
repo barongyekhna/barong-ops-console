@@ -1,6 +1,6 @@
-export const MODULE_UNAVAILABLE_TITLE = "Product area unavailable";
+export const MODULE_UNAVAILABLE_TITLE = "功能区暂不可用";
 export const MODULE_UNAVAILABLE_DESCRIPTION =
-  "This product area is not available for your workspace yet. Contact an owner if you need access.";
-export const MODULE_NO_PERMISSION_TITLE = "Access needed";
+  "该功能区当前还不能使用，请联系所有者确认开通状态。";
+export const MODULE_NO_PERMISSION_TITLE = "无权访问";
 export const MODULE_NO_PERMISSION_DESCRIPTION =
-  "Your account does not have access to this product area.";
+  "当前账号无权访问该功能区。";

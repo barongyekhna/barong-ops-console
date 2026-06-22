@@ -8,10 +8,10 @@ import { useAuth } from "@/components/auth-provider";
 import { ApiError, ApiRequestAbortedError, ApiTimeoutError } from "@/lib/api";
 
 const LOGIN_AUTH_ERROR =
-  "Unable to sign in. Check your credentials and try again.";
+  "登录失败，请检查账号和密码。";
 const LOGIN_BACKEND_ERROR =
-  "Sign-in service is unavailable. Please try again.";
-const LOGIN_ERROR = "Unable to sign in. Please try again.";
+  "登录服务暂不可用，请稍后重试。";
+const LOGIN_ERROR = "登录失败，请稍后重试。";
 const LOGIN_REQUEST_TIMEOUT_MS = 8_000;
 
 function isBackendLoginFailure(error: unknown) {
@@ -69,7 +69,7 @@ export function LoginForm() {
   return (
     <form className="login-form" onSubmit={handleSubmit}>
       <div className="field-group">
-        <label htmlFor="username">Username</label>
+        <label htmlFor="username">账号</label>
         <div className="input-shell">
           <UserRound aria-hidden="true" size={18} />
           <input
@@ -86,7 +86,7 @@ export function LoginForm() {
       </div>
 
       <div className="field-group">
-        <label htmlFor="password">Password</label>
+        <label htmlFor="password">密码</label>
         <div className="input-shell">
           <LockKeyhole aria-hidden="true" size={18} />
           <input
@@ -115,7 +115,7 @@ export function LoginForm() {
         ) : (
           <ArrowRight aria-hidden="true" size={18} />
         )}
-        {isSubmitting ? "Signing in" : "Sign in"}
+        {isSubmitting ? "正在登录" : "登录"}
       </button>
     </form>
   );

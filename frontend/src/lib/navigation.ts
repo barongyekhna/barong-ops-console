@@ -41,14 +41,14 @@ export type NavigationGroup = {
 
 export const navigationGroups: NavigationGroup[] = [
   {
-    label: "Users & Organizations",
+    label: "账号与组织",
     items: [
       {
         category: "admin",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/users",
         icon: UserRoundCog,
-        label: "Users",
+        label: "用户管理",
         module_key: "admin.users",
         owner_only: true,
         required_permission: "users.manage",
@@ -57,20 +57,20 @@ export const navigationGroups: NavigationGroup[] = [
       },
       {
         category: "admin",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/organizations",
         icon: Building2,
-        label: "Organizations",
+        label: "组织管理",
         module_key: "admin.organizations",
         route_namespace: "/organizations",
         status: "enabled",
       },
       {
         category: "admin",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/permissions",
         icon: LockKeyhole,
-        label: "Permissions",
+        label: "权限管理",
         module_key: "admin.permissions",
         owner_only: true,
         required_permission: "permissions.read",
@@ -80,7 +80,7 @@ export const navigationGroups: NavigationGroup[] = [
     ],
   },
   {
-    label: "Business Modules",
+    label: "业务处理",
     items: [
       {
         category: "business",
@@ -107,24 +107,24 @@ export const navigationGroups: NavigationGroup[] = [
     ],
   },
   {
-    label: "System Modules",
+    label: "系统管理",
     items: [
       {
         category: "core",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/dashboard",
         icon: LayoutDashboard,
-        label: "Dashboard",
+        label: "首页",
         module_key: "core.dashboard",
         route_namespace: "/dashboard",
         status: "sealed",
       },
       {
         category: "admin",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/modules",
         icon: Boxes,
-        label: "Modules",
+        label: "功能区",
         module_key: "admin.modules",
         required_permission: "modules.read",
         route_namespace: "/modules",
@@ -132,10 +132,10 @@ export const navigationGroups: NavigationGroup[] = [
       },
       {
         category: "admin",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/settings",
         icon: Settings,
-        label: "Settings",
+        label: "设置",
         module_key: "admin.settings",
         required_permission: "settings.read",
         route_namespace: "/settings",
@@ -143,10 +143,10 @@ export const navigationGroups: NavigationGroup[] = [
       },
       {
         category: "system",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/errors",
         icon: CircleAlert,
-        label: "Errors",
+        label: "异常记录",
         module_key: "system.errors",
         required_permission: "operation_logs.read",
         route_namespace: "/errors",
@@ -154,10 +154,10 @@ export const navigationGroups: NavigationGroup[] = [
       },
       {
         category: "system",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/memory-events",
         icon: Database,
-        label: "Memory Events",
+        label: "运行记录",
         module_key: "system.memory_events",
         required_permission: "operation_logs.read",
         route_namespace: "/memory-events",
@@ -165,10 +165,10 @@ export const navigationGroups: NavigationGroup[] = [
       },
       {
         category: "system",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/operation-logs",
         icon: FileText,
-        label: "Logs",
+        label: "操作记录",
         module_key: "system.operation_logs",
         required_permission: "operation_logs.read",
         route_namespace: "/operation-logs",
@@ -177,14 +177,14 @@ export const navigationGroups: NavigationGroup[] = [
     ],
   },
   {
-    label: "Extensions",
+    label: "扩展能力",
     items: [
       {
         category: "admin",
-        denied_behavior: "show_locked",
+        denied_behavior: "hide_when_denied",
         href: "/agents",
         icon: Bot,
-        label: "Agents",
+        label: "自动化助手",
         module_key: "admin.agents",
         required_permission: "modules.read",
         route_namespace: "/agents",

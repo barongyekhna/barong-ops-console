@@ -1,0 +1,21 @@
+{
+  "generated_at_utc": "2026-06-22T06:05:56Z",
+  "scope": "SAFE PRODUCTION DEPLOYMENT RESTART validation",
+  "environment": "production",
+  "status": "failed",
+  "missing_or_blocking_dependency": "A production image/build containing the fully productized frontend is required before restart-only deployment can pass validation.",
+  "evidence": [
+    "The production frontend and backend containers restarted successfully.",
+    "The five required frontend routes returned HTTP 200.",
+    "The checked routes load client chunks that still contain legacy English navigation and artifacts-module references.",
+    "The current workspace contains uncommitted productization changes, while the production container was only restarted from its existing image."
+  ],
+  "required_next_step": "Build and deploy a production frontend image from the productized code, then repeat the safe restart and validation.",
+  "prohibited_actions_respected": {
+    "staging_container_used": false,
+    "docker_prune_used": false,
+    "db_modified": false,
+    "rbac_core_modified": false,
+    "volumes_reset": false
+  }
+}

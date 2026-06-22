@@ -1,0 +1,43 @@
+{
+  "generated_at_utc": "2026-06-22T06:05:56Z",
+  "scope": "SAFE PRODUCTION DEPLOYMENT RESTART validation",
+  "environment": "production",
+  "containers_restarted": [
+    "barong-ops-console-prod_console_backend_1",
+    "barong-ops-console-prod_console_frontend_1"
+  ],
+  "routes_checked": {
+    "/": 200,
+    "/users": 200,
+    "/organizations": 200,
+    "/reviews": 200,
+    "/permissions": 200
+  },
+  "status": "failed",
+  "reason": "Production frontend routes are reachable, but active client chunks loaded by the checked pages still contain legacy UI strings.",
+  "legacy_strings_found_in_loaded_chunks": {
+    "09kglcqmcdhqa.js": [
+      "Create Organization",
+      "Organization List"
+    ],
+    "0jf9x0abf-x6i.js": [
+      "Access needed",
+      "Product area"
+    ],
+    "19kpbap5om54h.js": [
+      "artifacts"
+    ],
+    "20uvg0_c52yjz.js": [
+      "Users & Organizations",
+      "artifacts"
+    ],
+    "2524d2mjimkv5.js": [
+      "Business Modules",
+      "System Modules",
+      "Users & Organizations",
+      "artifacts"
+    ]
+  },
+  "frontend_productization_result": "not_passed",
+  "restart_policy_after_failure": "no additional restart executed"
+}

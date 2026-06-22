@@ -14,27 +14,27 @@ export function LoginScreen() {
           </span>
           <span>
             <strong>Barong</strong>
-            <small>Ops Console</small>
+            <small>运营工作台</small>
           </span>
         </div>
 
         <div className="identity-copy">
-          <span className="system-label">CONTROL / FOUNDATION</span>
-          <h1>Operational control starts here.</h1>
+          <span className="system-label">安全访问</span>
+          <h1>运营工作台</h1>
           <div className="signal-line">
             <span />
-            Authenticated workspace
+            登录后进入你的组织空间
           </div>
         </div>
 
-        <span className="build-label">F09 / Console shell</span>
+        <span className="build-label">Barong</span>
       </section>
 
       <section className="login-panel">
         <div className="login-panel-inner">
-          <span className="eyebrow">Secure access</span>
-          <h2>Sign in to Barong</h2>
-          <p className="login-intro">Use your initialized owner account.</p>
+          <span className="eyebrow">登录</span>
+          <h2>进入工作台</h2>
+          <p className="login-intro">使用已分配的账号登录。</p>
           <LoginForm />
         </div>
       </section>

@@ -50,8 +50,8 @@ const EMPTY_SECTION: ApprovalSectionState = {
   error: "",
   loading: true,
 };
-const PREVIEW_LIMIT = 5;
-const FULL_LIST_LIMIT = 50;
+const PREVIEW_LIMIT = 10;
+const FULL_LIST_LIMIT = 10;
 const REJECT_REASON_MIN_LENGTH = 15;
 
 function emptyApprovalListResponse(): ApprovalListResponse {
@@ -70,14 +70,15 @@ function emptyApprovalListResponse(): ApprovalListResponse {
 }
 
 function errorText(error: unknown, fallback: string) {
-  return error instanceof Error && error.message ? error.message : fallback;
+  void error;
+  return fallback;
 }
 
 function approvalListErrorText(error: unknown) {
   if (error instanceof ApiTimeoutError) {
-    return "approvals temporarily unavailable";
+    return "加载失败，请稍后重试。";
   }
-  return errorText(error, "approvals temporarily unavailable");
+  return errorText(error, "加载失败，请稍后重试。");
 }
 
 function formatDate(value: string) {
@@ -97,7 +98,7 @@ function categoryTitle(category: ApprovalCategory) {
 
 function categoryDescription(category: ApprovalCategory) {
   return category === "control_plane"
-    ? "系统级操作、权限变更、模块接入等需要 owner 确认的审批。"
+    ? "系统级操作、权限变更、模块接入等需要所有者确认的审批。"
     : "业务模块提交后的审批。";
 }
 
@@ -366,6 +367,7 @@ export function ApprovalMoreView() {
     ? "control_plane"
     : "feature";
   const [state, setState] = useState<ApprovalSectionState>(EMPTY_SECTION);
+  const [offset, setOffset] = useState(0);
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, error: "", loading: true }));
@@ -373,6 +375,7 @@ export function ApprovalMoreView() {
       const data = await listApprovals({
         category,
         limit: FULL_LIST_LIMIT,
+        offset,
       });
       setState({
         data,
@@ -386,7 +389,7 @@ export function ApprovalMoreView() {
         loading: false,
       }));
     }
-  }, [category]);
+  }, [category, offset]);
 
   useEffect(() => {
     void load();
@@ -412,6 +415,28 @@ export function ApprovalMoreView() {
         onRefresh={load}
         state={state}
       />
+      <div className="review-pager">
+        <button
+          className="secondary-button"
+          disabled={state.loading || offset === 0}
+          onClick={() => setOffset(Math.max(0, offset - FULL_LIST_LIMIT))}
+          type="button"
+        >
+          上一页
+        </button>
+        <span>{Math.floor(offset / FULL_LIST_LIMIT) + 1}</span>
+        <button
+          className="secondary-button"
+          disabled={
+            state.loading ||
+            (state.data?.items.length ?? 0) < FULL_LIST_LIMIT
+          }
+          onClick={() => setOffset(offset + FULL_LIST_LIMIT)}
+          type="button"
+        >
+          下一页
+        </button>
+      </div>
     </section>
   );
 }

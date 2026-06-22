@@ -6,29 +6,28 @@ export default function AgentsPage() {
   return (
     <ProductResourceConsole
       create={{
-        description: "Register a foundation agent and its allowed module scope.",
+        description: "登记一个自动化助手。",
         endpoint: "/agents",
         fields: [
           {
             key: "agent_key",
-            label: "Agent key",
-            placeholder: "demo.agent",
+            label: "助手编号",
             required: true,
           },
           {
             key: "name",
-            label: "Name",
+            label: "名称",
             required: true,
           },
           {
             defaultValue: "foundation",
             key: "status",
-            label: "Status",
+            label: "状态",
             options: [
-              { label: "Foundation", value: "foundation" },
-              { label: "Demo", value: "demo" },
-              { label: "Draft demo", value: "draft_demo" },
-              { label: "Inactive demo", value: "inactive_demo" },
+              { label: "基础", value: "foundation" },
+              { label: "演示", value: "demo" },
+              { label: "草稿", value: "draft_demo" },
+              { label: "停用", value: "inactive_demo" },
             ],
             required: true,
             type: "select",
@@ -36,42 +35,33 @@ export default function AgentsPage() {
           {
             defaultValue: "low",
             key: "risk_level",
-            label: "Risk level",
+            label: "风险等级",
             required: true,
           },
-            {
-              key: "allowed_module_keys",
-              label: "Allowed modules",
-              placeholder: "business.reviews",
-              type: "csv",
-            },
         ],
-        submitLabel: "Create agent",
-        title: "Create agent",
+        submitLabel: "创建",
+        title: "创建助手",
       }}
-      description="Expose the agent registry with detail inspection."
+      description="查看已登记的自动化助手。"
       detailEndpoint={(record) => `/agents/${record.agent_key}`}
       detailFields={[
-        { key: "agent_key", label: "Agent" },
-        { key: "name", label: "Name" },
-        { key: "status", label: "Status" },
-        { key: "risk_level", label: "Risk" },
-        { key: "allowed_module_keys", label: "Allowed modules" },
-        { key: "created_at", label: "Created" },
+        { key: "name", label: "名称" },
+        { key: "status", label: "状态" },
+        { key: "risk_level", label: "风险等级" },
+        { key: "created_at", label: "创建时间" },
       ]}
-      emptyDescription="Register an agent to connect it to module metadata."
-      emptyTitle="No automation records yet."
+      emptyDescription="当前没有可显示的助手。"
+      emptyTitle="暂无数据"
       endpoint="/agents?limit=50&offset=0"
-      eyebrow="Extensions"
+      eyebrow="扩展能力"
       fields={[
-        { key: "agent_key", label: "Agent" },
-        { key: "name", label: "Name" },
-        { key: "status", label: "Status" },
-        { key: "risk_level", label: "Risk" },
+        { key: "name", label: "名称" },
+        { key: "status", label: "状态" },
+        { key: "risk_level", label: "风险等级" },
       ]}
       idKey="agent_key"
       requiredPermission="modules.read"
-      title="Agents"
+      title="自动化助手"
     />
   );
 }

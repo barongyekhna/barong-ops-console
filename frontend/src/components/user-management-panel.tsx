@@ -10,7 +10,6 @@ import {
   RotateCcw,
   Save,
   ShieldAlert,
-  ShieldCheck,
   UserRoundCog,
 } from "lucide-react";
 import {
@@ -22,9 +21,9 @@ import {
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { UserPermissionsPanel } from "@/components/user-permissions-panel";
 import {
   MANAGED_USER_ROLES,
+  USERS_PAGE_LIMIT,
   createUser,
   disableUser,
   enableUser,
@@ -43,48 +42,47 @@ import {
   type UserRolesResponse,
 } from "@/lib/users-api";
 
-const DEFAULT_INITIAL_PASSWORD = "123456";
 const PASSWORD_LENGTH_MESSAGE =
-  "Password must be 12 to 256 characters.";
+  "密码长度必须为 12 到 256 个字符。";
 const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
   {
     assignable: true,
     c04_status: "bootstrap_only",
-    description: "Bootstrap/system owner account.",
+    description: "拥有全部权限。",
     human_or_agent: "human",
-    label: "Owner",
+    label: "所有者",
     name: "owner",
   },
   {
     assignable: true,
     c04_status: "user_management_admin_role",
-    description: "User management administrator.",
+    description: "管理所属组织。",
     human_or_agent: "human",
-    label: "Super Admin",
+    label: "组织管理员",
     name: "super_admin",
   },
   {
     assignable: true,
     c04_status: "assignable_user_role",
-    description: "Assignable managed user role.",
+    description: "查看允许访问的内容。",
     human_or_agent: "human",
-    label: "Viewer",
+    label: "查看员",
     name: "viewer",
   },
   {
     assignable: true,
     c04_status: "assignable_user_role",
-    description: "Assignable managed user role.",
+    description: "处理允许访问的业务。",
     human_or_agent: "human",
-    label: "Operator",
+    label: "操作员",
     name: "operator",
   },
   {
     assignable: true,
     c04_status: "assignable_user_role",
-    description: "Assignable managed user role.",
+    description: "审核允许访问的业务。",
     human_or_agent: "human",
-    label: "Reviewer",
+    label: "审核员",
     name: "reviewer",
   },
 ];
@@ -97,15 +95,15 @@ const FALLBACK_ASSIGNABLE_ROLES = MANAGED_USER_ROLES.map((role) =>
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
-    return "Not recorded";
+    return "暂无记录";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return value;
+    return "暂无记录";
   }
 
-  return new Intl.DateTimeFormat(undefined, {
+  return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
@@ -126,9 +124,33 @@ function isOwnerRole(role: string) {
   return role === "owner";
 }
 
+function roleLabel(role: string) {
+  const labels: Record<string, string> = {
+    operator: "操作员",
+    owner: "所有者",
+    reviewer: "审核员",
+    super_admin: "组织管理员",
+    viewer: "查看员",
+  };
+  return labels[role] ?? "成员";
+}
+
+function roleDescription(role: string) {
+  const descriptions: Record<string, string> = {
+    operator: "处理已授权的业务操作。",
+    owner: "拥有全部权限。",
+    reviewer: "审核已授权的业务。",
+    super_admin: "管理所属组织内的账号和功能。",
+    viewer: "查看已授权的内容。",
+  };
+  return descriptions[role] ?? "按授权范围访问工作台。";
+}
+
 export function UserManagementPanel() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<ManagedUser[]>([]);
+  const [userCount, setUserCount] = useState(0);
+  const [userOffset, setUserOffset] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [roleCatalog, setRoleCatalog] =
     useState<UserRolesResponse | null>(null);
@@ -175,7 +197,7 @@ export function UserManagementPanel() {
       setRoleCatalogError(
         formatUsersApiError(
           error,
-          "The role catalog could not be loaded.",
+          "加载失败，请稍后重试。",
         ),
       );
     } finally {
@@ -200,7 +222,7 @@ export function UserManagementPanel() {
       setOrganizationsError(
         formatUsersApiError(
           error,
-          "Organizations could not be loaded.",
+          "加载失败，请稍后重试。",
         ),
       );
     } finally {
@@ -209,7 +231,7 @@ export function UserManagementPanel() {
   }, [userCanManageUsers]);
 
   const loadUsers = useCallback(
-    async (showLoading = true) => {
+    async (showLoading = true, offset = userOffset) => {
       if (!userCanManageUsers) {
         setIsLoading(false);
         return;
@@ -221,13 +243,15 @@ export function UserManagementPanel() {
       setListError("");
 
       try {
-        const result = await listUsers();
+        const result = await listUsers(USERS_PAGE_LIMIT, offset);
         setUsers(result.items);
+        setUserCount(result.count);
+        setUserOffset(offset);
       } catch (error) {
         setListError(
           formatUsersApiError(
             error,
-            "The user list could not be loaded.",
+            "加载失败，请稍后重试。",
           ),
         );
       } finally {
@@ -236,7 +260,7 @@ export function UserManagementPanel() {
         }
       }
     },
-    [userCanManageUsers],
+    [userCanManageUsers, userOffset],
   );
 
   useEffect(() => {
@@ -250,17 +274,6 @@ export function UserManagementPanel() {
   useEffect(() => {
     void loadUsers();
   }, [loadUsers]);
-
-  const catalogRoleByName = useMemo(
-    () =>
-      new Map(
-        (roleCatalog?.standard_roles ?? []).map((role) => [
-          role.name,
-          role,
-        ]),
-      ),
-    [roleCatalog],
-  );
 
   const assignableRoleOptions = useMemo(() => {
     if (!roleCatalog) {
@@ -330,10 +343,6 @@ export function UserManagementPanel() {
       }),
     [users],
   );
-  const expandedRoleMetadata = expandedUser
-    ? catalogRoleByName.get(expandedUser.role)
-    : null;
-
   function clearActionMessages() {
     setActionError("");
     setActionNotice("");
@@ -361,7 +370,7 @@ export function UserManagementPanel() {
     const username = createUsername.trim();
     const jobTitle = createJobTitle.trim();
     if (!username) {
-      setActionError("Username is required.");
+      setActionError("请填写用户名。");
       return;
     }
     if (
@@ -369,12 +378,12 @@ export function UserManagementPanel() {
       !assignableRoleNames.has(createRole)
     ) {
       setActionError(
-        "Choose one of the current assignable roles before creating the account.",
+        "请选择可分配的角色后再创建账号。",
       );
       return;
     }
     if (!isOwnerRole(createRole) && !createOrganizationId) {
-      setActionError("Organization is required for non-owner users.");
+      setActionError("非所有者账号必须选择组织。");
       return;
     }
 
@@ -388,7 +397,7 @@ export function UserManagementPanel() {
         role: createRole,
         username,
       });
-      setActionNotice(`Created account ${created.username}.`);
+      setActionNotice(`已创建账号：${created.username}。`);
       setCreateUsername("");
       setCreateJobTitle("");
       setCreateOrganizationId(
@@ -398,7 +407,7 @@ export function UserManagementPanel() {
       await refreshAfterMutation(created.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "The account could not be created."),
+        formatUsersApiError(error, "账号创建失败，请稍后重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -417,25 +426,7 @@ export function UserManagementPanel() {
       await refreshDetail(target.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "The user detail could not be loaded."),
-      );
-    } finally {
-      setPendingAction(null);
-    }
-  }
-
-  async function handleOpenPermissions(target: ManagedUser) {
-    clearActionMessages();
-    if (expandedUser?.id === target.id) {
-      return;
-    }
-
-    setPendingAction(`detail-${target.id}`);
-    try {
-      await refreshDetail(target.id);
-    } catch (error) {
-      setActionError(
-        formatUsersApiError(error, "The user detail could not be loaded."),
+        formatUsersApiError(error, "账号详情加载失败，请稍后重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -445,12 +436,12 @@ export function UserManagementPanel() {
   async function handleDisable(target: ManagedUser) {
     clearActionMessages();
     if (target.id === currentUser?.id) {
-      setActionError("You cannot disable your own account here.");
+      setActionError("不能在这里停用当前登录账号。");
       return;
     }
     if (
       !window.confirm(
-        `Disable ${target.username}? This account will no longer be able to sign in.`,
+        `确认停用 ${target.username}？停用后该账号将无法登录。`,
       )
     ) {
       return;
@@ -459,11 +450,11 @@ export function UserManagementPanel() {
     setPendingAction(`disable-${target.id}`);
     try {
       const updated = await disableUser(target.id);
-      setActionNotice(`Disabled account ${updated.username}.`);
+      setActionNotice(`已停用账号：${updated.username}。`);
       await refreshAfterMutation(target.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "The account could not be disabled."),
+        formatUsersApiError(error, "账号停用失败，请稍后重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -472,18 +463,18 @@ export function UserManagementPanel() {
 
   async function handleEnable(target: ManagedUser) {
     clearActionMessages();
-    if (!window.confirm(`Enable ${target.username}?`)) {
+    if (!window.confirm(`确认启用 ${target.username}？`)) {
       return;
     }
 
     setPendingAction(`enable-${target.id}`);
     try {
       const updated = await enableUser(target.id);
-      setActionNotice(`Enabled account ${updated.username}.`);
+      setActionNotice(`已启用账号：${updated.username}。`);
       await refreshAfterMutation(target.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "The account could not be enabled."),
+        formatUsersApiError(error, "账号启用失败，请稍后重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -497,11 +488,11 @@ export function UserManagementPanel() {
       return;
     }
     if (expandedUser.id === currentUser?.id) {
-      setActionError("You cannot change your own role here.");
+      setActionError("不能在这里修改当前登录账号的角色。");
       return;
     }
     if (!isManagedUserRole(expandedUser.role)) {
-      setActionError("Only managed sub-account roles can be updated here.");
+      setActionError("这里只能调整受管理账号的角色。");
       return;
     }
     if (
@@ -509,7 +500,7 @@ export function UserManagementPanel() {
       !assignableRoleNames.has(detailRole)
     ) {
       setActionError(
-        "Choose one of the current assignable roles before saving.",
+        "请选择可分配的角色后再保存。",
       );
       return;
     }
@@ -517,11 +508,11 @@ export function UserManagementPanel() {
     setPendingAction(`role-${expandedUser.id}`);
     try {
       const updated = await updateUser(expandedUser.id, { role: detailRole });
-      setActionNotice(`Updated role for ${updated.username}.`);
+      setActionNotice(`已更新 ${updated.username} 的角色。`);
       await refreshAfterMutation(expandedUser.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "The account role could not be updated."),
+        formatUsersApiError(error, "角色更新失败，请稍后重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -535,7 +526,7 @@ export function UserManagementPanel() {
       return;
     }
     if (resetTarget.id === currentUser?.id) {
-      setActionError("You cannot reset your own password here.");
+      setActionError("不能在这里重置当前登录账号的密码。");
       setResetPassword("");
       setResetTarget(null);
       return;
@@ -549,7 +540,7 @@ export function UserManagementPanel() {
 
     if (
       !window.confirm(
-        `Reset password for ${resetTarget.username}? The old password will stop working.`,
+        `确认重置 ${resetTarget.username} 的密码？原密码将立即失效。`,
       )
     ) {
       return;
@@ -561,12 +552,12 @@ export function UserManagementPanel() {
         resetTarget.id,
         resetPassword,
       );
-      setActionNotice(`Reset password for ${updated.username}.`);
+      setActionNotice(`已重置 ${updated.username} 的密码。`);
       setResetTarget(null);
       await refreshAfterMutation(resetTarget.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "The password could not be reset."),
+        formatUsersApiError(error, "密码重置失败，请稍后重试。"),
       );
     } finally {
       setResetPassword("");
@@ -578,10 +569,9 @@ export function UserManagementPanel() {
     return (
       <section className="list-state list-error" role="alert">
         <div>
-          <h2>User management is restricted</h2>
+          <h2>无权管理用户</h2>
           <p>
-            This signed-in account can use the console, but only owner and
-            super admin accounts can manage internal users.
+            仅所有者和组织管理员可以管理工作台账号。
           </p>
         </div>
       </section>
@@ -589,26 +579,26 @@ export function UserManagementPanel() {
   }
 
   return (
-    <section className="users-workspace" aria-label="User management">
+    <section className="users-workspace" aria-label="用户管理">
       <form className="users-create-panel" onSubmit={handleCreate}>
         <div className="users-panel-heading">
           <div>
-            <span className="eyebrow">Internal accounts</span>
-            <h3>Create user</h3>
+            <span className="eyebrow">账号</span>
+            <h3>创建用户</h3>
           </div>
           <UserRoundCog aria-hidden="true" size={24} />
         </div>
 
         <div className="users-form-grid">
           <label className="field-group">
-            <span>Username</span>
+            <span>用户名</span>
             <span className="input-shell">
               <input
                 autoComplete="off"
                 disabled={isBusy}
                 maxLength={255}
                 onChange={(event) => setCreateUsername(event.target.value)}
-                placeholder="managed_viewer"
+                placeholder="请输入用户名"
                 type="text"
                 value={createUsername}
               />
@@ -616,20 +606,7 @@ export function UserManagementPanel() {
           </label>
 
           <label className="field-group">
-            <span>Password</span>
-            <span className="input-shell">
-              <input
-                autoComplete="new-password"
-                aria-readonly="true"
-                readOnly
-                type="password"
-                value={DEFAULT_INITIAL_PASSWORD}
-              />
-            </span>
-          </label>
-
-          <label className="field-group">
-            <span>Role</span>
+            <span>角色</span>
             <select
               className="select-shell"
               disabled={
@@ -644,21 +621,21 @@ export function UserManagementPanel() {
             >
               {assignableRoleOptions.map((role) => (
                 <option key={role.name} value={role.name}>
-                  {role.label}
+                  {roleLabel(role.name)}
                 </option>
               ))}
             </select>
             <span className="users-field-note">
               {isRoleCatalogLoading
-                ? "Loading role catalog."
+                ? "正在加载角色"
                 : roleCatalogError
-                  ? "Using fallback roles."
-                  : "Loaded from /users/roles."}
+                  ? "使用基础角色"
+                  : "角色已加载"}
             </span>
           </label>
 
           <label className="field-group">
-            <span>Job title</span>
+            <span>岗位</span>
             <span className="input-shell">
               <input
                 autoComplete="organization-title"
@@ -672,7 +649,7 @@ export function UserManagementPanel() {
           </label>
 
           <label className="field-group">
-            <span>Organization</span>
+            <span>组织</span>
             <select
               className="select-shell"
               disabled={
@@ -692,9 +669,9 @@ export function UserManagementPanel() {
               }
             >
               {isOwnerRole(createRole) ? (
-                <option value="">No organization required</option>
+                <option value="">无需选择组织</option>
               ) : organizations.length === 0 ? (
-                <option value="">No organizations available</option>
+                <option value="">暂无可选组织</option>
               ) : (
                 organizations.map((organization) => (
                   <option
@@ -708,10 +685,10 @@ export function UserManagementPanel() {
             </select>
             <span className="users-field-note">
               {isOrganizationsLoading
-                ? "Loading organizations."
+                ? "正在加载组织"
                 : organizationsError
                   ? organizationsError
-                  : "Loaded from /organizations."}
+                  : "组织已加载"}
             </span>
           </label>
         </div>
@@ -732,7 +709,7 @@ export function UserManagementPanel() {
           ) : (
             <Plus aria-hidden="true" size={17} />
           )}
-          Create user
+          创建用户
         </button>
       </form>
 
@@ -752,15 +729,14 @@ export function UserManagementPanel() {
       {resetTarget ? (
         <form className="users-reset-panel" onSubmit={handleReset}>
           <div>
-            <span className="eyebrow">Password reset</span>
+            <span className="eyebrow">密码重置</span>
             <h3>{resetTarget.username}</h3>
             <p>
-              Enter a new temporary password. It will not be shown after this
-              form is submitted.
+              请输入新的临时密码，提交后不会再次显示。
             </p>
           </div>
           <label className="field-group">
-            <span>New password</span>
+            <span>新密码</span>
             <span className="input-shell">
               <input
                 autoComplete="new-password"
@@ -780,7 +756,7 @@ export function UserManagementPanel() {
               type="submit"
             >
               <KeyRound aria-hidden="true" size={17} />
-              Confirm reset
+              确认重置
             </button>
             <button
               className="secondary-button"
@@ -791,7 +767,7 @@ export function UserManagementPanel() {
               }}
               type="button"
             >
-              Cancel
+              取消
             </button>
           </div>
         </form>
@@ -800,8 +776,8 @@ export function UserManagementPanel() {
       <div className="users-list-panel">
         <div className="users-list-heading">
           <div>
-            <h3>Users</h3>
-            <p>{users.length} accounts returned by the user management API.</p>
+            <h3>用户列表</h3>
+            <p>共 {userCount} 个账号，每页 {USERS_PAGE_LIMIT} 条。</p>
           </div>
           <button
             className="secondary-button"
@@ -810,14 +786,14 @@ export function UserManagementPanel() {
             type="button"
           >
             <RotateCcw aria-hidden="true" size={17} />
-            Refresh
+            刷新
           </button>
         </div>
 
         {isLoading && users.length === 0 ? (
-          <div className="list-state" aria-label="Loading users">
+          <div className="list-state" aria-label="正在加载用户">
             <LoaderCircle className="spin" aria-hidden="true" size={22} />
-            Loading users
+            正在加载用户
           </div>
         ) : null}
 
@@ -826,12 +802,12 @@ export function UserManagementPanel() {
             <div>
               <h2>
                 {users.length > 0
-                  ? "User API is degraded"
-                  : "User API request failed"}
+                  ? "加载失败，请稍后重试"
+                  : "加载失败，请稍后重试"}
               </h2>
-              <p>{listError}</p>
+              <p>{listError || "加载失败，请稍后重试。"}</p>
               {users.length > 0 ? (
-                <p>Showing the last successful user list.</p>
+                <p>正在显示上一次成功加载的用户列表。</p>
               ) : null}
             </div>
             <button
@@ -840,33 +816,33 @@ export function UserManagementPanel() {
               type="button"
             >
               <RotateCcw aria-hidden="true" size={17} />
-              Retry
+              重试
             </button>
           </div>
         ) : null}
 
         {(!isLoading || users.length > 0) && (!listError || users.length > 0) ? (
-          <div className="users-table-scroll">
-            <table className="users-table">
-              <thead>
-                <tr>
-                  <th scope="col">Username</th>
-                  <th scope="col">Role</th>
-                  <th scope="col">Status</th>
-                  <th scope="col">Created</th>
-                  <th scope="col">Updated</th>
-                  <th scope="col">Job title</th>
-                  <th scope="col">Organization</th>
-                  <th scope="col">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sortedUsers.map((target) => {
+          <>
+            <div className="users-table-scroll">
+              <table className="users-table">
+                <thead>
+                  <tr>
+                    <th scope="col">用户名</th>
+                    <th scope="col">角色</th>
+                    <th scope="col">状态</th>
+                    <th scope="col">创建时间</th>
+                    <th scope="col">更新时间</th>
+                    <th scope="col">岗位</th>
+                    <th scope="col">组织</th>
+                    <th scope="col">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedUsers.map((target) => {
                   const isSelf = target.id === currentUser?.id;
                   const actionDisabled = isBusy || isSelf;
                   const rowPending =
                     pendingAction?.endsWith(`-${target.id}`) ?? false;
-                  const roleMetadata = catalogRoleByName.get(target.role);
                   const targetOrganization = target.organization_id
                     ? organizationById.get(target.organization_id)
                     : null;
@@ -876,18 +852,16 @@ export function UserManagementPanel() {
                     <tr key={target.id}>
                       <td>
                         <strong>{target.username}</strong>
-                        {isSelf ? <span>Current account</span> : null}
+                        {isSelf ? <span>当前账号</span> : null}
                       </td>
                       <td>
                         <div className="users-role-cell">
                           <span className="users-role-pill">
-                            {roleMetadata?.label ?? target.role}
+                            {roleLabel(target.role)}
                           </span>
-                          {roleMetadata ? (
-                            <span className="users-role-description">
-                              {roleMetadata.description}
-                            </span>
-                          ) : null}
+                          <span className="users-role-description">
+                            {roleDescription(target.role)}
+                          </span>
                         </div>
                       </td>
                       <td>
@@ -898,7 +872,7 @@ export function UserManagementPanel() {
                               : "users-status-disabled"
                           }`}
                         >
-                          {target.is_active ? "Active" : "Disabled"}
+                          {target.is_active ? "正常" : "已停用"}
                         </span>
                       </td>
                       <td>{formatDate(target.created_at)}</td>
@@ -907,8 +881,7 @@ export function UserManagementPanel() {
                       <td>
                         {showOrgFields
                           ? targetOrganization?.org_name ??
-                            target.organization_id ??
-                            ""
+                            (target.organization_id ? "未匹配组织" : "")
                           : ""}
                       </td>
                       <td>
@@ -917,7 +890,7 @@ export function UserManagementPanel() {
                             className="icon-button"
                             disabled={isBusy}
                             onClick={() => void handleViewDetails(target)}
-                            title="View details"
+                            title="查看详情"
                             type="button"
                           >
                             {pendingAction === `detail-${target.id}` ? (
@@ -931,25 +904,6 @@ export function UserManagementPanel() {
                             )}
                           </button>
 
-                          <button
-                            className="secondary-button"
-                            disabled={isBusy}
-                            onClick={() => void handleOpenPermissions(target)}
-                            title="Manage permissions"
-                            type="button"
-                          >
-                            {pendingAction === `detail-${target.id}` ? (
-                              <LoaderCircle
-                                className="spin"
-                                aria-hidden="true"
-                                size={17}
-                              />
-                            ) : (
-                              <ShieldCheck aria-hidden="true" size={17} />
-                            )}
-                            Permissions
-                          </button>
-
                           {target.is_active ? (
                             <button
                               className="secondary-button"
@@ -957,8 +911,8 @@ export function UserManagementPanel() {
                               onClick={() => void handleDisable(target)}
                               title={
                                 isSelf
-                                  ? "You cannot disable yourself"
-                                  : "Disable user"
+                                  ? "不能停用当前账号"
+                                  : "停用用户"
                               }
                               type="button"
                             >
@@ -971,7 +925,7 @@ export function UserManagementPanel() {
                               ) : (
                                 <PowerOff aria-hidden="true" size={17} />
                               )}
-                              Disable
+                              停用
                             </button>
                           ) : (
                             <button
@@ -989,7 +943,7 @@ export function UserManagementPanel() {
                               ) : (
                                 <Power aria-hidden="true" size={17} />
                               )}
-                              Enable
+                              启用
                             </button>
                           )}
 
@@ -1003,8 +957,8 @@ export function UserManagementPanel() {
                             }}
                             title={
                               isSelf
-                                ? "You cannot reset your own password here"
-                                : "Reset password"
+                                ? "不能重置当前账号密码"
+                                : "重置密码"
                             }
                             type="button"
                           >
@@ -1018,30 +972,61 @@ export function UserManagementPanel() {
                             ) : (
                               <KeyRound aria-hidden="true" size={17} />
                             )}
-                            Reset
+                            重置
                           </button>
                         </div>
                       </td>
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div className="review-pager">
+              <button
+                className="secondary-button"
+                disabled={isBusy || isLoading || userOffset === 0}
+                onClick={() =>
+                  void loadUsers(
+                    true,
+                    Math.max(0, userOffset - USERS_PAGE_LIMIT),
+                  )
+                }
+                type="button"
+              >
+                上一页
+              </button>
+              <span>{Math.floor(userOffset / USERS_PAGE_LIMIT) + 1}</span>
+              <button
+                className="secondary-button"
+                disabled={
+                  isBusy ||
+                  isLoading ||
+                  userOffset + USERS_PAGE_LIMIT >= userCount
+                }
+                onClick={() =>
+                  void loadUsers(true, userOffset + USERS_PAGE_LIMIT)
+                }
+                type="button"
+              >
+                下一页
+              </button>
+            </div>
+          </>
         ) : null}
       </div>
 
       {expandedUser ? (
-        <section className="user-detail-panel" aria-label="User detail">
+        <section className="user-detail-panel" aria-label="用户详情">
           <div className="users-panel-heading">
             <div>
-              <span className="eyebrow">User detail</span>
+              <span className="eyebrow">用户详情</span>
               <h3>{expandedUser.username}</h3>
             </div>
             <button
               className="icon-button"
               onClick={() => setExpandedUser(null)}
-              title="Close details"
+              title="关闭详情"
               type="button"
             >
               <Eye aria-hidden="true" size={17} />
@@ -1050,55 +1035,49 @@ export function UserManagementPanel() {
 
           <dl className="user-detail-grid">
             <div>
-              <dt>User ID</dt>
-              <dd>{expandedUser.id}</dd>
-            </div>
-            <div>
-              <dt>Username</dt>
+              <dt>用户名</dt>
               <dd>{expandedUser.username}</dd>
             </div>
             <div>
-              <dt>Role</dt>
+              <dt>角色</dt>
               <dd>
-                {expandedRoleMetadata?.label ?? expandedUser.role}
-                {expandedRoleMetadata ? (
-                  <span className="user-detail-description">
-                    {expandedRoleMetadata.description}
-                  </span>
-                ) : null}
+                {roleLabel(expandedUser.role)}
+                <span className="user-detail-description">
+                  {roleDescription(expandedUser.role)}
+                </span>
               </dd>
             </div>
             {!isOwnerRole(expandedUser.role) ? (
               <>
                 <div>
-                  <dt>Job title</dt>
-                  <dd>{expandedUser.job_title ?? "Not set"}</dd>
+                  <dt>岗位</dt>
+                  <dd>{expandedUser.job_title ?? "未设置"}</dd>
                 </div>
                 <div>
-                  <dt>Organization</dt>
+                  <dt>组织</dt>
                   <dd>
                     {expandedUser.organization_id
                       ? organizationById.get(expandedUser.organization_id)
-                          ?.org_name ?? expandedUser.organization_id
-                      : "Not set"}
+                          ?.org_name ?? "未匹配组织"
+                      : "未设置"}
                   </dd>
                 </div>
               </>
             ) : null}
             <div>
-              <dt>Status</dt>
-              <dd>{expandedUser.is_active ? "Active" : "Disabled"}</dd>
+              <dt>状态</dt>
+              <dd>{expandedUser.is_active ? "正常" : "已停用"}</dd>
             </div>
             <div>
-              <dt>Created</dt>
+              <dt>创建时间</dt>
               <dd>{formatDate(expandedUser.created_at)}</dd>
             </div>
             <div>
-              <dt>Updated</dt>
+              <dt>更新时间</dt>
               <dd>{formatDate(expandedUser.updated_at)}</dd>
             </div>
             <div>
-              <dt>Last login</dt>
+              <dt>最近登录</dt>
               <dd>{formatDate(expandedUser.last_login_at)}</dd>
             </div>
           </dl>
@@ -1106,7 +1085,7 @@ export function UserManagementPanel() {
           {isManagedUserRole(expandedUser.role) ? (
             <form className="users-role-form" onSubmit={handleRoleUpdate}>
               <label className="field-group">
-                <span>Managed role</span>
+                <span>角色</span>
                 <select
                   className="select-shell"
                   disabled={
@@ -1122,7 +1101,7 @@ export function UserManagementPanel() {
                 >
                   {assignableRoleOptions.map((role) => (
                     <option key={role.name} value={role.name}>
-                      {role.label}
+                      {roleLabel(role.name)}
                     </option>
                   ))}
                 </select>
@@ -1139,18 +1118,14 @@ export function UserManagementPanel() {
                 type="submit"
               >
                 <Save aria-hidden="true" size={17} />
-                Save role
+                保存角色
               </button>
             </form>
           ) : (
             <p className="users-muted-note">
-              Owner and reserved roles are displayed for audit context. Owner,
-              super admin, area admin, and automation account roles cannot be
-              changed here.
+              所有者和保留角色仅用于查看，不能在这里修改。
             </p>
           )}
-
-          <UserPermissionsPanel targetUser={expandedUser} />
         </section>
       ) : null}
     </section>

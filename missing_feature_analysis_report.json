@@ -1,0 +1,2945 @@
+{
+  "backend_routes_not_exposed_to_frontend": [
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "frontend_proxy_path": "/errors/{error_id}",
+      "function": "error_detail",
+      "line": 35,
+      "method": "GET",
+      "path": "/{error_id}",
+      "registered_path": "/api/app/errors/{error_id}",
+      "response_model": "SystemErrorResponse",
+      "router": "router",
+      "router_prefix": "/errors",
+      "source": "backend/app/api/routes/errors.py",
+      "tags": [
+        "errors"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "frontend_proxy_path": "//memory-events/{memory_event_id}",
+      "function": "memory_event_detail",
+      "line": 55,
+      "method": "GET",
+      "path": "/memory-events/{memory_event_id}",
+      "registered_path": "/api/app//memory-events/{memory_event_id}",
+      "response_model": "MemoryEventResponse",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/routes/memory.py",
+      "tags": [
+        "memory"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "frontend_proxy_path": "//context-packets/{context_packet_id}",
+      "function": "context_packet_detail",
+      "line": 120,
+      "method": "GET",
+      "path": "/context-packets/{context_packet_id}",
+      "registered_path": "/api/app//context-packets/{context_packet_id}",
+      "response_model": "ContextPacketResponse",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/routes/memory.py",
+      "tags": [
+        "memory"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "frontend_proxy_path": "//memory-summaries/{summary_id}",
+      "function": "memory_summary_detail",
+      "line": 201,
+      "method": "GET",
+      "path": "/memory-summaries/{summary_id}",
+      "registered_path": "/api/app//memory-summaries/{summary_id}",
+      "response_model": "MemorySummaryResponse",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/routes/memory.py",
+      "tags": [
+        "memory"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "frontend_proxy_path": "/operation-logs/{operation_id}",
+      "function": "operation_log_detail",
+      "line": 40,
+      "method": "GET",
+      "path": "/{operation_id}",
+      "registered_path": "/api/app/operation-logs/{operation_id}",
+      "response_model": "OperationLogResponse",
+      "router": "router",
+      "router_prefix": "/operation-logs",
+      "source": "backend/app/api/routes/operation_logs.py",
+      "tags": [
+        "operation-logs"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(guarded_heavy_api_request('permissions.assignments'))",
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "frontend_proxy_path": "/permissions/users/{user_id}/assignments",
+      "function": "user_permission_assignments",
+      "line": 242,
+      "method": "GET",
+      "path": "/users/{user_id}/assignments",
+      "registered_path": "/api/app/permissions/users/{user_id}/assignments",
+      "response_model": "PermissionAssignmentListResponse",
+      "router": "router",
+      "router_prefix": "/permissions",
+      "source": "backend/app/api/routes/permissions.py",
+      "tags": [
+        "permissions"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "frontend_proxy_path": "/permissions/users/{user_id}/assignments",
+      "function": "user_permission_assignment_create",
+      "line": 261,
+      "method": "POST",
+      "path": "/users/{user_id}/assignments",
+      "registered_path": "/api/app/permissions/users/{user_id}/assignments",
+      "response_model": "PermissionAssignmentActionResponse",
+      "router": "router",
+      "router_prefix": "/permissions",
+      "source": "backend/app/api/routes/permissions.py",
+      "tags": [
+        "permissions"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "frontend_proxy_path": "/permissions/users/{user_id}/assignments/{assignment_id}",
+      "function": "user_permission_assignment_update",
+      "line": 296,
+      "method": "PATCH",
+      "path": "/users/{user_id}/assignments/{assignment_id}",
+      "registered_path": "/api/app/permissions/users/{user_id}/assignments/{assignment_id}",
+      "response_model": "PermissionAssignmentActionResponse",
+      "router": "router",
+      "router_prefix": "/permissions",
+      "source": "backend/app/api/routes/permissions.py",
+      "tags": [
+        "permissions"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Body(default=None)",
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "frontend_proxy_path": "/permissions/users/{user_id}/assignments/{assignment_id}",
+      "function": "user_permission_assignment_revoke",
+      "line": 322,
+      "method": "DELETE",
+      "path": "/users/{user_id}/assignments/{assignment_id}",
+      "registered_path": "/api/app/permissions/users/{user_id}/assignments/{assignment_id}",
+      "response_model": "PermissionAssignmentActionResponse",
+      "router": "router",
+      "router_prefix": "/permissions",
+      "source": "backend/app/api/routes/permissions.py",
+      "tags": [
+        "permissions"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/org/{org_id}",
+      "function": "org_update",
+      "line": 73,
+      "method": "PATCH",
+      "path": "/{org_id}",
+      "registered_path": "/api/app/org/{org_id}",
+      "response_model": "Organization",
+      "router": "router",
+      "router_prefix": "/org",
+      "source": "backend/app/api/org.py",
+      "tags": [
+        "organization"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/org/{org_id}",
+      "function": "org_delete",
+      "line": 93,
+      "method": "DELETE",
+      "path": "/{org_id}",
+      "registered_path": "/api/app/org/{org_id}",
+      "response_model": "Organization",
+      "router": "router",
+      "router_prefix": "/org",
+      "source": "backend/app/api/org.py",
+      "tags": [
+        "organization"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/org/{org_id}/activate",
+      "function": "org_activate",
+      "line": 111,
+      "method": "POST",
+      "path": "/{org_id}/activate",
+      "registered_path": "/api/app/org/{org_id}/activate",
+      "response_model": "Organization",
+      "router": "router",
+      "router_prefix": "/org",
+      "source": "backend/app/api/org.py",
+      "tags": [
+        "organization"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/org/{org_id}/suspend",
+      "function": "org_suspend",
+      "line": 129,
+      "method": "POST",
+      "path": "/{org_id}/suspend",
+      "registered_path": "/api/app/org/{org_id}/suspend",
+      "response_model": "Organization",
+      "router": "router",
+      "router_prefix": "/org",
+      "source": "backend/app/api/org.py",
+      "tags": [
+        "organization"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/org/{org_id}/members/add",
+      "function": "org_member_add",
+      "line": 70,
+      "method": "POST",
+      "path": "/{org_id}/members/add",
+      "registered_path": "/api/app/org/{org_id}/members/add",
+      "response_model": "OrgMembership",
+      "router": "router",
+      "router_prefix": "/org",
+      "source": "backend/app/api/org_membership.py",
+      "tags": [
+        "organization-membership"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/org/{org_id}/members/remove",
+      "function": "org_member_remove",
+      "line": 90,
+      "method": "POST",
+      "path": "/{org_id}/members/remove",
+      "registered_path": "/api/app/org/{org_id}/members/remove",
+      "response_model": "OrgMembership",
+      "router": "router",
+      "router_prefix": "/org",
+      "source": "backend/app/api/org_membership.py",
+      "tags": [
+        "organization-membership"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/org/{org_id}/members",
+      "function": "org_members_list",
+      "line": 110,
+      "method": "GET",
+      "path": "/{org_id}/members",
+      "registered_path": "/api/app/org/{org_id}/members",
+      "response_model": "list[OrgMembership]",
+      "router": "router",
+      "router_prefix": "/org",
+      "source": "backend/app/api/org_membership.py",
+      "tags": [
+        "organization-membership"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/contacts/directory",
+      "function": "global_contact_directory",
+      "line": 61,
+      "method": "GET",
+      "path": "/directory",
+      "registered_path": "/api/app/contacts/directory",
+      "response_model": "GlobalContactDirectory",
+      "router": "router",
+      "router_prefix": "/contacts",
+      "source": "backend/app/api/routes/contacts.py",
+      "tags": [
+        "contacts"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/contacts/{user_id}",
+      "function": "contact_identity_detail",
+      "line": 72,
+      "method": "GET",
+      "path": "/{user_id}",
+      "registered_path": "/api/app/contacts/{user_id}",
+      "response_model": "ContactIdentity",
+      "router": "router",
+      "router_prefix": "/contacts",
+      "source": "backend/app/api/routes/contacts.py",
+      "tags": [
+        "contacts"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/contacts/{user_id}",
+      "function": "contact_identity_update",
+      "line": 90,
+      "method": "PATCH",
+      "path": "/{user_id}",
+      "registered_path": "/api/app/contacts/{user_id}",
+      "response_model": "ContactIdentity",
+      "router": "router",
+      "router_prefix": "/contacts",
+      "source": "backend/app/api/routes/contacts.py",
+      "tags": [
+        "contacts"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/conversations/create",
+      "function": "create_conversation",
+      "line": 74,
+      "method": "POST",
+      "path": "/create",
+      "registered_path": "/api/app/conversations/create",
+      "response_model": "Conversation",
+      "router": "router",
+      "router_prefix": "/conversations",
+      "source": "backend/app/api/routes/conversations.py",
+      "tags": [
+        "conversations"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/conversations/user/{user_id}",
+      "function": "list_user_conversations",
+      "line": 86,
+      "method": "GET",
+      "path": "/user/{user_id}",
+      "registered_path": "/api/app/conversations/user/{user_id}",
+      "response_model": "list[Conversation]",
+      "router": "router",
+      "router_prefix": "/conversations",
+      "source": "backend/app/api/routes/conversations.py",
+      "tags": [
+        "conversations"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/conversations/{conversation_id}",
+      "function": "get_conversation",
+      "line": 102,
+      "method": "GET",
+      "path": "/{conversation_id}",
+      "registered_path": "/api/app/conversations/{conversation_id}",
+      "response_model": "Conversation",
+      "router": "router",
+      "router_prefix": "/conversations",
+      "source": "backend/app/api/routes/conversations.py",
+      "tags": [
+        "conversations"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/comm/cross-org/check",
+      "function": "check_cross_org_permission",
+      "line": 14,
+      "method": "POST",
+      "path": "/check",
+      "registered_path": "/api/app/comm/cross-org/check",
+      "response_model": "CrossOrgDecision",
+      "router": "router",
+      "router_prefix": "/comm/cross-org",
+      "source": "backend/app/api/routes/cross_org_communication.py",
+      "tags": [
+        "cross-org-communication"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/friends/request",
+      "function": "request_friend",
+      "line": 54,
+      "method": "POST",
+      "path": "/request",
+      "registered_path": "/api/app/friends/request",
+      "response_model": "FriendRequest",
+      "router": "router",
+      "router_prefix": "/friends",
+      "source": "backend/app/api/routes/friends.py",
+      "tags": [
+        "friends"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/friends/accept",
+      "function": "accept_friend",
+      "line": 79,
+      "method": "POST",
+      "path": "/accept",
+      "registered_path": "/api/app/friends/accept",
+      "response_model": "FriendRequest",
+      "router": "router",
+      "router_prefix": "/friends",
+      "source": "backend/app/api/routes/friends.py",
+      "tags": [
+        "friends"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/friends/reject",
+      "function": "reject_friend",
+      "line": 97,
+      "method": "POST",
+      "path": "/reject",
+      "registered_path": "/api/app/friends/reject",
+      "response_model": "FriendRequest",
+      "router": "router",
+      "router_prefix": "/friends",
+      "source": "backend/app/api/routes/friends.py",
+      "tags": [
+        "friends"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/friends/list",
+      "function": "list_friends",
+      "line": 108,
+      "method": "GET",
+      "path": "/list",
+      "registered_path": "/api/app/friends/list",
+      "response_model": "list[FriendRequest]",
+      "router": "router",
+      "router_prefix": "/friends",
+      "source": "backend/app/api/routes/friends.py",
+      "tags": [
+        "friends"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/messages/send",
+      "function": "send_message",
+      "line": 51,
+      "method": "POST",
+      "path": "/send",
+      "registered_path": "/api/app/messages/send",
+      "response_model": "CrossOrgMessageSendDecision",
+      "router": "router",
+      "router_prefix": "/messages",
+      "source": "backend/app/api/routes/messages.py",
+      "tags": [
+        "messages"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/messages/permission/check",
+      "function": "check_permission_for_message",
+      "line": 104,
+      "method": "POST",
+      "path": "/permission/check",
+      "registered_path": "/api/app/messages/permission/check",
+      "response_model": "MessagingPermissionDecision",
+      "router": "router",
+      "router_prefix": "/messages",
+      "source": "backend/app/api/routes/messages.py",
+      "tags": [
+        "messages"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/messages/{conversation_id}",
+      "function": "get_messages",
+      "line": 123,
+      "method": "GET",
+      "path": "/{conversation_id}",
+      "registered_path": "/api/app/messages/{conversation_id}",
+      "response_model": "MessageApiRuntimeNotice",
+      "router": "router",
+      "router_prefix": "/messages",
+      "source": "backend/app/api/routes/messages.py",
+      "tags": [
+        "messages"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/messages/read",
+      "function": "mark_messages_read",
+      "line": 136,
+      "method": "POST",
+      "path": "/read",
+      "registered_path": "/api/app/messages/read",
+      "response_model": "MessageApiRuntimeNotice",
+      "router": "router",
+      "router_prefix": "/messages",
+      "source": "backend/app/api/routes/messages.py",
+      "tags": [
+        "messages"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/attachments/upload",
+      "function": "upload_attachment",
+      "line": 34,
+      "method": "POST",
+      "path": "/upload",
+      "registered_path": "/api/app/attachments/upload",
+      "response_model": "AttachmentApiRuntimeNotice",
+      "router": "router",
+      "router_prefix": "/attachments",
+      "source": "backend/app/api/routes/attachments.py",
+      "tags": [
+        "attachments"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "/attachments/{message_id}",
+      "function": "get_attachments",
+      "line": 50,
+      "method": "GET",
+      "path": "/{message_id}",
+      "registered_path": "/api/app/attachments/{message_id}",
+      "response_model": "AttachmentApiRuntimeNotice",
+      "router": "router",
+      "router_prefix": "/attachments",
+      "source": "backend/app/api/routes/attachments.py",
+      "tags": [
+        "attachments"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "frontend_proxy_path": "//module/bind",
+      "function": "module_bind",
+      "line": 63,
+      "method": "POST",
+      "path": "/module/bind",
+      "registered_path": "/api/app//module/bind",
+      "response_model": "ModuleBinding",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/module_binding.py",
+      "tags": [
+        "module-binding"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "//module/{module_id}/bindings",
+      "function": "module_bindings",
+      "line": 75,
+      "method": "GET",
+      "path": "/module/{module_id}/bindings",
+      "registered_path": "/api/app//module/{module_id}/bindings",
+      "response_model": "ModuleBinding",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/module_binding.py",
+      "tags": [
+        "module-binding"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "//org/{org_id}/modules",
+      "function": "org_visible_modules",
+      "line": 87,
+      "method": "GET",
+      "path": "/org/{org_id}/modules",
+      "registered_path": "/api/app//org/{org_id}/modules",
+      "response_model": "OrgVisibleModulesResponse",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/module_binding.py",
+      "tags": [
+        "module-binding"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "//org/{org_id}/visible-modules",
+      "function": "org_visible_modules",
+      "line": 48,
+      "method": "GET",
+      "path": "/org/{org_id}/visible-modules",
+      "registered_path": "/api/app//org/{org_id}/visible-modules",
+      "response_model": "ModuleVisibilityResponse",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/module_visibility.py",
+      "tags": [
+        "module-visibility"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "frontend_proxy_path": "//module/shared/create",
+      "function": "shared_module_create",
+      "line": 69,
+      "method": "POST",
+      "path": "/module/shared/create",
+      "registered_path": "/api/app//module/shared/create",
+      "response_model": "SharedModule",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/shared_module.py",
+      "tags": [
+        "shared-module"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "frontend_proxy_path": "//module/shared/update-orgs",
+      "function": "shared_module_update_orgs",
+      "line": 81,
+      "method": "POST",
+      "path": "/module/shared/update-orgs",
+      "registered_path": "/api/app//module/shared/update-orgs",
+      "response_model": "SharedModule",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/shared_module.py",
+      "tags": [
+        "shared-module"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "frontend_proxy_path": "//module/shared/list",
+      "function": "shared_module_list",
+      "line": 93,
+      "method": "GET",
+      "path": "/module/shared/list",
+      "registered_path": "/api/app//module/shared/list",
+      "response_model": "SharedModuleListResponse",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/shared_module.py",
+      "tags": [
+        "shared-module"
+      ]
+    },
+    {
+      "api_layer": "/api/app",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "frontend_proxy_path": "//org/{org_id}/shared-modules",
+      "function": "org_shared_modules",
+      "line": 107,
+      "method": "GET",
+      "path": "/org/{org_id}/shared-modules",
+      "registered_path": "/api/app//org/{org_id}/shared-modules",
+      "response_model": "OrgSharedModulesResponse",
+      "router": "router",
+      "router_prefix": "",
+      "source": "backend/app/api/shared_module.py",
+      "tags": [
+        "shared-module"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(guarded_heavy_api_request('modules.detail'))",
+        "Depends(get_db)",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "frontend_proxy_path": "/modules/{module_key}",
+      "function": "module_detail",
+      "line": 177,
+      "method": "GET",
+      "path": "/{module_key}",
+      "registered_path": "/api/control-plane/modules/{module_key}",
+      "response_model": "ModuleResponse",
+      "router": "router",
+      "router_prefix": "/modules",
+      "source": "backend/app/api/routes/modules.py",
+      "tags": [
+        "modules"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "frontend_proxy_path": "/agents/{agent_key}",
+      "function": "agent_detail",
+      "line": 39,
+      "method": "GET",
+      "path": "/{agent_key}",
+      "registered_path": "/api/control-plane/agents/{agent_key}",
+      "response_model": "AgentResponse",
+      "router": "router",
+      "router_prefix": "/agents",
+      "source": "backend/app/api/routes/agents.py",
+      "tags": [
+        "agents"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15', 'execute'))"
+      ],
+      "frontend_proxy_path": "/foundation-demo/run",
+      "function": "foundation_demo_run",
+      "line": 25,
+      "method": "POST",
+      "path": "/run",
+      "registered_path": "/api/control-plane/foundation-demo/run",
+      "response_model": "FoundationDemoRunResponse",
+      "router": "router",
+      "router_prefix": "/foundation-demo",
+      "source": "backend/app/api/routes/foundation_demo.py",
+      "tags": [
+        "foundation-demo"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15', 'execute'))"
+      ],
+      "frontend_proxy_path": "/foundation-demo/latest",
+      "function": "foundation_demo_latest",
+      "line": 48,
+      "method": "GET",
+      "path": "/latest",
+      "registered_path": "/api/control-plane/foundation-demo/latest",
+      "response_model": "FoundationDemoLatestResponse",
+      "router": "router",
+      "router_prefix": "/foundation-demo",
+      "source": "backend/app/api/routes/foundation_demo.py",
+      "tags": [
+        "foundation-demo"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15', 'execute'))",
+        "Depends(get_settings)"
+      ],
+      "frontend_proxy_path": "/n8n-test/run",
+      "function": "n8n_test_run",
+      "line": 37,
+      "method": "POST",
+      "path": "/run",
+      "registered_path": "/api/control-plane/n8n-test/run",
+      "response_model": "N8nTestRunResponse",
+      "router": "router",
+      "router_prefix": "/n8n-test",
+      "source": "backend/app/api/routes/n8n_test.py",
+      "tags": [
+        "n8n-test"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Header(default=None, alias='X-Barong-Callback-Secret')",
+        "Depends(get_db)",
+        "Depends(get_settings)"
+      ],
+      "frontend_proxy_path": "/n8n-test/callback",
+      "function": "n8n_test_callback",
+      "line": 57,
+      "method": "POST",
+      "path": "/callback",
+      "registered_path": "/api/control-plane/n8n-test/callback",
+      "response_model": "N8nTestCallbackResponse",
+      "router": "router",
+      "router_prefix": "/n8n-test",
+      "source": "backend/app/api/routes/n8n_test.py",
+      "tags": [
+        "n8n-test"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15', 'execute'))"
+      ],
+      "frontend_proxy_path": "/n8n-test/latest",
+      "function": "n8n_test_latest",
+      "line": 90,
+      "method": "GET",
+      "path": "/latest",
+      "registered_path": "/api/control-plane/n8n-test/latest",
+      "response_model": "N8nTestLatestResponse",
+      "router": "router",
+      "router_prefix": "/n8n-test",
+      "source": "backend/app/api/routes/n8n_test.py",
+      "tags": [
+        "n8n-test"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C09', 'execute'))"
+      ],
+      "frontend_proxy_path": "/module-adapters/{adapter_key}/actions/{action_key}/request",
+      "function": "module_adapter_action_request",
+      "line": 59,
+      "method": "POST",
+      "path": "/{adapter_key}/actions/{action_key}/request",
+      "registered_path": "/api/control-plane/module-adapters/{adapter_key}/actions/{action_key}/request",
+      "response_model": "ExecutionUnlockResponse",
+      "router": "router",
+      "router_prefix": "/module-adapters",
+      "source": "backend/app/api/routes/module_adapters.py",
+      "tags": [
+        "module-adapters"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/registry",
+      "function": "workflow_registry",
+      "line": 36,
+      "method": "GET",
+      "path": "/registry",
+      "registered_path": "/api/control-plane/workflow-registry/registry",
+      "response_model": "WorkflowRegistryResponse",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/workflows/{workflow_id}",
+      "function": "workflow_registry_detail",
+      "line": 44,
+      "method": "GET",
+      "path": "/workflows/{workflow_id}",
+      "registered_path": "/api/control-plane/workflow-registry/workflows/{workflow_id}",
+      "response_model": "WorkflowRegistryRecord",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/module-bindings",
+      "function": "workflow_registry_module_bindings",
+      "line": 59,
+      "method": "GET",
+      "path": "/module-bindings",
+      "registered_path": "/api/control-plane/workflow-registry/module-bindings",
+      "response_model": "ModuleWorkflowBindingResponse",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/modules/{module}/workflows",
+      "function": "workflow_registry_module_workflows",
+      "line": 70,
+      "method": "GET",
+      "path": "/modules/{module}/workflows",
+      "registered_path": "/api/control-plane/workflow-registry/modules/{module}/workflows",
+      "response_model": "WorkflowRegistryResponse",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/status-management",
+      "function": "workflow_registry_status_management",
+      "line": 86,
+      "method": "GET",
+      "path": "/status-management",
+      "registered_path": "/api/control-plane/workflow-registry/status-management",
+      "response_model": "WorkflowStatusManagementModel",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/rules",
+      "function": "workflow_registry_rules",
+      "line": 94,
+      "method": "GET",
+      "path": "/rules",
+      "registered_path": "/api/control-plane/workflow-registry/rules",
+      "response_model": "WorkflowRegistryRulesModel",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Query(min_length=1, max_length=128)",
+        "Query(min_length=1, max_length=180)",
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/decision",
+      "function": "workflow_registry_decision",
+      "line": 102,
+      "method": "GET",
+      "path": "/decision",
+      "registered_path": "/api/control-plane/workflow-registry/decision",
+      "response_model": "WorkflowInvocationDecision",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/validation",
+      "function": "workflow_registry_validation",
+      "line": 112,
+      "method": "GET",
+      "path": "/validation",
+      "registered_path": "/api/control-plane/workflow-registry/validation",
+      "response_model": "WorkflowRegistryValidationResult",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/system-flow",
+      "function": "workflow_registry_system_flow",
+      "line": 120,
+      "method": "GET",
+      "path": "/system-flow",
+      "registered_path": "/api/control-plane/workflow-registry/system-flow",
+      "response_model": "WorkflowSystemFlowDiagram",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "frontend_proxy_path": "/workflow-registry/completion-status",
+      "function": "workflow_registry_completion_status",
+      "line": 131,
+      "method": "GET",
+      "path": "/completion-status",
+      "registered_path": "/api/control-plane/workflow-registry/completion-status",
+      "response_model": "WorkflowRegistryCompletionStatus",
+      "router": "router",
+      "router_prefix": "/workflow-registry",
+      "source": "backend/app/api/routes/workflow_registry.py",
+      "tags": [
+        "workflow-registry"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Header(default=None, alias='X-Barong-Gateway-Signature')",
+        "Depends(get_settings)",
+        "Depends(get_db)"
+      ],
+      "frontend_proxy_path": "/webhook-gateway/ingress",
+      "function": "webhook_gateway_ingress",
+      "line": 45,
+      "method": "POST",
+      "path": "/ingress",
+      "registered_path": "/api/control-plane/webhook-gateway/ingress",
+      "response_model": "WebhookGatewayDecision",
+      "router": "router",
+      "router_prefix": "/webhook-gateway",
+      "source": "backend/app/api/routes/webhook_gateway.py",
+      "tags": [
+        "webhook-gateway"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))"
+      ],
+      "frontend_proxy_path": "/webhook-gateway/design",
+      "function": "webhook_gateway_design",
+      "line": 172,
+      "method": "GET",
+      "path": "/design",
+      "registered_path": "/api/control-plane/webhook-gateway/design",
+      "response_model": "WebhookGatewayDesign",
+      "router": "router",
+      "router_prefix": "/webhook-gateway",
+      "source": "backend/app/api/routes/webhook_gateway.py",
+      "tags": [
+        "webhook-gateway"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))",
+        "Depends(get_settings)"
+      ],
+      "frontend_proxy_path": "/webhook-gateway/signature-model",
+      "function": "webhook_gateway_signature_model",
+      "line": 180,
+      "method": "GET",
+      "path": "/signature-model",
+      "registered_path": "/api/control-plane/webhook-gateway/signature-model",
+      "response_model": "WebhookGatewaySignatureModel",
+      "router": "router",
+      "router_prefix": "/webhook-gateway",
+      "source": "backend/app/api/routes/webhook_gateway.py",
+      "tags": [
+        "webhook-gateway"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))"
+      ],
+      "frontend_proxy_path": "/webhook-gateway/payload-format",
+      "function": "webhook_gateway_payload_format",
+      "line": 189,
+      "method": "GET",
+      "path": "/payload-format",
+      "registered_path": "/api/control-plane/webhook-gateway/payload-format",
+      "response_model": "WebhookGatewayPayloadFormat",
+      "router": "router",
+      "router_prefix": "/webhook-gateway",
+      "source": "backend/app/api/routes/webhook_gateway.py",
+      "tags": [
+        "webhook-gateway"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))"
+      ],
+      "frontend_proxy_path": "/webhook-gateway/workflow-lookup-flow",
+      "function": "webhook_gateway_workflow_lookup_flow",
+      "line": 197,
+      "method": "GET",
+      "path": "/workflow-lookup-flow",
+      "registered_path": "/api/control-plane/webhook-gateway/workflow-lookup-flow",
+      "response_model": "WebhookGatewayLookupFlow",
+      "router": "router",
+      "router_prefix": "/webhook-gateway",
+      "source": "backend/app/api/routes/webhook_gateway.py",
+      "tags": [
+        "webhook-gateway"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))"
+      ],
+      "frontend_proxy_path": "/webhook-gateway/completion-status",
+      "function": "webhook_gateway_completion_status",
+      "line": 208,
+      "method": "GET",
+      "path": "/completion-status",
+      "registered_path": "/api/control-plane/webhook-gateway/completion-status",
+      "response_model": "WebhookGatewayCompletionStatus",
+      "router": "router",
+      "router_prefix": "/webhook-gateway",
+      "source": "backend/app/api/routes/webhook_gateway.py",
+      "tags": [
+        "webhook-gateway"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Header(default=None, alias='X-Barong-Gateway-Signature')",
+        "Depends(get_settings)",
+        "Depends(get_db)"
+      ],
+      "frontend_proxy_path": "/callback-handler/receiver",
+      "function": "callback_handler_receiver",
+      "line": 57,
+      "method": "POST",
+      "path": "/receiver",
+      "registered_path": "/api/control-plane/callback-handler/receiver",
+      "response_model": "CallbackHandlerResult",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "frontend_proxy_path": "/callback-handler/context-bindings",
+      "function": "callback_handler_bind_context",
+      "line": 198,
+      "method": "POST",
+      "path": "/context-bindings",
+      "registered_path": "/api/control-plane/callback-handler/context-bindings",
+      "response_model": "CallbackContextBinding",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "frontend_proxy_path": "/callback-handler/results/{context_id}",
+      "function": "callback_handler_result",
+      "line": 234,
+      "method": "GET",
+      "path": "/results/{context_id}",
+      "registered_path": "/api/control-plane/callback-handler/results/{context_id}",
+      "response_model": "CallbackResultStorageRecord",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "frontend_proxy_path": "/callback-handler/design",
+      "function": "callback_handler_design",
+      "line": 250,
+      "method": "GET",
+      "path": "/design",
+      "registered_path": "/api/control-plane/callback-handler/design",
+      "response_model": "CallbackHandlerDesign",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "frontend_proxy_path": "/callback-handler/context-binding",
+      "function": "callback_handler_context_binding",
+      "line": 258,
+      "method": "GET",
+      "path": "/context-binding",
+      "registered_path": "/api/control-plane/callback-handler/context-binding",
+      "response_model": "CallbackContextBindingModel",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "frontend_proxy_path": "/callback-handler/status-management",
+      "function": "callback_handler_status_management",
+      "line": 266,
+      "method": "GET",
+      "path": "/status-management",
+      "registered_path": "/api/control-plane/callback-handler/status-management",
+      "response_model": "CallbackStatusManagementModel",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "frontend_proxy_path": "/callback-handler/result-storage",
+      "function": "callback_handler_result_storage",
+      "line": 274,
+      "method": "GET",
+      "path": "/result-storage",
+      "registered_path": "/api/control-plane/callback-handler/result-storage",
+      "response_model": "CallbackResultStorageModel",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "frontend_proxy_path": "/callback-handler/module-notifications",
+      "function": "callback_handler_module_notifications",
+      "line": 285,
+      "method": "GET",
+      "path": "/module-notifications",
+      "registered_path": "/api/control-plane/callback-handler/module-notifications",
+      "response_model": "CallbackModuleNotificationModel",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "frontend_proxy_path": "/callback-handler/completion-status",
+      "function": "callback_handler_completion_status",
+      "line": 296,
+      "method": "GET",
+      "path": "/completion-status",
+      "registered_path": "/api/control-plane/callback-handler/completion-status",
+      "response_model": "CallbackHandlerCompletionStatus",
+      "router": "router",
+      "router_prefix": "/callback-handler",
+      "source": "backend/app/api/routes/callback_handler.py",
+      "tags": [
+        "callback-handler"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/failures",
+      "function": "failure_handling_submit_failure",
+      "line": 50,
+      "method": "POST",
+      "path": "/failures",
+      "registered_path": "/api/control-plane/failure-handling/failures",
+      "response_model": "FailureHandlingOutcome",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/timeouts/evaluate",
+      "function": "failure_handling_evaluate_timeout",
+      "line": 72,
+      "method": "POST",
+      "path": "/timeouts/evaluate",
+      "registered_path": "/api/control-plane/failure-handling/timeouts/evaluate",
+      "response_model": "TimeoutHandlingDecision",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/dlq",
+      "function": "failure_handling_dlq",
+      "line": 94,
+      "method": "GET",
+      "path": "/dlq",
+      "registered_path": "/api/control-plane/failure-handling/dlq",
+      "response_model": "DeadLetterQueueResponse",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/dlq/{context_id}",
+      "function": "failure_handling_dlq_record",
+      "line": 103,
+      "method": "GET",
+      "path": "/dlq/{context_id}",
+      "registered_path": "/api/control-plane/failure-handling/dlq/{context_id}",
+      "response_model": "DeadLetterRecord",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))",
+        "Depends(get_settings)",
+        "Depends(get_db)"
+      ],
+      "frontend_proxy_path": "/failure-handling/recovery/replay",
+      "function": "failure_handling_manual_replay",
+      "line": 119,
+      "method": "POST",
+      "path": "/recovery/replay",
+      "registered_path": "/api/control-plane/failure-handling/recovery/replay",
+      "response_model": "RecoveryPlan",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/retry-system-design",
+      "function": "failure_handling_retry_system_design",
+      "line": 156,
+      "method": "GET",
+      "path": "/retry-system-design",
+      "registered_path": "/api/control-plane/failure-handling/retry-system-design",
+      "response_model": "RetrySystemDesign",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/timeout-handling",
+      "function": "failure_handling_timeout_model",
+      "line": 164,
+      "method": "GET",
+      "path": "/timeout-handling",
+      "registered_path": "/api/control-plane/failure-handling/timeout-handling",
+      "response_model": "TimeoutHandlingModel",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/dead-letter-queue",
+      "function": "failure_handling_dead_letter_queue",
+      "line": 175,
+      "method": "GET",
+      "path": "/dead-letter-queue",
+      "registered_path": "/api/control-plane/failure-handling/dead-letter-queue",
+      "response_model": "DeadLetterQueueArchitecture",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/fallback-strategy",
+      "function": "failure_handling_fallback_strategy",
+      "line": 183,
+      "method": "GET",
+      "path": "/fallback-strategy",
+      "registered_path": "/api/control-plane/failure-handling/fallback-strategy",
+      "response_model": "FallbackStrategy",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/recovery-flow",
+      "function": "failure_handling_recovery_flow",
+      "line": 191,
+      "method": "GET",
+      "path": "/recovery-flow",
+      "registered_path": "/api/control-plane/failure-handling/recovery-flow",
+      "response_model": "RecoveryFlow",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "frontend_proxy_path": "/failure-handling/completion-status",
+      "function": "failure_handling_completion_status",
+      "line": 202,
+      "method": "GET",
+      "path": "/completion-status",
+      "registered_path": "/api/control-plane/failure-handling/completion-status",
+      "response_model": "FailureHandlingCompletionStatus",
+      "router": "router",
+      "router_prefix": "/failure-handling",
+      "source": "backend/app/api/routes/failure_handling.py",
+      "tags": [
+        "failure-handling"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "frontend_proxy_path": "/live-gate/canary",
+      "function": "upsert_canary_rollout",
+      "line": 115,
+      "method": "POST",
+      "path": "/canary",
+      "registered_path": "/api/control-plane/live-gate/canary",
+      "response_model": "CanaryRolloutRead",
+      "router": "router",
+      "router_prefix": "/live-gate",
+      "source": "backend/app/api/routes/live_gate.py",
+      "tags": [
+        "live-gate"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "frontend_proxy_path": "/live-gate/rollback/failure",
+      "function": "record_rollback_failure",
+      "line": 154,
+      "method": "POST",
+      "path": "/rollback/failure",
+      "registered_path": "/api/control-plane/live-gate/rollback/failure",
+      "response_model": "RollbackGuardDecision",
+      "router": "router",
+      "router_prefix": "/live-gate",
+      "source": "backend/app/api/routes/live_gate.py",
+      "tags": [
+        "live-gate"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "frontend_proxy_path": "/live-gate/rollback/consistency",
+      "function": "verify_rollback_consistency",
+      "line": 176,
+      "method": "POST",
+      "path": "/rollback/consistency",
+      "registered_path": "/api/control-plane/live-gate/rollback/consistency",
+      "response_model": "RollbackGuardDecision",
+      "router": "router",
+      "router_prefix": "/live-gate",
+      "source": "backend/app/api/routes/live_gate.py",
+      "tags": [
+        "live-gate"
+      ]
+    },
+    {
+      "api_layer": "/api/control-plane",
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "frontend_proxy_path": "/live-gate/rollback/restore",
+      "function": "restore_previous_version",
+      "line": 195,
+      "method": "POST",
+      "path": "/rollback/restore",
+      "registered_path": "/api/control-plane/live-gate/rollback/restore",
+      "response_model": "RollbackGuardDecision",
+      "router": "router",
+      "router_prefix": "/live-gate",
+      "source": "backend/app/api/routes/live_gate.py",
+      "tags": [
+        "live-gate"
+      ]
+    }
+  ],
+  "basis": "Missing items are derived from route registry, module registry, frontend API calls and proxy allowlist.",
+  "critical_missing_bindings": [],
+  "frontend_hidden_instead_of_fake_ui": [
+    "admin.agents",
+    "admin.permissions",
+    "admin.settings",
+    "experimental.foundation_demo",
+    "integration.n8n_test_bridge",
+    "system.errors",
+    "system.memory_events",
+    "system.operation_logs"
+  ],
+  "generated_at": "2026-06-22T05:39:24.687113+00:00",
+  "module_missing_feature_analysis": [
+    {
+      "api_namespace": "no_api",
+      "backend_routes": [],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [],
+        "writes": []
+      },
+      "display_name": "Dashboard",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "no_api_declared"
+      ],
+      "module_key": "core.dashboard",
+      "no_api": true,
+      "permission_manifest": [],
+      "required_permissions": [],
+      "route_namespace": "/dashboard",
+      "status": "sealed"
+    },
+    {
+      "api_namespace": "/foundation-demo",
+      "backend_routes": [
+        {
+          "function": "foundation_demo_run",
+          "method": "POST",
+          "registered_path": "/api/control-plane/foundation-demo/run",
+          "source": "backend/app/api/routes/foundation_demo.py"
+        },
+        {
+          "function": "foundation_demo_latest",
+          "method": "GET",
+          "registered_path": "/api/control-plane/foundation-demo/latest",
+          "source": "backend/app/api/routes/foundation_demo.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "foundation_demo_metadata"
+        ],
+        "writes": [
+          "foundation_demo_metadata"
+        ]
+      },
+      "display_name": "Foundation Demo",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "frontend_api_binding_missing",
+        "hidden_from_product_navigation"
+      ],
+      "module_key": "experimental.foundation_demo",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "experimental",
+          "default_scope_type": "global",
+          "description": "View the internal demo-only foundation exercise metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read foundation demo metadata",
+          "menu_policy": "hide_when_denied",
+          "module_key": "experimental.foundation_demo",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        }
+      ],
+      "required_permissions": [
+        "modules.read"
+      ],
+      "route_namespace": "/foundation-demo",
+      "status": "enabled"
+    },
+    {
+      "api_namespace": "/n8n-test",
+      "backend_routes": [
+        {
+          "function": "n8n_test_run",
+          "method": "POST",
+          "registered_path": "/api/control-plane/n8n-test/run",
+          "source": "backend/app/api/routes/n8n_test.py"
+        },
+        {
+          "function": "n8n_test_callback",
+          "method": "POST",
+          "registered_path": "/api/control-plane/n8n-test/callback",
+          "source": "backend/app/api/routes/n8n_test.py"
+        },
+        {
+          "function": "n8n_test_latest",
+          "method": "GET",
+          "registered_path": "/api/control-plane/n8n-test/latest",
+          "source": "backend/app/api/routes/n8n_test.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [],
+        "writes": []
+      },
+      "display_name": "n8n Test Bridge",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "frontend_api_binding_missing",
+        "hidden_from_product_navigation",
+        "navigation_default_visible_false"
+      ],
+      "module_key": "integration.n8n_test_bridge",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "integration",
+          "default_scope_type": "global",
+          "description": "View the existing test-only bridge metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read n8n test bridge metadata",
+          "menu_policy": "hide_when_denied",
+          "module_key": "integration.n8n_test_bridge",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        }
+      ],
+      "required_permissions": [
+        "modules.read"
+      ],
+      "route_namespace": "/n8n-test",
+      "status": "adapter_pending"
+    },
+    {
+      "api_namespace": "/users",
+      "backend_routes": [
+        {
+          "function": "users",
+          "method": "GET",
+          "registered_path": "/api/app/users",
+          "source": "backend/app/api/routes/users.py"
+        },
+        {
+          "function": "user_create",
+          "method": "POST",
+          "registered_path": "/api/app/users",
+          "source": "backend/app/api/routes/users.py"
+        },
+        {
+          "function": "user_roles",
+          "method": "GET",
+          "registered_path": "/api/app/users/roles",
+          "source": "backend/app/api/routes/users.py"
+        },
+        {
+          "function": "user_detail",
+          "method": "GET",
+          "registered_path": "/api/app/users/{user_id}",
+          "source": "backend/app/api/routes/users.py"
+        },
+        {
+          "function": "user_update",
+          "method": "PATCH",
+          "registered_path": "/api/app/users/{user_id}",
+          "source": "backend/app/api/routes/users.py"
+        },
+        {
+          "function": "user_reset_password",
+          "method": "POST",
+          "registered_path": "/api/app/users/{user_id}/reset-password",
+          "source": "backend/app/api/routes/users.py"
+        },
+        {
+          "function": "user_disable",
+          "method": "POST",
+          "registered_path": "/api/app/users/{user_id}/disable",
+          "source": "backend/app/api/routes/users.py"
+        },
+        {
+          "function": "user_enable",
+          "method": "POST",
+          "registered_path": "/api/app/users/{user_id}/enable",
+          "source": "backend/app/api/routes/users.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "users"
+        ],
+        "writes": [
+          "users"
+        ]
+      },
+      "display_name": "User Management",
+      "frontend_api_bindings": [
+        {
+          "path": "/users?${params.toString()}",
+          "source": "frontend/src/lib/review-audit.ts"
+        },
+        {
+          "path": "/users?${params.toString()}",
+          "source": "frontend/src/lib/users-api.ts"
+        },
+        {
+          "path": "/users?${params.toString()}",
+          "source": "frontend/src/lib/users-api.ts"
+        },
+        {
+          "path": "/users/roles",
+          "source": "frontend/src/lib/users-api.ts"
+        },
+        {
+          "path": "/users",
+          "source": "frontend/src/lib/users-api.ts"
+        },
+        {
+          "path": "/users/${userId}",
+          "source": "frontend/src/lib/users-api.ts"
+        },
+        {
+          "path": "/users/${userId}",
+          "source": "frontend/src/lib/users-api.ts"
+        },
+        {
+          "path": "/users/${userId}/disable",
+          "source": "frontend/src/lib/users-api.ts"
+        },
+        {
+          "path": "/users/${userId}/enable",
+          "source": "frontend/src/lib/users-api.ts"
+        },
+        {
+          "path": "/users/${userId}/reset-password",
+          "source": "frontend/src/lib/users-api.ts"
+        }
+      ],
+      "frontend_route_targeted": true,
+      "missing_api_list": [],
+      "module_key": "admin.users",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View internal user accounts and safe metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read users",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.users",
+          "operation_log_required": false,
+          "permission_key": "users.read",
+          "risk_level": "medium"
+        },
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Create and maintain internal non-owner accounts.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage users",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.users",
+          "operation_log_required": true,
+          "permission_key": "users.manage",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "users.manage"
+      ],
+      "route_namespace": "/users",
+      "status": "sealed"
+    },
+    {
+      "api_namespace": "/organizations",
+      "backend_routes": [
+        {
+          "function": "organizations",
+          "method": "GET",
+          "registered_path": "/api/app/organizations",
+          "source": "backend/app/api/routes/organizations.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "organizations",
+          "users"
+        ],
+        "writes": [
+          "organizations"
+        ]
+      },
+      "display_name": "Organizations",
+      "frontend_api_bindings": [
+        {
+          "path": "/organizations?${params.toString()}",
+          "source": "frontend/src/lib/review-audit.ts"
+        },
+        {
+          "path": "/organizations?${params.toString()}",
+          "source": "frontend/src/lib/users-api.ts"
+        }
+      ],
+      "frontend_route_targeted": true,
+      "missing_api_list": [],
+      "module_key": "admin.organizations",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Create and maintain organizations through existing user management controls.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage organizations",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.organizations",
+          "operation_log_required": true,
+          "permission_key": "users.manage",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "users.manage"
+      ],
+      "route_namespace": "/organizations",
+      "status": "enabled"
+    },
+    {
+      "api_namespace": "/permissions",
+      "backend_routes": [
+        {
+          "function": "permissions_me",
+          "method": "GET",
+          "registered_path": "/api/app/permissions/me",
+          "source": "backend/app/api/routes/permissions.py"
+        },
+        {
+          "function": "permissions_registry",
+          "method": "GET",
+          "registered_path": "/api/app/permissions/registry",
+          "source": "backend/app/api/routes/permissions.py"
+        },
+        {
+          "function": "user_permission_assignments",
+          "method": "GET",
+          "registered_path": "/api/app/permissions/users/{user_id}/assignments",
+          "source": "backend/app/api/routes/permissions.py"
+        },
+        {
+          "function": "user_permission_assignment_create",
+          "method": "POST",
+          "registered_path": "/api/app/permissions/users/{user_id}/assignments",
+          "source": "backend/app/api/routes/permissions.py"
+        },
+        {
+          "function": "user_permission_assignment_update",
+          "method": "PATCH",
+          "registered_path": "/api/app/permissions/users/{user_id}/assignments/{assignment_id}",
+          "source": "backend/app/api/routes/permissions.py"
+        },
+        {
+          "function": "user_permission_assignment_revoke",
+          "method": "DELETE",
+          "registered_path": "/api/app/permissions/users/{user_id}/assignments/{assignment_id}",
+          "source": "backend/app/api/routes/permissions.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "permission_registry",
+          "user_permission_assignments"
+        ],
+        "writes": [
+          "user_permission_assignments"
+        ]
+      },
+      "display_name": "Permission Management",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "frontend_api_binding_missing",
+        "hidden_from_product_navigation",
+        "navigation_default_visible_false"
+      ],
+      "module_key": "admin.permissions",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View permission registry and assignment state.",
+          "high_risk_confirmation_required": false,
+          "label": "Read permissions",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.permissions",
+          "operation_log_required": false,
+          "permission_key": "permissions.read",
+          "risk_level": "medium"
+        },
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Grant, update, or revoke explicit assignments.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage permissions",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.permissions",
+          "operation_log_required": true,
+          "permission_key": "permissions.manage",
+          "risk_level": "critical"
+        }
+      ],
+      "required_permissions": [
+        "permissions.read"
+      ],
+      "route_namespace": "/users",
+      "status": "sealed"
+    },
+    {
+      "api_namespace": "/modules",
+      "backend_routes": [
+        {
+          "function": "modules",
+          "method": "GET",
+          "registered_path": "/api/control-plane/modules",
+          "source": "backend/app/api/routes/modules.py"
+        },
+        {
+          "function": "module_registry",
+          "method": "GET",
+          "registered_path": "/api/control-plane/modules/registry",
+          "source": "backend/app/api/routes/modules.py"
+        },
+        {
+          "function": "modules_me",
+          "method": "GET",
+          "registered_path": "/api/control-plane/modules/me",
+          "source": "backend/app/api/routes/modules.py"
+        },
+        {
+          "function": "module_detail",
+          "method": "GET",
+          "registered_path": "/api/control-plane/modules/{module_key}",
+          "source": "backend/app/api/routes/modules.py"
+        },
+        {
+          "function": "module_create",
+          "method": "POST",
+          "registered_path": "/api/control-plane/modules",
+          "source": "backend/app/api/routes/modules.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "module_registry"
+        ],
+        "writes": []
+      },
+      "display_name": "Modules",
+      "frontend_api_bindings": [
+        {
+          "path": "/modules/registry",
+          "source": "frontend/src/lib/module-registry-api.ts"
+        },
+        {
+          "path": "/modules/me",
+          "source": "frontend/src/lib/module-registry-api.ts"
+        }
+      ],
+      "frontend_route_targeted": true,
+      "missing_api_list": [],
+      "module_key": "admin.modules",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View safe module registry metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read modules",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.modules",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        },
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Reserved future module registry management.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage modules",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.modules",
+          "operation_log_required": true,
+          "permission_key": "modules.manage",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "modules.read"
+      ],
+      "route_namespace": "/modules",
+      "status": "sealed"
+    },
+    {
+      "api_namespace": "/agents",
+      "backend_routes": [
+        {
+          "function": "agents",
+          "method": "GET",
+          "registered_path": "/api/control-plane/agents",
+          "source": "backend/app/api/routes/agents.py"
+        },
+        {
+          "function": "agent_detail",
+          "method": "GET",
+          "registered_path": "/api/control-plane/agents/{agent_key}",
+          "source": "backend/app/api/routes/agents.py"
+        },
+        {
+          "function": "agent_create",
+          "method": "POST",
+          "registered_path": "/api/control-plane/agents",
+          "source": "backend/app/api/routes/agents.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "agent_registry"
+        ],
+        "writes": []
+      },
+      "display_name": "Agents",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "frontend_api_binding_missing",
+        "hidden_from_product_navigation"
+      ],
+      "module_key": "admin.agents",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View safe agent registry metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read agent registry",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.agents",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        }
+      ],
+      "required_permissions": [
+        "modules.read"
+      ],
+      "route_namespace": "/agents",
+      "status": "sealed"
+    },
+    {
+      "api_namespace": "no_api",
+      "backend_routes": [],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [],
+        "writes": []
+      },
+      "display_name": "Settings",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "no_api_declared",
+        "hidden_from_product_navigation",
+        "navigation_default_visible_false"
+      ],
+      "module_key": "admin.settings",
+      "no_api": true,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View safe settings metadata when implemented.",
+          "high_risk_confirmation_required": false,
+          "label": "Read settings",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.settings",
+          "operation_log_required": false,
+          "permission_key": "settings.read",
+          "risk_level": "medium"
+        },
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Reserved future settings management.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage settings",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.settings",
+          "operation_log_required": true,
+          "permission_key": "settings.manage",
+          "risk_level": "critical"
+        }
+      ],
+      "required_permissions": [
+        "settings.read"
+      ],
+      "route_namespace": "/settings",
+      "status": "planned"
+    },
+    {
+      "api_namespace": "no_api",
+      "backend_routes": [],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [],
+        "writes": []
+      },
+      "display_name": "Products",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "no_api_declared",
+        "navigation_default_visible_false"
+      ],
+      "module_key": "business.products",
+      "no_api": true,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "View future product workspace metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read products",
+          "menu_policy": "show_locked",
+          "module_key": "business.products",
+          "operation_log_required": false,
+          "permission_key": "products.read",
+          "risk_level": "low"
+        }
+      ],
+      "required_permissions": [
+        "products.read"
+      ],
+      "route_namespace": "/products",
+      "status": "planned"
+    },
+    {
+      "api_namespace": "/approval",
+      "backend_routes": [
+        {
+          "function": "approval_request_create",
+          "method": "POST",
+          "registered_path": "/api/app/approval/request",
+          "source": "backend/app/api/routes/approval.py"
+        },
+        {
+          "function": "approval_list",
+          "method": "GET",
+          "registered_path": "/api/app/approval/list",
+          "source": "backend/app/api/routes/approval.py"
+        },
+        {
+          "function": "approval_detail",
+          "method": "GET",
+          "registered_path": "/api/app/approval/{approval_id}",
+          "source": "backend/app/api/routes/approval.py"
+        },
+        {
+          "function": "approval_approve",
+          "method": "POST",
+          "registered_path": "/api/app/approval/{approval_id}/approve",
+          "source": "backend/app/api/routes/approval.py"
+        },
+        {
+          "function": "approval_reject",
+          "method": "POST",
+          "registered_path": "/api/app/approval/{approval_id}/reject",
+          "source": "backend/app/api/routes/approval.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "approval_requests",
+          "approval_decisions"
+        ],
+        "writes": [
+          "approval_requests",
+          "approval_decisions"
+        ]
+      },
+      "display_name": "Approvals",
+      "frontend_api_bindings": [
+        {
+          "path": "/approval/list?${params.toString()}",
+          "source": "frontend/src/lib/approval.ts"
+        },
+        {
+          "path": "/approval/${encodeURIComponent(approvalId)}",
+          "source": "frontend/src/lib/approval.ts"
+        },
+        {
+          "path": "/approval/${encodeURIComponent(approvalId)}/approve",
+          "source": "frontend/src/lib/approval.ts"
+        },
+        {
+          "path": "/approval/${encodeURIComponent(approvalId)}/reject",
+          "source": "frontend/src/lib/approval.ts"
+        }
+      ],
+      "frontend_route_targeted": true,
+      "missing_api_list": [],
+      "module_key": "business.approvals",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "View approval requests available to the current account.",
+          "high_risk_confirmation_required": false,
+          "label": "Read approvals",
+          "menu_policy": "show_locked",
+          "module_key": "business.approvals",
+          "operation_log_required": false,
+          "permission_key": "reviews.read",
+          "risk_level": "low"
+        },
+        {
+          "action": "approve",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "Approve or reject governed approval requests.",
+          "high_risk_confirmation_required": true,
+          "label": "Approve requests",
+          "menu_policy": "show_locked",
+          "module_key": "business.approvals",
+          "operation_log_required": true,
+          "permission_key": "reviews.approve",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "reviews.read"
+      ],
+      "route_namespace": "/approvals",
+      "status": "enabled"
+    },
+    {
+      "api_namespace": "/reviews",
+      "backend_routes": [
+        {
+          "function": "review_audit_overview",
+          "method": "GET",
+          "registered_path": "/api/app/reviews",
+          "source": "backend/app/api/routes/reviews.py"
+        },
+        {
+          "function": "review_audit_module_registry",
+          "method": "GET",
+          "registered_path": "/api/app/reviews/module-registry",
+          "source": "backend/app/api/routes/reviews.py"
+        },
+        {
+          "function": "review_audit_organizations",
+          "method": "GET",
+          "registered_path": "/api/app/reviews/organizations",
+          "source": "backend/app/api/routes/reviews.py"
+        },
+        {
+          "function": "review_audit_users",
+          "method": "GET",
+          "registered_path": "/api/app/reviews/organizations/{organization_id}/users",
+          "source": "backend/app/api/routes/reviews.py"
+        },
+        {
+          "function": "review_audit_actions",
+          "method": "GET",
+          "registered_path": "/api/app/reviews/organizations/{organization_id}/users/{user_id}/actions",
+          "source": "backend/app/api/routes/reviews.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "approval_decisions",
+          "approval_requests"
+        ],
+        "writes": []
+      },
+      "display_name": "Approval Audit",
+      "frontend_api_bindings": [
+        {
+          "path": "/reviews/organizations?${params.toString()}",
+          "source": "frontend/src/lib/review-audit.ts"
+        },
+        {
+          "path": "/reviews/module-registry",
+          "source": "frontend/src/lib/review-audit.ts"
+        },
+        {
+          "path": "/reviews/organizations/${encodeURIComponent(organizationId)}/users?${params.toString()}",
+          "source": "frontend/src/lib/review-audit.ts"
+        },
+        {
+          "path": "/reviews/organizations/${encodeURIComponent(organizationId)}/users/${userId}/actions?${params.toString()}",
+          "source": "frontend/src/lib/review-audit.ts"
+        }
+      ],
+      "frontend_route_targeted": true,
+      "missing_api_list": [],
+      "module_key": "business.reviews",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "View approval decision audit records.",
+          "high_risk_confirmation_required": false,
+          "label": "Read approval audit",
+          "menu_policy": "show_locked",
+          "module_key": "business.reviews",
+          "operation_log_required": false,
+          "permission_key": "reviews.read",
+          "risk_level": "low"
+        },
+        {
+          "action": "approve",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "Reserved review approval permission for governed workflows.",
+          "high_risk_confirmation_required": true,
+          "label": "Approve reviews",
+          "menu_policy": "show_locked",
+          "module_key": "business.reviews",
+          "operation_log_required": true,
+          "permission_key": "reviews.approve",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "reviews.read"
+      ],
+      "route_namespace": "/reviews",
+      "status": "enabled"
+    },
+    {
+      "api_namespace": "/errors",
+      "backend_routes": [
+        {
+          "function": "errors",
+          "method": "GET",
+          "registered_path": "/api/app/errors",
+          "source": "backend/app/api/routes/errors.py"
+        },
+        {
+          "function": "error_detail",
+          "method": "GET",
+          "registered_path": "/api/app/errors/{error_id}",
+          "source": "backend/app/api/routes/errors.py"
+        },
+        {
+          "function": "error_create",
+          "method": "POST",
+          "registered_path": "/api/app/errors",
+          "source": "backend/app/api/routes/errors.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "system_errors"
+        ],
+        "writes": []
+      },
+      "display_name": "Errors",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "frontend_api_binding_missing",
+        "hidden_from_product_navigation"
+      ],
+      "module_key": "system.errors",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "system",
+          "default_scope_type": "global",
+          "description": "View safe error and operation metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read system errors",
+          "menu_policy": "hide_when_denied",
+          "module_key": "system.errors",
+          "operation_log_required": false,
+          "permission_key": "operation_logs.read",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "operation_logs.read"
+      ],
+      "route_namespace": "/errors",
+      "status": "enabled"
+    },
+    {
+      "api_namespace": "/memory-events",
+      "backend_routes": [],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "memory_events"
+        ],
+        "writes": []
+      },
+      "display_name": "Memory Events",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "backend_route_missing_for_manifest_api_namespace",
+        "frontend_api_binding_missing",
+        "hidden_from_product_navigation"
+      ],
+      "module_key": "system.memory_events",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "system",
+          "default_scope_type": "global",
+          "description": "View safe memory event metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read memory events",
+          "menu_policy": "hide_when_denied",
+          "module_key": "system.memory_events",
+          "operation_log_required": false,
+          "permission_key": "operation_logs.read",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "operation_logs.read"
+      ],
+      "route_namespace": "/memory-events",
+      "status": "enabled"
+    },
+    {
+      "api_namespace": "/operation-logs",
+      "backend_routes": [
+        {
+          "function": "operation_logs",
+          "method": "GET",
+          "registered_path": "/api/app/operation-logs",
+          "source": "backend/app/api/routes/operation_logs.py"
+        },
+        {
+          "function": "operation_log_detail",
+          "method": "GET",
+          "registered_path": "/api/app/operation-logs/{operation_id}",
+          "source": "backend/app/api/routes/operation_logs.py"
+        }
+      ],
+      "data_source": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "operation_logs"
+        ],
+        "writes": []
+      },
+      "display_name": "Operation Logs",
+      "frontend_api_bindings": [],
+      "frontend_route_targeted": false,
+      "missing_api_list": [
+        "frontend_api_binding_missing",
+        "hidden_from_product_navigation",
+        "navigation_default_visible_false"
+      ],
+      "module_key": "system.operation_logs",
+      "no_api": false,
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "system",
+          "default_scope_type": "global",
+          "description": "View audit log and operation history metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read operation logs",
+          "menu_policy": "hide_when_denied",
+          "module_key": "system.operation_logs",
+          "operation_log_required": false,
+          "permission_key": "operation_logs.read",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "operation_logs.read"
+      ],
+      "route_namespace": "/operation-logs",
+      "status": "sealed"
+    }
+  ],
+  "no_missing_critical_bindings": true,
+  "notes": [
+    "Planned/no_api modules are reported and are not converted into fake UI.",
+    "Technical control-plane and operation-log pages are hidden from product navigation instead of being presented to business users."
+  ]
+}

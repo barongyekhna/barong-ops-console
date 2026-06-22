@@ -121,7 +121,6 @@ export type ExecutionAuditEventPolicy = {
 
 export type ExecutionArtifactPolicy = {
   artifact_refs_allowed: boolean;
-  writes_artifacts_in_c09b: false;
   local_path_allowed: false;
   external_reference_allowed: false;
   safe_reference_only: true;
@@ -636,7 +635,6 @@ function normalizeArtifactPolicy(value: unknown): ExecutionArtifactPolicy {
     external_reference_allowed: false,
     local_path_allowed: false,
     safe_reference_only: true,
-    writes_artifacts_in_c09b: false,
   };
 }
 

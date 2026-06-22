@@ -41,7 +41,7 @@ export function CapabilitySidebarEngine({
 
   return (
     <>
-      <nav aria-label="Console navigation" className="sidebar-navigation">
+      <nav aria-label="工作台导航" className="sidebar-navigation">
         {groups.map((group) => (
           <div className="navigation-group" key={group.label}>
             <span className="navigation-label">{group.label}</span>

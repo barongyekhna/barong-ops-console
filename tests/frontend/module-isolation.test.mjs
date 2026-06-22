@@ -182,7 +182,7 @@ const registryItems = [
   }),
   manifest({
     category: "admin",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "admin.users",
     required_permissions: ["users.manage"],
     route_namespace: "/users",
@@ -190,7 +190,7 @@ const registryItems = [
   }),
   manifest({
     category: "admin",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "admin.permissions",
     required_permissions: ["permissions.read"],
     route_namespace: "/permissions",
@@ -198,9 +198,9 @@ const registryItems = [
   }),
   manifest({
     category: "admin",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "admin.organizations",
-    required_permissions: ["organizations.read"],
+    required_permissions: ["users.manage"],
     route_namespace: "/organizations",
     status: "enabled",
   }),
@@ -222,14 +222,14 @@ const registryItems = [
   }),
   manifest({
     category: "core",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "core.dashboard",
     route_namespace: "/dashboard",
     status: "sealed",
   }),
   manifest({
     category: "admin",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "admin.modules",
     required_permissions: ["modules.read"],
     route_namespace: "/modules",
@@ -237,7 +237,7 @@ const registryItems = [
   }),
   manifest({
     category: "admin",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "admin.settings",
     required_permissions: ["settings.read"],
     route_namespace: "/settings",
@@ -245,7 +245,7 @@ const registryItems = [
   }),
   manifest({
     category: "system",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "system.errors",
     required_permissions: ["operation_logs.read"],
     route_namespace: "/errors",
@@ -253,7 +253,7 @@ const registryItems = [
   }),
   manifest({
     category: "system",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "system.memory_events",
     required_permissions: ["operation_logs.read"],
     route_namespace: "/memory-events",
@@ -261,7 +261,7 @@ const registryItems = [
   }),
   manifest({
     category: "system",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "system.operation_logs",
     required_permissions: ["operation_logs.read"],
     route_namespace: "/operation-logs",
@@ -269,7 +269,7 @@ const registryItems = [
   }),
   manifest({
     category: "admin",
-    denied_behavior: "show_locked",
+    denied_behavior: "hide_when_denied",
     module_key: "admin.agents",
     required_permissions: ["modules.read"],
     route_namespace: "/agents",
@@ -534,10 +534,12 @@ test("/modules/me failure fallback keeps non-owner entries locked", () => {
   );
 
   assert.equal(missingUsers.accessState, "unknown");
-  assert.equal(missingUsers.isLocked, true);
+  assert.equal(missingUsers.isHidden, true);
+  assert.equal(missingUsers.isLocked, false);
   assert.equal(missingUsers.noticeType, "no_permission");
   assert.equal(missingLogs.accessState, "unknown");
-  assert.equal(missingLogs.isLocked, true);
+  assert.equal(missingLogs.isHidden, true);
+  assert.equal(missingLogs.isLocked, false);
   assert.equal(missingLogs.noticeType, "no_permission");
   assert.equal(missingApprovals.isLocked, true);
   assert.equal(missingApprovals.canEnter, false);
@@ -605,26 +607,26 @@ test("every navigation module is registered and aligned with registry metadata",
   );
 });
 
-test("admin.users and admin.permissions remain owner-only but visible locked", () => {
+test("admin.users and admin.permissions remain owner-only and hidden when denied", () => {
   const adminUsers = item("admin.users");
   const adminPermissions = item("admin.permissions");
 
-  assert.equal(adminUsers.label, "Users");
+  assert.equal(adminUsers.label, "用户管理");
   assert.equal(adminUsers.module_key, "admin.users");
   assert.equal(adminUsers.owner_only, true);
-  assert.equal(adminUsers.denied_behavior, "show_locked");
+  assert.equal(adminUsers.denied_behavior, "hide_when_denied");
   assert.equal(adminUsers.category, "admin");
-  assert.equal(adminPermissions.label, "Permissions");
+  assert.equal(adminPermissions.label, "权限管理");
   assert.equal(adminPermissions.module_key, "admin.permissions");
   assert.equal(adminPermissions.owner_only, true);
-  assert.equal(adminPermissions.denied_behavior, "show_locked");
+  assert.equal(adminPermissions.denied_behavior, "hide_when_denied");
   assert.equal(adminPermissions.category, "admin");
 
   assert.equal(
     getNavigationStateForModule(noPermissions, adminUsers, [], {
       moduleAccessUnknown: true,
     }).isVisible,
-    true,
+    false,
   );
   assert.equal(
     getNavigationStateForModule(
@@ -633,7 +635,7 @@ test("admin.users and admin.permissions remain owner-only but visible locked", (
       [],
       { moduleAccessUnknown: true },
     ).isVisible,
-    true,
+    false,
   );
   assert.equal(
     getNavigationStateForModule(ownerPermissions, adminUsers, [], {
@@ -658,11 +660,11 @@ test("admin.organizations is visible and enterable for authenticated users", () 
     { moduleAccessUnknown: true },
   );
 
-  assert.equal(adminOrganizations.label, "Organizations");
+  assert.equal(adminOrganizations.label, "组织管理");
   assert.equal(adminOrganizations.module_key, "admin.organizations");
   assert.equal(adminOrganizations.owner_only, undefined);
   assert.equal(adminOrganizations.required_permission, undefined);
-  assert.equal(adminOrganizations.denied_behavior, "show_locked");
+  assert.equal(adminOrganizations.denied_behavior, "hide_when_denied");
   assert.equal(adminOrganizations.category, "admin");
   assert.equal(state.isVisible, true);
   assert.equal(state.isLocked, false);
@@ -677,8 +679,8 @@ test("organization page keeps only create and list sections", () => {
   const headings = source.match(/<h3 /g) ?? [];
 
   assert.equal(headings.length, 2);
-  assert.match(source, /Create Organization/);
-  assert.match(source, /Organization List/);
+  assert.match(source, /创建组织/);
+  assert.match(source, /组织列表/);
   assert.match(source, /isOwner \? \(/);
   assert.doesNotMatch(
     source,
@@ -725,7 +727,7 @@ test("business modules stay locked for users without permission", () => {
   }
 });
 
-test("owner-only admin entries and system logs stay visible but non-enterable when access is unknown", () => {
+test("owner-only admin entries and system logs stay hidden when access is unknown", () => {
   for (const moduleKey of [
     "admin.users",
     "admin.permissions",
@@ -737,8 +739,9 @@ test("owner-only admin entries and system logs stay visible but non-enterable wh
       [],
       { moduleAccessUnknown: true },
     );
-    assert.equal(state.isVisible, true);
-    assert.equal(state.isLocked, true);
+    assert.equal(state.isVisible, false);
+    assert.equal(state.isHidden, true);
+    assert.equal(state.isLocked, false);
     assert.equal(state.canEnter, false);
   }
 });
@@ -819,10 +822,10 @@ test("module route guard decisions cover locked, hidden, unavailable, and owner 
 });
 
 test("module notice copy remains module-aware", () => {
-  assert.equal(MODULE_UNAVAILABLE_TITLE, "Product area unavailable");
-  assert.match(MODULE_UNAVAILABLE_DESCRIPTION, /workspace/);
-  assert.equal(MODULE_NO_PERMISSION_TITLE, "Access needed");
-  assert.match(MODULE_NO_PERMISSION_DESCRIPTION, /product area/);
+  assert.equal(MODULE_UNAVAILABLE_TITLE, "功能区暂不可用");
+  assert.match(MODULE_UNAVAILABLE_DESCRIPTION, /功能区/);
+  assert.equal(MODULE_NO_PERMISSION_TITLE, "无权访问");
+  assert.match(MODULE_NO_PERMISSION_DESCRIPTION, /功能区/);
   assert.doesNotMatch(
     [
       MODULE_UNAVAILABLE_TITLE,
@@ -840,15 +843,15 @@ test("C05 and C06 regression assumptions remain intact", () => {
   assert.equal(isOwnerFullAccess(ownerPermissions), true);
   assert.deepEqual(getPermissionAccessState(noPermissions, usersModule), {
     canAccess: false,
-    isLocked: true,
-    isVisible: true,
+    isLocked: false,
+    isVisible: false,
   });
   assert.deepEqual(
     getPermissionAccessState(usersManagePermissions, usersModule),
     {
       canAccess: false,
-      isLocked: true,
-      isVisible: true,
+      isLocked: false,
+      isVisible: false,
     },
   );
   assert.equal(canShowPermissionManagementEntry(ownerPermissions), true);
@@ -918,8 +921,9 @@ test("wildcard permission does not override module access safety states", () => 
     ],
   );
 
-  assert.equal(wildcardLockedUsers.isVisible, true);
-  assert.equal(wildcardLockedUsers.isLocked, true);
+  assert.equal(wildcardLockedUsers.isVisible, false);
+  assert.equal(wildcardLockedUsers.isHidden, true);
+  assert.equal(wildcardLockedUsers.isLocked, false);
   assert.equal(wildcardLockedUsers.canEnter, false);
   assert.equal(backendLockedApprovals.isLocked, true);
   assert.equal(backendLockedApprovals.canEnter, false);

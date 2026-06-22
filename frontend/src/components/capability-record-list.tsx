@@ -27,10 +27,10 @@ type CapabilityRecordListProps = {
 
 function displayValue(value: unknown) {
   if (value === null || value === undefined || value === "") {
-    return "Not set";
+    return "未填写";
   }
   if (typeof value === "object") {
-    return JSON.stringify(value);
+    return "已记录";
   }
   return String(value);
 }
@@ -40,7 +40,7 @@ export function CapabilityRecordList({
   emptyDescription,
   emptyTitle,
   fields,
-  requiredPermission = "View permission for this area.",
+  requiredPermission = "当前账号可访问。",
   title,
 }: CapabilityRecordListProps) {
   const [result, setResult] = useState<CapabilityRecordListResponse | null>(null);
@@ -56,8 +56,8 @@ export function CapabilityRecordList({
       setResult(null);
       setError(
         requestError instanceof ApiError
-          ? requestError.message
-          : "Records are unavailable right now.",
+          ? "加载失败，请稍后重试。"
+          : "加载失败，请稍后重试。",
       );
     } finally {
       setIsLoading(false);
@@ -70,9 +70,9 @@ export function CapabilityRecordList({
 
   if (isLoading) {
     return (
-      <section className="list-state" aria-label={`Loading ${title}`}>
+      <section className="list-state" aria-label={`正在加载${title}`}>
         <LoaderCircle className="spin" aria-hidden="true" size={22} />
-        <span>Loading records</span>
+        <span>正在加载</span>
       </section>
     );
   }
@@ -83,17 +83,17 @@ export function CapabilityRecordList({
         action={
           <button className="primary-button" onClick={() => void load()}>
             <RotateCcw aria-hidden="true" size={17} />
-            Retry
+            重试
           </button>
         }
         reason={error}
-        required_execution_mode="View access must be available."
-        required_module_state="This product area must be available."
-        required_org_state="Active organization access is required."
+        required_execution_mode="可查看。"
+        required_module_state="功能区可用。"
+        required_org_state="组织状态正常。"
         required_permission={requiredPermission}
         state="missing_feature"
-        title={`${title} are unavailable`}
-        unlock_condition="Try again after the service is available."
+        title="加载失败，请稍后重试"
+        unlock_condition="稍后重试。"
       />
     );
   }
@@ -113,7 +113,7 @@ export function CapabilityRecordList({
     <section className="record-list" aria-label={title}>
       <div className="record-list-heading">
         <h2>{title}</h2>
-        <span>{result.count} records on this page</span>
+        <span>本页 {result.count} 条记录</span>
       </div>
       <div className="record-card-grid">
         {result.items.map((item, index) => (

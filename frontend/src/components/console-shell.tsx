@@ -63,10 +63,10 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         className={`sidebar ${isNavigationOpen ? "sidebar-open" : ""}`}
       >
         <button
-          aria-label="Go to home"
+          aria-label="返回首页"
           className="brand-lockup brand-home-button"
           onClick={handleLogoClick}
-          title="Go to home"
+          title="返回首页"
           type="button"
         >
           <span className="brand-mark">
@@ -74,7 +74,7 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
           </span>
           <span>
             <strong>Barong</strong>
-            <small>Operations</small>
+            <small>运营工作台</small>
           </span>
         </button>
 
@@ -88,10 +88,10 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
         <header className="topbar">
           <div className="topbar-title">
             <button
-              aria-label="Toggle navigation"
+              aria-label="打开或收起导航"
               className="icon-button menu-button"
               onClick={() => setIsNavigationOpen((open) => !open)}
-              title="Toggle navigation"
+              title="打开或收起导航"
               type="button"
             >
               <Menu aria-hidden="true" size={20} />

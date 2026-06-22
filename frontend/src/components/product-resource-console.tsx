@@ -113,8 +113,16 @@ function isRecord(value: unknown): value is ProductRecord {
 }
 
 function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof ApiError || error instanceof Error) {
-    return error.message || fallback;
+  if (error instanceof ApiError) {
+    if (error.status === 401) {
+      return "请重新登录后再操作。";
+    }
+    if (error.status === 403) {
+      return "当前账号无权执行此操作。";
+    }
+    if (error.status >= 500) {
+      return "加载失败，请稍后重试。";
+    }
   }
   return fallback;
 }
@@ -167,13 +175,13 @@ function readField(record: ProductRecord | null | undefined, key: string) {
 
 function displayValue(value: unknown) {
   if (value === null || value === undefined || value === "") {
-    return "Not set";
+    return "未填写";
   }
   if (Array.isArray(value)) {
-    return value.length > 0 ? value.join(", ") : "None";
+    return value.length > 0 ? value.join(", ") : "无";
   }
   if (typeof value === "object") {
-    return JSON.stringify(value);
+    return "已记录";
   }
   return String(value);
 }
@@ -270,7 +278,7 @@ function ResourceForm({
       await onSubmit(buildPayload(fields, values));
       setValues(fieldDefaults(fields));
     } catch (formError) {
-      setError(errorMessage(formError, "The action could not be completed."));
+      setError(errorMessage(formError, "操作失败，请稍后重试。"));
     } finally {
       setIsSubmitting(false);
     }
@@ -345,7 +353,7 @@ function ResourceForm({
         ) : (
           <CheckCircle2 aria-hidden="true" size={17} />
         )}
-        {isSubmitting ? "Working" : submitLabel}
+        {isSubmitting ? "处理中" : submitLabel}
       </button>
     </form>
   );
@@ -389,7 +397,7 @@ function RelatedRecords({
         return;
       }
       setPayload(null);
-      setError(errorMessage(requestError, "Related records are unavailable."));
+      setError(errorMessage(requestError, "加载失败，请稍后重试。"));
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
@@ -417,7 +425,7 @@ function RelatedRecords({
       <div className="ops-panel-heading">
         <div>
           <h3>{list.title}</h3>
-          <p>{endpoint}</p>
+          <p>关联记录</p>
         </div>
         <button
           className="secondary-button"
@@ -436,12 +444,12 @@ function RelatedRecords({
 
       {isLoading ? (
         <div className="ops-empty-state" role="status">
-          <strong>Loading related records</strong>
-          <span>{endpoint}</span>
+          <strong>正在加载</strong>
+          <span>请稍候。</span>
         </div>
       ) : error ? (
         <div className="ops-empty-state" role="alert">
-          <strong>Related records unavailable</strong>
+          <strong>加载失败，请稍后重试</strong>
           <span>{error}</span>
         </div>
       ) : payload?.items.length ? (
@@ -459,8 +467,8 @@ function RelatedRecords({
         </ol>
       ) : (
         <div className="ops-empty-state">
-          <strong>No related records</strong>
-          <span>{endpoint}</span>
+          <strong>暂无数据</strong>
+          <span>当前没有可显示的关联记录。</span>
         </div>
       )}
     </article>
@@ -550,7 +558,7 @@ export function ProductResourceConsole({
         setPayload(null);
         setSelectedId(null);
       }
-      setError(errorMessage(requestError, `${title} are unavailable.`));
+      setError(errorMessage(requestError, "加载失败，请稍后重试。"));
     } finally {
       if (listAbortControllerRef.current === controller) {
         listAbortControllerRef.current = null;
@@ -604,7 +612,7 @@ export function ProductResourceConsole({
           return;
         }
         setDetail(record);
-        setDetailError(errorMessage(requestError, "Detail is unavailable."));
+        setDetailError(errorMessage(requestError, "加载失败，请稍后重试。"));
       } finally {
         if (detailAbortControllerRef.current === controller) {
           detailAbortControllerRef.current = null;
@@ -650,7 +658,7 @@ export function ProductResourceConsole({
       body,
       method: "POST",
     });
-    setNotice(`${create.title} saved.`);
+    setNotice(`${create.title}已保存。`);
     await load();
     setSelectedId(recordId(created, idKey));
   }
@@ -671,14 +679,14 @@ export function ProductResourceConsole({
       body,
       method: action.method ?? "POST",
     });
-    setNotice(`${action.label} completed.`);
+    setNotice(`${action.label}已完成。`);
     setDetail(updated);
     await load();
   }
 
   const selectedLabel = selectedRecord
-    ? recordId(selectedRecord, idKey)
-    : "No selection";
+    ? "已选择"
+    : "未选择";
   const showBlockingListLoading =
     isLoading && payload === null && !fallbackToEmptyOnListError;
   const showBlockingListError =
@@ -705,7 +713,7 @@ export function ProductResourceConsole({
           ) : (
             <RotateCcw aria-hidden="true" size={17} />
           )}
-          Refresh
+          刷新
         </button>
       </div>
 
@@ -733,19 +741,19 @@ export function ProductResourceConsole({
       ) : null}
 
       {showBlockingListLoading ? (
-        <section className="list-state" aria-label={`Loading ${title}`}>
+        <section className="list-state" aria-label={`正在加载${title}`}>
           <LoaderCircle className="spin" aria-hidden="true" size={22} />
-          <span>Loading records</span>
+          <span>正在加载</span>
         </section>
       ) : showBlockingListError ? (
         <section className="list-state list-error" role="alert">
           <div>
-            <h2>{title} are unavailable</h2>
+            <h2>加载失败，请稍后重试</h2>
             <p>{error}</p>
           </div>
           <button className="primary-button" onClick={() => void load()} type="button">
             <RotateCcw aria-hidden="true" size={17} />
-            Retry
+            重试
           </button>
         </section>
       ) : (
@@ -753,16 +761,16 @@ export function ProductResourceConsole({
           <article className="ops-panel product-list-panel">
             <div className="ops-panel-heading">
               <div>
-                <h3>List</h3>
-                <p>{endpoint}</p>
+                <h3>列表</h3>
+                <p>共 {payload?.count ?? items.length} 条记录</p>
               </div>
-              <span className="ops-source">{items.length} shown</span>
+              <span className="ops-source">当前显示 {items.length} 条</span>
             </div>
 
             {isLoading && items.length === 0 ? (
               <div className="ops-empty-state" role="status">
-                <strong>Loading records</strong>
-                <span>{endpoint}</span>
+                <strong>正在加载</strong>
+                <span>请稍候。</span>
               </div>
             ) : items.length === 0 ? (
               <div className="ops-empty-state">
@@ -777,7 +785,7 @@ export function ProductResourceConsole({
                       {fields.map((field) => (
                         <th key={field.key}>{field.label}</th>
                       ))}
-                      <th>Detail</th>
+                      <th>操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -798,7 +806,7 @@ export function ProductResourceConsole({
                               onClick={() => setSelectedId(id)}
                               type="button"
                             >
-                              View
+                              查看
                             </button>
                           </td>
                         </tr>
@@ -813,7 +821,7 @@ export function ProductResourceConsole({
           <article className="ops-panel product-detail-panel">
             <div className="ops-panel-heading">
               <div>
-                <h3>Detail</h3>
+                <h3>详情</h3>
                 <p>{selectedLabel}</p>
               </div>
               {isDetailLoading ? (
@@ -836,8 +844,8 @@ export function ProductResourceConsole({
               </dl>
             ) : (
               <div className="ops-empty-state">
-                <strong>No record selected</strong>
-                <span>Select a list row to inspect the detail payload.</span>
+                <strong>请选择一条记录</strong>
+                <span>选择列表中的记录后查看详情。</span>
               </div>
             )}
 
@@ -884,7 +892,7 @@ export function ProductResourceConsole({
               <h3>{create.title}</h3>
               <p>{create.description}</p>
             </div>
-            <span className="ops-source">{create.endpoint}</span>
+            <span className="ops-source">可创建</span>
           </div>
           <ResourceForm
             fields={create.fields}

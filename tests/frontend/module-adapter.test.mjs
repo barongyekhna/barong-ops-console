@@ -723,27 +723,27 @@ test("C05 permission helper regression keeps owner full access explicit", () => 
   assert.equal(isOwnerFullAccess(noPermissions), false);
 });
 
-test("Users remains owner-only but visible as locked", () => {
+test("Users remains owner-only and hidden when denied", () => {
   const usersModule = navigationModuleRecords.find(
     (entry) => entry.module_key === "admin.users",
   );
   assert.equal(usersModule.owner_only, true);
   assert.deepEqual(getPermissionAccessState(noPermissions, usersModule), {
     canAccess: false,
-    isLocked: true,
-    isVisible: true,
+    isLocked: false,
+    isVisible: false,
   });
   assert.deepEqual(
     getPermissionAccessState(usersManagePermissions, usersModule),
     {
       canAccess: false,
-      isLocked: true,
-      isVisible: true,
+      isLocked: false,
+      isVisible: false,
     },
   );
 });
 
-test("Permissions management entry remains owner-only but visible as locked", () => {
+test("Permissions management entry remains owner-only and hidden when denied", () => {
   const permissionManagement = navigationModuleRecords.find(
     (entry) => entry.module_key === "admin.permissions",
   );
@@ -760,6 +760,6 @@ test("Permissions management entry remains owner-only but visible as locked", ()
       [],
       { moduleAccessUnknown: true },
     ).isVisible,
-    true,
+    false,
   );
 });

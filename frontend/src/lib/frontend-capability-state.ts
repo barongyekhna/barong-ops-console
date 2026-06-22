@@ -179,10 +179,10 @@ const ICONS: Record<string, LucideIcon> = {
 };
 
 const GROUP_ORDER = new Map([
-  ["Users & Organizations", 10],
-  ["Business Modules", 20],
-  ["System Modules", 30],
-  ["Extensions", 40],
+  ["账号与组织", 10],
+  ["业务处理", 20],
+  ["系统管理", 30],
+  ["扩展能力", 40],
   ["Core", 10],
   ["Operations", 20],
   ["System", 30],
@@ -191,33 +191,33 @@ const GROUP_ORDER = new Map([
 ]);
 
 const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
-  ["admin.users", "Users & Organizations"],
-  ["admin.organizations", "Users & Organizations"],
-  ["admin.permissions", "Users & Organizations"],
-  ["business.approvals", "Business Modules"],
-  ["business.reviews", "Business Modules"],
-  ["core.dashboard", "System Modules"],
-  ["admin.modules", "System Modules"],
-  ["admin.settings", "System Modules"],
-  ["system.errors", "System Modules"],
-  ["system.memory_events", "System Modules"],
-  ["system.operation_logs", "System Modules"],
-  ["admin.agents", "Extensions"],
+  ["admin.users", "账号与组织"],
+  ["admin.organizations", "账号与组织"],
+  ["admin.permissions", "账号与组织"],
+  ["business.approvals", "业务处理"],
+  ["business.reviews", "业务处理"],
+  ["core.dashboard", "系统管理"],
+  ["admin.modules", "系统管理"],
+  ["admin.settings", "系统管理"],
+  ["system.errors", "系统管理"],
+  ["system.memory_events", "系统管理"],
+  ["system.operation_logs", "系统管理"],
+  ["admin.agents", "扩展能力"],
 ]);
 
 const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
-  ["admin.users", "Users"],
-  ["admin.organizations", "Organizations"],
-  ["admin.permissions", "Permissions"],
+  ["admin.users", "用户管理"],
+  ["admin.organizations", "组织管理"],
+  ["admin.permissions", "权限管理"],
   ["business.approvals", "审批"],
   ["business.reviews", "审批审计"],
-  ["core.dashboard", "Dashboard"],
-  ["admin.modules", "Modules"],
-  ["admin.settings", "Settings"],
-  ["system.errors", "Errors"],
-  ["system.memory_events", "Memory Events"],
-  ["system.operation_logs", "Logs"],
-  ["admin.agents", "Agents"],
+  ["core.dashboard", "首页"],
+  ["admin.modules", "功能区"],
+  ["admin.settings", "设置"],
+  ["system.errors", "异常记录"],
+  ["system.memory_events", "运行记录"],
+  ["system.operation_logs", "操作记录"],
+  ["admin.agents", "自动化助手"],
 ]);
 
 const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
@@ -241,8 +241,14 @@ const INTERNAL_EXERCISE_MODULE_KEY = [
 ].join(".");
 
 export const PRODUCT_HIDDEN_MODULE_KEYS = new Set([
+  "admin.agents",
+  "admin.permissions",
+  "admin.settings",
   INTERNAL_EXERCISE_MODULE_KEY,
   "integration.n8n_test_bridge",
+  "system.errors",
+  "system.memory_events",
+  "system.operation_logs",
 ]);
 
 const routeByModuleKey = new Map(
@@ -251,7 +257,7 @@ const routeByModuleKey = new Map(
 
 const UI_ONLY_LIVE_GATE: LiveGateRuntimeState = {
   active_policy_count: 0,
-  blocked_reason: "Execution metadata is owned by AdapterAccessProvider.",
+  blocked_reason: "功能状态正在由系统汇总。",
   canary_state: "not_configured",
   execution_mode: "mock",
   live_gate_status: "blocked",
@@ -296,12 +302,12 @@ function missingPermissionText(
 ) {
   const missing = accessState?.missing_permissions ?? [];
   if (missing.length > 0) {
-    return missing.join(", ");
+    return "需要管理员开通访问权限。";
   }
   if (record.required_permission) {
-    return record.required_permission;
+    return "需要管理员开通访问权限。";
   }
-  return "No additional permission required.";
+  return "当前账号可访问。";
 }
 
 function groupOrder(label: string) {
@@ -330,15 +336,15 @@ function stateFromStaticNavigation(
 
 function staticCapabilityReason(state: ProductCapabilityStateName) {
   if (state === "hidden") {
-    return "This product area is not part of the current navigation.";
+    return "该功能区暂未开放。";
   }
   if (state === "adapter_pending") {
-    return "This product area is waiting for adapter metadata.";
+    return "该功能区仍在配置中。";
   }
   if (state === "partial") {
-    return "This product area is visible while metadata is loaded by its owner provider.";
+    return "该功能区暂时不可用。";
   }
-  return "This product area is available in the current navigation.";
+  return "该功能区可用。";
 }
 
 export function buildFrontendUiCapabilityGraph({
@@ -408,23 +414,23 @@ export function buildFrontendUiCapabilityGraph({
           provider_state: "owned_by_adapter_provider",
           reason,
           required_execution_mode:
-            "Execution metadata is loaded by AdapterAccessProvider.",
+            "操作状态由系统自动确认。",
           required_module_state:
-            record.status ?? "Module metadata is loaded by ModuleAccessProvider.",
+            state === "allowed" ? "功能区可用。" : "功能区暂不可用。",
           required_org_state:
             authStatus === "authenticated"
-              ? "Authenticated workspace identity."
-              : "Authenticated identity is required.",
+              ? "当前账号已登录。"
+              : "请先登录。",
           required_permission:
-            record.required_permission ?? "No additional permission required.",
+            record.required_permission ? "需要管理员开通访问权限。" : "当前账号可访问。",
           route_bound: routeBound,
           route_namespace: record.route_namespace,
           sidebar_state: sidebarStateForState(state),
           state,
           unlock_condition:
             state === "allowed"
-              ? "Open this product area."
-              : "Wait for the owning metadata provider to report availability.",
+              ? "打开功能区。"
+              : "等待管理员完成配置。",
         };
 
         return item;
@@ -462,8 +468,8 @@ export function buildFrontendUiCapabilityGraph({
       hidden_modules: items.length - sidebarItems.length,
       reason:
         authStatus === "authenticated"
-          ? "Workspace UI state is derived from authenticated identity."
-          : "Workspace UI state is waiting for authenticated identity.",
+          ? "工作台已按当前账号加载。"
+          : "工作台等待登录后加载。",
       role,
       source: "frontend_ui_state",
       state: authStatus === "authenticated" ? "active" : "unknown",
@@ -649,23 +655,23 @@ function stateFromSources({
     providerContracts,
   });
   const base = {
-    reason: "This product area is available for the current workspace.",
+    reason: "该功能区可用。",
     required_execution_mode: executionRequired
-      ? "Actions must be enabled for this workspace."
-      : "View access is available.",
-    required_module_state: manifest?.status ?? record.status ?? "enabled",
-    required_org_state: "Active organization access.",
+      ? "需要先启用相关操作能力。"
+      : "可查看。",
+    required_module_state: "功能区可用。",
+    required_org_state: "当前组织可访问。",
     required_permission: requiredPermission,
     state: "allowed" as ProductCapabilityStateName,
-    unlock_condition: "Open this product area.",
+    unlock_condition: "打开功能区。",
   };
 
   if (PRODUCT_HIDDEN_MODULE_KEYS.has(record.module_key)) {
     return {
       ...base,
-      reason: "This feature is not part of the current product navigation.",
+      reason: "该功能区暂未开放。",
       state: "hidden" as const,
-      unlock_condition: "Use an available product area from the sidebar.",
+      unlock_condition: "请使用左侧已开放功能。",
     };
   }
 
@@ -673,61 +679,53 @@ function stateFromSources({
     if (record.denied_behavior === "show_locked") {
       return {
         ...base,
-        reason:
-          navigationState.reason ||
-          "Your account does not have access to this product area.",
+        reason: "当前账号无权访问该功能区。",
         state: "forbidden" as const,
-        unlock_condition: "Ask an owner to grant the required access.",
+        unlock_condition: "请联系所有者开通访问权限。",
       };
     }
 
     return {
       ...base,
-      reason:
-        navigationState.reason ||
-        "This product area is not visible for the current workspace.",
+      reason: "该功能区对当前账号不可见。",
       state: "hidden" as const,
-      unlock_condition: "Ask an owner to review workspace access.",
+      unlock_condition: "请联系所有者确认访问范围。",
     };
   }
 
   if (navigationState.isLocked) {
     return {
       ...base,
-      reason:
-        navigationState.reason ||
-        "Your account does not have access to this product area.",
+      reason: "当前账号无权访问该功能区。",
       state: "forbidden" as const,
-      unlock_condition: "Ask an owner to grant the required access.",
+      unlock_condition: "请联系所有者开通访问权限。",
     };
   }
 
   if (!routeBound) {
     return {
       ...base,
-      reason: "This feature is not connected to a product page yet.",
+      reason: "该能力暂未接入产品页面。",
       state: "partial" as const,
-      unlock_condition: "Use an available product area from the sidebar.",
+      unlock_condition: "请使用左侧已开放功能。",
     };
   }
 
   if (registryUnavailable && !manifest) {
     return {
       ...base,
-      reason: "Workspace product areas could not be refreshed.",
+      reason: "功能区信息暂时无法刷新。",
       state: "partial" as const,
-      unlock_condition: "Refresh the page or try again later.",
+      unlock_condition: "请刷新页面或稍后重试。",
     };
   }
 
   if (navigationState.moduleAccessUnknown) {
     return {
       ...base,
-      reason:
-        navigationState.reason ||
-        "Workspace access could not be confirmed.",
+      reason: "暂时无法确认当前账号访问范围。",
       state: "partial" as const,
-      unlock_condition: "Refresh the page or contact an owner.",
+      unlock_condition: "请刷新页面或联系所有者。",
     };
   }
 
@@ -738,31 +736,28 @@ function stateFromSources({
   ) {
     return {
       ...base,
-      reason:
-        adapter?.reason ||
-        navigationState.reason ||
-        "This feature is still being prepared.",
-      required_execution_mode: "Actions must be enabled before use.",
+      reason: "该功能区仍在配置中。",
+      required_execution_mode: "需要先启用相关操作能力。",
       state: "adapter_pending" as const,
-      unlock_condition: "Check back after setup is complete.",
+      unlock_condition: "请等待管理员完成配置。",
     };
   }
 
   if (adapter?.hidden) {
     return {
       ...base,
-      reason: adapter.reason || "This feature is hidden for the current workspace.",
+      reason: "该功能区对当前组织不可见。",
       state: "hidden" as const,
-      unlock_condition: "Ask an owner to review workspace access.",
+      unlock_condition: "请联系所有者确认访问范围。",
     };
   }
 
   if (adapter?.locked) {
     return {
       ...base,
-      reason: adapter.reason || "Your account does not have access to this feature.",
+      reason: "当前账号无权访问该功能区。",
       state: "forbidden" as const,
-      unlock_condition: "Ask an owner to grant the required access.",
+      unlock_condition: "请联系所有者开通访问权限。",
     };
   }
 
@@ -776,23 +771,20 @@ function stateFromSources({
   ) {
     return {
       ...base,
-      reason:
-        adapter?.reason ||
-        navigationState.reason ||
-        "This feature is not fully available yet.",
-      required_execution_mode: "Actions are not available yet.",
+      reason: "该功能区暂时不可用。",
+      required_execution_mode: "操作能力暂不可用。",
       state: "partial" as const,
-      unlock_condition: "Use the available product areas while setup continues.",
+      unlock_condition: "请先使用已开放功能。",
     };
   }
 
   if (executionRequired && executionState.live_gate_status === "backend_unavailable") {
     return {
       ...base,
-      reason: "Action readiness could not be confirmed.",
-      required_execution_mode: "Action readiness must be available.",
+      reason: "暂时无法确认操作状态。",
+      required_execution_mode: "操作状态需要可用。",
       state: "backend_unavailable" as const,
-      unlock_condition: "Refresh the page or try again later.",
+      unlock_condition: "请刷新页面或稍后重试。",
     };
   }
 
@@ -807,12 +799,10 @@ function stateFromSources({
   ) {
     return {
       ...base,
-      reason:
-        providerAccess.find((provider) => provider.block_reason)?.block_reason ||
-        "Actions are not enabled for this workspace.",
-      required_execution_mode: "Actions must be enabled before use.",
+      reason: "该功能区的操作能力尚未启用。",
+      required_execution_mode: "需要先启用操作能力。",
       state: "no_execution" as const,
-      unlock_condition: "Ask an owner to finish feature setup.",
+      unlock_condition: "请联系所有者完成配置。",
     };
   }
 
@@ -823,21 +813,21 @@ function stateFromSources({
     return {
       ...base,
       reason: executionProviderAccessUnknown
-        ? "Action readiness could not be confirmed."
-        : "This feature is available only as a preview.",
-      required_execution_mode: "Actions must be enabled before use.",
+        ? "暂时无法确认操作状态。"
+        : "该功能区目前仅可预览。",
+      required_execution_mode: "需要先启用操作能力。",
       state: executionProviderAccessUnknown ? "partial" as const : "mock" as const,
-      unlock_condition: "Ask an owner to finish feature setup.",
+      unlock_condition: "请联系所有者完成配置。",
     };
   }
 
   if (adapterAccessUnknown && manifest?.module_adapter_required) {
     return {
       ...base,
-      reason: "Feature setup could not be confirmed.",
-      required_execution_mode: "Feature setup must be confirmed.",
+      reason: "暂时无法确认功能配置。",
+      required_execution_mode: "需要确认功能配置。",
       state: "backend_unavailable" as const,
-      unlock_condition: "Refresh the page or try again later.",
+      unlock_condition: "请刷新页面或稍后重试。",
     };
   }
 
@@ -986,17 +976,17 @@ function ownerCapabilityItem({
     org_visibility: "visible",
     permission_state: "available",
     reason: permissionBlocked
-      ? "Owner full access bypasses frontend permission checks for this product area."
+      ? "所有者拥有全部访问权限。"
       : item.reason,
     required_permission: permissionBlocked
-      ? record.required_permission ?? "Owner full access."
+      ? "所有者全部权限。"
       : item.required_permission,
     sidebar_state: permissionBlocked
       ? sidebarStateForState(state)
       : item.sidebar_state,
     state,
     unlock_condition: permissionBlocked
-      ? "Open this product area."
+      ? "打开功能区。"
       : item.unlock_condition,
   };
 }
@@ -1014,11 +1004,11 @@ function organizationListCapabilityItem({
     can_enter: routeBound,
     org_visibility: "visible",
     permission_state: "available",
-    reason: "Organization list is visible to every authenticated user.",
-    required_permission: "Authenticated user session.",
+    reason: "已登录账号可以查看组织列表。",
+    required_permission: "当前账号已登录。",
     sidebar_state: "allowed",
     state: "allowed",
-    unlock_condition: "Open the organization list.",
+    unlock_condition: "打开组织管理。",
   };
 }
 
@@ -1038,11 +1028,11 @@ function reviewAuditCapabilityItem({
       can_enter: false,
       org_visibility: "hidden",
       permission_state: "hidden",
-      reason: "This product area is hidden for the current role.",
-      required_permission: "Owner or super admin role.",
+      reason: "该功能区对当前角色不可见。",
+      required_permission: "需要所有者或组织管理员权限。",
       sidebar_state: "hidden",
       state: "hidden",
-      unlock_condition: "Use an available product area from the sidebar.",
+      unlock_condition: "请使用左侧已开放功能。",
     };
   }
 
@@ -1052,11 +1042,11 @@ function reviewAuditCapabilityItem({
     can_enter: routeBound,
     org_visibility: "visible",
     permission_state: "available",
-    reason: "Review audit is available for this role.",
-    required_permission: "Owner or super admin role.",
+    reason: "当前角色可查看审批审计。",
+    required_permission: "需要所有者或组织管理员权限。",
     sidebar_state: "allowed",
     state: "allowed",
-    unlock_condition: "Open review audit.",
+    unlock_condition: "打开审批审计。",
   };
 }
 
@@ -1145,7 +1135,7 @@ function orgContext({
   if (moduleAccessUnknown) {
     return {
       hidden_modules: moduleAccessItems.filter((item) => item.hidden).length,
-      reason: "Workspace organization access is unavailable or incomplete.",
+      reason: "暂时无法确认组织访问范围。",
       role,
       source: "/modules/me",
       state: "unknown",
@@ -1155,7 +1145,7 @@ function orgContext({
 
   return {
     hidden_modules: moduleAccessItems.filter((item) => item.hidden).length,
-    reason: "Workspace organization access is available.",
+    reason: "组织访问范围已确认。",
     role,
     source: "/modules/me",
     state: "active",
@@ -1348,11 +1338,11 @@ export function buildFrontendCapabilityGraph({
           can_enter: false,
           org_visibility: "hidden" as const,
           permission_state: "hidden" as const,
-          reason: "This product area is hidden for the current role.",
-          required_permission: "Owner or super admin role.",
+          reason: "该功能区对当前角色不可见。",
+          required_permission: "需要所有者或组织管理员权限。",
           sidebar_state: "hidden" as const,
           state: "hidden" as const,
-          unlock_condition: "Use an available product area from the sidebar.",
+          unlock_condition: "请使用左侧已开放功能。",
         };
       }
 
@@ -1370,12 +1360,11 @@ export function buildFrontendCapabilityGraph({
           badge: "locked" as const,
           org_visibility: "visible" as const,
           permission_state: "locked" as const,
-          reason: "Owner access is required for this product area.",
-          required_permission:
-            record.required_permission ?? "Owner access required.",
+          reason: "该功能区需要所有者权限。",
+          required_permission: "需要所有者权限。",
           sidebar_state: "forbidden" as const,
           state: "forbidden" as const,
-          unlock_condition: "Ask an owner to grant the required access.",
+          unlock_condition: "请联系所有者开通访问权限。",
         };
       }
 

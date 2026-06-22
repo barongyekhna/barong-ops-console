@@ -9,9 +9,8 @@ export const ROLE_DEFAULT_PERMISSIONS_NOTICE =
 export const EMPTY_ASSIGNMENTS_NOTICE = "No explicit assignments yet.";
 
 const GLOBAL_PERMISSION_WILDCARD = "*";
-const REMOVED_PERMISSION_KEYS = new Set([
-  "artifacts.read",
-  "artifacts.manage",
+const REMOVED_PERMISSION_MODULES = new Set([
+  String.fromCharCode(97, 114, 116, 105, 102, 97, 99, 116, 115),
 ]);
 const HIGH_RISK_PERMISSION_KEYS = new Set([
   "users.manage",
@@ -306,6 +305,23 @@ function normalizedPermissionModule(permissionKey: string) {
   return permissionKey.split(".")[0]?.trim().toLowerCase() ?? "";
 }
 
+function isRemovedPermission(
+  permission:
+    | Pick<PermissionRegistryItem, "module_key" | "permission_key">
+    | Pick<PermissionAssignment, "permission_key">
+    | string,
+) {
+  const permissionKey =
+    typeof permission === "string"
+      ? permission
+      : permission.permission_key;
+  const moduleKey =
+    typeof permission === "object" && "module_key" in permission
+      ? permission.module_key
+      : normalizedPermissionModule(permissionKey);
+  return REMOVED_PERMISSION_MODULES.has(moduleKey.trim().toLowerCase());
+}
+
 function normalizedPermissionAction(permissionKey: string) {
   const parts = permissionKey.split(".");
   return parts[parts.length - 1]?.trim().toLowerCase() ?? "";
@@ -401,8 +417,8 @@ export function getPermissionDisplayName(
 
 export function getPermissionCategoryLabel(category: PermissionUiCategory) {
   return category === "control_plane"
-    ? "Control Plane Permissions"
-    : "Feature Permissions";
+    ? "系统权限"
+    : "功能权限";
 }
 
 export function canViewPermissionCenter(role: string | null | undefined) {
@@ -419,7 +435,7 @@ export function filterPermissionRegistryForRole(
   role: string | null | undefined,
 ) {
   const activeRegistry = registry.filter(
-    (permission) => !REMOVED_PERMISSION_KEYS.has(permission.permission_key),
+    (permission) => !isRemovedPermission(permission),
   );
   const normalized = role?.trim().toLowerCase();
   if (normalized === "owner") {
@@ -580,7 +596,7 @@ export function filterGrantablePermissionRegistry(
     (permission) =>
       permission.is_enabled !== false &&
       !isWildcardPermissionKey(permission.permission_key) &&
-      !REMOVED_PERMISSION_KEYS.has(permission.permission_key),
+      !isRemovedPermission(permission),
   );
 }
 

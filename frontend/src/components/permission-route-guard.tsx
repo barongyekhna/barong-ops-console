@@ -24,23 +24,17 @@ export function PermissionRouteGuard({
   const {
     getCapabilityForPath,
     isLoading: capabilityStateLoading,
-    permissionSnapshot,
   } =
     useFrontendCapabilityState();
   const { items, moduleAccessUnknown } = useModuleAccess();
   const capability = getCapabilityForPath(pathname);
-  const isOwner = permissionSnapshot.is_owner_full_access === true;
   const isUserManagerRoute =
     pathname === "/users" && user?.role === "super_admin";
-  const isPermissionManagerRoute =
-    pathname === "/permissions" && user?.role === "super_admin";
   const isOrganizationListRoute =
     pathname === "/organizations" && status === "authenticated";
 
   if (
-    isOwner ||
     isUserManagerRoute ||
-    isPermissionManagerRoute ||
     isOrganizationListRoute
   ) {
     return children;
@@ -62,7 +56,7 @@ export function PermissionRouteGuard({
         required_org_state={capability.required_org_state}
         required_permission={capability.required_permission}
         state={capability.state}
-        title={`${capability.label} is not available`}
+        title={`${capability.label}暂不可用`}
         unlock_condition={capability.unlock_condition}
       />
     );

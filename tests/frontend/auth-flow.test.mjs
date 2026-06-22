@@ -184,7 +184,7 @@ test("login uses one backend attempt and separates auth from backend failures", 
   assert.match(providerSource, /writeStoredAuthSession\(\{[\s\S]*sessionToken: result\.session_token/);
   assert.match(loginFormSource, /isSubmittingRef/);
   assert.match(loginFormSource, /loginError instanceof ApiError && loginError\.status === 401/);
-  assert.match(loginFormSource, /Sign-in service is unavailable/);
+  assert.match(loginFormSource, /登录服务暂不可用/);
   assert.doesNotMatch(loginFormSource, /took longer than expected/i);
   assert.doesNotMatch(loginFormSource, /Promise\.race/);
 });

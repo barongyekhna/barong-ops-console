@@ -1,6 +1,6 @@
 import { apiRequest } from "@/lib/api";
 
-export const APPROVAL_LIST_DEFAULT_LIMIT = 50;
+export const APPROVAL_LIST_DEFAULT_LIMIT = 10;
 export const APPROVAL_LIST_MAX_LIMIT = 100;
 export const APPROVAL_LIST_TIMEOUT_MS = 2_000;
 
@@ -149,8 +149,8 @@ function normalizeListResponse(value: unknown): ApprovalListResponse {
   const error = isRecord(record.error) ? record.error : {};
   const message =
     stringValue(record.message) ||
-    stringValue(error.message) ||
-    (degraded ? "approvals temporarily unavailable" : "");
+    (stringValue(error.message) ? "审批列表暂时不可用。" : "") ||
+    (degraded ? "审批列表暂时不可用。" : "");
 
   return {
     count: numberValue(record.count, items.length),

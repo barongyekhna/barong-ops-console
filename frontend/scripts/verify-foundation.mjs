@@ -103,12 +103,14 @@ for (const usersPath of [
 }
 
 for (const requiredUserModuleSignal of [
-  "Manage workspace accounts",
+  "用户管理",
+  "创建用户",
+  "用户列表",
   "UserPermissionsPanel",
   "DEFAULT_INITIAL_PASSWORD",
   "123456",
-  "Job title",
-  "Organization",
+  "岗位",
+  "组织",
   "job_title: string | null",
   "organization_id: string | null",
   "job_title ??",
@@ -586,11 +588,13 @@ for (const navigationModuleKey of productNavigationModuleKeys) {
 }
 
 const productNavigationLabels = [
-  "Users",
-  "Organizations",
-  "Permissions",
-  "Logs",
+  "账号与组织",
+  "用户管理",
+  "组织管理",
+  "权限管理",
+  "操作记录",
   "审批",
+  "审批审计",
 ];
 for (const label of productNavigationLabels) {
   if (!navigationSource.includes(`label: "${label}"`)) {

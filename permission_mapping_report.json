@@ -1,0 +1,2578 @@
+{
+  "basis": "Derived from backend role helpers, permission service concepts, route dependencies and module manifests.",
+  "generated_at": "2026-06-22T05:39:24.687113+00:00",
+  "module_permissions": [
+    {
+      "module_key": "core.dashboard",
+      "permission_manifest": [],
+      "required_permissions": []
+    },
+    {
+      "module_key": "experimental.foundation_demo",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "experimental",
+          "default_scope_type": "global",
+          "description": "View the internal demo-only foundation exercise metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read foundation demo metadata",
+          "menu_policy": "hide_when_denied",
+          "module_key": "experimental.foundation_demo",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        }
+      ],
+      "required_permissions": [
+        "modules.read"
+      ]
+    },
+    {
+      "module_key": "integration.n8n_test_bridge",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "integration",
+          "default_scope_type": "global",
+          "description": "View the existing test-only bridge metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read n8n test bridge metadata",
+          "menu_policy": "hide_when_denied",
+          "module_key": "integration.n8n_test_bridge",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        }
+      ],
+      "required_permissions": [
+        "modules.read"
+      ]
+    },
+    {
+      "module_key": "admin.users",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View internal user accounts and safe metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read users",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.users",
+          "operation_log_required": false,
+          "permission_key": "users.read",
+          "risk_level": "medium"
+        },
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Create and maintain internal non-owner accounts.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage users",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.users",
+          "operation_log_required": true,
+          "permission_key": "users.manage",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "users.manage"
+      ]
+    },
+    {
+      "module_key": "admin.organizations",
+      "permission_manifest": [
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Create and maintain organizations through existing user management controls.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage organizations",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.organizations",
+          "operation_log_required": true,
+          "permission_key": "users.manage",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "users.manage"
+      ]
+    },
+    {
+      "module_key": "admin.permissions",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View permission registry and assignment state.",
+          "high_risk_confirmation_required": false,
+          "label": "Read permissions",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.permissions",
+          "operation_log_required": false,
+          "permission_key": "permissions.read",
+          "risk_level": "medium"
+        },
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Grant, update, or revoke explicit assignments.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage permissions",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.permissions",
+          "operation_log_required": true,
+          "permission_key": "permissions.manage",
+          "risk_level": "critical"
+        }
+      ],
+      "required_permissions": [
+        "permissions.read"
+      ]
+    },
+    {
+      "module_key": "admin.modules",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View safe module registry metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read modules",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.modules",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        },
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Reserved future module registry management.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage modules",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.modules",
+          "operation_log_required": true,
+          "permission_key": "modules.manage",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "modules.read"
+      ]
+    },
+    {
+      "module_key": "admin.agents",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View safe agent registry metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read agent registry",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.agents",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        }
+      ],
+      "required_permissions": [
+        "modules.read"
+      ]
+    },
+    {
+      "module_key": "admin.settings",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "View safe settings metadata when implemented.",
+          "high_risk_confirmation_required": false,
+          "label": "Read settings",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.settings",
+          "operation_log_required": false,
+          "permission_key": "settings.read",
+          "risk_level": "medium"
+        },
+        {
+          "action": "manage",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "admin",
+          "default_scope_type": "global",
+          "description": "Reserved future settings management.",
+          "high_risk_confirmation_required": true,
+          "label": "Manage settings",
+          "menu_policy": "hide_when_denied",
+          "module_key": "admin.settings",
+          "operation_log_required": true,
+          "permission_key": "settings.manage",
+          "risk_level": "critical"
+        }
+      ],
+      "required_permissions": [
+        "settings.read"
+      ]
+    },
+    {
+      "module_key": "business.products",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "View future product workspace metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read products",
+          "menu_policy": "show_locked",
+          "module_key": "business.products",
+          "operation_log_required": false,
+          "permission_key": "products.read",
+          "risk_level": "low"
+        }
+      ],
+      "required_permissions": [
+        "products.read"
+      ]
+    },
+    {
+      "module_key": "business.approvals",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "View approval requests available to the current account.",
+          "high_risk_confirmation_required": false,
+          "label": "Read approvals",
+          "menu_policy": "show_locked",
+          "module_key": "business.approvals",
+          "operation_log_required": false,
+          "permission_key": "reviews.read",
+          "risk_level": "low"
+        },
+        {
+          "action": "approve",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "Approve or reject governed approval requests.",
+          "high_risk_confirmation_required": true,
+          "label": "Approve requests",
+          "menu_policy": "show_locked",
+          "module_key": "business.approvals",
+          "operation_log_required": true,
+          "permission_key": "reviews.approve",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "reviews.read"
+      ]
+    },
+    {
+      "module_key": "business.reviews",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "View approval decision audit records.",
+          "high_risk_confirmation_required": false,
+          "label": "Read approval audit",
+          "menu_policy": "show_locked",
+          "module_key": "business.reviews",
+          "operation_log_required": false,
+          "permission_key": "reviews.read",
+          "risk_level": "low"
+        },
+        {
+          "action": "approve",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "business",
+          "default_scope_type": "global",
+          "description": "Reserved review approval permission for governed workflows.",
+          "high_risk_confirmation_required": true,
+          "label": "Approve reviews",
+          "menu_policy": "show_locked",
+          "module_key": "business.reviews",
+          "operation_log_required": true,
+          "permission_key": "reviews.approve",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "reviews.read"
+      ]
+    },
+    {
+      "module_key": "system.errors",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "system",
+          "default_scope_type": "global",
+          "description": "View safe error and operation metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read system errors",
+          "menu_policy": "hide_when_denied",
+          "module_key": "system.errors",
+          "operation_log_required": false,
+          "permission_key": "operation_logs.read",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "operation_logs.read"
+      ]
+    },
+    {
+      "module_key": "system.memory_events",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "system",
+          "default_scope_type": "global",
+          "description": "View safe memory event metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read memory events",
+          "menu_policy": "hide_when_denied",
+          "module_key": "system.memory_events",
+          "operation_log_required": false,
+          "permission_key": "operation_logs.read",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "operation_logs.read"
+      ]
+    },
+    {
+      "module_key": "system.operation_logs",
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "system",
+          "default_scope_type": "global",
+          "description": "View audit log and operation history metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read operation logs",
+          "menu_policy": "hide_when_denied",
+          "module_key": "system.operation_logs",
+          "operation_log_required": false,
+          "permission_key": "operation_logs.read",
+          "risk_level": "high"
+        }
+      ],
+      "required_permissions": [
+        "operation_logs.read"
+      ]
+    }
+  ],
+  "role_mapping": {
+    "owner": {
+      "code_basis": [
+        "backend/app/core/roles.py:is_owner_role",
+        "backend/app/services/permission_service.py:EffectivePermissions.is_owner_full_access",
+        "frontend/src/lib/permissions.ts:createOwnerFullAccessPermissions"
+      ],
+      "scope": "全部权限"
+    },
+    "super_admin": {
+      "code_basis": [
+        "backend/app/schemas/user.py:is_user_manager_role",
+        "backend/app/api/routes/users.py:non-owner list is constrained by org_context/organization_id",
+        "frontend/src/components/permission-route-guard.tsx:super_admin user route exception only for productized user management"
+      ],
+      "scope": "所属组织"
+    },
+    "user": {
+      "code_basis": [
+        "backend/app/services/module_registry.py:build_module_access_state missing permissions lock/hide modules",
+        "backend/app/middleware/permission.py:enforce_permission_isolation",
+        "frontend/src/lib/frontend-capability-state.ts:hidden/locked state handling"
+      ],
+      "scope": "限制访问"
+    }
+  },
+  "route_permission_control_points": [
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_settings)"
+      ],
+      "function": "login",
+      "method": "POST",
+      "registered_path": "/api/public/auth/login",
+      "source": "backend/app/api/routes/auth.py"
+    },
+    {
+      "dependencies": [
+        "Depends(_current_identity_fast)"
+      ],
+      "function": "me",
+      "method": "GET",
+      "registered_path": "/api/public/auth/me",
+      "source": "backend/app/api/routes/auth.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_read_db)",
+        "Depends(_current_identity_fast)"
+      ],
+      "function": "auth_context",
+      "method": "GET",
+      "registered_path": "/api/public/auth/context",
+      "source": "backend/app/api/routes/auth.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_session)"
+      ],
+      "function": "change_password",
+      "method": "POST",
+      "registered_path": "/api/public/auth/change-password",
+      "source": "backend/app/api/routes/auth.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_settings)"
+      ],
+      "function": "logout",
+      "method": "POST",
+      "registered_path": "/api/public/auth/logout",
+      "source": "backend/app/api/routes/auth.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Query(default=None, max_length=40)",
+        "Query(default=None, max_length=40)",
+        "Depends(get_db)",
+        "Depends(require_user_manager)"
+      ],
+      "function": "users",
+      "method": "GET",
+      "registered_path": "/api/app/users",
+      "source": "backend/app/api/routes/users.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_user_manager)"
+      ],
+      "function": "user_create",
+      "method": "POST",
+      "registered_path": "/api/app/users",
+      "source": "backend/app/api/routes/users.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_user_manager)"
+      ],
+      "function": "user_roles",
+      "method": "GET",
+      "registered_path": "/api/app/users/roles",
+      "source": "backend/app/api/routes/users.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_user_manager)"
+      ],
+      "function": "user_detail",
+      "method": "GET",
+      "registered_path": "/api/app/users/{user_id}",
+      "source": "backend/app/api/routes/users.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_user_manager)"
+      ],
+      "function": "user_update",
+      "method": "PATCH",
+      "registered_path": "/api/app/users/{user_id}",
+      "source": "backend/app/api/routes/users.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_user_manager)"
+      ],
+      "function": "user_reset_password",
+      "method": "POST",
+      "registered_path": "/api/app/users/{user_id}/reset-password",
+      "source": "backend/app/api/routes/users.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_user_manager)"
+      ],
+      "function": "user_disable",
+      "method": "POST",
+      "registered_path": "/api/app/users/{user_id}/disable",
+      "source": "backend/app/api/routes/users.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_user_manager)"
+      ],
+      "function": "user_enable",
+      "method": "POST",
+      "registered_path": "/api/app/users/{user_id}/enable",
+      "source": "backend/app/api/routes/users.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=1, ge=1, le=10)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "dashboard_overview",
+      "method": "GET",
+      "registered_path": "/api/app/dashboard/overview",
+      "source": "backend/app/api/routes/dashboard.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Query(default=8, ge=1, le=25)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "dashboard_activity",
+      "method": "GET",
+      "registered_path": "/api/app/dashboard/activity",
+      "source": "backend/app/api/routes/dashboard.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'write'))"
+      ],
+      "function": "approval_request_create",
+      "method": "POST",
+      "registered_path": "/api/app/approval/request",
+      "source": "backend/app/api/routes/approval.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=None, alias='status')",
+        "Query(default=None)",
+        "Query(default=APPROVAL_LIST_DEFAULT_LIMIT, ge=1, le=APPROVAL_LIST_MAX_LIMIT)",
+        "Query(default=0, ge=0)",
+        "Query(default=None)",
+        "Depends(get_current_user)",
+        "Depends(get_db)"
+      ],
+      "function": "approval_list",
+      "method": "GET",
+      "registered_path": "/api/app/approval/list",
+      "source": "backend/app/api/routes/approval.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "approval_detail",
+      "method": "GET",
+      "registered_path": "/api/app/approval/{approval_id}",
+      "source": "backend/app/api/routes/approval.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "approval_approve",
+      "method": "POST",
+      "registered_path": "/api/app/approval/{approval_id}/approve",
+      "source": "backend/app/api/routes/approval.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "approval_reject",
+      "method": "POST",
+      "registered_path": "/api/app/approval/{approval_id}/reject",
+      "source": "backend/app/api/routes/approval.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=None, alias='status')",
+        "Query(default=None)",
+        "Query(default=APPROVAL_LIST_DEFAULT_LIMIT, ge=1, le=APPROVAL_LIST_MAX_LIMIT)",
+        "Query(default=0, ge=0)",
+        "Query(default=None)",
+        "Depends(get_current_user)",
+        "Depends(get_db)"
+      ],
+      "function": "approvals_list",
+      "method": "GET",
+      "registered_path": "/api/app/approvals/list",
+      "source": "backend/app/api/routes/approval.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "review_audit_overview",
+      "method": "GET",
+      "registered_path": "/api/app/reviews",
+      "source": "backend/app/api/routes/reviews.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "review_audit_module_registry",
+      "method": "GET",
+      "registered_path": "/api/app/reviews/module-registry",
+      "source": "backend/app/api/routes/reviews.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=None, max_length=40)",
+        "Query(default=None, max_length=255)",
+        "Query(default=None, gt=0)",
+        "Query(default=None, alias='review_module', max_length=128)",
+        "Query(default=None)",
+        "Query(default=None)",
+        "Query(default=DEFAULT_REVIEW_AUDIT_LIMIT, ge=1, le=MAX_REVIEW_AUDIT_LIMIT)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "review_audit_organizations",
+      "method": "GET",
+      "registered_path": "/api/app/reviews/organizations",
+      "source": "backend/app/api/routes/reviews.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=None, max_length=255)",
+        "Query(default=None, gt=0)",
+        "Query(default=None, alias='review_module', max_length=128)",
+        "Query(default=None)",
+        "Query(default=None)",
+        "Query(default=DEFAULT_REVIEW_AUDIT_EMPLOYEE_LIMIT, ge=1, le=MAX_REVIEW_AUDIT_EMPLOYEE_LIMIT)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "review_audit_users",
+      "method": "GET",
+      "registered_path": "/api/app/reviews/organizations/{organization_id}/users",
+      "source": "backend/app/api/routes/reviews.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=None, alias='review_module', max_length=128)",
+        "Query(default=None)",
+        "Query(default=None)",
+        "Query(default=DEFAULT_REVIEW_AUDIT_LIMIT, ge=1, le=MAX_REVIEW_AUDIT_LIMIT)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "review_audit_actions",
+      "method": "GET",
+      "registered_path": "/api/app/reviews/organizations/{organization_id}/users/{user_id}/actions",
+      "source": "backend/app/api/routes/reviews.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "errors",
+      "method": "GET",
+      "registered_path": "/api/app/errors",
+      "source": "backend/app/api/routes/errors.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "error_detail",
+      "method": "GET",
+      "registered_path": "/api/app/errors/{error_id}",
+      "source": "backend/app/api/routes/errors.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "error_create",
+      "method": "POST",
+      "registered_path": "/api/app/errors",
+      "source": "backend/app/api/routes/errors.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "memory_events",
+      "method": "GET",
+      "registered_path": "/api/app//memory-events",
+      "source": "backend/app/api/routes/memory.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "memory_event_detail",
+      "method": "GET",
+      "registered_path": "/api/app//memory-events/{memory_event_id}",
+      "source": "backend/app/api/routes/memory.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "memory_event_create",
+      "method": "POST",
+      "registered_path": "/api/app//memory-events",
+      "source": "backend/app/api/routes/memory.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "context_packets",
+      "method": "GET",
+      "registered_path": "/api/app//context-packets",
+      "source": "backend/app/api/routes/memory.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "context_packet_detail",
+      "method": "GET",
+      "registered_path": "/api/app//context-packets/{context_packet_id}",
+      "source": "backend/app/api/routes/memory.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "context_packet_create",
+      "method": "POST",
+      "registered_path": "/api/app//context-packets",
+      "source": "backend/app/api/routes/memory.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "memory_summaries",
+      "method": "GET",
+      "registered_path": "/api/app//memory-summaries",
+      "source": "backend/app/api/routes/memory.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "memory_summary_detail",
+      "method": "GET",
+      "registered_path": "/api/app//memory-summaries/{summary_id}",
+      "source": "backend/app/api/routes/memory.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Query(default=None, pattern='^\\\\d+$')",
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "operation_logs",
+      "method": "GET",
+      "registered_path": "/api/app/operation-logs",
+      "source": "backend/app/api/routes/operation_logs.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('AUDIT', 'admin'))"
+      ],
+      "function": "operation_log_detail",
+      "method": "GET",
+      "registered_path": "/api/app/operation-logs/{operation_id}",
+      "source": "backend/app/api/routes/operation_logs.py"
+    },
+    {
+      "dependencies": [
+        "Depends(guarded_heavy_api_request('permissions.me'))",
+        "Depends(get_db)",
+        "Depends(require_rbac('AUTH', 'read'))"
+      ],
+      "function": "permissions_me",
+      "method": "GET",
+      "registered_path": "/api/app/permissions/me",
+      "source": "backend/app/api/routes/permissions.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=100, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Depends(guarded_heavy_api_request('permissions.registry'))",
+        "Depends(get_db)",
+        "Depends(require_rbac('C16', 'admin'))"
+      ],
+      "function": "permissions_registry",
+      "method": "GET",
+      "registered_path": "/api/app/permissions/registry",
+      "source": "backend/app/api/routes/permissions.py"
+    },
+    {
+      "dependencies": [
+        "Depends(guarded_heavy_api_request('permissions.assignments'))",
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "function": "user_permission_assignments",
+      "method": "GET",
+      "registered_path": "/api/app/permissions/users/{user_id}/assignments",
+      "source": "backend/app/api/routes/permissions.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "function": "user_permission_assignment_create",
+      "method": "POST",
+      "registered_path": "/api/app/permissions/users/{user_id}/assignments",
+      "source": "backend/app/api/routes/permissions.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "function": "user_permission_assignment_update",
+      "method": "PATCH",
+      "registered_path": "/api/app/permissions/users/{user_id}/assignments/{assignment_id}",
+      "source": "backend/app/api/routes/permissions.py"
+    },
+    {
+      "dependencies": [
+        "Body(default=None)",
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "function": "user_permission_assignment_revoke",
+      "method": "DELETE",
+      "registered_path": "/api/app/permissions/users/{user_id}/assignments/{assignment_id}",
+      "source": "backend/app/api/routes/permissions.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=100, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(require_user_manager)"
+      ],
+      "function": "organizations",
+      "method": "GET",
+      "registered_path": "/api/app/organizations",
+      "source": "backend/app/api/routes/organizations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_create",
+      "method": "POST",
+      "registered_path": "/api/app/org/create",
+      "source": "backend/app/api/org.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_update",
+      "method": "PATCH",
+      "registered_path": "/api/app/org/{org_id}",
+      "source": "backend/app/api/org.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_delete",
+      "method": "DELETE",
+      "registered_path": "/api/app/org/{org_id}",
+      "source": "backend/app/api/org.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_activate",
+      "method": "POST",
+      "registered_path": "/api/app/org/{org_id}/activate",
+      "source": "backend/app/api/org.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_suspend",
+      "method": "POST",
+      "registered_path": "/api/app/org/{org_id}/suspend",
+      "source": "backend/app/api/org.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_member_add",
+      "method": "POST",
+      "registered_path": "/api/app/org/{org_id}/members/add",
+      "source": "backend/app/api/org_membership.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_member_remove",
+      "method": "POST",
+      "registered_path": "/api/app/org/{org_id}/members/remove",
+      "source": "backend/app/api/org_membership.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_members_list",
+      "method": "GET",
+      "registered_path": "/api/app/org/{org_id}/members",
+      "source": "backend/app/api/org_membership.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "global_contact_directory",
+      "method": "GET",
+      "registered_path": "/api/app/contacts/directory",
+      "source": "backend/app/api/routes/contacts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "contact_identity_detail",
+      "method": "GET",
+      "registered_path": "/api/app/contacts/{user_id}",
+      "source": "backend/app/api/routes/contacts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "contact_identity_update",
+      "method": "PATCH",
+      "registered_path": "/api/app/contacts/{user_id}",
+      "source": "backend/app/api/routes/contacts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "create_conversation",
+      "method": "POST",
+      "registered_path": "/api/app/conversations/create",
+      "source": "backend/app/api/routes/conversations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "list_user_conversations",
+      "method": "GET",
+      "registered_path": "/api/app/conversations/user/{user_id}",
+      "source": "backend/app/api/routes/conversations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "get_conversation",
+      "method": "GET",
+      "registered_path": "/api/app/conversations/{conversation_id}",
+      "source": "backend/app/api/routes/conversations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "check_cross_org_permission",
+      "method": "POST",
+      "registered_path": "/api/app/comm/cross-org/check",
+      "source": "backend/app/api/routes/cross_org_communication.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "request_friend",
+      "method": "POST",
+      "registered_path": "/api/app/friends/request",
+      "source": "backend/app/api/routes/friends.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "accept_friend",
+      "method": "POST",
+      "registered_path": "/api/app/friends/accept",
+      "source": "backend/app/api/routes/friends.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "reject_friend",
+      "method": "POST",
+      "registered_path": "/api/app/friends/reject",
+      "source": "backend/app/api/routes/friends.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "list_friends",
+      "method": "GET",
+      "registered_path": "/api/app/friends/list",
+      "source": "backend/app/api/routes/friends.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "send_message",
+      "method": "POST",
+      "registered_path": "/api/app/messages/send",
+      "source": "backend/app/api/routes/messages.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "check_permission_for_message",
+      "method": "POST",
+      "registered_path": "/api/app/messages/permission/check",
+      "source": "backend/app/api/routes/messages.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "get_messages",
+      "method": "GET",
+      "registered_path": "/api/app/messages/{conversation_id}",
+      "source": "backend/app/api/routes/messages.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "mark_messages_read",
+      "method": "POST",
+      "registered_path": "/api/app/messages/read",
+      "source": "backend/app/api/routes/messages.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "upload_attachment",
+      "method": "POST",
+      "registered_path": "/api/app/attachments/upload",
+      "source": "backend/app/api/routes/attachments.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_current_user)"
+      ],
+      "function": "get_attachments",
+      "method": "GET",
+      "registered_path": "/api/app/attachments/{message_id}",
+      "source": "backend/app/api/routes/attachments.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "function": "module_bind",
+      "method": "POST",
+      "registered_path": "/api/app//module/bind",
+      "source": "backend/app/api/module_binding.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "module_bindings",
+      "method": "GET",
+      "registered_path": "/api/app//module/{module_id}/bindings",
+      "source": "backend/app/api/module_binding.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_visible_modules",
+      "method": "GET",
+      "registered_path": "/api/app//org/{org_id}/modules",
+      "source": "backend/app/api/module_binding.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_visible_modules",
+      "method": "GET",
+      "registered_path": "/api/app//org/{org_id}/visible-modules",
+      "source": "backend/app/api/module_visibility.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "function": "shared_module_create",
+      "method": "POST",
+      "registered_path": "/api/app//module/shared/create",
+      "source": "backend/app/api/shared_module.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "function": "shared_module_update_orgs",
+      "method": "POST",
+      "registered_path": "/api/app//module/shared/update-orgs",
+      "source": "backend/app/api/shared_module.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_owner)"
+      ],
+      "function": "shared_module_list",
+      "method": "GET",
+      "registered_path": "/api/app//module/shared/list",
+      "source": "backend/app/api/shared_module.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(get_current_user)"
+      ],
+      "function": "org_shared_modules",
+      "method": "GET",
+      "registered_path": "/api/app//org/{org_id}/shared-modules",
+      "source": "backend/app/api/shared_module.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Depends(guarded_heavy_api_request('modules.list'))",
+        "Depends(get_db)",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "function": "modules",
+      "method": "GET",
+      "registered_path": "/api/control-plane/modules",
+      "source": "backend/app/api/routes/modules.py"
+    },
+    {
+      "dependencies": [
+        "Depends(guarded_heavy_api_request('modules.registry'))",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "function": "module_registry",
+      "method": "GET",
+      "registered_path": "/api/control-plane/modules/registry",
+      "source": "backend/app/api/routes/modules.py"
+    },
+    {
+      "dependencies": [
+        "Depends(guarded_heavy_api_request('modules.me'))",
+        "Depends(get_db)",
+        "Depends(require_cached_control_plane_admin)"
+      ],
+      "function": "modules_me",
+      "method": "GET",
+      "registered_path": "/api/control-plane/modules/me",
+      "source": "backend/app/api/routes/modules.py"
+    },
+    {
+      "dependencies": [
+        "Depends(guarded_heavy_api_request('modules.detail'))",
+        "Depends(get_db)",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "function": "module_detail",
+      "method": "GET",
+      "registered_path": "/api/control-plane/modules/{module_key}",
+      "source": "backend/app/api/routes/modules.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "function": "module_create",
+      "method": "POST",
+      "registered_path": "/api/control-plane/modules",
+      "source": "backend/app/api/routes/modules.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=50, ge=1, le=100)",
+        "Query(default=0, ge=0)",
+        "Depends(get_db)",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "function": "agents",
+      "method": "GET",
+      "registered_path": "/api/control-plane/agents",
+      "source": "backend/app/api/routes/agents.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "function": "agent_detail",
+      "method": "GET",
+      "registered_path": "/api/control-plane/agents/{agent_key}",
+      "source": "backend/app/api/routes/agents.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('REGISTRY', 'admin'))"
+      ],
+      "function": "agent_create",
+      "method": "POST",
+      "registered_path": "/api/control-plane/agents",
+      "source": "backend/app/api/routes/agents.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15', 'execute'))"
+      ],
+      "function": "foundation_demo_run",
+      "method": "POST",
+      "registered_path": "/api/control-plane/foundation-demo/run",
+      "source": "backend/app/api/routes/foundation_demo.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15', 'execute'))"
+      ],
+      "function": "foundation_demo_latest",
+      "method": "GET",
+      "registered_path": "/api/control-plane/foundation-demo/latest",
+      "source": "backend/app/api/routes/foundation_demo.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15', 'execute'))",
+        "Depends(get_settings)"
+      ],
+      "function": "n8n_test_run",
+      "method": "POST",
+      "registered_path": "/api/control-plane/n8n-test/run",
+      "source": "backend/app/api/routes/n8n_test.py"
+    },
+    {
+      "dependencies": [
+        "Header(default=None, alias='X-Barong-Callback-Secret')",
+        "Depends(get_db)",
+        "Depends(get_settings)"
+      ],
+      "function": "n8n_test_callback",
+      "method": "POST",
+      "registered_path": "/api/control-plane/n8n-test/callback",
+      "source": "backend/app/api/routes/n8n_test.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15', 'execute'))"
+      ],
+      "function": "n8n_test_latest",
+      "method": "GET",
+      "registered_path": "/api/control-plane/n8n-test/latest",
+      "source": "backend/app/api/routes/n8n_test.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "module_adapter_registry",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-adapters/registry",
+      "source": "backend/app/api/routes/module_adapters.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "module_adapters_me",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-adapters/me",
+      "source": "backend/app/api/routes/module_adapters.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C09', 'execute'))"
+      ],
+      "function": "module_adapter_action_request",
+      "method": "POST",
+      "registered_path": "/api/control-plane/module-adapters/{adapter_key}/actions/{action_key}/request",
+      "source": "backend/app/api/routes/module_adapters.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15F', 'execute'))"
+      ],
+      "function": "module_workflow_binding_model",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-workflow-bindings/model",
+      "source": "backend/app/api/routes/module_workflow_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15F', 'execute'))"
+      ],
+      "function": "module_workflow_binding_enforcement",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-workflow-bindings/enforcement",
+      "source": "backend/app/api/routes/module_workflow_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15F', 'execute'))"
+      ],
+      "function": "module_workflow_binding_access_control",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-workflow-bindings/access-control",
+      "source": "backend/app/api/routes/module_workflow_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15F', 'execute'))"
+      ],
+      "function": "module_workflow_binding_isolation_rules",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-workflow-bindings/isolation-rules",
+      "source": "backend/app/api/routes/module_workflow_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Query(min_length=1, max_length=128)",
+        "Query(min_length=1, max_length=180)",
+        "Depends(require_rbac('C15F', 'execute'))"
+      ],
+      "function": "module_workflow_binding_decision",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-workflow-bindings/decision",
+      "source": "backend/app/api/routes/module_workflow_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15F', 'execute'))"
+      ],
+      "function": "module_workflow_binding_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-workflow-bindings/validation",
+      "source": "backend/app/api/routes/module_workflow_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15F', 'execute'))"
+      ],
+      "function": "module_workflow_binding_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-workflow-bindings/completion-status",
+      "source": "backend/app/api/routes/module_workflow_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C09', 'execute'))"
+      ],
+      "function": "execution_provider_registry",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-providers/registry",
+      "source": "backend/app/api/routes/execution_providers.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C09', 'execute'))"
+      ],
+      "function": "execution_providers_me",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-providers/me",
+      "source": "backend/app/api/routes/execution_providers.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "execution_prompt_template_engine",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-prompts/template-engine",
+      "source": "backend/app/api/routes/execution_prompts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "execution_prompt_binding_injection",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-prompts/binding-injection",
+      "source": "backend/app/api/routes/execution_prompts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "execution_prompt_context_assembly",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-prompts/context-assembly",
+      "source": "backend/app/api/routes/execution_prompts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "execution_prompt_security_constraints",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-prompts/security-constraints",
+      "source": "backend/app/api/routes/execution_prompts.py"
+    },
+    {
+      "dependencies": [
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Query('', max_length=5000)",
+        "Query(1, ge=1)",
+        "Query(0, ge=0)",
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "execution_prompt_payload",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-prompts/payload",
+      "source": "backend/app/api/routes/execution_prompts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "execution_prompt_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-prompts/validation",
+      "source": "backend/app/api/routes/execution_prompts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "execution_prompt_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/execution-prompts/completion-status",
+      "source": "backend/app/api/routes/execution_prompts.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "external_service_registry",
+      "method": "GET",
+      "registered_path": "/api/control-plane/external-dependencies/registry",
+      "source": "backend/app/api/routes/external_dependencies.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "external_service_registration_proposals",
+      "method": "GET",
+      "registered_path": "/api/control-plane/external-dependencies/proposals",
+      "source": "backend/app/api/routes/external_dependencies.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "external_dependency_bindings",
+      "method": "GET",
+      "registered_path": "/api/control-plane/external-dependencies/bindings",
+      "source": "backend/app/api/routes/external_dependencies.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "external_dependency_binding_rules",
+      "method": "GET",
+      "registered_path": "/api/control-plane/external-dependencies/binding-rules",
+      "source": "backend/app/api/routes/external_dependencies.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "external_dependency_graph",
+      "method": "GET",
+      "registered_path": "/api/control-plane/external-dependencies/dependency-graph",
+      "source": "backend/app/api/routes/external_dependencies.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "external_dependency_binding_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/external-dependencies/binding-validation",
+      "source": "backend/app/api/routes/external_dependencies.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14', 'admin'))"
+      ],
+      "function": "external_dependency_binding_audit",
+      "method": "GET",
+      "registered_path": "/api/control-plane/external-dependencies/binding-audit",
+      "source": "backend/app/api/routes/external_dependencies.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "ai_execution_binding_registry",
+      "method": "GET",
+      "registered_path": "/api/control-plane/ai-execution-bindings/registry",
+      "source": "backend/app/api/routes/ai_execution_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "ai_execution_binding_rules",
+      "method": "GET",
+      "registered_path": "/api/control-plane/ai-execution-bindings/rules",
+      "source": "backend/app/api/routes/ai_execution_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "ai_execution_binding_execution_flow",
+      "method": "GET",
+      "registered_path": "/api/control-plane/ai-execution-bindings/execution-flow",
+      "source": "backend/app/api/routes/ai_execution_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "ai_execution_binding_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/ai-execution-bindings/validation",
+      "source": "backend/app/api/routes/ai_execution_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "ai_execution_binding_ui_interaction",
+      "method": "GET",
+      "registered_path": "/api/control-plane/ai-execution-bindings/ui-interaction",
+      "source": "backend/app/api/routes/ai_execution_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "ai_execution_binding_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/ai-execution-bindings/completion-status",
+      "source": "backend/app/api/routes/ai_execution_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "model_lock_registry",
+      "method": "GET",
+      "registered_path": "/api/control-plane/model-locks/registry",
+      "source": "backend/app/api/routes/model_locks.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "model_lock_rules",
+      "method": "GET",
+      "registered_path": "/api/control-plane/model-locks/rules",
+      "source": "backend/app/api/routes/model_locks.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "model_lock_enforcement",
+      "method": "GET",
+      "registered_path": "/api/control-plane/model-locks/enforcement",
+      "source": "backend/app/api/routes/model_locks.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "model_lock_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/model-locks/validation",
+      "source": "backend/app/api/routes/model_locks.py"
+    },
+    {
+      "dependencies": [
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "model_lock_request_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/model-locks/request-validation",
+      "source": "backend/app/api/routes/model_locks.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "model_lock_integration",
+      "method": "GET",
+      "registered_path": "/api/control-plane/model-locks/integration",
+      "source": "backend/app/api/routes/model_locks.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "model_lock_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/model-locks/completion-status",
+      "source": "backend/app/api/routes/model_locks.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "capability_binding_routing_model",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability-bindings/routing-model",
+      "source": "backend/app/api/routes/capability_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "capability_binding_model_mapping",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability-bindings/model-mapping",
+      "source": "backend/app/api/routes/capability_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "capability_binding_module_bindings",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability-bindings/module-bindings",
+      "source": "backend/app/api/routes/capability_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "capability_binding_enforcement",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability-bindings/enforcement",
+      "source": "backend/app/api/routes/capability_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "capability_binding_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability-bindings/validation",
+      "source": "backend/app/api/routes/capability_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=128)",
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "capability_binding_request_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability-bindings/request-validation",
+      "source": "backend/app/api/routes/capability_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "capability_binding_integration",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability-bindings/integration",
+      "source": "backend/app/api/routes/capability_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "capability_binding_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability-bindings/completion-status",
+      "source": "backend/app/api/routes/capability_bindings.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_cached_control_plane_admin)"
+      ],
+      "function": "capability_bootstrap",
+      "method": "GET",
+      "registered_path": "/api/control-plane/capability/bootstrap",
+      "source": "backend/app/api/routes/capability_bootstrap.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_registry",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/registry",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_assignment_model",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/assignment-model",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_categories",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/categories",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_budget_system",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/budget-system",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_enforcement",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/enforcement",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_integration_flow",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/integration-flow",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/validation",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., min_length=1, max_length=180)",
+        "Query(..., ge=0)",
+        "Query(0, ge=0)",
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_request_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/request-validation",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C14X', 'admin'))"
+      ],
+      "function": "module_allocation_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/module-allocations/completion-status",
+      "source": "backend/app/api/routes/module_allocations.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/registry",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_detail",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/workflows/{workflow_id}",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_module_bindings",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/module-bindings",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_module_workflows",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/modules/{module}/workflows",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_status_management",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/status-management",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_rules",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/rules",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Query(min_length=1, max_length=128)",
+        "Query(min_length=1, max_length=180)",
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_decision",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/decision",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_validation",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/validation",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_system_flow",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/system-flow",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15A', 'execute'))"
+      ],
+      "function": "workflow_registry_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/workflow-registry/completion-status",
+      "source": "backend/app/api/routes/workflow_registry.py"
+    },
+    {
+      "dependencies": [
+        "Header(default=None, alias='X-Barong-Gateway-Signature')",
+        "Depends(get_settings)",
+        "Depends(get_db)"
+      ],
+      "function": "webhook_gateway_ingress",
+      "method": "POST",
+      "registered_path": "/api/control-plane/webhook-gateway/ingress",
+      "source": "backend/app/api/routes/webhook_gateway.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))"
+      ],
+      "function": "webhook_gateway_design",
+      "method": "GET",
+      "registered_path": "/api/control-plane/webhook-gateway/design",
+      "source": "backend/app/api/routes/webhook_gateway.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))",
+        "Depends(get_settings)"
+      ],
+      "function": "webhook_gateway_signature_model",
+      "method": "GET",
+      "registered_path": "/api/control-plane/webhook-gateway/signature-model",
+      "source": "backend/app/api/routes/webhook_gateway.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))"
+      ],
+      "function": "webhook_gateway_payload_format",
+      "method": "GET",
+      "registered_path": "/api/control-plane/webhook-gateway/payload-format",
+      "source": "backend/app/api/routes/webhook_gateway.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))"
+      ],
+      "function": "webhook_gateway_workflow_lookup_flow",
+      "method": "GET",
+      "registered_path": "/api/control-plane/webhook-gateway/workflow-lookup-flow",
+      "source": "backend/app/api/routes/webhook_gateway.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15B', 'execute'))"
+      ],
+      "function": "webhook_gateway_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/webhook-gateway/completion-status",
+      "source": "backend/app/api/routes/webhook_gateway.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15C', 'execute'))"
+      ],
+      "function": "payload_standardization_normalize",
+      "method": "POST",
+      "registered_path": "/api/control-plane/payload-standardization/normalize",
+      "source": "backend/app/api/routes/payload_standardization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15C', 'execute'))"
+      ],
+      "function": "payload_standardization_model",
+      "method": "GET",
+      "registered_path": "/api/control-plane/payload-standardization/model",
+      "source": "backend/app/api/routes/payload_standardization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15C', 'execute'))"
+      ],
+      "function": "payload_standardization_engine",
+      "method": "GET",
+      "registered_path": "/api/control-plane/payload-standardization/normalization-engine",
+      "source": "backend/app/api/routes/payload_standardization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15C', 'execute'))"
+      ],
+      "function": "payload_standardization_context_rules",
+      "method": "GET",
+      "registered_path": "/api/control-plane/payload-standardization/context-rules",
+      "source": "backend/app/api/routes/payload_standardization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15C', 'execute'))"
+      ],
+      "function": "payload_standardization_workflow_mapping",
+      "method": "GET",
+      "registered_path": "/api/control-plane/payload-standardization/workflow-mapping",
+      "source": "backend/app/api/routes/payload_standardization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15C', 'execute'))"
+      ],
+      "function": "payload_standardization_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/payload-standardization/completion-status",
+      "source": "backend/app/api/routes/payload_standardization.py"
+    },
+    {
+      "dependencies": [
+        "Header(default=None, alias='X-Barong-Gateway-Signature')",
+        "Depends(get_settings)",
+        "Depends(get_db)"
+      ],
+      "function": "callback_handler_receiver",
+      "method": "POST",
+      "registered_path": "/api/control-plane/callback-handler/receiver",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "function": "callback_handler_bind_context",
+      "method": "POST",
+      "registered_path": "/api/control-plane/callback-handler/context-bindings",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "function": "callback_handler_result",
+      "method": "GET",
+      "registered_path": "/api/control-plane/callback-handler/results/{context_id}",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "function": "callback_handler_design",
+      "method": "GET",
+      "registered_path": "/api/control-plane/callback-handler/design",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "function": "callback_handler_context_binding",
+      "method": "GET",
+      "registered_path": "/api/control-plane/callback-handler/context-binding",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "function": "callback_handler_status_management",
+      "method": "GET",
+      "registered_path": "/api/control-plane/callback-handler/status-management",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "function": "callback_handler_result_storage",
+      "method": "GET",
+      "registered_path": "/api/control-plane/callback-handler/result-storage",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "function": "callback_handler_module_notifications",
+      "method": "GET",
+      "registered_path": "/api/control-plane/callback-handler/module-notifications",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15D', 'execute'))"
+      ],
+      "function": "callback_handler_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/callback-handler/completion-status",
+      "source": "backend/app/api/routes/callback_handler.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15E', 'execute'))"
+      ],
+      "function": "result_normalization_normalize",
+      "method": "POST",
+      "registered_path": "/api/control-plane/result-normalization/normalize",
+      "source": "backend/app/api/routes/result_normalization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15E', 'execute'))"
+      ],
+      "function": "result_normalization_engine",
+      "method": "GET",
+      "registered_path": "/api/control-plane/result-normalization/normalization-engine",
+      "source": "backend/app/api/routes/result_normalization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15E', 'execute'))"
+      ],
+      "function": "result_normalization_schema_mapping",
+      "method": "GET",
+      "registered_path": "/api/control-plane/result-normalization/schema-mapping",
+      "source": "backend/app/api/routes/result_normalization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15E', 'execute'))"
+      ],
+      "function": "result_normalization_module_adapters",
+      "method": "GET",
+      "registered_path": "/api/control-plane/result-normalization/module-adapters",
+      "source": "backend/app/api/routes/result_normalization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15E', 'execute'))"
+      ],
+      "function": "result_normalization_ui_output_structure",
+      "method": "GET",
+      "registered_path": "/api/control-plane/result-normalization/ui-output-structure",
+      "source": "backend/app/api/routes/result_normalization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15E', 'execute'))"
+      ],
+      "function": "result_normalization_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/result-normalization/completion-status",
+      "source": "backend/app/api/routes/result_normalization.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_submit_failure",
+      "method": "POST",
+      "registered_path": "/api/control-plane/failure-handling/failures",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_evaluate_timeout",
+      "method": "POST",
+      "registered_path": "/api/control-plane/failure-handling/timeouts/evaluate",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_dlq",
+      "method": "GET",
+      "registered_path": "/api/control-plane/failure-handling/dlq",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_dlq_record",
+      "method": "GET",
+      "registered_path": "/api/control-plane/failure-handling/dlq/{context_id}",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))",
+        "Depends(get_settings)",
+        "Depends(get_db)"
+      ],
+      "function": "failure_handling_manual_replay",
+      "method": "POST",
+      "registered_path": "/api/control-plane/failure-handling/recovery/replay",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_retry_system_design",
+      "method": "GET",
+      "registered_path": "/api/control-plane/failure-handling/retry-system-design",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_timeout_model",
+      "method": "GET",
+      "registered_path": "/api/control-plane/failure-handling/timeout-handling",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_dead_letter_queue",
+      "method": "GET",
+      "registered_path": "/api/control-plane/failure-handling/dead-letter-queue",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_fallback_strategy",
+      "method": "GET",
+      "registered_path": "/api/control-plane/failure-handling/fallback-strategy",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_recovery_flow",
+      "method": "GET",
+      "registered_path": "/api/control-plane/failure-handling/recovery-flow",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(require_rbac('C15H', 'execute'))"
+      ],
+      "function": "failure_handling_completion_status",
+      "method": "GET",
+      "registered_path": "/api/control-plane/failure-handling/completion-status",
+      "source": "backend/app/api/routes/failure_handling.py"
+    },
+    {
+      "dependencies": [
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "pre_live_readiness",
+      "method": "GET",
+      "registered_path": "/api/control-plane/live-gate/readiness",
+      "source": "backend/app/api/routes/live_gate.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=None)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "production_readiness",
+      "method": "GET",
+      "registered_path": "/api/control-plane/live-gate/production-readiness",
+      "source": "backend/app/api/routes/live_gate.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "list_live_gate_policies",
+      "method": "GET",
+      "registered_path": "/api/control-plane/live-gate/policies",
+      "source": "backend/app/api/routes/live_gate.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "upsert_live_gate_policy",
+      "method": "POST",
+      "registered_path": "/api/control-plane/live-gate/policies",
+      "source": "backend/app/api/routes/live_gate.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "upsert_canary_rollout",
+      "method": "POST",
+      "registered_path": "/api/control-plane/live-gate/canary",
+      "source": "backend/app/api/routes/live_gate.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "record_rollback_failure",
+      "method": "POST",
+      "registered_path": "/api/control-plane/live-gate/rollback/failure",
+      "source": "backend/app/api/routes/live_gate.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "verify_rollback_consistency",
+      "method": "POST",
+      "registered_path": "/api/control-plane/live-gate/rollback/consistency",
+      "source": "backend/app/api/routes/live_gate.py"
+    },
+    {
+      "dependencies": [
+        "Query(default=PLATFORM_ORG_ID)",
+        "Depends(get_db)",
+        "Depends(require_rbac('GOVERNANCE', 'admin'))"
+      ],
+      "function": "restore_previous_version",
+      "method": "POST",
+      "registered_path": "/api/control-plane/live-gate/rollback/restore",
+      "source": "backend/app/api/routes/live_gate.py"
+    },
+    {
+      "name": "enforce_control_plane_isolation",
+      "source": "backend/app/main.py",
+      "summary": "Control-plane routes require authenticated session and PermissionDecisionEngine platform metadata decision.",
+      "type": "middleware"
+    },
+    {
+      "name": "enforce_permission_isolation",
+      "source": "backend/app/middleware/permission.py",
+      "summary": "API app/control-plane requests with org/module context are checked by services.permission_isolation.check_permission.",
+      "type": "middleware"
+    },
+    {
+      "name": "permission_manifest",
+      "source": "backend/app/core/modules.py",
+      "summary": "Each registered module declares required_permissions and permission_manifest entries.",
+      "type": "module_registry"
+    }
+  ],
+  "ui_enforcement": {
+    "guard_file": "frontend/src/components/permission-route-guard.tsx",
+    "hidden_technical_modules": [
+      "admin.agents",
+      "admin.permissions",
+      "admin.settings",
+      "experimental.foundation_demo",
+      "integration.n8n_test_bridge",
+      "system.errors",
+      "system.memory_events",
+      "system.operation_logs"
+    ],
+    "productized_routes": [
+      "admin.modules",
+      "admin.organizations",
+      "admin.users",
+      "business.approvals",
+      "business.reviews"
+    ]
+  }
+}

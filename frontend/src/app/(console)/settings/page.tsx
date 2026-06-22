@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { ControlPlaneSettingsView } from "@/components/control-plane-settings-view";
 
 export const metadata: Metadata = {
-  title: "Settings",
+  title: "设置",
 };
 
 export default function SettingsPage() {

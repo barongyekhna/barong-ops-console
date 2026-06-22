@@ -14,21 +14,23 @@ type EmptyStateProps = {
 };
 
 export function EmptyState({
-  dataSource = "No records are available yet.",
+  dataSource,
   title,
   description,
   icon: Icon = Inbox,
-  requiredExecutionMode = "View access is available.",
-  requiredModuleState = "Product area is available.",
-  requiredOrgState = "Active organization context is available.",
-  requiredPermission = "View permission for this area.",
-  unlockCondition = "Records will appear when activity starts.",
+  requiredExecutionMode = "可查看。",
+  requiredModuleState = "功能区可用。",
+  requiredOrgState = "组织状态正常。",
+  requiredPermission = "当前账号可访问。",
+  unlockCondition = "有记录后会显示在这里。",
 }: EmptyStateProps) {
+  void dataSource;
+
   return (
     <CapabilityEmptyState
       icon={Icon}
-      next_action_label="Refresh"
-      reason={`${description} ${dataSource}`}
+      next_action_label="刷新"
+      reason={description}
       required_execution_mode={requiredExecutionMode}
       required_module_state={requiredModuleState}
       required_org_state={requiredOrgState}

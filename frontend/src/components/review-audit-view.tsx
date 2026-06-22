@@ -65,6 +65,33 @@ type ModuleOption = {
   value: string;
 };
 
+const MODULE_LABELS: Record<string, string> = {
+  Agents: "自动化助手",
+  "Approval Audit": "审批审计",
+  Dashboard: "首页",
+  Errors: "异常记录",
+  "Foundation Demo": "内部演示",
+  "Memory Events": "运行记录",
+  Modules: "功能区",
+  "n8n Test Bridge": "外部流程接入",
+  "Operation Logs": "操作记录",
+  "Permission Management": "权限管理",
+  Products: "业务功能",
+  "User Management": "用户管理",
+  "admin.agents": "自动化助手",
+  "admin.modules": "功能区",
+  "admin.organizations": "组织管理",
+  "admin.permissions": "权限管理",
+  "admin.settings": "设置",
+  "admin.users": "用户管理",
+  "business.approvals": "审批",
+  "business.reviews": "审批审计",
+  "core.dashboard": "首页",
+  "system.errors": "异常记录",
+  "system.memory_events": "运行记录",
+  "system.operation_logs": "操作记录",
+};
+
 function formatDate(value: string | null | undefined) {
   if (!value) {
     return "暂无时间";
@@ -97,6 +124,10 @@ function roleLabel(role: string) {
     return "查看员";
   }
   return "员工";
+}
+
+function moduleLabel(value: string) {
+  return MODULE_LABELS[value] ?? "审批";
 }
 
 function canUseReviewAudit(role: string | null | undefined) {
@@ -183,12 +214,9 @@ function ActionTimeline({
           <article className="review-action-card">
             <div className="review-action-top">
               <div>
-                <strong>{action.approval_module}</strong>
+                <strong>{moduleLabel(action.approval_module)}</strong>
                 <span>
                   {action.organization_name} · {action.employee_name}
-                </span>
-                <span>
-                  {action.related_object_type} · {action.related_object}
                 </span>
               </div>
               <span className={`review-status ${action.status}`}>
@@ -405,7 +433,10 @@ export function ReviewAuditView() {
       setModuleOptions(
         result.items
           .map((module) => ({
-            label: module.display_name || module.module_key,
+            label:
+              MODULE_LABELS[module.module_key] ??
+              MODULE_LABELS[module.display_name] ??
+              "业务功能",
             value: module.module_key,
           }))
           .sort((left, right) => left.label.localeCompare(right.label, "zh-CN")),

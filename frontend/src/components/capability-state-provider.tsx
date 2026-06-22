@@ -440,20 +440,12 @@ export function CapabilityStateProvider({
 
           if (isApiAbortError(error)) {
             loadedAuthKeyRef.current = null;
-            setLoadError(
-              error instanceof Error
-                ? error.message
-                : "Capability bootstrap was aborted.",
-            );
+            setLoadError("加载失败，请稍后重试。");
             return;
           }
 
           loadedAuthKeyRef.current = null;
-          setLoadError(
-            error instanceof Error
-              ? error.message
-              : "Capability bootstrap failed.",
-          );
+          setLoadError("加载失败，请稍后重试。");
         })
         .finally(() => {
           if (bootstrapAbortControllerRef.current === controller) {

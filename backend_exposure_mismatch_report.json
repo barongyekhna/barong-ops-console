@@ -1,0 +1,24 @@
+{
+  "generated_at_utc": "2026-06-22T06:05:56Z",
+  "scope": "SAFE PRODUCTION DEPLOYMENT RESTART validation",
+  "environment": "production",
+  "status": "no_backend_runtime_failure_detected",
+  "backend_health": {
+    "url": "http://127.0.0.1:8000/api/public/health",
+    "response": {
+      "status": "ok",
+      "service": "barong-ops-console",
+      "mode": "lightweight",
+      "db": "not_checked"
+    }
+  },
+  "container_status": {
+    "barong-ops-console-prod_console_backend_1": "Up",
+    "barong-ops-console-prod_console_frontend_1": "Up",
+    "barong-ops-console-prod_console_postgres_1": "Up healthy, not restarted by this task"
+  },
+  "blocking_mismatch": "Frontend production build artifact contains legacy UI references, so frontend/backend productization sync cannot be confirmed as passed.",
+  "db_touched": false,
+  "rbac_core_touched": false,
+  "volumes_touched": false
+}

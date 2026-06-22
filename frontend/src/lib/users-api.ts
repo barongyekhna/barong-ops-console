@@ -75,12 +75,14 @@ export type UpdateUserPayload = {
   is_active?: boolean;
 };
 
+export const USERS_PAGE_LIMIT = 10;
+
 export function isManagedUserRole(role: string): role is ManagedUserRole {
   return MANAGED_USER_ROLES.includes(role as ManagedUserRole);
 }
 
 export function listUsers(
-  limit = 50,
+  limit = USERS_PAGE_LIMIT,
   offset = 0,
   options: { organizationId?: string | null } = {},
 ) {
@@ -124,7 +126,7 @@ export function listUserRoles() {
   });
 }
 
-export function listOrganizations(limit = 100, offset = 0) {
+export function listOrganizations(limit = USERS_PAGE_LIMIT, offset = 0) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
@@ -189,28 +191,26 @@ export function formatUsersApiError(error: unknown, fallback: string) {
   }
 
   if (error.status === 401) {
-    return "Sign in again before managing console accounts.";
+    return "请重新登录后再管理账号。";
   }
   if (error.status === 403) {
-    return "Only owner and super admin accounts can manage console users.";
+    return "仅所有者和组织管理员可以管理账号。";
   }
   if (error.status === 409) {
-    return "That username already exists. Choose a different username.";
+    return "该用户名已存在，请更换后重试。";
   }
   if (error.status === 404) {
-    return "The user management endpoint or selected user was not found. Refresh the list and try again.";
+    return "未找到对应账号，请刷新后重试。";
   }
   if (error.status === 422) {
-    return error.message === "The request could not be completed."
-      ? "Check the username, role, and organization."
-      : error.message;
+    return "请检查用户名、角色和组织后再提交。";
   }
   if (error.status === 503) {
-    return "The backend API service is unavailable.";
+    return "加载失败，请稍后重试。";
   }
   if (error.status >= 500) {
-    return "The backend API returned an internal error. Try again after checking the service.";
+    return "加载失败，请稍后重试。";
   }
 
-  return error.message || fallback;
+  return fallback;
 }

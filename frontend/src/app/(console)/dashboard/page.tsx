@@ -4,7 +4,7 @@ import { DashboardAccessControl } from "@/components/dashboard-access-control";
 import { OperationsDashboard } from "@/components/operations-dashboard";
 
 export const metadata: Metadata = {
-  title: "Operations Hub",
+  title: "工作台概览",
 };
 
 export default function DashboardPage() {
@@ -12,12 +12,11 @@ export default function DashboardPage() {
     <DashboardAccessControl>
       <div className="page-stack">
         <div className="page-heading">
-          <span className="section-index">Hub</span>
+          <span className="section-index">首页</span>
           <div>
-            <h2>Operations Hub</h2>
+            <h2>工作台概览</h2>
             <p>
-              System Health Card, Users Overview, Organizations Overview,
-              Approvals Queue, Logs, and Execution Status.
+              查看账号、组织、审批和系统状态。
             </p>
           </div>
         </div>
