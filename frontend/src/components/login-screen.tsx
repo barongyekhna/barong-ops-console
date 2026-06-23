@@ -1,7 +1,6 @@
 "use client";
 
-import { Blocks } from "lucide-react";
-
+import { Logo } from "@/components/brand-logo";
 import { LoginForm } from "@/components/login-form";
 
 export function LoginScreen() {
@@ -10,7 +9,7 @@ export function LoginScreen() {
       <section className="login-identity">
         <div className="login-brand">
           <span className="brand-mark brand-mark-large">
-            <Blocks aria-hidden="true" size={26} />
+            <Logo decorative />
           </span>
           <span>
             <strong>Barong</strong>
@@ -27,7 +26,9 @@ export function LoginScreen() {
           </div>
         </div>
 
-        <span className="build-label">Barong</span>
+        <span className="build-label" aria-hidden="true">
+          <Logo className="brand-watermark" decorative />
+        </span>
       </section>
 
       <section className="login-panel">

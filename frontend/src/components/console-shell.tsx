@@ -1,12 +1,11 @@
 "use client";
 
-import { Blocks, LogOut, Menu } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 
 import { useAuth } from "@/components/auth-provider";
-import { CapabilitySidebarEngine } from "@/components/capability-sidebar-engine";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
+import { Sidebar, TopHeader } from "@/components/saas-shell";
 import { pageTitles } from "@/lib/navigation";
 
 function roleLabel(role: string | null | undefined) {
@@ -65,65 +64,23 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="console-layout">
-      <aside
-        className={`sidebar ${isNavigationOpen ? "sidebar-open" : ""}`}
-      >
-        <button
-          aria-label="返回首页"
-          className="brand-lockup brand-home-button"
-          onClick={handleLogoClick}
-          title="返回首页"
-          type="button"
-        >
-          <span className="brand-mark">
-            <Blocks aria-hidden="true" size={20} />
-          </span>
-          <span>
-            <strong>Barong</strong>
-            <small>运营工作台</small>
-          </span>
-        </button>
-
-        <CapabilitySidebarEngine
-          onNavigate={() => setIsNavigationOpen(false)}
-          pathname={pathname}
-        />
-      </aside>
+      <Sidebar
+        isOpen={isNavigationOpen}
+        onLogoClick={handleLogoClick}
+        onNavigate={() => setIsNavigationOpen(false)}
+        pathname={pathname}
+      />
 
       <div className="console-main">
-        <header className="topbar">
-          <div className="topbar-title">
-            <button
-              aria-label="打开或收起导航"
-              className="icon-button menu-button"
-              onClick={() => setIsNavigationOpen((open) => !open)}
-              title="打开或收起导航"
-              type="button"
-            >
-              <Menu aria-hidden="true" size={20} />
-            </button>
-            <div>
-              <span className="eyebrow">工作台</span>
-              <h1>{title}</h1>
-            </div>
-          </div>
-
-          <div className="account-area">
-            <div className="account-copy">
-              <strong>{user?.username}</strong>
-              <span>{roleLabel(user?.role)}</span>
-            </div>
-            <button
-              className="logout-button"
-              disabled={isLoggingOut}
-              onClick={() => void handleLogout()}
-              type="button"
-            >
-              <LogOut aria-hidden="true" size={17} />
-              {isLoggingOut ? "正在退出" : "退出"}
-            </button>
-          </div>
-        </header>
+        <TopHeader
+          isActionPending={isLoggingOut}
+          onLogout={() => void handleLogout()}
+          onMenuToggle={() => setIsNavigationOpen((open) => !open)}
+          onRefresh={() => void capabilityState.refresh()}
+          role={roleLabel(user?.role)}
+          title={title}
+          username={user?.username}
+        />
 
         <main className="page-content">
           {showFallbackBanner ? (
