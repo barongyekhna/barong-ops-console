@@ -206,10 +206,10 @@ export function formatUsersApiError(error: unknown, fallback: string) {
     return "请检查用户名、角色和组织后再提交。";
   }
   if (error.status === 503) {
-    return "加载失败，请稍后重试。";
+    return "服务暂时不可用，请稍后再试。";
   }
   if (error.status >= 500) {
-    return "加载失败，请稍后重试。";
+    return "服务暂时不可用，请稍后再试。";
   }
 
   return fallback;

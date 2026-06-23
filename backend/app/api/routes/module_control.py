@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
 
 from ...db.session import get_db
@@ -10,23 +10,28 @@ from ...schemas.module_control import (
 )
 from ...services.module_control_center import (
     ModuleControlError,
-    build_module_control_center,
     update_module_control_state,
 )
+from ...services.module_control_cache_service import (
+    apply_module_control_state_to_cache,
+    get_module_control_center_cached_json,
+    refresh_module_control_center_cache_async,
+)
 from ...services.data_isolation import without_org_data_isolation
-from ..deps import require_owner
+from ..deps import require_lightweight_control_plane_admin, require_owner
 
 router = APIRouter(prefix="/module-control", tags=["module-control"])
 
 
 @router.get("/center", response_model=ModuleControlCenterResponse)
 def module_control_center(
-    db: Session = Depends(get_db),
-    user: User = Depends(require_owner),
-) -> ModuleControlCenterResponse:
+    user: User = Depends(require_lightweight_control_plane_admin),
+) -> Response:
     del user
-    with without_org_data_isolation():
-        return build_module_control_center(db)
+    return Response(
+        content=get_module_control_center_cached_json(),
+        media_type="application/json",
+    )
 
 
 @router.patch(
@@ -62,4 +67,6 @@ def module_control_update(
                 detail="Module not registered.",
             ) from exc
         raise
+    apply_module_control_state_to_cache(item)
+    refresh_module_control_center_cache_async(force=True)
     return ModuleControlUpdateResponse(item=item)

@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from ..core.api_classification import is_lightweight_control_plane_path
 from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
@@ -40,11 +41,6 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
         "/api/app/module/shared/update-orgs",
         "/api/app/module/shared/list",
         "/api/app/permissions/me",
-    )
-)
-ORG_CONTEXT_BUILD_EXEMPT_PATHS = frozenset(
-    (
-        "/api/control-plane/modules/me",
     )
 )
 FRONTEND_ORG_QUERY_KEYS = ("org_id", "active_org_id")
@@ -393,7 +389,7 @@ async def org_context_middleware(request: Request, call_next):
             "org_id must come from the authenticated server context.",
         )
 
-    if request.url.path in ORG_CONTEXT_BUILD_EXEMPT_PATHS:
+    if is_lightweight_control_plane_path(request.url.path):
         return await call_next(request)
 
     session_id = get_session_id_from_request(request, settings=settings)

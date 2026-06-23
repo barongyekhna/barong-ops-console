@@ -345,6 +345,25 @@ def require_cached_control_plane_admin(
     )
 
 
+def require_lightweight_control_plane_admin(request: Request) -> User:
+    current_session = getattr(request.state, "authenticated_session", None)
+    user = getattr(current_session, "user", None)
+    decision = getattr(request.state, "control_plane_rbac_decision", None)
+    if (
+        isinstance(current_session, AuthenticatedSession)
+        and isinstance(user, User)
+        and decision is not None
+        and getattr(decision, "allowed", False)
+        and getattr(decision, "module_id", None) == "C16"
+        and getattr(decision, "action", None) == "admin"
+    ):
+        return user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Permission denied.",
+    )
+
+
 def require_internal_rbac(module: str, action: str = "internal") -> None:
     decision = check_internal_permission(module, action)
     emit_event(

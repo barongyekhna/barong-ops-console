@@ -1,19 +1,21 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from collections import Counter
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..models.module_control import ModuleControlStateRecord
 from ..models.organization import OrganizationRecord
+from ..schemas.module import ModuleManifestV1
 from ..schemas.module_control import (
     ModuleControlCenterResponse,
     ModuleControlOrgGroup,
     ModuleControlStateRead,
     ModuleControlUpdateRequest,
 )
-from .module_registry import get_module_manifest, list_module_manifests
+from .module_registry import get_module_manifest, list_module_manifests_snapshot
 
 
 class ModuleControlError(ValueError):
@@ -28,6 +30,14 @@ def _active_organizations(db: Session) -> list[OrganizationRecord]:
             .order_by(OrganizationRecord.org_name, OrganizationRecord.org_id)
         )
     )
+
+
+def list_module_control_org_summary(db: Session) -> list[OrganizationRecord]:
+    return _active_organizations(db)
+
+
+def list_module_control_module_list() -> list[ModuleManifestV1]:
+    return list_module_manifests_snapshot()
 
 
 def _state_lookup(
@@ -46,12 +56,37 @@ def _state_lookup(
     return {(record.org_id, record.module_id): record for record in records}
 
 
+def list_module_control_status(
+    db: Session,
+    org_ids: list[str],
+) -> dict[tuple[str, str], ModuleControlStateRecord]:
+    return _state_lookup(db, org_ids)
+
+
+def build_module_control_execution_snapshot(
+    lookup: dict[tuple[str, str], ModuleControlStateRecord],
+) -> dict[str, int]:
+    counts = Counter(record.runtime_status for record in lookup.values())
+    return {
+        "active": counts.get("active", 0),
+        "disabled": counts.get("disabled", 0),
+        "error": counts.get("error", 0),
+        "total": sum(counts.values()),
+    }
+
+
 def _runtime_status_for_enabled(enabled: bool) -> str:
     return "active" if enabled else "disabled"
 
 
-def _read_from_record(record: ModuleControlStateRecord) -> ModuleControlStateRead:
-    manifest = get_module_manifest(record.module_id)
+def _read_from_record(
+    record: ModuleControlStateRecord,
+    *,
+    manifest: ModuleManifestV1 | None = None,
+) -> ModuleControlStateRead:
+    manifest = (
+        manifest if manifest is not None else get_module_manifest(record.module_id)
+    )
     return ModuleControlStateRead(
         org_id=record.org_id,
         module_id=record.module_id,
@@ -66,9 +101,18 @@ def _read_from_record(record: ModuleControlStateRecord) -> ModuleControlStateRea
     )
 
 
-def ensure_module_control_states(db: Session) -> tuple[int, list[OrganizationRecord]]:
-    organizations = _active_organizations(db)
-    manifests = list_module_manifests()
+def ensure_module_control_states(
+    db: Session,
+    *,
+    organizations: list[OrganizationRecord] | None = None,
+    manifests: list[ModuleManifestV1] | None = None,
+) -> tuple[int, list[OrganizationRecord]]:
+    organizations = (
+        organizations if organizations is not None else _active_organizations(db)
+    )
+    manifests = (
+        manifests if manifests is not None else list_module_control_module_list()
+    )
     lookup = _state_lookup(db, [organization.org_id for organization in organizations])
     created = 0
     for organization in organizations:
@@ -91,19 +135,28 @@ def ensure_module_control_states(db: Session) -> tuple[int, list[OrganizationRec
     return created, organizations
 
 
-def build_module_control_center(db: Session) -> ModuleControlCenterResponse:
-    created, organizations = ensure_module_control_states(db)
-    manifests = list_module_manifests()
+def build_module_control_center_from_parts(
+    *,
+    auto_registered_count: int,
+    organizations: list[OrganizationRecord],
+    manifests: list[ModuleManifestV1],
+    state_lookup: dict[tuple[str, str], ModuleControlStateRecord],
+) -> ModuleControlCenterResponse:
     module_ids = [manifest.module_key for manifest in manifests]
-    lookup = _state_lookup(db, [organization.org_id for organization in organizations])
+    manifest_by_key = {manifest.module_key: manifest for manifest in manifests}
     groups: list[ModuleControlOrgGroup] = []
     for organization in organizations:
         modules: list[ModuleControlStateRead] = []
         for module_id in module_ids:
-            record = lookup.get((organization.org_id, module_id))
+            record = state_lookup.get((organization.org_id, module_id))
             if record is None:
                 continue
-            modules.append(_read_from_record(record))
+            modules.append(
+                _read_from_record(
+                    record,
+                    manifest=manifest_by_key.get(module_id),
+                )
+            )
         groups.append(
             ModuleControlOrgGroup(
                 org_id=organization.org_id,
@@ -115,7 +168,27 @@ def build_module_control_center(db: Session) -> ModuleControlCenterResponse:
         organizations=groups,
         organization_count=len(groups),
         module_count=sum(len(group.modules) for group in groups),
+        auto_registered_count=auto_registered_count,
+    )
+
+
+def build_module_control_center(db: Session) -> ModuleControlCenterResponse:
+    organizations = list_module_control_org_summary(db)
+    manifests = list_module_control_module_list()
+    created, organizations = ensure_module_control_states(
+        db,
+        organizations=organizations,
+        manifests=manifests,
+    )
+    lookup = list_module_control_status(
+        db,
+        [organization.org_id for organization in organizations],
+    )
+    return build_module_control_center_from_parts(
         auto_registered_count=created,
+        organizations=organizations,
+        manifests=manifests,
+        state_lookup=lookup,
     )
 
 

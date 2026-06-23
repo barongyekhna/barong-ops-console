@@ -1,0 +1,83 @@
+{
+  "generated_at_utc": "2026-06-23T02:13:22Z",
+  "production": {
+    "docker_network": "barong-ops-console-prod",
+    "services": {
+      "frontend": {
+        "container": "barong-ops-console-prod_console_frontend_1",
+        "image": "barong-ops-console-prod_console_frontend:latest",
+        "host_port": "127.0.0.1:3000",
+        "container_port": 3000,
+        "runtime_api_env": {
+          "BACKEND_API_URL": "http://console_backend:8000",
+          "NEXT_PUBLIC_API_BASE_URL": "/api",
+          "OWNER_USERNAME": ""
+        }
+      },
+      "backend": {
+        "container": "barong-ops-console-prod_console_backend_1",
+        "host_port": "127.0.0.1:8000",
+        "container_port": 8000,
+        "network_dns_name": "console_backend"
+      },
+      "postgres": {
+        "container": "barong-ops-console-prod_console_postgres_1",
+        "status": "healthy"
+      }
+    },
+    "request_flow": [
+      {
+        "from": "browser",
+        "to": "Next.js frontend",
+        "url_shape": "http://127.0.0.1:3000/api/backend/*"
+      },
+      {
+        "from": "Next.js route handler",
+        "to": "FastAPI backend",
+        "url_shape": "http://console_backend:8000/api/{public|app|control-plane}/*"
+      }
+    ],
+    "connectivity_tests": [
+      {
+        "source": "host",
+        "target": "http://127.0.0.1:3000/api/backend/health",
+        "status": 200
+      },
+      {
+        "source": "frontend container",
+        "target": "http://console_backend:8000/health",
+        "status": 200
+      },
+      {
+        "source": "frontend container",
+        "target": "http://console_backend:8000/api/app/users",
+        "status": 401,
+        "expected": "unauthenticated request reaches backend auth"
+      }
+    ]
+  },
+  "staging": {
+    "docker_network": "barong-ops-console-staging",
+    "services_observed": {
+      "frontend": "barong-ops-console-staging_console_staging_frontend_1",
+      "backend": "barong-ops-console-staging_console_staging_backend_1",
+      "postgres": "barong-ops-console-staging_console_staging_postgres_1"
+    },
+    "runtime_api_env_observed": {
+      "BACKEND_API_URL": "http://console_staging_backend:8000",
+      "NEXT_PUBLIC_API_BASE_URL": "/api"
+    },
+    "status": "observed running; production restore was the deployment target"
+  },
+  "base_url_findings": {
+    "frontend_client_base": "/api/backend",
+    "server_proxy_base_env_precedence": [
+      "BACKEND_API_URL",
+      "NEXT_PUBLIC_API_BASE_URL"
+    ],
+    "stale_env": {
+      "NEXT_PUBLIC_API_BASE_URL": "/api",
+      "impact": "No production impact because BACKEND_API_URL is set and takes precedence in the server-side proxy."
+    }
+  }
+}

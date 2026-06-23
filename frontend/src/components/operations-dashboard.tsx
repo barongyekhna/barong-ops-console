@@ -239,8 +239,8 @@ function FallbackNotice({
   return (
     <div aria-live="polite" className="ops-empty-state" role="status">
       <strong>暂无数据</strong>
-      <span>系统正在准备，请稍后刷新。</span>
-      <span>{textValue(detail, "加载失败，请稍后重试。")}</span>
+      <span>服务暂时不可用，请稍后刷新。</span>
+      <span>{textValue(detail, "服务暂时不可用，请稍后再试。")}</span>
       <button
         className="secondary-button"
         disabled={isLoading}
@@ -336,10 +336,13 @@ export function OperationsDashboard() {
         health: batchData(overview.health),
         healthError: batchError(
           overview.health,
-          "加载失败，请稍后重试。",
+          "服务暂时不可用，请稍后再试。",
         ),
         users: batchData(overview.users),
-        usersError: batchError(overview.users, "加载失败，请稍后重试。"),
+        usersError: batchError(
+          overview.users,
+          "服务暂时不可用，请稍后再试。",
+        ),
       }),
       (error) => ({
         health: null,
@@ -347,7 +350,7 @@ export function OperationsDashboard() {
         users: null,
         usersError: error,
       }),
-      "加载失败，请稍后重试。",
+      "服务暂时不可用，请稍后再试。",
     );
     void loadResource(
       apiRequest<DashboardActivityResponse>(
@@ -361,11 +364,11 @@ export function OperationsDashboard() {
         approvals: batchData(activity.approvals),
         approvalsError: batchError(
           activity.approvals,
-          "加载失败，请稍后重试。",
+          "服务暂时不可用，请稍后再试。",
         ),
         logsError: batchError(
           activity.operation_logs,
-          "加载失败，请稍后重试。",
+          "服务暂时不可用，请稍后再试。",
         ),
         operationLogs: batchData(activity.operation_logs),
       }),
@@ -375,7 +378,7 @@ export function OperationsDashboard() {
         logsError: error,
         operationLogs: null,
       }),
-      "加载失败，请稍后重试。",
+      "服务暂时不可用，请稍后再试。",
     );
   }, []);
 

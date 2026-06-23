@@ -199,6 +199,10 @@ def list_module_manifests() -> list[ModuleManifestV1]:
     return manifests
 
 
+def list_module_manifests_snapshot() -> list[ModuleManifestV1]:
+    return list(_cached_module_manifests())
+
+
 def get_module_manifest(module_key: str) -> ModuleManifestV1 | None:
     for manifest in list_module_manifests():
         if manifest.module_key == module_key:

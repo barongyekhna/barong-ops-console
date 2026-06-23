@@ -2,7 +2,7 @@ import { apiRequest } from "@/lib/api";
 
 export const APPROVAL_LIST_DEFAULT_LIMIT = 10;
 export const APPROVAL_LIST_MAX_LIMIT = 100;
-export const APPROVAL_LIST_TIMEOUT_MS = 2_000;
+export const APPROVAL_LIST_TIMEOUT_MS = 12_000;
 
 export type ApprovalCategory = "control_plane" | "feature";
 export type ApprovalStatus =

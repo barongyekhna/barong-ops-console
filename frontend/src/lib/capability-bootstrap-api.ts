@@ -82,6 +82,8 @@ type CapabilityBootstrapOptions = {
   timeoutMs?: number;
 };
 
+const CAPABILITY_BOOTSTRAP_TIMEOUT_MS = 30_000;
+
 export type CapabilityBootstrapResult = {
   adapterAccessResult: ModuleAdapterApiResult<UserModuleAdaptersResponse>;
   adapterRegistryResult: ModuleAdapterApiResult<ModuleAdapterRegistryResponse>;
@@ -177,7 +179,7 @@ export async function getCapabilityBootstrap(
       {
         method: "GET",
         signal: options.signal,
-        timeoutMs: options.timeoutMs,
+        timeoutMs: options.timeoutMs ?? CAPABILITY_BOOTSTRAP_TIMEOUT_MS,
       },
     );
 

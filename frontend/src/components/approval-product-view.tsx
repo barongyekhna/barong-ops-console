@@ -34,6 +34,7 @@ import {
   type ApprovalListResponse,
 } from "@/lib/approval";
 import {
+  ApiError,
   ApiRequestAbortedError,
   ApiTimeoutError,
   isApiAbortError,
@@ -70,15 +71,20 @@ function emptyApprovalListResponse(): ApprovalListResponse {
 }
 
 function errorText(error: unknown, fallback: string) {
-  void error;
+  if (error instanceof ApiTimeoutError) {
+    return "服务暂时不可用，请稍后再试。";
+  }
+  if (error instanceof ApiError && error.status >= 500) {
+    return "服务暂时不可用，请稍后再试。";
+  }
   return fallback;
 }
 
 function approvalListErrorText(error: unknown) {
   if (error instanceof ApiTimeoutError) {
-    return "加载失败，请稍后重试。";
+    return "服务暂时不可用，请稍后再试。";
   }
-  return errorText(error, "加载失败，请稍后重试。");
+  return errorText(error, "服务暂时不可用，请稍后再试。");
 }
 
 function formatDate(value: string) {

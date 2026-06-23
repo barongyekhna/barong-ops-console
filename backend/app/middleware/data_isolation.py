@@ -8,6 +8,7 @@ from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import inspect
 
+from ..core.api_classification import is_lightweight_control_plane_path
 from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
@@ -48,7 +49,6 @@ MUTATING_METHODS = frozenset(("POST", "PUT", "PATCH", "DELETE"))
 C18D_TARGET_ORG_PAYLOAD_PATHS = frozenset(("/api/app/module/bind",))
 DATA_ISOLATION_EXEMPT_PATHS = frozenset(
     (
-        "/api/control-plane/modules/me",
         "/api/app/permissions/me",
     )
 )
@@ -195,7 +195,10 @@ async def enforce_org_data_isolation(request: Request, call_next):
     if is_auth_me_path(request.url.path):
         return await call_next(request)
 
-    if request.url.path in DATA_ISOLATION_EXEMPT_PATHS:
+    if (
+        request.url.path in DATA_ISOLATION_EXEMPT_PATHS
+        or is_lightweight_control_plane_path(request.url.path)
+    ):
         return await call_next(request)
 
     if not _is_api_path(request):

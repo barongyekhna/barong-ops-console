@@ -41,7 +41,7 @@ function messageFromError(error: unknown, fallback: string) {
       return "当前账号无权执行此操作。";
     }
     if (error.status >= 500) {
-      return "加载失败，请稍后重试。";
+      return "服务暂时不可用，请稍后再试。";
     }
   }
   return fallback;
@@ -187,10 +187,10 @@ function OrganizationListSection({
         <div className="ops-empty-state" role="alert">
           <strong>
             {organizations.length > 0
-              ? "加载失败，请稍后重试"
-              : "加载失败，请稍后重试"}
+              ? "服务暂时不可用"
+              : "服务暂时不可用"}
           </strong>
-          <span>{listError || "加载失败，请稍后重试。"}</span>
+          <span>{listError || "服务暂时不可用，请稍后再试。"}</span>
           {organizations.length > 0 ? (
             <span>正在显示上一次成功加载的组织列表。</span>
           ) : null}
@@ -348,7 +348,7 @@ export function OrganizationProductView() {
         setListError(
           messageFromError(
             error,
-            "加载失败，请稍后重试。",
+            "服务暂时不可用，请稍后再试。",
           ),
         );
       }

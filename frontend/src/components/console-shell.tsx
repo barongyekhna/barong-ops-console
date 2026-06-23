@@ -56,6 +56,12 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const title = pageTitles[pathname] ?? currentCapability?.label ?? "工作台";
   const showFallbackBanner =
     capabilityState.isLoading || capabilityState.uiState === "fallback";
+  const fallbackBannerTitle = capabilityState.isLoading
+    ? "正在加载系统状态"
+    : "服务暂时不可用";
+  const fallbackBannerBody = capabilityState.isLoading
+    ? "部分信息稍后刷新"
+    : "请稍后刷新";
 
   return (
     <div className="console-layout">
@@ -127,8 +133,8 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
               role="status"
             >
               <div>
-                <strong>系统正在准备</strong>
-                <span>部分信息稍后刷新</span>
+                <strong>{fallbackBannerTitle}</strong>
+                <span>{fallbackBannerBody}</span>
               </div>
               <button
                 className="secondary-button"

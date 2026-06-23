@@ -1,4 +1,5 @@
 import json
+import time
 
 from fastapi.testclient import TestClient
 import pytest
@@ -6,12 +7,16 @@ import pytest
 from backend.app.core.modules import MODULE_MANIFESTS_V1
 from backend.app.core.security import hash_password
 from backend.app.db.session import SessionLocal
+from backend.app import main as app_main
+from backend.app.middleware import data_isolation as data_isolation_middleware
+from backend.app.middleware import org_context as org_context_middleware
 from backend.app.models.organization import OrganizationRecord
 from backend.app.models.user import User
 from backend.app.services.api_key_orchestration import (
     ApiKeyIsolationError,
     resolve_module_api_key_for_injection,
 )
+from backend.app.services import module_control_cache_service
 
 pytestmark = pytest.mark.integration
 
@@ -53,6 +58,7 @@ def test_module_control_center_auto_registers(owner_client: TestClient) -> None:
     response = owner_client.get("/api/control-plane/module-control/center")
     assert response.status_code == 200, response.text
     payload = response.json()
+    assert payload["cache_status"] in {"fresh", "stale"}
     assert payload["organization_count"] >= 1
     assert payload["module_count"] >= len(MODULE_MANIFESTS_V1)
     assert payload["auto_registered_count"] >= len(MODULE_MANIFESTS_V1)
@@ -65,6 +71,84 @@ def test_module_control_center_auto_registers(owner_client: TestClient) -> None:
     assert {"module_id", "enabled", "runtime_status"}.issubset(
         default_group["modules"][0]
     )
+
+
+def test_module_control_center_uses_cached_snapshot(
+    owner_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    response = owner_client.get("/api/control-plane/module-control/center")
+    assert response.status_code == 200, response.text
+
+    def fail_live_rebuild(*args, **kwargs):
+        raise AssertionError("module control center rebuilt instead of using cache")
+
+    monkeypatch.setattr(
+        module_control_cache_service,
+        "build_module_control_center",
+        fail_live_rebuild,
+    )
+
+    cached_response = owner_client.get("/api/control-plane/module-control/center")
+    assert cached_response.status_code == 200, cached_response.text
+    cached_payload = cached_response.json()
+    assert cached_payload["cache_status"] == "fresh"
+    assert cached_payload["organization_count"] >= 1
+
+
+def test_module_control_center_uses_lightweight_middleware_boundary(
+    owner_client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    warm_response = owner_client.get("/api/control-plane/module-control/center")
+    assert warm_response.status_code == 200, warm_response.text
+
+    def fail_full_chain(*args, **kwargs):
+        raise AssertionError("full middleware pipeline should not run for center")
+
+    monkeypatch.setattr(app_main, "validate_session", fail_full_chain)
+    monkeypatch.setattr(org_context_middleware, "validate_session", fail_full_chain)
+    monkeypatch.setattr(org_context_middleware, "build_org_context", fail_full_chain)
+    monkeypatch.setattr(
+        data_isolation_middleware,
+        "_c05b_schema_without_c18_data_isolation",
+        fail_full_chain,
+    )
+
+    response = owner_client.get("/api/control-plane/module-control/center")
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["cache_status"] in {"fresh", "stale"}
+    assert payload["organization_count"] >= 1
+
+
+def test_module_control_cache_miss_returns_partial_without_blocking(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    module_control_cache_service.reset_module_control_center_cache_for_tests()
+
+    def slow_refresh():
+        time.sleep(0.05)
+        raise RuntimeError("slow backend aggregation")
+
+    monkeypatch.setattr(
+        module_control_cache_service,
+        "_refresh_snapshot",
+        slow_refresh,
+    )
+
+    started = time.perf_counter()
+    response = module_control_cache_service.get_module_control_center_cached(
+        max_wait_seconds=0.001,
+    )
+    elapsed = time.perf_counter() - started
+
+    assert response.cache_status == "partial"
+    assert response.organization_count == 0
+    assert elapsed < 0.03
+    module_control_cache_service.stop_module_control_cache_worker()
+    module_control_cache_service.reset_module_control_center_cache_for_tests()
 
 
 def test_module_control_toggle_persists(owner_client: TestClient) -> None:

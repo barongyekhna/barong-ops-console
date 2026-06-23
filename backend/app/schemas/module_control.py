@@ -35,6 +35,8 @@ class ModuleControlCenterResponse(BaseModel):
     organization_count: int = Field(ge=0)
     module_count: int = Field(ge=0)
     auto_registered_count: int = Field(ge=0)
+    cache_status: Literal["fresh", "stale", "partial"] = "fresh"
+    generated_at: datetime | None = None
 
 
 class ModuleControlUpdateRequest(BaseModel):

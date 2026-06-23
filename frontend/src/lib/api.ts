@@ -10,7 +10,9 @@ export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 const API_PROXY_BASE = "/api/backend";
 const AUTH_SESSION_STORAGE_KEY = "barong-auth-session";
 const SESSION_TOKEN_HEADER = "X-Session-Token";
-export const DEFAULT_API_TIMEOUT_MS = 5_000;
+export const DEFAULT_API_TIMEOUT_MS = 15_000;
+const CAPABILITY_BOOTSTRAP_TIMEOUT_MS = 30_000;
+const MODULE_CONTROL_TIMEOUT_MS = 60_000;
 const DEFAULT_API_RETRY_LIMIT = 1;
 const RETRYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
@@ -36,7 +38,7 @@ export class ApiRequestAbortedError extends Error {
 
 export class ApiTimeoutError extends ApiRequestAbortedError {
   constructor(readonly timeoutMs: number) {
-    super(`The request timed out after ${timeoutMs}ms.`);
+    super("服务暂时不可用，请稍后再试。");
     this.name = "ApiTimeoutError";
   }
 }
@@ -48,8 +50,18 @@ type ApiRequestOptions = Omit<RequestInit, "body"> & {
 };
 
 function defaultTimeoutMsForPath(path: string, method: string) {
-  void path;
-  void method;
+  if (method !== "GET") {
+    return DEFAULT_API_TIMEOUT_MS;
+  }
+
+  const normalizedPath = new URL(path, "https://frontend.local").pathname;
+  if (normalizedPath === "/capability/bootstrap") {
+    return CAPABILITY_BOOTSTRAP_TIMEOUT_MS;
+  }
+  if (normalizedPath === "/module-control/center") {
+    return MODULE_CONTROL_TIMEOUT_MS;
+  }
+
   return DEFAULT_API_TIMEOUT_MS;
 }
 
@@ -220,7 +232,9 @@ function isTechnicalErrorMessage(message: string) {
     normalized === "invalid request." ||
     normalized === "invalid request" ||
     normalized === "request failed." ||
-    normalized === "request failed"
+    normalized === "request failed" ||
+    normalized === "加载失败，请稍后重试。" ||
+    normalized === "服务暂时不可用，请稍后重试。"
   );
 }
 

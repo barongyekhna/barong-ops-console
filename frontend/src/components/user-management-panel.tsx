@@ -197,7 +197,7 @@ export function UserManagementPanel() {
       setRoleCatalogError(
         formatUsersApiError(
           error,
-          "加载失败，请稍后重试。",
+          "服务暂时不可用，请稍后再试。",
         ),
       );
     } finally {
@@ -222,7 +222,7 @@ export function UserManagementPanel() {
       setOrganizationsError(
         formatUsersApiError(
           error,
-          "加载失败，请稍后重试。",
+          "服务暂时不可用，请稍后再试。",
         ),
       );
     } finally {
@@ -251,7 +251,7 @@ export function UserManagementPanel() {
         setListError(
           formatUsersApiError(
             error,
-            "加载失败，请稍后重试。",
+            "服务暂时不可用，请稍后再试。",
           ),
         );
       } finally {
@@ -802,10 +802,10 @@ export function UserManagementPanel() {
             <div>
               <h2>
                 {users.length > 0
-                  ? "加载失败，请稍后重试"
-                  : "加载失败，请稍后重试"}
+                  ? "服务暂时不可用"
+                  : "服务暂时不可用"}
               </h2>
-              <p>{listError || "加载失败，请稍后重试。"}</p>
+              <p>{listError || "服务暂时不可用，请稍后再试。"}</p>
               {users.length > 0 ? (
                 <p>正在显示上一次成功加载的用户列表。</p>
               ) : null}

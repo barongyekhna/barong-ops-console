@@ -349,13 +349,28 @@ function organizationLabel(organization: OrganizationOption) {
   return organization.org_name.trim() || "未命名组织";
 }
 
+function validOrganizationId(
+  organizations: OrganizationOption[],
+  currentOrgId: string,
+) {
+  if (
+    currentOrgId &&
+    organizations.some((organization) => organization.org_id === currentOrgId)
+  ) {
+    return currentOrgId;
+  }
+  return organizations[0]?.org_id ?? "";
+}
+
 function OwnerModuleControlCenter() {
   const [controlCenter, setControlCenter] =
     useState<ModuleControlCenterResponse | null>(null);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
+  const [organizationCount, setOrganizationCount] = useState(0);
   const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
   const [bindings, setBindings] = useState<ApiKeyBindingRecord[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isOrganizationsLoading, setIsOrganizationsLoading] = useState(true);
+  const [isControlDataLoading, setIsControlDataLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -379,40 +394,65 @@ function OwnerModuleControlCenter() {
   });
 
   const refresh = useCallback(async () => {
-    setIsLoading(true);
     setError("");
+    setIsOrganizationsLoading(true);
+    setIsControlDataLoading(true);
+
+    let hydratedOrganizations: OrganizationOption[] = [];
     try {
-      const [center, keys, keyBindings, organizationsResponse] = await Promise.all([
+      const organizationsResponse = await listOrganizations(100, 0);
+      hydratedOrganizations = organizationsResponse.items;
+      setOrganizations(hydratedOrganizations);
+      setOrganizationCount(organizationsResponse.count);
+
+      setKeyForm((current) => ({
+        ...current,
+        org_id: validOrganizationId(hydratedOrganizations, current.org_id),
+      }));
+      setBindingForm((current) => ({
+        ...current,
+        org_id: validOrganizationId(hydratedOrganizations, current.org_id),
+      }));
+    } catch (organizationLoadError) {
+      setOrganizations([]);
+      setOrganizationCount(0);
+      setError(
+        messageFromError(
+          organizationLoadError,
+          "组织数据暂时不可用，请稍后再试。",
+        ),
+      );
+      setIsOrganizationsLoading(false);
+      setIsControlDataLoading(false);
+      return;
+    } finally {
+      setIsOrganizationsLoading(false);
+    }
+
+    try {
+      const [center, keys, keyBindings] = await Promise.all([
         listModuleControlCenter(),
         listApiKeys(),
         listApiKeyBindings(),
-        listOrganizations(100, 0),
       ]);
       setControlCenter(center);
       setApiKeys(keys.items);
       setBindings(keyBindings.items);
-      setOrganizations(organizationsResponse.items);
 
-      const firstOrg =
-        organizationsResponse.items[0]?.org_id || center.organizations[0]?.org_id || "";
+      const controlGroupsByOrgId = new Map(
+        center.organizations.map((group) => [group.org_id, group]),
+      );
 
       setKeyForm((current) => ({
         ...current,
-        org_id:
-          current.org_id &&
-          organizationsResponse.items.some((item) => item.org_id === current.org_id)
-            ? current.org_id
-            : firstOrg,
+        org_id: validOrganizationId(hydratedOrganizations, current.org_id),
       }));
       setBindingForm((current) => {
-        const selectedOrg =
-          current.org_id &&
-          organizationsResponse.items.some((item) => item.org_id === current.org_id)
-            ? current.org_id
-            : firstOrg;
-        const orgModules =
-          center.organizations.find((group) => group.org_id === selectedOrg)
-            ?.modules ?? [];
+        const selectedOrg = validOrganizationId(
+          hydratedOrganizations,
+          current.org_id,
+        );
+        const orgModules = controlGroupsByOrgId.get(selectedOrg)?.modules ?? [];
         const orgKeys = keys.items.filter((key) => key.org_id === selectedOrg);
 
         return {
@@ -430,9 +470,9 @@ function OwnerModuleControlCenter() {
         };
       });
     } catch (loadError) {
-      setError(messageFromError(loadError, "加载失败，请稍后重试。"));
+      setError(messageFromError(loadError, "服务暂时不可用，请稍后再试。"));
     } finally {
-      setIsLoading(false);
+      setIsControlDataLoading(false);
     }
   }, []);
 
@@ -440,33 +480,36 @@ function OwnerModuleControlCenter() {
     void refresh();
   }, [refresh]);
 
+  const controlGroupsByOrgId = useMemo(() => {
+    const groups = new Map<string, ModuleControlCenterResponse["organizations"][number]>();
+    for (const group of controlCenter?.organizations ?? []) {
+      groups.set(group.org_id, group);
+    }
+    return groups;
+  }, [controlCenter]);
+
   const selectedOrgModules = useMemo(() => {
     const orgId = bindingForm.org_id || keyForm.org_id;
-    return (
-      controlCenter?.organizations.find((group) => group.org_id === orgId)
-        ?.modules ?? []
-    );
-  }, [bindingForm.org_id, controlCenter, keyForm.org_id]);
+    return controlGroupsByOrgId.get(orgId)?.modules ?? [];
+  }, [bindingForm.org_id, controlGroupsByOrgId, keyForm.org_id]);
 
   const availableKeysForOrg = useMemo(
     () => apiKeys.filter((key) => key.org_id === bindingForm.org_id),
     [apiKeys, bindingForm.org_id],
   );
 
-  const formOrganizations = useMemo<OrganizationOption[]>(() => {
-    if (organizations.length > 0) {
-      return organizations;
-    }
-    return (
-      controlCenter?.organizations.map((group) => ({
-        org_id: group.org_id,
-        org_name: group.org_name,
-        org_type: "",
-        owner_user_id: "",
-        status: "active",
-      })) ?? []
-    );
-  }, [controlCenter, organizations]);
+  const moduleGroups = useMemo(
+    () =>
+      organizations.map((organization) => {
+        const centerGroup = controlGroupsByOrgId.get(organization.org_id);
+        return {
+          modules: centerGroup?.modules ?? [],
+          org_id: organization.org_id,
+          org_name: organizationLabel(organization),
+        };
+      }),
+    [controlGroupsByOrgId, organizations],
+  );
 
   const moduleNameById = useMemo(() => {
     const names = new Map<string, string>();
@@ -487,8 +530,7 @@ function OwnerModuleControlCenter() {
 
   function handleBindingOrganizationChange(orgId: string) {
     const modules =
-      controlCenter?.organizations.find((group) => group.org_id === orgId)
-        ?.modules ?? [];
+      controlGroupsByOrgId.get(orgId)?.modules ?? [];
     const keys = apiKeys.filter((key) => key.org_id === orgId);
     setBindingForm((current) => ({
       ...current,
@@ -607,19 +649,25 @@ function OwnerModuleControlCenter() {
     }
   }
 
-  const organizationCount = controlCenter?.organization_count ?? 0;
-  const moduleCount = controlCenter?.module_count ?? 0;
+  const isLoading = isOrganizationsLoading || isControlDataLoading;
+  const hasOrganizations = organizations.length > 0;
+  const organizationSelectDisabled =
+    isSaving || !hasOrganizations || (isOrganizationsLoading && !hasOrganizations);
+  const moduleCount =
+    moduleGroups.reduce((sum, group) => sum + group.modules.length, 0) ||
+    controlCenter?.module_count ||
+    0;
   const activeModuleCount =
-    controlCenter?.organizations.reduce(
+    moduleGroups.reduce(
       (sum, group) => sum + group.modules.filter((module) => module.enabled).length,
       0,
-    ) ?? 0;
+    );
   const errorModuleCount =
-    controlCenter?.organizations.reduce(
+    moduleGroups.reduce(
       (sum, group) =>
         sum + group.modules.filter((module) => module.runtime_status === "error").length,
       0,
-    ) ?? 0;
+    );
 
   return (
     <section className="module-registry-workspace" aria-label="模块管理中心">
@@ -683,7 +731,37 @@ function OwnerModuleControlCenter() {
       ) : null}
 
       <div className="module-control-org-list">
-        {controlCenter?.organizations.map((group) => (
+        {isOrganizationsLoading && organizations.length === 0 ? (
+          <section className="ops-panel ops-panel-wide">
+            <div className="ops-panel-heading">
+              <div>
+                <h3>组织数据加载中</h3>
+                <p>正在同步后端组织列表。</p>
+              </div>
+              <LoaderCircle className="spin" aria-hidden="true" size={18} />
+            </div>
+          </section>
+        ) : null}
+        {!isOrganizationsLoading && organizations.length === 0 ? (
+          <section className="ops-panel ops-panel-wide">
+            <div className="ops-panel-heading">
+              <div>
+                <h3>组织数据未返回</h3>
+                <p>请刷新后重试。</p>
+              </div>
+              <button
+                className="secondary-button"
+                disabled={isLoading || isSaving}
+                onClick={() => void refresh()}
+                type="button"
+              >
+                <RotateCcw aria-hidden="true" size={17} />
+                刷新
+              </button>
+            </div>
+          </section>
+        ) : null}
+        {moduleGroups.map((group) => (
           <section className="ops-panel ops-panel-wide" key={group.org_id}>
             <div className="ops-panel-heading">
               <div>
@@ -692,40 +770,52 @@ function OwnerModuleControlCenter() {
               </div>
               <span className="ops-source">{group.modules.length} 个模块</span>
             </div>
-            <div className="module-control-card-grid">
-              {group.modules.map((module) => (
-                <article className="module-control-card" key={module.module_id}>
-                  <div className="module-control-card-top">
-                    <div>
-                      <strong>{module.display_name}</strong>
-                      <span>{moduleDescription(module.module_id)}</span>
+            {isControlDataLoading && group.modules.length === 0 ? (
+              <div className="ops-empty-state" role="status">
+                <strong>模块数据加载中</strong>
+                <span>正在同步该组织的模块状态。</span>
+              </div>
+            ) : group.modules.length === 0 ? (
+              <div className="ops-empty-state" role="status">
+                <strong>模块数据暂未返回</strong>
+                <span>请刷新后重试。</span>
+              </div>
+            ) : (
+              <div className="module-control-card-grid">
+                {group.modules.map((module) => (
+                  <article className="module-control-card" key={module.module_id}>
+                    <div className="module-control-card-top">
+                      <div>
+                        <strong>{module.display_name}</strong>
+                        <span>{moduleDescription(module.module_id)}</span>
+                      </div>
+                      <span
+                        className={`module-control-status ${module.runtime_status}`}
+                      >
+                        {runtimeStatusLabel(module.runtime_status)}
+                      </span>
                     </div>
-                    <span
-                      className={`module-control-status ${module.runtime_status}`}
-                    >
-                      {runtimeStatusLabel(module.runtime_status)}
-                    </span>
-                  </div>
-                  <div className="module-control-card-bottom">
-                    <label className="module-toggle">
-                      <input
-                        checked={module.enabled}
-                        disabled={isSaving}
-                        onChange={() => void toggleModule(module)}
-                        type="checkbox"
-                      />
-                      <span aria-hidden="true" />
-                    </label>
-                    <span>{module.enabled ? "已启用" : "已停用"}</span>
-                  </div>
-                  {module.runtime_error_message ? (
-                    <p className="module-error-badge">
-                      运行异常：{module.runtime_error_message}
-                    </p>
-                  ) : null}
-                </article>
-              ))}
-            </div>
+                    <div className="module-control-card-bottom">
+                      <label className="module-toggle">
+                        <input
+                          checked={module.enabled}
+                          disabled={isSaving}
+                          onChange={() => void toggleModule(module)}
+                          type="checkbox"
+                        />
+                        <span aria-hidden="true" />
+                      </label>
+                      <span>{module.enabled ? "已启用" : "已停用"}</span>
+                    </div>
+                    {module.runtime_error_message ? (
+                      <p className="module-error-badge">
+                        运行异常：{module.runtime_error_message}
+                      </p>
+                    ) : null}
+                  </article>
+                ))}
+              </div>
+            )}
           </section>
         ))}
       </div>
@@ -744,11 +834,17 @@ function OwnerModuleControlCenter() {
             <span>组织</span>
             <span className="input-shell">
               <select
+                disabled={organizationSelectDisabled}
                 onChange={(event) => handleKeyOrganizationChange(event.target.value)}
                 required
                 value={keyForm.org_id}
               >
-                {formOrganizations.map((organization) => (
+                {!hasOrganizations ? (
+                  <option value="">
+                    {isOrganizationsLoading ? "组织加载中" : "暂无组织"}
+                  </option>
+                ) : null}
+                {organizations.map((organization) => (
                   <option key={organization.org_id} value={organization.org_id}>
                     {organizationLabel(organization)}
                   </option>
@@ -805,7 +901,11 @@ function OwnerModuleControlCenter() {
               />
             </span>
           </label>
-          <button className="primary-button" disabled={isSaving} type="submit">
+          <button
+            className="primary-button"
+            disabled={isSaving || !keyForm.org_id || !hasOrganizations}
+            type="submit"
+          >
             <Plus aria-hidden="true" size={17} />
             新增密钥
           </button>
@@ -934,11 +1034,17 @@ function OwnerModuleControlCenter() {
             <span>组织</span>
             <span className="input-shell">
               <select
+                disabled={organizationSelectDisabled}
                 onChange={(event) => handleBindingOrganizationChange(event.target.value)}
                 required
                 value={bindingForm.org_id}
               >
-                {formOrganizations.map((organization) => (
+                {!hasOrganizations ? (
+                  <option value="">
+                    {isOrganizationsLoading ? "组织加载中" : "暂无组织"}
+                  </option>
+                ) : null}
+                {organizations.map((organization) => (
                   <option key={organization.org_id} value={organization.org_id}>
                     {organizationLabel(organization)}
                   </option>
@@ -950,6 +1056,7 @@ function OwnerModuleControlCenter() {
             <span>模块</span>
             <span className="input-shell">
               <select
+                disabled={isSaving || selectedOrgModules.length === 0}
                 onChange={(event) =>
                   setBindingForm((current) => ({
                     ...current,
@@ -971,6 +1078,7 @@ function OwnerModuleControlCenter() {
             <span>密钥</span>
             <span className="input-shell">
               <select
+                disabled={isSaving || availableKeysForOrg.length === 0}
                 onChange={(event) =>
                   setBindingForm((current) => ({
                     ...current,

@@ -219,7 +219,7 @@ test("approval list requests are bounded and render degraded state", () => {
 
   assert.match(approvalApiSource, /APPROVAL_LIST_DEFAULT_LIMIT\s*=\s*10/);
   assert.match(approvalApiSource, /APPROVAL_LIST_MAX_LIMIT\s*=\s*100/);
-  assert.match(approvalApiSource, /APPROVAL_LIST_TIMEOUT_MS\s*=\s*2_000/);
+  assert.match(approvalApiSource, /APPROVAL_LIST_TIMEOUT_MS\s*=\s*12_000/);
   assert.match(approvalApiSource, /retryLimit:\s*0/);
   assert.match(approvalApiSource, /record\.status === "degraded"/);
   assert.match(approvalViewSource, /ApiTimeoutError/);

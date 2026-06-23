@@ -4,6 +4,7 @@ from time import perf_counter
 
 from fastapi import Request
 
+from ..core.api_classification import is_lightweight_control_plane_path
 from ..core.auth_paths import is_auth_login_path, is_auth_me_path
 from ..services.event_collector import (
     classify_module_from_path,
@@ -52,7 +53,11 @@ def request_trace_root_id(request: Request, fallback_context_id: str) -> str:
 
 
 async def capture_audit_events(request: Request, call_next):
-    if is_auth_me_path(request.url.path) or is_auth_login_path(request.url.path):
+    if (
+        is_auth_me_path(request.url.path)
+        or is_auth_login_path(request.url.path)
+        or is_lightweight_control_plane_path(request.url.path)
+    ):
         return await call_next(request)
 
     context_id = ensure_request_context_id(request)

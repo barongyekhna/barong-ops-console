@@ -712,7 +712,7 @@ async function proxyRequest(
     });
   } catch {
     return Response.json(
-      { detail: "加载失败，请稍后重试。" },
+      { detail: "服务暂时不可用，请稍后再试。" },
       { status: 503 },
     );
   }
@@ -765,7 +765,7 @@ async function fetchCapabilityBootstrapTarget(
       target.key,
       {
         data: null,
-        detail: "加载失败，请稍后重试。",
+        detail: "服务暂时不可用，请稍后再试。",
         ok: false,
         status: 404,
       },
@@ -800,7 +800,7 @@ async function fetchCapabilityBootstrapTarget(
       target.key,
       {
         data: null,
-        detail: "加载失败，请稍后重试。",
+        detail: "服务暂时不可用，请稍后再试。",
         ok: false,
         status: 503,
       },

@@ -1,0 +1,121 @@
+{
+  "generated_at_utc": "2026-06-23T02:13:22Z",
+  "proxy_entrypoint": "frontend/src/app/api/backend/[...path]/route.ts",
+  "frontend_facade_prefix": "/api/backend",
+  "backend_prefixes": {
+    "public": "/api/public",
+    "application": "/api/app",
+    "control_plane": "/api/control-plane"
+  },
+  "base_url_resolution": {
+    "runtime_BACKEND_API_URL": "http://console_backend:8000",
+    "runtime_NEXT_PUBLIC_API_BASE_URL": "/api",
+    "effective_base_url": "http://console_backend:8000"
+  },
+  "validated_mappings": [
+    {
+      "frontend_path": "/api/backend/auth/me",
+      "backend_path": "/api/public/auth/me",
+      "layer": "public",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/users",
+      "backend_path": "/api/app/users",
+      "layer": "application",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/users/roles",
+      "backend_path": "/api/app/users/roles",
+      "layer": "application",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/organizations",
+      "backend_path": "/api/app/organizations",
+      "layer": "application",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/approval/list",
+      "backend_path": "/api/app/approval/list",
+      "layer": "application",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/permissions/me",
+      "backend_path": "/api/app/permissions/me",
+      "layer": "application",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/permissions/registry",
+      "backend_path": "/api/app/permissions/registry",
+      "layer": "application",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/api-key-orchestration/keys",
+      "backend_path": "/api/control-plane/api-key-orchestration/keys",
+      "layer": "control_plane",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/api-key-orchestration/bindings",
+      "backend_path": "/api/control-plane/api-key-orchestration/bindings",
+      "layer": "control_plane",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/module-control/center",
+      "backend_path": "/api/control-plane/module-control/center",
+      "layer": "control_plane",
+      "post_restore_status": 200
+    },
+    {
+      "frontend_path": "/api/backend/capability/bootstrap",
+      "backend_path": "/api/control-plane/capability/bootstrap",
+      "layer": "control_plane",
+      "post_restore_status": 200
+    }
+  ],
+  "proxy_controls": {
+    "allowed_public_paths": [
+      "health",
+      "auth/context",
+      "auth/me",
+      "auth/login",
+      "auth/logout",
+      "auth/change-password"
+    ],
+    "allowed_application_paths_relevant_to_incident": [
+      "users",
+      "users/roles",
+      "organizations",
+      "approval/list",
+      "approvals/list",
+      "permissions/me",
+      "permissions/registry",
+      "permissions/users/{user_id}/assignments"
+    ],
+    "allowed_control_plane_paths_relevant_to_incident": [
+      "api-key-orchestration/keys",
+      "api-key-orchestration/bindings",
+      "module-control/center",
+      "capability/bootstrap"
+    ],
+    "blocked_security_paths_preserved": [
+      "webhook",
+      "n8n",
+      "webhook-gateway/ingress"
+    ]
+  },
+  "error_handling": {
+    "proxy_connectivity_failure_status": 503,
+    "proxy_connectivity_failure_detail": "服务暂时不可用，请稍后再试。",
+    "frontend_timeout_failure_detail": "服务暂时不可用，请稍后再试。",
+    "stuck_preparing_copy_removed": true
+  },
+  "conclusion": "Proxy mapping and backend prefixes are aligned. The restored runtime fixes the API failures by aligning frontend communication timeouts with observed production backend latency and by returning clear service-unavailable states on failures."
+}

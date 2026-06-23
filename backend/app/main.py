@@ -66,18 +66,23 @@ from .api.module_visibility import router as module_visibility_router
 from .api.org import router as org_router
 from .api.org_membership import router as org_membership_router
 from .api.shared_module import router as shared_module_router
+from .core.api_classification import is_lightweight_control_plane_path
 from .core.auth_paths import is_auth_me_path
 from .core.config import get_settings
 from .core.environments import is_production_like
 from .core.security_headers import apply_security_headers
 from .core.session_cookies import get_session_id_from_request
 from .db.session import managed_read_session
+from .models.auth_session import AuthSession
+from .models.user import User
 from .middleware.event_collector import capture_audit_events
 from .middleware.data_isolation import enforce_org_data_isolation
 from .middleware.org_context import org_context_middleware
 from .middleware.permission import enforce_permission_isolation
 from .services.event_collector import emit_event
 from .services.auth_service import (
+    AuthenticatedSession,
+    AuthenticatedUserIdentity,
     InvalidSessionError,
     validate_session,
     validate_session_identity_fast,
@@ -85,6 +90,11 @@ from .services.auth_service import (
 from .services.login_side_effects import (
     start_login_side_effect_worker,
     stop_login_side_effect_worker,
+)
+from .services.module_control_cache_service import (
+    refresh_module_control_center_cache_async,
+    start_module_control_cache_worker,
+    stop_module_control_cache_worker,
 )
 from .services.permission_decision_engine import PermissionDecisionEngine
 from .services.request_session_cache import cache_authenticated_session
@@ -165,6 +175,38 @@ def _auth_me_payload(request: Request) -> dict[str, object] | None:
         )
 
 
+def _session_from_identity(
+    identity: AuthenticatedUserIdentity,
+    *,
+    audit: object,
+) -> AuthenticatedSession:
+    user = User(
+        username=identity.username,
+        password_hash="",
+        role=identity.role,
+        organization_id=identity.organization_id,
+        must_change_password=identity.must_change_password,
+        is_active=identity.is_active,
+    )
+    user.id = identity.id
+    user.last_login_at = identity.last_login_at
+
+    auth_session = AuthSession(
+        session_id_hash=identity.session_id_hash,
+        user_id=identity.id,
+        issued_at=identity.session_expires_at,
+        expires_at=identity.session_expires_at,
+        last_seen_at=None,
+        ip_address=getattr(audit, "ip_address", None),
+        user_agent=getattr(audit, "user_agent", None),
+    )
+    auth_session.id = 0
+    auth_session.invalidated_at = None
+    auth_session.invalidation_reason = None
+    auth_session.user = user
+    return AuthenticatedSession(user=user, auth_session=auth_session)
+
+
 def _production_error_detail(request: Request, status_code: int) -> str:
     if _is_control_plane_path(request.url.path):
         return "Not found."
@@ -209,11 +251,14 @@ def enforce_production_migration_safety() -> None:
         enforce_migration_safety(engine, app_env=settings.app_env)
     start_session_seen_flush_worker()
     start_login_side_effect_worker()
+    start_module_control_cache_worker()
+    refresh_module_control_center_cache_async(force=True)
 
 
 @app.on_event("shutdown")
 def flush_deferred_session_seen_updates() -> None:
     stop_login_side_effect_worker()
+    stop_module_control_cache_worker()
     stop_session_seen_flush_worker()
 
 
@@ -316,30 +361,73 @@ async def enforce_control_plane_isolation(request: Request, call_next):
         return await call_next(request)
 
     audit = get_audit_context(request)
-    emit_event(
-        event_type="control_plane.entry",
-        module="C16",
-        action=f"{request.method} {request.url.path}",
-        source="backend",
-        status="pending",
-        context_id=audit.request_id,
-        payload={"path": request.url.path, "method": request.method},
-    )
-    session_id = get_session_id_from_request(request, settings=settings)
-    if session_id is None:
+    lightweight_control_plane = is_lightweight_control_plane_path(request.url.path)
+    if not lightweight_control_plane:
         emit_event(
-            event_type="control_plane.exit",
+            event_type="control_plane.entry",
             module="C16",
             action=f"{request.method} {request.url.path}",
             source="backend",
-            status="failed",
+            status="pending",
             context_id=audit.request_id,
-            payload={"reason": "missing_session"},
+            payload={"path": request.url.path, "method": request.method},
         )
+    session_id = get_session_id_from_request(request, settings=settings)
+    if session_id is None:
+        if not lightweight_control_plane:
+            emit_event(
+                event_type="control_plane.exit",
+                module="C16",
+                action=f"{request.method} {request.url.path}",
+                source="backend",
+                status="failed",
+                context_id=audit.request_id,
+                payload={"reason": "missing_session"},
+            )
         return _control_plane_denied_response(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Not authenticated.",
         )
+
+    if lightweight_control_plane:
+        with managed_read_session() as db:
+            try:
+                identity = validate_session_identity_fast(db, session_id=session_id)
+            except InvalidSessionError:
+                return _control_plane_denied_response(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Not authenticated.",
+                )
+
+        current_session = _session_from_identity(identity, audit=audit)
+        queue_session_seen(identity.session_id_hash)
+        cache_authenticated_session(
+            request,
+            session_id=session_id,
+            current_session=current_session,
+        )
+        decision = PermissionDecisionEngine(request=request).decide_platform_metadata(
+            UnifiedPermissionRequest(
+                user_id=current_session.user.id,
+                org_id=None,
+                module_id="C16",
+                action="admin",
+                role=current_session.user.role,
+                scope_type="global",
+                scope_key="*",
+                source="control_plane_lightweight_isolation",
+            )
+        )
+        request.state.control_plane_rbac_decision = decision
+        if not decision.allowed:
+            request.state.user_id = str(current_session.user.id)
+            return _control_plane_denied_response(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden.",
+            )
+        request.state.user_id = str(current_session.user.id)
+        request.state.control_plane_pipeline = "lightweight"
+        return await call_next(request)
 
     with managed_read_session() as db:
         try:

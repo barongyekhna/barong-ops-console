@@ -2,6 +2,8 @@
 
 import { apiRequest } from "@/lib/api";
 
+const API_KEY_ORCHESTRATION_TIMEOUT_MS = 15_000;
+
 export type ApiKeyStatus = "active" | "disabled" | "deleted";
 
 export type ApiKeyRecord = {
@@ -43,7 +45,7 @@ export type ApiKeyBindingListResponse = {
 export function listApiKeys() {
   return apiRequest<ApiKeyListResponse>("/api-key-orchestration/keys", {
     method: "GET",
-    timeoutMs: 8_000,
+    timeoutMs: API_KEY_ORCHESTRATION_TIMEOUT_MS,
   });
 }
 
@@ -59,7 +61,7 @@ export function createApiKey(payload: {
     {
       body,
       method: "POST",
-      timeoutMs: 8_000,
+      timeoutMs: API_KEY_ORCHESTRATION_TIMEOUT_MS,
     },
   );
 }
@@ -78,7 +80,7 @@ export function updateApiKey(
     {
       body: payload,
       method: "PATCH",
-      timeoutMs: 8_000,
+      timeoutMs: API_KEY_ORCHESTRATION_TIMEOUT_MS,
     },
   );
 }
@@ -88,7 +90,7 @@ export function deleteApiKey(keyId: string) {
     `/api-key-orchestration/keys/${encodeURIComponent(keyId)}`,
     {
       method: "DELETE",
-      timeoutMs: 8_000,
+      timeoutMs: API_KEY_ORCHESTRATION_TIMEOUT_MS,
     },
   );
 }
@@ -96,7 +98,7 @@ export function deleteApiKey(keyId: string) {
 export function listApiKeyBindings() {
   return apiRequest<ApiKeyBindingListResponse>("/api-key-orchestration/bindings", {
     method: "GET",
-    timeoutMs: 8_000,
+    timeoutMs: API_KEY_ORCHESTRATION_TIMEOUT_MS,
   });
 }
 
@@ -112,7 +114,7 @@ export function createApiKeyBinding(payload: {
     {
       body,
       method: "POST",
-      timeoutMs: 8_000,
+      timeoutMs: API_KEY_ORCHESTRATION_TIMEOUT_MS,
     },
   );
 }
@@ -122,7 +124,7 @@ export function deleteApiKeyBinding(bindingId: string) {
     `/api-key-orchestration/bindings/${encodeURIComponent(bindingId)}`,
     {
       method: "DELETE",
-      timeoutMs: 8_000,
+      timeoutMs: API_KEY_ORCHESTRATION_TIMEOUT_MS,
     },
   );
 }

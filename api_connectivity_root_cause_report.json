@@ -1,0 +1,212 @@
+{
+  "generated_at_utc": "2026-06-23T02:13:22Z",
+  "scope": "system-wide API connectivity diagnosis and restore",
+  "constraints_observed": {
+    "rbac_modified": false,
+    "db_schema_modified": false,
+    "business_modules_modified": false,
+    "changed_layers": [
+      "frontend API timeout policy",
+      "Next.js API proxy error fallback",
+      "frontend API failure display fallback",
+      "frontend runtime deployment"
+    ]
+  },
+  "root_cause": {
+    "primary": "Frontend API requests were timing out before production backend routes returned successful responses.",
+    "not_root_cause": [
+      "backend baseURL mismatch",
+      "missing /api prefix on backend routes",
+      "Next.js proxy path mapping mismatch",
+      "RBAC or database schema failure"
+    ],
+    "evidence": [
+      {
+        "check": "frontend runtime BACKEND_API_URL",
+        "result": "http://console_backend:8000"
+      },
+      {
+        "check": "frontend container to backend /health",
+        "status": 200
+      },
+      {
+        "check": "unauthenticated backend /api/app/users from frontend container",
+        "status": 401,
+        "meaning": "route is reachable and rejected by backend auth, not by network/proxy"
+      },
+      {
+        "check": "authenticated production proxy smoke before fix",
+        "observed_slow_successes": [
+          {
+            "path": "/users?limit=5&offset=0",
+            "status": 200,
+            "elapsed_ms": 7901,
+            "old_timeout_ms": 5000
+          },
+          {
+            "path": "/users/roles",
+            "status": 200,
+            "elapsed_ms": 6112,
+            "old_timeout_ms": 5000
+          },
+          {
+            "path": "/organizations?limit=5&offset=0",
+            "status": 200,
+            "elapsed_ms": 5784,
+            "old_timeout_ms": 5000
+          },
+          {
+            "path": "/approval/list?limit=5&offset=0",
+            "status": 200,
+            "elapsed_ms": 4717,
+            "old_timeout_ms": 2000
+          },
+          {
+            "path": "/api-key-orchestration/keys",
+            "status": 200,
+            "elapsed_ms": 6302,
+            "old_timeout_ms": 8000
+          },
+          {
+            "path": "/capability/bootstrap",
+            "status": 200,
+            "elapsed_ms": 11312,
+            "old_timeout_ms": 5000
+          }
+        ]
+      }
+    ]
+  },
+  "restore_actions": [
+    {
+      "file": "frontend/src/lib/api.ts",
+      "change": "Raised default API timeout from 5000ms to 15000ms and added path-aware defaults for capability bootstrap and module control."
+    },
+    {
+      "file": "frontend/src/lib/approval.ts",
+      "change": "Raised approval list timeout from 2000ms to 12000ms."
+    },
+    {
+      "file": "frontend/src/lib/api-key-orchestration-api.ts",
+      "change": "Raised API key orchestration timeout from 8000ms to 15000ms."
+    },
+    {
+      "file": "frontend/src/lib/capability-bootstrap-api.ts",
+      "change": "Set capability bootstrap timeout to 30000ms."
+    },
+    {
+      "file": "frontend/src/app/api/backend/[...path]/route.ts",
+      "change": "Unified proxy connectivity failures to service-unavailable response text."
+    },
+    {
+      "file": "frontend/src/components/*",
+      "change": "Replaced stuck preparing/loading failure copy on affected API pages with service-unavailable fallback text."
+    }
+  ],
+  "post_restore_authenticated_smoke": {
+    "environment": "production",
+    "frontend_base": "http://127.0.0.1:3000",
+    "login_status": 200,
+    "auth_complete": true,
+    "endpoints": [
+      {
+        "path": "/auth/me",
+        "status": 200,
+        "elapsed_ms": 398
+      },
+      {
+        "path": "/users?limit=5&offset=0",
+        "status": 200,
+        "elapsed_ms": 7097,
+        "items": 2,
+        "count": 2
+      },
+      {
+        "path": "/users/roles",
+        "status": 200,
+        "elapsed_ms": 5092
+      },
+      {
+        "path": "/organizations?limit=5&offset=0",
+        "status": 200,
+        "elapsed_ms": 4099,
+        "items": 2,
+        "count": 2
+      },
+      {
+        "path": "/approval/list?limit=5&offset=0",
+        "status": 200,
+        "elapsed_ms": 4797,
+        "items": 0,
+        "count": 0
+      },
+      {
+        "path": "/permissions/me",
+        "status": 200,
+        "elapsed_ms": 5320
+      },
+      {
+        "path": "/permissions/registry?limit=5&offset=0",
+        "status": 200,
+        "elapsed_ms": 6085,
+        "items": 5,
+        "count": 18
+      },
+      {
+        "path": "/api-key-orchestration/keys",
+        "status": 200,
+        "elapsed_ms": 6904,
+        "items": 0,
+        "count": 0
+      },
+      {
+        "path": "/api-key-orchestration/bindings",
+        "status": 200,
+        "elapsed_ms": 5500,
+        "items": 0,
+        "count": 0
+      },
+      {
+        "path": "/module-control/center",
+        "status": 200,
+        "elapsed_ms": 25103,
+        "organizations": 2,
+        "module_count": 30
+      },
+      {
+        "path": "/capability/bootstrap",
+        "status": 200,
+        "elapsed_ms": 11503,
+        "bootstrap_keys": 9,
+        "bootstrap_failed": 4,
+        "note": "Four subentries are intentionally deferred by backend capability bootstrap."
+      }
+    ]
+  },
+  "deployment": {
+    "frontend_container": "barong-ops-console-prod_console_frontend_1",
+    "frontend_image": "barong-ops-console-prod_console_frontend:latest",
+    "backend_container_restarted": false,
+    "database_container_restarted": false,
+    "notes": [
+      "docker-compose v1 failed to recreate the frontend container with a ContainerConfig compatibility error.",
+      "Frontend was restored manually with the same network, port, restart policy, env file, and compose frontend sensitive-env blank overrides.",
+      "The stopped old frontend container left by the failed compose recreate was removed after the new frontend was running."
+    ]
+  },
+  "validation": {
+    "typecheck": "passed",
+    "frontend_tests": "passed, 13/13",
+    "git_diff_check": "passed",
+    "production_proxy_health": 200,
+    "production_frontend_container_status": "Up",
+    "production_backend_container_status": "Up",
+    "production_postgres_container_status": "Up (healthy)"
+  },
+  "residual_risk": [
+    {
+      "area": "backend latency",
+      "detail": "module-control/center still takes about 25-29 seconds in production. The frontend now waits long enough, but backend performance remains a separate non-connectivity concern."
+    }
+  ]
+}
