@@ -7,6 +7,7 @@ from ...core.session_cookies import (
     get_session_id_from_request,
     set_session_cookie,
 )
+from ...core.roles import normalize_role
 from ...db.session import get_db, get_read_db
 from ...middleware.org_context import build_org_context
 from ...models.auth_session import AuthSession
@@ -69,7 +70,7 @@ def _identity_response(identity: AuthenticatedUserIdentity) -> AuthenticatedUser
     return AuthenticatedUser(
         id=identity.id,
         username=identity.username,
-        role=identity.role,
+        role=normalize_role(identity.role),
         organization_id=identity.organization_id,
         must_change_password=identity.must_change_password,
         is_active=identity.is_active,
@@ -81,7 +82,7 @@ def _user_response(user: User) -> AuthenticatedUser:
     return AuthenticatedUser(
         id=user.id,
         username=user.username,
-        role=user.role,
+        role=normalize_role(user.role),
         organization_id=user.organization_id,
         must_change_password=must_change_password_required(
             role=user.role,
@@ -96,7 +97,7 @@ def _identity_user(identity: AuthenticatedUserIdentity) -> User:
     user = User(
         username=identity.username,
         password_hash="",
-        role=identity.role,
+        role=normalize_role(identity.role),
         organization_id=identity.organization_id,
         must_change_password=identity.must_change_password,
         is_active=identity.is_active,

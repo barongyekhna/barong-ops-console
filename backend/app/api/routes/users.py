@@ -3,8 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from ...core.roles import is_owner_role, list_standard_role_metadata
-from ...core.roles import normalize_role
+from ...core.roles import list_standard_role_metadata, normalize_role
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.common import ListResponse
@@ -23,6 +22,7 @@ from ...services.user_management_service import (
     OwnerRoleNotAllowedError,
     SelfDisableNotAllowedError,
     SelfPasswordResetNotAllowedError,
+    UserManagementPermissionDeniedError,
     UserOrganizationNotFoundError,
     create_managed_user,
     disable_managed_user,
@@ -67,6 +67,11 @@ def _raise_user_management_error(exc: Exception) -> None:
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from None
+    if isinstance(exc, UserManagementPermissionDeniedError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from None
     if isinstance(
         exc,
         (SelfDisableNotAllowedError, SelfPasswordResetNotAllowedError),
@@ -95,47 +100,17 @@ def users(
     organization_id: str | None = Query(default=None, max_length=40),
     role: str | None = Query(default=None, max_length=40),
     db: Session = Depends(get_db),
-    owner: User = Depends(require_user_manager),
+    actor: User = Depends(get_current_user),
 ) -> ListResponse[UserResponse]:
     requested_org = organization_id.strip() if organization_id else None
     requested_org = requested_org or None
     requested_role = normalize_role(role) if role and role.strip() else None
     effective_org = requested_org or None
-    if not is_owner_role(owner.role):
-        org_context = getattr(request.state, "org_context", None)
-        context_org_id = getattr(org_context, "org_id", None)
-        effective_org = context_org_id or owner.organization_id
-        if requested_org is not None and requested_org != effective_org:
-            return ListResponse(items=[], count=0, limit=limit, offset=offset)
-        if effective_org is None:
-            cache_key = api_snapshot_key(
-                "users.list",
-                owner.id,
-                owner.role,
-                requested_org,
-                requested_role,
-                limit,
-                offset,
-            )
-            snapshot = get_api_snapshot(cache_key)
-            if snapshot is not None:
-                return degraded_snapshot(
-                    snapshot,
-                    code="users_org_context_missing",
-                    message="User list is using the last successful snapshot because organization context is unavailable.",
-                    request=request,
-                )
-            raise_structured_api_error(
-                code="users_org_context_missing",
-                message="Organization context is required to list managed users.",
-                request=request,
-                retryable=True,
-            )
 
     cache_key = api_snapshot_key(
         "users.list",
-        owner.id,
-        owner.role,
+        actor.id,
+        actor.role,
         effective_org,
         requested_role,
         limit,
@@ -208,9 +183,13 @@ def user_create(
 
 @router.get("/roles", response_model=UserRolesResponse)
 def user_roles(
-    owner: User = Depends(require_user_manager),
+    actor: User = Depends(get_current_user),
 ) -> UserRolesResponse:
-    del owner
+    if not is_user_manager_role(actor.role):
+        return UserRolesResponse(
+            assignable_roles=[],
+            standard_roles=list_standard_role_metadata(),
+        )
     role_metadata = user_management_role_metadata()
     return UserRolesResponse(
         assignable_roles=role_metadata,
@@ -222,9 +201,9 @@ def user_roles(
 def user_detail(
     user_id: int,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_user_manager),
+    actor: User = Depends(get_current_user),
 ) -> UserResponse:
-    del owner
+    del actor
     try:
         user = get_managed_user(db, user_id)
     except Exception as exc:

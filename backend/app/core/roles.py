@@ -11,6 +11,18 @@ ROLE_VIEWER = "viewer"
 ROLE_SYSTEM = "system"
 ROLE_BOT_AGENT = "bot_agent"
 
+ROLE_ALIASES = MappingProxyType(
+    {
+        "super admin": ROLE_SUPER_ADMIN,
+        "super-admin": ROLE_SUPER_ADMIN,
+        "superadmin": ROLE_SUPER_ADMIN,
+        "org_admin": ROLE_SUPER_ADMIN,
+        "org admin": ROLE_SUPER_ADMIN,
+        "organization_admin": ROLE_SUPER_ADMIN,
+        "organization admin": ROLE_SUPER_ADMIN,
+    }
+)
+
 STANDARD_ROLES = (
     ROLE_OWNER,
     ROLE_ADMIN,
@@ -98,8 +110,34 @@ ROLE_DISPLAY_METADATA = MappingProxyType(
 )
 
 
-def normalize_role(role: str) -> str:
-    return role.strip().lower()
+def normalize_role(role: str | None) -> str:
+    if role is None:
+        return ""
+    normalized = role.strip().lower().replace("-", "_")
+    normalized = "_".join(normalized.split())
+    return ROLE_ALIASES.get(normalized, normalized)
+
+
+def is_super_admin_role(role: str | None) -> bool:
+    return normalize_role(role) == ROLE_SUPER_ADMIN
+
+
+def is_org_admin_like_role(role: str | None) -> bool:
+    return is_super_admin_role(role)
+
+
+def role_filter_values(role: str | None) -> tuple[str, ...]:
+    normalized = normalize_role(role)
+    if normalized == ROLE_SUPER_ADMIN:
+        return (
+            ROLE_SUPER_ADMIN,
+            "super admin",
+            "super-admin",
+            "superadmin",
+            "org_admin",
+            "organization_admin",
+        )
+    return (normalized,) if normalized else ()
 
 
 def is_standard_role(role: str) -> bool:

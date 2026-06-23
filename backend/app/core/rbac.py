@@ -53,11 +53,13 @@ def normalize_rbac_role(role: str) -> str:
 
 def get_role_metadata(role: str) -> RoleMetadata:
     normalized = normalize_rbac_role(role)
-    role_actions = ROLE_PERMISSIONS.get(normalized, frozenset())
+    legacy_alias = LEGACY_ROLE_ALIASES.get(normalized)
+    effective_role = legacy_alias or normalized
+    role_actions = ROLE_PERMISSIONS.get(effective_role, frozenset())
     return RoleMetadata(
         role=role,
         normalized_role=normalized,
-        legacy_alias_of=LEGACY_ROLE_ALIASES.get(normalized),
+        legacy_alias_of=legacy_alias,
         role_actions=role_actions,
-        role_known=normalized in ROLE_PERMISSIONS,
+        role_known=effective_role in ROLE_PERMISSIONS,
     )

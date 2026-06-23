@@ -13,6 +13,7 @@ import {
 import { useAuth } from "@/components/auth-provider";
 import { navigationModuleRecords } from "@/lib/navigation";
 import { getModuleRouteDecision } from "@/lib/module-registry";
+import { isOwnerRole, isSuperAdminRole } from "@/lib/roles";
 
 export function PermissionRouteGuard({
   children,
@@ -28,14 +29,20 @@ export function PermissionRouteGuard({
     useFrontendCapabilityState();
   const { items, moduleAccessUnknown } = useModuleAccess();
   const capability = getCapabilityForPath(pathname);
+  const isAuthenticated = status === "authenticated";
+  const isPrivilegedRole =
+    isOwnerRole(user?.role) || isSuperAdminRole(user?.role);
   const isUserManagerRoute =
-    pathname === "/users" && user?.role === "super_admin";
+    pathname === "/users" && isAuthenticated;
   const isOrganizationListRoute =
-    pathname === "/organizations" && status === "authenticated";
+    pathname === "/organizations" && isAuthenticated;
+  const isPermissionCenterRoute =
+    pathname === "/permissions" && isAuthenticated && isPrivilegedRole;
 
   if (
     isUserManagerRoute ||
-    isOrganizationListRoute
+    isOrganizationListRoute ||
+    isPermissionCenterRoute
   ) {
     return children;
   }

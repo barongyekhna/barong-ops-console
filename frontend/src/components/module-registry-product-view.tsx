@@ -39,6 +39,11 @@ import {
   type ModuleControlState,
 } from "@/lib/module-control-api";
 import {
+  moduleControlToggleKey,
+  optimisticModuleControlState,
+  replaceModuleControlCenterItem,
+} from "@/lib/module-control-state";
+import {
   listOrganizations,
   type OrganizationOption,
 } from "@/lib/users-api";
@@ -367,6 +372,9 @@ function OwnerModuleControlCenter() {
   const [isOrganizationsLoading, setIsOrganizationsLoading] = useState(true);
   const [isControlDataLoading, setIsControlDataLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [pendingModuleToggleIds, setPendingModuleToggleIds] = useState<
+    Set<string>
+  >(new Set());
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [keyForm, setKeyForm] = useState({
@@ -488,6 +496,8 @@ function OwnerModuleControlCenter() {
     return controlGroupsByOrgId.get(orgId)?.modules ?? [];
   }, [bindingForm.org_id, controlGroupsByOrgId, keyForm.org_id]);
 
+  const hasPendingModuleToggles = pendingModuleToggleIds.size > 0;
+
   const availableKeysForOrg = useMemo(
     () => apiKeys.filter((key) => key.org_id === bindingForm.org_id),
     [apiKeys, bindingForm.org_id],
@@ -536,21 +546,44 @@ function OwnerModuleControlCenter() {
   }
 
   async function toggleModule(module: ModuleControlState) {
-    setIsSaving(true);
+    const nextEnabled = !module.enabled;
+    const toggleKey = moduleControlToggleKey(module);
+
+    setPendingModuleToggleIds((current) => {
+      const next = new Set(current);
+      next.add(toggleKey);
+      return next;
+    });
     setNotice("");
     setError("");
+    setControlCenter((current) =>
+      replaceModuleControlCenterItem(
+        current,
+        optimisticModuleControlState(module, nextEnabled),
+      ),
+    );
+
     try {
-      await updateModuleControlState({
-        enabled: !module.enabled,
+      const response = await updateModuleControlState({
+        enabled: nextEnabled,
         moduleId: module.module_id,
         orgId: module.org_id,
       });
-      await refresh();
+      setControlCenter((current) =>
+        replaceModuleControlCenterItem(current, response.item),
+      );
       setNotice("模块状态已更新。");
     } catch (toggleError) {
+      setControlCenter((current) =>
+        replaceModuleControlCenterItem(current, module),
+      );
       setError(messageFromError(toggleError, "模块状态更新失败。"));
     } finally {
-      setIsSaving(false);
+      setPendingModuleToggleIds((current) => {
+        const next = new Set(current);
+        next.delete(toggleKey);
+        return next;
+      });
     }
   }
 
@@ -674,7 +707,7 @@ function OwnerModuleControlCenter() {
         </div>
         <button
           className="secondary-button"
-          disabled={isLoading || isSaving}
+          disabled={isLoading || isSaving || hasPendingModuleToggles}
           onClick={() => void refresh()}
           type="button"
         >
@@ -747,7 +780,7 @@ function OwnerModuleControlCenter() {
               </div>
               <button
                 className="secondary-button"
-                disabled={isLoading || isSaving}
+                disabled={isLoading || isSaving || hasPendingModuleToggles}
                 onClick={() => void refresh()}
                 type="button"
               >
@@ -782,38 +815,44 @@ function OwnerModuleControlCenter() {
               </div>
             ) : (
               <div className="module-control-card-grid">
-                {group.modules.map((module) => (
-                  <article className="module-control-card" key={module.module_id}>
-                    <div className="module-control-card-top">
-                      <div>
-                        <strong>{module.display_name}</strong>
-                        <span>{moduleDescription(module.module_id)}</span>
+                {group.modules.map((module) => {
+                  const togglePending = pendingModuleToggleIds.has(
+                    moduleControlToggleKey(module),
+                  );
+
+                  return (
+                    <article className="module-control-card" key={module.module_id}>
+                      <div className="module-control-card-top">
+                        <div>
+                          <strong>{module.display_name}</strong>
+                          <span>{moduleDescription(module.module_id)}</span>
+                        </div>
+                        <span
+                          className={`module-control-status ${module.runtime_status}`}
+                        >
+                          {runtimeStatusLabel(module.runtime_status)}
+                        </span>
                       </div>
-                      <span
-                        className={`module-control-status ${module.runtime_status}`}
-                      >
-                        {runtimeStatusLabel(module.runtime_status)}
-                      </span>
-                    </div>
-                    <div className="module-control-card-bottom">
-                      <label className="module-toggle">
-                        <input
-                          checked={module.enabled}
-                          disabled={isSaving}
-                          onChange={() => void toggleModule(module)}
-                          type="checkbox"
-                        />
-                        <span aria-hidden="true" />
-                      </label>
-                      <span>{module.enabled ? "已启用" : "已停用"}</span>
-                    </div>
-                    {module.runtime_error_message ? (
-                      <p className="module-error-badge">
-                        运行异常：{module.runtime_error_message}
-                      </p>
-                    ) : null}
-                  </article>
-                ))}
+                      <div className="module-control-card-bottom">
+                        <label className="module-toggle">
+                          <input
+                            checked={module.enabled}
+                            disabled={isSaving || togglePending}
+                            onChange={() => void toggleModule(module)}
+                            type="checkbox"
+                          />
+                          <span aria-hidden="true" />
+                        </label>
+                        <span>{module.enabled ? "已启用" : "已停用"}</span>
+                      </div>
+                      {module.runtime_error_message ? (
+                        <p className="module-error-badge">
+                          运行异常：{module.runtime_error_message}
+                        </p>
+                      ) : null}
+                    </article>
+                  );
+                })}
               </div>
             )}
           </section>

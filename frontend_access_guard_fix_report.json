@@ -1,0 +1,36 @@
+{
+  "report": "frontend_access_guard_fix_report",
+  "status": "passed",
+  "checked_at": "2026-06-23T16:50:00Z",
+  "principle": "Data visibility and operation permissions are handled separately.",
+  "route_guard_fixes": [
+    "/organizations is visible to authenticated users.",
+    "/users is visible to authenticated users.",
+    "/permissions is visible to owner and super_admin.",
+    "Ordinary users do not see permission management or owner-only modules."
+  ],
+  "sidebar_fixes": [
+    "super_admin sees users, organizations, permissions, approvals, and reviews without lock.",
+    "viewer sees users and organizations, hides permission management.",
+    "No management-only lock is used to hide data-list pages."
+  ],
+  "page_gate_fixes": [
+    "Organization list stays visible while create/edit actions are hidden where unauthorized.",
+    "User list stays visible while create/disable/reset actions are hidden where unauthorized.",
+    "Permission page hides control-plane data for super_admin.",
+    "Approval page shows empty content instead of unavailable/sync text when no approvals exist."
+  ],
+  "async_state_fixes": [
+    "User and organization page load aborts are retried once to avoid false sync errors during auth/route refresh.",
+    "Permission and approval browser validation confirmed final page state after client hydration."
+  ],
+  "deployment": {
+    "backend_rebuilt": true,
+    "frontend_rebuilt_no_cache": true,
+    "frontend_container_recreated": true,
+    "docker_restart_only": false,
+    "database_reset": false,
+    "volume_reset": false,
+    "docker_prune": false
+  }
+}

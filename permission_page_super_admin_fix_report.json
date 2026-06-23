@@ -1,0 +1,34 @@
+{
+  "report": "permission_page_super_admin_fix_report",
+  "status": "passed",
+  "checked_at": "2026-06-23T16:50:00Z",
+  "product_rules": {
+    "owner_sees_control_plane_and_feature_permissions": true,
+    "super_admin_sees_feature_permissions_only": true,
+    "ordinary_user_does_not_see_permission_module": true
+  },
+  "backend_fixes": [
+    "GET /permissions/registry filters non-owner responses to feature permissions.",
+    "Ordinary viewer receives 403 for permission registry.",
+    "RBAC role aliases recognize super_admin without changing root permission rules."
+  ],
+  "frontend_fixes": [
+    "Permission route guard allows owner and super_admin.",
+    "Sidebar exposes permission center for super_admin without lock.",
+    "Super_admin permission page hides system/control-plane summary and section.",
+    "Owner page still shows system and feature permission groups."
+  ],
+  "e2e_validation": {
+    "owner_permission_categories": [
+      "control_plane",
+      "feature"
+    ],
+    "super_admin_permission_categories": [
+      "feature"
+    ],
+    "super_admin_browser_shows_system_permissions": false,
+    "super_admin_sidebar_permission_locked": false,
+    "viewer_permission_registry_status": 403,
+    "viewer_sidebar_has_permission_module": false
+  }
+}

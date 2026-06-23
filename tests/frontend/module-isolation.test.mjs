@@ -534,9 +534,9 @@ test("/modules/me failure fallback keeps non-owner entries locked", () => {
   );
 
   assert.equal(missingUsers.accessState, "unknown");
-  assert.equal(missingUsers.isHidden, true);
+  assert.equal(missingUsers.isHidden, false);
   assert.equal(missingUsers.isLocked, false);
-  assert.equal(missingUsers.noticeType, "no_permission");
+  assert.equal(missingUsers.noticeType, "none");
   assert.equal(missingLogs.accessState, "unknown");
   assert.equal(missingLogs.isHidden, true);
   assert.equal(missingLogs.isLocked, false);
@@ -607,13 +607,14 @@ test("every navigation module is registered and aligned with registry metadata",
   );
 });
 
-test("admin.users and admin.permissions remain owner-only and hidden when denied", () => {
+test("admin.users stays visible while admin.permissions remains hidden when denied", () => {
   const adminUsers = item("admin.users");
   const adminPermissions = item("admin.permissions");
 
   assert.equal(adminUsers.label, "用户管理");
   assert.equal(adminUsers.module_key, "admin.users");
-  assert.equal(adminUsers.owner_only, true);
+  assert.equal(adminUsers.owner_only, undefined);
+  assert.equal(adminUsers.required_permission, undefined);
   assert.equal(adminUsers.denied_behavior, "hide_when_denied");
   assert.equal(adminUsers.category, "admin");
   assert.equal(adminPermissions.label, "权限管理");
@@ -626,7 +627,7 @@ test("admin.users and admin.permissions remain owner-only and hidden when denied
     getNavigationStateForModule(noPermissions, adminUsers, [], {
       moduleAccessUnknown: true,
     }).isVisible,
-    false,
+    true,
   );
   assert.equal(
     getNavigationStateForModule(
@@ -728,11 +729,18 @@ test("business modules stay locked for users without permission", () => {
 });
 
 test("owner-only admin entries and system logs stay hidden when access is unknown", () => {
-  for (const moduleKey of [
-    "admin.users",
-    "admin.permissions",
-    "system.operation_logs",
-  ]) {
+  const usersState = getNavigationStateForModule(
+    noPermissions,
+    item("admin.users"),
+    [],
+    { moduleAccessUnknown: true },
+  );
+  assert.equal(usersState.isVisible, true);
+  assert.equal(usersState.isHidden, false);
+  assert.equal(usersState.isLocked, false);
+  assert.equal(usersState.canEnter, true);
+
+  for (const moduleKey of ["admin.permissions", "system.operation_logs"]) {
     const state = getNavigationStateForModule(
       noPermissions,
       item(moduleKey),
@@ -842,16 +850,16 @@ test("C05 and C06 regression assumptions remain intact", () => {
 
   assert.equal(isOwnerFullAccess(ownerPermissions), true);
   assert.deepEqual(getPermissionAccessState(noPermissions, usersModule), {
-    canAccess: false,
+    canAccess: true,
     isLocked: false,
-    isVisible: false,
+    isVisible: true,
   });
   assert.deepEqual(
     getPermissionAccessState(usersManagePermissions, usersModule),
     {
-      canAccess: false,
+      canAccess: true,
       isLocked: false,
-      isVisible: false,
+      isVisible: true,
     },
   );
   assert.equal(canShowPermissionManagementEntry(ownerPermissions), true);
@@ -921,10 +929,10 @@ test("wildcard permission does not override module access safety states", () => 
     ],
   );
 
-  assert.equal(wildcardLockedUsers.isVisible, false);
-  assert.equal(wildcardLockedUsers.isHidden, true);
+  assert.equal(wildcardLockedUsers.isVisible, true);
+  assert.equal(wildcardLockedUsers.isHidden, false);
   assert.equal(wildcardLockedUsers.isLocked, false);
-  assert.equal(wildcardLockedUsers.canEnter, false);
+  assert.equal(wildcardLockedUsers.canEnter, true);
   assert.equal(backendLockedApprovals.isLocked, true);
   assert.equal(backendLockedApprovals.canEnter, false);
 });

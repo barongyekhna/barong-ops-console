@@ -179,20 +179,33 @@ def permissions_registry(
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C16", "admin")),
 ) -> ListResponse[PermissionRegistryRead]:
-    del guard, user
+    del guard
     cache_key = api_snapshot_key("permissions.registry", limit, offset)
     try:
         permissions = list_enabled_permissions(db)
         if not permissions:
             upsert_permission_registry(db)
             permissions = list_enabled_permissions(db)
+        visible_permissions = (
+            permissions
+            if is_owner_role(user.role)
+            else [
+                permission
+                for permission in permissions
+                if permission_response_category(
+                    module_key=permission.module_key,
+                    permission_key=permission.permission_key,
+                )
+                == "feature"
+            ]
+        )
         items = [
             _permission_registry_response_item(permission)
-            for permission in permissions[offset : offset + limit]
+            for permission in visible_permissions[offset : offset + limit]
         ]
         response = ListResponse(
             items=items,
-            count=len(permissions),
+            count=len(visible_permissions),
             limit=limit,
             offset=offset,
             degraded=not bool(permissions),

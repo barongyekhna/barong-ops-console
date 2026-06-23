@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ...db.session import get_db
+from ...core.roles import normalize_role
 from ...models.user import User
 from ...schemas.common import ListResponse
 from ...schemas.module import ModuleManifestRead, ModuleRegistryResponse
@@ -35,7 +36,7 @@ logger = logging.getLogger(__name__)
 
 
 def _normalized_role(user: User) -> str:
-    return user.role.strip().lower()
+    return normalize_role(user.role)
 
 
 def _review_scope(request: Request, user: User) -> ReviewAuditScope:

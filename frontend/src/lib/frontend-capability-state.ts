@@ -43,6 +43,7 @@ import {
   navigationModuleRecords,
 } from "@/lib/navigation";
 import type { FrontendPermissions } from "@/lib/permissions";
+import { isOwnerRole, isSuperAdminRole, normalizeRole } from "@/lib/roles";
 
 export type ProductCapabilityStateName =
   | "allowed"
@@ -275,9 +276,13 @@ function isOwnerFullAccess(
 
 function isSuperAdminVisibleAdminModule(role: string, moduleKey: string) {
   return (
-    role === "super_admin" &&
+    isSuperAdminRole(role) &&
     (moduleKey === "admin.users" || moduleKey === "admin.permissions")
   );
+}
+
+function isApprovalModule(moduleKey: string) {
+  return moduleKey === "business.approvals";
 }
 
 function isReviewAuditModule(moduleKey: string) {
@@ -285,7 +290,7 @@ function isReviewAuditModule(moduleKey: string) {
 }
 
 function canSeeReviewAudit(role: string) {
-  return role === "owner" || role === "super_admin";
+  return isOwnerRole(role) || isSuperAdminRole(role);
 }
 
 function isOrganizationListModule(moduleKey: string) {
@@ -354,7 +359,8 @@ export function buildFrontendUiCapabilityGraph({
   authStatus: "checking" | "authenticated" | "unauthenticated";
   role: string;
 }): FrontendCapabilityGraph {
-  const owner = role === "owner";
+  const normalizedRole = normalizeRole(role);
+  const owner = isOwnerRole(normalizedRole);
   const executionState = deriveFrontendExecutionState({
     adapterAccessItems: [],
     executionProviderAccessItems: [],
@@ -366,17 +372,27 @@ export function buildFrontendUiCapabilityGraph({
         const hiddenPermissionModule =
           authStatus === "authenticated" &&
           isPermissionManagementModule(record.module_key) &&
-          role !== "owner" &&
-          role !== "super_admin";
+          !isOwnerRole(normalizedRole) &&
+          !isSuperAdminRole(normalizedRole);
         const hiddenReviewAuditModule =
           authStatus === "authenticated" &&
           isReviewAuditModule(record.module_key) &&
-          !canSeeReviewAudit(role);
+          !canSeeReviewAudit(normalizedRole);
+        const roleVisibleModule =
+          authStatus === "authenticated" &&
+          (owner ||
+            isSuperAdminVisibleAdminModule(normalizedRole, record.module_key) ||
+            (isSuperAdminRole(normalizedRole) &&
+              isApprovalModule(record.module_key)) ||
+            (canSeeReviewAudit(normalizedRole) &&
+              isReviewAuditModule(record.module_key)));
         const state = hiddenPermissionModule
           ? "hidden"
           : hiddenReviewAuditModule
             ? "hidden"
-            : stateFromStaticNavigation(record);
+            : roleVisibleModule
+              ? "allowed"
+              : stateFromStaticNavigation(record);
         const reason = staticCapabilityReason(state);
         const routeBound = Boolean(routeByModuleKey.get(record.module_key));
         const item: ProductCapabilityItem = {
@@ -470,7 +486,7 @@ export function buildFrontendUiCapabilityGraph({
         authStatus === "authenticated"
           ? "工作台已按当前账号加载。"
           : "工作台等待登录后加载。",
-      role,
+      role: normalizedRole,
       source: "frontend_ui_state",
       state: authStatus === "authenticated" ? "active" : "unknown",
       visible_modules: sidebarItems.length,
@@ -991,6 +1007,33 @@ function ownerCapabilityItem({
   };
 }
 
+function superAdminVisibleCapabilityItem({
+  item,
+  routeBound,
+  reason,
+  requiredPermission,
+  unlockCondition,
+}: {
+  item: ProductCapabilityItem;
+  routeBound: boolean;
+  reason: string;
+  requiredPermission: string;
+  unlockCondition: string;
+}): ProductCapabilityItem {
+  return {
+    ...item,
+    badge: null,
+    can_enter: routeBound,
+    org_visibility: "visible",
+    permission_state: "available",
+    reason,
+    required_permission: requiredPermission,
+    sidebar_state: "allowed",
+    state: "allowed",
+    unlock_condition: unlockCondition,
+  };
+}
+
 function organizationListCapabilityItem({
   item,
   routeBound,
@@ -1221,6 +1264,7 @@ export function buildFrontendCapabilityGraph({
   }
 
   const sources = Array.from(sourceMap.values());
+  const normalizedRole = normalizeRole(role);
   const owner = isOwnerFullAccess(permissions);
 
   const items = sources
@@ -1312,22 +1356,42 @@ export function buildFrontendCapabilityGraph({
         return reviewAuditCapabilityItem({
           item,
           routeBound,
-          visible: owner || canSeeReviewAudit(role),
+          visible: owner || canSeeReviewAudit(normalizedRole),
         });
       }
 
-      if (owner || isSuperAdminVisibleAdminModule(role, moduleKey)) {
+      if (isSuperAdminRole(normalizedRole) && isApprovalModule(moduleKey)) {
+        return superAdminVisibleCapabilityItem({
+          item,
+          reason: "组织管理员可查看本组织功能审批。",
+          requiredPermission: "组织管理员权限。",
+          routeBound,
+          unlockCondition: "打开审批。",
+        });
+      }
+
+      if (owner || isSuperAdminVisibleAdminModule(normalizedRole, moduleKey)) {
         const permissionBlocked =
           navigationState.isHidden ||
           navigationState.isLocked ||
           adapterAccess?.hidden === true ||
           adapterAccess?.locked === true;
 
-        return ownerCapabilityItem({
+        if (owner) {
+          return ownerCapabilityItem({
+            item,
+            permissionBlocked,
+            record,
+            routeBound,
+          });
+        }
+
+        return superAdminVisibleCapabilityItem({
           item,
-          permissionBlocked,
-          record,
+          reason: "组织管理员可查看并管理本组织范围。",
+          requiredPermission: "组织管理员权限。",
           routeBound,
+          unlockCondition: "打开功能区。",
         });
       }
 
@@ -1402,7 +1466,7 @@ export function buildFrontendCapabilityGraph({
     orgContext: orgContext({
       moduleAccessItems,
       moduleAccessUnknown,
-      role,
+      role: normalizedRole,
     }),
     permissionSnapshot: permissionSnapshot(permissions),
     sidebarItems,

@@ -50,8 +50,6 @@ export const navigationGroups: NavigationGroup[] = [
         icon: UserRoundCog,
         label: "用户管理",
         module_key: "admin.users",
-        owner_only: true,
-        required_permission: "users.manage",
         route_namespace: "/users",
         status: "sealed",
       },

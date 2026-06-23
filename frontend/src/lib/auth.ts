@@ -1,4 +1,5 @@
 import { ApiError, apiRequest } from "@/lib/api";
+import { isOwnerRole, normalizeRole } from "@/lib/roles";
 
 export type AuthenticatedUser = {
   id: number;
@@ -38,7 +39,7 @@ type AuthRequestOptions = {
 };
 
 export function roleBypassesPasswordReset(role: string | null | undefined) {
-  const normalizedRole = role?.trim().toLowerCase().replace(/\s+/g, "_");
+  const normalizedRole = normalizeRole(role);
   return normalizedRole === "owner";
 }
 
@@ -59,6 +60,7 @@ function normalizeAuthenticatedUser(
 
   return {
     ...identity,
+    role: normalizeRole(identity.role),
     organization_id: identity.organization_id ?? null,
     last_login_at: identity.last_login_at ?? null,
     must_change_password: requiresPasswordChange(user),

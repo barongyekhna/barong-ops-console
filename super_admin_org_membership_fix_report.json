@@ -1,0 +1,42 @@
+{
+  "report": "super_admin_org_membership_fix_report",
+  "status": "passed",
+  "checked_at": "2026-06-23T16:50:00Z",
+  "target_user": {
+    "id": 2,
+    "username": "王创鑫",
+    "role": "super_admin",
+    "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+    "organization_name": "涌龙麟（深圳）国际贸易有限公司",
+    "job_title": "总经理",
+    "is_active": true
+  },
+  "before_fix": {
+    "user_role": "super_admin",
+    "organization_id_present": true,
+    "job_title_present": true,
+    "active": true,
+    "active_admin_membership_present": false
+  },
+  "actions": [
+    "Inserted missing active org_memberships row for the super_admin user and their organization.",
+    "Set super_admin membership role to admin and status to active.",
+    "Did not delete users, organizations, permissions, approvals, volumes, or reset the database.",
+    "Did not modify owner data."
+  ],
+  "after_fix": {
+    "membership_id": "mem_7986ce48aa6ebf5d40e702d260625b25",
+    "user_id": "2",
+    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+    "membership_role": "admin",
+    "membership_status": "active"
+  },
+  "runtime_capabilities": {
+    "identity_known": true,
+    "organization_known": true,
+    "recognized_as_org_admin": true,
+    "can_manage_own_org_users": true,
+    "can_view_own_org_feature_permissions": true,
+    "can_view_own_org_approvals": true
+  }
+}

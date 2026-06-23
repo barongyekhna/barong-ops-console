@@ -1,0 +1,84 @@
+{
+  "report": "non_owner_e2e_validation_report",
+  "status": "passed",
+  "checked_at": "2026-06-23T16:50:00Z",
+  "method": [
+    "Production HTTP E2E through http://127.0.0.1:3000/api/backend",
+    "Real Chromium E2E through production frontend http://127.0.0.1:3000",
+    "Short-lived session tokens were used and not written to this report."
+  ],
+  "owner": {
+    "auth_role": "owner",
+    "organizations_visible": true,
+    "organization_count": 2,
+    "users_visible": true,
+    "user_count": 3,
+    "permission_categories": [
+      "control_plane",
+      "feature"
+    ],
+    "approvals_visible": true,
+    "modules_visible": true,
+    "api_key_management_visible": true
+  },
+  "super_admin": {
+    "auth_role": "super_admin",
+    "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+    "organizations_visible": true,
+    "organization_count": 2,
+    "users_visible": true,
+    "user_count": 3,
+    "can_manage_own_org_user": true,
+    "permission_categories": [
+      "feature"
+    ],
+    "control_plane_permissions_visible": false,
+    "approval_status": 200,
+    "review_status": 200,
+    "sidebar_locks": {
+      "users": false,
+      "organizations": false,
+      "permissions": false,
+      "approvals": false,
+      "reviews": false
+    },
+    "approval_unavailable_text_visible": false,
+    "approval_empty_text_visible": true
+  },
+  "viewer": {
+    "auth_role": "viewer",
+    "organizations_visible": true,
+    "organization_count": 2,
+    "users_visible": true,
+    "user_count": 3,
+    "permission_management_visible": false,
+    "owner_only_modules_visible": false,
+    "management_buttons_present": [],
+    "sidebar_permission_module_visible": false
+  },
+  "verification_commands": {
+    "backend_compile": "python3 -m compileall backend/app/core/roles.py backend/app/core/rbac.py backend/app/api/routes/users.py backend/app/api/routes/organizations.py backend/app/api/routes/permissions.py backend/app/api/routes/reviews.py backend/app/services/user_management_service.py backend/app/services/auth_service.py backend/app/middleware/org_context.py backend/app/main.py",
+    "backend_pytest": ".venv/bin/python -m pytest tests/backend/test_roles.py tests/backend/test_auth_api.py tests/backend/test_user_management_api.py tests/backend/test_permissions_api.py tests/backend/test_review_audit_api.py tests/backend/test_approval_api.py",
+    "frontend_tests": "npm run test",
+    "frontend_typecheck": "npm run typecheck",
+    "production_http": "curl frontend / and backend /health returned 200"
+  },
+  "deployment": {
+    "backend_image_rebuilt": true,
+    "backend_container_recreated": true,
+    "frontend_image_rebuilt_with_no_cache": true,
+    "frontend_container_recreated": true,
+    "compose_project": "barong-ops-console-prod",
+    "services_up": {
+      "console_backend": true,
+      "console_frontend": true,
+      "console_postgres": true
+    },
+    "notes": [
+      "docker-compose v1 failed to replace existing containers because legacy containers lacked a compose version label.",
+      "The stateless frontend/backend containers were removed and recreated from the newly built images.",
+      "No docker restart-only deployment was used.",
+      "No database reset, volume reset, data deletion, or docker prune was performed."
+    ]
+  }
+}

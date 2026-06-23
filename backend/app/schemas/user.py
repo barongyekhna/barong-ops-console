@@ -76,6 +76,11 @@ class UserResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @field_validator("role")
+    @classmethod
+    def normalize_response_role(cls, value: str) -> str:
+        return normalize_role(value)
+
 
 class UserCreate(BaseModel):
     username: str = Field(min_length=1, max_length=255)

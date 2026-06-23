@@ -21,6 +21,13 @@ import {
 } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { isApiAbortError } from "@/lib/api";
+import {
+  canManageUsersForRole,
+  isOwnerRole,
+  isSuperAdminRole,
+  normalizeRole,
+} from "@/lib/roles";
 import {
   MANAGED_USER_ROLES,
   USERS_PAGE_LIMIT,
@@ -116,15 +123,8 @@ function validatePassword(password: string) {
   return "";
 }
 
-function canManageUsers(role: string | undefined) {
-  return role === "owner" || role === "super_admin";
-}
-
-function isOwnerRole(role: string) {
-  return role === "owner";
-}
-
 function roleLabel(role: string) {
+  const normalizedRole = normalizeRole(role);
   const labels: Record<string, string> = {
     operator: "操作员",
     owner: "owner",
@@ -132,10 +132,11 @@ function roleLabel(role: string) {
     super_admin: "组织管理员",
     viewer: "查看员",
   };
-  return labels[role] ?? "成员";
+  return labels[normalizedRole] ?? "成员";
 }
 
 function roleDescription(role: string) {
+  const normalizedRole = normalizeRole(role);
   const descriptions: Record<string, string> = {
     operator: "处理已授权的业务操作。",
     owner: "拥有全部权限。",
@@ -143,7 +144,7 @@ function roleDescription(role: string) {
     super_admin: "管理所属组织内的账号和功能。",
     viewer: "查看已授权的内容。",
   };
-  return descriptions[role] ?? "按授权范围访问工作台。";
+  return descriptions[normalizedRole] ?? "按授权范围访问工作台。";
 }
 
 export function UserManagementPanel() {
@@ -177,7 +178,7 @@ export function UserManagementPanel() {
   const [createRole, setCreateRole] =
     useState<ManagedUserRole>("viewer");
 
-  const userCanManageUsers = canManageUsers(currentUser?.role);
+  const userCanManageUsers = canManageUsersForRole(currentUser?.role);
   const isBusy = pendingAction !== null;
 
   const loadRoleCatalog = useCallback(async () => {
@@ -206,19 +207,28 @@ export function UserManagementPanel() {
   }, [userCanManageUsers]);
 
   const loadOrganizations = useCallback(async () => {
-    if (!userCanManageUsers) {
-      setOrganizations([]);
-      setOrganizationsError("");
-      setIsOrganizationsLoading(false);
-      return;
-    }
-
     setIsOrganizationsLoading(true);
     setOrganizationsError("");
     try {
       const result = await listOrganizations();
       setOrganizations(result.items);
     } catch (error) {
+      if (isApiAbortError(error)) {
+        try {
+          const result = await listOrganizations();
+          setOrganizations(result.items);
+        } catch (retryError) {
+          if (!isApiAbortError(retryError)) {
+            setOrganizationsError(
+              formatUsersApiError(
+                retryError,
+                "组织数据暂未同步，请重试。",
+              ),
+            );
+          }
+        }
+        return;
+      }
       setOrganizationsError(
         formatUsersApiError(
           error,
@@ -228,15 +238,10 @@ export function UserManagementPanel() {
     } finally {
       setIsOrganizationsLoading(false);
     }
-  }, [userCanManageUsers]);
+  }, []);
 
   const loadUsers = useCallback(
     async (showLoading = true, offset = userOffset) => {
-      if (!userCanManageUsers) {
-        setIsLoading(false);
-        return;
-      }
-
       if (showLoading) {
         setIsLoading(true);
       }
@@ -248,6 +253,24 @@ export function UserManagementPanel() {
         setUserCount(result.count);
         setUserOffset(offset);
       } catch (error) {
+        if (isApiAbortError(error)) {
+          try {
+            const result = await listUsers(USERS_PAGE_LIMIT, offset);
+            setUsers(result.items);
+            setUserCount(result.count);
+            setUserOffset(offset);
+          } catch (retryError) {
+            if (!isApiAbortError(retryError)) {
+              setListError(
+                formatUsersApiError(
+                  retryError,
+                  "用户数据暂未同步，请重试。",
+                ),
+              );
+            }
+          }
+          return;
+        }
         setListError(
           formatUsersApiError(
             error,
@@ -260,7 +283,7 @@ export function UserManagementPanel() {
         }
       }
     },
-    [userCanManageUsers, userOffset],
+    [userOffset],
   );
 
   useEffect(() => {
@@ -275,20 +298,75 @@ export function UserManagementPanel() {
     void loadUsers();
   }, [loadUsers]);
 
+  const currentUserOrgId = currentUser?.organization_id ?? null;
+  const canAssignRole = useCallback(
+    (role: string) => {
+      const normalizedRole = normalizeRole(role);
+      if (isOwnerRole(currentUser?.role)) {
+        return isManagedUserRole(normalizedRole);
+      }
+      if (isSuperAdminRole(currentUser?.role)) {
+        return (
+          isManagedUserRole(normalizedRole) &&
+          !isOwnerRole(normalizedRole) &&
+          !isSuperAdminRole(normalizedRole)
+        );
+      }
+      return false;
+    },
+    [currentUser?.role],
+  );
+
+  const canManageTarget = useCallback(
+    (target: ManagedUser | null | undefined) => {
+      if (!target) {
+        return false;
+      }
+      if (isOwnerRole(currentUser?.role)) {
+        return true;
+      }
+      if (!isSuperAdminRole(currentUser?.role)) {
+        return false;
+      }
+      if (isOwnerRole(target.role) || isSuperAdminRole(target.role)) {
+        return false;
+      }
+      return (
+        Boolean(currentUserOrgId) &&
+        target.organization_id === currentUserOrgId
+      );
+    },
+    [currentUser?.role, currentUserOrgId],
+  );
+
   const assignableRoleOptions = useMemo(() => {
     if (!roleCatalog) {
-      return roleCatalogError ? FALLBACK_ASSIGNABLE_ROLES : [];
+      return roleCatalogError
+        ? FALLBACK_ASSIGNABLE_ROLES.filter((role) => canAssignRole(role.name))
+        : [];
     }
 
     return roleCatalog.assignable_roles.filter(
-      (role) => role.assignable && isManagedUserRole(role.name),
+      (role) => role.assignable && canAssignRole(role.name),
     );
-  }, [roleCatalog, roleCatalogError]);
+  }, [canAssignRole, roleCatalog, roleCatalogError]);
 
   const assignableRoleNames = useMemo(
     () => new Set(assignableRoleOptions.map((role) => role.name)),
     [assignableRoleOptions],
   );
+
+  const creatableOrganizations = useMemo(() => {
+    if (isOwnerRole(currentUser?.role)) {
+      return organizations;
+    }
+    if (isSuperAdminRole(currentUser?.role) && currentUserOrgId) {
+      return organizations.filter(
+        (organization) => organization.org_id === currentUserOrgId,
+      );
+    }
+    return [];
+  }, [currentUser?.role, currentUserOrgId, organizations]);
 
   useEffect(() => {
     if (assignableRoleOptions.length === 0) {
@@ -311,13 +389,13 @@ export function UserManagementPanel() {
 
   useEffect(() => {
     if (
-      organizations.length > 0 &&
+      creatableOrganizations.length > 0 &&
       !createOrganizationId &&
       !isOwnerRole(createRole)
     ) {
-      setCreateOrganizationId(organizations[0].org_id);
+      setCreateOrganizationId(creatableOrganizations[0].org_id);
     }
-  }, [createOrganizationId, createRole, organizations]);
+  }, [creatableOrganizations, createOrganizationId, createRole]);
 
   const organizationById = useMemo(
     () =>
@@ -366,6 +444,10 @@ export function UserManagementPanel() {
   async function handleCreate(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     clearActionMessages();
+    if (!userCanManageUsers) {
+      setActionError("当前账号不能创建用户。");
+      return;
+    }
 
     const username = createUsername.trim();
     const jobTitle = createJobTitle.trim();
@@ -401,7 +483,9 @@ export function UserManagementPanel() {
       setCreateUsername("");
       setCreateJobTitle("");
       setCreateOrganizationId(
-        organizations.length > 0 ? organizations[0].org_id : "",
+        creatableOrganizations.length > 0
+          ? creatableOrganizations[0].org_id
+          : "",
       );
       setCreateRole("viewer");
       await refreshAfterMutation(created.id);
@@ -435,6 +519,10 @@ export function UserManagementPanel() {
 
   async function handleDisable(target: ManagedUser) {
     clearActionMessages();
+    if (!canManageTarget(target)) {
+      setActionError("当前账号不能管理该用户。");
+      return;
+    }
     if (target.id === currentUser?.id) {
       setActionError("不能在这里停用当前登录账号。");
       return;
@@ -463,6 +551,10 @@ export function UserManagementPanel() {
 
   async function handleEnable(target: ManagedUser) {
     clearActionMessages();
+    if (!canManageTarget(target)) {
+      setActionError("当前账号不能管理该用户。");
+      return;
+    }
     if (!window.confirm(`确认启用 ${target.username}？`)) {
       return;
     }
@@ -485,6 +577,10 @@ export function UserManagementPanel() {
     event.preventDefault();
     clearActionMessages();
     if (!expandedUser) {
+      return;
+    }
+    if (!canManageTarget(expandedUser)) {
+      setActionError("当前账号不能管理该用户。");
       return;
     }
     if (expandedUser.id === currentUser?.id) {
@@ -523,6 +619,12 @@ export function UserManagementPanel() {
     event.preventDefault();
     clearActionMessages();
     if (!resetTarget) {
+      return;
+    }
+    if (!canManageTarget(resetTarget)) {
+      setActionError("当前账号不能管理该用户。");
+      setResetPassword("");
+      setResetTarget(null);
       return;
     }
     if (resetTarget.id === currentUser?.id) {
@@ -565,22 +667,10 @@ export function UserManagementPanel() {
     }
   }
 
-  if (!userCanManageUsers) {
-    return (
-      <section className="list-state list-error" role="alert">
-        <div>
-          <h2>无权管理用户</h2>
-          <p>
-            仅owner和组织管理员可以管理工作台账号。
-          </p>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section className="users-workspace" aria-label="用户管理">
-      <form className="users-create-panel" onSubmit={handleCreate}>
+      {userCanManageUsers ? (
+        <form className="users-create-panel" onSubmit={handleCreate}>
         <div className="users-panel-heading">
           <div>
             <span className="eyebrow">账号</span>
@@ -656,7 +746,7 @@ export function UserManagementPanel() {
                 isBusy ||
                 isOrganizationsLoading ||
                 isOwnerRole(createRole) ||
-                organizations.length === 0
+                creatableOrganizations.length === 0
               }
               onChange={(event) =>
                 setCreateOrganizationId(event.target.value)
@@ -670,10 +760,10 @@ export function UserManagementPanel() {
             >
               {isOwnerRole(createRole) ? (
                 <option value="">无需选择组织</option>
-              ) : organizations.length === 0 ? (
+              ) : creatableOrganizations.length === 0 ? (
                 <option value="">暂无可选组织</option>
               ) : (
-                organizations.map((organization) => (
+                creatableOrganizations.map((organization) => (
                   <option
                     key={organization.org_id}
                     value={organization.org_id}
@@ -700,7 +790,7 @@ export function UserManagementPanel() {
             isRoleCatalogLoading ||
             isOrganizationsLoading ||
             assignableRoleOptions.length === 0 ||
-            (!isOwnerRole(createRole) && organizations.length === 0)
+            (!isOwnerRole(createRole) && creatableOrganizations.length === 0)
           }
           type="submit"
         >
@@ -711,7 +801,8 @@ export function UserManagementPanel() {
           )}
           创建用户
         </button>
-      </form>
+        </form>
+      ) : null}
 
       {actionError ? (
         <div className="users-alert users-alert-error" role="alert">
@@ -726,7 +817,7 @@ export function UserManagementPanel() {
         </div>
       ) : null}
 
-      {resetTarget ? (
+      {resetTarget && canManageTarget(resetTarget) ? (
         <form className="users-reset-panel" onSubmit={handleReset}>
           <div>
             <span className="eyebrow">密码重置</span>
@@ -841,7 +932,8 @@ export function UserManagementPanel() {
                 <tbody>
                   {sortedUsers.map((target) => {
                   const isSelf = target.id === currentUser?.id;
-                  const actionDisabled = isBusy || isSelf;
+                  const canManageRow = canManageTarget(target);
+                  const actionDisabled = isBusy || isSelf || !canManageRow;
                   const rowPending =
                     pendingAction?.endsWith(`-${target.id}`) ?? false;
                   const targetOrganization = target.organization_id
@@ -905,7 +997,7 @@ export function UserManagementPanel() {
                             )}
                           </button>
 
-                          {target.is_active ? (
+                          {canManageRow && target.is_active ? (
                             <button
                               className="secondary-button"
                               disabled={actionDisabled}
@@ -928,7 +1020,7 @@ export function UserManagementPanel() {
                               )}
                               停用
                             </button>
-                          ) : (
+                          ) : canManageRow ? (
                             <button
                               className="secondary-button"
                               disabled={isBusy}
@@ -946,35 +1038,37 @@ export function UserManagementPanel() {
                               )}
                               启用
                             </button>
-                          )}
+                          ) : null}
 
-                          <button
-                            className="danger-button"
-                            disabled={actionDisabled}
-                            onClick={() => {
-                              clearActionMessages();
-                              setResetTarget(target);
-                              setResetPassword("");
-                            }}
-                            title={
-                              isSelf
-                                ? "不能重置当前账号密码"
-                                : "重置密码"
-                            }
-                            type="button"
-                          >
-                            {rowPending &&
-                            pendingAction === `reset-${target.id}` ? (
-                              <LoaderCircle
-                                className="spin"
-                                aria-hidden="true"
-                                size={17}
-                              />
-                            ) : (
-                              <KeyRound aria-hidden="true" size={17} />
-                            )}
-                            重置
-                          </button>
+                          {canManageRow ? (
+                            <button
+                              className="danger-button"
+                              disabled={actionDisabled}
+                              onClick={() => {
+                                clearActionMessages();
+                                setResetTarget(target);
+                                setResetPassword("");
+                              }}
+                              title={
+                                isSelf
+                                  ? "不能重置当前账号密码"
+                                  : "重置密码"
+                              }
+                              type="button"
+                            >
+                              {rowPending &&
+                              pendingAction === `reset-${target.id}` ? (
+                                <LoaderCircle
+                                  className="spin"
+                                  aria-hidden="true"
+                                  size={17}
+                                />
+                              ) : (
+                                <KeyRound aria-hidden="true" size={17} />
+                              )}
+                              重置
+                            </button>
+                          ) : null}
                         </div>
                       </td>
                     </tr>
@@ -1083,7 +1177,7 @@ export function UserManagementPanel() {
             </div>
           </dl>
 
-          {isManagedUserRole(expandedUser.role) ? (
+          {isManagedUserRole(expandedUser.role) && canManageTarget(expandedUser) ? (
             <form className="users-role-form" onSubmit={handleRoleUpdate}>
               <label className="field-group">
                 <span>角色</span>
@@ -1124,7 +1218,7 @@ export function UserManagementPanel() {
             </form>
           ) : (
             <p className="users-muted-note">
-              owner和保留角色仅用于查看，不能在这里修改。
+              当前账号仅可查看该用户详情。
             </p>
           )}
         </section>

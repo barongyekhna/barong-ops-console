@@ -72,6 +72,7 @@ from .core.config import get_settings
 from .core.environments import is_production_like
 from .core.security_headers import apply_security_headers
 from .core.session_cookies import get_session_id_from_request
+from .core.roles import normalize_role
 from .db.session import managed_read_session
 from .models.auth_session import AuthSession
 from .models.user import User
@@ -166,7 +167,7 @@ def _auth_me_payload(request: Request) -> dict[str, object] | None:
             {
                 "id": identity.id,
                 "username": identity.username,
-                "role": identity.role,
+                "role": normalize_role(identity.role),
                 "organization_id": identity.organization_id,
                 "must_change_password": identity.must_change_password,
                 "is_active": identity.is_active,
@@ -183,7 +184,7 @@ def _session_from_identity(
     user = User(
         username=identity.username,
         password_hash="",
-        role=identity.role,
+        role=normalize_role(identity.role),
         organization_id=identity.organization_id,
         must_change_password=identity.must_change_password,
         is_active=identity.is_active,

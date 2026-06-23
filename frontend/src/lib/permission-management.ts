@@ -107,6 +107,34 @@ const PERMISSION_DISPLAY_LABELS: Record<string, string> = {
   "users.read": "查看用户权限",
 };
 
+function normalizeRole(role: string | null | undefined) {
+  if (!role) {
+    return "";
+  }
+  const normalized = role
+    .trim()
+    .toLowerCase()
+    .replace(/-/g, "_")
+    .replace(/\s+/g, "_");
+  if (
+    normalized === "superadmin" ||
+    normalized === "super_admin" ||
+    normalized === "org_admin" ||
+    normalized === "organization_admin"
+  ) {
+    return "super_admin";
+  }
+  return normalized;
+}
+
+function isOwnerRole(role: string | null | undefined) {
+  return normalizeRole(role) === "owner";
+}
+
+function isSuperAdminRole(role: string | null | undefined) {
+  return normalizeRole(role) === "super_admin";
+}
+
 export type PermissionAssignment = {
   id: string;
   user_id: number;
@@ -422,12 +450,11 @@ export function getPermissionCategoryLabel(category: PermissionUiCategory) {
 }
 
 export function canViewPermissionCenter(role: string | null | undefined) {
-  const normalized = role?.trim().toLowerCase();
-  return normalized === "owner" || normalized === "super_admin";
+  return isOwnerRole(role) || isSuperAdminRole(role);
 }
 
 export function canManagePermissionAssignments(role: string | null | undefined) {
-  return role?.trim().toLowerCase() === "owner";
+  return isOwnerRole(role);
 }
 
 export function filterPermissionRegistryForRole(
@@ -437,7 +464,7 @@ export function filterPermissionRegistryForRole(
   const activeRegistry = registry.filter(
     (permission) => !isRemovedPermission(permission),
   );
-  const normalized = role?.trim().toLowerCase();
+  const normalized = normalizeRole(role);
   if (normalized === "owner") {
     return activeRegistry;
   }
@@ -627,7 +654,7 @@ export function canShowPermissionManagementEntry(
 ) {
   return (
     permissions?.is_owner_full_access === true ||
-    role?.trim().toLowerCase() === "super_admin"
+    isSuperAdminRole(role)
   );
 }
 

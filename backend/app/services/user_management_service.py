@@ -5,6 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.security import hash_password
+from ..core.roles import is_owner_role, is_super_admin_role, normalize_role
 from ..models.user import User
 from ..repositories.auth_sessions import invalidate_active_sessions_for_user
 from ..repositories.operation_logs import create_operation_log
@@ -48,6 +49,10 @@ class UserOrganizationNotFoundError(UserManagementError):
     pass
 
 
+class UserManagementPermissionDeniedError(PermissionError):
+    pass
+
+
 class SelfDisableNotAllowedError(UserManagementError):
     pass
 
@@ -64,6 +69,64 @@ class UserListResult:
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _actor_org_id(actor: User) -> str | None:
+    organization_id = actor.organization_id
+    if organization_id is None:
+        return None
+    organization_id = organization_id.strip()
+    return organization_id or None
+
+
+def _ensure_actor_can_manage_user(actor: User, target: User) -> None:
+    if is_owner_role(actor.role):
+        return
+    if not is_super_admin_role(actor.role):
+        raise UserManagementPermissionDeniedError(
+            "Owner or super admin role required."
+        )
+    actor_org_id = _actor_org_id(actor)
+    if actor_org_id is None:
+        raise UserManagementPermissionDeniedError(
+            "Super admin organization context is required."
+        )
+    if normalize_role(target.role) in {"owner", "super_admin"}:
+        raise UserManagementPermissionDeniedError(
+            "Super admin cannot manage owner or super admin accounts."
+        )
+    if target.organization_id != actor_org_id:
+        raise UserManagementPermissionDeniedError(
+            "Super admin can only manage users in their organization."
+        )
+
+
+def _ensure_actor_can_create_user(
+    actor: User,
+    *,
+    role: str,
+    organization_id: str | None,
+) -> str | None:
+    if is_owner_role(actor.role):
+        return organization_id
+    if not is_super_admin_role(actor.role):
+        raise UserManagementPermissionDeniedError(
+            "Owner or super admin role required."
+        )
+    actor_org_id = _actor_org_id(actor)
+    if actor_org_id is None:
+        raise UserManagementPermissionDeniedError(
+            "Super admin organization context is required."
+        )
+    if role in {"owner", "super_admin"}:
+        raise UserManagementPermissionDeniedError(
+            "Super admin cannot create owner or super admin accounts."
+        )
+    if organization_id is not None and organization_id != actor_org_id:
+        raise UserManagementPermissionDeniedError(
+            "Super admin can only create users in their organization."
+        )
+    return actor_org_id
 
 
 def _log_user_operation(
@@ -135,7 +198,11 @@ def create_managed_user(
     username = payload.username.strip()
     if get_user_by_username(db, username) is not None:
         raise DuplicateUsernameError("Username already exists.")
-    organization_id = payload.organization_id
+    organization_id = _ensure_actor_can_create_user(
+        actor,
+        role=role,
+        organization_id=payload.organization_id,
+    )
     job_title = payload.job_title
     if role == "owner":
         organization_id = None
@@ -193,12 +260,17 @@ def update_managed_user(
     audit: AuditContext,
 ) -> User:
     user = get_managed_user(db, user_id)
+    _ensure_actor_can_manage_user(actor, user)
     role = None
     if payload.role is not None:
         try:
             role = validate_user_management_role(payload.role)
         except ValueError as exc:
             raise OwnerRoleNotAllowedError(str(exc)) from None
+        if not is_owner_role(actor.role) and role in {"owner", "super_admin"}:
+            raise UserManagementPermissionDeniedError(
+                "Super admin cannot assign owner or super admin roles."
+            )
     if user.id == actor.id and payload.is_active is False:
         raise SelfDisableNotAllowedError("Current owner cannot be disabled.")
 
@@ -246,6 +318,7 @@ def reset_managed_user_password(
     audit: AuditContext,
 ) -> User:
     user = get_managed_user(db, user_id)
+    _ensure_actor_can_manage_user(actor, user)
     if user.id == actor.id:
         raise SelfPasswordResetNotAllowedError(
             "Current owner password reset is not available here."
@@ -288,6 +361,7 @@ def disable_managed_user(
     audit: AuditContext,
 ) -> User:
     user = get_managed_user(db, user_id)
+    _ensure_actor_can_manage_user(actor, user)
     if user.id == actor.id:
         raise SelfDisableNotAllowedError("Current owner cannot be disabled.")
 
@@ -313,6 +387,7 @@ def enable_managed_user(
     audit: AuditContext,
 ) -> User:
     user = get_managed_user(db, user_id)
+    _ensure_actor_can_manage_user(actor, user)
     user = update_user_record(db, user, is_active=True)
     _log_user_operation(
         db,

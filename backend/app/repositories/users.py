@@ -4,6 +4,7 @@ from sqlalchemy import func, inspect, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, load_only
 
+from ..core.roles import role_filter_values
 from ..db.compatibility import table_exists
 from ..models.user import User
 
@@ -83,7 +84,10 @@ def list_users(
     if organization_id is not None:
         statement = statement.where(User.organization_id == organization_id)
     if role is not None:
-        statement = statement.where(User.role == role)
+        role_values = role_filter_values(role)
+        if not role_values:
+            return []
+        statement = statement.where(User.role.in_(role_values))
     rows = list(db.scalars(statement.limit(limit + offset)))
     return rows[offset : offset + limit]
 
@@ -98,7 +102,10 @@ def count_users(
     if organization_id is not None:
         statement = statement.where(User.organization_id == organization_id)
     if role is not None:
-        statement = statement.where(User.role == role)
+        role_values = role_filter_values(role)
+        if not role_values:
+            return 0
+        statement = statement.where(User.role.in_(role_values))
     return int(db.scalar(statement) or 0)
 
 

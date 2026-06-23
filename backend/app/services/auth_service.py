@@ -19,6 +19,7 @@ from ..core.security import (
     hash_password,
     verify_password,
 )
+from ..core.roles import normalize_role
 from ..db.compatibility import is_missing_table_error, table_exists
 from ..models.auth_session import AuthSession
 from ..models.user import User
@@ -469,7 +470,7 @@ def _authenticated_identity_from_user(
     return AuthenticatedUserIdentity(
         id=user.id,
         username=user.username,
-        role=user.role,
+        role=normalize_role(user.role),
         organization_id=user.organization_id,
         must_change_password=must_change_password_required(
             role=user.role,
@@ -522,7 +523,7 @@ def validate_session_identity_fast(
         identity = AuthenticatedUserIdentity(
             id=row.id,
             username=row.username,
-            role=row.role,
+            role=normalize_role(row.role),
             organization_id=row.organization_id,
             must_change_password=must_change_password_required(
                 role=row.role,
@@ -571,7 +572,7 @@ def validate_session_identity_fast(
     identity = AuthenticatedUserIdentity(
         id=row.id,
         username=row.username,
-        role=row.role,
+        role=normalize_role(row.role),
         organization_id=row.organization_id,
         must_change_password=must_change_password_required(
             role=row.role,

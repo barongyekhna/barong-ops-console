@@ -39,6 +39,7 @@ import {
   ApiTimeoutError,
   isApiAbortError,
 } from "@/lib/api";
+import { isSuperAdminRole } from "@/lib/roles";
 
 type ApprovalSectionState = {
   data: ApprovalListResponse | null;
@@ -123,7 +124,7 @@ function ApprovalListRows({ items }: { items: ApprovalListItem[] }) {
   if (items.length === 0) {
     return (
       <div className="approval-empty">
-        <strong>暂无待处理审批</strong>
+        <strong>暂无待审批内容</strong>
         <span>有新的业务草稿提交后会出现在这里。</span>
       </div>
     );
@@ -175,9 +176,6 @@ function ApprovalSection({
   const items = state.data?.items ?? [];
   const showMore = isOwner && items.length >= PREVIEW_LIMIT;
   const Icon = icon === "control" ? ShieldCheck : Layers3;
-  const hasDegradedEmptyData =
-    state.data?.status === "degraded" && items.length === 0;
-
   return (
     <section
       className={`approval-section approval-section-${category}`}
@@ -221,7 +219,7 @@ function ApprovalSection({
       {state.error ? (
         <div className="approval-empty approval-empty-error" role="alert">
           <strong>
-            {state.data === null ? "审批列表暂时不可用" : "审批列表降级显示"}
+            {items.length === 0 ? "暂无待审批内容" : "审批列表降级显示"}
           </strong>
           <span>{state.error}</span>
           {state.data !== null ? (
@@ -238,7 +236,6 @@ function ApprovalSection({
       ) : null}
 
       {state.data !== null &&
-      !hasDegradedEmptyData &&
       (!state.loading || items.length > 0) ? (
         <ApprovalListRows items={items} />
       ) : null}
@@ -248,7 +245,7 @@ function ApprovalSection({
 
 export function ApprovalConsoleView() {
   const { isOwner, user } = useAuth();
-  const isSuperAdmin = user?.role === "super_admin" || user?.role === "admin";
+  const isSuperAdmin = isSuperAdminRole(user?.role);
   const [control, setControl] = useState<ApprovalSectionState>(EMPTY_SECTION);
   const [feature, setFeature] = useState<ApprovalSectionState>(EMPTY_SECTION);
   const controlAbortRef = useRef<AbortController | null>(null);

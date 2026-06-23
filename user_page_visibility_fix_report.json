@@ -1,0 +1,39 @@
+{
+  "report": "user_page_visibility_fix_report",
+  "status": "passed",
+  "checked_at": "2026-06-23T16:50:00Z",
+  "product_rules": {
+    "all_authenticated_users_can_view_user_list": true,
+    "owner_can_manage_all_users": true,
+    "super_admin_can_manage_own_org_users": true,
+    "ordinary_users_read_only": true,
+    "no_full_page_block_for_non_managers": true
+  },
+  "backend_fixes": [
+    "GET /users is authenticated read, not manager-only.",
+    "GET /users/{user_id} is authenticated read.",
+    "Write routes remain restricted to owner or super_admin.",
+    "super_admin writes are limited to the actor organization and cannot manage owner or super_admin targets."
+  ],
+  "frontend_fixes": [
+    "User page loads users and organizations for all authenticated users.",
+    "Management controls are hidden per target and current role.",
+    "Viewer sees the table and details without create/edit/disable/reset buttons.",
+    "Initial abort during route/auth refresh retries once instead of showing a false sync error."
+  ],
+  "e2e_validation": {
+    "owner_users_visible": true,
+    "super_admin_users_visible": true,
+    "super_admin_can_patch_own_org_viewer": true,
+    "viewer_users_visible": true,
+    "viewer_forbidden_buttons_present": [],
+    "viewer_user_count": 3
+  },
+  "test_user_created_for_ordinary_user_coverage": {
+    "username": "codex_e2e_viewer",
+    "role": "viewer",
+    "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+    "job_title": "E2E Viewer",
+    "reason": "Production database had no ordinary user before E2E coverage."
+  }
+}

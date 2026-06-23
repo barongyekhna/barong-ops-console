@@ -1,0 +1,26 @@
+{
+  "report": "approval_review_super_admin_visibility_report",
+  "status": "passed",
+  "checked_at": "2026-06-23T16:50:00Z",
+  "product_rules": {
+    "owner_can_view_all_approval_scopes": true,
+    "super_admin_can_view_own_org_feature_approvals": true,
+    "super_admin_can_view_own_org_review_audit": true,
+    "empty_approval_state_text": "暂无待审批内容"
+  },
+  "fixes": [
+    "Normalized super_admin role checks in approval/review paths.",
+    "Changed degraded/empty approval fallback away from unavailable/sync language.",
+    "Updated browser-rendered empty approval list text to 暂无待审批内容.",
+    "Frontend sidebar exposes approval and review for super_admin without lock."
+  ],
+  "e2e_validation": {
+    "owner_approval_status": 200,
+    "super_admin_approval_status": 200,
+    "super_admin_review_status": 200,
+    "super_admin_approval_sidebar_locked": false,
+    "super_admin_review_sidebar_locked": false,
+    "browser_contains_unavailable_text": false,
+    "browser_contains_empty_text": true
+  }
+}

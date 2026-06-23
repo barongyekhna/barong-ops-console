@@ -36,16 +36,17 @@ import {
   listUsers,
   type ManagedUser,
 } from "@/lib/users-api";
+import { isOwnerRole, isSuperAdminRole, normalizeRole } from "@/lib/roles";
 
 const ASSIGNMENT_REASON = "Permission center assignment update.";
 const GLOBAL_SCOPE_TYPE = "global";
 const GLOBAL_SCOPE_KEY = "*";
 
 function roleLabel(role: string) {
-  if (role === "owner") {
+  if (isOwnerRole(role)) {
     return "owner";
   }
-  if (role === "super_admin") {
+  if (isSuperAdminRole(role)) {
     return "组织管理员";
   }
   return "普通用户";
@@ -137,7 +138,8 @@ function PermissionCard({
 
 export function PermissionsProductView() {
   const { status, user } = useAuth();
-  const role = user?.role ?? "";
+  const role = normalizeRole(user?.role);
+  const canViewControlPlanePermissions = isOwnerRole(role);
   const canView = status === "authenticated" && canViewPermissionCenter(role);
   const canWriteAssignments = canManagePermissionAssignments(role);
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -172,8 +174,20 @@ export function PermissionsProductView() {
     [visibleRegistry],
   );
   const assignableUsers = useMemo(
-    () => users.filter((targetUser) => targetUser.role !== "owner"),
-    [users],
+    () =>
+      users.filter((targetUser) => {
+        if (isOwnerRole(targetUser.role)) {
+          return false;
+        }
+        if (isSuperAdminRole(role)) {
+          return (
+            targetUser.organization_id === user?.organization_id &&
+            !isSuperAdminRole(targetUser.role)
+          );
+        }
+        return true;
+      }),
+    [role, user?.organization_id, users],
   );
   const filteredDialogUsers = useMemo(() => {
     const query = dialogSearchQuery.trim().toLowerCase();
@@ -381,10 +395,12 @@ export function PermissionsProductView() {
           <span>功能权限</span>
           <strong>{featurePermissions.length}</strong>
         </div>
-        <div>
-          <span>系统权限</span>
-          <strong>{controlPlanePermissions.length}</strong>
-        </div>
+        {canViewControlPlanePermissions ? (
+          <div>
+            <span>系统权限</span>
+            <strong>{controlPlanePermissions.length}</strong>
+          </div>
+        ) : null}
         <div>
           <span>当前角色</span>
           <strong>{roleLabel(role)}</strong>
@@ -428,7 +444,7 @@ export function PermissionsProductView() {
       {(!error || registry.length > 0 || users.length > 0) &&
       (!isLoading || registry.length > 0 || users.length > 0) ? (
         <div className="permissions-product-stack">
-          {role === "owner" ? (
+          {canViewControlPlanePermissions ? (
             <section
               className="permissions-group-section"
               aria-label="系统权限"

@@ -13,6 +13,7 @@ import { useAuth } from "@/components/auth-provider";
 import { ApiError, apiRequest } from "@/lib/api";
 import {
   listSuperAdminUsers,
+  listUsers,
   type ManagedUser,
 } from "@/lib/users-api";
 
@@ -146,6 +147,7 @@ function OrganizationListSection({
   organizations,
   superAdminError,
   superAdminLabelForOrganization,
+  memberCountForOrganization,
 }: {
   isLoading: boolean;
   listError: string;
@@ -155,6 +157,7 @@ function OrganizationListSection({
   organizations: OrganizationRecord[];
   superAdminError: string;
   superAdminLabelForOrganization: (organization: OrganizationRecord) => string;
+  memberCountForOrganization: (organization: OrganizationRecord) => number;
   total: number;
 }) {
   return (
@@ -209,6 +212,7 @@ function OrganizationListSection({
               <tr>
                 <th scope="col">组织名称</th>
                 <th scope="col">组织管理员</th>
+                <th scope="col">成员数量</th>
               </tr>
             </thead>
             <tbody>
@@ -218,6 +222,7 @@ function OrganizationListSection({
                     <strong>{organizationName(organization)}</strong>
                   </td>
                   <td>{superAdminLabelForOrganization(organization)}</td>
+                  <td>{memberCountForOrganization(organization)}</td>
                 </tr>
               ))}
             </tbody>
@@ -262,6 +267,7 @@ export function OrganizationProductView() {
   const [organizationCount, setOrganizationCount] = useState(0);
   const [organizationOffset, setOrganizationOffset] = useState(0);
   const [superAdmins, setSuperAdmins] = useState<ManagedUser[]>([]);
+  const [managedUsers, setManagedUsers] = useState<ManagedUser[]>([]);
   const [isListLoading, setIsListLoading] = useState(true);
   const [listError, setListError] = useState("");
   const [superAdminError, setSuperAdminError] = useState("");
@@ -317,6 +323,27 @@ export function OrganizationProductView() {
     [superAdminsByIdentity, superAdminsByOrganization],
   );
 
+  const memberCountForOrganization = useCallback(
+    (organization: OrganizationRecord) => {
+      const orgId = normalizeIdentifier(organization.org_id);
+      const memberIds = new Set<string>();
+
+      for (const managedUser of managedUsers) {
+        if (normalizeIdentifier(managedUser.organization_id) === orgId) {
+          memberIds.add(String(managedUser.id));
+        }
+      }
+
+      const ownerUserId = normalizeIdentifier(organization.owner_user_id);
+      if (ownerUserId) {
+        memberIds.add(ownerUserId);
+      }
+
+      return memberIds.size;
+    },
+    [managedUsers],
+  );
+
   const loadOrganizations = useCallback(
     async ({
       offset = organizationOffset,
@@ -348,6 +375,8 @@ export function OrganizationProductView() {
       try {
         const superAdminResult = await listSuperAdminUsers();
         setSuperAdmins(superAdminResult.items);
+        const usersResult = await listUsers(100);
+        setManagedUsers(usersResult.items);
       } catch (error) {
         setSuperAdminError(
           messageFromError(
@@ -396,7 +425,10 @@ export function OrganizationProductView() {
       });
       setCreateName("");
       setCreateNotice("组织已创建。");
-      await loadOrganizations({ offset: organizationOffset, showLoading: false });
+      await loadOrganizations({
+        offset: organizationOffset,
+        showLoading: false,
+      });
     } catch (error) {
       setCreateError(
         messageFromError(error, "组织创建未完成，请重试。"),
@@ -428,6 +460,7 @@ export function OrganizationProductView() {
         organizations={organizations}
         superAdminError={superAdminError}
         superAdminLabelForOrganization={superAdminLabelForOrganization}
+        memberCountForOrganization={memberCountForOrganization}
         total={organizationCount}
       />
     </section>

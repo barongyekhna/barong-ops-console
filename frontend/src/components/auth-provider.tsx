@@ -28,6 +28,7 @@ import {
   sessionCheckRequest,
   type AuthenticatedUser,
 } from "@/lib/auth";
+import { isOwnerRole } from "@/lib/roles";
 
 type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 type AuthLoginResult = {
@@ -380,7 +381,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [resetAuthState]);
 
-  const isOwner = user?.role === "owner";
+  const isOwner = isOwnerRole(user?.role);
   const value = useMemo(
     () => ({
       status,

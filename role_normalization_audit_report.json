@@ -1,0 +1,64 @@
+{
+  "report": "role_normalization_audit_report",
+  "status": "passed",
+  "checked_at": "2026-06-23T16:50:00Z",
+  "canonical_roles": {
+    "owner": "owner",
+    "super admin": "super_admin",
+    "super_admin": "super_admin",
+    "org_admin": "super_admin",
+    "organization_admin": "super_admin",
+    "operator": "operator",
+    "reviewer": "reviewer",
+    "viewer": "viewer"
+  },
+  "negative_controls": {
+    "chinese_ui_labels_used_for_permission_decisions": false,
+    "ordinary_users_promoted_to_admin": false
+  },
+  "backend_audit": {
+    "files": [
+      "backend/app/core/roles.py",
+      "backend/app/core/rbac.py",
+      "backend/app/repositories/users.py",
+      "backend/app/schemas/user.py",
+      "backend/app/services/auth_service.py",
+      "backend/app/api/routes/auth.py",
+      "backend/app/main.py",
+      "backend/app/middleware/org_context.py",
+      "backend/app/api/routes/reviews.py"
+    ],
+    "fixes": [
+      "Added centralized role normalization and alias handling.",
+      "Normalized auth/me and session identity roles.",
+      "Normalized persisted user response roles.",
+      "Updated role filtering to include safe legacy aliases.",
+      "Allowed RBAC metadata lookup to understand super_admin as admin metadata without changing root RBAC rules."
+    ]
+  },
+  "frontend_audit": {
+    "files": [
+      "frontend/src/lib/roles.ts",
+      "frontend/src/lib/auth.ts",
+      "frontend/src/components/auth-provider.tsx",
+      "frontend/src/components/permission-route-guard.tsx",
+      "frontend/src/lib/frontend-capability-state.ts",
+      "frontend/src/lib/permission-management.ts",
+      "frontend/src/components/user-management-panel.tsx",
+      "frontend/src/components/permissions-product-view.tsx",
+      "frontend/src/components/approval-product-view.tsx"
+    ],
+    "fixes": [
+      "Added shared frontend role normalization.",
+      "Separated data visibility from operation permissions.",
+      "Removed UI role labels from permission logic.",
+      "Added super_admin route/sidebar visibility where product rules require it."
+    ]
+  },
+  "verification": {
+    "backend_compile": "passed",
+    "backend_pytest": "20 passed, 62 skipped",
+    "frontend_tests": "14 passed",
+    "frontend_typecheck": "passed"
+  }
+}

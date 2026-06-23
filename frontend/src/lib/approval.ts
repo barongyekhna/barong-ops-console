@@ -149,8 +149,8 @@ function normalizeListResponse(value: unknown): ApprovalListResponse {
   const error = isRecord(record.error) ? record.error : {};
   const message =
     stringValue(record.message) ||
-    (stringValue(error.message) ? "审批列表暂时不可用。" : "") ||
-    (degraded ? "审批列表暂时不可用。" : "");
+    (stringValue(error.message) ? "暂无待审批内容。" : "") ||
+    (degraded ? "暂无待审批内容。" : "");
 
   return {
     count: numberValue(record.count, items.length),

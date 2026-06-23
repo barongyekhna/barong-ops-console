@@ -15,6 +15,7 @@ from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..core.session_cookies import get_session_id_from_request
+from ..core.roles import is_super_admin_role, normalize_role
 from ..db.compatibility import is_missing_table_error, table_exists
 from ..db.session import managed_read_session
 from ..models.auth_session import AuthSession
@@ -188,9 +189,10 @@ def _c18_org_tables_available(db: Session) -> bool:
 
 
 def _compat_org_resolution(*, role: str) -> OrgResolution:
+    normalized_role = normalize_role(role)
     return OrgResolution(
         org_id=ROLLOUT_BACKFILL_ORG_ID,
-        role="owner" if role == "owner" else "member",
+        role="owner" if normalized_role == "owner" else "member",
         source="c05b_compat_no_c18_tables",
     )
 
@@ -230,7 +232,7 @@ def _resolve_org(
     auth_session: AuthSession,
 ) -> OrgResolution | None:
     user_id = str(user.id)
-    user_role = user.role
+    user_role = normalize_role(user.role)
     if not _c18_org_tables_available(db):
         return _compat_org_resolution(role=user_role)
 
@@ -276,6 +278,17 @@ def _resolve_org(
             role=_role_for_membership(membership),
             source="c18c_active_membership",
         )
+
+    if is_super_admin_role(user_role):
+        user_org_id = _string_value(user.organization_id)
+        if user_org_id is not None:
+            organization = db.get(OrganizationRecord, user_org_id)
+            if organization is not None and organization.status == "active":
+                return OrgResolution(
+                    org_id=organization.org_id,
+                    role="admin",
+                    source="fallback_super_admin_user_org",
+                )
 
     try:
         owner_org = _owner_org_for_user(db, user_id=user_id)
