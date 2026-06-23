@@ -1,0 +1,198 @@
+{
+  "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+  "checks": [
+    {
+      "check": "browser_available",
+      "details": {
+        "browser_click_available": true,
+        "chromium_path": "/snap/bin/chromium",
+        "frontend_playwright_package": true,
+        "npx": "/usr/bin/npx",
+        "playwright_cli": null
+      },
+      "status": "success"
+    },
+    {
+      "check": "http_navigation_routes",
+      "details": {
+        "base_url": "http://127.0.0.1:3100",
+        "routes": [
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 294.51,
+            "error": null,
+            "ok": true,
+            "route": "/login",
+            "status_code": 200,
+            "url": "http://127.0.0.1:3100/login"
+          },
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 7.72,
+            "error": null,
+            "ok": true,
+            "route": "/dashboard",
+            "status_code": 200,
+            "url": "http://127.0.0.1:3100/dashboard"
+          },
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 11.43,
+            "error": null,
+            "ok": true,
+            "route": "/modules",
+            "status_code": 200,
+            "url": "http://127.0.0.1:3100/modules"
+          },
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 284.23,
+            "error": null,
+            "ok": true,
+            "route": "/organizations",
+            "status_code": 200,
+            "url": "http://127.0.0.1:3100/organizations"
+          },
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 498.86,
+            "error": null,
+            "ok": true,
+            "route": "/reviews",
+            "status_code": 200,
+            "url": "http://127.0.0.1:3100/reviews"
+          }
+        ],
+        "routes_checked": 5,
+        "routes_ok": 5,
+        "timeout_over_3s": []
+      },
+      "status": "success"
+    },
+    {
+      "check": "playwright_browser_navigation",
+      "details": {
+        "base_url": "http://127.0.0.1:3100",
+        "routes": [
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 1707,
+            "error": null,
+            "final_url": "http://127.0.0.1:3100/login",
+            "ok": true,
+            "route": "/login",
+            "status_code": 200,
+            "title": "Login | Barong Operations",
+            "url": "http://127.0.0.1:3100/login"
+          },
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 688,
+            "error": null,
+            "final_url": "http://127.0.0.1:3100/dashboard",
+            "ok": true,
+            "route": "/dashboard",
+            "status_code": 200,
+            "title": "Operations Hub | Barong Operations",
+            "url": "http://127.0.0.1:3100/dashboard"
+          },
+          {
+            "api_key_management_section_found": false,
+            "broken_state_marker_found": false,
+            "elapsed_ms": 1807,
+            "error": null,
+            "final_url": "http://127.0.0.1:3100/modules",
+            "ok": true,
+            "route": "/modules",
+            "status_code": 200,
+            "title": "Barong Operations",
+            "url": "http://127.0.0.1:3100/modules"
+          },
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 506,
+            "error": null,
+            "final_url": "http://127.0.0.1:3100/organizations",
+            "ok": true,
+            "route": "/organizations",
+            "status_code": 200,
+            "title": "Organizations | Barong Operations",
+            "url": "http://127.0.0.1:3100/organizations"
+          },
+          {
+            "broken_state_marker_found": false,
+            "elapsed_ms": 606,
+            "error": null,
+            "final_url": "http://127.0.0.1:3100/reviews",
+            "ok": true,
+            "route": "/reviews",
+            "status_code": 200,
+            "title": "Barong Operations",
+            "url": "http://127.0.0.1:3100/reviews"
+          }
+        ],
+        "routes_checked": 5,
+        "routes_ok": 5,
+        "timeout_over_3s": []
+      },
+      "status": "success"
+    },
+    {
+      "check": "api_key_management_section_visible",
+      "details": {
+        "reason": "API key management is embedded in the modules surface; without an isolated browser-authenticated frontend/backend pair this check can only confirm route availability.",
+        "route": "/modules"
+      },
+      "status": "partial_valid"
+    },
+    {
+      "check": "browser_click_flow",
+      "reason": "Playwright browser navigation executed. Full login click flow remains partial because this zero-risk harness does not start a frontend/backend pair against the isolated temporary DB.",
+      "status": "not_executed_fallback_valid"
+    }
+  ],
+  "cleanup": {
+    "attempted": true,
+    "removed": true,
+    "returncode": 0,
+    "stderr_tail": ""
+  },
+  "click_flow_executed": false,
+  "critical_failure_ids": [],
+  "environment": {
+    "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+    "browser_environment": {
+      "browser_click_available": true,
+      "chromium_path": "/snap/bin/chromium",
+      "frontend_playwright_package": true,
+      "npx": "/usr/bin/npx",
+      "playwright_cli": null
+    },
+    "database": "isolated_temporary_postgres",
+    "database_url_safe": true,
+    "docker_container": "barong-strict-e2e-strict_e2e_20260623t065820z_dd613c97",
+    "event_queue_harness": {
+      "async_worker_started": false,
+      "persistence_path": "DEFAULT_EVENT_EMITTER.emit still writes EventStreamRecord synchronously",
+      "reason": "Avoid daemon polling an isolated temporary DB after harness cleanup."
+    },
+    "python": "/opt/barong-ops-console/.venv/bin/python",
+    "started_at": "2026-06-23T06:58:20.304329+00:00"
+  },
+  "generated_at": "2026-06-23T07:00:54.190620+00:00",
+  "http_navigation_substitute_used": true,
+  "isolated_namespace": "test_scope_strict_e2e_20260623T065820Z_dd613c97",
+  "mode": "FULL_SYSTEM_END_TO_END_SELF_TEST_STRICT_AUDIT_ZERO_RISK",
+  "overall_status": "passed",
+  "production_data_touched": false,
+  "report": "ui_user_flow_validation_report",
+  "routes_requested": [
+    "/login",
+    "/dashboard",
+    "/modules",
+    "/organizations",
+    "/reviews"
+  ],
+  "staging_data_touched": false,
+  "status": "partial_valid_playwright_browser_navigation_executed"
+}

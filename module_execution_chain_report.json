@@ -1,0 +1,2278 @@
+{
+  "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+  "backend_requests": [
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 1,
+          "is_active": true,
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_e09471d994b847a285b794e9c310ba55",
+          "role": "owner",
+          "username": "test_user_strict_e2e_20260623T065820Z_dd613c97"
+        }
+      },
+      "elapsed_ms": 2503.75,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "login_test_user_owner"
+    },
+    {
+      "body": {
+        "id": 1,
+        "is_active": true,
+        "last_login_at": null,
+        "must_change_password": "***",
+        "organization_id": "org_e09471d994b847a285b794e9c310ba55",
+        "role": "owner",
+        "username": "test_user_strict_e2e_20260623T065820Z_dd613c97"
+      },
+      "elapsed_ms": 5.47,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "auth_me"
+    },
+    {
+      "body": {
+        "auto_registered_count": 45,
+        "cache_status": "fresh",
+        "generated_at": "2026-06-23T06:59:57.200844Z",
+        "module_count": 45,
+        "organization_count": 3,
+        "organizations": [
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_00000000000000000000000000000000",
+            "org_name": "C18 Rollout Backfill Org"
+          },
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_1d25908b120240d0a793b57186f6358c",
+            "org_name": "Strict E2E Other Org strict_e2e_20260623T065820Z_dd613c97"
+          },
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "org_name": "Strict E2E Test Org strict_e2e_20260623T065820Z_dd613c97"
+          }
+        ]
+      },
+      "elapsed_ms": 81.62,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "module_control_center_as_owner"
+    },
+    {
+      "body": {
+        "count": 0,
+        "items": []
+      },
+      "elapsed_ms": 5019.94,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "api_key_list_as_owner_initial"
+    },
+    {
+      "body": {
+        "count": 3,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [
+          {
+            "created_at": "2026-06-23T06:59:05.102845Z",
+            "metadata": {
+              "country": "",
+              "custom": {},
+              "industry": "",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 365
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_00000000000000000000000000000000",
+            "org_name": "C18 Rollout Backfill Org",
+            "org_type": "store",
+            "owner_user_id": "system",
+            "status": "active",
+            "updated_at": "2026-06-23T06:59:05.102845Z"
+          },
+          {
+            "created_at": "2026-06-23T06:59:43.797973Z",
+            "metadata": {
+              "country": "",
+              "custom": {
+                "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+                "isolation_probe": true,
+                "namespace": "test_scope_strict_e2e_20260623T065820Z_dd613c97",
+                "test_scope": true
+              },
+              "industry": "",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 365
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_1d25908b120240d0a793b57186f6358c",
+            "org_name": "Strict E2E Other Org strict_e2e_20260623T065820Z_dd613c97",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-23T06:59:43.797973Z"
+          },
+          {
+            "created_at": "2026-06-23T06:59:43.797973Z",
+            "metadata": {
+              "country": "",
+              "custom": {
+                "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+                "namespace": "test_scope_strict_e2e_20260623T065820Z_dd613c97",
+                "test_scope": true
+              },
+              "industry": "",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 365
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "org_name": "Strict E2E Test Org strict_e2e_20260623T065820Z_dd613c97",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-23T06:59:43.797973Z"
+          }
+        ],
+        "limit": 100,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 2683.39,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "organizations_list_as_owner_test"
+    },
+    {
+      "body": {
+        "item": {
+          "category": "core",
+          "display_name": "Dashboard",
+          "enabled": false,
+          "last_error_at": null,
+          "module_id": "core.dashboard",
+          "org_id": "org_e09471d994b847a285b794e9c310ba55",
+          "runtime_error_code": null,
+          "runtime_error_message": null,
+          "runtime_status": "disabled",
+          "updated_at": "2026-06-23T07:00:08.093991Z"
+        }
+      },
+      "elapsed_ms": 2205.7,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "disable_reference_module"
+    },
+    {
+      "body": {
+        "auto_registered_count": 0,
+        "cache_status": "fresh",
+        "generated_at": "2026-06-23T07:00:08.409174Z",
+        "module_count": 45,
+        "organization_count": 3,
+        "organizations": [
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_00000000000000000000000000000000",
+            "org_name": "C18 Rollout Backfill Org"
+          },
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_1d25908b120240d0a793b57186f6358c",
+            "org_name": "Strict E2E Other Org strict_e2e_20260623T065820Z_dd613c97"
+          },
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": false,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "disabled",
+                "updated_at": "2026-06-23T07:00:08.093991Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "org_name": "Strict E2E Test Org strict_e2e_20260623T065820Z_dd613c97"
+          }
+        ]
+      },
+      "elapsed_ms": 104.71,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "module_control_center_after_disable"
+    },
+    {
+      "body": {
+        "item": {
+          "category": "core",
+          "display_name": "Dashboard",
+          "enabled": true,
+          "last_error_at": null,
+          "module_id": "core.dashboard",
+          "org_id": "org_e09471d994b847a285b794e9c310ba55",
+          "runtime_error_code": null,
+          "runtime_error_message": null,
+          "runtime_status": "active",
+          "updated_at": "2026-06-23T07:00:11.590854Z"
+        }
+      },
+      "elapsed_ms": 3407.32,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "enable_reference_module"
+    },
+    {
+      "body": {
+        "auto_registered_count": 0,
+        "cache_status": "fresh",
+        "generated_at": "2026-06-23T07:00:12.406618Z",
+        "module_count": 45,
+        "organization_count": 3,
+        "organizations": [
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_00000000000000000000000000000000",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_00000000000000000000000000000000",
+            "org_name": "C18 Rollout Backfill Org"
+          },
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_1d25908b120240d0a793b57186f6358c",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_1d25908b120240d0a793b57186f6358c",
+            "org_name": "Strict E2E Other Org strict_e2e_20260623T065820Z_dd613c97"
+          },
+          {
+            "modules": [
+              {
+                "category": "core",
+                "display_name": "Dashboard",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "core.dashboard",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T07:00:11.590854Z"
+              },
+              {
+                "category": "experimental",
+                "display_name": "Foundation Demo",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "experimental.foundation_demo",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "integration",
+                "display_name": "n8n Test Bridge",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "integration.n8n_test_bridge",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "User Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.users",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Organizations",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.organizations",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Permission Management",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.permissions",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Modules",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.modules",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Agents",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.agents",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "admin",
+                "display_name": "Settings",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "admin.settings",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Products",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.products",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approvals",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.approvals",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "business",
+                "display_name": "Approval Audit",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "business.reviews",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Errors",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.errors",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Memory Events",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.memory_events",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              },
+              {
+                "category": "system",
+                "display_name": "Operation Logs",
+                "enabled": true,
+                "last_error_at": null,
+                "module_id": "system.operation_logs",
+                "org_id": "org_e09471d994b847a285b794e9c310ba55",
+                "runtime_error_code": null,
+                "runtime_error_message": null,
+                "runtime_status": "active",
+                "updated_at": "2026-06-23T06:59:56.493720Z"
+              }
+            ],
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "org_name": "Strict E2E Test Org strict_e2e_20260623T065820Z_dd613c97"
+          }
+        ]
+      },
+      "elapsed_ms": 8.85,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "module_control_center_after_enable"
+    },
+    {
+      "body": {
+        "item": {
+          "assigned_module_ids": [],
+          "created_at": "2026-06-23T07:00:14.998026Z",
+          "key_hash_prefix": "438ae63d972e",
+          "key_id": "key_126886a27baddf25eea88b67e2eda159",
+          "last_used_at": null,
+          "name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+          "org_id": "org_e09471d994b847a285b794e9c310ba55",
+          "status": "active",
+          "updated_at": "2026-06-23T07:00:14.998026Z",
+          "url": "https://example.test/api"
+        }
+      },
+      "elapsed_ms": 2695.87,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 201,
+      "step": "create_scoped_api_key"
+    },
+    {
+      "body": {
+        "count": 1,
+        "items": [
+          {
+            "assigned_module_ids": [],
+            "created_at": "2026-06-23T07:00:14.998026Z",
+            "key_hash_prefix": "438ae63d972e",
+            "key_id": "key_126886a27baddf25eea88b67e2eda159",
+            "last_used_at": null,
+            "name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "status": "active",
+            "updated_at": "2026-06-23T07:00:14.998026Z",
+            "url": "https://example.test/api"
+          }
+        ]
+      },
+      "elapsed_ms": 2608.25,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "api_key_list_after_create"
+    },
+    {
+      "body": {
+        "item": {
+          "binding_id": "akb_3f045c1bd24a698b6828307a2172ee1a",
+          "created_at": "2026-06-23T07:00:20.197413Z",
+          "key_alias": "default",
+          "key_id": "key_126886a27baddf25eea88b67e2eda159",
+          "key_name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+          "key_url": "https://example.test/api",
+          "module_id": "core.dashboard",
+          "org_id": "org_e09471d994b847a285b794e9c310ba55",
+          "status": "active",
+          "updated_at": "2026-06-23T07:00:20.197413Z"
+        }
+      },
+      "elapsed_ms": 2892.33,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 201,
+      "step": "bind_key_to_reference_module"
+    },
+    {
+      "body": {
+        "detail": "module_not_registered"
+      },
+      "elapsed_ms": 3192.98,
+      "expected_status": 404,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 404,
+      "step": "bind_key_to_missing_module_expected_404"
+    },
+    {
+      "body": {
+        "item": {
+          "assigned_module_ids": [],
+          "created_at": "2026-06-23T07:00:26.401862Z",
+          "key_hash_prefix": "009acde5b211",
+          "key_id": "key_9f844d8d5cf6e4d5a7c784492bd1cc9f",
+          "last_used_at": null,
+          "name": "strict e2e other org key strict_e2e_20260623T065820Z_dd613c97",
+          "org_id": "org_1d25908b120240d0a793b57186f6358c",
+          "status": "active",
+          "updated_at": "2026-06-23T07:00:26.401862Z",
+          "url": "https://other.example.test/api"
+        }
+      },
+      "elapsed_ms": 2796.62,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 201,
+      "step": "create_other_org_api_key"
+    },
+    {
+      "body": {
+        "detail": "api_key_org_mismatch"
+      },
+      "elapsed_ms": 2416.66,
+      "expected_status": 403,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 403,
+      "step": "bind_other_org_key_to_test_org_expected_403"
+    },
+    {
+      "body": {
+        "count": 1,
+        "items": [
+          {
+            "binding_id": "akb_3f045c1bd24a698b6828307a2172ee1a",
+            "created_at": "2026-06-23T07:00:20.197413Z",
+            "key_alias": "default",
+            "key_id": "key_126886a27baddf25eea88b67e2eda159",
+            "key_name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+            "key_url": "https://example.test/api",
+            "module_id": "core.dashboard",
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "status": "active",
+            "updated_at": "2026-06-23T07:00:20.197413Z"
+          }
+        ]
+      },
+      "elapsed_ms": 2786.19,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "api_key_bindings_after_bind"
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 2,
+          "is_active": true,
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_e09471d994b847a285b794e9c310ba55",
+          "role": "viewer",
+          "username": "test_viewer_strict_e2e_20260623T065820Z_dd613c97"
+        }
+      },
+      "elapsed_ms": 403.05,
+      "expected_status": null,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 200,
+      "step": "login_negative_rbac_viewer"
+    },
+    {
+      "body": {
+        "detail": "Forbidden."
+      },
+      "elapsed_ms": 80.45,
+      "expected_status": 403,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 403,
+      "step": "viewer_module_control_center_expected_403"
+    },
+    {
+      "body": {
+        "detail": "Forbidden."
+      },
+      "elapsed_ms": 2998.46,
+      "expected_status": 403,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 403,
+      "step": "viewer_api_key_list_expected_403"
+    },
+    {
+      "body": {
+        "detail": "Owner or super admin role required."
+      },
+      "elapsed_ms": 1510.36,
+      "expected_status": 403,
+      "ok": true,
+      "secret_value_leaked": false,
+      "status_code": 403,
+      "step": "viewer_organizations_expected_403"
+    }
+  ],
+  "chain": [
+    {
+      "node": "owner_login",
+      "status": "success"
+    },
+    {
+      "details": {
+        "body": {
+          "item": {
+            "category": "core",
+            "display_name": "Dashboard",
+            "enabled": true,
+            "last_error_at": null,
+            "module_id": "core.dashboard",
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "runtime_error_code": null,
+            "runtime_error_message": null,
+            "runtime_status": "active",
+            "updated_at": "2026-06-23T07:00:11.590854Z"
+          }
+        },
+        "elapsed_ms": 3407.32,
+        "expected_status": null,
+        "ok": true,
+        "secret_value_leaked": false,
+        "status_code": 200,
+        "step": "enable_reference_module"
+      },
+      "node": "module_control_enabled",
+      "status": "success"
+    },
+    {
+      "details": {
+        "body": {
+          "item": {
+            "binding_id": "akb_3f045c1bd24a698b6828307a2172ee1a",
+            "created_at": "2026-06-23T07:00:20.197413Z",
+            "key_alias": "default",
+            "key_id": "key_126886a27baddf25eea88b67e2eda159",
+            "key_name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+            "key_url": "https://example.test/api",
+            "module_id": "core.dashboard",
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "status": "active",
+            "updated_at": "2026-06-23T07:00:20.197413Z"
+          }
+        },
+        "elapsed_ms": 2892.33,
+        "expected_status": null,
+        "ok": true,
+        "secret_value_leaked": false,
+        "status_code": 201,
+        "step": "bind_key_to_reference_module"
+      },
+      "node": "api_key_bound",
+      "status": "success"
+    },
+    {
+      "node": "execution_triggered",
+      "status": "success"
+    },
+    {
+      "node": "backend_receives_request",
+      "status": "success"
+    },
+    {
+      "details": {
+        "allowed": true,
+        "backend_received_injected_header": true,
+        "control_module_id": "core.dashboard",
+        "header_value_matches_secret": "***",
+        "header_value_recorded_in_report": "***",
+        "last_used_at_recorded": true,
+        "org_id": "org_e09471d994b847a285b794e9c310ba55",
+        "redacted_keys": {
+          "mock_execution": {
+            "header_name": "Authorization",
+            "header_value": "***",
+            "key_alias": "default",
+            "key_id": "key_126886a27baddf25eea88b67e2eda159",
+            "name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+            "step_name": "mock_execution",
+            "url": "https://example.test/api"
+          }
+        },
+        "requested_module_id": "core.dashboard"
+      },
+      "node": "api_key_injected",
+      "status": "success"
+    },
+    {
+      "event_count": 2,
+      "node": "logs_recorded",
+      "status": "success"
+    }
+  ],
+  "cleanup": {
+    "attempted": true,
+    "removed": true,
+    "returncode": 0,
+    "stderr_tail": ""
+  },
+  "critical_failure_ids": [],
+  "environment": {
+    "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+    "browser_environment": {
+      "browser_click_available": true,
+      "chromium_path": "/snap/bin/chromium",
+      "frontend_playwright_package": true,
+      "npx": "/usr/bin/npx",
+      "playwright_cli": null
+    },
+    "database": "isolated_temporary_postgres",
+    "database_url_safe": true,
+    "docker_container": "barong-strict-e2e-strict_e2e_20260623t065820z_dd613c97",
+    "event_queue_harness": {
+      "async_worker_started": false,
+      "persistence_path": "DEFAULT_EVENT_EMITTER.emit still writes EventStreamRecord synchronously",
+      "reason": "Avoid daemon polling an isolated temporary DB after harness cleanup."
+    },
+    "python": "/opt/barong-ops-console/.venv/bin/python",
+    "started_at": "2026-06-23T06:58:20.304329+00:00"
+  },
+  "generated_at": "2026-06-23T07:00:54.190620+00:00",
+  "isolated_namespace": "test_scope_strict_e2e_20260623T065820Z_dd613c97",
+  "mode": "FULL_SYSTEM_END_TO_END_SELF_TEST_STRICT_AUDIT_ZERO_RISK",
+  "module_gate": {
+    "disabled_gate": {
+      "blocked": true,
+      "code": "MODULE_DISABLED",
+      "expected_code": "MODULE_DISABLED",
+      "status_code": 403
+    },
+    "module_control_ui_state": {
+      "appears_in_control_center": true,
+      "disabled_state": {
+        "category": "core",
+        "display_name": "Dashboard",
+        "enabled": false,
+        "last_error_at": null,
+        "module_id": "core.dashboard",
+        "org_id": "org_e09471d994b847a285b794e9c310ba55",
+        "runtime_error_code": null,
+        "runtime_error_message": null,
+        "runtime_status": "disabled",
+        "updated_at": "2026-06-23T07:00:08.093991Z"
+      },
+      "disabled_state_reflected": true,
+      "enabled_state": {
+        "category": "core",
+        "display_name": "Dashboard",
+        "enabled": true,
+        "last_error_at": null,
+        "module_id": "core.dashboard",
+        "org_id": "org_e09471d994b847a285b794e9c310ba55",
+        "runtime_error_code": null,
+        "runtime_error_message": null,
+        "runtime_status": "active",
+        "updated_at": "2026-06-23T07:00:11.590854Z"
+      },
+      "enabled_state_reflected": true,
+      "reference_module": "core.dashboard"
+    }
+  },
+  "overall_status": "passed",
+  "production_data_touched": false,
+  "report": "module_execution_chain_report",
+  "staging_data_touched": false,
+  "status": "passed"
+}

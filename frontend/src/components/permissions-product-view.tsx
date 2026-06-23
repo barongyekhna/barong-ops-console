@@ -203,7 +203,7 @@ export function PermissionsProductView() {
       loadErrors.push(
         formatUsersApiError(
           loadError,
-          "加载用户失败，请稍后重试。",
+          "用户数据暂未同步，请重试。",
         ),
       );
     }
@@ -215,7 +215,7 @@ export function PermissionsProductView() {
       loadErrors.push(
         formatUsersApiError(
           loadError,
-          "加载权限失败，请稍后重试。",
+          "权限数据暂未同步，请重试。",
         ),
       );
     }
@@ -258,7 +258,7 @@ export function PermissionsProductView() {
       }));
       if (failedCount > 0) {
         void lastError;
-        setDialogError("部分员工权限加载失败，已显示可用员工。");
+        setDialogError("部分员工权限暂未同步，已显示可用员工。");
       }
       setIsDialogLoading(false);
     },
@@ -341,7 +341,7 @@ export function PermissionsProductView() {
       setDialogNotice("权限已更新。");
     } catch (actionError) {
       void actionError;
-      setDialogError("操作失败，请稍后重试。");
+      setDialogError("操作未完成，请重试。");
     } finally {
       setPendingUserId(null);
     }
@@ -367,12 +367,8 @@ export function PermissionsProductView() {
           onClick={() => void load()}
           type="button"
         >
-          {isLoading ? (
-            <LoaderCircle aria-hidden="true" className="spin" size={17} />
-          ) : (
-            <RotateCcw aria-hidden="true" size={17} />
-          )}
-          刷新
+          <RotateCcw aria-hidden="true" size={17} />
+          {isLoading ? "同步中" : "刷新"}
         </button>
       </div>
 
@@ -397,8 +393,11 @@ export function PermissionsProductView() {
 
       {isLoading && registry.length === 0 && users.length === 0 ? (
         <section className="list-state">
-          <LoaderCircle className="spin" aria-hidden="true" size={22} />
-          <span>正在加载权限</span>
+          <div className="skeleton-stack" aria-hidden="true">
+            <span className="skeleton-line medium" />
+            <span className="skeleton-line" />
+            <span className="skeleton-line short" />
+          </div>
         </section>
       ) : null}
 
@@ -407,8 +406,8 @@ export function PermissionsProductView() {
           <div>
             <h2>
               {registry.length > 0 || users.length > 0
-                ? "部分数据加载失败"
-                : "加载失败，请稍后重试"}
+                ? "部分数据暂未同步"
+                : "权限数据暂未同步"}
             </h2>
             <p>{error}</p>
             {registry.length > 0 || users.length > 0 ? (

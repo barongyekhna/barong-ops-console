@@ -3,7 +3,6 @@
 import {
   Boxes,
   KeyRound,
-  LoaderCircle,
   Plus,
   RotateCcw,
   Save,
@@ -125,7 +124,7 @@ function messageFromError(error: unknown, fallback: string) {
       return "当前账号无权执行此操作。";
     }
     if (error.status >= 500) {
-      return "服务暂时不可用，请稍后重试。";
+      return "后端响应暂未返回可用数据。";
     }
     return error.message || fallback;
   }
@@ -203,12 +202,8 @@ function ReadOnlyModuleRegistryView() {
           onClick={() => void refresh()}
           type="button"
         >
-          {isLoading ? (
-            <LoaderCircle className="spin" aria-hidden="true" size={17} />
-          ) : (
-            <RotateCcw aria-hidden="true" size={17} />
-          )}
-          刷新
+          <RotateCcw aria-hidden="true" size={17} />
+          {isLoading ? "同步中" : "刷新"}
         </button>
       </div>
 
@@ -470,7 +465,7 @@ function OwnerModuleControlCenter() {
         };
       });
     } catch (loadError) {
-      setError(messageFromError(loadError, "服务暂时不可用，请稍后再试。"));
+      setError(messageFromError(loadError, "后端响应暂未返回可用数据。"));
     } finally {
       setIsControlDataLoading(false);
     }
@@ -683,12 +678,8 @@ function OwnerModuleControlCenter() {
           onClick={() => void refresh()}
           type="button"
         >
-          {isLoading ? (
-            <LoaderCircle className="spin" aria-hidden="true" size={17} />
-          ) : (
-            <RotateCcw aria-hidden="true" size={17} />
-          )}
-          刷新
+          <RotateCcw aria-hidden="true" size={17} />
+          {isLoading ? "同步中" : "刷新"}
         </button>
       </div>
 
@@ -738,7 +729,12 @@ function OwnerModuleControlCenter() {
                 <h3>组织数据加载中</h3>
                 <p>正在同步后端组织列表。</p>
               </div>
-              <LoaderCircle className="spin" aria-hidden="true" size={18} />
+              <span className="skeleton-chip" aria-hidden="true" />
+            </div>
+            <div className="skeleton-grid" aria-hidden="true">
+              <span className="skeleton-card" />
+              <span className="skeleton-card" />
+              <span className="skeleton-card" />
             </div>
           </section>
         ) : null}
@@ -774,6 +770,10 @@ function OwnerModuleControlCenter() {
               <div className="ops-empty-state" role="status">
                 <strong>模块数据加载中</strong>
                 <span>正在同步该组织的模块状态。</span>
+                <div className="skeleton-grid" aria-hidden="true">
+                  <span className="skeleton-card" />
+                  <span className="skeleton-card" />
+                </div>
               </div>
             ) : group.modules.length === 0 ? (
               <div className="ops-empty-state" role="status">

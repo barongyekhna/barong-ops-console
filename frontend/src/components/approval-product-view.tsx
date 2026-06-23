@@ -72,19 +72,19 @@ function emptyApprovalListResponse(): ApprovalListResponse {
 
 function errorText(error: unknown, fallback: string) {
   if (error instanceof ApiTimeoutError) {
-    return "服务暂时不可用，请稍后再试。";
+    return "数据同步延迟，请重试。";
   }
   if (error instanceof ApiError && error.status >= 500) {
-    return "服务暂时不可用，请稍后再试。";
+    return "后端响应暂未返回可用数据。";
   }
   return fallback;
 }
 
 function approvalListErrorText(error: unknown) {
   if (error instanceof ApiTimeoutError) {
-    return "服务暂时不可用，请稍后再试。";
+    return "数据同步延迟，请重试。";
   }
-  return errorText(error, "服务暂时不可用，请稍后再试。");
+  return errorText(error, "审批数据暂未同步，请重试。");
 }
 
 function formatDate(value: string) {
@@ -473,7 +473,7 @@ export function ApprovalDetailView() {
     try {
       setDetail(await getApprovalDetail(approvalId));
     } catch (requestError) {
-      setError(errorText(requestError, "审批详情加载失败。"));
+      setError(errorText(requestError, "审批详情暂未同步。"));
     } finally {
       setLoading(false);
     }

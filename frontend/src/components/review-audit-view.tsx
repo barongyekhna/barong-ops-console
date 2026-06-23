@@ -3,7 +3,6 @@
 import {
   Building2,
   CheckCircle2,
-  LoaderCircle,
   RotateCcw,
   Search,
   UserRound,
@@ -158,6 +157,19 @@ function employeeMatchesSearch(employee: ReviewAuditEmployee, search: string) {
     employee.employee_name.toLowerCase().includes(query) ||
     employee.employee_role.toLowerCase().includes(query) ||
     (employee.job_title ?? "").toLowerCase().includes(query)
+  );
+}
+
+function ReviewLoadingState({ label }: { label: string }) {
+  return (
+    <div className="review-empty" role="status">
+      <strong>{label}</strong>
+      <div className="skeleton-stack" aria-hidden="true">
+        <span className="skeleton-line medium" />
+        <span className="skeleton-line" />
+        <span className="skeleton-line short" />
+      </div>
+    </div>
   );
 }
 
@@ -779,12 +791,8 @@ export function ReviewAuditView() {
           }}
           type="button"
         >
-          {organizationLoading ? (
-            <LoaderCircle aria-hidden="true" className="spin" size={16} />
-          ) : (
-            <RotateCcw aria-hidden="true" size={16} />
-          )}
-          刷新
+          <RotateCcw aria-hidden="true" size={16} />
+          {organizationLoading ? "同步中" : "刷新"}
         </button>
       </div>
 
@@ -932,10 +940,7 @@ export function ReviewAuditView() {
           ) : null}
           {selectedFilterUserId === null ? (
             filterEmployeeLoading && filterEmployees.items.length === 0 ? (
-              <div className="review-empty" role="status">
-                <LoaderCircle aria-hidden="true" className="spin" size={18} />
-                <span>正在加载员工</span>
-              </div>
+              <ReviewLoadingState label="正在加载员工" />
             ) : filterEmployees.items.length === 0 ? (
               <div className="review-empty">
                 <strong>没有匹配的员工审批记录</strong>
@@ -969,10 +974,7 @@ export function ReviewAuditView() {
               </ol>
             )
           ) : filteredActionLoading && filteredActions.items.length === 0 ? (
-            <div className="review-empty" role="status">
-              <LoaderCircle aria-hidden="true" className="spin" size={18} />
-              <span>正在加载筛选结果</span>
-            </div>
+            <ReviewLoadingState label="正在加载筛选结果" />
           ) : filteredActions.items.length === 0 ? (
             <div className="review-empty">
               <strong>没有匹配的审批记录</strong>
@@ -1019,10 +1021,7 @@ export function ReviewAuditView() {
               </p>
             ) : null}
             {organizationLoading && organizations.items.length === 0 ? (
-              <div className="review-empty" role="status">
-                <LoaderCircle aria-hidden="true" className="spin" size={18} />
-                <span>正在加载组织</span>
-              </div>
+              <ReviewLoadingState label="正在加载组织" />
             ) : organizations.items.length === 0 ? (
               <div className="review-empty">
                 <strong>暂无组织</strong>
@@ -1095,10 +1094,7 @@ export function ReviewAuditView() {
                 </select>
               </label>
               {employeeLoading ? (
-                <div className="review-empty" role="status">
-                  <LoaderCircle aria-hidden="true" className="spin" size={18} />
-                  <span>正在加载员工</span>
-                </div>
+                <ReviewLoadingState label="正在加载员工" />
               ) : employees.items.length === 0 ? (
                 <div className="review-empty">
                   <strong>该组织暂无员工</strong>
@@ -1156,10 +1152,7 @@ export function ReviewAuditView() {
                   <strong>选择员工后显示记录</strong>
                 </div>
               ) : actionLoading && actions.items.length === 0 ? (
-                <div className="review-empty" role="status">
-                  <LoaderCircle aria-hidden="true" className="spin" size={18} />
-                  <span>正在加载审批记录</span>
-                </div>
+                <ReviewLoadingState label="正在加载审批记录" />
               ) : actions.items.length === 0 ? (
                 <div className="review-empty">
                   <strong>暂无审批任务</strong>

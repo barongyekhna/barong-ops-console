@@ -10,8 +10,8 @@ import { ApiError, ApiRequestAbortedError, ApiTimeoutError } from "@/lib/api";
 const LOGIN_AUTH_ERROR =
   "登录失败，请检查账号和密码。";
 const LOGIN_BACKEND_ERROR =
-  "登录服务暂不可用，请稍后重试。";
-const LOGIN_ERROR = "登录失败，请稍后重试。";
+  "登录服务暂未响应，请重试。";
+const LOGIN_ERROR = "登录未完成，请重试。";
 const LOGIN_REQUEST_TIMEOUT_MS = 8_000;
 
 function isBackendLoginFailure(error: unknown) {

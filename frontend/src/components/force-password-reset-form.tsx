@@ -15,7 +15,7 @@ function messageFromError(error: unknown) {
   if (error instanceof ApiError && error.status === 401) {
     return "请重新登录后再操作。";
   }
-  return "密码修改失败，请稍后重试。";
+  return "密码修改未完成，请重试。";
 }
 
 export function ForcePasswordResetForm() {

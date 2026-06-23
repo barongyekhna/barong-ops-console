@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, RotateCcw } from "lucide-react";
+import { RotateCcw } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { CapabilityEmptyState } from "@/components/capability-empty-state";
@@ -56,8 +56,8 @@ export function CapabilityRecordList({
       setResult(null);
       setError(
         requestError instanceof ApiError
-          ? "加载失败，请稍后重试。"
-          : "加载失败，请稍后重试。",
+          ? "数据暂未同步，请重试。"
+          : "数据暂未同步，请重试。",
       );
     } finally {
       setIsLoading(false);
@@ -71,8 +71,11 @@ export function CapabilityRecordList({
   if (isLoading) {
     return (
       <section className="list-state" aria-label={`正在加载${title}`}>
-        <LoaderCircle className="spin" aria-hidden="true" size={22} />
-        <span>正在加载</span>
+        <div className="skeleton-stack" aria-hidden="true">
+          <span className="skeleton-line medium" />
+          <span className="skeleton-line" />
+          <span className="skeleton-line short" />
+        </div>
       </section>
     );
   }
@@ -92,7 +95,7 @@ export function CapabilityRecordList({
         required_org_state="组织状态正常。"
         required_permission={requiredPermission}
         state="missing_feature"
-        title="加载失败，请稍后重试"
+        title={`${title}暂未同步`}
         unlock_condition="稍后重试。"
       />
     );

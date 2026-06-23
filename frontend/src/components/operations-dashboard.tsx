@@ -5,7 +5,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   FileText,
-  LoaderCircle,
   RotateCcw,
   ShieldCheck,
   UsersRound,
@@ -238,21 +237,24 @@ function FallbackNotice({
 }) {
   return (
     <div aria-live="polite" className="ops-empty-state" role="status">
-      <strong>暂无数据</strong>
-      <span>服务暂时不可用，请稍后刷新。</span>
-      <span>{textValue(detail, "服务暂时不可用，请稍后再试。")}</span>
+      <strong>数据暂未同步</strong>
+      <span>当前视图已保留，可重试刷新。</span>
+      <span>{textValue(detail, "后端响应暂未返回可用数据。")}</span>
+      {isLoading ? (
+        <div className="skeleton-stack" aria-hidden="true">
+          <span className="skeleton-line medium" />
+          <span className="skeleton-line" />
+          <span className="skeleton-line short" />
+        </div>
+      ) : null}
       <button
         className="secondary-button"
         disabled={isLoading}
         onClick={onRetry}
         type="button"
       >
-        {isLoading ? (
-          <LoaderCircle aria-hidden="true" className="spin" size={15} />
-        ) : (
-          <RotateCcw aria-hidden="true" size={15} />
-        )}
-        刷新
+        <RotateCcw aria-hidden="true" size={15} />
+        {isLoading ? "同步中" : "重试"}
       </button>
     </div>
   );
@@ -336,12 +338,12 @@ export function OperationsDashboard() {
         health: batchData(overview.health),
         healthError: batchError(
           overview.health,
-          "服务暂时不可用，请稍后再试。",
+          "后端响应暂未返回可用数据。",
         ),
         users: batchData(overview.users),
         usersError: batchError(
           overview.users,
-          "服务暂时不可用，请稍后再试。",
+          "后端响应暂未返回可用数据。",
         ),
       }),
       (error) => ({
@@ -350,7 +352,7 @@ export function OperationsDashboard() {
         users: null,
         usersError: error,
       }),
-      "服务暂时不可用，请稍后再试。",
+      "后端响应暂未返回可用数据。",
     );
     void loadResource(
       apiRequest<DashboardActivityResponse>(
@@ -364,11 +366,11 @@ export function OperationsDashboard() {
         approvals: batchData(activity.approvals),
         approvalsError: batchError(
           activity.approvals,
-          "服务暂时不可用，请稍后再试。",
+          "后端响应暂未返回可用数据。",
         ),
         logsError: batchError(
           activity.operation_logs,
-          "服务暂时不可用，请稍后再试。",
+          "后端响应暂未返回可用数据。",
         ),
         operationLogs: batchData(activity.operation_logs),
       }),
@@ -378,7 +380,7 @@ export function OperationsDashboard() {
         logsError: error,
         operationLogs: null,
       }),
-      "服务暂时不可用，请稍后再试。",
+      "后端响应暂未返回可用数据。",
     );
   }, []);
 
@@ -540,12 +542,8 @@ export function OperationsDashboard() {
           onClick={() => void load()}
           type="button"
         >
-          {activeLoading ? (
-            <LoaderCircle className="spin" aria-hidden="true" size={17} />
-          ) : (
-            <RotateCcw aria-hidden="true" size={17} />
-          )}
-          刷新
+          <RotateCcw aria-hidden="true" size={17} />
+          {activeLoading ? "同步中" : "刷新"}
         </button>
       </div>
 

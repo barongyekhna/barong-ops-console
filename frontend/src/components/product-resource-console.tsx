@@ -121,7 +121,7 @@ function errorMessage(error: unknown, fallback: string) {
       return "当前账号无权执行此操作。";
     }
     if (error.status >= 500) {
-      return "加载失败，请稍后重试。";
+      return "数据暂未同步，请重试。";
     }
   }
   return fallback;
@@ -278,7 +278,7 @@ function ResourceForm({
       await onSubmit(buildPayload(fields, values));
       setValues(fieldDefaults(fields));
     } catch (formError) {
-      setError(errorMessage(formError, "操作失败，请稍后重试。"));
+      setError(errorMessage(formError, "操作未完成，请重试。"));
     } finally {
       setIsSubmitting(false);
     }
@@ -397,7 +397,7 @@ function RelatedRecords({
         return;
       }
       setPayload(null);
-      setError(errorMessage(requestError, "加载失败，请稍后重试。"));
+      setError(errorMessage(requestError, "数据暂未同步，请重试。"));
     } finally {
       if (abortControllerRef.current === controller) {
         abortControllerRef.current = null;
@@ -433,23 +433,23 @@ function RelatedRecords({
           onClick={() => void load()}
           type="button"
         >
-          {isLoading ? (
-            <LoaderCircle aria-hidden="true" className="spin" size={15} />
-          ) : (
-            <RotateCcw aria-hidden="true" size={15} />
-          )}
-          刷新
+          <RotateCcw aria-hidden="true" size={15} />
+          {isLoading ? "同步中" : "刷新"}
         </button>
       </div>
 
       {isLoading ? (
         <div className="ops-empty-state" role="status">
           <strong>正在加载</strong>
-          <span>请稍候。</span>
+          <div className="skeleton-stack" aria-hidden="true">
+            <span className="skeleton-line medium" />
+            <span className="skeleton-line" />
+            <span className="skeleton-line short" />
+          </div>
         </div>
       ) : error ? (
         <div className="ops-empty-state" role="alert">
-          <strong>加载失败，请稍后重试</strong>
+          <strong>关联数据暂未同步</strong>
           <span>{error}</span>
         </div>
       ) : payload?.items.length ? (
@@ -558,7 +558,7 @@ export function ProductResourceConsole({
         setPayload(null);
         setSelectedId(null);
       }
-      setError(errorMessage(requestError, "加载失败，请稍后重试。"));
+      setError(errorMessage(requestError, "数据暂未同步，请重试。"));
     } finally {
       if (listAbortControllerRef.current === controller) {
         listAbortControllerRef.current = null;
@@ -612,7 +612,7 @@ export function ProductResourceConsole({
           return;
         }
         setDetail(record);
-        setDetailError(errorMessage(requestError, "加载失败，请稍后重试。"));
+        setDetailError(errorMessage(requestError, "详情暂未同步，请重试。"));
       } finally {
         if (detailAbortControllerRef.current === controller) {
           detailAbortControllerRef.current = null;
@@ -708,12 +708,8 @@ export function ProductResourceConsole({
           onClick={() => void load()}
           type="button"
         >
-          {isLoading ? (
-            <LoaderCircle aria-hidden="true" className="spin" size={17} />
-          ) : (
-            <RotateCcw aria-hidden="true" size={17} />
-          )}
-          刷新
+          <RotateCcw aria-hidden="true" size={17} />
+          {isLoading ? "同步中" : "刷新"}
         </button>
       </div>
 
@@ -742,13 +738,16 @@ export function ProductResourceConsole({
 
       {showBlockingListLoading ? (
         <section className="list-state" aria-label={`正在加载${title}`}>
-          <LoaderCircle className="spin" aria-hidden="true" size={22} />
-          <span>正在加载</span>
+          <div className="skeleton-stack" aria-hidden="true">
+            <span className="skeleton-line medium" />
+            <span className="skeleton-line" />
+            <span className="skeleton-line short" />
+          </div>
         </section>
       ) : showBlockingListError ? (
         <section className="list-state list-error" role="alert">
           <div>
-            <h2>加载失败，请稍后重试</h2>
+            <h2>数据暂未同步</h2>
             <p>{error}</p>
           </div>
           <button className="primary-button" onClick={() => void load()} type="button">

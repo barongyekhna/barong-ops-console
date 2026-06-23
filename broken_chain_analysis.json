@@ -1,0 +1,41 @@
+{
+  "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+  "broken_links": [],
+  "cleanup": {
+    "attempted": true,
+    "removed": true,
+    "returncode": 0,
+    "stderr_tail": ""
+  },
+  "critical_failure_ids": [],
+  "environment": {
+    "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+    "browser_environment": {
+      "browser_click_available": true,
+      "chromium_path": "/snap/bin/chromium",
+      "frontend_playwright_package": true,
+      "npx": "/usr/bin/npx",
+      "playwright_cli": null
+    },
+    "database": "isolated_temporary_postgres",
+    "database_url_safe": true,
+    "docker_container": "barong-strict-e2e-strict_e2e_20260623t065820z_dd613c97",
+    "event_queue_harness": {
+      "async_worker_started": false,
+      "persistence_path": "DEFAULT_EVENT_EMITTER.emit still writes EventStreamRecord synchronously",
+      "reason": "Avoid daemon polling an isolated temporary DB after harness cleanup."
+    },
+    "python": "/opt/barong-ops-console/.venv/bin/python",
+    "started_at": "2026-06-23T06:58:20.304329+00:00"
+  },
+  "first_broken_link": null,
+  "generated_at": "2026-06-23T07:00:54.190620+00:00",
+  "isolated_namespace": "test_scope_strict_e2e_20260623T065820Z_dd613c97",
+  "mode": "FULL_SYSTEM_END_TO_END_SELF_TEST_STRICT_AUDIT_ZERO_RISK",
+  "not_executed_after_failure": [],
+  "overall_status": "passed",
+  "production_data_touched": false,
+  "report": "broken_chain_analysis",
+  "staging_data_touched": false,
+  "status": "intact"
+}

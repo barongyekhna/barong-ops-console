@@ -1,0 +1,98 @@
+{
+  "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+  "cleanup": {
+    "attempted": true,
+    "removed": true,
+    "returncode": 0,
+    "stderr_tail": ""
+  },
+  "critical_failure_ids": [],
+  "data_safety": {
+    "isolated_postgres_container_removed": true,
+    "production_db_modified": false,
+    "staging_db_modified": false,
+    "test_data_rollback_method": "temporary container removal"
+  },
+  "environment": {
+    "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+    "browser_environment": {
+      "browser_click_available": true,
+      "chromium_path": "/snap/bin/chromium",
+      "frontend_playwright_package": true,
+      "npx": "/usr/bin/npx",
+      "playwright_cli": null
+    },
+    "database": "isolated_temporary_postgres",
+    "database_url_safe": true,
+    "docker_container": "barong-strict-e2e-strict_e2e_20260623t065820z_dd613c97",
+    "event_queue_harness": {
+      "async_worker_started": false,
+      "persistence_path": "DEFAULT_EVENT_EMITTER.emit still writes EventStreamRecord synchronously",
+      "reason": "Avoid daemon polling an isolated temporary DB after harness cleanup."
+    },
+    "python": "/opt/barong-ops-console/.venv/bin/python",
+    "started_at": "2026-06-23T06:58:20.304329+00:00"
+  },
+  "environment_limitations": [
+    "Playwright browser navigation executed. Full login click flow remains partial because this zero-risk harness does not start a frontend/backend pair against the isolated temporary DB."
+  ],
+  "generated_at": "2026-06-23T07:00:54.190620+00:00",
+  "isolated_namespace": "test_scope_strict_e2e_20260623T065820Z_dd613c97",
+  "mode": "FULL_SYSTEM_END_TO_END_SELF_TEST_STRICT_AUDIT_ZERO_RISK",
+  "overall_status": "passed",
+  "performance": {
+    "max_elapsed_ms": 5019.94,
+    "timeout_over_3s": [
+      {
+        "body": {
+          "count": 0,
+          "items": []
+        },
+        "elapsed_ms": 5019.94,
+        "expected_status": null,
+        "ok": true,
+        "secret_value_leaked": false,
+        "status_code": 200,
+        "step": "api_key_list_as_owner_initial"
+      },
+      {
+        "body": {
+          "item": {
+            "category": "core",
+            "display_name": "Dashboard",
+            "enabled": true,
+            "last_error_at": null,
+            "module_id": "core.dashboard",
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "runtime_error_code": null,
+            "runtime_error_message": null,
+            "runtime_status": "active",
+            "updated_at": "2026-06-23T07:00:11.590854Z"
+          }
+        },
+        "elapsed_ms": 3407.32,
+        "expected_status": null,
+        "ok": true,
+        "secret_value_leaked": false,
+        "status_code": 200,
+        "step": "enable_reference_module"
+      },
+      {
+        "body": {
+          "detail": "module_not_registered"
+        },
+        "elapsed_ms": 3192.98,
+        "expected_status": 404,
+        "ok": true,
+        "secret_value_leaked": false,
+        "status_code": 404,
+        "step": "bind_key_to_missing_module_expected_404"
+      }
+    ]
+  },
+  "production_data_touched": false,
+  "report": "system_integrity_risk_report",
+  "risks": [],
+  "staging_data_touched": false,
+  "status": "no_integrity_risk_detected"
+}

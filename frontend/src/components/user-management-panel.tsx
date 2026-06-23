@@ -197,7 +197,7 @@ export function UserManagementPanel() {
       setRoleCatalogError(
         formatUsersApiError(
           error,
-          "服务暂时不可用，请稍后再试。",
+          "角色数据暂未同步，请重试。",
         ),
       );
     } finally {
@@ -222,7 +222,7 @@ export function UserManagementPanel() {
       setOrganizationsError(
         formatUsersApiError(
           error,
-          "服务暂时不可用，请稍后再试。",
+          "组织数据暂未同步，请重试。",
         ),
       );
     } finally {
@@ -251,7 +251,7 @@ export function UserManagementPanel() {
         setListError(
           formatUsersApiError(
             error,
-            "服务暂时不可用，请稍后再试。",
+            "用户数据暂未同步，请重试。",
           ),
         );
       } finally {
@@ -407,7 +407,7 @@ export function UserManagementPanel() {
       await refreshAfterMutation(created.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "账号创建失败，请稍后重试。"),
+        formatUsersApiError(error, "账号创建未完成，请重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -426,7 +426,7 @@ export function UserManagementPanel() {
       await refreshDetail(target.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "账号详情加载失败，请稍后重试。"),
+        formatUsersApiError(error, "账号详情暂未同步，请重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -454,7 +454,7 @@ export function UserManagementPanel() {
       await refreshAfterMutation(target.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "账号停用失败，请稍后重试。"),
+        formatUsersApiError(error, "账号停用未完成，请重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -474,7 +474,7 @@ export function UserManagementPanel() {
       await refreshAfterMutation(target.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "账号启用失败，请稍后重试。"),
+        formatUsersApiError(error, "账号启用未完成，请重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -512,7 +512,7 @@ export function UserManagementPanel() {
       await refreshAfterMutation(expandedUser.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "角色更新失败，请稍后重试。"),
+        formatUsersApiError(error, "角色更新未完成，请重试。"),
       );
     } finally {
       setPendingAction(null);
@@ -557,7 +557,7 @@ export function UserManagementPanel() {
       await refreshAfterMutation(resetTarget.id);
     } catch (error) {
       setActionError(
-        formatUsersApiError(error, "密码重置失败，请稍后重试。"),
+        formatUsersApiError(error, "密码重置未完成，请重试。"),
       );
     } finally {
       setResetPassword("");
@@ -792,8 +792,11 @@ export function UserManagementPanel() {
 
         {isLoading && users.length === 0 ? (
           <div className="list-state" aria-label="正在加载用户">
-            <LoaderCircle className="spin" aria-hidden="true" size={22} />
-            正在加载用户
+            <div className="skeleton-stack" aria-hidden="true">
+              <span className="skeleton-line medium" />
+              <span className="skeleton-line" />
+              <span className="skeleton-line short" />
+            </div>
           </div>
         ) : null}
 
@@ -801,11 +804,9 @@ export function UserManagementPanel() {
           <div className="list-state list-error" role="alert">
             <div>
               <h2>
-                {users.length > 0
-                  ? "服务暂时不可用"
-                  : "服务暂时不可用"}
+                用户数据暂未同步
               </h2>
-              <p>{listError || "服务暂时不可用，请稍后再试。"}</p>
+              <p>{listError || "后端响应暂未返回可用数据。"}</p>
               {users.length > 0 ? (
                 <p>正在显示上一次成功加载的用户列表。</p>
               ) : null}

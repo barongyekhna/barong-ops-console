@@ -5,7 +5,6 @@ import {
   Bell,
   CircleAlert,
   FileSearch,
-  LoaderCircle,
   RotateCcw,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -67,7 +66,7 @@ function errorMessage(error: unknown) {
   if (error instanceof ApiError && error.status === 403) {
     return "当前账号无权访问。";
   }
-  return "加载失败，请稍后重试。";
+  return "数据暂未同步，请重试。";
 }
 
 function isFailedLog(log: OperationLogRecord) {
@@ -136,8 +135,11 @@ export function OperationLogsCenter() {
   if (isLoading) {
     return (
       <section className="list-state" aria-label="正在加载操作记录">
-        <LoaderCircle className="spin" aria-hidden="true" size={22} />
-        <span>正在加载</span>
+        <div className="skeleton-stack" aria-hidden="true">
+          <span className="skeleton-line medium" />
+          <span className="skeleton-line" />
+          <span className="skeleton-line short" />
+        </div>
       </section>
     );
   }
@@ -157,7 +159,7 @@ export function OperationLogsCenter() {
         required_org_state="组织状态正常。"
         required_permission="operation_logs.read"
         state="missing_feature"
-        title="加载失败，请稍后重试"
+        title="操作记录暂未同步"
         unlock_condition="稍后重试。"
       />
     );

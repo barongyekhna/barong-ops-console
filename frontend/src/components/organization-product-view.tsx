@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, Plus, RotateCcw } from "lucide-react";
+import { Plus, RotateCcw } from "lucide-react";
 import {
   type FormEvent,
   useCallback,
@@ -41,7 +41,7 @@ function messageFromError(error: unknown, fallback: string) {
       return "当前账号无权执行此操作。";
     }
     if (error.status >= 500) {
-      return "服务暂时不可用，请稍后再试。";
+      return "后端响应暂未返回可用数据。";
     }
   }
   return fallback;
@@ -117,12 +117,8 @@ function CreateOrganizationSection({
         </label>
 
         <button className="primary-button" disabled={isCreating} type="submit">
-          {isCreating ? (
-            <LoaderCircle aria-hidden="true" className="spin" size={17} />
-          ) : (
-            <Plus aria-hidden="true" size={17} />
-          )}
-          创建
+          <Plus aria-hidden="true" size={17} />
+          {isCreating ? "创建中" : "创建"}
         </button>
       </form>
 
@@ -174,23 +170,15 @@ function OrganizationListSection({
           onClick={onRefresh}
           type="button"
         >
-          {isLoading ? (
-            <LoaderCircle aria-hidden="true" className="spin" size={15} />
-          ) : (
-            <RotateCcw aria-hidden="true" size={15} />
-          )}
-          刷新
+          <RotateCcw aria-hidden="true" size={15} />
+          {isLoading ? "同步中" : "刷新"}
         </button>
       </div>
 
       {listError ? (
         <div className="ops-empty-state" role="alert">
-          <strong>
-            {organizations.length > 0
-              ? "服务暂时不可用"
-              : "服务暂时不可用"}
-          </strong>
-          <span>{listError || "服务暂时不可用，请稍后再试。"}</span>
+          <strong>组织数据暂未同步</strong>
+          <span>{listError || "后端响应暂未返回可用数据。"}</span>
           {organizations.length > 0 ? (
             <span>正在显示上一次成功加载的组织列表。</span>
           ) : null}
@@ -199,7 +187,11 @@ function OrganizationListSection({
 
       {isLoading && organizations.length === 0 ? (
         <div className="list-state" aria-label="正在加载组织">
-          正在加载组织
+          <div className="skeleton-stack" aria-hidden="true">
+            <span className="skeleton-line medium" />
+            <span className="skeleton-line" />
+            <span className="skeleton-line short" />
+          </div>
         </div>
       ) : null}
 
@@ -348,7 +340,7 @@ export function OrganizationProductView() {
         setListError(
           messageFromError(
             error,
-            "服务暂时不可用，请稍后再试。",
+            "后端响应暂未返回可用数据。",
           ),
         );
       }
@@ -360,7 +352,7 @@ export function OrganizationProductView() {
         setSuperAdminError(
           messageFromError(
             error,
-            "组织管理员信息加载失败，请稍后重试。",
+            "组织管理员信息暂未同步，请重试。",
           ),
         );
       }
@@ -407,7 +399,7 @@ export function OrganizationProductView() {
       await loadOrganizations({ offset: organizationOffset, showLoading: false });
     } catch (error) {
       setCreateError(
-        messageFromError(error, "组织创建失败，请稍后重试。"),
+        messageFromError(error, "组织创建未完成，请重试。"),
       );
     } finally {
       setIsCreating(false);

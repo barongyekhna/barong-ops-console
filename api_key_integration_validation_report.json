@@ -1,0 +1,146 @@
+{
+  "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+  "checks": [
+    {
+      "check": "create_api_key",
+      "details": {
+        "body": {
+          "item": {
+            "assigned_module_ids": [],
+            "created_at": "2026-06-23T07:00:14.998026Z",
+            "key_hash_prefix": "438ae63d972e",
+            "key_id": "key_126886a27baddf25eea88b67e2eda159",
+            "last_used_at": null,
+            "name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "status": "active",
+            "updated_at": "2026-06-23T07:00:14.998026Z",
+            "url": "https://example.test/api"
+          }
+        },
+        "elapsed_ms": 2695.87,
+        "expected_status": null,
+        "ok": true,
+        "secret_value_leaked": false,
+        "status_code": 201,
+        "step": "create_scoped_api_key"
+      },
+      "status": "success"
+    },
+    {
+      "check": "bind_to_registered_module",
+      "details": {
+        "body": {
+          "item": {
+            "binding_id": "akb_3f045c1bd24a698b6828307a2172ee1a",
+            "created_at": "2026-06-23T07:00:20.197413Z",
+            "key_alias": "default",
+            "key_id": "key_126886a27baddf25eea88b67e2eda159",
+            "key_name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+            "key_url": "https://example.test/api",
+            "module_id": "core.dashboard",
+            "org_id": "org_e09471d994b847a285b794e9c310ba55",
+            "status": "active",
+            "updated_at": "2026-06-23T07:00:20.197413Z"
+          }
+        },
+        "elapsed_ms": 2892.33,
+        "expected_status": null,
+        "ok": true,
+        "secret_value_leaked": false,
+        "status_code": 201,
+        "step": "bind_key_to_reference_module"
+      },
+      "status": "success"
+    },
+    {
+      "check": "missing_module_manifest_negative_case",
+      "details": {
+        "body": {
+          "detail": "module_not_registered"
+        },
+        "elapsed_ms": 3192.98,
+        "expected_status": 404,
+        "ok": true,
+        "secret_value_leaked": false,
+        "status_code": 404,
+        "step": "bind_key_to_missing_module_expected_404"
+      },
+      "status": "valid_expected_failure"
+    },
+    {
+      "check": "backend_header_injection",
+      "details": {
+        "allowed": true,
+        "backend_received_injected_header": true,
+        "control_module_id": "core.dashboard",
+        "header_value_matches_secret": "***",
+        "header_value_recorded_in_report": "***",
+        "last_used_at_recorded": true,
+        "org_id": "org_e09471d994b847a285b794e9c310ba55",
+        "redacted_keys": {
+          "mock_execution": {
+            "header_name": "Authorization",
+            "header_value": "***",
+            "key_alias": "default",
+            "key_id": "key_126886a27baddf25eea88b67e2eda159",
+            "name": "strict e2e test key strict_e2e_20260623T065820Z_dd613c97",
+            "step_name": "mock_execution",
+            "url": "https://example.test/api"
+          }
+        },
+        "requested_module_id": "core.dashboard"
+      },
+      "status": "success"
+    },
+    {
+      "check": "no_key_leakage_to_frontend_or_api_responses",
+      "details": {
+        "raw_secret_in_report": false,
+        "secret_leak_response_steps": []
+      },
+      "status": "success"
+    }
+  ],
+  "cleanup": {
+    "attempted": true,
+    "removed": true,
+    "returncode": 0,
+    "stderr_tail": ""
+  },
+  "critical_failure_ids": [],
+  "environment": {
+    "audit_id": "strict_e2e_20260623T065820Z_dd613c97",
+    "browser_environment": {
+      "browser_click_available": true,
+      "chromium_path": "/snap/bin/chromium",
+      "frontend_playwright_package": true,
+      "npx": "/usr/bin/npx",
+      "playwright_cli": null
+    },
+    "database": "isolated_temporary_postgres",
+    "database_url_safe": true,
+    "docker_container": "barong-strict-e2e-strict_e2e_20260623t065820z_dd613c97",
+    "event_queue_harness": {
+      "async_worker_started": false,
+      "persistence_path": "DEFAULT_EVENT_EMITTER.emit still writes EventStreamRecord synchronously",
+      "reason": "Avoid daemon polling an isolated temporary DB after harness cleanup."
+    },
+    "python": "/opt/barong-ops-console/.venv/bin/python",
+    "started_at": "2026-06-23T06:58:20.304329+00:00"
+  },
+  "generated_at": "2026-06-23T07:00:54.190620+00:00",
+  "isolated_namespace": "test_scope_strict_e2e_20260623T065820Z_dd613c97",
+  "mode": "FULL_SYSTEM_END_TO_END_SELF_TEST_STRICT_AUDIT_ZERO_RISK",
+  "overall_status": "passed",
+  "production_data_touched": false,
+  "report": "api_key_integration_validation_report",
+  "requested_api_key_scope": {
+    "missing_module_probe": "integration_test_module",
+    "reference_static_module": "core.dashboard",
+    "test_api_key": "test_api_key"
+  },
+  "sensitive_values_in_report": false,
+  "staging_data_touched": false,
+  "status": "passed"
+}

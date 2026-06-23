@@ -57,11 +57,11 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
   const showFallbackBanner =
     capabilityState.isLoading || capabilityState.uiState === "fallback";
   const fallbackBannerTitle = capabilityState.isLoading
-    ? "正在加载系统状态"
-    : "服务暂时不可用";
+    ? "正在同步系统状态"
+    : "数据同步延迟";
   const fallbackBannerBody = capabilityState.isLoading
-    ? "部分信息稍后刷新"
-    : "请稍后刷新";
+    ? "权限与模块状态正在更新。"
+    : "当前导航已保留，可重试刷新。";
 
   return (
     <div className="console-layout">

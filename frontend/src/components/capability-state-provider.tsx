@@ -440,12 +440,12 @@ export function CapabilityStateProvider({
 
           if (isApiAbortError(error)) {
             loadedAuthKeyRef.current = null;
-            setLoadError("服务暂时不可用，请稍后再试。");
+            setLoadError("数据同步延迟，请重试。");
             return;
           }
 
           loadedAuthKeyRef.current = null;
-          setLoadError("服务暂时不可用，请稍后再试。");
+          setLoadError("数据同步延迟，请重试。");
         })
         .finally(() => {
           if (bootstrapAbortControllerRef.current === controller) {
