@@ -1,0 +1,649 @@
+{
+  "export": {
+    "name": "C_SERIES_V1_ARCHITECTURE_OVERVIEW",
+    "companion_document": "C_SERIES_V1_FULL_SYSTEM_DOCUMENTATION.md",
+    "generated_date": "2026-06-24",
+    "basis": "current repository source code",
+    "scope": [
+      "backend/app",
+      "frontend/src",
+      "tests",
+      "scripts",
+      "docker-compose files",
+      "Dockerfiles",
+      "deployment templates",
+      "environment examples"
+    ],
+    "secret_handling": "real secret environment files are not used as documentation sources"
+  },
+  "system": {
+    "name": "barong-ops-console",
+    "series": "C-SERIES",
+    "version": "V1",
+    "runtime_shape": "Next.js frontend + FastAPI backend + PostgreSQL + Docker Compose",
+    "backend_entrypoint": "backend/app/main.py",
+    "frontend_entrypoint": "frontend/src/app/layout.tsx",
+    "database": "PostgreSQL with SQLAlchemy and Alembic",
+    "production_worker_count": 2
+  },
+  "api_prefixes": [
+    {
+      "prefix": "/api/public",
+      "purpose": "public health, security and auth endpoints"
+    },
+    {
+      "prefix": "/api/app",
+      "purpose": "console business application APIs"
+    },
+    {
+      "prefix": "/api/control-plane",
+      "purpose": "module, governance, execution, webhook and owner control-plane APIs"
+    },
+    {
+      "prefix": "/api/backend",
+      "purpose": "frontend Next.js proxy prefix for backend calls"
+    }
+  ],
+  "backend_architecture": {
+    "framework": "FastAPI",
+    "configuration": "backend/app/core/config.py",
+    "database_session": "backend/app/db/session.py",
+    "production_controls": {
+      "docs_default_disabled_in_production": true,
+      "control_plane_stealth_mode": true,
+      "sanitized_exception_handlers": true,
+      "migration_safety": "backend/app/db/migration_safety.py"
+    },
+    "hot_read_paths": [
+      "/api/app/organizations",
+      "/api/app/permissions/me",
+      "/api/control-plane/module-control/center",
+      "/api/control-plane/modules/registry"
+    ],
+    "removed_runtime_routes": [
+      "/api/app/artifacts",
+      "/api/app/jobs",
+      "/api/control-plane/workflows"
+    ]
+  },
+  "module_system": {
+    "static_manifest_file": "backend/app/core/modules.py",
+    "dynamic_registry_service": "backend/app/services/module_registry.py",
+    "routes": "backend/app/api/routes/modules.py",
+    "static_modules": [
+      "core.dashboard",
+      "experimental.foundation_demo",
+      "integration.n8n_test_bridge",
+      "integration.n8n_webhook_test_bridge",
+      "admin.users",
+      "admin.organizations",
+      "admin.permissions",
+      "admin.modules",
+      "admin.agents",
+      "admin.settings",
+      "business.products",
+      "business.approvals",
+      "business.reviews",
+      "system.errors",
+      "system.memory_events",
+      "system.operation_logs"
+    ],
+    "dynamic_module_rules": {
+      "module_key_format": "lowercase dot segments",
+      "external_dependency_name_forbidden_markers": [
+        "secret",
+        "token",
+        "password",
+        "credential",
+        "authorization",
+        "api_key",
+        "env",
+        "url",
+        "http",
+        "://",
+        "="
+      ],
+      "status_mapping": {
+        "foundation": "installed",
+        "demo": "enabled",
+        "draft_demo": "planned",
+        "inactive_demo": "disabled"
+      }
+    }
+  },
+  "module_control": {
+    "api": {
+      "read_center": "GET /api/control-plane/module-control/center",
+      "update_state": "PATCH /api/control-plane/module-control/organizations/{org_id}/registry-entries/{module_id}"
+    },
+    "implementation": {
+      "route": "backend/app/api/routes/module_control.py",
+      "builder": "backend/app/services/module_control_center.py",
+      "cache": "backend/app/services/module_control_cache_service.py",
+      "model": "backend/app/models/module_control.py"
+    },
+    "permissions": {
+      "read": "lightweight cached control-plane admin",
+      "write": "owner only"
+    },
+    "state_table": "module_control_states",
+    "state_defaults": {
+      "missing_state_on_read": "represented as enabled active without writing a row",
+      "missing_state_on_update": "created by update operation",
+      "enabled_true_runtime_status": "active",
+      "enabled_false_runtime_status": "disabled"
+    },
+    "cache": {
+      "ttl_seconds": 5,
+      "refresh_interval_seconds": 5,
+      "wait_timeout_seconds": 0.5,
+      "scope": "per backend worker process"
+    }
+  },
+  "api_key_management": {
+    "routes_prefix": "/api/control-plane/api-key-orchestration",
+    "route_file": "backend/app/api/routes/api_key_orchestration.py",
+    "service_file": "backend/app/services/api_key_orchestration.py",
+    "models_file": "backend/app/models/api_keys.py",
+    "frontend_api_file": "frontend/src/lib/api-key-orchestration-api.ts",
+    "permission": "owner only",
+    "tables": [
+      "api_key_records",
+      "api_key_module_bindings"
+    ],
+    "encryption": {
+      "envelope_prefix": "akv1",
+      "nonce_bytes": 16,
+      "mac": "HMAC-SHA256",
+      "cipher": "HMAC-SHA256 keystream XOR",
+      "secret_priority": [
+        "API_KEY_ENCRYPTION_SECRET",
+        "OWNER_PASSWORD",
+        "DATABASE_URL"
+      ]
+    },
+    "runtime_injection": {
+      "resolver": "resolve_module_api_key_for_injection",
+      "header_name": "Authorization",
+      "header_value_format": "Bearer {secret}",
+      "updates_last_used_at": true
+    },
+    "frontend_exposure_policy": {
+      "returns_plaintext_key": false,
+      "returns_ciphertext": false,
+      "returns_fingerprint": false,
+      "returns_hash_prefix": true
+    }
+  },
+  "rbac": {
+    "files": [
+      "backend/app/core/roles.py",
+      "backend/app/core/rbac.py",
+      "backend/app/services/unified_permission_engine.py",
+      "backend/app/api/deps.py",
+      "backend/app/middleware/permission.py"
+    ],
+    "standard_roles": [
+      "owner",
+      "admin",
+      "super_admin",
+      "module_admin",
+      "operator",
+      "reviewer",
+      "viewer",
+      "system",
+      "bot_agent"
+    ],
+    "assignable_user_roles": [
+      "admin",
+      "viewer",
+      "operator",
+      "reviewer"
+    ],
+    "unassignable_roles": [
+      "owner",
+      "super_admin",
+      "module_admin",
+      "system",
+      "bot_agent"
+    ],
+    "role_actions": {
+      "owner": [
+        "read",
+        "write",
+        "execute",
+        "admin"
+      ],
+      "admin": [
+        "read",
+        "write",
+        "execute",
+        "admin"
+      ],
+      "operator": [
+        "read",
+        "write"
+      ],
+      "viewer": [
+        "read"
+      ],
+      "system": [
+        "internal"
+      ]
+    },
+    "legacy_aliases": {
+      "super_admin": "admin",
+      "module_admin": "admin",
+      "reviewer": "operator",
+      "bot_agent": "system"
+    },
+    "decision_modes": [
+      "platform metadata RBAC",
+      "permission key registry and assignment",
+      "organization module decision with membership and binding"
+    ],
+    "permission_tables": [
+      "permission_registry",
+      "user_permission_assignments",
+      "role_default_permissions",
+      "org_memberships",
+      "module_bindings"
+    ]
+  },
+  "execution_gates": {
+    "c13e_execution_flow_gate": {
+      "file": "backend/app/services/execution_flow_gate.py",
+      "flow": [
+        "C08 Module Adapter",
+        "C13E Execution Flow Gate",
+        "C12 Approval Gate",
+        "C14 External Dependency Gate",
+        "C09 Execution Provider",
+        "C10 Sandbox"
+      ],
+      "checks": [
+        "emergency kill switch",
+        "identity validity",
+        "module switch runtime gate",
+        "sandbox envelope",
+        "adapter action contract",
+        "approval gate",
+        "external dependency gate",
+        "provider readiness",
+        "sandbox runtime status",
+        "secret binding",
+        "mock/staging/live mode"
+      ]
+    },
+    "module_execution_gate": {
+      "file": "backend/app/services/module_execution_gate.py",
+      "used_by": [
+        "integration.n8n_test_bridge",
+        "integration.n8n_webhook_test_bridge"
+      ],
+      "responsibilities": [
+        "resolve org context",
+        "normalize legacy module ids",
+        "validate registered module",
+        "ensure or read module control state",
+        "block disabled or error modules",
+        "resolve required API key bindings",
+        "emit execution gate events"
+      ],
+      "missing_key_error_code": "API_KEY_BINDING_MISSING"
+    },
+    "live_gate": {
+      "route_prefix": "/api/control-plane/live-gate",
+      "permission": "GOVERNANCE.admin",
+      "files": [
+        "backend/app/api/routes/live_gate.py",
+        "backend/app/services/live_gating.py",
+        "backend/app/services/pre_live_validation.py"
+      ],
+      "live_requirements": [
+        "C12 unlock",
+        "canary routed live",
+        "pre-live validation passed",
+        "global live switch",
+        "active enabled org policy",
+        "active enabled module policy",
+        "not staging_only"
+      ]
+    }
+  },
+  "webhook_n8n": {
+    "webhook_gateway": {
+      "route": "POST /api/control-plane/webhook-gateway/ingress",
+      "route_file": "backend/app/api/routes/webhook_gateway.py",
+      "service_file": "backend/app/services/webhook_gateway.py",
+      "permission": "internal C15B",
+      "signature": {
+        "header": "X-Barong-Gateway-Signature",
+        "format": "sha256=<hex>",
+        "algorithm": "HMAC-SHA256",
+        "secret": "WEBHOOK_GATEWAY_SIGNING_SECRET",
+        "timestamp_tolerance_seconds_default": 300,
+        "replay_nonce_ttl_seconds_default": 900
+      },
+      "dispatches_to_n8n": false,
+      "payload_policy": {
+        "forbids_secret_fields": true,
+        "forbids_runtime_urls": true,
+        "forbids_direct_authorization_values": true
+      }
+    },
+    "callback_handler": {
+      "route_prefix": "/api/control-plane/callback-handler",
+      "routes": [
+        "POST /receiver",
+        "POST /context-bindings",
+        "GET /results/{context_id}"
+      ],
+      "signature_model": "same gateway signature header and secret",
+      "tables": [
+        "callback_state",
+        "callback_state_transitions",
+        "execution_callbacks",
+        "execution_results"
+      ]
+    },
+    "n8n_test_bridge": {
+      "module": "integration.n8n_test_bridge",
+      "route_file": "backend/app/api/routes/n8n_test.py",
+      "mode": "mock-only",
+      "real_external_dispatch": false
+    },
+    "n8n_webhook_test_bridge": {
+      "module": "integration.n8n_webhook_test_bridge",
+      "route_file": "backend/app/api/routes/n8n_webhook_test.py",
+      "service_file": "backend/app/services/n8n_webhook_test_service.py",
+      "config": [
+        "N8N_TEST_WEBHOOK_URL",
+        "N8N_TEST_CALLBACK_SECRET"
+      ],
+      "default_key_alias": "n8n",
+      "http_client": "httpx",
+      "retryable_statuses": [
+        408,
+        429,
+        500,
+        502,
+        503,
+        504
+      ],
+      "max_retries": 2
+    }
+  },
+  "frontend_architecture": {
+    "framework": "Next.js 16 + React 19",
+    "root_layout": "frontend/src/app/layout.tsx",
+    "console_layout": "frontend/src/app/(console)/layout.tsx",
+    "composition": [
+      "AuthGuard",
+      "CapabilityStateProvider",
+      "ModuleAccessProvider",
+      "AdapterAccessProvider",
+      "ConsoleShell",
+      "PermissionRouteGuard"
+    ],
+    "api_client": "frontend/src/lib/api.ts",
+    "api_proxy": "frontend/src/app/api/backend/[...path]/route.ts",
+    "design_system": "frontend/src/app/globals.css",
+    "navigation": "frontend/src/lib/navigation.ts",
+    "module_center": "frontend/src/components/module-registry-product-view.tsx",
+    "capability_bootstrap": {
+      "frontend": "frontend/src/lib/capability-bootstrap-api.ts",
+      "backend": "backend/app/api/routes/capability_bootstrap.py",
+      "proxy_cache_ttl_seconds": 60,
+      "fallback_subrequest_concurrency": 6
+    },
+    "ui_style": "operational SaaS console with sidebar, topbar, dense tables, status pills and module-control surfaces"
+  },
+  "database": {
+    "orm": "SQLAlchemy",
+    "migrations": "Alembic",
+    "session_file": "backend/app/db/session.py",
+    "groups": {
+      "identity_auth": [
+        "users",
+        "auth_sessions",
+        "security_rate_limit_buckets",
+        "security_replay_nonces"
+      ],
+      "organization_tenant": [
+        "organizations",
+        "org_memberships",
+        "module_bindings",
+        "shared_modules",
+        "contact_identities",
+        "messages"
+      ],
+      "permissions": [
+        "permission_registry",
+        "user_permission_assignments",
+        "role_default_permissions"
+      ],
+      "module_registry_api_key": [
+        "module_registry",
+        "agent_registry",
+        "workflow_registry",
+        "module_control_states",
+        "api_key_records",
+        "api_key_module_bindings"
+      ],
+      "execution_approval_callback": [
+        "approval_requests",
+        "approval_workflows",
+        "approval_decisions",
+        "execution_callbacks",
+        "execution_results",
+        "callback_state",
+        "callback_state_transitions",
+        "execution_dlq",
+        "dlq_state"
+      ],
+      "observability_ops": [
+        "operation_logs",
+        "event_streams",
+        "audit_logs",
+        "replay_jobs",
+        "anomaly_events",
+        "storage_events",
+        "ops_alerts",
+        "ops_alert_deliveries",
+        "ops_live_gate_policies",
+        "ops_execution_unlock_tokens",
+        "ops_canary_rollouts",
+        "ops_rollback_guards"
+      ],
+      "legacy_compatibility": [
+        "automation_jobs",
+        "job_events",
+        "artifacts",
+        "memory_events",
+        "memory_summaries",
+        "agent_memory_access_logs",
+        "system_errors",
+        "review_items",
+        "context_packets"
+      ]
+    },
+    "data_isolation": {
+      "middleware": "backend/app/middleware/data_isolation.py",
+      "service": "backend/app/services/data_isolation.py",
+      "strategy": "org context plus SQLAlchemy loader criteria and write guards",
+      "explicit_owner_bypass": "without_org_data_isolation"
+    }
+  },
+  "workers_concurrency": {
+    "backend_worker_count": 2,
+    "worker_class": "uvicorn.workers.UvicornWorker",
+    "db_pool_size": 10,
+    "db_max_overflow": 20,
+    "max_theoretical_backend_db_connections": 60,
+    "per_process_background_threads": [
+      {
+        "name": "barong-session-last-seen-flush",
+        "purpose": "batch session last_seen updates",
+        "interval_seconds": 60,
+        "batch_size": 500
+      },
+      {
+        "name": "barong-login-side-effects",
+        "purpose": "login success/failure side effects and operation logs",
+        "queue_size": 10000,
+        "max_attempts": 3
+      },
+      {
+        "name": "barong-module-control-cache",
+        "purpose": "module-control center snapshot refresh",
+        "refresh_interval_seconds": 5
+      }
+    ],
+    "cache_scope": "per process, not cross-worker shared"
+  },
+  "tests": {
+    "backend": {
+      "config": "backend/pytest.ini",
+      "test_path": "tests/backend",
+      "runner": "scripts/run_backend_tests.sh",
+      "markers": [
+        "unit",
+        "integration",
+        "system",
+        "slow"
+      ],
+      "integration_db": "ephemeral postgres:17.5-alpine",
+      "requires_barong_test_db_ready": true
+    },
+    "frontend": {
+      "runner": "scripts/run_frontend_tests.sh",
+      "package_scripts": [
+        "npm run test",
+        "npm run typecheck",
+        "npm run verify"
+      ],
+      "tests_path": "tests/frontend"
+    },
+    "strict_e2e_audit": {
+      "script": "scripts/strict_e2e_audit.py",
+      "reports": [
+        "system_e2e_test_report.json",
+        "api_key_integration_validation_report.json",
+        "module_execution_chain_report.json",
+        "ui_user_flow_validation_report.json",
+        "permission_isolation_report.json",
+        "critical_failure_report.json",
+        "broken_chain_analysis.json",
+        "system_integrity_risk_report.json"
+      ]
+    }
+  },
+  "deployment": {
+    "backend_dockerfile": "backend/Dockerfile",
+    "frontend_dockerfile": "frontend/Dockerfile",
+    "production_compose": "docker-compose.production.yml",
+    "staging_compose": "docker-compose.staging.yml",
+    "example_compose": "docker-compose.example.yml",
+    "production_env_example": ".env.production.example",
+    "staging_env_example": ".env.staging.example",
+    "nginx_template": "deploy/nginx/ops.barongyekhna.com.conf.template",
+    "safe_release_script": "scripts/safe_compose_release.sh",
+    "production_smoke_script": "scripts/production_smoke_check.sh",
+    "production_ports": {
+      "backend": "127.0.0.1:8000",
+      "frontend": "127.0.0.1:3000"
+    },
+    "staging_ports": {
+      "backend": "127.0.0.1:8100",
+      "frontend": "127.0.0.1:3100"
+    },
+    "nginx_stealth_denies": [
+      "/webhook",
+      "/n8n",
+      "/api/backend/(webhook|n8n)",
+      "/api/backend/webhook-gateway/ingress"
+    ]
+  },
+  "k_series_integration_notes": {
+    "must_reuse": [
+      "module manifest or module_registry",
+      "permission_registry and unified permission engine",
+      "org_memberships and module_bindings",
+      "module_control_states",
+      "api_key_orchestration for external credentials",
+      "module_execution_gate or execution_flow_gate",
+      "webhook_gateway and callback_handler for signed ingress/callback",
+      "capability bootstrap and frontend route guard"
+    ],
+    "must_not_do": [
+      "do not expose n8n or webhook runtime URL directly to the frontend",
+      "do not return plaintext API keys to the frontend",
+      "do not carry secret/token/authorization fields in execution payloads",
+      "do not bypass org membership and module binding checks",
+      "do not depend on removed jobs/artifacts/workflows routes"
+    ]
+  },
+  "source_index": {
+    "main": "backend/app/main.py",
+    "config": "backend/app/core/config.py",
+    "db_session": "backend/app/db/session.py",
+    "roles": "backend/app/core/roles.py",
+    "rbac": "backend/app/core/rbac.py",
+    "deps": "backend/app/api/deps.py",
+    "permission_engine": "backend/app/services/unified_permission_engine.py",
+    "permission_middleware": "backend/app/middleware/permission.py",
+    "data_isolation": [
+      "backend/app/middleware/data_isolation.py",
+      "backend/app/services/data_isolation.py"
+    ],
+    "modules": "backend/app/core/modules.py",
+    "module_control": [
+      "backend/app/api/routes/module_control.py",
+      "backend/app/services/module_control_center.py",
+      "backend/app/services/module_control_cache_service.py"
+    ],
+    "api_keys": [
+      "backend/app/models/api_keys.py",
+      "backend/app/api/routes/api_key_orchestration.py",
+      "backend/app/services/api_key_orchestration.py"
+    ],
+    "execution": [
+      "backend/app/services/execution_flow_gate.py",
+      "backend/app/services/module_execution_gate.py"
+    ],
+    "webhook": [
+      "backend/app/api/routes/webhook_gateway.py",
+      "backend/app/services/webhook_gateway.py",
+      "backend/app/api/routes/callback_handler.py"
+    ],
+    "n8n": [
+      "backend/app/api/routes/n8n_test.py",
+      "backend/app/api/routes/n8n_webhook_test.py",
+      "backend/app/services/n8n_webhook_test_service.py"
+    ],
+    "frontend": [
+      "frontend/src/app/layout.tsx",
+      "frontend/src/app/(console)/layout.tsx",
+      "frontend/src/app/api/backend/[...path]/route.ts",
+      "frontend/src/lib/api.ts",
+      "frontend/src/lib/navigation.ts",
+      "frontend/src/components/module-registry-product-view.tsx",
+      "frontend/src/app/globals.css"
+    ],
+    "tests": [
+      "backend/pytest.ini",
+      "tests/backend/conftest.py",
+      "scripts/run_backend_tests.sh",
+      "scripts/run_frontend_tests.sh",
+      "scripts/strict_e2e_audit.py"
+    ],
+    "deployment": [
+      "backend/Dockerfile",
+      "frontend/Dockerfile",
+      "docker-compose.production.yml",
+      "docker-compose.staging.yml",
+      "deploy/nginx/ops.barongyekhna.com.conf.template"
+    ]
+  }
+}
