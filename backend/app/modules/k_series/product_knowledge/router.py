@@ -37,6 +37,9 @@ from .constants import (
     PERMISSION_READ,
     PERMISSION_RISK_TERMS_MANAGE,
     PERMISSION_UPDATE,
+    PERMISSION_EXPORT,
+    PERMISSION_WORKFLOW_EXECUTE,
+    TARGET_ORGANIZATION_NAME,
 )
 from .errors import KConflictError, KProductKnowledgeError, KProductNotFoundError
 from .models import (
@@ -59,11 +62,18 @@ from .schemas import (
     ProductKnowledgeKeywordPatch,
     ProductKnowledgeListItem,
     ProductKnowledgeListResponse,
+    ProductKnowledgeImageBindRequest,
+    ProductKnowledgeMediaDownloadResponse,
     ProductKnowledgeRead,
+    ProductKnowledgeRiskReviewRequest,
     ProductKnowledgeRiskTermItem,
     ProductKnowledgeRiskTermListResponse,
     ProductKnowledgeRiskTermPatch,
     ProductKnowledgeUpdate,
+    ProductKnowledgeWorkflowExecutionRead,
+    ProductKnowledgeWorkflowExportRequest,
+    ProductKnowledgeWorkflowExportResponse,
+    ProductKnowledgeWorkflowStartRequest,
 )
 from .scope_shim import KScopeContext, apply_scope_filters
 from .service import (
@@ -78,6 +88,11 @@ from .service import (
     patch_keywords,
     patch_risk_terms,
     update_product,
+)
+from .workflow_engine import (
+    IMAGE_SOURCE_MANUAL,
+    KWorkflowOrchestratorV1,
+    KWorkflowExecutionError,
 )
 
 router = APIRouter(prefix="/k", tags=["k-product-knowledge"])
@@ -237,9 +252,10 @@ class MediaAssetCreate(BaseModel):
     product_id: str = Field(min_length=1)
     asset_type: str = Field(min_length=1, max_length=50)
     asset_role: str = Field(default="gallery", min_length=1, max_length=50)
+    filename: str | None = Field(default=None, max_length=255)
     file_url_placeholder: str | None = Field(default=None, max_length=2048)
     mime_type: str | None = Field(default=None, max_length=100)
-    source: str | None = Field(default="manual", max_length=100)
+    source: str | None = Field(default=IMAGE_SOURCE_MANUAL, max_length=100)
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -250,6 +266,7 @@ class MediaAssetRead(BaseModel):
     asset_role: str
     status: str
     review_status: str
+    object_key: str | None
     file_url_placeholder: str | None
     mime_type: str | None
     source: str | None
@@ -372,6 +389,7 @@ def _product_by_ref(
         workspace_key=scope_context.workspace_key,
         business_context=scope_context.business_context,
         scope_mode=scope_context.scope_mode,
+        organization_name=TARGET_ORGANIZATION_NAME,
         product_key=normalized,
         product_status="draft",
         review_status="draft",
@@ -476,6 +494,10 @@ def _gate_error(exc: ModuleExecutionGateError) -> HTTPException:
             "org_id": exc.org_id,
         },
     )
+
+
+def _workflow_error(exc: KWorkflowExecutionError) -> HTTPException:
+    return HTTPException(status_code=exc.status_code, detail=exc.error_report)
 
 
 def _execution_context(
@@ -848,6 +870,112 @@ def product_knowledge_risk_terms_patch(
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
     return ProductKnowledgeRiskTermListResponse(items=items, count=len(items))
+
+
+@router.get(
+    "/products/{product_id}/workflow/latest",
+    response_model=ProductKnowledgeWorkflowExecutionRead,
+)
+def product_knowledge_workflow_latest(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> ProductKnowledgeWorkflowExecutionRead:
+    del user
+    try:
+        execution = KWorkflowOrchestratorV1(db).latest_execution_for_product(
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    if execution is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="K workflow execution was not found.",
+        )
+    return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
+
+
+@router.post(
+    "/products/{product_id}/workflow/start",
+    response_model=ProductKnowledgeWorkflowExecutionRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def product_knowledge_workflow_start(
+    product_id: UUID,
+    payload: ProductKnowledgeWorkflowStartRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_WORKFLOW_EXECUTE)),
+) -> ProductKnowledgeWorkflowExecutionRead:
+    try:
+        execution = KWorkflowOrchestratorV1(db).start_pipeline(
+            product_id=product_id,
+            payload=payload,
+            scope_context=_scope_context(request),
+            request=request,
+            user=user,
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    except KWorkflowExecutionError as exc:
+        raise _workflow_error(exc) from exc
+    return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
+
+
+@router.post(
+    "/products/{product_id}/workflow/risk-review",
+    response_model=ProductKnowledgeWorkflowExecutionRead,
+)
+def product_knowledge_workflow_risk_review(
+    product_id: UUID,
+    payload: ProductKnowledgeRiskReviewRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_RISK_TERMS_MANAGE)),
+) -> ProductKnowledgeWorkflowExecutionRead:
+    try:
+        execution = KWorkflowOrchestratorV1(db).review_risk_terms(
+            product_id=product_id,
+            payload=payload,
+            scope_context=_scope_context(request),
+            user=user,
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    except KWorkflowExecutionError as exc:
+        raise _workflow_error(exc) from exc
+    return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
+
+
+@router.post(
+    "/products/{product_id}/workflow/export",
+    response_model=ProductKnowledgeWorkflowExportResponse,
+)
+def product_knowledge_workflow_export(
+    product_id: UUID,
+    request: Request,
+    payload: ProductKnowledgeWorkflowExportRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_EXPORT)),
+) -> ProductKnowledgeWorkflowExportResponse:
+    try:
+        execution, report = KWorkflowOrchestratorV1(db).export_payloads(
+            product_id=product_id,
+            payload=payload or ProductKnowledgeWorkflowExportRequest(),
+            scope_context=_scope_context(request),
+            user=user,
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    except KWorkflowExecutionError as exc:
+        raise _workflow_error(exc) from exc
+    return ProductKnowledgeWorkflowExportResponse(
+        execution=ProductKnowledgeWorkflowExecutionRead.model_validate(execution),
+        report=report,
+    )
 
 
 @router.get("/keywords/{product_id}", response_model=KeywordListResponse)
@@ -1445,6 +1573,7 @@ def list_media_assets(
             asset_role=row.asset_role,
             status=row.status,
             review_status=row.review_status,
+            object_key=row.object_key,
             file_url_placeholder=row.file_url_placeholder,
             mime_type=row.mime_type,
             source=row.source,
@@ -1465,21 +1594,47 @@ def create_media_asset(
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
 ) -> MediaAssetRead:
     del user
+    if (payload.source or IMAGE_SOURCE_MANUAL) != IMAGE_SOURCE_MANUAL:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "K series only supports manual image uploads. "
+                "AI image generation and AI image review belong to I series."
+            ),
+        )
     product = _product_by_ref(
         db,
         product_ref=payload.product_id,
         scope_context=_scope_context(request),
         create_shell=True,
     )
+    filename = (
+        payload.filename
+        or (payload.file_url_placeholder or "image").rsplit("/", 1)[-1]
+        or "image"
+    )
+    object_key = f"k-products/{product.product_key}/images/{filename}"
     row = KProductKnowledgeMediaAsset(
         id=uuid4(),
         product_id=product.id,
         asset_type=payload.asset_type,
         asset_role=payload.asset_role,
+        status="available",
+        review_status="not_applicable",
+        object_key=object_key,
         file_url_placeholder=payload.file_url_placeholder,
         mime_type=payload.mime_type,
-        source=payload.source,
-        metadata_json=payload.metadata,
+        source=IMAGE_SOURCE_MANUAL,
+        metadata_json={
+            **payload.metadata,
+            "filename": filename,
+            "product_folder": f"k-products/{product.product_key}",
+            "source_type": IMAGE_SOURCE_MANUAL,
+            "product_key": product.product_key,
+            "sku": product.sku,
+            "k_image_ai_generation_allowed": False,
+            "k_image_review_allowed": False,
+        },
     )
     db.add(row)
     db.flush()
@@ -1491,10 +1646,63 @@ def create_media_asset(
         asset_role=row.asset_role,
         status=row.status,
         review_status=row.review_status,
+        object_key=row.object_key,
         file_url_placeholder=row.file_url_placeholder,
         mime_type=row.mime_type,
         source=row.source,
         metadata=row.metadata_json,
         created_at=row.created_at,
         updated_at=row.updated_at,
+    )
+
+
+@router.post(
+    "/products/{product_id}/images/bind",
+    response_model=ProductKnowledgeWorkflowExecutionRead,
+)
+def bind_product_image(
+    product_id: UUID,
+    payload: ProductKnowledgeImageBindRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> ProductKnowledgeWorkflowExecutionRead:
+    try:
+        execution = KWorkflowOrchestratorV1(db).bind_image_asset(
+            product_id=product_id,
+            payload=payload,
+            scope_context=_scope_context(request),
+            user=user,
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    except KWorkflowExecutionError as exc:
+        raise _workflow_error(exc) from exc
+    return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
+
+
+@router.get(
+    "/media/{asset_id}/download",
+    response_model=ProductKnowledgeMediaDownloadResponse,
+)
+def download_media_asset(
+    asset_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> ProductKnowledgeMediaDownloadResponse:
+    del user
+    row = db.get(KProductKnowledgeMediaAsset, asset_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Media asset was not found.")
+    filename = None
+    if isinstance(row.metadata_json, dict):
+        filename = row.metadata_json.get("filename")
+    return ProductKnowledgeMediaDownloadResponse(
+        asset_id=row.id,
+        product_id=row.product_id,
+        object_key=row.object_key,
+        download_url=row.file_url_placeholder,
+        filename=filename,
+        review_status=row.review_status,
+        status=row.status,
     )

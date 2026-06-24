@@ -1,24 +1,78 @@
 "use client";
 
-import { FileText, LoaderCircle, Sparkles } from "lucide-react";
+import {
+  CheckCircle2,
+  Download,
+  FileText,
+  ImagePlus,
+  LoaderCircle,
+  Play,
+  RotateCcw,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import styles from "./ProductKnowledge.module.css";
-import type { ProductKnowledgeListItem } from "./types";
+import type {
+  KMediaAsset,
+  KRiskReviewDecision,
+  KWorkflowExecution,
+  KWorkflowExportResponse,
+  KWorkflowStartPayload,
+  ProductKnowledgeListItem,
+} from "./types";
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 
+const TARGET_ORGANIZATION = "涌龙麟（深圳）国际贸易有限公司";
+const WORKFLOW_STEPS = [
+  "product_ingestion",
+  "serp_keyword_fetch",
+  "ai_filter_chatgpt",
+  "ai_filter_claude_opus",
+  "risk_term_review_manual",
+  "keyword_optimization_ai",
+  "unit_conversion_normalization",
+  "image_handling",
+  "export_p_gmc_seo",
+];
+
+type RiskDecisionValue = "approve" | "reject";
+
 type ProductDetailProps = {
+  exportResult?: KWorkflowExportResponse | null;
   isGeneratingSellingPoints?: boolean;
+  isWorkflowBusy?: boolean;
+  mediaAssets?: KMediaAsset[];
+  onBindImage?: (assetId: string) => void;
+  onBindISystemImage?: (imageAssetId: string) => void;
+  onCreateMedia?: (url: string) => void;
+  onExportWorkflow?: () => void;
   onGenerateSellingPoints?: () => void;
+  onRefreshWorkflow?: () => void;
+  onStartWorkflow?: (payload: KWorkflowStartPayload) => void;
+  onSubmitRiskReview?: (
+    decisions: KRiskReviewDecision[],
+    confirmNoRiskTerms: boolean,
+  ) => void;
   product: ProductKnowledgeListItem | null;
   sellingPoints?: ProductSellingPoints | null;
   sellingPointsError?: string;
+  workflow?: KWorkflowExecution | null;
+  workflowError?: string;
 };
 
 function displayValue(value: string | null | undefined) {
   return value && value.trim().length > 0 ? value : "Not set";
 }
 
-function formatDate(value: string) {
+function formatDate(value: string | null | undefined) {
+  if (!value) {
+    return "Not set";
+  }
+
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
     return value;
@@ -30,13 +84,68 @@ function formatDate(value: string) {
   }).format(date);
 }
 
+function workflowStepStatus(workflow: KWorkflowExecution | null, step: string) {
+  if (!workflow) {
+    return "pending";
+  }
+  const latest = [...workflow.trace_json].reverse().find((item) => item.step === step);
+
+  return latest?.status ?? (workflow.current_step === step ? workflow.status : "pending");
+}
+
+function normalizeRiskKeywords(workflow: KWorkflowExecution | null) {
+  const values = workflow?.claude_filter_result_json?.risk_keywords ?? [];
+
+  return values
+    .map((item) => {
+      if (typeof item === "string") {
+        return { reason: null, term: item };
+      }
+
+      return {
+        reason: item.reason ?? null,
+        term: item.term ?? "",
+      };
+    })
+    .filter((item) => item.term.trim().length > 0);
+}
+
 export function ProductDetail({
+  exportResult = null,
   isGeneratingSellingPoints = false,
+  isWorkflowBusy = false,
+  mediaAssets = [],
+  onBindImage,
+  onBindISystemImage,
+  onCreateMedia,
+  onExportWorkflow,
   onGenerateSellingPoints,
+  onRefreshWorkflow,
+  onStartWorkflow,
+  onSubmitRiskReview,
   product,
   sellingPoints = null,
   sellingPointsError = "",
+  workflow = null,
+  workflowError = "",
 }: ProductDetailProps) {
+  const [targetMarket, setTargetMarket] = useState("US");
+  const [serpQuery, setSerpQuery] = useState("");
+  const [mediaUrl, setMediaUrl] = useState("");
+  const [iSystemImageAssetId, setISystemImageAssetId] = useState("");
+  const [riskDecisions, setRiskDecisions] = useState<Record<string, RiskDecisionValue>>(
+    {},
+  );
+  const [riskDecisionError, setRiskDecisionError] = useState("");
+
+  const riskKeywords = useMemo(() => normalizeRiskKeywords(workflow), [workflow]);
+  const canExport = workflow?.status === "ready_for_export" || workflow?.status === "exported";
+
+  useEffect(() => {
+    setRiskDecisions({});
+    setRiskDecisionError("");
+  }, [workflow?.id]);
+
   if (!product) {
     return (
       <aside className={styles.detail} aria-label="Product detail">
@@ -51,6 +160,59 @@ export function ProductDetail({
     );
   }
 
+  function submitWorkflowStart() {
+    onStartWorkflow?.({
+      seed_keywords: [],
+      serp_query: serpQuery.trim() || null,
+      target_market: targetMarket,
+    });
+  }
+
+  function submitRiskReview() {
+    if (riskKeywords.length === 0) {
+      onSubmitRiskReview?.([], true);
+      return;
+    }
+
+    const missing = riskKeywords.filter((item) => !riskDecisions[item.term]);
+    if (missing.length > 0) {
+      setRiskDecisionError("Every risk keyword needs a manual approve or reject decision.");
+      return;
+    }
+
+    setRiskDecisionError("");
+    onSubmitRiskReview?.(
+      riskKeywords.map((item) => {
+        const decision = riskDecisions[item.term] as RiskDecisionValue;
+
+        return {
+          decision,
+          reason: decision === "reject" ? "Rejected in manual review" : null,
+          term: item.term,
+        };
+      }),
+      false,
+    );
+  }
+
+  function createMedia() {
+    const value = mediaUrl.trim();
+    if (!value) {
+      return;
+    }
+    onCreateMedia?.(value);
+    setMediaUrl("");
+  }
+
+  function bindISystemImage() {
+    const value = iSystemImageAssetId.trim();
+    if (!value) {
+      return;
+    }
+    onBindISystemImage?.(value);
+    setISystemImageAssetId("");
+  }
+
   return (
     <aside className={styles.detail} aria-label="Product detail">
       <div className={styles.detailHeading}>
@@ -62,6 +224,10 @@ export function ProductDetail({
       </div>
 
       <dl className={styles.detailGrid}>
+        <div>
+          <dt>Organization</dt>
+          <dd>{product.organization_name || TARGET_ORGANIZATION}</dd>
+        </div>
         <div>
           <dt>Product key</dt>
           <dd>{product.product_key}</dd>
@@ -79,30 +245,278 @@ export function ProductDetail({
           <dd>{displayValue(product.product_type)}</dd>
         </div>
         <div>
-          <dt>Status</dt>
-          <dd>{product.product_status}</dd>
-        </div>
-        <div>
-          <dt>Language</dt>
-          <dd>{product.canonical_language}</dd>
-        </div>
-        <div>
           <dt>Workspace</dt>
           <dd>{product.workspace_key}</dd>
-        </div>
-        <div>
-          <dt>Scope</dt>
-          <dd>{product.scope_mode}</dd>
-        </div>
-        <div>
-          <dt>Created</dt>
-          <dd>{formatDate(product.created_at)}</dd>
         </div>
         <div>
           <dt>Updated</dt>
           <dd>{formatDate(product.updated_at)}</dd>
         </div>
       </dl>
+
+      <section className={styles.workflowSection} aria-labelledby="k-workflow-title">
+        <div className={styles.sellingPointsHeading}>
+          <div>
+            <span className={styles.eyebrow}>K Workflow</span>
+            <h4 id="k-workflow-title">Product Knowledge Pipeline</h4>
+          </div>
+          <button
+            className="secondary-button"
+            disabled={isWorkflowBusy}
+            onClick={onRefreshWorkflow}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={16} />
+            Refresh
+          </button>
+        </div>
+
+        {workflowError ? (
+          <p className={styles.sellingPointsError}>{workflowError}</p>
+        ) : null}
+
+        <dl className={styles.workflowMetrics}>
+          <div>
+            <dt>Status</dt>
+            <dd>{workflow?.status ?? "not_started"}</dd>
+          </div>
+          <div>
+            <dt>Current step</dt>
+            <dd>{workflow?.current_step ?? "product_ingestion"}</dd>
+          </div>
+        </dl>
+
+        <div className={styles.workflowStartGrid}>
+          <label className={styles.field}>
+            <span>Target market</span>
+            <select
+              onChange={(event) => setTargetMarket(event.target.value)}
+              value={targetMarket}
+            >
+              <option value="US">US</option>
+              <option value="EU">EU</option>
+              <option value="UK">UK</option>
+              <option value="CN">CN</option>
+            </select>
+          </label>
+          <label className={styles.field}>
+            <span>SERP query</span>
+            <input
+              onChange={(event) => setSerpQuery(event.target.value)}
+              placeholder={product.product_name_en || product.product_key}
+              value={serpQuery}
+            />
+          </label>
+          <button
+            className="primary-button"
+            disabled={isWorkflowBusy}
+            onClick={submitWorkflowStart}
+            type="button"
+          >
+            {isWorkflowBusy ? (
+              <LoaderCircle aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <Play aria-hidden="true" size={16} />
+            )}
+            Start
+          </button>
+        </div>
+
+        <ol className={styles.workflowSteps}>
+          {WORKFLOW_STEPS.map((step) => (
+            <li key={step}>
+              <span>{step}</span>
+              <strong>{workflowStepStatus(workflow, step)}</strong>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className={styles.workflowSection} aria-labelledby="k-risk-review">
+        <div className={styles.sellingPointsHeading}>
+          <div>
+            <span className={styles.eyebrow}>Manual Gate</span>
+            <h4 id="k-risk-review">Risk Keyword Review</h4>
+          </div>
+          <button
+            className="secondary-button"
+            disabled={!workflow || isWorkflowBusy}
+            onClick={submitRiskReview}
+            type="button"
+          >
+            <ShieldCheck aria-hidden="true" size={16} />
+            Submit Review
+          </button>
+        </div>
+
+        {riskDecisionError ? (
+          <p className={styles.sellingPointsError}>{riskDecisionError}</p>
+        ) : null}
+
+        {riskKeywords.length === 0 ? (
+          <p className={styles.sellingPointsEmpty}>
+            No risk keywords returned yet. Manual confirmation is still required after
+            the dual AI filter completes.
+          </p>
+        ) : (
+          <ul className={styles.riskDecisionList}>
+            {riskKeywords.map((item) => (
+              <li key={item.term}>
+                <div>
+                  <strong>{item.term}</strong>
+                  {item.reason ? <span>{item.reason}</span> : null}
+                </div>
+                <div>
+                  <button
+                    aria-pressed={riskDecisions[item.term] === "approve"}
+                    className="secondary-button"
+                    onClick={() =>
+                      setRiskDecisions((current) => ({
+                        ...current,
+                        [item.term]: "approve",
+                      }))
+                    }
+                    type="button"
+                  >
+                    <CheckCircle2 aria-hidden="true" size={15} />
+                    Approve
+                  </button>
+                  <button
+                    aria-pressed={riskDecisions[item.term] === "reject"}
+                    className="secondary-button"
+                    onClick={() =>
+                      setRiskDecisions((current) => ({
+                        ...current,
+                        [item.term]: "reject",
+                      }))
+                    }
+                    type="button"
+                  >
+                    <XCircle aria-hidden="true" size={15} />
+                    Reject
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <section className={styles.workflowSection} aria-labelledby="k-image-system">
+        <div className={styles.sellingPointsHeading}>
+          <div>
+            <span className={styles.eyebrow}>Image Handling</span>
+            <h4 id="k-image-system">Manual Or I-System</h4>
+          </div>
+        </div>
+
+        <div className={styles.mediaCreateRow}>
+          <label className={styles.field}>
+            <span>Manual image URL</span>
+            <input
+              onChange={(event) => setMediaUrl(event.target.value)}
+              placeholder="https://example.com/image.jpg"
+              value={mediaUrl}
+            />
+          </label>
+          <button
+            className="secondary-button"
+            disabled={isWorkflowBusy || !mediaUrl.trim()}
+            onClick={createMedia}
+            type="button"
+          >
+            <ImagePlus aria-hidden="true" size={16} />
+            Upload
+          </button>
+        </div>
+
+        <div className={styles.mediaCreateRow}>
+          <label className={styles.field}>
+            <span>I-system image_asset_id</span>
+            <input
+              onChange={(event) => setISystemImageAssetId(event.target.value)}
+              placeholder="img_asset_..."
+              value={iSystemImageAssetId}
+            />
+          </label>
+          <button
+            className="secondary-button"
+            disabled={isWorkflowBusy || !iSystemImageAssetId.trim()}
+            onClick={bindISystemImage}
+            type="button"
+          >
+            <Send aria-hidden="true" size={16} />
+            Bind
+          </button>
+        </div>
+
+        <ul className={styles.mediaList}>
+          {mediaAssets.map((asset) => (
+            <li key={asset.id}>
+              <div>
+                <strong>{asset.object_key || asset.id}</strong>
+                <span>
+                  {asset.source || "manual_upload_image"} / {asset.status}
+                </span>
+              </div>
+              <div>
+                {asset.file_url_placeholder ? (
+                  <a
+                    className="secondary-button"
+                    href={asset.file_url_placeholder}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    <Download aria-hidden="true" size={15} />
+                    Download
+                  </a>
+                ) : null}
+                <button
+                  className="secondary-button"
+                  disabled={isWorkflowBusy || asset.source === "i_system_asset"}
+                  onClick={() => onBindImage?.(asset.id)}
+                  type="button"
+                >
+                  <Send aria-hidden="true" size={15} />
+                  Bind
+                </button>
+              </div>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className={styles.workflowSection} aria-labelledby="k-export-gate">
+        <div className={styles.sellingPointsHeading}>
+          <div>
+            <span className={styles.eyebrow}>Export Gate</span>
+            <h4 id="k-export-gate">P / GMC / SEO</h4>
+          </div>
+          <button
+            className="primary-button"
+            disabled={!canExport || isWorkflowBusy}
+            onClick={onExportWorkflow}
+            type="button"
+          >
+            <Send aria-hidden="true" size={16} />
+            Export
+          </button>
+        </div>
+
+        {!canExport ? (
+          <p className={styles.sellingPointsEmpty}>
+            Export unlocks only after dual AI filters, manual risk approval,
+            finalized keywords, and manual or I-system image binding.
+          </p>
+        ) : null}
+
+        {exportResult?.report.export_payloads ? (
+          <div className={styles.exportSummary}>
+            <strong>Generated payloads</strong>
+            <span>{Object.keys(exportResult.report.export_payloads).join(", ")}</span>
+          </div>
+        ) : null}
+      </section>
 
       <section
         aria-labelledby="k7-selling-points"
@@ -124,7 +538,7 @@ export function ProductDetail({
             ) : (
               <Sparkles aria-hidden="true" size={16} />
             )}
-            Generate Selling Points
+            Generate
           </button>
         </div>
 
@@ -136,7 +550,7 @@ export function ProductDetail({
           <SellingPointsResult sellingPoints={sellingPoints} />
         ) : (
           <p className={styles.sellingPointsEmpty}>
-            Select Generate Selling Points to load the K14 structured output.
+            Selling points are available as an auxiliary K14 output.
           </p>
         )}
       </section>

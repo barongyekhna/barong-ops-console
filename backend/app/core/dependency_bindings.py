@@ -20,6 +20,20 @@ MODULE_SERVICE_BINDINGS_V1: tuple[dict[str, Any], ...] = (
     },
     {
         "module_key": "k.product_knowledge",
+        "service_id": "chatgpt",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["reasoning", "writing"],
+        "reason": "K product knowledge must use ChatGPT as the first AI keyword filter after explicit key binding.",
+    },
+    {
+        "module_key": "k.product_knowledge",
+        "service_id": "claude_opus",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["reasoning", "writing"],
+        "reason": "K product knowledge must use Claude Opus as the second AI keyword filter after explicit key binding.",
+    },
+    {
+        "module_key": "k.product_knowledge",
         "service_id": "ai_provider",
         "binding_status": "restricted",
         "allowed_capabilities": ["reasoning", "writing"],
@@ -71,6 +85,18 @@ SERVICE_CAPABILITY_MAPPINGS_V1: tuple[dict[str, Any], ...] = (
         "capabilities": ["reasoning", "writing"],
         "binding_status": "restricted",
         "reason": "DeepSeek service is restricted to product enrichment.",
+    },
+    {
+        "service_id": "chatgpt",
+        "capabilities": ["reasoning", "writing"],
+        "binding_status": "restricted",
+        "reason": "ChatGPT service is restricted to first-pass keyword filtering.",
+    },
+    {
+        "service_id": "claude_opus",
+        "capabilities": ["reasoning", "writing"],
+        "binding_status": "restricted",
+        "reason": "Claude Opus service is restricted to second-pass keyword filtering.",
     },
     {
         "service_id": "ai_provider",

@@ -6,12 +6,28 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { generateSellingPoints } from "@/modules/k14/selling-points/api";
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 
-import { createProduct, getProducts, ProductKnowledgeApiError } from "./api";
+import {
+  bindProductImage,
+  createMediaAsset,
+  createProduct,
+  exportWorkflow,
+  getLatestWorkflow,
+  getMediaAssets,
+  getProducts,
+  ProductKnowledgeApiError,
+  reviewWorkflowRiskTerms,
+  startWorkflow,
+} from "./api";
 import { ProductDetail } from "./ProductDetail";
 import { ProductForm } from "./ProductForm";
 import styles from "./ProductKnowledge.module.css";
 import type {
   ProductKnowledgeCreatePayload,
+  KMediaAsset,
+  KRiskReviewDecision,
+  KWorkflowExecution,
+  KWorkflowExportResponse,
+  KWorkflowStartPayload,
   ProductKnowledgeListItem,
   ProductKnowledgeListResponse,
 } from "./types";
@@ -60,12 +76,25 @@ export function ProductList() {
   const [sellingPointsByProductId, setSellingPointsByProductId] = useState<
     Record<string, ProductSellingPoints>
   >({});
+  const [workflowByProductId, setWorkflowByProductId] = useState<
+    Record<string, KWorkflowExecution | null>
+  >({});
+  const [mediaByProductId, setMediaByProductId] = useState<
+    Record<string, KMediaAsset[]>
+  >({});
+  const [exportByProductId, setExportByProductId] = useState<
+    Record<string, KWorkflowExportResponse>
+  >({});
   const [loadError, setLoadError] = useState("");
   const [createError, setCreateError] = useState("");
   const [sellingPointsError, setSellingPointsError] = useState("");
+  const [workflowError, setWorkflowError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [generatingProductId, setGeneratingProductId] = useState<string | null>(
+    null,
+  );
+  const [workflowBusyAction, setWorkflowBusyAction] = useState<string | null>(
     null,
   );
 
@@ -102,6 +131,37 @@ export function ProductList() {
     void loadProducts();
   }, [loadProducts]);
 
+  const loadWorkflowRuntime = useCallback(async (productId: string) => {
+    setWorkflowError("");
+
+    try {
+      const [workflow, media] = await Promise.all([
+        getLatestWorkflow(productId),
+        getMediaAssets(productId),
+      ]);
+      setWorkflowByProductId((current) => ({
+        ...current,
+        [productId]: workflow,
+      }));
+      setMediaByProductId((current) => ({
+        ...current,
+        [productId]: media.items,
+      }));
+    } catch (error) {
+      setWorkflowError(
+        formatError(error, "Workflow runtime state could not be loaded."),
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!selectedProductId) {
+      return;
+    }
+
+    void loadWorkflowRuntime(selectedProductId);
+  }, [loadWorkflowRuntime, selectedProductId]);
+
   async function handleCreate(payload: ProductKnowledgeCreatePayload) {
     setIsCreating(true);
     setCreateError("");
@@ -122,6 +182,7 @@ export function ProductList() {
   function selectProduct(productId: string) {
     setSelectedProductId(productId);
     setSellingPointsError("");
+    setWorkflowError("");
   }
 
   async function handleGenerateSellingPoints() {
@@ -147,6 +208,134 @@ export function ProductList() {
     } finally {
       setGeneratingProductId(null);
     }
+  }
+
+  async function runWorkflowAction(
+    actionName: string,
+    callback: () => Promise<void>,
+  ) {
+    setWorkflowBusyAction(actionName);
+    setWorkflowError("");
+
+    try {
+      await callback();
+    } catch (error) {
+      setWorkflowError(formatError(error, "Workflow action failed."));
+    } finally {
+      setWorkflowBusyAction(null);
+    }
+  }
+
+  async function handleStartWorkflow(payload: KWorkflowStartPayload) {
+    if (!selectedProduct) {
+      return;
+    }
+
+    await runWorkflowAction("start", async () => {
+      const workflow = await startWorkflow(selectedProduct.id, payload);
+      setWorkflowByProductId((current) => ({
+        ...current,
+        [selectedProduct.id]: workflow,
+      }));
+    });
+  }
+
+  async function handleSubmitRiskReview(
+    decisions: KRiskReviewDecision[],
+    confirmNoRiskTerms: boolean,
+  ) {
+    if (!selectedProduct) {
+      return;
+    }
+    const workflow = workflowByProductId[selectedProduct.id] ?? null;
+
+    await runWorkflowAction("risk-review", async () => {
+      const updated = await reviewWorkflowRiskTerms(selectedProduct.id, {
+        confirm_no_risk_terms: confirmNoRiskTerms,
+        decisions,
+        execution_id: workflow?.id ?? null,
+      });
+      setWorkflowByProductId((current) => ({
+        ...current,
+        [selectedProduct.id]: updated,
+      }));
+      await loadWorkflowRuntime(selectedProduct.id);
+    });
+  }
+
+  async function handleCreateMedia(url: string) {
+    if (!selectedProduct) {
+      return;
+    }
+
+    await runWorkflowAction("media-create", async () => {
+      await createMediaAsset({
+        asset_role: "main",
+        asset_type: "image",
+        file_url_placeholder: url,
+        filename: url.split("/").pop() || `${selectedProduct.product_key}.jpg`,
+        metadata: { upload_mode: "url_placeholder" },
+        mime_type: "image/jpeg",
+        product_id: selectedProduct.id,
+        source: "manual_upload_image",
+      });
+      await loadWorkflowRuntime(selectedProduct.id);
+    });
+  }
+
+  async function handleBindImage(assetId: string) {
+    if (!selectedProduct) {
+      return;
+    }
+
+    await runWorkflowAction("image-bind", async () => {
+      const workflow = await bindProductImage(selectedProduct.id, {
+        asset_id: assetId,
+        source_type: "manual_upload_image",
+      });
+      setWorkflowByProductId((current) => ({
+        ...current,
+        [selectedProduct.id]: workflow,
+      }));
+      await loadWorkflowRuntime(selectedProduct.id);
+    });
+  }
+
+  async function handleBindISystemImage(imageAssetId: string) {
+    if (!selectedProduct) {
+      return;
+    }
+
+    await runWorkflowAction("i-system-image-bind", async () => {
+      const workflow = await bindProductImage(selectedProduct.id, {
+        i_system_image_asset_id: imageAssetId,
+        source_type: "i_system_asset",
+      });
+      setWorkflowByProductId((current) => ({
+        ...current,
+        [selectedProduct.id]: workflow,
+      }));
+      await loadWorkflowRuntime(selectedProduct.id);
+    });
+  }
+
+  async function handleExportWorkflow() {
+    if (!selectedProduct) {
+      return;
+    }
+    const workflow = workflowByProductId[selectedProduct.id] ?? null;
+
+    await runWorkflowAction("export", async () => {
+      const exported = await exportWorkflow(selectedProduct.id, workflow?.id);
+      setWorkflowByProductId((current) => ({
+        ...current,
+        [selectedProduct.id]: exported.execution,
+      }));
+      setExportByProductId((current) => ({
+        ...current,
+        [selectedProduct.id]: exported,
+      }));
+    });
   }
 
   return (
@@ -259,10 +448,30 @@ export function ProductList() {
         </section>
 
         <ProductDetail
+          exportResult={
+            selectedProduct ? exportByProductId[selectedProduct.id] ?? null : null
+          }
           isGeneratingSellingPoints={
             selectedProduct ? generatingProductId === selectedProduct.id : false
           }
+          isWorkflowBusy={workflowBusyAction !== null}
+          mediaAssets={
+            selectedProduct ? mediaByProductId[selectedProduct.id] ?? [] : []
+          }
           onGenerateSellingPoints={handleGenerateSellingPoints}
+          onBindImage={(assetId) => void handleBindImage(assetId)}
+          onBindISystemImage={(imageAssetId) =>
+            void handleBindISystemImage(imageAssetId)
+          }
+          onCreateMedia={(url) => void handleCreateMedia(url)}
+          onExportWorkflow={() => void handleExportWorkflow()}
+          onRefreshWorkflow={() =>
+            selectedProduct ? void loadWorkflowRuntime(selectedProduct.id) : undefined
+          }
+          onStartWorkflow={(payload) => void handleStartWorkflow(payload)}
+          onSubmitRiskReview={(decisions, confirmNoRiskTerms) =>
+            void handleSubmitRiskReview(decisions, confirmNoRiskTerms)
+          }
           product={selectedProduct}
           sellingPoints={
             selectedProduct
@@ -270,6 +479,8 @@ export function ProductList() {
               : null
           }
           sellingPointsError={sellingPointsError}
+          workflow={selectedProduct ? workflowByProductId[selectedProduct.id] ?? null : null}
+          workflowError={workflowError}
         />
       </div>
     </section>

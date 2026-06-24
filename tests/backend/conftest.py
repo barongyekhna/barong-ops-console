@@ -69,6 +69,19 @@ from backend.app.models.review import ReviewItem
 from backend.app.models.security import SecurityRateLimitBucket, SecurityReplayNonce
 from backend.app.models.shared_module import SharedModuleRecord
 from backend.app.models.user import User
+from backend.app.modules.k_series.product_knowledge.models import (
+    KProductKnowledgeAIEvent,
+    KProductKnowledgeAttribute,
+    KProductKnowledgeKeyword,
+    KProductKnowledgeMediaAsset,
+    KProductKnowledgeProduct,
+    KProductKnowledgeResearchRun,
+    KProductKnowledgeReviewItem,
+    KProductKnowledgeRiskTerm,
+    KProductKnowledgeTranslation,
+    KProductKnowledgeVersion,
+    KProductKnowledgeWorkflowExecution,
+)
 from backend.app.services.session_seen_buffer import clear_session_seen_buffer
 from backend.app.services.module_control_cache_service import (
     reset_module_control_center_cache_for_tests,
@@ -265,6 +278,17 @@ def clear_auth_tables() -> None:
         db.execute(delete(ApprovalWorkflowRecord))
         db.execute(delete(ApprovalRequestRecord))
         db.execute(delete(SharedModuleRecord))
+        db.execute(delete(KProductKnowledgeWorkflowExecution))
+        db.execute(delete(KProductKnowledgeReviewItem))
+        db.execute(delete(KProductKnowledgeMediaAsset))
+        db.execute(delete(KProductKnowledgeVersion))
+        db.execute(delete(KProductKnowledgeAIEvent))
+        db.execute(delete(KProductKnowledgeResearchRun))
+        db.execute(delete(KProductKnowledgeRiskTerm))
+        db.execute(delete(KProductKnowledgeKeyword))
+        db.execute(delete(KProductKnowledgeTranslation))
+        db.execute(delete(KProductKnowledgeAttribute))
+        db.execute(delete(KProductKnowledgeProduct))
         db.execute(delete(ApiKeyModuleBindingRecord))
         db.execute(delete(ApiKeyRecord))
         db.execute(delete(ModuleControlStateRecord))

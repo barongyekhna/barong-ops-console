@@ -24,6 +24,16 @@ ReviewStatus = Literal[
 KeywordType = Literal["primary", "secondary", "long_tail", "b2b", "negative", "risk"]
 KeywordStatus = Literal["candidate", "approved", "rejected", "removed"]
 RiskTermStatus = Literal["candidate", "confirmed", "removed", "false_positive"]
+ImageSourceType = Literal["manual_upload_image", "i_system_asset"]
+WorkflowStatus = Literal[
+    "created",
+    "running",
+    "blocked",
+    "failed",
+    "ready_for_export",
+    "exported",
+]
+RiskReviewDecision = Literal["approve", "reject"]
 
 
 class ProductKnowledgeAttributeItem(BaseModel):
@@ -173,6 +183,7 @@ class ProductKnowledgeRead(BaseModel):
     workspace_key: str
     business_context: str
     scope_mode: str
+    organization_name: str
     created_at: datetime
     updated_at: datetime
     attributes_count: int | None = None
@@ -195,6 +206,7 @@ class ProductKnowledgeListItem(BaseModel):
     workspace_key: str
     business_context: str
     scope_mode: str
+    organization_name: str
     created_at: datetime
     updated_at: datetime
 
@@ -290,6 +302,132 @@ class ProductKnowledgeRiskTermListResponse(BaseModel):
     count: int = Field(ge=0)
 
 
+class ProductKnowledgeWorkflowStartRequest(BaseModel):
+    target_market: str = Field(default="US", min_length=1, max_length=50)
+    target_region: str | None = Field(default=None, max_length=100)
+    serp_query: str | None = Field(default=None, max_length=512)
+    seed_keywords: list[str] = Field(default_factory=list, max_length=50)
+    competitors: list[str] = Field(default_factory=list, max_length=50)
+
+    @model_validator(mode="after")
+    def normalize_workflow_input(self) -> "ProductKnowledgeWorkflowStartRequest":
+        self.target_market = self.target_market.strip().upper()
+        if self.target_region is not None:
+            self.target_region = self.target_region.strip() or None
+        if self.serp_query is not None:
+            self.serp_query = self.serp_query.strip() or None
+        self.seed_keywords = [_clean_text(item) for item in self.seed_keywords]
+        self.seed_keywords = [item for item in self.seed_keywords if item]
+        self.competitors = [_clean_text(item) for item in self.competitors]
+        self.competitors = [item for item in self.competitors if item]
+        return self
+
+
+class ProductKnowledgeRiskReviewDecision(BaseModel):
+    risk_term_id: UUID | None = None
+    term: str = Field(min_length=1, max_length=512)
+    decision: RiskReviewDecision
+    reason: str | None = Field(default=None, max_length=1000)
+
+    @model_validator(mode="after")
+    def normalize_decision(self) -> "ProductKnowledgeRiskReviewDecision":
+        self.term = self.term.strip()
+        if self.reason is not None:
+            self.reason = self.reason.strip() or None
+        return self
+
+
+class ProductKnowledgeRiskReviewRequest(BaseModel):
+    execution_id: UUID | None = None
+    decisions: list[ProductKnowledgeRiskReviewDecision] = Field(default_factory=list)
+    confirm_no_risk_terms: bool = False
+
+
+class ProductKnowledgeWorkflowExportRequest(BaseModel):
+    execution_id: UUID | None = None
+
+
+class ProductKnowledgeImageBindRequest(BaseModel):
+    source_type: ImageSourceType = "manual_upload_image"
+    asset_id: UUID | None = None
+    manual_asset_id: UUID | None = None
+    i_system_image_asset_id: str | None = Field(default=None, max_length=255)
+
+    @model_validator(mode="after")
+    def require_source_identifier(self) -> "ProductKnowledgeImageBindRequest":
+        if self.i_system_image_asset_id is not None:
+            self.i_system_image_asset_id = self.i_system_image_asset_id.strip() or None
+        if self.source_type == "manual_upload_image" and not (
+            self.asset_id or self.manual_asset_id
+        ):
+            raise ValueError("manual_upload_image requires asset_id or manual_asset_id.")
+        if self.source_type == "i_system_asset" and not (
+            self.i_system_image_asset_id or self.asset_id
+        ):
+            raise ValueError("i_system_asset requires i_system_image_asset_id.")
+        return self
+
+
+class ProductKnowledgeWorkflowExecutionRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    product_id: UUID
+    organization_name: str
+    workspace_key: str
+    business_context: str
+    scope_mode: str
+    target_market: str
+    target_region: str | None
+    status: str
+    current_step: str
+    trace_json: list[dict[str, Any]]
+    chatgpt_filter_result_json: dict[str, Any] | None
+    claude_filter_result_json: dict[str, Any] | None
+    risk_approval_log_json: dict[str, Any] | None
+    final_keyword_set_json: dict[str, Any] | None
+    unit_conversion_json: dict[str, Any] | None
+    image_binding_json: dict[str, Any] | None
+    export_payloads_json: dict[str, Any] | None
+    execution_gate_logs_json: list[dict[str, Any]]
+    error_report_json: dict[str, Any] | None
+    started_at: datetime | None
+    finished_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ProductKnowledgeWorkflowReport(BaseModel):
+    workflow_id: UUID
+    product_id: UUID
+    organization: str
+    status: str
+    current_step: str
+    full_pipeline_trace: list[dict[str, Any]]
+    chatgpt_filter_result: dict[str, Any] | None
+    claude_filter_result: dict[str, Any] | None
+    risk_approval_log: dict[str, Any] | None
+    final_keyword_set: dict[str, Any] | None
+    export_payloads: dict[str, Any] | None
+    execution_gate_logs: list[dict[str, Any]]
+    error_report: dict[str, Any] | None
+
+
+class ProductKnowledgeWorkflowExportResponse(BaseModel):
+    execution: ProductKnowledgeWorkflowExecutionRead
+    report: ProductKnowledgeWorkflowReport
+
+
+class ProductKnowledgeMediaDownloadResponse(BaseModel):
+    asset_id: UUID
+    product_id: UUID
+    object_key: str | None
+    download_url: str | None
+    filename: str | None
+    review_status: str
+    status: str
+
+
 class ArchiveProductKnowledgeRequest(BaseModel):
     reason: str | None = Field(default=None, max_length=1000)
 
@@ -297,3 +435,7 @@ class ArchiveProductKnowledgeRequest(BaseModel):
 class ErrorResponse(BaseModel):
     code: str
     message: str
+
+
+def _clean_text(value: Any) -> str:
+    return str(value).strip()

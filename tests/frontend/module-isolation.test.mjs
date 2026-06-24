@@ -223,7 +223,14 @@ const registryItems = [
   manifest({
     category: "business",
     denied_behavior: "show_locked",
-    external_dependencies: ["serp", "deepseek", "ai_provider", "n8n"],
+    external_dependencies: [
+      "serp",
+      "chatgpt",
+      "claude_opus",
+      "deepseek",
+      "ai_provider",
+      "n8n",
+    ],
     module_key: "k.product_knowledge",
     required_permissions: ["k.product_knowledge.read"],
     route_namespace: "/products",

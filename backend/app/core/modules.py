@@ -718,10 +718,47 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
                 high_risk_confirmation_required=True,
                 operation_log_required=True,
             ),
+            _permission(
+                module_key="k.product_knowledge",
+                permission_key="k.product_knowledge.workflow.execute",
+                category="business",
+                action="execute",
+                label="Execute product knowledge workflow",
+                description=(
+                    "Run the gated K-series product knowledge pipeline up to "
+                    "manual review checkpoints."
+                ),
+                risk_level="high",
+                menu_policy="show_locked",
+                high_risk_confirmation_required=True,
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="k.product_knowledge",
+                permission_key="k.product_knowledge.export",
+                category="business",
+                action="export",
+                label="Export product knowledge payloads",
+                description=(
+                    "Export P-series, GMC, and SEO payloads only after the "
+                    "full K workflow gate is satisfied."
+                ),
+                risk_level="critical",
+                menu_policy="show_locked",
+                high_risk_confirmation_required=True,
+                operation_log_required=True,
+            ),
         ),
         denied_behavior="show_locked",
         unavailable_behavior="show_unavailable",
-        external_dependencies=("serp", "deepseek", "ai_provider", "n8n"),
+        external_dependencies=(
+            "serp",
+            "chatgpt",
+            "claude_opus",
+            "deepseek",
+            "ai_provider",
+            "n8n",
+        ),
         execution_provider_required=True,
         module_adapter_required=True,
         sandbox_required=True,
@@ -732,12 +769,15 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             "k.product_knowledge.keyword.updated",
             "k.product_knowledge.risk_term.updated",
             "k.product_knowledge.enrichment.executed",
+            "k.product_knowledge.workflow.executed",
+            "k.product_knowledge.export.generated",
         ),
         data_boundary=_data_boundary(
             reads=(
                 "k_product_knowledge_products",
                 "k_product_knowledge_keywords",
                 "k_product_knowledge_risk_terms",
+                "k_product_knowledge_workflow_executions",
                 "credential_module_bindings",
             ),
             writes=(
@@ -746,6 +786,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
                 "k_product_knowledge_risk_terms",
                 "k_product_knowledge_media_assets",
                 "k_product_knowledge_ai_events",
+                "k_product_knowledge_workflow_executions",
             ),
         ),
         release_requirements=_release_requirements(
@@ -755,6 +796,9 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
                 "k product persistence",
                 "k api key binding",
                 "k execution gate",
+                "k dual ai filter",
+                "k manual risk review",
+                "k guarded export",
             ),
         ),
         staging_acceptance_required=True,
@@ -803,6 +847,58 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             staging_acceptance=True,
             production_archive=True,
             required_checks=("future adapter acceptance",),
+        ),
+        staging_acceptance_required=True,
+        production_release_required=True,
+    ),
+    _manifest(
+        module_key="i.image_system",
+        display_name="I Image System",
+        description=(
+            "Independent I-series AI image system boundary for image generation, "
+            "AI image review, quality scoring, versioning, recommendation, and "
+            "image_asset_id handoff to K-series."
+        ),
+        category="business",
+        status="adapter_pending",
+        lifecycle="designed",
+        route_namespace="/images",
+        api_namespace="no_api",
+        no_api=True,
+        navigation=_navigation(
+            group="Registry",
+            label="I 图片系统",
+            icon="Images",
+            order=9,
+            default_visible=False,
+        ),
+        required_permissions=("i.image_system.read",),
+        permission_manifest=(
+            _permission(
+                module_key="i.image_system",
+                permission_key="i.image_system.read",
+                category="business",
+                action="read",
+                label="Read I image system metadata",
+                description="View the independent I-series image system boundary metadata.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="adapter_pending",
+        execution_provider_required=True,
+        module_adapter_required=True,
+        sandbox_required=True,
+        feature_flag_key="modules.i.image_system",
+        data_boundary=_data_boundary(
+            reads=("i_image_assets",),
+            writes=("i_image_assets",),
+        ),
+        release_requirements=_release_requirements(
+            staging_acceptance=True,
+            production_archive=True,
+            required_checks=("future I-series adapter acceptance",),
         ),
         staging_acceptance_required=True,
         production_release_required=True,

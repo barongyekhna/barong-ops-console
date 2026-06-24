@@ -521,7 +521,7 @@ def test_adapter_dependency_and_runtime_safety_metadata() -> None:
     assert {
         dependency.dependency_key
         for dependency in k_adapter.dependency_declarations
-    } == {"serp", "deepseek", "ai_provider", "n8n"}
+    } == {"serp", "chatgpt", "claude_opus", "deepseek", "ai_provider", "n8n"}
     assert all(
         dependency.live_connection_allowed is False
         for dependency in k_adapter.dependency_declarations

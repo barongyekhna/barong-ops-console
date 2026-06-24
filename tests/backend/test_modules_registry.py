@@ -512,6 +512,8 @@ def test_module_registry_dependency_and_runtime_safety_metadata() -> None:
     assert k_product_knowledge.api_namespace == "/k"
     assert set(k_product_knowledge.external_dependencies) == {
         "serp",
+        "chatgpt",
+        "claude_opus",
         "deepseek",
         "ai_provider",
         "n8n",

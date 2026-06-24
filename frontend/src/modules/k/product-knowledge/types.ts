@@ -20,6 +20,7 @@ export type ProductKnowledgeListItem = {
   workspace_key: string;
   business_context: string;
   scope_mode: string;
+  organization_name: string;
   created_at: string;
   updated_at: string;
 };
@@ -73,4 +74,132 @@ export type ProductFormValues = {
   product_type: string;
   raw_input_language: string;
   raw_input_text: string;
+};
+
+export type KWorkflowStatus =
+  | "created"
+  | "running"
+  | "blocked"
+  | "failed"
+  | "ready_for_export"
+  | "exported"
+  | string;
+
+export type KWorkflowTraceItem = {
+  step: string;
+  status: string;
+  timestamp: string;
+  input_summary?: Record<string, unknown>;
+  output_summary?: Record<string, unknown>;
+  error?: Record<string, unknown> | null;
+};
+
+export type KWorkflowExecution = {
+  id: string;
+  product_id: string;
+  organization_name: string;
+  workspace_key: string;
+  business_context: string;
+  scope_mode: string;
+  target_market: string;
+  target_region: string | null;
+  status: KWorkflowStatus;
+  current_step: string;
+  trace_json: KWorkflowTraceItem[];
+  chatgpt_filter_result_json: Record<string, unknown> | null;
+  claude_filter_result_json: {
+    final_keywords?: string[];
+    high_value_keywords?: string[];
+    low_value_keywords?: string[];
+    risk_keywords?: Array<string | { term?: string; reason?: string | null }>;
+  } | null;
+  risk_approval_log_json: Record<string, unknown> | null;
+  final_keyword_set_json: {
+    primary_keywords?: string[];
+    secondary_keywords?: string[];
+    longtail_keywords?: string[];
+  } | null;
+  unit_conversion_json: Record<string, unknown> | null;
+  image_binding_json: Record<string, unknown> | null;
+  export_payloads_json: Record<string, unknown> | null;
+  execution_gate_logs_json: Array<Record<string, unknown>>;
+  error_report_json: Record<string, unknown> | null;
+  started_at: string | null;
+  finished_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KWorkflowStartPayload = {
+  target_market: string;
+  target_region?: string | null;
+  serp_query?: string | null;
+  seed_keywords?: string[];
+  competitors?: string[];
+};
+
+export type KRiskReviewDecision = {
+  risk_term_id?: string | null;
+  term: string;
+  decision: "approve" | "reject";
+  reason?: string | null;
+};
+
+export type KRiskReviewPayload = {
+  execution_id?: string | null;
+  decisions: KRiskReviewDecision[];
+  confirm_no_risk_terms?: boolean;
+};
+
+export type KMediaAsset = {
+  id: string;
+  product_id: string;
+  asset_type: string;
+  asset_role: string;
+  status: string;
+  review_status: string;
+  object_key: string | null;
+  file_url_placeholder: string | null;
+  mime_type: string | null;
+  source: string | null;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type KMediaListResponse = {
+  items: KMediaAsset[];
+  count: number;
+};
+
+export type KMediaCreatePayload = {
+  product_id: string;
+  asset_type: string;
+  asset_role?: string;
+  filename?: string | null;
+  file_url_placeholder?: string | null;
+  mime_type?: string | null;
+  source?: string | null;
+  metadata?: Record<string, unknown>;
+};
+
+export type KWorkflowReport = {
+  workflow_id: string;
+  product_id: string;
+  organization: string;
+  status: string;
+  current_step: string;
+  full_pipeline_trace: KWorkflowTraceItem[];
+  chatgpt_filter_result: Record<string, unknown> | null;
+  claude_filter_result: Record<string, unknown> | null;
+  risk_approval_log: Record<string, unknown> | null;
+  final_keyword_set: Record<string, unknown> | null;
+  export_payloads: Record<string, unknown> | null;
+  execution_gate_logs: Array<Record<string, unknown>>;
+  error_report: Record<string, unknown> | null;
+};
+
+export type KWorkflowExportResponse = {
+  execution: KWorkflowExecution;
+  report: KWorkflowReport;
 };

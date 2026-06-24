@@ -33,6 +33,7 @@ from .constants import (
     DEFAULT_CANONICAL_LANGUAGE,
     DEFAULT_SCOPE_MODE,
     DEFAULT_WORKSPACE_KEY,
+    TARGET_ORGANIZATION_NAME,
 )
 
 
@@ -112,6 +113,11 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
         String(64),
         nullable=False,
         server_default=DEFAULT_SCOPE_MODE,
+    )
+    organization_name: Mapped[str] = mapped_column(
+        String(255),
+        nullable=False,
+        server_default=TARGET_ORGANIZATION_NAME,
     )
     product_key: Mapped[str] = mapped_column(String(128), nullable=False)
     source_system: Mapped[str | None] = mapped_column(String(100), nullable=True)
@@ -554,6 +560,91 @@ class KProductKnowledgeAIEvent(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     token_estimate: Mapped[int | None] = mapped_column(Integer, nullable=True)
     cost_estimate: Mapped[Decimal | None] = mapped_column(Numeric(12, 6), nullable=True)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+
+
+class KProductKnowledgeWorkflowExecution(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
+    __tablename__ = "k_product_knowledge_workflow_executions"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ("
+            "'created', 'running', 'blocked', 'failed', "
+            "'ready_for_export', 'exported'"
+            ")",
+            name=conv("ck_kpk_workflow_executions_valid_status"),
+        ),
+        Index("ix_kpk_workflow_executions_product", "product_id"),
+        Index("ix_kpk_workflow_executions_status", "status"),
+        Index("ix_kpk_workflow_executions_current_step", "current_step"),
+        Index(
+            "ix_kpk_workflow_executions_scope",
+            "workspace_key",
+            "business_context",
+            "organization_name",
+        ),
+        Index("ix_kpk_workflow_executions_created", "created_at"),
+    )
+
+    product_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "k_product_knowledge_products.id",
+            name="fk_kpk_workflow_executions_product_id_products",
+        ),
+        nullable=False,
+    )
+    organization_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    workspace_key: Mapped[str] = mapped_column(String(128), nullable=False)
+    business_context: Mapped[str] = mapped_column(String(128), nullable=False)
+    scope_mode: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_market: Mapped[str] = mapped_column(String(50), nullable=False)
+    target_region: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        server_default="created",
+    )
+    current_step: Mapped[str] = mapped_column(String(100), nullable=False)
+    trace_json: Mapped[Any] = mapped_column(json_type(), nullable=False)
+    chatgpt_filter_result_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    claude_filter_result_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    risk_approval_log_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    final_keyword_set_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    unit_conversion_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    image_binding_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    export_payloads_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    execution_gate_logs_json: Mapped[Any] = mapped_column(json_type(), nullable=False)
+    error_report_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
     created_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     updated_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
 

@@ -1,0 +1,199 @@
+{
+  "report_name": "k_series_orchestrator_v2_report",
+  "report_type": "k_workflow_orchestrator_v1_and_i_series_separation_design",
+  "generated_at": "2026-06-24T00:00:00Z",
+  "organization": "涌龙麟（深圳）国际贸易有限公司",
+  "architecture_boundary": {
+    "k_series": {
+      "responsibilities": [
+        "product_information_management",
+        "sku_category_market_management",
+        "serp_keyword_fetch",
+        "chatgpt_then_claude_dual_ai_keyword_filter",
+        "manual_risk_term_review",
+        "keyword_optimization",
+        "unit_conversion_normalization",
+        "product_export_p_gmc_seo",
+        "image_binding_from_manual_upload_or_i_system"
+      ],
+      "forbidden": [
+        "ai_image_generation",
+        "image_review",
+        "image_quality_scoring",
+        "image_version_management",
+        "image_recommendation"
+      ]
+    },
+    "i_series": {
+      "responsibilities": [
+        "ai_image_generation",
+        "ai_image_review",
+        "image_quality_scoring",
+        "image_version_management",
+        "image_recommendation",
+        "image_asset_id_output"
+      ],
+      "handoff_contract": {
+        "output_field": "image_asset_id",
+        "k_reference_field": "i_system_image_asset_id",
+        "k_source_type": "i_system_asset"
+      }
+    }
+  },
+  "full_workflow_trace": [
+    {
+      "step": "product_ingestion",
+      "status": "implemented",
+      "blocking_rule": "organization must equal required company"
+    },
+    {
+      "step": "serp_keyword_fetch",
+      "status": "implemented",
+      "blocking_rule": "serp proxy key and keyword output required"
+    },
+    {
+      "step": "ai_filter_chatgpt",
+      "status": "implemented",
+      "blocking_rule": "must execute before Claude Opus; result persisted"
+    },
+    {
+      "step": "ai_filter_claude_opus",
+      "status": "implemented",
+      "blocking_rule": "must execute after ChatGPT; result persisted"
+    },
+    {
+      "step": "risk_term_review_manual",
+      "status": "implemented",
+      "blocking_rule": "each risk term requires manual approve or reject"
+    },
+    {
+      "step": "keyword_optimization_ai",
+      "status": "implemented",
+      "outputs": [
+        "primary_keywords",
+        "secondary_keywords",
+        "longtail_keywords"
+      ]
+    },
+    {
+      "step": "unit_conversion_normalization",
+      "status": "implemented",
+      "supported_conversions": [
+        "cm_to_inch",
+        "kg_to_lb",
+        "g_to_oz"
+      ]
+    },
+    {
+      "step": "image_handling",
+      "status": "implemented",
+      "allowed_sources": [
+        "manual_upload_image",
+        "i_system_asset"
+      ],
+      "forbidden_in_k": [
+        "ai_image_generation",
+        "image_review"
+      ]
+    },
+    {
+      "step": "export_p_gmc_seo",
+      "status": "implemented",
+      "blocking_rule": "dual AI passed, risk approved, keywords finalized, image bound"
+    }
+  ],
+  "chatgpt_filter_result": {
+    "required": true,
+    "provider_key_alias": "chatgpt",
+    "persisted_to": [
+      "k_product_knowledge_ai_events",
+      "k_product_knowledge_workflow_executions.chatgpt_filter_result_json"
+    ],
+    "skip_allowed": false
+  },
+  "claude_filter_result": {
+    "required": true,
+    "provider_key_alias": "claude_opus",
+    "persisted_to": [
+      "k_product_knowledge_ai_events",
+      "k_product_knowledge_workflow_executions.claude_filter_result_json"
+    ],
+    "skip_allowed": false
+  },
+  "risk_approval_log": {
+    "manual_review_required": true,
+    "auto_pass_allowed": false,
+    "persisted_to": "k_product_knowledge_workflow_executions.risk_approval_log_json"
+  },
+  "image_source_type": {
+    "manual_upload_image": {
+      "implemented": true,
+      "k_capability": "manual URL/file metadata registration and binding to product_key/SKU",
+      "k_review": false,
+      "k_ai_generation": false
+    },
+    "i_system_asset": {
+      "implemented": true,
+      "k_capability": "reference I-series image_asset_id and bind it to product export payloads",
+      "i_system_owns": [
+        "ai_generation",
+        "ai_review",
+        "quality_score",
+        "versioning",
+        "recommendation"
+      ]
+    }
+  },
+  "export_payload": {
+    "p_series_payload": "generated after export gate",
+    "gmc_feed": "generated after export gate",
+    "seo_keyword_pack": "generated after export gate"
+  },
+  "execution_gate_logs": {
+    "module_control": "required",
+    "api_key_resolution": [
+      "serp",
+      "chatgpt",
+      "claude_opus"
+    ],
+    "organization_validation": "涌龙麟（深圳）国际贸易有限公司",
+    "failure_behavior": "stop workflow, persist error_report_json, block export"
+  },
+  "export_gate": {
+    "required_conditions": [
+      "chatgpt_passed",
+      "claude_passed",
+      "risk_approved",
+      "keywords_finalized",
+      "image_bound_manual_or_i_system"
+    ],
+    "direct_export_allowed": false
+  },
+  "verification": {
+    "status": "verified_with_available_local_tooling",
+    "commands": [
+      {
+        "command": "python3 -m compileall backend/app/modules/k_series/product_knowledge backend/app/core/modules.py backend/app/core/module_adapters.py tests/backend/test_k_series_workflow_engine.py",
+        "status": "passed"
+      },
+      {
+        "command": "npm run typecheck",
+        "status": "passed"
+      },
+      {
+        "command": "npm test",
+        "status": "passed",
+        "summary": "14/14 frontend node tests passed"
+      },
+      {
+        "command": "python3 -m json.tool k_series_orchestrator_v2_report.json",
+        "status": "passed"
+      },
+      {
+        "command": "python3 -m pytest tests/backend/test_k_series_workflow_engine.py",
+        "status": "not_run",
+        "reason": "pytest is not installed in the current environment"
+      }
+    ]
+  }
+}

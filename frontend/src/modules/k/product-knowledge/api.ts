@@ -1,6 +1,13 @@
 "use client";
 
 import type {
+  KMediaAsset,
+  KMediaCreatePayload,
+  KMediaListResponse,
+  KRiskReviewPayload,
+  KWorkflowExecution,
+  KWorkflowExportResponse,
+  KWorkflowStartPayload,
   ProductKnowledgeCreatePayload,
   ProductKnowledgeDetail,
   ProductKnowledgeListResponse,
@@ -52,6 +59,20 @@ async function errorMessageFor(response: Response) {
     if (typeof payload.detail === "string") {
       return payload.detail;
     }
+    if (
+      payload.detail &&
+      typeof payload.detail === "object" &&
+      "message" in payload.detail
+    ) {
+      const detail = payload.detail as { code?: unknown; message?: unknown };
+      const code = typeof detail.code === "string" ? `${detail.code}: ` : "";
+      const message =
+        typeof detail.message === "string"
+          ? detail.message
+          : "The Product Knowledge API request could not be completed.";
+
+      return `${code}${message}`;
+    }
   } catch {
     // Keep the stable fallback for non-JSON backend responses.
   }
@@ -95,4 +116,121 @@ export async function createProduct(
   });
 
   return readJson<ProductKnowledgeDetail>(response);
+}
+
+export async function getLatestWorkflow(
+  productId: string,
+): Promise<KWorkflowExecution | null> {
+  const response = await fetch(
+    `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${productId}/workflow/latest`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(),
+      method: "GET",
+    },
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  return readJson<KWorkflowExecution>(response);
+}
+
+export async function startWorkflow(
+  productId: string,
+  payload: KWorkflowStartPayload,
+): Promise<KWorkflowExecution> {
+  const response = await fetch(
+    `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${productId}/workflow/start`,
+    {
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+
+  return readJson<KWorkflowExecution>(response);
+}
+
+export async function reviewWorkflowRiskTerms(
+  productId: string,
+  payload: KRiskReviewPayload,
+): Promise<KWorkflowExecution> {
+  const response = await fetch(
+    `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${productId}/workflow/risk-review`,
+    {
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+
+  return readJson<KWorkflowExecution>(response);
+}
+
+export async function exportWorkflow(
+  productId: string,
+  executionId?: string | null,
+): Promise<KWorkflowExportResponse> {
+  const response = await fetch(
+    `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${productId}/workflow/export`,
+    {
+      body: JSON.stringify({ execution_id: executionId ?? null }),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+
+  return readJson<KWorkflowExportResponse>(response);
+}
+
+export async function getMediaAssets(
+  productId: string,
+): Promise<KMediaListResponse> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/k/media?product_id=${encodeURIComponent(productId)}`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(),
+      method: "GET",
+    },
+  );
+
+  return readJson<KMediaListResponse>(response);
+}
+
+export async function createMediaAsset(
+  payload: KMediaCreatePayload,
+): Promise<KMediaAsset> {
+  const response = await fetch(`${API_PROXY_BASE}/k/media`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+
+  return readJson<KMediaAsset>(response);
+}
+
+export async function bindProductImage(
+  productId: string,
+  payload:
+    | { source_type: "manual_upload_image"; asset_id: string }
+    | { source_type: "i_system_asset"; i_system_image_asset_id: string },
+): Promise<KWorkflowExecution> {
+  const response = await fetch(
+    `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${productId}/images/bind`,
+    {
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+
+  return readJson<KWorkflowExecution>(response);
 }

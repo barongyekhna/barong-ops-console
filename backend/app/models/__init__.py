@@ -59,6 +59,7 @@ from ..modules.k_series.product_knowledge.models import (
     KProductKnowledgeResearchRun,
     KProductKnowledgeRiskTerm,
     KProductKnowledgeTranslation,
+    KProductKnowledgeWorkflowExecution,
 )
 
 __all__ = [
@@ -92,6 +93,7 @@ __all__ = [
     "KProductKnowledgeResearchRun",
     "KProductKnowledgeRiskTerm",
     "KProductKnowledgeTranslation",
+    "KProductKnowledgeWorkflowExecution",
     "MemoryEvent",
     "MemorySummary",
     "MessageRecord",

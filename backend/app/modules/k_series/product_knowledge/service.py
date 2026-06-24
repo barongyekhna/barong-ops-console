@@ -24,6 +24,7 @@ from .schemas import (
     ProductKnowledgeUpdate,
 )
 from .scope_shim import KScopeContext, apply_scope_filters, normalize_scope_context
+from .constants import TARGET_ORGANIZATION_NAME
 
 PRODUCT_CREATE_FIELDS = frozenset(
     {
@@ -118,6 +119,7 @@ def create_product(
         workspace_key=context.workspace_key,
         business_context=context.business_context,
         scope_mode=context.scope_mode,
+        organization_name=TARGET_ORGANIZATION_NAME,
     )
     db.add(product)
 

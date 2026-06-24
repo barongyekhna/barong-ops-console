@@ -86,12 +86,16 @@ def test_c14e_default_rules_explicitly_disable_n8n_capabilities() -> None:
     assert n8n_binding.allowed_capabilities == []
     assert validation.valid is True
     assert graph.validation.valid is True
-    assert len(graph.edges) == 6
+    assert len(graph.edges) == 10
     assert {
         (edge.module_key, edge.service_id, edge.capability)
         for edge in graph.edges
     } == {
         ("k.product_knowledge", "serp", "serp"),
+        ("k.product_knowledge", "chatgpt", "reasoning"),
+        ("k.product_knowledge", "chatgpt", "writing"),
+        ("k.product_knowledge", "claude_opus", "reasoning"),
+        ("k.product_knowledge", "claude_opus", "writing"),
         ("k.product_knowledge", "deepseek", "reasoning"),
         ("k.product_knowledge", "deepseek", "writing"),
         ("k.product_knowledge", "ai_provider", "reasoning"),

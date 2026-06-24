@@ -1024,6 +1024,8 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                     "k.product_knowledge.serp.execute",
                     "k.product_knowledge.ai_enrich.execute",
                     "k.product_knowledge.risk_filter.execute",
+                    "k.product_knowledge.workflow.execute",
+                    "k.product_knowledge.export.generate",
                 ),
             ),
         ),
@@ -1125,6 +1127,33 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 status="production_ready",
                 required_permission="k.product_knowledge.update",
             ),
+            _api(
+                api_key="k.product_knowledge.workflow.start",
+                module_key="k.product_knowledge",
+                api_namespace="/k",
+                path="/k/products/{product_id}/workflow/start",
+                method="POST",
+                status="production_ready",
+                required_permission="k.product_knowledge.workflow.execute",
+            ),
+            _api(
+                api_key="k.product_knowledge.workflow.risk_review",
+                module_key="k.product_knowledge",
+                api_namespace="/k",
+                path="/k/products/{product_id}/workflow/risk-review",
+                method="POST",
+                status="production_ready",
+                required_permission="k.product_knowledge.risk_terms.manage",
+            ),
+            _api(
+                api_key="k.product_knowledge.workflow.export",
+                module_key="k.product_knowledge",
+                api_namespace="/k",
+                path="/k/products/{product_id}/workflow/export",
+                method="POST",
+                status="production_ready",
+                required_permission="k.product_knowledge.export",
+            ),
         ),
         capabilities=(
             _capability(
@@ -1142,6 +1171,17 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 description="Execute provider-gated prompt, SERP, AI enrichment, and risk filtering flows.",
                 required_permission="k.product_knowledge.update",
                 surfaces=("action_panel", "status_widget"),
+            ),
+            _capability(
+                capability_key="k.product_knowledge.workflow_orchestration",
+                module_key="k.product_knowledge",
+                display_name="Orchestrate product knowledge workflow",
+                description=(
+                    "Run the durable K-series SERP, dual-AI, manual-risk, "
+                    "keyword, unit, image, and guarded export workflow."
+                ),
+                required_permission="k.product_knowledge.workflow.execute",
+                surfaces=("action_panel", "detail_page", "status_widget"),
             ),
         ),
         actions=(
@@ -1198,6 +1238,34 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 requires_execution_provider=True,
                 requires_approval=True,
             ),
+            _action(
+                action_key="k.product_knowledge.workflow.execute",
+                module_key="k.product_knowledge",
+                capability_key="k.product_knowledge.workflow_orchestration",
+                display_name="Execute full K workflow",
+                description="Run the K workflow through SERP and mandatory ChatGPT then Claude Opus gates.",
+                required_permission="k.product_knowledge.workflow.execute",
+                risk_level="high",
+                operation_log_action="k.product_knowledge.workflow.executed",
+                execution_type="no_op",
+                status="production_ready",
+                requires_execution_provider=True,
+                requires_approval=True,
+            ),
+            _action(
+                action_key="k.product_knowledge.export.generate",
+                module_key="k.product_knowledge",
+                capability_key="k.product_knowledge.workflow_orchestration",
+                display_name="Generate guarded export",
+                description="Generate P-series, GMC, and SEO payloads only after all workflow gates pass.",
+                required_permission="k.product_knowledge.export",
+                risk_level="critical",
+                operation_log_action="k.product_knowledge.export.generated",
+                execution_type="no_op",
+                status="production_ready",
+                requires_execution_provider=True,
+                requires_approval=True,
+            ),
         ),
         action_contracts=(
             _action_contract(
@@ -1245,6 +1313,30 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 requires_approval=True,
                 execution_requirement_ref="k.product_knowledge.execution.v1",
             ),
+            _action_contract(
+                action_key="k.product_knowledge.workflow.execute",
+                input_contract="k.product_knowledge.workflow.input.v1",
+                output_contract="k.product_knowledge.workflow.output.v1",
+                required_permission="k.product_knowledge.workflow.execute",
+                risk_level="high",
+                operation_log_action="k.product_knowledge.workflow.executed",
+                execution_type="no_op",
+                requires_execution_provider=True,
+                requires_approval=True,
+                execution_requirement_ref="k.product_knowledge.execution.v1",
+            ),
+            _action_contract(
+                action_key="k.product_knowledge.export.generate",
+                input_contract="k.product_knowledge.export.input.v1",
+                output_contract="k.product_knowledge.export.output.v1",
+                required_permission="k.product_knowledge.export",
+                risk_level="critical",
+                operation_log_action="k.product_knowledge.export.generated",
+                execution_type="no_op",
+                requires_execution_provider=True,
+                requires_approval=True,
+                execution_requirement_ref="k.product_knowledge.execution.v1",
+            ),
         ),
         data_contracts=(
             _data_contract(
@@ -1255,12 +1347,14 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                     "k_product_knowledge_products",
                     "k_product_knowledge_keywords",
                     "k_product_knowledge_risk_terms",
+                    "k_product_knowledge_workflow_executions",
                 ),
                 write_boundary=(
                     "k_product_knowledge_products",
                     "k_product_knowledge_keywords",
                     "k_product_knowledge_risk_terms",
                     "k_product_knowledge_ai_events",
+                    "k_product_knowledge_workflow_executions",
                 ),
             ),
         ),
@@ -1285,6 +1379,18 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 action_key="k.product_knowledge.risk_filter.execute",
                 required_fields=("product_id",),
             ),
+            _input_contract(
+                contract_key="k.product_knowledge.workflow.input.v1",
+                action_key="k.product_knowledge.workflow.execute",
+                required_fields=("product_id", "target_market"),
+                optional_fields=("serp_query", "seed_keywords", "competitors"),
+            ),
+            _input_contract(
+                contract_key="k.product_knowledge.export.input.v1",
+                action_key="k.product_knowledge.export.generate",
+                required_fields=("product_id",),
+                optional_fields=("execution_id",),
+            ),
         ),
         output_contracts=(
             _output_contract(
@@ -1306,6 +1412,16 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 contract_key="k.product_knowledge.risk_filter.output.v1",
                 action_key="k.product_knowledge.risk_filter.execute",
                 safe_summary_fields=("product_id", "provider", "risk_count"),
+            ),
+            _output_contract(
+                contract_key="k.product_knowledge.workflow.output.v1",
+                action_key="k.product_knowledge.workflow.execute",
+                safe_summary_fields=("workflow_id", "product_id", "status", "current_step"),
+            ),
+            _output_contract(
+                contract_key="k.product_knowledge.export.output.v1",
+                action_key="k.product_knowledge.export.generate",
+                safe_summary_fields=("workflow_id", "product_id", "status", "payloads"),
             ),
         ),
         permission_bindings=(
@@ -1369,6 +1485,22 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 surface="action_panel",
                 risk_level="medium",
             ),
+            _permission_binding(
+                permission_key="k.product_knowledge.workflow.execute",
+                module_key="k.product_knowledge",
+                used_by="action:k.product_knowledge.workflow.execute",
+                action_key="k.product_knowledge.workflow.execute",
+                surface="action_panel",
+                risk_level="high",
+            ),
+            _permission_binding(
+                permission_key="k.product_knowledge.export",
+                module_key="k.product_knowledge",
+                used_by="action:k.product_knowledge.export.generate",
+                action_key="k.product_knowledge.export.generate",
+                surface="action_panel",
+                risk_level="critical",
+            ),
         ),
         operation_log_bindings=(
             _operation_log_binding(
@@ -1391,6 +1523,16 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 operation_log_action="k.product_knowledge.risk_filter.execute",
                 target_type="k_product",
             ),
+            _operation_log_binding(
+                action_key="k.product_knowledge.workflow.execute",
+                operation_log_action="k.product_knowledge.workflow.executed",
+                target_type="k_product_workflow",
+            ),
+            _operation_log_binding(
+                action_key="k.product_knowledge.export.generate",
+                operation_log_action="k.product_knowledge.export.generated",
+                target_type="k_product_workflow",
+            ),
         ),
         dependency_declarations=(
             {
@@ -1412,6 +1554,26 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
                 "secret_requirement_ref": None,
                 "live_connection_allowed": False,
                 "safe_unavailable_message": "DeepSeek key binding is required before execution.",
+            },
+            {
+                "dependency_key": "chatgpt",
+                "dependency_type": "external_provider",
+                "required": False,
+                "provider_status": "declared_only",
+                "provider_contract_ref": "k.product_knowledge.chatgpt.provider.v1",
+                "secret_requirement_ref": None,
+                "live_connection_allowed": False,
+                "safe_unavailable_message": "ChatGPT key binding is required before the first AI filter.",
+            },
+            {
+                "dependency_key": "claude_opus",
+                "dependency_type": "external_provider",
+                "required": False,
+                "provider_status": "declared_only",
+                "provider_contract_ref": "k.product_knowledge.claude_opus.provider.v1",
+                "secret_requirement_ref": None,
+                "live_connection_allowed": False,
+                "safe_unavailable_message": "Claude Opus key binding is required before the second AI filter.",
             },
             {
                 "dependency_key": "ai_provider",
@@ -1750,6 +1912,160 @@ MODULE_ADAPTER_CONTRACTS_V1: tuple[dict[str, Any], ...] = (
             _feature_flag(
                 feature_flag_key="modules.integration.n8n_test_bridge",
                 module_key="integration.n8n_test_bridge",
+            ),
+        ),
+        requires_execution_provider=True,
+        requires_sandbox=True,
+        execution_type="no_op",
+        unavailable_behavior="adapter_pending",
+    ),
+    _adapter(
+        adapter_key="i.image_system.adapter",
+        module_key="i.image_system",
+        display_name="I Image System Adapter",
+        description=(
+            "Contract-only I-series image system adapter boundary. I owns AI "
+            "image generation, AI image review, quality scoring, versioning, "
+            "recommendation, and image_asset_id output."
+        ),
+        adapter_status="adapter_pending",
+        lifecycle="adapter_pending",
+        supported_surfaces=("navigation", "module_page", "status_widget"),
+        pages=(
+            _page(
+                page_key="i.image_system.index",
+                module_key="i.image_system",
+                surface="module_page",
+                route="/images",
+                route_namespace="/images",
+                required_permission="i.image_system.read",
+                status="adapter_pending",
+                unavailable_behavior="adapter_pending",
+                component_ref="placeholder.i_image_system_shell",
+                data_contract_refs=("i.image_system.asset.v1",),
+                action_refs=("i.image_system.declare",),
+            ),
+        ),
+        nav_bindings=(
+            _nav(
+                nav_key="i.image_system.main",
+                module_key="i.image_system",
+                label="I 图片系统",
+                group="Registry",
+                icon="Images",
+                order=9,
+                route="/images",
+                required_permission="i.image_system.read",
+                denied_behavior="show_locked",
+                unavailable_behavior="adapter_pending",
+                default_visible=False,
+            ),
+        ),
+        route_bindings=(
+            _route(
+                route_key="i.image_system.index",
+                module_key="i.image_system",
+                path="/images",
+                route_namespace="/images",
+                surface="module_page",
+                required_permission="i.image_system.read",
+                status="adapter_pending",
+            ),
+        ),
+        api_bindings=(
+            _api(
+                api_key="i.image_system.no_api",
+                module_key="i.image_system",
+                api_namespace="no_api",
+                path="no_api",
+                method="NO_API",
+                status="adapter_pending",
+                required_permission="i.image_system.read",
+                no_api=True,
+            ),
+        ),
+        capabilities=(
+            _capability(
+                capability_key="i.image_system.boundary",
+                module_key="i.image_system",
+                display_name="Declare image system boundary",
+                description="Declare independent I-series AI image lifecycle ownership.",
+                required_permission="i.image_system.read",
+                surfaces=("module_page", "status_widget"),
+            ),
+        ),
+        actions=(
+            _action(
+                action_key="i.image_system.declare",
+                module_key="i.image_system",
+                capability_key="i.image_system.boundary",
+                display_name="Declare I image asset contract",
+                description="Declare I-series image_asset_id handoff contract only.",
+                required_permission="i.image_system.read",
+                risk_level="medium",
+                operation_log_action="i.image_system.declare",
+                execution_type="no_op",
+                status="adapter_pending",
+                requires_execution_provider=True,
+            ),
+        ),
+        action_contracts=(
+            _action_contract(
+                action_key="i.image_system.declare",
+                input_contract="i.image_system.input.v1",
+                output_contract="i.image_system.output.v1",
+                required_permission="i.image_system.read",
+                risk_level="medium",
+                operation_log_action="i.image_system.declare",
+                execution_type="no_op",
+                requires_execution_provider=True,
+                execution_requirement_ref="i.image_system.execution.v1",
+            ),
+        ),
+        data_contracts=(
+            _data_contract(
+                contract_key="i.image_system.asset.v1",
+                module_key="i.image_system",
+                object_type="i_image_asset",
+                read_boundary=("i_image_assets",),
+                write_boundary=("i_image_assets",),
+            ),
+        ),
+        input_contracts=(
+            _input_contract(
+                contract_key="i.image_system.input.v1",
+                action_key="i.image_system.declare",
+                optional_fields=("image_asset_id",),
+            ),
+        ),
+        output_contracts=(
+            _output_contract(
+                contract_key="i.image_system.output.v1",
+                action_key="i.image_system.declare",
+                safe_summary_fields=("image_asset_id", "status"),
+            ),
+        ),
+        permission_bindings=(
+            _permission_binding(
+                permission_key="i.image_system.read",
+                module_key="i.image_system",
+                used_by="surface:i.image_system",
+                surface="module_page",
+                risk_level="low",
+            ),
+        ),
+        operation_log_bindings=(
+            _operation_log_binding(
+                action_key="i.image_system.declare",
+                operation_log_action="i.image_system.declare",
+                target_type="i_image_asset",
+            ),
+        ),
+        dependency_declarations=(),
+        feature_flag_bindings=(
+            _feature_flag(
+                feature_flag_key="modules.i.image_system",
+                module_key="i.image_system",
             ),
         ),
         requires_execution_provider=True,

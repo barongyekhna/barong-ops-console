@@ -1,0 +1,162 @@
+{
+  "report_name": "k_series_workflow_execution_report",
+  "report_type": "implementation_and_safe_deployment_gate_report",
+  "generated_at": "2026-06-24T00:00:00Z",
+  "organization": "涌龙麟（深圳）国际贸易有限公司",
+  "live_execution_performed": false,
+  "live_execution_blocker": "No real SERP, ChatGPT, or Claude Opus proxy API keys are present in this workspace execution environment.",
+  "runtime_report_contract": {
+    "full_pipeline_trace": "k_product_knowledge_workflow_executions.trace_json",
+    "chatgpt_filter_result": "k_product_knowledge_workflow_executions.chatgpt_filter_result_json",
+    "claude_filter_result": "k_product_knowledge_workflow_executions.claude_filter_result_json",
+    "risk_approval_log": "k_product_knowledge_workflow_executions.risk_approval_log_json",
+    "final_keyword_set": "k_product_knowledge_workflow_executions.final_keyword_set_json",
+    "export_payloads": "k_product_knowledge_workflow_executions.export_payloads_json",
+    "execution_gate_logs": "k_product_knowledge_workflow_executions.execution_gate_logs_json",
+    "error_report": "k_product_knowledge_workflow_executions.error_report_json"
+  },
+  "full_pipeline_trace": [
+    {
+      "step": "product_ingestion",
+      "status": "implemented",
+      "persistence": "product row plus workflow trace",
+      "blocking_rule": "organization_name must equal required organization"
+    },
+    {
+      "step": "serp_keyword_fetch",
+      "status": "implemented",
+      "persistence": "research run, keyword candidates, workflow trace",
+      "blocking_rule": "SERP proxy API key and usable keywords required"
+    },
+    {
+      "step": "ai_filter_chatgpt",
+      "status": "implemented",
+      "persistence": "AI event plus chatgpt_filter_result_json",
+      "blocking_rule": "cannot be skipped; cleaned_keywords required"
+    },
+    {
+      "step": "ai_filter_claude_opus",
+      "status": "implemented",
+      "persistence": "AI event plus claude_filter_result_json",
+      "blocking_rule": "must run after ChatGPT; final_keywords required"
+    },
+    {
+      "step": "risk_term_review_manual",
+      "status": "implemented",
+      "persistence": "risk terms plus risk_approval_log_json",
+      "blocking_rule": "manual approve/reject required for every risk keyword; no automatic approval"
+    },
+    {
+      "step": "keyword_optimization_ai",
+      "status": "implemented",
+      "persistence": "final_keyword_set_json and approved keyword rows",
+      "blocking_rule": "requires approved risk review and Claude final keywords"
+    },
+    {
+      "step": "unit_conversion_normalization",
+      "status": "implemented",
+      "persistence": "unit_conversion_json and product field_diff_json",
+      "blocking_rule": "supports cm_to_inch, kg_to_lb, and g_to_oz by target market"
+    },
+    {
+      "step": "image_handling",
+      "status": "implemented",
+      "persistence": "manual upload or I-system asset reference, product selected_image_path, image_binding_json",
+      "blocking_rule": "manual_upload_image or i_system_asset must be bound; K image AI generation and K image review are not allowed"
+    },
+    {
+      "step": "export_p_gmc_seo",
+      "status": "implemented",
+      "persistence": "export_payloads_json and workflow report response",
+      "blocking_rule": "requires approved risk review, completed dual AI filters, finalized keywords, and manual or I-system image binding"
+    }
+  ],
+  "chatgpt_filter_result": {
+    "required_provider_key_alias": "chatgpt",
+    "required_sequence": "after serp_keyword_fetch and before ai_filter_claude_opus",
+    "required_fields": [
+      "cleaned_keywords",
+      "filtered_keywords",
+      "rejected_keywords",
+      "rationale"
+    ],
+    "skip_allowed": false
+  },
+  "claude_filter_result": {
+    "required_provider_key_alias": "claude_opus",
+    "required_sequence": "after ai_filter_chatgpt",
+    "required_fields": [
+      "final_keywords",
+      "high_value_keywords",
+      "low_value_keywords",
+      "risk_keywords"
+    ],
+    "skip_allowed": false
+  },
+  "risk_approval_log": {
+    "manual_review_required": true,
+    "auto_approval_allowed": false,
+    "decision_values": [
+      "approve",
+      "reject"
+    ],
+    "reject_blocks_pipeline": true,
+    "empty_risk_keyword_confirmation_required": true
+  },
+  "final_keyword_set": {
+    "required_outputs": [
+      "primary_keywords",
+      "secondary_keywords",
+      "longtail_keywords"
+    ],
+    "optimization_operations": [
+      "ranking",
+      "clustering",
+      "intent_classification",
+      "duplication_removal"
+    ]
+  },
+  "export_payloads": {
+    "p_series_payload": {
+      "status": "implemented",
+      "generated_only_after_export_gate": true
+    },
+    "gmc_feed_structure": {
+      "status": "implemented",
+      "generated_only_after_export_gate": true
+    },
+    "seo_keyword_pack": {
+      "status": "implemented",
+      "generated_only_after_export_gate": true
+    }
+  },
+  "execution_gate_logs": {
+    "module_control": "required through require_module_execution_ready",
+    "api_key_resolution": [
+      "serp",
+      "chatgpt",
+      "claude_opus"
+    ],
+    "ai_provider_injection": "provider calls receive only backend-injected proxy key headers",
+    "organization_validation": "product and active organization context must match required organization"
+  },
+  "safe_deployment_gate": {
+    "blocked_conditions": [
+      "ChatGPT filter failure",
+      "Claude Opus filter failure",
+      "manual risk review missing",
+      "API key missing",
+      "organization mismatch",
+      "keywords not finalized",
+      "manual or I-system image not bound"
+    ],
+    "direct_export_allowed": false,
+    "incomplete_workflow_auto_submit_allowed": false
+  },
+  "verification": {
+    "python_compileall": "passed for modified backend K workflow files and migration",
+    "frontend_typecheck": "passed",
+    "frontend_node_tests": "passed 14/14",
+    "backend_pytest": "not run: pytest and FastAPI are not installed in the current environment"
+  }
+}
