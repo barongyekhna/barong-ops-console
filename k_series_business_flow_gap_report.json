@@ -1,0 +1,154 @@
+{
+  "report_name": "k_series_business_flow_gap_report",
+  "audit_type": "K-SERIES BUSINESS FLOW GAP AUDIT",
+  "generated_at_utc": "2026-06-24T13:29:02Z",
+  "basis": {
+    "repository": "/opt/barong-ops-console",
+    "worktree": "current real worktree",
+    "old_audit_results_used": false,
+    "code_modified": false
+  },
+  "designed_flow": [
+    "product_creation",
+    "ai_generation",
+    "serp_analysis",
+    "risk_term_review",
+    "save_canonical_product_knowledge",
+    "export_to_p_gmc_seo"
+  ],
+  "as_built_flow_state": {
+    "complete_closed_loop": false,
+    "first_major_break": "After product creation, the UI does not expose DeepSeek enrichment and no single backend orchestration endpoint continues the flow.",
+    "terminal_break": "Export to P/GMC/SEO is only registered as workflow metadata; no K export endpoint or runtime dispatch exists."
+  },
+  "step_results": [
+    {
+      "flow_step": "product_creation",
+      "status": "implemented",
+      "as_built": "Frontend ProductForm posts to /k/products and backend persists KProductKnowledgeProduct with basic fields.",
+      "evidence": [
+        "frontend/src/modules/k/product-knowledge/ProductForm.tsx:48",
+        "frontend/src/modules/k/product-knowledge/api.ts:87",
+        "backend/app/modules/k_series/product_knowledge/router.py:615",
+        "backend/app/modules/k_series/product_knowledge/service.py:107"
+      ],
+      "breaks_or_gaps": [
+        "Creation captures only minimal fields.",
+        "Created product is not automatically enriched."
+      ]
+    },
+    {
+      "flow_step": "ai_generation",
+      "status": "partial",
+      "as_built": "Backend has DeepSeek enrichment, translation, risk-filter, and selling-points provider endpoints. Product UI only exposes selling-points generation.",
+      "evidence": [
+        "backend/app/modules/k_series/product_knowledge/router.py:1212",
+        "backend/app/modules/k_series/product_knowledge/router.py:1262",
+        "backend/app/modules/k_series/product_knowledge/router.py:1315",
+        "backend/app/modules/k_series/product_knowledge/router.py:1382",
+        "frontend/src/modules/k/product-knowledge/ProductDetail.tsx:116"
+      ],
+      "breaks_or_gaps": [
+        "No DeepSeek enrichment button or flow state in UI.",
+        "DeepSeek output is stored but not applied to canonical fields.",
+        "Selling points are returned to local component state, not persisted."
+      ]
+    },
+    {
+      "flow_step": "serp_analysis",
+      "status": "partial",
+      "as_built": "SERP search can perform a provider HTTP call and store a research run summary. The separate keyword research start endpoint only queues a row.",
+      "evidence": [
+        "backend/app/modules/k_series/product_knowledge/router.py:1086",
+        "backend/app/modules/k_series/product_knowledge/router.py:1139",
+        "backend/app/modules/k_series/product_knowledge/router.py:1153",
+        "backend/app/modules/k_series/product_knowledge/router.py:1182",
+        "frontend/src/modules/k16/serp-trigger/SERPTriggerPanel.tsx:52"
+      ],
+      "breaks_or_gaps": [
+        "SERP returned keywords are not saved to keyword table.",
+        "SERP UI is not connected to selected product state.",
+        "No competitor review/persistence UI exists."
+      ]
+    },
+    {
+      "flow_step": "risk_term_review",
+      "status": "partial",
+      "as_built": "Risk terms can be manually managed in UI and AI risk-filter can create candidate risk terms in backend.",
+      "evidence": [
+        "backend/app/modules/k_series/product_knowledge/router.py:975",
+        "backend/app/modules/k_series/product_knowledge/router.py:1315",
+        "backend/app/modules/k_series/product_knowledge/router.py:1348",
+        "frontend/src/modules/k20/risk/RiskPanel.tsx:139",
+        "frontend/src/modules/k20/risk/RiskTable.tsx:185"
+      ],
+      "breaks_or_gaps": [
+        "AI risk-filter endpoint has no UI trigger.",
+        "Risk resolve/ignore is not bound to product approval/export gating.",
+        "No approval record is required even though adapter metadata marks risk filtering as approval-required."
+      ]
+    },
+    {
+      "flow_step": "save_canonical_product_knowledge",
+      "status": "partial",
+      "as_built": "Products, keywords, risks, AI events, translations, media metadata, and research runs are persisted where called.",
+      "evidence": [
+        "backend/app/db/session.py:135",
+        "backend/app/modules/k_series/product_knowledge/models.py:61",
+        "backend/app/modules/k_series/product_knowledge/models.py:345",
+        "backend/app/modules/k_series/product_knowledge/models.py:406",
+        "backend/app/modules/k_series/product_knowledge/models.py:451",
+        "backend/app/modules/k_series/product_knowledge/models.py:518"
+      ],
+      "breaks_or_gaps": [
+        "Persistence is fragmented by endpoint, not by a complete business transaction.",
+        "AI/SERP outputs are not consistently transformed into canonical records.",
+        "Operation logs and version rows are not written by current K service paths."
+      ]
+    },
+    {
+      "flow_step": "export_to_p_gmc_seo",
+      "status": "missing_runtime_flow",
+      "as_built": "Workflow registry contains active metadata for K to P-series, GMC, and SEO. No K export endpoint, UI action, or runtime dispatch was found.",
+      "evidence": [
+        "backend/app/core/workflow_registry.py:9",
+        "backend/app/core/workflow_registry.py:22",
+        "backend/app/core/workflow_registry.py:35",
+        "backend/app/services/webhook_gateway.py:238",
+        "frontend/src/app/(console)/products/page.tsx:25"
+      ],
+      "breaks_or_gaps": [
+        "No handoff is initiated after risk review.",
+        "No export artifact is created.",
+        "No P/GMC/SEO output preview or download exists."
+      ]
+    }
+  ],
+  "business_flow_blocking_breakpoints": [
+    {
+      "breakpoint": "product_created_to_deepseek_enrichment",
+      "severity": "critical",
+      "reason": "The backend endpoint exists, but the UI and orchestrated flow do not call it."
+    },
+    {
+      "breakpoint": "deepseek_output_to_canonical_product_fields",
+      "severity": "critical",
+      "reason": "DeepSeek output remains JSON payload/event data and is not merged into product knowledge fields."
+    },
+    {
+      "breakpoint": "serp_output_to_keyword_candidates",
+      "severity": "high",
+      "reason": "SERP output keywords are returned and stored in research summary but not inserted into keyword records."
+    },
+    {
+      "breakpoint": "risk_review_to_export_gate",
+      "severity": "critical",
+      "reason": "Risk confirmation is not enforced before downstream output."
+    },
+    {
+      "breakpoint": "approved_product_to_p_gmc_seo_export",
+      "severity": "critical",
+      "reason": "Only workflow metadata exists; no export action dispatches or produces P/GMC/SEO output."
+    }
+  ]
+}

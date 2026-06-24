@@ -1,0 +1,304 @@
+{
+  "report_name": "k_series_functional_gap_report",
+  "audit_type": "K-SERIES FULL GAP AUDIT - DESIGNED vs IMPLEMENTED",
+  "generated_at_utc": "2026-06-24T13:29:02Z",
+  "basis": {
+    "repository": "/opt/barong-ops-console",
+    "worktree": "current real worktree",
+    "old_audit_results_used": false,
+    "code_modified": false,
+    "report_files_created_only": true
+  },
+  "summary": {
+    "overall_functional_state": "partial",
+    "implemented_capability_count": 0,
+    "partial_capability_count": 8,
+    "missing_capability_count": 2,
+    "primary_reason": "K has persistent backend models, CRUD endpoints, provider-gated HTTP calls, API-key injection, and module registration, but the complete product-to-AI-to-SERP-to-risk-to-export workflow is not implemented."
+  },
+  "capability_matrix": [
+    {
+      "capability": "product_basic_information_layer",
+      "as_designed": "Product records should hold complete product knowledge, support create/edit/review/archive, and persist canonical business data for downstream P/GMC/SEO use.",
+      "as_built": {
+        "status": "partial",
+        "completion_level": 0.6,
+        "implemented": [
+          "Persistent SQLAlchemy table family exists for products, attributes, translations, keywords, risk terms, research runs, AI events, versions, media assets, and review items.",
+          "Backend exposes list/create/detail/update/archive endpoints for products and patch/read endpoints for attributes, keywords, and risk terms.",
+          "Frontend /products page supports product creation, list loading, selection, and minimal detail display."
+        ],
+        "gaps": [
+          "Product DTOs and UI expose only a subset of model fields; pricing, inventory, material, unit, category, SEO, GMC, media, and many logistics fields are not editable in the main UI.",
+          "Review item model exists but no review item API/UI flow is wired for product approval.",
+          "Archive exists in backend but is not exposed in the current product UI.",
+          "Operation log actions are declared in the module manifest but K service comments state operation_logs are intentionally left as a future optional hook."
+        ],
+        "evidence": [
+          "backend/app/modules/k_series/product_knowledge/models.py:61",
+          "backend/app/modules/k_series/product_knowledge/models.py:149",
+          "backend/app/modules/k_series/product_knowledge/models.py:649",
+          "backend/app/modules/k_series/product_knowledge/router.py:579",
+          "backend/app/modules/k_series/product_knowledge/router.py:615",
+          "backend/app/modules/k_series/product_knowledge/router.py:657",
+          "backend/app/modules/k_series/product_knowledge/router.py:678",
+          "backend/app/modules/k_series/product_knowledge/service.py:407",
+          "frontend/src/modules/k/product-knowledge/ProductForm.tsx:48",
+          "frontend/src/modules/k/product-knowledge/ProductList.tsx:57",
+          "frontend/src/modules/k/product-knowledge/ProductDetail.tsx:54"
+        ]
+      }
+    },
+    {
+      "capability": "deepseek_ai_structured_layer",
+      "as_designed": "DeepSeek should structure raw product input into canonical K product fields and create reviewable AI output.",
+      "as_built": {
+        "status": "partial",
+        "completion_level": 0.45,
+        "implemented": [
+          "Backend endpoint POST /k/products/{product_id}/enrich/deepseek requires module execution readiness with key alias deepseek.",
+          "Endpoint performs an HTTP POST to the configured provider URL and stores provider output in deepseek_structured_output_json and k_product_knowledge_ai_events.",
+          "Product review_status is advanced to ai_structured."
+        ],
+        "gaps": [
+          "No DeepSeek UI trigger is present on /products.",
+          "No prompt template/version or DeepSeek-specific schema validator is implemented in K runtime.",
+          "Provider output is stored as JSON but not mapped into canonical product, attribute, keyword, category, image, SEO, or GMC fields.",
+          "The endpoint calls a generic configured provider URL; the code does not prove it is the DeepSeek public API."
+        ],
+        "evidence": [
+          "backend/app/modules/k_series/product_knowledge/router.py:1212",
+          "backend/app/modules/k_series/product_knowledge/router.py:1219",
+          "backend/app/modules/k_series/product_knowledge/router.py:1231",
+          "backend/app/modules/k_series/product_knowledge/router.py:1239",
+          "backend/app/modules/k_series/product_knowledge/router.py:1241",
+          "frontend/src/app/(console)/products/page.tsx:25"
+        ]
+      }
+    },
+    {
+      "capability": "serp_keyword_system",
+      "as_designed": "SERP should execute real market searches, extract competitors and keywords, persist keyword candidates, and feed optimization/review.",
+      "as_built": {
+        "status": "partial",
+        "completion_level": 0.45,
+        "implemented": [
+          "POST /k/serp/search requires execution gate and key alias serp.",
+          "The endpoint posts to the configured provider URL and parses organic_results/results/items into a typed SERP response.",
+          "SERP provider output is stored on a research run row.",
+          "Frontend has a SERP trigger panel that calls /k/serp/search."
+        ],
+        "gaps": [
+          "POST /k/keyword-research/start only creates a queued research run; it does not execute SERP or a worker pipeline.",
+          "SERP keyword strings returned by the provider are not inserted into k_product_knowledge_keywords.",
+          "Frontend SERP panel uses hardcoded default product choices and is not tied to the selected product list row.",
+          "No persisted competitor entity/table or SERP result detail UI exists."
+        ],
+        "evidence": [
+          "backend/app/modules/k_series/product_knowledge/router.py:1086",
+          "backend/app/modules/k_series/product_knowledge/router.py:1115",
+          "backend/app/modules/k_series/product_knowledge/router.py:1139",
+          "backend/app/modules/k_series/product_knowledge/router.py:1153",
+          "backend/app/modules/k_series/product_knowledge/router.py:1178",
+          "backend/app/modules/k_series/product_knowledge/router.py:1182",
+          "frontend/src/modules/k16/serp-trigger/SERPTriggerPanel.tsx:17",
+          "frontend/src/modules/k16/serp-trigger/SERPTriggerPanel.tsx:52"
+        ]
+      }
+    },
+    {
+      "capability": "risk_term_system",
+      "as_designed": "Risk terms should be detected, reviewed by humans, confirmed or ignored, and block/clean unsafe product output before export.",
+      "as_built": {
+        "status": "partial",
+        "completion_level": 0.6,
+        "implemented": [
+          "Risk term table and product-scoped backend patch/read endpoints exist.",
+          "K20 compatibility endpoints support global risk list, create, update, and ignore.",
+          "POST /k/products/{product_id}/risk-filter calls an AI provider and stores returned risk_terms as candidate risk rows.",
+          "Frontend risk UI supports manual creation, severity/category filtering, edit, resolve, and ignore."
+        ],
+        "gaps": [
+          "Risk-filter AI endpoint has no UI trigger.",
+          "Risk review is not bound to product approval status, export gate, or approval records.",
+          "Global /k/risks list is not scoped by product in the UI.",
+          "Duplicate risk detection and canonical risk severity schema are weak; risk_type is encoded as a free-form string."
+        ],
+        "evidence": [
+          "backend/app/modules/k_series/product_knowledge/models.py:406",
+          "backend/app/modules/k_series/product_knowledge/router.py:803",
+          "backend/app/modules/k_series/product_knowledge/router.py:975",
+          "backend/app/modules/k_series/product_knowledge/router.py:995",
+          "backend/app/modules/k_series/product_knowledge/router.py:1031",
+          "backend/app/modules/k_series/product_knowledge/router.py:1315",
+          "backend/app/modules/k_series/product_knowledge/router.py:1342",
+          "frontend/src/modules/k20/risk/RiskPanel.tsx:69",
+          "frontend/src/modules/k20/risk/RiskPanel.tsx:139",
+          "frontend/src/modules/k20/risk/RiskTable.tsx:63"
+        ]
+      }
+    },
+    {
+      "capability": "ai_keyword_optimization",
+      "as_designed": "AI should refine SERP keyword candidates, classify intent, rank/select useful keywords, reject risky terms, and persist optimized keyword decisions.",
+      "as_built": {
+        "status": "missing",
+        "completion_level": 0.1,
+        "implemented": [
+          "Research run model reserves chatgpt_filter_summary_json and claude_filter_summary_json fields.",
+          "Frontend keyword source types include K17 and K18 labels."
+        ],
+        "gaps": [
+          "No backend endpoint implements AI keyword filtering/optimization.",
+          "No prompt-to-AI optimization pipeline exists for SERP keyword ranking.",
+          "No optimized keyword persistence path connects SERP output to k_product_knowledge_keywords.",
+          "No UI control exists for AI keyword optimization."
+        ],
+        "evidence": [
+          "backend/app/modules/k_series/product_knowledge/models.py:492",
+          "backend/app/modules/k_series/product_knowledge/models.py:496",
+          "frontend/src/modules/k19/keywords/types.ts:41",
+          "backend/app/modules/k_series/product_knowledge/router.py:1139"
+        ]
+      }
+    },
+    {
+      "capability": "unit_conversion_system",
+      "as_designed": "K should normalize product units such as dimensions and weight for marketplaces and downstream product pages.",
+      "as_built": {
+        "status": "missing",
+        "completion_level": 0.05,
+        "implemented": [
+          "Product and attribute models reserve dimensions_json, weight_json, package dimensions/weight JSON, and attribute_unit fields."
+        ],
+        "gaps": [
+          "No unit conversion service was found.",
+          "No conversion endpoint was found.",
+          "No UI exists for unit normalization or metric/imperial conversion.",
+          "No downstream mapping applies normalized units for GMC/P/SEO output."
+        ],
+        "evidence": [
+          "backend/app/modules/k_series/product_knowledge/models.py:165",
+          "backend/app/modules/k_series/product_knowledge/models.py:170",
+          "backend/app/modules/k_series/product_knowledge/models.py:275",
+          "backend/app/modules/k_series/product_knowledge/schemas.py:33"
+        ]
+      }
+    },
+    {
+      "capability": "image_system",
+      "as_designed": "K should manage product images, gallery assets, selection/review state, and downstream image metadata.",
+      "as_built": {
+        "status": "partial",
+        "completion_level": 0.2,
+        "implemented": [
+          "Media asset table exists with product, role, status, review_status, storage_provider, object_key, placeholder URL, dimensions, file size, source, and metadata fields.",
+          "Backend exposes GET /k/media and POST /k/media for metadata records."
+        ],
+        "gaps": [
+          "No image upload endpoint or storage integration exists in K.",
+          "POST /k/media only accepts file_url_placeholder and metadata; it does not manage object storage.",
+          "No image management UI is present on /products.",
+          "No image review/selection workflow is exposed."
+        ],
+        "evidence": [
+          "backend/app/modules/k_series/product_knowledge/models.py:592",
+          "backend/app/modules/k_series/product_knowledge/router.py:236",
+          "backend/app/modules/k_series/product_knowledge/router.py:1421",
+          "backend/app/modules/k_series/product_knowledge/router.py:1460",
+          "frontend/src/app/(console)/products/page.tsx:25"
+        ]
+      }
+    },
+    {
+      "capability": "p_gmc_seo_output_layer",
+      "as_designed": "Approved K product knowledge should export or hand off structured output to P-series, GMC, and SEO pipelines.",
+      "as_built": {
+        "status": "partial",
+        "completion_level": 0.15,
+        "implemented": [
+          "Workflow registry declares active K workflows for to_p_series, to_gmc, and to_seo.",
+          "Result normalization has generic K/P/SEO family adaptation rules.",
+          "Product model reserves SEO and merchant category fields."
+        ],
+        "gaps": [
+          "No K export endpoint for P/GMC/SEO was found.",
+          "No UI export action exists.",
+          "No runtime n8n dispatch/handoff is called from K endpoints.",
+          "No generated P/GMC/SEO artifact or persisted output table was found."
+        ],
+        "evidence": [
+          "backend/app/core/workflow_registry.py:9",
+          "backend/app/core/workflow_registry.py:22",
+          "backend/app/core/workflow_registry.py:35",
+          "backend/app/services/result_normalization.py:426",
+          "backend/app/modules/k_series/product_knowledge/models.py:193",
+          "backend/app/modules/k_series/product_knowledge/models.py:201",
+          "frontend/src/app/(console)/products/page.tsx:25"
+        ]
+      }
+    },
+    {
+      "capability": "api_key_access_layer",
+      "as_designed": "K provider execution should use organization-scoped API key bindings and never expose raw secrets to frontend.",
+      "as_built": {
+        "status": "partial",
+        "completion_level": 0.7,
+        "implemented": [
+          "API key records and module bindings exist.",
+          "Keys are stored as encrypted envelopes and injected server-side as Authorization headers.",
+          "K execution endpoints request aliases serp, deepseek, and ai_provider through require_module_execution_ready.",
+          "Generic API key orchestration endpoints exist for owners."
+        ],
+        "gaps": [
+          "No provider-specific schema/health check proves a bound URL is a real SERP/DeepSeek provider.",
+          "K n8n downstream binding is declared but not used by K runtime.",
+          "K UI does not surface provider readiness directly inside the product workflow."
+        ],
+        "evidence": [
+          "backend/app/models/api_keys.py:11",
+          "backend/app/models/api_keys.py:51",
+          "backend/app/services/api_key_orchestration.py:212",
+          "backend/app/services/api_key_orchestration.py:398",
+          "backend/app/services/module_execution_gate.py:253",
+          "backend/app/modules/k_series/product_knowledge/router.py:1106",
+          "backend/app/modules/k_series/product_knowledge/router.py:1223",
+          "backend/app/modules/k_series/product_knowledge/router.py:1274",
+          "backend/app/api/routes/api_key_orchestration.py:66"
+        ]
+      }
+    },
+    {
+      "capability": "execution_gate_layer",
+      "as_designed": "K execution should pass module control, org context, API key binding, permission, and high-risk approval gates before external execution.",
+      "as_built": {
+        "status": "partial",
+        "completion_level": 0.65,
+        "implemented": [
+          "Provider-style K endpoints call require_module_execution_ready.",
+          "Execution gate resolves org context, creates/reads module control state, blocks disabled modules, resolves API key aliases, and emits gate events.",
+          "K endpoints separately require K permissions."
+        ],
+        "gaps": [
+          "Execution gate is not used for basic CRUD endpoints, which is acceptable for non-provider operations but means module control is not universal across K.",
+          "High-risk risk_filter action is declared as approval-required in adapter metadata, but the actual /risk-filter endpoint does not request or validate an approval record.",
+          "Adapter action contracts say execution_type is no_op while K router performs direct HTTP provider calls, creating a contract/runtime mismatch.",
+          "Operation-log requirements are declared but K service does not write operation logs."
+        ],
+        "evidence": [
+          "backend/app/modules/k_series/product_knowledge/router.py:481",
+          "backend/app/modules/k_series/product_knowledge/router.py:1102",
+          "backend/app/modules/k_series/product_knowledge/router.py:1146",
+          "backend/app/modules/k_series/product_knowledge/router.py:1219",
+          "backend/app/modules/k_series/product_knowledge/router.py:1322",
+          "backend/app/services/module_execution_gate.py:295",
+          "backend/app/core/module_adapters.py:1188",
+          "backend/app/core/module_adapters.py:1199",
+          "backend/app/core/module_adapters.py:1237",
+          "backend/app/core/module_adapters.py:1245",
+          "backend/app/modules/k_series/product_knowledge/service.py:407"
+        ]
+      }
+    }
+  ]
+}

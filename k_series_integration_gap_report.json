@@ -1,0 +1,153 @@
+{
+  "report_name": "k_series_integration_gap_report",
+  "audit_type": "K-SERIES SYSTEM INTEGRATION GAP AUDIT",
+  "generated_at_utc": "2026-06-24T13:29:02Z",
+  "basis": {
+    "repository": "/opt/barong-ops-console",
+    "worktree": "current real worktree",
+    "old_audit_results_used": false,
+    "code_modified": false
+  },
+  "integration_summary": {
+    "module_system": "integrated",
+    "api_key_system": "partial",
+    "execution_gate": "partial",
+    "webhook_n8n": "metadata_only",
+    "p_gmc_seo": "metadata_only",
+    "primary_integration_gap": "K is registered with system contracts, but multiple contracts are declarative while K runtime either bypasses them with direct provider HTTP calls or never dispatches downstream workflows."
+  },
+  "checks": [
+    {
+      "integration": "module_system",
+      "status": "implemented",
+      "as_built": [
+        "k.product_knowledge is present in MODULE_MANIFESTS_V1 with status active and lifecycle production_released.",
+        "Frontend navigation contains /products with module_key k.product_knowledge.",
+        "Main backend registers the K router under /api/app/k and also directly under /k."
+      ],
+      "gaps": [
+        "K constants still contain stale wording: unregistered skeleton / adapter_pending defaults, which conflicts with current module manifest status.",
+        "Direct unprefixed /k router registration bypasses the /api/app namespace convention."
+      ],
+      "evidence": [
+        "backend/app/core/modules.py:623",
+        "backend/app/core/modules.py:631",
+        "frontend/src/lib/navigation.ts:84",
+        "backend/app/main.py:896",
+        "backend/app/main.py:897",
+        "backend/app/modules/k_series/product_knowledge/constants.py:1",
+        "backend/app/modules/k_series/product_knowledge/constants.py:8"
+      ]
+    },
+    {
+      "integration": "module_adapter_system",
+      "status": "partial",
+      "as_built": [
+        "Adapter registry declares k.product_knowledge.adapter with pages, nav, route, API bindings, capabilities, actions, contracts, data contracts, permissions, operation logs, and dependencies.",
+        "Adapter status is production_ready."
+      ],
+      "gaps": [
+        "Adapter action contracts declare execution_type no_op while K router performs direct HTTP provider calls.",
+        "Adapter declares more API surfaces than the UI actually exposes.",
+        "Declared operation log bindings are not written by K service paths."
+      ],
+      "evidence": [
+        "backend/app/core/module_adapters.py:992",
+        "backend/app/core/module_adapters.py:1001",
+        "backend/app/core/module_adapters.py:1055",
+        "backend/app/core/module_adapters.py:1147",
+        "backend/app/core/module_adapters.py:1202",
+        "backend/app/core/module_adapters.py:1373",
+        "backend/app/modules/k_series/product_knowledge/service.py:407"
+      ]
+    },
+    {
+      "integration": "api_key_system",
+      "status": "partial",
+      "as_built": [
+        "API key records and module bindings are persisted.",
+        "K provider endpoints request server-side key injection through the execution gate.",
+        "Keys are never exposed to frontend by K endpoints."
+      ],
+      "gaps": [
+        "Provider URL/key values are generic and not validated per provider type.",
+        "No K-local readiness UI shows missing aliases serp/deepseek/ai_provider.",
+        "n8n key/binding is declared in dependencies but not used by K runtime."
+      ],
+      "evidence": [
+        "backend/app/services/api_key_orchestration.py:398",
+        "backend/app/services/api_key_orchestration.py:425",
+        "backend/app/services/module_execution_gate.py:319",
+        "backend/app/modules/k_series/product_knowledge/router.py:1106",
+        "backend/app/modules/k_series/product_knowledge/router.py:1223",
+        "backend/app/modules/k_series/product_knowledge/router.py:1274"
+      ]
+    },
+    {
+      "integration": "execution_gate",
+      "status": "partial",
+      "as_built": [
+        "K provider-like endpoints call require_module_execution_ready for serp, deepseek, and ai_provider aliases.",
+        "Gate checks module control state, org context, and API key binding."
+      ],
+      "gaps": [
+        "Risk filter high-risk approval requirement is declared in adapter metadata but not enforced by endpoint code.",
+        "Manual K CRUD endpoints do not check module control state.",
+        "No unified execution request object is produced for K direct provider calls."
+      ],
+      "evidence": [
+        "backend/app/modules/k_series/product_knowledge/router.py:481",
+        "backend/app/services/module_execution_gate.py:295",
+        "backend/app/core/module_adapters.py:1199",
+        "backend/app/core/module_adapters.py:1245"
+      ]
+    },
+    {
+      "integration": "webhook_n8n",
+      "status": "metadata_only",
+      "as_built": [
+        "Workflow registry declares active K workflows for P-series, GMC, and SEO.",
+        "Webhook gateway validates signatures, replay, registry binding, and workflow access."
+      ],
+      "gaps": [
+        "Webhook gateway returns a decision and explicitly does not perform runtime n8n execution.",
+        "No K endpoint calls the webhook gateway for downstream export.",
+        "No real n8n URL is resolved or dispatched by current K runtime."
+      ],
+      "evidence": [
+        "backend/app/core/workflow_registry.py:7",
+        "backend/app/api/routes/webhook_gateway.py:40",
+        "backend/app/services/webhook_gateway.py:140",
+        "backend/app/services/webhook_gateway.py:198",
+        "backend/app/services/webhook_gateway.py:238"
+      ]
+    },
+    {
+      "integration": "p_gmc_seo",
+      "status": "metadata_only",
+      "as_built": [
+        "Three K downstream workflow records exist: to_p_series, to_gmc, to_seo.",
+        "Result normalization contains K/P/SEO adapter families."
+      ],
+      "gaps": [
+        "No P-series, GMC, or SEO export endpoint is mounted under K.",
+        "No UI export action exists.",
+        "No persisted downstream output artifacts are produced by K."
+      ],
+      "evidence": [
+        "backend/app/core/workflow_registry.py:9",
+        "backend/app/core/workflow_registry.py:22",
+        "backend/app/core/workflow_registry.py:35",
+        "backend/app/services/result_normalization.py:431",
+        "backend/app/services/result_normalization.py:444",
+        "backend/app/services/result_normalization.py:457"
+      ]
+    }
+  ],
+  "integration_blocking_gaps": [
+    "Adapter/execution-provider contracts are declarative/no-op while K runtime makes direct HTTP provider calls.",
+    "No runtime n8n/P/GMC/SEO handoff exists.",
+    "Approval and operation-log contract requirements are not enforced in K runtime.",
+    "K UI does not expose API key readiness or missing provider bindings inside the workflow."
+  ]
+}

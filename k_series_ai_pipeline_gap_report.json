@@ -1,0 +1,139 @@
+{
+  "report_name": "k_series_ai_pipeline_gap_report",
+  "audit_type": "K-SERIES AI PIPELINE GAP AUDIT",
+  "generated_at_utc": "2026-06-24T13:29:02Z",
+  "basis": {
+    "repository": "/opt/barong-ops-console",
+    "worktree": "current real worktree",
+    "old_audit_results_used": false,
+    "code_modified": false
+  },
+  "summary": {
+    "ai_pipeline_state": "partial",
+    "pipeline_closed_loop": false,
+    "serp_real_execution": "partial",
+    "deepseek_real_api_call": "partial",
+    "still_depends_on_mock_or_contract_only_layers": true,
+    "primary_break": "K runtime can call configured provider URLs, but outputs are not consistently normalized, persisted into canonical K objects, reviewed, or handed off downstream."
+  },
+  "checks": [
+    {
+      "check": "serp_whether_real_execution",
+      "result": "partial",
+      "as_built": [
+        "POST /k/serp/search resolves a serp key through the execution gate and performs urlopen POST to the configured provider URL.",
+        "It parses organic_results/results/items and stores provider output on KProductKnowledgeResearchRun.",
+        "POST /k/keyword-research/start does not call the provider; it creates a queued run only."
+      ],
+      "gaps": [
+        "Keyword research trigger is not a real research pipeline.",
+        "SERP results do not populate the keyword table.",
+        "There is no async worker to move queued research runs to running/succeeded."
+      ],
+      "evidence": [
+        "backend/app/modules/k_series/product_knowledge/router.py:1086",
+        "backend/app/modules/k_series/product_knowledge/router.py:1115",
+        "backend/app/modules/k_series/product_knowledge/router.py:1139",
+        "backend/app/modules/k_series/product_knowledge/router.py:1153",
+        "backend/app/modules/k_series/product_knowledge/router.py:1182"
+      ]
+    },
+    {
+      "check": "deepseek_whether_real_api_call",
+      "result": "partial",
+      "as_built": [
+        "POST /k/products/{product_id}/enrich/deepseek resolves key alias deepseek and posts product JSON to the configured provider URL.",
+        "The result is stored on product.deepseek_structured_output_json and an AI event row."
+      ],
+      "gaps": [
+        "No code verifies that the configured URL is actually DeepSeek.",
+        "No DeepSeek prompt template, prompt version, model selection, or schema normalization layer is present in K runtime.",
+        "Structured output is not mapped into canonical product fields."
+      ],
+      "evidence": [
+        "backend/app/modules/k_series/product_knowledge/router.py:1212",
+        "backend/app/modules/k_series/product_knowledge/router.py:1223",
+        "backend/app/modules/k_series/product_knowledge/router.py:1231",
+        "backend/app/modules/k_series/product_knowledge/router.py:1239",
+        "backend/app/modules/k_series/product_knowledge/router.py:1241"
+      ]
+    },
+    {
+      "check": "ai_pipeline_closed_loop",
+      "result": false,
+      "as_built": [
+        "DeepSeek enrichment stores raw structured output and an event.",
+        "Translation stores translation payloads.",
+        "Risk filter stores risk terms from provider output.",
+        "Selling-points endpoint returns a validated response to frontend."
+      ],
+      "gaps": [
+        "DeepSeek output is not merged into product attributes or product canonical fields.",
+        "SERP keywords are not persisted as keyword candidates.",
+        "Selling points are not stored.",
+        "No single orchestration endpoint runs product creation -> AI -> SERP -> risk -> export."
+      ],
+      "evidence": [
+        "backend/app/modules/k_series/product_knowledge/router.py:1239",
+        "backend/app/modules/k_series/product_knowledge/router.py:1294",
+        "backend/app/modules/k_series/product_knowledge/router.py:1342",
+        "backend/app/modules/k_series/product_knowledge/router.py:1382"
+      ]
+    },
+    {
+      "check": "prompt_to_ai_to_output_completeness",
+      "result": "partial",
+      "as_built": [
+        "Provider requests include task markers such as deepseek_enrichment, bilingual_translation, risk_filtering, and selling_points.",
+        "Provider output is returned to caller and, for some endpoints, persisted."
+      ],
+      "gaps": [
+        "No explicit prompt construction service is used by K runtime.",
+        "No output schema is enforced for DeepSeek enrichment, translation, or risk filtering beyond loose dict parsing.",
+        "No prompt_version is written although AIEvent has a prompt_version column.",
+        "No product review workflow consumes prompt outputs."
+      ],
+      "evidence": [
+        "backend/app/modules/k_series/product_knowledge/models.py:548",
+        "backend/app/modules/k_series/product_knowledge/router.py:1236",
+        "backend/app/modules/k_series/product_knowledge/router.py:1291",
+        "backend/app/modules/k_series/product_knowledge/router.py:1339",
+        "backend/app/modules/k_series/product_knowledge/router.py:1401"
+      ]
+    },
+    {
+      "check": "mock_dependency_audit",
+      "result": "partial_mock_or_contract_only_dependency_present",
+      "as_built": [
+        "K router itself does direct HTTP provider calls instead of returning local fake data.",
+        "Core adapter metadata declares K action execution_type as no_op.",
+        "Core execution provider contracts for K providers are executable=false and can_request_execution=false.",
+        "K15/K16 frontend text and states still describe future/trigger behavior in places."
+      ],
+      "gaps": [
+        "Adapter and execution provider registry do not match runtime behavior.",
+        "Registered provider contracts are not executable provider dispatchers.",
+        "No tests prove live provider execution success for K endpoints."
+      ],
+      "evidence": [
+        "backend/app/core/module_adapters.py:1157",
+        "backend/app/core/module_adapters.py:1170",
+        "backend/app/core/module_adapters.py:1183",
+        "backend/app/core/module_adapters.py:1196",
+        "backend/app/core/execution_providers.py:364",
+        "backend/app/core/execution_providers.py:392",
+        "backend/app/core/execution_providers.py:413",
+        "backend/app/core/execution_providers.py:434",
+        "backend/app/core/execution_providers.py:456",
+        "frontend/src/modules/k16/serp-trigger/SERPTriggerPanel.tsx:75"
+      ]
+    }
+  ],
+  "blocking_ai_gaps": [
+    "No canonical AI normalization and field merge layer for DeepSeek output.",
+    "No AI keyword optimization implementation.",
+    "No closed orchestration pipeline across DeepSeek, SERP, keyword persistence, risk review, and downstream export.",
+    "No prompt versioning or strict schema validation for most K AI calls.",
+    "No direct K endpoint tests for provider execution behavior were found."
+  ]
+}

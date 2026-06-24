@@ -1,0 +1,147 @@
+{
+  "report_name": "k_series_ui_gap_report",
+  "audit_type": "K-SERIES UI GAP AUDIT",
+  "generated_at_utc": "2026-06-24T13:29:02Z",
+  "basis": {
+    "repository": "/opt/barong-ops-console",
+    "worktree": "current real worktree",
+    "old_audit_results_used": false,
+    "code_modified": false
+  },
+  "ui_summary": {
+    "ui_state": "partial",
+    "complete_product_knowledge_ui_closed_loop": false,
+    "supports_create": true,
+    "supports_edit": "keyword/risk only; product edit absent",
+    "supports_review": "risk resolve/ignore only; product review absent",
+    "supports_export": false,
+    "supports_image_management": false
+  },
+  "checks": [
+    {
+      "ui_capability": "complete_product_knowledge_ui_closed_loop",
+      "status": "partial",
+      "as_built": [
+        "/products page renders ProductList, ResearchTriggerPanel, SERPTriggerPanel, KeywordPanel, and RiskPanel.",
+        "ProductList loads products, creates products, selects a row, and shows minimal details.",
+        "ProductDetail can call K14 selling-points generation."
+      ],
+      "gaps": [
+        "ProductDetail receives list item data, not full detail data from GET /k/products/{id}.",
+        "No UI for product update/archive.",
+        "No UI for attributes, translations, DeepSeek enrichment, risk-filter AI trigger, media, review items, versions, or downstream export."
+      ],
+      "evidence": [
+        "frontend/src/app/(console)/products/page.tsx:25",
+        "frontend/src/app/(console)/products/page.tsx:28",
+        "frontend/src/app/(console)/products/page.tsx:32",
+        "frontend/src/modules/k/product-knowledge/ProductList.tsx:77",
+        "frontend/src/modules/k/product-knowledge/ProductList.tsx:127",
+        "frontend/src/modules/k/product-knowledge/ProductDetail.tsx:116"
+      ]
+    },
+    {
+      "ui_capability": "create_edit_review_export",
+      "status": "partial",
+      "as_built": [
+        "Create product UI exists.",
+        "Keyword edit/archive UI exists.",
+        "Risk edit/resolve/ignore UI exists."
+      ],
+      "gaps": [
+        "No product edit form exists.",
+        "No product review/approve/block flow exists.",
+        "No product archive button exists.",
+        "No P/GMC/SEO export button or output preview exists."
+      ],
+      "evidence": [
+        "frontend/src/modules/k/product-knowledge/ProductForm.tsx:82",
+        "frontend/src/modules/k19/keywords/KeywordEditor.tsx:17",
+        "frontend/src/modules/k20/risk/RiskEditor.tsx:19",
+        "frontend/src/app/(console)/products/page.tsx:25"
+      ]
+    },
+    {
+      "ui_capability": "risk_term_manual_confirmation",
+      "status": "partial",
+      "as_built": [
+        "Risk table supports edit, resolve, and ignore actions.",
+        "Risk panel supports severity and category filters."
+      ],
+      "gaps": [
+        "Risk confirmation is not tied to current selected product.",
+        "No confirmation modal/approval record for high-risk terms exists.",
+        "AI risk-filter endpoint is not exposed in UI."
+      ],
+      "evidence": [
+        "frontend/src/modules/k20/risk/RiskPanel.tsx:55",
+        "frontend/src/modules/k20/risk/RiskPanel.tsx:139",
+        "frontend/src/modules/k20/risk/RiskPanel.tsx:158",
+        "frontend/src/modules/k20/risk/RiskTable.tsx:185",
+        "frontend/src/modules/k20/risk/RiskTable.tsx:201"
+      ]
+    },
+    {
+      "ui_capability": "keyword_filtering",
+      "status": "partial",
+      "as_built": [
+        "Keyword table has a product id filter and refresh action.",
+        "Keyword entries can be manually created, edited, and archived."
+      ],
+      "gaps": [
+        "No status/source/search-intent/language/market filters are present in the UI.",
+        "No AI keyword score/ranking display exists.",
+        "SERP results are not one-click promoted into keyword entries."
+      ],
+      "evidence": [
+        "frontend/src/modules/k19/keywords/KeywordTable.tsx:44",
+        "frontend/src/modules/k19/keywords/KeywordInput.tsx:48",
+        "frontend/src/modules/k19/keywords/KeywordEditor.tsx:35"
+      ]
+    },
+    {
+      "ui_capability": "image_management",
+      "status": "missing",
+      "as_built": [
+        "No K image/media component is imported on /products."
+      ],
+      "gaps": [
+        "No UI for media list/create even though backend has /k/media.",
+        "No upload, preview, gallery, image role, review status, or selection UI."
+      ],
+      "evidence": [
+        "frontend/src/app/(console)/products/page.tsx:3",
+        "frontend/src/app/(console)/products/page.tsx:25",
+        "backend/app/modules/k_series/product_knowledge/router.py:1421"
+      ]
+    },
+    {
+      "ui_capability": "ai_and_provider_readiness_controls",
+      "status": "partial",
+      "as_built": [
+        "SERP and keyword research trigger panels exist.",
+        "Selling-points generation button exists."
+      ],
+      "gaps": [
+        "No DeepSeek enrichment button exists.",
+        "No translation button exists.",
+        "No risk-filter AI button exists.",
+        "No provider/API-key readiness state is shown in K workflow panels.",
+        "Research/SERP/Keyword panels use hardcoded default product ids instead of selected product context."
+      ],
+      "evidence": [
+        "frontend/src/modules/k15/research-trigger/ResearchTriggerPanel.tsx:17",
+        "frontend/src/modules/k16/serp-trigger/SERPTriggerPanel.tsx:17",
+        "frontend/src/modules/k19/keywords/KeywordPanel.tsx:21",
+        "frontend/src/modules/k/product-knowledge/ProductDetail.tsx:116"
+      ]
+    }
+  ],
+  "ui_blocking_gaps": [
+    "No end-to-end product workflow UI from create to AI enrichment to SERP to risk to export.",
+    "No product edit/review/archive/export UI.",
+    "No media/image management UI.",
+    "No UI trigger for DeepSeek enrichment or AI risk-filter.",
+    "Hardcoded product ids break product context continuity across K panels."
+  ]
+}
