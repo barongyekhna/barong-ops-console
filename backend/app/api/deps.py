@@ -15,7 +15,9 @@ from ..services.auth_service import (
     AuditContext,
     AuthenticatedSession,
     InvalidSessionError,
+    authenticated_session_from_identity,
     validate_session,
+    validate_session_identity_fast,
 )
 from ..services.session_seen_buffer import queue_session_seen
 from ..services.permission_decision_engine import PermissionDecisionEngine
@@ -119,14 +121,21 @@ def get_current_session(
         )
         return cached_session
 
+    audit = get_audit_context(request)
     try:
-        current_session = validate_session(
-            db,
-            session_id=session_id,
-            audit=get_audit_context(request),
-        )
+        if request.method in {"GET", "HEAD", "OPTIONS"}:
+            identity = validate_session_identity_fast(db, session_id=session_id)
+            current_session = authenticated_session_from_identity(
+                identity,
+                audit=audit,
+            )
+        else:
+            current_session = validate_session(
+                db,
+                session_id=session_id,
+                audit=audit,
+            )
     except InvalidSessionError:
-        audit = get_audit_context(request)
         emit_event(
             event_type="auth.session.validate",
             module="system",

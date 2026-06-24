@@ -1,0 +1,327 @@
+{
+  "audit_id": "recovery_20260624T072323Z_c698c9ca",
+  "generated_at": "2026-06-24T07:24:25.191173+00:00",
+  "non_owner_org_create_attempts": [
+    {
+      "denied": true,
+      "elapsed_ms": 599.125,
+      "role": "super_admin",
+      "status_code": 403
+    },
+    {
+      "denied": true,
+      "elapsed_ms": 500.673,
+      "role": "org_admin",
+      "status_code": 403
+    },
+    {
+      "denied": true,
+      "elapsed_ms": 397.073,
+      "role": "viewer",
+      "status_code": 403
+    }
+  ],
+  "owner_org_create": {
+    "body": {
+      "created_at": "2026-06-24T07:23:24.995621Z",
+      "metadata": {
+        "country": "US",
+        "custom": {
+          "audit_id": "recovery_20260624T072323Z_c698c9ca",
+          "isolated": true
+        },
+        "industry": "audit",
+        "settings": {
+          "allow_ai": false,
+          "allow_n8n": true,
+          "data_retention_days": 30
+        },
+        "timezone": "UTC"
+      },
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "org_name": "Recovery Audit recovery_20260624T072323Z_c698c9ca",
+      "org_type": "store",
+      "owner_user_id": "1",
+      "status": "active",
+      "updated_at": "2026-06-24T07:23:24.995621Z"
+    },
+    "elapsed_ms": 715.142,
+    "method": "POST",
+    "ok": true,
+    "path": "/api/app/org/create",
+    "status_code": 201
+  },
+  "rbac_core_modified": false,
+  "role_user_creation": [
+    {
+      "change_password": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 113,
+            "is_active": true,
+            "last_login_at": "2026-06-24T07:23:27.494118Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "super_admin",
+            "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+          }
+        },
+        "elapsed_ms": 1016.408,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_user": {
+        "body": {
+          "created_at": "2026-06-24T07:23:26.278524Z",
+          "id": 113,
+          "is_active": true,
+          "job_title": "Recovery super_admin",
+          "last_login_at": null,
+          "must_change_password": true,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "super_admin",
+          "title": "Recovery super_admin",
+          "updated_at": "2026-06-24T07:23:26.278524Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+        },
+        "elapsed_ms": 1791.401,
+        "ok": true,
+        "status_code": 201
+      },
+      "final_login": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": false,
+          "session_token": "SyXEzL7mbGkkVovU7PDlMSvzDht5wuBYCuUq7GDcH7o",
+          "user": {
+            "id": 113,
+            "is_active": true,
+            "last_login_at": "2026-06-24T07:23:27.494118Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "super_admin",
+            "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+          }
+        },
+        "elapsed_ms": 498.05,
+        "ok": true,
+        "status_code": 200
+      },
+      "initial_login": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": true,
+          "session_token": "1ZzgS-nUKaIdL5whNe2MZ7NnCsNrV29ZcgOXnpz8yV4",
+          "user": {
+            "id": 113,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": true,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "super_admin",
+            "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+          }
+        },
+        "elapsed_ms": 385.881,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "super_admin",
+      "user_role": "super_admin",
+      "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+    },
+    {
+      "change_password": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 114,
+            "is_active": true,
+            "last_login_at": "2026-06-24T07:23:32.696072Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "operator",
+            "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+          }
+        },
+        "elapsed_ms": 1013.173,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_user": {
+        "body": {
+          "created_at": "2026-06-24T07:23:30.301805Z",
+          "id": 114,
+          "is_active": true,
+          "job_title": "Recovery org_admin",
+          "last_login_at": null,
+          "must_change_password": true,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "operator",
+          "title": "Recovery org_admin",
+          "updated_at": "2026-06-24T07:23:30.301805Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+        },
+        "elapsed_ms": 1815.475,
+        "ok": true,
+        "status_code": 201
+      },
+      "derived_membership": {
+        "body": {
+          "joined_at": "2026-06-24T07:23:31.986184Z",
+          "membership_id": "mem_01601bf7aa754dd69a1bc292010aeebc",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "admin",
+          "status": "active",
+          "user_id": "114"
+        },
+        "elapsed_ms": 999.471,
+        "ok": true,
+        "status_code": 201
+      },
+      "final_login": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": false,
+          "session_token": "z-YcwbXPNR05ALxoyXl6UOy2U-yPOI_uUKcr4AoRskQ",
+          "user": {
+            "id": 114,
+            "is_active": true,
+            "last_login_at": "2026-06-24T07:23:32.696072Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "operator",
+            "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+          }
+        },
+        "elapsed_ms": 296.225,
+        "ok": true,
+        "status_code": 200
+      },
+      "initial_login": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": true,
+          "session_token": "biivNVw9T7QXswHXUJZ-rt-vgXtOl-vanXJ-hWx9dh8",
+          "user": {
+            "id": 114,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": true,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "operator",
+            "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+          }
+        },
+        "elapsed_ms": 387.319,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "org_admin",
+      "user_role": "operator",
+      "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+    },
+    {
+      "change_password": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 115,
+            "is_active": true,
+            "last_login_at": "2026-06-24T07:23:35.490807Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+          }
+        },
+        "elapsed_ms": 906.323,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_user": {
+        "body": {
+          "created_at": "2026-06-24T07:23:34.599824Z",
+          "id": 115,
+          "is_active": true,
+          "job_title": "Recovery viewer",
+          "last_login_at": null,
+          "must_change_password": true,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery viewer",
+          "updated_at": "2026-06-24T07:23:34.599824Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+        },
+        "elapsed_ms": 800.444,
+        "ok": true,
+        "status_code": 201
+      },
+      "final_login": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": false,
+          "session_token": "UNbMxPOUDBC11Xn5PR-mjfX6hiue3kbo31Lk-wUeVXc",
+          "user": {
+            "id": 115,
+            "is_active": true,
+            "last_login_at": "2026-06-24T07:23:35.490807Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+          }
+        },
+        "elapsed_ms": 300.294,
+        "ok": true,
+        "status_code": 200
+      },
+      "initial_login": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": true,
+          "session_token": "4XcgNEeNTOSUJjLv-Lcyz_zzH5cLmqK-3ZK6k_MeTr4",
+          "user": {
+            "id": 115,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": true,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+          }
+        },
+        "elapsed_ms": 380.414,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "viewer",
+      "user_role": "viewer",
+      "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+    }
+  ],
+  "rule": "if role != owner: deny create organization with 403; org_admin is derived from org_memberships.role=admin",
+  "status": "passed"
+}

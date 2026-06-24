@@ -1,0 +1,138 @@
+{
+  "approval_concurrency": {
+    "avg_ms": 1150.69,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 1422.739,
+    "p95_ms": 1422.739,
+    "success": 3,
+    "timeout": 0,
+    "total": 3
+  },
+  "audit_id": "go_live_20260624T082455Z_01b82d78",
+  "checks": {
+    "approval_concurrency": true,
+    "db_pool_stable": true,
+    "fifty_rps_api_load": true,
+    "module_toggle_stress": true,
+    "ten_concurrent_user_logins": true,
+    "webhook_stress": true,
+    "workers_distributed": true
+  },
+  "db_pool_usage": {
+    "after": {
+      "by_state": {
+        "argv": [
+          "docker",
+          "exec",
+          "barong-ops-console-prod_console_postgres_1",
+          "psql",
+          "-U",
+          "barong_ops_console",
+          "-d",
+          "barong_ops_console",
+          "-At",
+          "-F",
+          "\t",
+          "-c",
+          "select coalesce(state,'[null]'), count(*) from pg_stat_activity group by 1 order by 1;"
+        ],
+        "elapsed_ms": 811.55,
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "[null]\t5\nactive\t1\nidle\t18\n"
+      },
+      "database_connection_count": 19,
+      "idle_in_transaction_count": 0,
+      "stable": true
+    },
+    "before": {
+      "by_state": {
+        "argv": [
+          "docker",
+          "exec",
+          "barong-ops-console-prod_console_postgres_1",
+          "psql",
+          "-U",
+          "barong_ops_console",
+          "-d",
+          "barong_ops_console",
+          "-At",
+          "-F",
+          "\t",
+          "-c",
+          "select coalesce(state,'[null]'), count(*) from pg_stat_activity group by 1 order by 1;"
+        ],
+        "elapsed_ms": 1307.364,
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "[null]\t5\nactive\t1\nidle\t16\n"
+      },
+      "database_connection_count": 17,
+      "idle_in_transaction_count": 0,
+      "stable": true
+    }
+  },
+  "generated_at": "2026-06-24T08:25:39.198932+00:00",
+  "login_load": {
+    "avg_ms": 2434.162,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 3094.18,
+    "p95_ms": 3094.18,
+    "success": 10,
+    "timeout": 0,
+    "total": 10
+  },
+  "module_toggle_stress": {
+    "avg_ms": 5608.055,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 6199.31,
+    "p95_ms": 6199.31,
+    "success": 8,
+    "timeout": 0,
+    "total": 8
+  },
+  "read_50_rps": {
+    "avg_ms": 805.428,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 1600.021,
+    "p95_ms": 1499.534,
+    "success": 50,
+    "timeout": 0,
+    "total": 50
+  },
+  "samples": {
+    "read_failures": [],
+    "webhook_failures": []
+  },
+  "status": "passed",
+  "webhook_stress": {
+    "avg_ms": 2706.978,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 3395.455,
+    "p95_ms": 3395.455,
+    "success": 3,
+    "timeout": 0,
+    "total": 3
+  },
+  "worker_distribution": {
+    "active_worker_processes": 2,
+    "configured_workers": 2,
+    "docker_top_ok": true,
+    "gunicorn_master_present": true,
+    "raw_process_lines": [
+      "UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD",
+      "dnsmasq             2446278             2446252             0                   08:21               ?                   00:00:00            sh -c gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --worker-class uvicorn.workers.UvicornWorker --timeout ${GUNICORN_TIMEOUT:-120} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-30} --access-logfile - --error-logfile - --forwarded-allow-ips='*'",
+      "dnsmasq             2446334             2446278             2                   08:21               ?                   00:00:04            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*",
+      "dnsmasq             2446483             2446334             12                  08:21               ?                   00:00:26            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*",
+      "dnsmasq             2446484             2446334             15                  08:21               ?                   00:00:31            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*"
+    ],
+    "uvicorn_worker_class_configured": true
+  }
+}

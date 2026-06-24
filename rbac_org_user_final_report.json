@@ -1,0 +1,1051 @@
+{
+  "admin_create_negative": {
+    "body": {
+      "detail": "Invalid request."
+    },
+    "elapsed_ms": 401.234,
+    "method": "POST",
+    "ok": false,
+    "path": "/api/app/users",
+    "status_code": 422
+  },
+  "audit_id": "go_live_20260624T082455Z_01b82d78",
+  "checks": {
+    "no_admin_role_leakage": true,
+    "no_zero_org_false_state": true,
+    "org_list_correct": true,
+    "owner_full_access": true,
+    "super_admin_org_scoped_access": true,
+    "user_list_correct": true,
+    "viewer_read_only_access": true
+  },
+  "generated_at": "2026-06-24T08:25:17.486630+00:00",
+  "logins": {
+    "org_admin": {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": false,
+        "session_token": "oY3LzCAUvcf10zLtqoGYVKMQzz8u8DxiGGHk1uckAHs",
+        "user": {
+          "id": 114,
+          "is_active": true,
+          "last_login_at": "2026-06-24T08:23:53.181207Z",
+          "must_change_password": false,
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "operator",
+          "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+        }
+      },
+      "elapsed_ms": 301.662,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    },
+    "owner": {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": false,
+        "session_token": "4ABN2t-C2-pUamgYqmL-fWRcS611gKUG5owNzBn87-8",
+        "user": {
+          "id": 1,
+          "is_active": true,
+          "last_login_at": "2026-06-24T08:23:53.683566Z",
+          "must_change_password": false,
+          "organization_id": null,
+          "role": "owner",
+          "username": "barongyekhna"
+        }
+      },
+      "elapsed_ms": 390.239,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    },
+    "super_admin": {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": false,
+        "session_token": "LSJLrkvg_DNCZHLfYD_52xVwra2FLO1s6jn2yEgP_SI",
+        "user": {
+          "id": 113,
+          "is_active": true,
+          "last_login_at": "2026-06-24T08:23:53.792098Z",
+          "must_change_password": false,
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "super_admin",
+          "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+        }
+      },
+      "elapsed_ms": 307.251,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    },
+    "viewer": {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": false,
+        "session_token": "Ay28-LrxT0-k-CsZetXSKRyO3z9OCATgBF_t1vg1jrE",
+        "user": {
+          "id": 115,
+          "is_active": true,
+          "last_login_at": "2026-06-24T08:23:53.485182Z",
+          "must_change_password": false,
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+        }
+      },
+      "elapsed_ms": 710.415,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    }
+  },
+  "owner_orgs": {
+    "body": {
+      "count": 13,
+      "cursor": null,
+      "degraded": false,
+      "error": null,
+      "items": [
+        {
+          "created_at": "2026-06-23T18:10:52.787424Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "final_preprod_20260623T181050Z_0e3e9f24",
+              "namespace": "audit_scope_final_preprod_20260623T181050Z_0e3e9f24",
+              "test_scope": true,
+              "updated": true
+            },
+            "industry": "audit-updated",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 14
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+          "org_name": "Audit Primary Updated final_preprod_20260623T181050Z_0e3e9f24",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-23T18:11:00.084178Z"
+        },
+        {
+          "created_at": "2026-06-23T18:19:23.982448Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+              "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+              "test_scope": true,
+              "updated": true
+            },
+            "industry": "audit-updated",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 14
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_cf25980213a1459e8908bbf505729895",
+          "org_name": "Audit Primary Updated final_preprod_20260623T181922Z_9658bfcf",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-23T18:19:29.074613Z"
+        },
+        {
+          "created_at": "2026-06-24T01:39:00.324790Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "purpose": "final_production_regression",
+              "run_id": "20260624013853_7yljssen"
+            },
+            "industry": "regression",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 365
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_19721ad17c6848d5aaf3a192e54eb3e8",
+          "org_name": "Final Production E2E 20260624013853_7yljssen",
+          "org_type": "factory",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-24T01:39:00.324790Z"
+        },
+        {
+          "created_at": "2026-06-23T19:00:46.087903Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260623T190042Z_ba899f37",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_4769b90c7f0e44ae96ce787ade28e8c1",
+          "org_name": "Recovery Audit recovery_20260623T190042Z_ba899f37",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-23T19:00:46.087903Z"
+        },
+        {
+          "created_at": "2026-06-23T19:04:53.585246Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260623T190449Z_91b6bdaa",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_25b3a5022b33462a91faf7e7944f6c64",
+          "org_name": "Recovery Audit recovery_20260623T190449Z_91b6bdaa",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-23T19:04:53.585246Z"
+        },
+        {
+          "created_at": "2026-06-23T19:10:02.798162Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260623T190957Z_8e948ed7",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_8138a6cf74f04577a103138ee00357c4",
+          "org_name": "Recovery Audit recovery_20260623T190957Z_8e948ed7",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-23T19:10:02.798162Z"
+        },
+        {
+          "created_at": "2026-06-24T06:23:07.907551Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260624T062304Z_3cf203f3",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_d9e4fe922d9b4b258025670a229b036d",
+          "org_name": "Recovery Audit recovery_20260624T062304Z_3cf203f3",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-24T06:23:07.907551Z"
+        },
+        {
+          "created_at": "2026-06-24T06:33:11.398433Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260624T063307Z_92bb1e70",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_7512577c7033447584b246ec0e3276fd",
+          "org_name": "Recovery Audit recovery_20260624T063307Z_92bb1e70",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-24T06:33:11.398433Z"
+        },
+        {
+          "created_at": "2026-06-24T07:11:47.487095Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260624T071145Z_cf1e556f",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+          "org_name": "Recovery Audit recovery_20260624T071145Z_cf1e556f",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-24T07:11:47.487095Z"
+        },
+        {
+          "created_at": "2026-06-24T07:18:50.577432Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260624T071847Z_cf4deb86",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+          "org_name": "Recovery Audit recovery_20260624T071847Z_cf4deb86",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-24T07:18:50.577432Z"
+        },
+        {
+          "created_at": "2026-06-24T07:23:24.995621Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260624T072323Z_c698c9ca",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "org_name": "Recovery Audit recovery_20260624T072323Z_c698c9ca",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-24T07:23:24.995621Z"
+        },
+        {
+          "created_at": "2026-06-20T02:39:08.302108Z",
+          "metadata": {
+            "country": "",
+            "custom": {},
+            "industry": "",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": false,
+              "data_retention_days": 365
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_d7497212d213498cbf0513d75e486c20",
+          "org_name": "涌龙麟（吉林）电子产品制造有限公司",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-20T02:39:08.302108Z"
+        },
+        {
+          "created_at": "2026-06-19T15:41:12.489208Z",
+          "metadata": {
+            "country": "",
+            "custom": {},
+            "industry": "",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": false,
+              "data_retention_days": 365
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "org_name": "涌龙麟（深圳）国际贸易有限公司",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-19T15:41:12.489208Z"
+        }
+      ],
+      "limit": 100,
+      "next_cursor": null,
+      "offset": 0,
+      "source": "live"
+    },
+    "elapsed_ms": 198.329,
+    "method": "GET",
+    "ok": true,
+    "path": "/api/app/organizations?limit=100&offset=0",
+    "status_code": 200
+  },
+  "owner_users": {
+    "body": {
+      "count": 13,
+      "cursor": null,
+      "degraded": false,
+      "error": null,
+      "items": [
+        {
+          "created_at": "2026-06-24T07:23:26.278524Z",
+          "id": 113,
+          "is_active": true,
+          "job_title": "Recovery super_admin",
+          "last_login_at": "2026-06-24T08:24:57.082440Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "super_admin",
+          "title": "Recovery super_admin",
+          "updated_at": "2026-06-24T08:24:57.088574Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+        },
+        {
+          "created_at": "2026-06-24T07:23:30.301805Z",
+          "id": 114,
+          "is_active": true,
+          "job_title": "Recovery org_admin",
+          "last_login_at": "2026-06-24T08:24:57.582652Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "operator",
+          "title": "Recovery org_admin",
+          "updated_at": "2026-06-24T08:24:57.588206Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+        },
+        {
+          "created_at": "2026-06-24T07:23:34.599824Z",
+          "id": 115,
+          "is_active": true,
+          "job_title": "Recovery viewer",
+          "last_login_at": "2026-06-24T08:24:58.492856Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery viewer",
+          "updated_at": "2026-06-24T08:24:58.582461Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+        },
+        {
+          "created_at": "2026-06-24T07:23:44.494239Z",
+          "id": 116,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.491328Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:11.589592Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_0"
+        },
+        {
+          "created_at": "2026-06-24T07:23:46.499449Z",
+          "id": 117,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:10.596473Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:10.785490Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_1"
+        },
+        {
+          "created_at": "2026-06-24T07:23:48.789201Z",
+          "id": 118,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.497450Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:13.789720Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_2"
+        },
+        {
+          "created_at": "2026-06-24T07:23:51.188101Z",
+          "id": 119,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.499205Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:12.605770Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_3"
+        },
+        {
+          "created_at": "2026-06-24T07:23:53.192513Z",
+          "id": 120,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:12.784745Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:15.077083Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_4"
+        },
+        {
+          "created_at": "2026-06-24T07:23:55.886090Z",
+          "id": 121,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:08.785916Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:09.077965Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_5"
+        },
+        {
+          "created_at": "2026-06-24T07:23:57.898284Z",
+          "id": 122,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:12.392138Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:14.577626Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_6"
+        },
+        {
+          "created_at": "2026-06-24T07:24:00.293487Z",
+          "id": 123,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.297396Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:11.692411Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_7"
+        },
+        {
+          "created_at": "2026-06-24T07:24:02.380195Z",
+          "id": 124,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.491268Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:14.284881Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_8"
+        },
+        {
+          "created_at": "2026-06-24T07:24:04.088426Z",
+          "id": 125,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.587476Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:12.597768Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_9"
+        }
+      ],
+      "limit": 100,
+      "next_cursor": null,
+      "offset": 0,
+      "source": "live"
+    },
+    "elapsed_ms": 305.392,
+    "method": "GET",
+    "ok": true,
+    "path": "/api/app/users?organization_id=org_2a038f7f7bd9483a92ac7de8957bacde&limit=100&offset=0",
+    "status_code": 200
+  },
+  "role_catalog": {
+    "body": {
+      "assignable_roles": [
+        {
+          "assignable": true,
+          "c04_status": "bootstrap_only",
+          "description": "Bootstrap/system owner account.",
+          "human_or_agent": "human",
+          "label": "Owner",
+          "name": "owner"
+        },
+        {
+          "assignable": true,
+          "c04_status": "legacy_admin_alias",
+          "description": "Legacy admin role; mapped to admin by RBAC.",
+          "human_or_agent": "human",
+          "label": "Super Admin",
+          "name": "super_admin"
+        },
+        {
+          "assignable": true,
+          "c04_status": "assignable_user_role",
+          "description": "Assignable managed user role.",
+          "human_or_agent": "human",
+          "label": "Operator",
+          "name": "operator"
+        },
+        {
+          "assignable": true,
+          "c04_status": "assignable_user_role",
+          "description": "Assignable managed user role.",
+          "human_or_agent": "human",
+          "label": "Viewer",
+          "name": "viewer"
+        },
+        {
+          "assignable": true,
+          "c04_status": "assignable_user_role",
+          "description": "Assignable managed user role.",
+          "human_or_agent": "human",
+          "label": "Reviewer",
+          "name": "reviewer"
+        }
+      ],
+      "standard_roles": [
+        {
+          "assignable": false,
+          "c04_status": "bootstrap_only",
+          "description": "Bootstrap/system owner account.",
+          "human_or_agent": "human",
+          "label": "Owner",
+          "name": "owner"
+        },
+        {
+          "assignable": true,
+          "c04_status": "assignable_admin_role",
+          "description": "Module-level RBAC administrator.",
+          "human_or_agent": "human",
+          "label": "Admin",
+          "name": "admin"
+        },
+        {
+          "assignable": false,
+          "c04_status": "legacy_admin_alias",
+          "description": "Legacy admin role; mapped to admin by RBAC.",
+          "human_or_agent": "human",
+          "label": "Super Admin",
+          "name": "super_admin"
+        },
+        {
+          "assignable": false,
+          "c04_status": "legacy_admin_alias",
+          "description": "Legacy module admin role; mapped to admin by RBAC.",
+          "human_or_agent": "human",
+          "label": "Module Admin",
+          "name": "module_admin"
+        },
+        {
+          "assignable": true,
+          "c04_status": "assignable_user_role",
+          "description": "Assignable managed user role.",
+          "human_or_agent": "human",
+          "label": "Operator",
+          "name": "operator"
+        },
+        {
+          "assignable": true,
+          "c04_status": "assignable_user_role",
+          "description": "Assignable managed user role.",
+          "human_or_agent": "human",
+          "label": "Reviewer",
+          "name": "reviewer"
+        },
+        {
+          "assignable": true,
+          "c04_status": "assignable_user_role",
+          "description": "Assignable managed user role.",
+          "human_or_agent": "human",
+          "label": "Viewer",
+          "name": "viewer"
+        },
+        {
+          "assignable": false,
+          "c04_status": "internal_only",
+          "description": "Internal system principal for signed callbacks and service boundaries.",
+          "human_or_agent": "agent",
+          "label": "System",
+          "name": "system"
+        },
+        {
+          "assignable": false,
+          "c04_status": "legacy_system_alias",
+          "description": "Legacy agent role; mapped to system by RBAC.",
+          "human_or_agent": "agent",
+          "label": "Bot Agent",
+          "name": "bot_agent"
+        }
+      ]
+    },
+    "elapsed_ms": 304.356,
+    "method": "GET",
+    "ok": true,
+    "path": "/api/app/users/roles",
+    "status_code": 200
+  },
+  "status": "passed",
+  "super_admin_orgs": {
+    "body": {
+      "count": 1,
+      "cursor": null,
+      "degraded": false,
+      "error": null,
+      "items": [
+        {
+          "created_at": "2026-06-24T07:23:24.995621Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260624T072323Z_c698c9ca",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "org_name": "Recovery Audit recovery_20260624T072323Z_c698c9ca",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-24T07:23:24.995621Z"
+        }
+      ],
+      "limit": 100,
+      "next_cursor": null,
+      "offset": 0,
+      "source": "live"
+    },
+    "elapsed_ms": 95.195,
+    "method": "GET",
+    "ok": true,
+    "path": "/api/app/organizations?limit=100&offset=0",
+    "status_code": 200
+  },
+  "super_admin_users": {
+    "body": {
+      "count": 13,
+      "cursor": null,
+      "degraded": false,
+      "error": null,
+      "items": [
+        {
+          "created_at": "2026-06-24T07:23:26.278524Z",
+          "id": 113,
+          "is_active": true,
+          "job_title": "Recovery super_admin",
+          "last_login_at": "2026-06-24T08:24:57.082440Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "super_admin",
+          "title": "Recovery super_admin",
+          "updated_at": "2026-06-24T08:24:57.088574Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+        },
+        {
+          "created_at": "2026-06-24T07:23:30.301805Z",
+          "id": 114,
+          "is_active": true,
+          "job_title": "Recovery org_admin",
+          "last_login_at": "2026-06-24T08:24:57.582652Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "operator",
+          "title": "Recovery org_admin",
+          "updated_at": "2026-06-24T08:24:57.588206Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+        },
+        {
+          "created_at": "2026-06-24T07:23:34.599824Z",
+          "id": 115,
+          "is_active": true,
+          "job_title": "Recovery viewer",
+          "last_login_at": "2026-06-24T08:24:58.492856Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery viewer",
+          "updated_at": "2026-06-24T08:24:58.582461Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+        },
+        {
+          "created_at": "2026-06-24T07:23:44.494239Z",
+          "id": 116,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.491328Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:11.589592Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_0"
+        },
+        {
+          "created_at": "2026-06-24T07:23:46.499449Z",
+          "id": 117,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:10.596473Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:10.785490Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_1"
+        },
+        {
+          "created_at": "2026-06-24T07:23:48.789201Z",
+          "id": 118,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.497450Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:13.789720Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_2"
+        },
+        {
+          "created_at": "2026-06-24T07:23:51.188101Z",
+          "id": 119,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.499205Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:12.605770Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_3"
+        },
+        {
+          "created_at": "2026-06-24T07:23:53.192513Z",
+          "id": 120,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:12.784745Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:15.077083Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_4"
+        },
+        {
+          "created_at": "2026-06-24T07:23:55.886090Z",
+          "id": 121,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:08.785916Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:09.077965Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_5"
+        },
+        {
+          "created_at": "2026-06-24T07:23:57.898284Z",
+          "id": 122,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:12.392138Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:14.577626Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_6"
+        },
+        {
+          "created_at": "2026-06-24T07:24:00.293487Z",
+          "id": 123,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.297396Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:11.692411Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_7"
+        },
+        {
+          "created_at": "2026-06-24T07:24:02.380195Z",
+          "id": 124,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.491268Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:14.284881Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_8"
+        },
+        {
+          "created_at": "2026-06-24T07:24:04.088426Z",
+          "id": 125,
+          "is_active": true,
+          "job_title": "Recovery load user",
+          "last_login_at": "2026-06-24T07:24:11.587476Z",
+          "must_change_password": false,
+          "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "role": "viewer",
+          "title": "Recovery load user",
+          "updated_at": "2026-06-24T07:24:12.597768Z",
+          "username": "recovery_20260624T072323Z_c698c9ca_load_9"
+        }
+      ],
+      "limit": 100,
+      "next_cursor": null,
+      "offset": 0,
+      "source": "live"
+    },
+    "elapsed_ms": 398.772,
+    "method": "GET",
+    "ok": true,
+    "path": "/api/app/users?organization_id=org_2a038f7f7bd9483a92ac7de8957bacde&limit=100&offset=0",
+    "status_code": 200
+  },
+  "viewer_orgs": {
+    "body": {
+      "count": 1,
+      "cursor": null,
+      "degraded": false,
+      "error": null,
+      "items": [
+        {
+          "created_at": "2026-06-24T07:23:24.995621Z",
+          "metadata": {
+            "country": "US",
+            "custom": {
+              "audit_id": "recovery_20260624T072323Z_c698c9ca",
+              "isolated": true
+            },
+            "industry": "audit",
+            "settings": {
+              "allow_ai": false,
+              "allow_n8n": true,
+              "data_retention_days": 30
+            },
+            "timezone": "UTC"
+          },
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "org_name": "Recovery Audit recovery_20260624T072323Z_c698c9ca",
+          "org_type": "store",
+          "owner_user_id": "1",
+          "status": "active",
+          "updated_at": "2026-06-24T07:23:24.995621Z"
+        }
+      ],
+      "limit": 100,
+      "next_cursor": null,
+      "offset": 0,
+      "source": "live"
+    },
+    "elapsed_ms": 87.782,
+    "method": "GET",
+    "ok": true,
+    "path": "/api/app/organizations?limit=100&offset=0",
+    "status_code": 200
+  },
+  "viewer_write_negative": {
+    "body": {
+      "detail": "Forbidden."
+    },
+    "elapsed_ms": 406.216,
+    "method": "POST",
+    "ok": false,
+    "path": "/api/app/org/create",
+    "status_code": 403
+  }
+}

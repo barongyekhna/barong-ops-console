@@ -1,0 +1,1745 @@
+{
+  "api_key_binding_results": [
+    {
+      "body": null,
+      "elapsed_ms": 20021.79,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.0",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20089.22,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.6",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20086.89,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.8",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20085.15,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.9",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20098.58,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.2",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20094.2,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.5",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20090.88,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.7",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20096.21,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.4",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20102.47,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.1",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20098.1,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.3",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20083.53,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.11",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20022.79,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.14",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20105.67,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.10",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20101.98,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.12",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20020.6,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.16",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20025.62,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.13",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20098.42,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.15",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20094.6,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.18",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20092.2,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.19",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20096.0,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "POST",
+      "name": "stress.api_key_binding.17",
+      "ok": false,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": null
+    }
+  ],
+  "api_results_sample": [
+    {
+      "elapsed_ms": 88.94,
+      "error": null,
+      "method": "GET",
+      "ok_transport": true,
+      "path": "/api/public/auth/me",
+      "status_code": 200,
+      "timeout": false
+    },
+    {
+      "elapsed_ms": 20078.3,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20084.97,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20079.15,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20102.14,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20098.82,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20085.44,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20093.01,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20092.04,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20098.12,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20095.39,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20105.35,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20021.58,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20101.41,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20101.5,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20097.71,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20188.34,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20096.5,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20103.24,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20087.09,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20095.22,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20106.25,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20102.32,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20099.54,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20093.48,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20086.0,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20093.58,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20091.23,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20103.27,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20095.02,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20103.5,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20105.81,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20104.97,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20095.41,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20099.46,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20191.58,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20107.32,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20113.21,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20112.68,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20112.46,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20022.08,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20090.19,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/approval/list?limit=10&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20096.16,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/organizations?limit=20&offset=0",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20099.89,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20087.48,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/app/permissions/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20094.68,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20093.07,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20022.96,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20091.21,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/control-plane/modules/me",
+      "status_code": null,
+      "timeout": true
+    },
+    {
+      "elapsed_ms": 20101.44,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "method": "GET",
+      "ok_transport": false,
+      "path": "/api/public/auth/me",
+      "status_code": null,
+      "timeout": true
+    }
+  ],
+  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+  "db_pressure": {
+    "after": {
+      "command_ok": true,
+      "metrics": {
+        "activity_total": "37",
+        "db_size": "113388691",
+        "states": "{ \"none\" : 5, \"active\" : 1, \"idle in transaction\" : 18, \"idle\" : 13 }"
+      },
+      "stderr": ""
+    },
+    "before": {
+      "command_ok": true,
+      "metrics": {
+        "activity_total": "36",
+        "db_size": "111725715",
+        "states": "{ \"none\" : 5, \"active\" : 2, \"idle\" : 29 }"
+      },
+      "stderr": ""
+    }
+  },
+  "docker_stats": {
+    "after": {
+      "command_ok": true,
+      "rows": [
+        {
+          "BlockIO": "127MB / 32.2MB",
+          "CPUPerc": "99.43%",
+          "Container": "barong-ops-console-prod_console_backend_1",
+          "ID": "802e5bea0642",
+          "MemPerc": "8.92%",
+          "MemUsage": "348.9MiB / 3.818GiB",
+          "Name": "barong-ops-console-prod_console_backend_1",
+          "NetIO": "97.2MB / 72.7MB",
+          "PIDs": "21"
+        },
+        {
+          "BlockIO": "147kB / 0B",
+          "CPUPerc": "0.00%",
+          "Container": "barong-ops-console-prod_console_frontend_1",
+          "ID": "22f598116ea3",
+          "MemPerc": "1.79%",
+          "MemUsage": "70.18MiB / 3.818GiB",
+          "Name": "barong-ops-console-prod_console_frontend_1",
+          "NetIO": "2.87MB / 7.62MB",
+          "PIDs": "11"
+        },
+        {
+          "BlockIO": "266MB / 911MB",
+          "CPUPerc": "158.77%",
+          "Container": "barong-ops-console-prod_console_postgres_1",
+          "ID": "1eadff342962",
+          "MemPerc": "5.34%",
+          "MemUsage": "208.9MiB / 3.818GiB",
+          "Name": "barong-ops-console-prod_console_postgres_1",
+          "NetIO": "185MB / 387MB",
+          "PIDs": "37"
+        }
+      ],
+      "stderr": ""
+    },
+    "before": {
+      "command_ok": true,
+      "rows": [
+        {
+          "BlockIO": "127MB / 32.2MB",
+          "CPUPerc": "49.94%",
+          "Container": "barong-ops-console-prod_console_backend_1",
+          "ID": "802e5bea0642",
+          "MemPerc": "8.07%",
+          "MemUsage": "315.7MiB / 3.818GiB",
+          "Name": "barong-ops-console-prod_console_backend_1",
+          "NetIO": "91.4MB / 64.9MB",
+          "PIDs": "7"
+        },
+        {
+          "BlockIO": "147kB / 0B",
+          "CPUPerc": "0.00%",
+          "Container": "barong-ops-console-prod_console_frontend_1",
+          "ID": "22f598116ea3",
+          "MemPerc": "1.80%",
+          "MemUsage": "70.19MiB / 3.818GiB",
+          "Name": "barong-ops-console-prod_console_frontend_1",
+          "NetIO": "2.87MB / 7.62MB",
+          "PIDs": "11"
+        },
+        {
+          "BlockIO": "263MB / 872MB",
+          "CPUPerc": "104.48%",
+          "Container": "barong-ops-console-prod_console_postgres_1",
+          "ID": "1eadff342962",
+          "MemPerc": "5.14%",
+          "MemUsage": "200.8MiB / 3.818GiB",
+          "Name": "barong-ops-console-prod_console_postgres_1",
+          "NetIO": "178MB / 381MB",
+          "PIDs": "36"
+        }
+      ],
+      "stderr": ""
+    }
+  },
+  "executed_at": "2026-06-23T18:25:27.186049+00:00",
+  "extra_users_created_for_stress": {
+    "audit_stress_0_9658bfcf": {
+      "change_record": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 17,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:22:55.268352Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "username": "audit_stress_0_9658bfcf"
+          }
+        },
+        "elapsed_ms": 1695.51,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.0.change_password",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_record": {
+        "body": {
+          "created_at": "2026-06-23T18:22:54.087110Z",
+          "id": 17,
+          "is_active": true,
+          "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=operator",
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "updated_at": "2026-06-23T18:22:54.087110Z",
+          "username": "audit_stress_0_9658bfcf"
+        },
+        "elapsed_ms": 1396.51,
+        "error": null,
+        "expected_status": 201,
+        "method": "POST",
+        "name": "user.create.operator.audit_stress_0_9658bfcf",
+        "ok": true,
+        "path": "/api/app/users",
+        "status_code": 201
+      },
+      "id": 17,
+      "login_record": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 17,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "username": "audit_stress_0_9658bfcf"
+          }
+        },
+        "elapsed_ms": 393.71,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.0.login_default_password",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "operator"
+    },
+    "audit_stress_1_9658bfcf": {
+      "change_record": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 18,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:22:59.091075Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "username": "audit_stress_1_9658bfcf"
+          }
+        },
+        "elapsed_ms": 1303.44,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.1.change_password",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_record": {
+        "body": {
+          "created_at": "2026-06-23T18:22:57.568495Z",
+          "id": 18,
+          "is_active": true,
+          "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "updated_at": "2026-06-23T18:22:57.568495Z",
+          "username": "audit_stress_1_9658bfcf"
+        },
+        "elapsed_ms": 1707.02,
+        "error": null,
+        "expected_status": 201,
+        "method": "POST",
+        "name": "user.create.viewer.audit_stress_1_9658bfcf",
+        "ok": true,
+        "path": "/api/app/users",
+        "status_code": 201
+      },
+      "id": 18,
+      "login_record": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 18,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "username": "audit_stress_1_9658bfcf"
+          }
+        },
+        "elapsed_ms": 691.34,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.1.login_default_password",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "viewer"
+    },
+    "audit_stress_2_9658bfcf": {
+      "change_record": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 19,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:23:02.980311Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "username": "audit_stress_2_9658bfcf"
+          }
+        },
+        "elapsed_ms": 2294.03,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.2.change_password",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_record": {
+        "body": {
+          "created_at": "2026-06-23T18:23:01.369028Z",
+          "id": 19,
+          "is_active": true,
+          "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=operator",
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "updated_at": "2026-06-23T18:23:01.369028Z",
+          "username": "audit_stress_2_9658bfcf"
+        },
+        "elapsed_ms": 1839.2,
+        "error": null,
+        "expected_status": 201,
+        "method": "POST",
+        "name": "user.create.operator.audit_stress_2_9658bfcf",
+        "ok": true,
+        "path": "/api/app/users",
+        "status_code": 201
+      },
+      "id": 19,
+      "login_record": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 19,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "username": "audit_stress_2_9658bfcf"
+          }
+        },
+        "elapsed_ms": 563.81,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.2.login_default_password",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "operator"
+    },
+    "audit_stress_3_9658bfcf": {
+      "change_record": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 20,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:23:07.277800Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "username": "audit_stress_3_9658bfcf"
+          }
+        },
+        "elapsed_ms": 1706.88,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.3.change_password",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_record": {
+        "body": {
+          "created_at": "2026-06-23T18:23:06.170761Z",
+          "id": 20,
+          "is_active": true,
+          "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "updated_at": "2026-06-23T18:23:06.170761Z",
+          "username": "audit_stress_3_9658bfcf"
+        },
+        "elapsed_ms": 1506.62,
+        "error": null,
+        "expected_status": 201,
+        "method": "POST",
+        "name": "user.create.viewer.audit_stress_3_9658bfcf",
+        "ok": true,
+        "path": "/api/app/users",
+        "status_code": 201
+      },
+      "id": 20,
+      "login_record": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 20,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "username": "audit_stress_3_9658bfcf"
+          }
+        },
+        "elapsed_ms": 490.46,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.3.login_default_password",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "viewer"
+    },
+    "audit_stress_4_9658bfcf": {
+      "change_record": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 21,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:23:11.682539Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "username": "audit_stress_4_9658bfcf"
+          }
+        },
+        "elapsed_ms": 2392.69,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.4.change_password",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_record": {
+        "body": {
+          "created_at": "2026-06-23T18:23:10.172984Z",
+          "id": 21,
+          "is_active": true,
+          "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=operator",
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "updated_at": "2026-06-23T18:23:10.172984Z",
+          "username": "audit_stress_4_9658bfcf"
+        },
+        "elapsed_ms": 2099.24,
+        "error": null,
+        "expected_status": 201,
+        "method": "POST",
+        "name": "user.create.operator.audit_stress_4_9658bfcf",
+        "ok": true,
+        "path": "/api/app/users",
+        "status_code": 201
+      },
+      "id": 21,
+      "login_record": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 21,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "username": "audit_stress_4_9658bfcf"
+          }
+        },
+        "elapsed_ms": 700.52,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.4.login_default_password",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "operator"
+    },
+    "audit_stress_5_9658bfcf": {
+      "change_record": {
+        "body": {
+          "message": "Password changed.",
+          "user": {
+            "id": 22,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:23:16.478442Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "username": "audit_stress_5_9658bfcf"
+          }
+        },
+        "elapsed_ms": 1681.22,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.5.change_password",
+        "ok": true,
+        "path": "/api/public/auth/change-password",
+        "status_code": 200
+      },
+      "create_record": {
+        "body": {
+          "created_at": "2026-06-23T18:23:14.890433Z",
+          "id": 22,
+          "is_active": true,
+          "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "updated_at": "2026-06-23T18:23:14.890433Z",
+          "username": "audit_stress_5_9658bfcf"
+        },
+        "elapsed_ms": 1501.75,
+        "error": null,
+        "expected_status": 201,
+        "method": "POST",
+        "name": "user.create.viewer.audit_stress_5_9658bfcf",
+        "ok": true,
+        "path": "/api/app/users",
+        "status_code": 201
+      },
+      "id": 22,
+      "login_record": {
+        "body": {
+          "auth_complete": true,
+          "message": "首次登录默认密码为123456，请立即修改密码",
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 22,
+            "is_active": true,
+            "last_login_at": null,
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "username": "audit_stress_5_9658bfcf"
+          }
+        },
+        "elapsed_ms": 714.88,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "stress_user.5.login_default_password",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "role": "viewer"
+    }
+  },
+  "login_results": [
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 15,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:22:05.167443Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "username": "audit_viewer_9658bfcf"
+        }
+      },
+      "elapsed_ms": 2700.28,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.viewer",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "viewer",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 18,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:22:59.091075Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "username": "audit_stress_1_9658bfcf"
+        }
+      },
+      "elapsed_ms": 2788.48,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.stress_1",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "stress_1",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 1,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:20:38.282661Z",
+          "must_change_password": "***",
+          "organization_id": null,
+          "role": "owner",
+          "username": "barongyekhna"
+        }
+      },
+      "elapsed_ms": 2806.38,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.owner",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "owner",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 21,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:23:11.682539Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "username": "audit_stress_4_9658bfcf"
+        }
+      },
+      "elapsed_ms": 2708.75,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.stress_4",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "stress_4",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 17,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:22:55.268352Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "username": "audit_stress_0_9658bfcf"
+        }
+      },
+      "elapsed_ms": 3092.44,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.stress_0",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "stress_0",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 13,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:21:12.581042Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "super_admin",
+          "username": "audit_super_admin_9658bfcf"
+        }
+      },
+      "elapsed_ms": 3105.18,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.super_admin",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "super_admin",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 14,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:21:38.276241Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "username": "audit_operator_9658bfcf"
+        }
+      },
+      "elapsed_ms": 3110.47,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.operator",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "operator",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 19,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:23:02.980311Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "username": "audit_stress_2_9658bfcf"
+        }
+      },
+      "elapsed_ms": 3283.92,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.stress_2",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "stress_2",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 20,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:23:07.277800Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "username": "audit_stress_3_9658bfcf"
+        }
+      },
+      "elapsed_ms": 3219.62,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.stress_3",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "stress_3",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": null,
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 22,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:23:16.478442Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "username": "audit_stress_5_9658bfcf"
+        }
+      },
+      "elapsed_ms": 3308.07,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "stress.parallel_login.stress_5",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "role_label": "stress_5",
+      "status_code": 200
+    }
+  ],
+  "logs": {
+    "backend": {
+      "command_ok": true,
+      "container": "barong-ops-console-prod_console_backend_1",
+      "error_like_count": 1,
+      "error_like_tail": [
+        "(Background on this error at: https://sqlalche.me/e/20/e3q8)"
+      ],
+      "line_count": 85
+    },
+    "frontend": {
+      "command_ok": true,
+      "container": "barong-ops-console-prod_console_frontend_1",
+      "error_like_count": 0,
+      "error_like_tail": [],
+      "line_count": 4
+    }
+  },
+  "module_toggle_results": [
+    {
+      "body": null,
+      "elapsed_ms": 20085.55,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.0",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20094.56,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.3",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20181.76,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.2",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20085.43,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.5",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20183.37,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.1",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20099.31,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.6",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20098.94,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.7",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20111.3,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.4",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20096.85,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.9",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20085.75,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.14",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20090.9,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.12",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20084.07,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.15",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20089.78,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.13",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20097.06,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.10",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20093.64,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.11",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20101.81,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.8",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20100.24,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.16",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20101.01,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.17",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20096.8,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.19",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    },
+    {
+      "body": null,
+      "elapsed_ms": 20098.24,
+      "error": "HTTPConnectionPool(host='127.0.0.1', port=8000): Read timed out. (read timeout=20)",
+      "expected_status": null,
+      "method": "PATCH",
+      "name": "stress.module_toggle.18",
+      "ok": false,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": null
+    }
+  ],
+  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+  "scenario": {
+    "concurrent_api_requests_per_user": 20,
+    "parallel_login_users_executed": 10,
+    "parallel_login_users_requested": 10,
+    "simultaneous_api_key_binding_operations": 20,
+    "simultaneous_module_toggle_operations": 20
+  },
+  "summary": {
+    "api_key_binding_5xx_count": 0,
+    "api_request_count": 200,
+    "api_status_counts": {
+      "200": 1,
+      "None": 199
+    },
+    "backend_error_like_log_count": 1,
+    "failure_rate": 0.995,
+    "login_failure_count": 0,
+    "login_success_count": 10,
+    "module_toggle_5xx_count": 0,
+    "p95_response_ms": 20185.4,
+    "timeout_count": 199,
+    "timeout_rate": 0.995,
+    "transport_failure_count": 199
+  }
+}

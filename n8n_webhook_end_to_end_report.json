@@ -1,0 +1,100 @@
+{
+  "audit_id": "go_live_20260624T082455Z_01b82d78",
+  "callback_mode": "synchronous_n8n_response",
+  "checks": {
+    "backend_received_callback_response": true,
+    "logs_persisted": true,
+    "n8n_received_request": true,
+    "no_timeout": true,
+    "request_sent_successfully": true,
+    "response_received_successfully": true,
+    "retry_mechanism_after_failure": true
+  },
+  "generated_at": "2026-06-24T08:25:13.982942+00:00",
+  "module_id": "integration.n8n_webhook_test_bridge",
+  "request": {
+    "body": {
+      "attempts": 1,
+      "duration_ms": 708.783,
+      "error_code": null,
+      "error_message": null,
+      "injected_key": {
+        "header_name": "Authorization",
+        "injected": true,
+        "key_alias": "n8n",
+        "key_id": "key_23840420533cb8dca99237d16802f694",
+        "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca"
+      },
+      "logs_stored": true,
+      "module_id": "integration.n8n_webhook_test_bridge",
+      "n8n_received": true,
+      "operation_log_id": "a93fa480-fee4-41b5-bd05-d910b40a1cdf",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "request_sent": true,
+      "response_body": {
+        "unparseable_json": true
+      },
+      "response_returned": true,
+      "retry_count": 0,
+      "run_id": "n8n_webhook_test_cba53b8919b5486fb9a8a43bd448aef8",
+      "status_code": 200,
+      "success": true
+    },
+    "elapsed_ms": 1595.497,
+    "method": "POST",
+    "ok": true,
+    "path": "/api/control-plane/n8n-webhook-test/run",
+    "status_code": 201
+  },
+  "retry_probe": {
+    "first_failure": {
+      "body": {
+        "detail": "Not found."
+      },
+      "elapsed_ms": 390.343,
+      "method": "POST",
+      "ok": false,
+      "path": "/api/control-plane/n8n-webhook-test/run",
+      "status_code": 403
+    },
+    "retry_after_failure": {
+      "body": {
+        "attempts": 1,
+        "duration_ms": 810.688,
+        "error_code": null,
+        "error_message": null,
+        "injected_key": {
+          "header_name": "Authorization",
+          "injected": true,
+          "key_alias": "n8n",
+          "key_id": "key_23840420533cb8dca99237d16802f694",
+          "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca"
+        },
+        "logs_stored": true,
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "n8n_received": true,
+        "operation_log_id": "660286a9-e3ae-4e12-bab5-a64b3675a91f",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "request_sent": true,
+        "response_body": {
+          "unparseable_json": true
+        },
+        "response_returned": true,
+        "retry_count": 0,
+        "run_id": "n8n_webhook_test_efff2aad060c43eb999588c655732167",
+        "status_code": 200,
+        "success": true
+      },
+      "elapsed_ms": 1707.413,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/n8n-webhook-test/run",
+      "status_code": 201
+    },
+    "service_retry_fields_present": {
+      "attempts": 1,
+      "retry_count": 0
+    }
+  },
+  "status": "passed"
+}

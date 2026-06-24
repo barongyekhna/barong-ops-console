@@ -3,6 +3,7 @@ from typing import Any
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from ..core.roles import is_owner_role
 from ..models.organization import OrganizationRecord
 from ..models.user import User
 from ..repositories.operation_logs import create_operation_log
@@ -213,6 +214,17 @@ def create_organization(
     audit: AuditContext,
 ) -> Organization:
     action = "org.create"
+    if not is_owner_role(actor.role):
+        _log_and_commit_failure(
+            db,
+            actor=actor,
+            action=action,
+            target_id="pending_org",
+            audit=audit,
+            error_code="owner_role_required",
+            details={"actor_role": actor.role},
+        )
+        raise OrganizationOwnerDeniedError("Owner role required.")
     try:
         enforce_owner_can_create_organization(
             actor_user_id=_actor_user_id(actor),

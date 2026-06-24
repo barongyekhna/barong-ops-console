@@ -52,6 +52,14 @@ SENSITIVE_KEY_MARKERS = (
     "provider_url",
     "endpoint",
 )
+HIGH_FREQUENCY_SUCCESS_EVENT_TYPES = frozenset(
+    {
+        "auth.session.validate",
+        "rbac.check",
+        "rbac.owner_check",
+        "rbac.permission_check",
+    }
+)
 
 _context_id: ContextVar[str | None] = ContextVar(
     "event_context_id",
@@ -90,6 +98,7 @@ class EventQueueBackend:
         batch_size: int = DEFAULT_EVENT_QUEUE_BATCH_SIZE,
         poll_interval_seconds: float = DEFAULT_EVENT_QUEUE_POLL_INTERVAL_SECONDS,
         max_attempts: int = DEFAULT_EVENT_QUEUE_MAX_ATTEMPTS,
+        auto_drain: bool = False,
     ) -> None:
         self._lock = threading.Lock()
         self._wake = threading.Event()
@@ -98,6 +107,7 @@ class EventQueueBackend:
         self._batch_size = batch_size
         self._poll_interval_seconds = poll_interval_seconds
         self._max_attempts = max_attempts
+        self._auto_drain = auto_drain
         self._failed = 0
         self._emitted = 0
         self._started = False
@@ -129,24 +139,9 @@ class EventQueueBackend:
                 self._failed += 1
             return write
 
-        queued_count = self._queued_count()
-        if queued_count > self._queue_size:
-            self._mark_processing_status(
-                write.record_id,
-                status="backpressure",
-                error="event processing queue backpressure limit exceeded",
-            )
-            with self._lock:
-                self._failed += 1
-            return EventQueueWriteResult(
-                persisted=True,
-                queued=False,
-                record_id=write.record_id,
-                error="event processing queue backpressure limit exceeded",
-            )
-
-        self.start()
-        self._wake.set()
+        if self._auto_drain:
+            self.start()
+            self._wake.set()
         with self._lock:
             self._emitted += 1
         return EventQueueWriteResult(
@@ -272,6 +267,8 @@ class EventQueueBackend:
                             "C17 event queue failed to mark processing failure for %s",
                             record_id,
                         )
+            self._wake.wait(min(self._poll_interval_seconds, 0.05))
+            self._wake.clear()
 
     def _write_event(
         self,
@@ -774,6 +771,14 @@ def emit_event(
         payload=sanitize_event_payload(dict(payload or {})),
         metadata=sanitize_event_payload(dict(metadata or {})),
     )
+    if status == "success" and event_type in HIGH_FREQUENCY_SUCCESS_EVENT_TYPES:
+        return EmittedAuditEvent(
+            **event.model_dump(mode="python"),
+            persisted=False,
+            queued=False,
+            success=True,
+            error=None,
+        )
     result = DEFAULT_EVENT_EMITTER.emit(event, org_id=org_id)
     return EmittedAuditEvent(
         **event.model_dump(mode="python"),

@@ -1,0 +1,252 @@
+{
+  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+  "chain": "module -> api_key -> execution_gate -> backend_call -> logs",
+  "checks": [
+    {
+      "call": {
+        "body": {
+          "item": {
+            "category": "integration",
+            "display_name": "n8n Test Bridge",
+            "enabled": true,
+            "last_error_at": null,
+            "module_id": "integration.n8n_test_bridge",
+            "org_id": "org_cf25980213a1459e8908bbf505729895",
+            "runtime_error_code": null,
+            "runtime_error_message": null,
+            "runtime_status": "active",
+            "updated_at": "2026-06-23T18:20:01.575073Z"
+          }
+        },
+        "elapsed_ms": 1589.84,
+        "error": null,
+        "expected_status": 200,
+        "method": "PATCH",
+        "name": "chain.ensure_module_enabled",
+        "ok": true,
+        "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+        "status_code": 200
+      },
+      "name": "ensure_module_enabled"
+    },
+    {
+      "call": {
+        "body": {
+          "detail": "Not found."
+        },
+        "elapsed_ms": 1305.98,
+        "error": null,
+        "expected_status": [
+          201,
+          403,
+          500
+        ],
+        "method": "POST",
+        "name": "chain.execution_after_binding",
+        "ok": true,
+        "path": "/api/control-plane/n8n-test/run",
+        "status_code": 403
+      },
+      "mock_only_marker_seen": false,
+      "name": "module_to_api_key_to_execution_gate_to_backend_call",
+      "real_external_backend_call_verified": false,
+      "reason": "n8n-test service is explicitly mock-only and external_dispatch_blocked even when key injection succeeds."
+    },
+    {
+      "call": {
+        "body": {
+          "count": 4,
+          "items": [
+            {
+              "assigned_module_ids": [
+                "integration.n8n_test_bridge"
+              ],
+              "created_at": "2026-06-23T18:19:55.682591Z",
+              "key_hash_prefix": "27649b89fb25",
+              "key_id": "key_d611ebd2d3618f33cd96bf543651e26a",
+              "last_used_at": null,
+              "name": "Audit backup key final_preprod_20260623T181922Z_9658bfcf",
+              "org_id": "org_cf25980213a1459e8908bbf505729895",
+              "status": "active",
+              "updated_at": "2026-06-23T18:19:55.682591Z",
+              "url": "http://127.0.0.1:8788/audit/backup"
+            },
+            {
+              "assigned_module_ids": [
+                "integration.n8n_test_bridge"
+              ],
+              "created_at": "2026-06-23T18:19:54.085965Z",
+              "key_hash_prefix": "d753ec2dd903",
+              "key_id": "key_575957fb51b80804825c41a462c16b39",
+              "last_used_at": null,
+              "name": "Audit n8n key final_preprod_20260623T181922Z_9658bfcf",
+              "org_id": "org_cf25980213a1459e8908bbf505729895",
+              "status": "active",
+              "updated_at": "2026-06-23T18:19:54.085965Z",
+              "url": "http://127.0.0.1:8788/audit/n8n"
+            },
+            {
+              "assigned_module_ids": [
+                "integration.n8n_test_bridge"
+              ],
+              "created_at": "2026-06-23T18:11:37.884221Z",
+              "key_hash_prefix": "2f43cdb728f3",
+              "key_id": "key_14444ef2acae538ca750701fbd6bbb0b",
+              "last_used_at": null,
+              "name": "Audit backup key final_preprod_20260623T181050Z_0e3e9f24",
+              "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "status": "active",
+              "updated_at": "2026-06-23T18:11:37.884221Z",
+              "url": "http://127.0.0.1:8788/audit/backup"
+            },
+            {
+              "assigned_module_ids": [
+                "integration.n8n_test_bridge"
+              ],
+              "created_at": "2026-06-23T18:11:35.578396Z",
+              "key_hash_prefix": "113d103b25aa",
+              "key_id": "key_9ae881ef8df2c9db1109eb0961f53696",
+              "last_used_at": null,
+              "name": "Audit n8n key final_preprod_20260623T181050Z_0e3e9f24",
+              "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "status": "active",
+              "updated_at": "2026-06-23T18:11:35.578396Z",
+              "url": "http://127.0.0.1:8788/audit/n8n"
+            }
+          ]
+        },
+        "elapsed_ms": 1107.98,
+        "error": null,
+        "expected_status": 200,
+        "method": "GET",
+        "name": "chain.keys_after_execution",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/keys",
+        "status_code": 200
+      },
+      "key_usage": {
+        "key_575957fb51b80804825c41a462c16b39": {
+          "assigned_module_ids": [
+            "integration.n8n_test_bridge"
+          ],
+          "last_used_at": null,
+          "name": "Audit n8n key final_preprod_20260623T181922Z_9658bfcf"
+        },
+        "key_d611ebd2d3618f33cd96bf543651e26a": {
+          "assigned_module_ids": [
+            "integration.n8n_test_bridge"
+          ],
+          "last_used_at": null,
+          "name": "Audit backup key final_preprod_20260623T181922Z_9658bfcf"
+        }
+      },
+      "name": "correct_key_selection_last_used_probe"
+    },
+    {
+      "call": {
+        "body": {
+          "item": {
+            "binding_id": "akb_1f80324c5c60395375faf9bddb88a447",
+            "created_at": "2026-06-23T18:19:58.475742Z",
+            "key_alias": "backup",
+            "key_id": "key_d611ebd2d3618f33cd96bf543651e26a",
+            "key_name": "Audit backup key final_preprod_20260623T181922Z_9658bfcf",
+            "key_url": "http://127.0.0.1:8788/audit/backup",
+            "module_id": "integration.n8n_test_bridge",
+            "org_id": "org_cf25980213a1459e8908bbf505729895",
+            "status": "active",
+            "updated_at": "2026-06-23T18:19:58.475742Z"
+          }
+        },
+        "elapsed_ms": 1598.72,
+        "error": null,
+        "expected_status": 201,
+        "method": "POST",
+        "name": "chain.multiple_key_alias_backup_binding",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+        "status_code": 201
+      },
+      "name": "multiple_keys_per_module_alias_binding"
+    },
+    {
+      "call": {
+        "body": {
+          "item": {
+            "category": "integration",
+            "display_name": "n8n Test Bridge",
+            "enabled": false,
+            "last_error_at": null,
+            "module_id": "integration.n8n_test_bridge",
+            "org_id": "org_cf25980213a1459e8908bbf505729895",
+            "runtime_error_code": null,
+            "runtime_error_message": null,
+            "runtime_status": "disabled",
+            "updated_at": "2026-06-23T18:22:47.167176Z"
+          }
+        },
+        "elapsed_ms": 1785.48,
+        "error": null,
+        "expected_status": 200,
+        "method": "PATCH",
+        "name": "chain.module_disable_probe",
+        "ok": true,
+        "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+        "status_code": 200
+      },
+      "name": "module_disabled_before_execution_probe"
+    },
+    {
+      "call": {
+        "body": {
+          "detail": "Not found."
+        },
+        "elapsed_ms": 1411.54,
+        "error": null,
+        "expected_status": 403,
+        "method": "POST",
+        "name": "chain.execution_disabled_module_fallback",
+        "ok": true,
+        "path": "/api/control-plane/n8n-test/run",
+        "status_code": 403
+      },
+      "name": "fallback_when_module_disabled"
+    },
+    {
+      "call": {
+        "body": {
+          "item": {
+            "category": "integration",
+            "display_name": "n8n Test Bridge",
+            "enabled": true,
+            "last_error_at": null,
+            "module_id": "integration.n8n_test_bridge",
+            "org_id": "org_cf25980213a1459e8908bbf505729895",
+            "runtime_error_code": null,
+            "runtime_error_message": null,
+            "runtime_status": "active",
+            "updated_at": "2026-06-23T18:22:49.993844Z"
+          }
+        },
+        "elapsed_ms": 1485.91,
+        "error": null,
+        "expected_status": 200,
+        "method": "PATCH",
+        "name": "chain.module_reenable_after_probe",
+        "ok": true,
+        "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+        "status_code": 200
+      },
+      "name": "module_reenabled_after_probe"
+    }
+  ],
+  "executed_at": "2026-06-23T18:22:50.473612+00:00",
+  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+  "summary": {
+    "disabled_module_fallback_status": 403,
+    "key_injection_path_executed": false,
+    "multiple_keys_bound": true,
+    "real_backend_call_blocker": "Current execution route is n8n-test mock-only; external dispatch is intentionally blocked.",
+    "real_backend_call_verified": false
+  }
+}

@@ -1,0 +1,647 @@
+{
+  "api_key_system_readiness": {
+    "disabled_module_fallback_status": 403,
+    "key_injection_path_executed": false,
+    "multiple_keys_bound": true,
+    "real_backend_call_blocker": "Current execution route is n8n-test mock-only; external dispatch is intentionally blocked.",
+    "real_backend_call_verified": false
+  },
+  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+  "blocking_issues": [
+    {
+      "code": "OWNER_FLOW_FAILURES",
+      "detail": [
+        {
+          "body": {
+            "detail": "Invalid request."
+          },
+          "elapsed_ms": 807.71,
+          "error": null,
+          "expected_status": [
+            201,
+            422
+          ],
+          "method": "POST",
+          "name": "user.create.admin.audit_admin_9658bfcf",
+          "ok": true,
+          "path": "/api/app/users",
+          "requirement_failure": "admin role creation is required by audit but rejected by product API",
+          "requirement_ok": false,
+          "status_code": 422
+        },
+        {
+          "body": {
+            "detail": "Request failed."
+          },
+          "elapsed_ms": 686.92,
+          "error": null,
+          "expected_status": 200,
+          "method": "POST",
+          "name": "reset_probe.change_password_after_owner_reset",
+          "ok": false,
+          "path": "/api/public/auth/change-password",
+          "requirement_failure": "User password reset produced a temporary password that logs in but cannot complete the forced password-change flow.",
+          "requirement_ok": false,
+          "status_code": 400
+        },
+        {
+          "body": {
+            "detail": "Request conflict."
+          },
+          "elapsed_ms": 1192.75,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "approval.request.create",
+          "ok": false,
+          "path": "/api/app/approval/request",
+          "status_code": 409
+        }
+      ],
+      "severity": "critical"
+    },
+    {
+      "code": "ADMIN_ROLE_CREATION_UNSUPPORTED",
+      "detail": "Audit requires admin account creation and login, but the real user API rejects role=admin.",
+      "severity": "critical"
+    },
+    {
+      "code": "PERMISSION_VIOLATION",
+      "detail": [
+        {
+          "check": {
+            "body": {
+              "created_at": "2026-06-23T18:20:13.272728Z",
+              "metadata": {
+                "country": "US",
+                "custom": {
+                  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                  "suffix": "negative_super_admin",
+                  "test_scope": true
+                },
+                "industry": "audit",
+                "settings": {
+                  "allow_ai": false,
+                  "allow_n8n": false,
+                  "data_retention_days": 7
+                },
+                "timezone": "UTC"
+              },
+              "org_id": "org_b8f5f6f3a752479ea1a782722b85b8ac",
+              "org_name": "Audit negative_super_admin final_preprod_20260623T181922Z_9658bfcf",
+              "org_type": "store",
+              "owner_user_id": "13",
+              "status": "active",
+              "updated_at": "2026-06-23T18:20:13.272728Z"
+            },
+            "elapsed_ms": 1199.09,
+            "error": null,
+            "expected_status": 201,
+            "method": "POST",
+            "name": "org.create.negative_super_admin",
+            "ok": true,
+            "path": "/api/app/org/create",
+            "permission_probe": "non_owner_org_create_should_not_succeed",
+            "permission_violation": true,
+            "status_code": 201
+          },
+          "role": "super_admin"
+        },
+        {
+          "check": {
+            "body": {
+              "created_at": "2026-06-23T18:20:19.686181Z",
+              "metadata": {
+                "country": "US",
+                "custom": {
+                  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                  "suffix": "negative_operator",
+                  "test_scope": true
+                },
+                "industry": "audit",
+                "settings": {
+                  "allow_ai": false,
+                  "allow_n8n": false,
+                  "data_retention_days": 7
+                },
+                "timezone": "UTC"
+              },
+              "org_id": "org_e69da0ab14b3492a96c06e1e5222a296",
+              "org_name": "Audit negative_operator final_preprod_20260623T181922Z_9658bfcf",
+              "org_type": "store",
+              "owner_user_id": "14",
+              "status": "active",
+              "updated_at": "2026-06-23T18:20:19.686181Z"
+            },
+            "elapsed_ms": 1213.56,
+            "error": null,
+            "expected_status": 201,
+            "method": "POST",
+            "name": "org.create.negative_operator",
+            "ok": true,
+            "path": "/api/app/org/create",
+            "permission_probe": "non_owner_org_create_should_not_succeed",
+            "permission_violation": true,
+            "status_code": 201
+          },
+          "role": "operator"
+        },
+        {
+          "check": {
+            "body": {
+              "created_at": "2026-06-23T18:20:25.274697Z",
+              "metadata": {
+                "country": "US",
+                "custom": {
+                  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                  "suffix": "negative_viewer",
+                  "test_scope": true
+                },
+                "industry": "audit",
+                "settings": {
+                  "allow_ai": false,
+                  "allow_n8n": false,
+                  "data_retention_days": 7
+                },
+                "timezone": "UTC"
+              },
+              "org_id": "org_43c0dde4bf4c40daa70eef5ba10d6c9f",
+              "org_name": "Audit negative_viewer final_preprod_20260623T181922Z_9658bfcf",
+              "org_type": "store",
+              "owner_user_id": "15",
+              "status": "active",
+              "updated_at": "2026-06-23T18:20:25.274697Z"
+            },
+            "elapsed_ms": 1300.35,
+            "error": null,
+            "expected_status": 201,
+            "method": "POST",
+            "name": "org.create.negative_viewer",
+            "ok": true,
+            "path": "/api/app/org/create",
+            "permission_probe": "non_owner_org_create_should_not_succeed",
+            "permission_violation": true,
+            "status_code": 201
+          },
+          "role": "viewer"
+        }
+      ],
+      "severity": "critical"
+    },
+    {
+      "code": "FIELD_CONSISTENCY_GAPS",
+      "detail": [
+        {
+          "missing": [
+            "approval_id",
+            "execution_id",
+            "module_key",
+            "status",
+            "risk_level",
+            "execution_type",
+            "requester_id",
+            "request_time"
+          ],
+          "module": "Approvals"
+        },
+        {
+          "missing": [
+            "module_key",
+            "display_name",
+            "description",
+            "category",
+            "status",
+            "lifecycle",
+            "route_namespace",
+            "api_namespace",
+            "required_permissions",
+            "permission_manifest"
+          ],
+          "module": "Modules"
+        }
+      ],
+      "severity": "high"
+    },
+    {
+      "code": "CONCURRENCY_TRANSPORT_FAILURES",
+      "detail": {
+        "api_key_binding_5xx_count": 0,
+        "api_request_count": 200,
+        "api_status_counts": {
+          "200": 1,
+          "None": 199
+        },
+        "backend_error_like_log_count": 1,
+        "failure_rate": 0.995,
+        "login_failure_count": 0,
+        "login_success_count": 10,
+        "module_toggle_5xx_count": 0,
+        "p95_response_ms": 20185.4,
+        "timeout_count": 199,
+        "timeout_rate": 0.995,
+        "transport_failure_count": 199
+      },
+      "severity": "critical"
+    },
+    {
+      "code": "MODULE_ONBOARDING_NOT_READY",
+      "detail": [
+        {
+          "call": {
+            "body": {
+              "detail": "C18F permission denied."
+            },
+            "elapsed_ms": 493.02,
+            "error": null,
+            "expected_status": 200,
+            "method": "GET",
+            "name": "module.dynamic.detail",
+            "ok": false,
+            "path": "/api/control-plane/modules/demo.audit_preprod_9658bfcf",
+            "status_code": 403
+          },
+          "name": "new_module_appears_in_dynamic_modules_table"
+        },
+        {
+          "call": {
+            "body": {
+              "detail": "C18F permission denied."
+            },
+            "elapsed_ms": 716.48,
+            "error": null,
+            "expected_status": 200,
+            "method": "GET",
+            "name": "module.static.registry.after_dynamic_create",
+            "ok": false,
+            "path": "/api/control-plane/modules/registry",
+            "status_code": 403
+          },
+          "manifest_contains_dynamic_module": false,
+          "name": "new_module_appears_in_manifest_registry",
+          "requirement_ok": false
+        },
+        {
+          "call": {
+            "body": {
+              "detail": "Not found."
+            },
+            "elapsed_ms": 1294.41,
+            "error": null,
+            "expected_status": [
+              201,
+              404
+            ],
+            "method": "POST",
+            "name": "module.dynamic.api_key_binding",
+            "ok": true,
+            "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+            "status_code": 404
+          },
+          "name": "new_module_can_bind_api_key",
+          "requirement_ok": false
+        },
+        {
+          "call": {
+            "body": {
+              "detail": "Not found."
+            },
+            "elapsed_ms": 1607.47,
+            "error": null,
+            "expected_status": [
+              200,
+              404
+            ],
+            "method": "PATCH",
+            "name": "module.dynamic.control_center_toggle",
+            "ok": true,
+            "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/demo.audit_preprod_9658bfcf",
+            "status_code": 404
+          },
+          "name": "new_module_can_be_enabled_disabled_via_control_center",
+          "requirement_ok": false
+        }
+      ],
+      "severity": "critical"
+    },
+    {
+      "code": "API_KEY_MODULE_CHAIN_NOT_REAL_BACKEND_CALL",
+      "detail": "Current execution route is n8n-test mock-only; external dispatch is intentionally blocked.",
+      "severity": "critical"
+    },
+    {
+      "code": "STALE_UI_TEXT_MARKERS_PRESENT",
+      "detail": {
+        "demo": 16,
+        "foundation": 3,
+        "mock": 27,
+        "placeholder": 17,
+        "暂未": 42
+      },
+      "severity": "medium"
+    }
+  ],
+  "dead_code_scan_summary": {
+    "backend_route_count": 204,
+    "debug_marker_count": 5,
+    "frontend_route_count": 20,
+    "orphan_endpoint_candidate_count": 136,
+    "stale_ui_marker_count": 105,
+    "unused_module_candidate_count": 1
+  },
+  "deployment_rule_result": {
+    "commands": [
+      "docker restart barong-ops-console-prod_console_backend_1",
+      "docker restart barong-ops-console-prod_console_frontend_1"
+    ],
+    "reason": "Restart is allowed only when all audit conditions pass.",
+    "restart_attempted": false
+  },
+  "executed_at": "2026-06-23T18:25:27.777273+00:00",
+  "field_ui_consistency_summary": {
+    "missing_fields": [
+      {
+        "missing": [
+          "approval_id",
+          "execution_id",
+          "module_key",
+          "status",
+          "risk_level",
+          "execution_type",
+          "requester_id",
+          "request_time"
+        ],
+        "module": "Approvals"
+      },
+      {
+        "missing": [
+          "module_key",
+          "display_name",
+          "description",
+          "category",
+          "status",
+          "lifecycle",
+          "route_namespace",
+          "api_namespace",
+          "required_permissions",
+          "permission_manifest"
+        ],
+        "module": "Modules"
+      }
+    ],
+    "module_count": 7,
+    "modules_with_missing_fields": 2,
+    "ui_playwright_ok": true
+  },
+  "module_system_readiness": {
+    "blocking_issue_count": 4,
+    "blocking_issues": [
+      {
+        "call": {
+          "body": {
+            "detail": "C18F permission denied."
+          },
+          "elapsed_ms": 493.02,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "module.dynamic.detail",
+          "ok": false,
+          "path": "/api/control-plane/modules/demo.audit_preprod_9658bfcf",
+          "status_code": 403
+        },
+        "name": "new_module_appears_in_dynamic_modules_table"
+      },
+      {
+        "call": {
+          "body": {
+            "detail": "C18F permission denied."
+          },
+          "elapsed_ms": 716.48,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "module.static.registry.after_dynamic_create",
+          "ok": false,
+          "path": "/api/control-plane/modules/registry",
+          "status_code": 403
+        },
+        "manifest_contains_dynamic_module": false,
+        "name": "new_module_appears_in_manifest_registry",
+        "requirement_ok": false
+      },
+      {
+        "call": {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 1294.41,
+          "error": null,
+          "expected_status": [
+            201,
+            404
+          ],
+          "method": "POST",
+          "name": "module.dynamic.api_key_binding",
+          "ok": true,
+          "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+          "status_code": 404
+        },
+        "name": "new_module_can_bind_api_key",
+        "requirement_ok": false
+      },
+      {
+        "call": {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 1607.47,
+          "error": null,
+          "expected_status": [
+            200,
+            404
+          ],
+          "method": "PATCH",
+          "name": "module.dynamic.control_center_toggle",
+          "ok": true,
+          "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/demo.audit_preprod_9658bfcf",
+          "status_code": 404
+        },
+        "name": "new_module_can_be_enabled_disabled_via_control_center",
+        "requirement_ok": false
+      }
+    ],
+    "dynamic_module_api_key_binding": false,
+    "dynamic_module_created": true,
+    "dynamic_module_in_manifest_registry": false
+  },
+  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+  "performance_summary": {
+    "api_key_binding_5xx_count": 0,
+    "api_request_count": 200,
+    "api_status_counts": {
+      "200": 1,
+      "None": 199
+    },
+    "backend_error_like_log_count": 1,
+    "failure_rate": 0.995,
+    "login_failure_count": 0,
+    "login_success_count": 10,
+    "module_toggle_5xx_count": 0,
+    "p95_response_ms": 20185.4,
+    "timeout_count": 199,
+    "timeout_rate": 0.995,
+    "transport_failure_count": 199
+  },
+  "permission_correctness_summary": {
+    "admin_created": false,
+    "permission_violation_count": 3,
+    "permission_violations": [
+      {
+        "check": {
+          "body": {
+            "created_at": "2026-06-23T18:20:13.272728Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_super_admin",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_b8f5f6f3a752479ea1a782722b85b8ac",
+            "org_name": "Audit negative_super_admin final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "13",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:13.272728Z"
+          },
+          "elapsed_ms": 1199.09,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_super_admin",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        "role": "super_admin"
+      },
+      {
+        "check": {
+          "body": {
+            "created_at": "2026-06-23T18:20:19.686181Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_operator",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_e69da0ab14b3492a96c06e1e5222a296",
+            "org_name": "Audit negative_operator final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "14",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:19.686181Z"
+          },
+          "elapsed_ms": 1213.56,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_operator",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        "role": "operator"
+      },
+      {
+        "check": {
+          "body": {
+            "created_at": "2026-06-23T18:20:25.274697Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_viewer",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_43c0dde4bf4c40daa70eef5ba10d6c9f",
+            "org_name": "Audit negative_viewer final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "15",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:25.274697Z"
+          },
+          "elapsed_ms": 1300.35,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_viewer",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        "role": "viewer"
+      }
+    ],
+    "roles_created": [
+      "operator",
+      "super_admin",
+      "viewer"
+    ],
+    "roles_requested": [
+      "super_admin",
+      "admin",
+      "operator",
+      "viewer"
+    ]
+  },
+  "report_files": {
+    "chain": "api_key_module_execution_chain_report.json",
+    "dead_code": "full_system_dead_code_report.json",
+    "fields": "ui_field_consistency_report.json",
+    "final": "final_pre_production_audit_report.json",
+    "module_human": "module_integration_spec_human_report.md",
+    "module_machine": "module_integration_spec_machine.json",
+    "owner": "owner_full_flow_report.json",
+    "roles": "multi_role_access_report.json",
+    "stress": "concurrency_stress_test_report.json"
+  },
+  "system_can_go_live": "NO"
+}

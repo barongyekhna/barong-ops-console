@@ -68,7 +68,9 @@ class UserResponse(BaseModel):
     id: int
     username: str
     role: str
+    title: str | None = None
     job_title: str | None = None
+    organization: str | None = None
     organization_id: str | None = None
     must_change_password: bool
     is_active: bool
@@ -80,6 +82,12 @@ class UserResponse(BaseModel):
     @classmethod
     def normalize_response_role(cls, value: str) -> str:
         return normalize_role(value)
+
+    @model_validator(mode="after")
+    def sync_standard_fields(self) -> "UserResponse":
+        self.title = self.job_title
+        self.organization = self.organization_id
+        return self
 
 
 class UserCreate(BaseModel):

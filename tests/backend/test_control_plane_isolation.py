@@ -32,7 +32,7 @@ def test_control_plane_requires_privileged_role(
     auth_client: TestClient,
 ) -> None:
     create_user("c16_viewer", "viewer")
-    create_user("c16_admin", "admin")
+    create_user("c16_super_admin", "super_admin")
 
     unauthenticated = auth_client.get(
         "/api/control-plane/ai-execution-bindings/registry"
@@ -46,11 +46,11 @@ def test_control_plane_requires_privileged_role(
     assert viewer_response.status_code == 403
 
     auth_client.cookies.clear()
-    login(auth_client, "c16_admin")
-    admin_response = auth_client.get(
+    login(auth_client, "c16_super_admin")
+    super_admin_response = auth_client.get(
         "/api/control-plane/ai-execution-bindings/registry"
     )
-    assert admin_response.status_code == 200
+    assert super_admin_response.status_code == 200
 
 
 def test_control_plane_has_no_app_or_legacy_bypass(
@@ -73,8 +73,8 @@ def test_control_plane_has_no_app_or_legacy_bypass(
 def test_control_plane_unknown_routes_default_to_not_found_after_boundary(
     auth_client: TestClient,
 ) -> None:
-    create_user("c16_admin_unknown", "admin")
-    login(auth_client, "c16_admin_unknown")
+    create_user("c16_owner_unknown", "owner")
+    login(auth_client, "c16_owner_unknown")
 
     response = auth_client.get("/api/control-plane/not-registered")
 
@@ -92,11 +92,11 @@ def test_control_plane_system_role_no_longer_bypasses_boundary(
     assert response.status_code == 403
 
 
-def test_control_plane_legacy_admin_alias_no_longer_bypasses_boundary(
+def test_control_plane_operator_no_longer_bypasses_boundary(
     auth_client: TestClient,
 ) -> None:
-    create_user("c16_super_admin", "super_admin")
-    login(auth_client, "c16_super_admin")
+    create_user("c16_operator", "operator")
+    login(auth_client, "c16_operator")
 
     response = auth_client.get("/api/control-plane/not-registered")
 

@@ -5,7 +5,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ..core.security import hash_password
-from ..core.roles import is_owner_role, is_super_admin_role, normalize_role
+from ..core.roles import is_org_admin_like_role, is_owner_role, normalize_role
 from ..models.user import User
 from ..repositories.auth_sessions import invalidate_active_sessions_for_user
 from ..repositories.operation_logs import create_operation_log
@@ -82,22 +82,22 @@ def _actor_org_id(actor: User) -> str | None:
 def _ensure_actor_can_manage_user(actor: User, target: User) -> None:
     if is_owner_role(actor.role):
         return
-    if not is_super_admin_role(actor.role):
+    if not is_org_admin_like_role(actor.role):
         raise UserManagementPermissionDeniedError(
-            "Owner or super admin role required."
+            "Owner, super admin, or admin role required."
         )
     actor_org_id = _actor_org_id(actor)
     if actor_org_id is None:
         raise UserManagementPermissionDeniedError(
-            "Super admin organization context is required."
+            "Organization admin context is required."
         )
     if normalize_role(target.role) in {"owner", "super_admin"}:
         raise UserManagementPermissionDeniedError(
-            "Super admin cannot manage owner or super admin accounts."
+            "Organization admin cannot manage owner or super admin accounts."
         )
     if target.organization_id != actor_org_id:
         raise UserManagementPermissionDeniedError(
-            "Super admin can only manage users in their organization."
+            "Organization admin can only manage users in their organization."
         )
 
 
@@ -109,22 +109,22 @@ def _ensure_actor_can_create_user(
 ) -> str | None:
     if is_owner_role(actor.role):
         return organization_id
-    if not is_super_admin_role(actor.role):
+    if not is_org_admin_like_role(actor.role):
         raise UserManagementPermissionDeniedError(
-            "Owner or super admin role required."
+            "Owner, super admin, or admin role required."
         )
     actor_org_id = _actor_org_id(actor)
     if actor_org_id is None:
         raise UserManagementPermissionDeniedError(
-            "Super admin organization context is required."
+            "Organization admin context is required."
         )
     if role in {"owner", "super_admin"}:
         raise UserManagementPermissionDeniedError(
-            "Super admin cannot create owner or super admin accounts."
+            "Organization admin cannot create owner or super admin accounts."
         )
     if organization_id is not None and organization_id != actor_org_id:
         raise UserManagementPermissionDeniedError(
-            "Super admin can only create users in their organization."
+            "Organization admin can only create users in their organization."
         )
     return actor_org_id
 

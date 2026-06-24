@@ -9,11 +9,17 @@ export type ModuleControlState = {
   module_id: string;
   display_name: string;
   category: string;
+  status: ModuleRuntimeStatus;
   enabled: boolean;
   runtime_status: ModuleRuntimeStatus;
   runtime_error_code: string | null;
   runtime_error_message: string | null;
   last_error_at: string | null;
+  error: {
+    code: string | null;
+    message: string | null;
+    timestamp: string | null;
+  };
   updated_at: string;
 };
 

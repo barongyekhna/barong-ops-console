@@ -1,0 +1,1490 @@
+{
+  "api_key_ids": {
+    "backup": "key_d611ebd2d3618f33cd96bf543651e26a",
+    "n8n": "key_575957fb51b80804825c41a462c16b39"
+  },
+  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+  "backend_base_url": "http://127.0.0.1:8000",
+  "created_users": {
+    "operator": {
+      "id": 14,
+      "role": "operator",
+      "username": "audit_operator_9658bfcf"
+    },
+    "super_admin": {
+      "id": 13,
+      "role": "super_admin",
+      "username": "audit_super_admin_9658bfcf"
+    },
+    "viewer": {
+      "id": 15,
+      "role": "viewer",
+      "username": "audit_viewer_9658bfcf"
+    }
+  },
+  "executed_at": "2026-06-23T18:20:05.771543+00:00",
+  "frontend_base_url": "http://127.0.0.1:3000",
+  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+  "password_by_role_internal_only": [
+    "super_admin",
+    "operator",
+    "viewer"
+  ],
+  "passwords_stored_in_report": false,
+  "permission_assignment": {
+    "created_at": "2026-06-23T18:19:48.887848Z",
+    "description": "View review queues and safe review metadata.",
+    "effective": true,
+    "enabled": true,
+    "expires_at": null,
+    "granted_by_user_id": 1,
+    "high_risk": false,
+    "id": "698b3c34-303e-4cdb-9043-3f69ad25c0e4",
+    "is_enabled": true,
+    "permission_key": "reviews.read",
+    "permission_name": "Read reviews",
+    "reason": "final pre-production audit final_preprod_20260623T181922Z_9658bfcf",
+    "risk_level": "low",
+    "scope_id": "*",
+    "scope_key": "*",
+    "scope_type": "global",
+    "updated_at": "2026-06-23T18:19:48.887848Z",
+    "user_id": 15
+  },
+  "primary_org_id": "org_cf25980213a1459e8908bbf505729895",
+  "reset_probe_user": {
+    "change_after_reset": {
+      "body": {
+        "detail": "Request failed."
+      },
+      "elapsed_ms": 686.92,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "reset_probe.change_password_after_owner_reset",
+      "ok": false,
+      "path": "/api/public/auth/change-password",
+      "requirement_failure": "User password reset produced a temporary password that logs in but cannot complete the forced password-change flow.",
+      "requirement_ok": false,
+      "status_code": 400
+    },
+    "id": 16,
+    "login_after_reset": {
+      "body": {
+        "auth_complete": true,
+        "message": "首次登录默认密码为123456，请立即修改密码",
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 16,
+          "is_active": true,
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "username": "audit_reset_probe_9658bfcf"
+        }
+      },
+      "elapsed_ms": 598.16,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "reset_probe.login.after_owner_reset",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    },
+    "username": "audit_reset_probe_9658bfcf"
+  },
+  "selected_permission": {
+    "action": "read",
+    "category": "feature",
+    "created_at": "2026-06-11T10:14:48.212440Z",
+    "description": "View review queues and safe review metadata.",
+    "id": "c0e01ffa-deb5-4612-9955-5188dcb2a2b9",
+    "is_enabled": true,
+    "is_system": true,
+    "label": "Read reviews",
+    "menu_policy": "show_locked",
+    "module_key": "reviews",
+    "permission_key": "reviews.read",
+    "risk_level": "low",
+    "updated_at": "2026-06-11T10:14:48.212440Z"
+  },
+  "soft_deleted_test_org_id": "org_cf7008568ede4b2e8fea469cc5a1b3a9",
+  "steps": [
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:23.982448Z",
+        "metadata": {
+          "country": "US",
+          "custom": {
+            "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+            "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+            "suffix": "primary",
+            "test_scope": true
+          },
+          "industry": "audit",
+          "settings": {
+            "allow_ai": false,
+            "allow_n8n": false,
+            "data_retention_days": 7
+          },
+          "timezone": "UTC"
+        },
+        "org_id": "org_cf25980213a1459e8908bbf505729895",
+        "org_name": "Audit primary final_preprod_20260623T181922Z_9658bfcf",
+        "org_type": "store",
+        "owner_user_id": "1",
+        "status": "active",
+        "updated_at": "2026-06-23T18:19:23.982448Z"
+      },
+      "elapsed_ms": 1110.94,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "org.create.primary",
+      "ok": true,
+      "path": "/api/app/org/create",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:25.090721Z",
+        "metadata": {
+          "country": "US",
+          "custom": {
+            "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+            "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+            "suffix": "delete_probe",
+            "test_scope": true
+          },
+          "industry": "audit",
+          "settings": {
+            "allow_ai": false,
+            "allow_n8n": false,
+            "data_retention_days": 7
+          },
+          "timezone": "UTC"
+        },
+        "org_id": "org_cf7008568ede4b2e8fea469cc5a1b3a9",
+        "org_name": "Audit delete_probe final_preprod_20260623T181922Z_9658bfcf",
+        "org_type": "store",
+        "owner_user_id": "1",
+        "status": "active",
+        "updated_at": "2026-06-23T18:19:25.090721Z"
+      },
+      "elapsed_ms": 1101.37,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "org.create.delete_probe",
+      "ok": true,
+      "path": "/api/app/org/create",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:23.982448Z",
+        "metadata": {
+          "country": "US",
+          "custom": {
+            "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+            "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+            "test_scope": true,
+            "updated": true
+          },
+          "industry": "audit-updated",
+          "settings": {
+            "allow_ai": false,
+            "allow_n8n": true,
+            "data_retention_days": 14
+          },
+          "timezone": "UTC"
+        },
+        "org_id": "org_cf25980213a1459e8908bbf505729895",
+        "org_name": "Audit Primary Updated final_preprod_20260623T181922Z_9658bfcf",
+        "org_type": "store",
+        "owner_user_id": "1",
+        "status": "active",
+        "updated_at": "2026-06-23T18:19:26.370247Z"
+      },
+      "elapsed_ms": 1184.9,
+      "error": null,
+      "expected_status": 200,
+      "method": "PATCH",
+      "name": "org.update.primary",
+      "ok": true,
+      "path": "/api/app/org/org_cf25980213a1459e8908bbf505729895",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:23.982448Z",
+        "metadata": {
+          "country": "US",
+          "custom": {
+            "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+            "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+            "test_scope": true,
+            "updated": true
+          },
+          "industry": "audit-updated",
+          "settings": {
+            "allow_ai": false,
+            "allow_n8n": true,
+            "data_retention_days": 14
+          },
+          "timezone": "UTC"
+        },
+        "org_id": "org_cf25980213a1459e8908bbf505729895",
+        "org_name": "Audit Primary Updated final_preprod_20260623T181922Z_9658bfcf",
+        "org_type": "store",
+        "owner_user_id": "1",
+        "status": "suspended",
+        "updated_at": "2026-06-23T18:19:27.873951Z"
+      },
+      "elapsed_ms": 1698.9,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "org.suspend.primary",
+      "ok": true,
+      "path": "/api/app/org/org_cf25980213a1459e8908bbf505729895/suspend",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:23.982448Z",
+        "metadata": {
+          "country": "US",
+          "custom": {
+            "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+            "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+            "test_scope": true,
+            "updated": true
+          },
+          "industry": "audit-updated",
+          "settings": {
+            "allow_ai": false,
+            "allow_n8n": true,
+            "data_retention_days": 14
+          },
+          "timezone": "UTC"
+        },
+        "org_id": "org_cf25980213a1459e8908bbf505729895",
+        "org_name": "Audit Primary Updated final_preprod_20260623T181922Z_9658bfcf",
+        "org_type": "store",
+        "owner_user_id": "1",
+        "status": "active",
+        "updated_at": "2026-06-23T18:19:29.074613Z"
+      },
+      "elapsed_ms": 1007.22,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "org.activate.primary",
+      "ok": true,
+      "path": "/api/app/org/org_cf25980213a1459e8908bbf505729895/activate",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:25.090721Z",
+        "metadata": {
+          "country": "US",
+          "custom": {
+            "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+            "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+            "suffix": "delete_probe",
+            "test_scope": true
+          },
+          "industry": "audit",
+          "settings": {
+            "allow_ai": false,
+            "allow_n8n": false,
+            "data_retention_days": 7
+          },
+          "timezone": "UTC"
+        },
+        "org_id": "org_cf7008568ede4b2e8fea469cc5a1b3a9",
+        "org_name": "Audit delete_probe final_preprod_20260623T181922Z_9658bfcf",
+        "org_type": "store",
+        "owner_user_id": "1",
+        "status": "deleted",
+        "updated_at": "2026-06-23T18:19:29.985931Z"
+      },
+      "elapsed_ms": 1105.9,
+      "error": null,
+      "expected_status": 200,
+      "method": "DELETE",
+      "name": "org.delete.delete_probe",
+      "ok": true,
+      "path": "/api/app/org/org_cf7008568ede4b2e8fea469cc5a1b3a9",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:31.079405Z",
+        "id": 13,
+        "is_active": true,
+        "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=super_admin",
+        "last_login_at": null,
+        "must_change_password": "***",
+        "organization_id": "org_cf25980213a1459e8908bbf505729895",
+        "role": "super_admin",
+        "updated_at": "2026-06-23T18:19:31.079405Z",
+        "username": "audit_super_admin_9658bfcf"
+      },
+      "elapsed_ms": 1392.37,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "user.create.super_admin.audit_super_admin_9658bfcf",
+      "ok": true,
+      "path": "/api/app/users",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "detail": "Invalid request."
+      },
+      "elapsed_ms": 807.71,
+      "error": null,
+      "expected_status": [
+        201,
+        422
+      ],
+      "method": "POST",
+      "name": "user.create.admin.audit_admin_9658bfcf",
+      "ok": true,
+      "path": "/api/app/users",
+      "requirement_failure": "admin role creation is required by audit but rejected by product API",
+      "requirement_ok": false,
+      "status_code": 422
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:33.485096Z",
+        "id": 14,
+        "is_active": true,
+        "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=operator",
+        "last_login_at": null,
+        "must_change_password": "***",
+        "organization_id": "org_cf25980213a1459e8908bbf505729895",
+        "role": "operator",
+        "updated_at": "2026-06-23T18:19:33.485096Z",
+        "username": "audit_operator_9658bfcf"
+      },
+      "elapsed_ms": 2201.62,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "user.create.operator.audit_operator_9658bfcf",
+      "ok": true,
+      "path": "/api/app/users",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:35.672460Z",
+        "id": 15,
+        "is_active": true,
+        "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+        "last_login_at": null,
+        "must_change_password": "***",
+        "organization_id": "org_cf25980213a1459e8908bbf505729895",
+        "role": "viewer",
+        "updated_at": "2026-06-23T18:19:35.672460Z",
+        "username": "audit_viewer_9658bfcf"
+      },
+      "elapsed_ms": 1595.66,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "user.create.viewer.audit_viewer_9658bfcf",
+      "ok": true,
+      "path": "/api/app/users",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": "首次登录默认密码为123456，请立即修改密码",
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 13,
+          "is_active": true,
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "super_admin",
+          "username": "audit_super_admin_9658bfcf"
+        }
+      },
+      "elapsed_ms": 486.82,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "super_admin.login.default_password",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "message": "Password changed.",
+        "user": {
+          "id": 13,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:19:36.789308Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "super_admin",
+          "username": "audit_super_admin_9658bfcf"
+        }
+      },
+      "elapsed_ms": 1808.59,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "super_admin.change_password",
+      "ok": true,
+      "path": "/api/public/auth/change-password",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": "首次登录默认密码为123456，请立即修改密码",
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 14,
+          "is_active": true,
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "username": "audit_operator_9658bfcf"
+        }
+      },
+      "elapsed_ms": 503.4,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "operator.login.default_password",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "message": "Password changed.",
+        "user": {
+          "id": 14,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:19:39.272858Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "operator",
+          "username": "audit_operator_9658bfcf"
+        }
+      },
+      "elapsed_ms": 1492.54,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "operator.change_password",
+      "ok": true,
+      "path": "/api/public/auth/change-password",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": "首次登录默认密码为123456，请立即修改密码",
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 15,
+          "is_active": true,
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "username": "audit_viewer_9658bfcf"
+        }
+      },
+      "elapsed_ms": 403.84,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "viewer.login.default_password",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "message": "Password changed.",
+        "user": {
+          "id": 15,
+          "is_active": true,
+          "last_login_at": "2026-06-23T18:19:41.171571Z",
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "username": "audit_viewer_9658bfcf"
+        }
+      },
+      "elapsed_ms": 1484.89,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "viewer.change_password",
+      "ok": true,
+      "path": "/api/public/auth/change-password",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:43.382498Z",
+        "id": 16,
+        "is_active": true,
+        "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+        "last_login_at": null,
+        "must_change_password": "***",
+        "organization_id": "org_cf25980213a1459e8908bbf505729895",
+        "role": "viewer",
+        "updated_at": "2026-06-23T18:19:43.382498Z",
+        "username": "audit_reset_probe_9658bfcf"
+      },
+      "elapsed_ms": 1516.19,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "user.create.viewer.audit_reset_probe_9658bfcf",
+      "ok": true,
+      "path": "/api/app/users",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:43.382498Z",
+        "id": 16,
+        "is_active": true,
+        "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+        "last_login_at": null,
+        "must_change_password": "***",
+        "organization_id": "org_cf25980213a1459e8908bbf505729895",
+        "role": "viewer",
+        "updated_at": "2026-06-23T18:19:44.867251Z",
+        "username": "audit_reset_probe_9658bfcf"
+      },
+      "elapsed_ms": 1500.83,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "user.reset_password.16",
+      "ok": true,
+      "path": "/api/app/users/16/reset-password",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "auth_complete": true,
+        "message": "首次登录默认密码为123456，请立即修改密码",
+        "require_password_change": "***",
+        "session_token": "***",
+        "user": {
+          "id": 16,
+          "is_active": true,
+          "last_login_at": null,
+          "must_change_password": "***",
+          "organization_id": "org_cf25980213a1459e8908bbf505729895",
+          "role": "viewer",
+          "username": "audit_reset_probe_9658bfcf"
+        }
+      },
+      "elapsed_ms": 598.16,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "reset_probe.login.after_owner_reset",
+      "ok": true,
+      "path": "/api/public/auth/login",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "detail": "Request failed."
+      },
+      "elapsed_ms": 686.92,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "reset_probe.change_password_after_owner_reset",
+      "ok": false,
+      "path": "/api/public/auth/change-password",
+      "requirement_failure": "User password reset produced a temporary password that logs in but cannot complete the forced password-change flow.",
+      "requirement_ok": false,
+      "status_code": 400
+    },
+    {
+      "body": {
+        "count": 18,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [
+          {
+            "action": "read",
+            "category": "feature",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View artifact metadata and safe artifact records.",
+            "id": "b288eecb-0e1e-4cb6-8e07-c74034ba1c22",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read artifacts",
+            "menu_policy": "show_locked",
+            "module_key": "artifacts",
+            "permission_key": "artifacts.read",
+            "risk_level": "low",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "create",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Create allowed automation jobs in an assigned scope.",
+            "id": "c7512f59-8f77-43fc-a85d-5ca620e05f27",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Create jobs",
+            "menu_policy": "show_locked",
+            "module_key": "jobs",
+            "permission_key": "jobs.create",
+            "risk_level": "medium",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "manage",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Manage job lifecycle state for allowed automation jobs.",
+            "id": "27155bb6-6984-412a-8f56-6990927ab415",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Manage jobs",
+            "menu_policy": "show_locked",
+            "module_key": "jobs",
+            "permission_key": "jobs.manage",
+            "risk_level": "high",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "read",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View automation jobs and their safe metadata.",
+            "id": "1a4c3991-edeb-42fd-aa96-676753d409fa",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read jobs",
+            "menu_policy": "show_locked",
+            "module_key": "jobs",
+            "permission_key": "jobs.read",
+            "risk_level": "low",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "manage",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Manage module registry metadata and future module manifests.",
+            "id": "757088db-2bb5-4ba6-a5f5-b70340c34f6d",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Manage modules",
+            "menu_policy": "hide_when_denied",
+            "module_key": "modules",
+            "permission_key": "modules.manage",
+            "risk_level": "high",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "read",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View registered modules and module metadata.",
+            "id": "601221cf-cd22-4462-b751-7e832c660b13",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read modules",
+            "menu_policy": "hide_when_denied",
+            "module_key": "modules",
+            "permission_key": "modules.read",
+            "risk_level": "low",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "read",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View audit logs and operation history.",
+            "id": "932400e9-e2cf-47ee-a997-bb8c893f1a22",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read operation logs",
+            "menu_policy": "hide_when_denied",
+            "module_key": "operation_logs",
+            "permission_key": "operation_logs.read",
+            "risk_level": "high",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "manage",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Grant, disable, or change scoped user permission assignments.",
+            "id": "fb2e9220-9757-4103-b8b6-fee5ee0406fe",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Manage permissions",
+            "menu_policy": "hide_when_denied",
+            "module_key": "permissions",
+            "permission_key": "permissions.manage",
+            "risk_level": "critical",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "read",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View permission registry entries and assignment state.",
+            "id": "d2eabe03-6323-4da9-991a-bd7dc59f8760",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read permissions",
+            "menu_policy": "hide_when_denied",
+            "module_key": "permissions",
+            "permission_key": "permissions.read",
+            "risk_level": "medium",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "release",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Approve or execute future production release workflows.",
+            "id": "8fe8951a-0163-41ac-ac84-dec19f38668b",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Release production",
+            "menu_policy": "hide_when_denied",
+            "module_key": "production",
+            "permission_key": "production.release",
+            "risk_level": "critical",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "approve",
+            "category": "feature",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Approve assigned review items within an authorized scope.",
+            "id": "a4abb811-80eb-4340-b834-645d3cbf00ed",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Approve reviews",
+            "menu_policy": "show_locked",
+            "module_key": "reviews",
+            "permission_key": "reviews.approve",
+            "risk_level": "high",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "read",
+            "category": "feature",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View review queues and safe review metadata.",
+            "id": "c0e01ffa-deb5-4612-9955-5188dcb2a2b9",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read reviews",
+            "menu_policy": "show_locked",
+            "module_key": "reviews",
+            "permission_key": "reviews.read",
+            "risk_level": "low",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "read",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View the system role catalog and assignable role metadata.",
+            "id": "0306cb2d-38d6-48c2-9d9d-8b671d7cbb4e",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read roles",
+            "menu_policy": "hide_when_denied",
+            "module_key": "roles",
+            "permission_key": "roles.read",
+            "risk_level": "low",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "manage",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Change system settings when a settings API is added.",
+            "id": "bad6ef91-a761-4963-95cf-5c2e58cb3ba5",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Manage settings",
+            "menu_policy": "hide_when_denied",
+            "module_key": "settings",
+            "permission_key": "settings.manage",
+            "risk_level": "critical",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "read",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View safe system settings metadata.",
+            "id": "2b8c2919-4b03-4aca-8e86-d149f77f6994",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read settings",
+            "menu_policy": "hide_when_denied",
+            "module_key": "settings",
+            "permission_key": "settings.read",
+            "risk_level": "medium",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "admin",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Reserved high-risk system administration permission.",
+            "id": "f691d5f3-2635-4eb6-afb9-7ceff7deaa4a",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "System admin",
+            "menu_policy": "hide_when_denied",
+            "module_key": "system",
+            "permission_key": "system.admin",
+            "risk_level": "critical",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "manage",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "Create, update, disable, enable, and reset internal users.",
+            "id": "a62fbe83-9746-4c14-af6b-d4def0f95bb4",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Manage users",
+            "menu_policy": "hide_when_denied",
+            "module_key": "users",
+            "permission_key": "users.manage",
+            "risk_level": "high",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          },
+          {
+            "action": "read",
+            "category": "control_plane",
+            "created_at": "2026-06-11T10:14:48.212440Z",
+            "description": "View internal user accounts and basic user metadata.",
+            "id": "b3a6f66e-e2ff-4c21-aa93-3be818d28857",
+            "is_enabled": true,
+            "is_system": true,
+            "label": "Read users",
+            "menu_policy": "hide_when_denied",
+            "module_key": "users",
+            "permission_key": "users.read",
+            "risk_level": "medium",
+            "updated_at": "2026-06-11T10:14:48.212440Z"
+          }
+        ],
+        "limit": 100,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 901.34,
+      "error": null,
+      "expected_status": 200,
+      "method": "GET",
+      "name": "permissions.registry.owner",
+      "ok": true,
+      "path": "/api/app/permissions/registry?limit=100&offset=0",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "assignment": {
+          "created_at": "2026-06-23T18:19:48.887848Z",
+          "description": "View review queues and safe review metadata.",
+          "effective": true,
+          "enabled": true,
+          "expires_at": null,
+          "granted_by_user_id": 1,
+          "high_risk": false,
+          "id": "698b3c34-303e-4cdb-9043-3f69ad25c0e4",
+          "is_enabled": true,
+          "permission_key": "reviews.read",
+          "permission_name": "Read reviews",
+          "reason": "final pre-production audit final_preprod_20260623T181922Z_9658bfcf",
+          "risk_level": "low",
+          "scope_id": "*",
+          "scope_key": "*",
+          "scope_type": "global",
+          "updated_at": "2026-06-23T18:19:48.887848Z",
+          "user_id": 15
+        },
+        "operation_id": "240aaeb1-3319-4fb7-b2af-f7bf4897b95b"
+      },
+      "elapsed_ms": 1505.6,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "permission.assignment.create.viewer",
+      "ok": true,
+      "path": "/api/app/permissions/users/15/assignments",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "detail": "Request conflict."
+      },
+      "elapsed_ms": 1192.75,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "approval.request.create",
+      "ok": false,
+      "path": "/api/app/approval/request",
+      "status_code": 409
+    },
+    {
+      "body": {
+        "count": 0,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [],
+        "limit": 20,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 900.99,
+      "error": null,
+      "expected_status": 200,
+      "method": "GET",
+      "name": "approval.list.owner",
+      "ok": true,
+      "path": "/api/app/approval/list?limit=20&offset=0",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "entrypoints": [
+          {
+            "description": "List organizations with approval decision audit activity.",
+            "method": "GET",
+            "path": "/reviews/organizations"
+          },
+          {
+            "description": "List modules available as approval audit filters.",
+            "method": "GET",
+            "path": "/reviews/module-registry"
+          },
+          {
+            "description": "List employees with approval decision audit activity.",
+            "method": "GET",
+            "path": "/reviews/organizations/{organization_id}/users"
+          },
+          {
+            "description": "List approval decisions for one employee.",
+            "method": "GET",
+            "path": "/reviews/organizations/{organization_id}/users/{user_id}/actions"
+          }
+        ],
+        "legacy_review_items_enabled": false,
+        "module": "approval_audit",
+        "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+        "owner_scope": true,
+        "scope_role": "owner",
+        "source": "approval_decisions"
+      },
+      "elapsed_ms": 1104.19,
+      "error": null,
+      "expected_status": 200,
+      "method": "GET",
+      "name": "reviews.overview.owner",
+      "ok": true,
+      "path": "/api/app/reviews",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "item": {
+          "assigned_module_ids": [],
+          "created_at": "2026-06-23T18:19:54.085965Z",
+          "key_hash_prefix": "d753ec2dd903",
+          "key_id": "key_575957fb51b80804825c41a462c16b39",
+          "last_used_at": null,
+          "name": "Audit n8n key final_preprod_20260623T181922Z_9658bfcf",
+          "org_id": "org_cf25980213a1459e8908bbf505729895",
+          "status": "active",
+          "updated_at": "2026-06-23T18:19:54.085965Z",
+          "url": "http://127.0.0.1:8788/audit/n8n"
+        }
+      },
+      "elapsed_ms": 1912.23,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "api_key.create.n8n",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/keys",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "item": {
+          "assigned_module_ids": [],
+          "created_at": "2026-06-23T18:19:55.682591Z",
+          "key_hash_prefix": "27649b89fb25",
+          "key_id": "key_d611ebd2d3618f33cd96bf543651e26a",
+          "last_used_at": null,
+          "name": "Audit backup key final_preprod_20260623T181922Z_9658bfcf",
+          "org_id": "org_cf25980213a1459e8908bbf505729895",
+          "status": "active",
+          "updated_at": "2026-06-23T18:19:55.682591Z",
+          "url": "http://127.0.0.1:8788/audit/backup"
+        }
+      },
+      "elapsed_ms": 1398.17,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "api_key.create.backup",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/keys",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "item": {
+          "binding_id": "akb_0a4e76caa058320929e4ef45beaa2b47",
+          "created_at": "2026-06-23T18:19:56.890757Z",
+          "key_alias": "n8n",
+          "key_id": "key_575957fb51b80804825c41a462c16b39",
+          "key_name": "Audit n8n key final_preprod_20260623T181922Z_9658bfcf",
+          "key_url": "http://127.0.0.1:8788/audit/n8n",
+          "module_id": "integration.n8n_test_bridge",
+          "org_id": "org_cf25980213a1459e8908bbf505729895",
+          "status": "active",
+          "updated_at": "2026-06-23T18:19:56.890757Z"
+        }
+      },
+      "elapsed_ms": 1591.64,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "api_key.binding.create.n8n",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "item": {
+          "binding_id": "akb_1f80324c5c60395375faf9bddb88a447",
+          "created_at": "2026-06-23T18:19:58.475742Z",
+          "key_alias": "backup",
+          "key_id": "key_d611ebd2d3618f33cd96bf543651e26a",
+          "key_name": "Audit backup key final_preprod_20260623T181922Z_9658bfcf",
+          "key_url": "http://127.0.0.1:8788/audit/backup",
+          "module_id": "integration.n8n_test_bridge",
+          "org_id": "org_cf25980213a1459e8908bbf505729895",
+          "status": "active",
+          "updated_at": "2026-06-23T18:19:58.475742Z"
+        }
+      },
+      "elapsed_ms": 1215.08,
+      "error": null,
+      "expected_status": 201,
+      "method": "POST",
+      "name": "api_key.binding.create.backup",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_cf25980213a1459e8908bbf505729895/bindings",
+      "status_code": 201
+    },
+    {
+      "body": {
+        "item": {
+          "category": "integration",
+          "display_name": "n8n Test Bridge",
+          "enabled": false,
+          "last_error_at": null,
+          "module_id": "integration.n8n_test_bridge",
+          "org_id": "org_cf25980213a1459e8908bbf505729895",
+          "runtime_error_code": null,
+          "runtime_error_message": null,
+          "runtime_status": "disabled",
+          "updated_at": "2026-06-23T18:19:59.685804Z"
+        }
+      },
+      "elapsed_ms": 1408.59,
+      "error": null,
+      "expected_status": 200,
+      "method": "PATCH",
+      "name": "module_control.toggle.False",
+      "ok": true,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "item": {
+          "category": "integration",
+          "display_name": "n8n Test Bridge",
+          "enabled": true,
+          "last_error_at": null,
+          "module_id": "integration.n8n_test_bridge",
+          "org_id": "org_cf25980213a1459e8908bbf505729895",
+          "runtime_error_code": null,
+          "runtime_error_message": null,
+          "runtime_status": "active",
+          "updated_at": "2026-06-23T18:20:01.575073Z"
+        }
+      },
+      "elapsed_ms": 1904.79,
+      "error": null,
+      "expected_status": 200,
+      "method": "PATCH",
+      "name": "module_control.toggle.True",
+      "ok": true,
+      "path": "/api/control-plane/module-control/organizations/org_cf25980213a1459e8908bbf505729895/registry-entries/integration.n8n_test_bridge",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:35.672460Z",
+        "id": 15,
+        "is_active": false,
+        "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+        "last_login_at": "2026-06-23T18:19:41.171571Z",
+        "must_change_password": "***",
+        "organization_id": "org_cf25980213a1459e8908bbf505729895",
+        "role": "viewer",
+        "updated_at": "2026-06-23T18:20:02.686053Z",
+        "username": "audit_viewer_9658bfcf"
+      },
+      "elapsed_ms": 1185.91,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "user.disable.viewer",
+      "ok": true,
+      "path": "/api/app/users/15/disable",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "created_at": "2026-06-23T18:19:35.672460Z",
+        "id": 15,
+        "is_active": true,
+        "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+        "last_login_at": "2026-06-23T18:19:41.171571Z",
+        "must_change_password": "***",
+        "organization_id": "org_cf25980213a1459e8908bbf505729895",
+        "role": "viewer",
+        "updated_at": "2026-06-23T18:20:03.984672Z",
+        "username": "audit_viewer_9658bfcf"
+      },
+      "elapsed_ms": 1306.67,
+      "error": null,
+      "expected_status": 200,
+      "method": "POST",
+      "name": "user.enable.viewer",
+      "ok": true,
+      "path": "/api/app/users/15/enable",
+      "status_code": 200
+    },
+    {
+      "body": {
+        "count": 16,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [
+          {
+            "created_at": "2026-06-09T10:44:32.478968Z",
+            "id": 1,
+            "is_active": true,
+            "job_title": null,
+            "last_login_at": "2026-06-23T18:19:23.181485Z",
+            "must_change_password": "***",
+            "organization_id": null,
+            "role": "owner",
+            "updated_at": "2026-06-23T18:19:23.270432Z",
+            "username": "barongyekhna"
+          },
+          {
+            "created_at": "2026-06-19T15:42:13.488131Z",
+            "id": 2,
+            "is_active": true,
+            "job_title": "总经理",
+            "last_login_at": "2026-06-23T18:17:44.281274Z",
+            "must_change_password": "***",
+            "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+            "role": "super_admin",
+            "updated_at": "2026-06-23T18:17:44.472392Z",
+            "username": "王创鑫"
+          },
+          {
+            "created_at": "2026-06-23T15:49:06.487422Z",
+            "id": 3,
+            "is_active": true,
+            "job_title": "E2E Viewer",
+            "last_login_at": null,
+            "must_change_password": "***",
+            "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+            "role": "viewer",
+            "updated_at": "2026-06-23T17:15:59.392434Z",
+            "username": "codex_e2e_viewer"
+          },
+          {
+            "created_at": "2026-06-23T18:11:04.794609Z",
+            "id": 4,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=super_admin",
+            "last_login_at": "2026-06-23T18:11:14.578303Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "super_admin",
+            "updated_at": "2026-06-23T18:15:32.869863Z",
+            "username": "audit_super_admin_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:11:08.375442Z",
+            "id": 5,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+            "last_login_at": "2026-06-23T18:11:18.885988Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "operator",
+            "updated_at": "2026-06-23T18:15:29.468487Z",
+            "username": "audit_operator_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:11:10.976464Z",
+            "id": 6,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+            "last_login_at": "2026-06-23T18:11:23.771413Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "viewer",
+            "updated_at": "2026-06-23T18:15:33.774244Z",
+            "username": "audit_viewer_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:14:48.780436Z",
+            "id": 7,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+            "last_login_at": "2026-06-23T18:14:52.389050Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "operator",
+            "updated_at": "2026-06-23T18:15:34.973645Z",
+            "username": "audit_stress_0_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:14:54.880733Z",
+            "id": 8,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+            "last_login_at": "2026-06-23T18:14:58.489531Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "viewer",
+            "updated_at": "2026-06-23T18:15:31.788132Z",
+            "username": "audit_stress_1_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:15:00.970159Z",
+            "id": 9,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+            "last_login_at": "2026-06-23T18:15:05.492726Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "operator",
+            "updated_at": "2026-06-23T18:15:30.179360Z",
+            "username": "audit_stress_2_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:15:07.689427Z",
+            "id": 10,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+            "last_login_at": "2026-06-23T18:15:11.579673Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "viewer",
+            "updated_at": "2026-06-23T18:15:30.989476Z",
+            "username": "audit_stress_3_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:15:14.288663Z",
+            "id": 11,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+            "last_login_at": "2026-06-23T18:15:18.275620Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "operator",
+            "updated_at": "2026-06-23T18:15:35.682788Z",
+            "username": "audit_stress_4_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:15:21.269361Z",
+            "id": 12,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+            "last_login_at": "2026-06-23T18:15:24.474728Z",
+            "must_change_password": "***",
+            "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "role": "viewer",
+            "updated_at": "2026-06-23T18:15:34.380326Z",
+            "username": "audit_stress_5_0e3e9f24"
+          },
+          {
+            "created_at": "2026-06-23T18:19:31.079405Z",
+            "id": 13,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=super_admin",
+            "last_login_at": "2026-06-23T18:19:36.789308Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "super_admin",
+            "updated_at": "2026-06-23T18:19:37.179911Z",
+            "username": "audit_super_admin_9658bfcf"
+          },
+          {
+            "created_at": "2026-06-23T18:19:33.485096Z",
+            "id": 14,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=operator",
+            "last_login_at": "2026-06-23T18:19:39.272858Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "updated_at": "2026-06-23T18:19:39.475472Z",
+            "username": "audit_operator_9658bfcf"
+          },
+          {
+            "created_at": "2026-06-23T18:19:35.672460Z",
+            "id": 15,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+            "last_login_at": "2026-06-23T18:19:41.171571Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "updated_at": "2026-06-23T18:20:03.984672Z",
+            "username": "audit_viewer_9658bfcf"
+          },
+          {
+            "created_at": "2026-06-23T18:19:43.382498Z",
+            "id": 16,
+            "is_active": true,
+            "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+            "last_login_at": "2026-06-23T18:19:46.186421Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "updated_at": "2026-06-23T18:19:46.273149Z",
+            "username": "audit_reset_probe_9658bfcf"
+          }
+        ],
+        "limit": 100,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 1197.5,
+      "error": null,
+      "expected_status": 200,
+      "method": "GET",
+      "name": "users.list.owner",
+      "ok": true,
+      "path": "/api/app/users?limit=100&offset=0",
+      "status_code": 200
+    }
+  ],
+  "summary": {
+    "failed_or_requirement_failed_steps": 3,
+    "ok_steps": 32,
+    "requirement_failures": [
+      {
+        "body": {
+          "detail": "Invalid request."
+        },
+        "elapsed_ms": 807.71,
+        "error": null,
+        "expected_status": [
+          201,
+          422
+        ],
+        "method": "POST",
+        "name": "user.create.admin.audit_admin_9658bfcf",
+        "ok": true,
+        "path": "/api/app/users",
+        "requirement_failure": "admin role creation is required by audit but rejected by product API",
+        "requirement_ok": false,
+        "status_code": 422
+      },
+      {
+        "body": {
+          "detail": "Request failed."
+        },
+        "elapsed_ms": 686.92,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "reset_probe.change_password_after_owner_reset",
+        "ok": false,
+        "path": "/api/public/auth/change-password",
+        "requirement_failure": "User password reset produced a temporary password that logs in but cannot complete the forced password-change flow.",
+        "requirement_ok": false,
+        "status_code": 400
+      },
+      {
+        "body": {
+          "detail": "Request conflict."
+        },
+        "elapsed_ms": 1192.75,
+        "error": null,
+        "expected_status": 201,
+        "method": "POST",
+        "name": "approval.request.create",
+        "ok": false,
+        "path": "/api/app/approval/request",
+        "status_code": 409
+      }
+    ],
+    "total_steps": 34
+  }
+}

@@ -25,11 +25,12 @@ router = APIRouter(prefix="/module-control", tags=["module-control"])
 
 @router.get("/center", response_model=ModuleControlCenterResponse)
 def module_control_center(
+    db: Session = Depends(get_db),
     user: User = Depends(require_lightweight_control_plane_admin),
 ) -> Response:
     del user
     return Response(
-        content=get_module_control_center_cached_json(),
+        content=get_module_control_center_cached_json(db=db),
         media_type="application/json",
     )
 

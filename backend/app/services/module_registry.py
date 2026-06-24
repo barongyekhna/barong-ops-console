@@ -3,10 +3,12 @@ from collections.abc import Mapping, Sequence
 from functools import lru_cache
 from typing import Any, get_args
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.modules import MODULE_MANIFESTS_V1
 from ..core.permissions import ALLOWED_SCOPE_TYPES, validate_permission_key
+from ..models.registry import ModuleRegistry
 from ..models.user import User
 from ..schemas.module import (
     ModuleAccessRead,
@@ -48,6 +50,12 @@ NON_EXECUTABLE_STATUS_STATES = {
     "adapter_pending": "adapter_pending",
     "unavailable": "unavailable",
     "disabled": "unavailable",
+}
+DYNAMIC_STATUS_TO_MODULE_STATUS = {
+    "foundation": "installed",
+    "demo": "enabled",
+    "draft_demo": "planned",
+    "inactive_demo": "disabled",
 }
 
 
@@ -203,11 +211,126 @@ def list_module_manifests_snapshot() -> list[ModuleManifestV1]:
     return list(_cached_module_manifests())
 
 
+def _dynamic_module_category(record: ModuleRegistry) -> ModuleCategory:
+    prefix = record.module_id.split(".", 1)[0]
+    if prefix == "business":
+        return "business"
+    if prefix == "integration":
+        return "integration"
+    if prefix == "admin":
+        return "admin"
+    if prefix == "core":
+        return "core"
+    if prefix == "system":
+        return "system"
+    return "experimental"
+
+
+def dynamic_module_manifest_from_record(record: ModuleRegistry) -> ModuleManifestV1:
+    category = _dynamic_module_category(record)
+    denied_behavior = (
+        "show_locked" if category == "business" else "hide_when_denied"
+    )
+    status = DYNAMIC_STATUS_TO_MODULE_STATUS.get(record.status, "planned")
+    route_namespace = f"/modules/{record.module_id}"
+    return ModuleManifestV1(
+        module_key=record.module_id,
+        display_name=record.name,
+        description=(
+            "Dynamic module registered through the control-plane module registry."
+        ),
+        category=category,
+        status=status,  # type: ignore[arg-type]
+        lifecycle=(
+            "production_released"
+            if status in {"installed", "enabled"}
+            else "designed"
+        ),
+        route_namespace=route_namespace,
+        api_namespace=route_namespace,
+        no_api=False,
+        navigation={
+            "group": "Dynamic Modules",
+            "label": record.name,
+            "icon": "Boxes",
+            "order": 900,
+            "default_visible": True,
+            "owner_only": False,
+        },
+        required_permissions=[],
+        permission_manifest=[],
+        denied_behavior=denied_behavior,
+        unavailable_behavior="show_unavailable",
+        external_dependencies=[],
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key=None,
+        audit_log_actions=[],
+        operation_log_policy={
+            "read": "optional",
+            "write": "required",
+            "approve": "required",
+            "release": "required",
+        },
+        allowed_scope_types=["global", "organization", "module"],
+        data_boundary={
+            "reads": ["dynamic_module_registry"],
+            "writes": [],
+            "blocked_objects": [
+                "server_local_config",
+                "external_provider_config",
+                "cross_module_writes",
+            ],
+        },
+        release_requirements={
+            "local_verify": True,
+            "staging_acceptance": False,
+            "production_archive": False,
+            "required_checks": ["dynamic registry record exists"],
+        },
+        staging_acceptance_required=False,
+        production_release_required=False,
+        docs_path="docs/MODULE_CONTRACT.md",
+    )
+
+
+def list_dynamic_module_manifests(db: Session) -> list[ModuleManifestV1]:
+    static_keys = {manifest.module_key for manifest in _cached_module_manifests()}
+    rows = list(
+        db.scalars(
+            select(ModuleRegistry)
+            .where(ModuleRegistry.module_id.notin_(static_keys))
+            .order_by(ModuleRegistry.module_id)
+        )
+    )
+    return [dynamic_module_manifest_from_record(row) for row in rows]
+
+
+def list_module_manifests_with_dynamic(db: Session) -> list[ModuleManifestV1]:
+    return [*list_module_manifests_snapshot(), *list_dynamic_module_manifests(db)]
+
+
 def get_module_manifest(module_key: str) -> ModuleManifestV1 | None:
-    for manifest in list_module_manifests():
+    for manifest in list_module_manifests_snapshot():
         if manifest.module_key == module_key:
             return manifest
     return None
+
+
+def get_module_manifest_for_db(
+    db: Session,
+    module_key: str,
+) -> ModuleManifestV1 | None:
+    manifest = get_module_manifest(module_key)
+    if manifest is not None:
+        return manifest
+    record = db.scalar(
+        select(ModuleRegistry).where(ModuleRegistry.module_id == module_key)
+    )
+    if record is None:
+        return None
+    return dynamic_module_manifest_from_record(record)
 
 
 def _missing_permissions(
@@ -366,7 +489,7 @@ def list_modules_for_user(
     )
     items = [
         build_module_access_state(manifest, current_user_permissions)
-        for manifest in list_module_manifests()
+        for manifest in list_module_manifests_with_dynamic(db)
     ]
     emit_event(
         event_type="category_tree.read",

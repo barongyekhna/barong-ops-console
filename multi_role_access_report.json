@@ -1,0 +1,2787 @@
+{
+  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+  "executed_at": "2026-06-23T18:20:27.066638+00:00",
+  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+  "roles": {
+    "admin": {
+      "api_checks": [],
+      "login": {
+        "error": "admin test account could not be created through real user-management API",
+        "ok": false,
+        "status_code": null
+      },
+      "requirement_failure": "admin role is required by audit but USER_MANAGEMENT_ROLES rejects role=admin"
+    },
+    "operator": {
+      "api_checks": [
+        {
+          "body": {
+            "id": 14,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:19:39.272858+00:00",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "username": "audit_operator_9658bfcf"
+          },
+          "elapsed_ms": 79.16,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.operator.auth.me",
+          "ok": true,
+          "path": "/api/public/auth/me",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "context_available": false,
+            "module_scope": [],
+            "org_id": null,
+            "resolution_source": "missing_org_context",
+            "role": null,
+            "user_id": 14
+          },
+          "elapsed_ms": 502.33,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.operator.auth.context",
+          "ok": true,
+          "path": "/api/public/auth/context",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "id": 14,
+            "is_owner": false,
+            "permission_keys": [],
+            "permissions": {
+              "assignments": [],
+              "is_owner_full_access": false,
+              "permission_keys": [],
+              "scope_summary": []
+            },
+            "role": "operator",
+            "user_id": 14
+          },
+          "elapsed_ms": 1100.22,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.operator.permissions.me",
+          "ok": true,
+          "path": "/api/app/permissions/me",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "detail": "C18H org context is required."
+          },
+          "elapsed_ms": 512.34,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.operator.users.list",
+          "ok": false,
+          "path": "/api/app/users?limit=10&offset=0",
+          "status_code": 403
+        },
+        {
+          "body": {
+            "detail": "C18H org context is required."
+          },
+          "elapsed_ms": 202.35,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.operator.organizations.list",
+          "ok": false,
+          "path": "/api/app/organizations?limit=10&offset=0",
+          "status_code": 403
+        },
+        {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 90.19,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.operator.modules.me",
+          "ok": false,
+          "path": "/api/control-plane/modules/me",
+          "status_code": 404
+        },
+        {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 9.51,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.operator.module_control.center",
+          "ok": false,
+          "path": "/api/control-plane/module-control/center",
+          "status_code": 404
+        },
+        {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 786.91,
+          "error": null,
+          "expected_status": [
+            403,
+            404
+          ],
+          "method": "GET",
+          "name": "role_access.operator.api_keys.list.non_owner",
+          "ok": true,
+          "path": "/api/control-plane/api-key-orchestration/keys",
+          "status_code": 404
+        },
+        {
+          "body": {
+            "detail": "C18H org context is required."
+          },
+          "elapsed_ms": 202.68,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.operator.permissions.registry",
+          "ok": false,
+          "path": "/api/app/permissions/registry?limit=20&offset=0",
+          "status_code": 403
+        },
+        {
+          "body": {
+            "created_at": "2026-06-23T18:20:19.686181Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_operator",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_e69da0ab14b3492a96c06e1e5222a296",
+            "org_name": "Audit negative_operator final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "14",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:19.686181Z"
+          },
+          "elapsed_ms": 1213.56,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_operator",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        {
+          "body": {
+            "created_at": "2026-06-23T18:20:19.686181Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_operator",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_e69da0ab14b3492a96c06e1e5222a296",
+            "org_name": "Audit negative_operator final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "14",
+            "status": "deleted",
+            "updated_at": "2026-06-23T18:20:20.782143Z"
+          },
+          "elapsed_ms": 994.68,
+          "error": null,
+          "expected_status": 200,
+          "method": "DELETE",
+          "name": "role_access.operator.cleanup_created_org",
+          "ok": true,
+          "path": "/api/app/org/org_e69da0ab14b3492a96c06e1e5222a296",
+          "status_code": 200
+        }
+      ],
+      "login": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 14,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:19:39.272858Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "operator",
+            "username": "audit_operator_9658bfcf"
+          }
+        },
+        "elapsed_ms": 320.1,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "role_access.operator.login",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      }
+    },
+    "super_admin": {
+      "api_checks": [
+        {
+          "body": {
+            "id": 13,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:19:36.789308+00:00",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "super_admin",
+            "username": "audit_super_admin_9658bfcf"
+          },
+          "elapsed_ms": 6.36,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.super_admin.auth.me",
+          "ok": true,
+          "path": "/api/public/auth/me",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "context_available": true,
+            "module_scope": [],
+            "org_id": "org_cf25980213a1459e8908bbf505729895",
+            "resolution_source": "fallback_super_admin_user_org",
+            "role": "admin",
+            "user_id": 13
+          },
+          "elapsed_ms": 499.41,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.super_admin.auth.context",
+          "ok": true,
+          "path": "/api/public/auth/context",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "id": 13,
+            "is_owner": false,
+            "permission_keys": [],
+            "permissions": {
+              "assignments": [],
+              "is_owner_full_access": false,
+              "permission_keys": [],
+              "scope_summary": []
+            },
+            "role": "super_admin",
+            "user_id": 13
+          },
+          "elapsed_ms": 599.26,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.super_admin.permissions.me",
+          "ok": true,
+          "path": "/api/app/permissions/me",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "count": 16,
+            "cursor": null,
+            "degraded": false,
+            "error": null,
+            "items": [
+              {
+                "created_at": "2026-06-09T10:44:32.478968Z",
+                "id": 1,
+                "is_active": true,
+                "job_title": null,
+                "last_login_at": "2026-06-23T18:19:23.181485Z",
+                "must_change_password": "***",
+                "organization_id": null,
+                "role": "owner",
+                "updated_at": "2026-06-23T18:19:23.270432Z",
+                "username": "barongyekhna"
+              },
+              {
+                "created_at": "2026-06-19T15:42:13.488131Z",
+                "id": 2,
+                "is_active": true,
+                "job_title": "总经理",
+                "last_login_at": "2026-06-23T18:17:44.281274Z",
+                "must_change_password": "***",
+                "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                "role": "super_admin",
+                "updated_at": "2026-06-23T18:17:44.472392Z",
+                "username": "王创鑫"
+              },
+              {
+                "created_at": "2026-06-23T15:49:06.487422Z",
+                "id": 3,
+                "is_active": true,
+                "job_title": "E2E Viewer",
+                "last_login_at": null,
+                "must_change_password": "***",
+                "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                "role": "viewer",
+                "updated_at": "2026-06-23T17:15:59.392434Z",
+                "username": "codex_e2e_viewer"
+              },
+              {
+                "created_at": "2026-06-23T18:11:04.794609Z",
+                "id": 4,
+                "is_active": true,
+                "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=super_admin",
+                "last_login_at": "2026-06-23T18:11:14.578303Z",
+                "must_change_password": "***",
+                "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "role": "super_admin",
+                "updated_at": "2026-06-23T18:15:32.869863Z",
+                "username": "audit_super_admin_0e3e9f24"
+              },
+              {
+                "created_at": "2026-06-23T18:11:08.375442Z",
+                "id": 5,
+                "is_active": true,
+                "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+                "last_login_at": "2026-06-23T18:11:18.885988Z",
+                "must_change_password": "***",
+                "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "role": "operator",
+                "updated_at": "2026-06-23T18:15:29.468487Z",
+                "username": "audit_operator_0e3e9f24"
+              },
+              {
+                "created_at": "2026-06-23T18:11:10.976464Z",
+                "id": 6,
+                "is_active": true,
+                "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+                "last_login_at": "2026-06-23T18:11:23.771413Z",
+                "must_change_password": "***",
+                "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "role": "viewer",
+                "updated_at": "2026-06-23T18:15:33.774244Z",
+                "username": "audit_viewer_0e3e9f24"
+              },
+              {
+                "created_at": "2026-06-23T18:14:48.780436Z",
+                "id": 7,
+                "is_active": true,
+                "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+                "last_login_at": "2026-06-23T18:14:52.389050Z",
+                "must_change_password": "***",
+                "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "role": "operator",
+                "updated_at": "2026-06-23T18:15:34.973645Z",
+                "username": "audit_stress_0_0e3e9f24"
+              },
+              {
+                "created_at": "2026-06-23T18:14:54.880733Z",
+                "id": 8,
+                "is_active": true,
+                "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+                "last_login_at": "2026-06-23T18:14:58.489531Z",
+                "must_change_password": "***",
+                "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "role": "viewer",
+                "updated_at": "2026-06-23T18:15:31.788132Z",
+                "username": "audit_stress_1_0e3e9f24"
+              },
+              {
+                "created_at": "2026-06-23T18:15:00.970159Z",
+                "id": 9,
+                "is_active": true,
+                "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+                "last_login_at": "2026-06-23T18:15:05.492726Z",
+                "must_change_password": "***",
+                "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "role": "operator",
+                "updated_at": "2026-06-23T18:15:30.179360Z",
+                "username": "audit_stress_2_0e3e9f24"
+              },
+              {
+                "created_at": "2026-06-23T18:15:07.689427Z",
+                "id": 10,
+                "is_active": true,
+                "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+                "last_login_at": "2026-06-23T18:15:11.579673Z",
+                "must_change_password": "***",
+                "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "role": "viewer",
+                "updated_at": "2026-06-23T18:15:30.989476Z",
+                "username": "audit_stress_3_0e3e9f24"
+              }
+            ],
+            "limit": 10,
+            "next_cursor": null,
+            "offset": 0,
+            "source": "live"
+          },
+          "elapsed_ms": 788.6,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.super_admin.users.list",
+          "ok": true,
+          "path": "/api/app/users?limit=10&offset=0",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "count": 4,
+            "cursor": null,
+            "degraded": false,
+            "error": null,
+            "items": [
+              {
+                "created_at": "2026-06-23T18:10:52.787424Z",
+                "metadata": {
+                  "country": "US",
+                  "custom": {
+                    "audit_id": "final_preprod_20260623T181050Z_0e3e9f24",
+                    "namespace": "audit_scope_final_preprod_20260623T181050Z_0e3e9f24",
+                    "test_scope": true,
+                    "updated": true
+                  },
+                  "industry": "audit-updated",
+                  "settings": {
+                    "allow_ai": false,
+                    "allow_n8n": true,
+                    "data_retention_days": 14
+                  },
+                  "timezone": "UTC"
+                },
+                "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "org_name": "Audit Primary Updated final_preprod_20260623T181050Z_0e3e9f24",
+                "org_type": "store",
+                "owner_user_id": "1",
+                "status": "active",
+                "updated_at": "2026-06-23T18:11:00.084178Z"
+              },
+              {
+                "created_at": "2026-06-23T18:19:23.982448Z",
+                "metadata": {
+                  "country": "US",
+                  "custom": {
+                    "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                    "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                    "test_scope": true,
+                    "updated": true
+                  },
+                  "industry": "audit-updated",
+                  "settings": {
+                    "allow_ai": false,
+                    "allow_n8n": true,
+                    "data_retention_days": 14
+                  },
+                  "timezone": "UTC"
+                },
+                "org_id": "org_cf25980213a1459e8908bbf505729895",
+                "org_name": "Audit Primary Updated final_preprod_20260623T181922Z_9658bfcf",
+                "org_type": "store",
+                "owner_user_id": "1",
+                "status": "active",
+                "updated_at": "2026-06-23T18:19:29.074613Z"
+              },
+              {
+                "created_at": "2026-06-20T02:39:08.302108Z",
+                "metadata": {
+                  "country": "",
+                  "custom": {},
+                  "industry": "",
+                  "settings": {
+                    "allow_ai": false,
+                    "allow_n8n": false,
+                    "data_retention_days": 365
+                  },
+                  "timezone": "UTC"
+                },
+                "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                "org_name": "涌龙麟（吉林）电子产品制造有限公司",
+                "org_type": "store",
+                "owner_user_id": "1",
+                "status": "active",
+                "updated_at": "2026-06-20T02:39:08.302108Z"
+              },
+              {
+                "created_at": "2026-06-19T15:41:12.489208Z",
+                "metadata": {
+                  "country": "",
+                  "custom": {},
+                  "industry": "",
+                  "settings": {
+                    "allow_ai": false,
+                    "allow_n8n": false,
+                    "data_retention_days": 365
+                  },
+                  "timezone": "UTC"
+                },
+                "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                "org_name": "涌龙麟（深圳）国际贸易有限公司",
+                "org_type": "store",
+                "owner_user_id": "1",
+                "status": "active",
+                "updated_at": "2026-06-19T15:41:12.489208Z"
+              }
+            ],
+            "limit": 10,
+            "next_cursor": null,
+            "offset": 0,
+            "source": "live"
+          },
+          "elapsed_ms": 1007.43,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.super_admin.organizations.list",
+          "ok": true,
+          "path": "/api/app/organizations?limit=10&offset=0",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "count": 15,
+            "degraded": false,
+            "error": null,
+            "is_owner_full_access": false,
+            "items": [
+              {
+                "access_state": "available",
+                "category": "core",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": false,
+                "locked": false,
+                "missing_permissions": [],
+                "module_key": "core.dashboard",
+                "reason": "Module metadata is available.",
+                "required_permissions": [],
+                "route_namespace": "/dashboard",
+                "status": "sealed",
+                "unavailable": false,
+                "visible": true
+              },
+              {
+                "access_state": "hidden",
+                "category": "experimental",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "modules.read"
+                ],
+                "module_key": "experimental.foundation_demo",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "modules.read"
+                ],
+                "route_namespace": "/foundation-demo",
+                "status": "enabled",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "integration",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "modules.read"
+                ],
+                "module_key": "integration.n8n_test_bridge",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "modules.read"
+                ],
+                "route_namespace": "/n8n-test",
+                "status": "adapter_pending",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "admin",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "users.manage"
+                ],
+                "module_key": "admin.users",
+                "reason": "Module is owner-only.",
+                "required_permissions": [
+                  "users.manage"
+                ],
+                "route_namespace": "/users",
+                "status": "sealed",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "admin",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "users.manage"
+                ],
+                "module_key": "admin.organizations",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "users.manage"
+                ],
+                "route_namespace": "/organizations",
+                "status": "enabled",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "admin",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "permissions.read"
+                ],
+                "module_key": "admin.permissions",
+                "reason": "Module is owner-only.",
+                "required_permissions": [
+                  "permissions.read"
+                ],
+                "route_namespace": "/users",
+                "status": "sealed",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "admin",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "modules.read"
+                ],
+                "module_key": "admin.modules",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "modules.read"
+                ],
+                "route_namespace": "/modules",
+                "status": "sealed",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "admin",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "modules.read"
+                ],
+                "module_key": "admin.agents",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "modules.read"
+                ],
+                "route_namespace": "/agents",
+                "status": "sealed",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "admin",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "settings.read"
+                ],
+                "module_key": "admin.settings",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "settings.read"
+                ],
+                "route_namespace": "/settings",
+                "status": "planned",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "locked",
+                "category": "business",
+                "denied_behavior": "show_locked",
+                "executable": false,
+                "hidden": false,
+                "locked": true,
+                "missing_permissions": [
+                  "products.read"
+                ],
+                "module_key": "business.products",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "products.read"
+                ],
+                "route_namespace": "/products",
+                "status": "planned",
+                "unavailable": true,
+                "visible": true
+              },
+              {
+                "access_state": "locked",
+                "category": "business",
+                "denied_behavior": "show_locked",
+                "executable": false,
+                "hidden": false,
+                "locked": true,
+                "missing_permissions": [
+                  "reviews.read"
+                ],
+                "module_key": "business.approvals",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "reviews.read"
+                ],
+                "route_namespace": "/approvals",
+                "status": "enabled",
+                "unavailable": false,
+                "visible": true
+              },
+              {
+                "access_state": "locked",
+                "category": "business",
+                "denied_behavior": "show_locked",
+                "executable": false,
+                "hidden": false,
+                "locked": true,
+                "missing_permissions": [
+                  "reviews.read"
+                ],
+                "module_key": "business.reviews",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "reviews.read"
+                ],
+                "route_namespace": "/reviews",
+                "status": "enabled",
+                "unavailable": false,
+                "visible": true
+              },
+              {
+                "access_state": "hidden",
+                "category": "system",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "operation_logs.read"
+                ],
+                "module_key": "system.errors",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "operation_logs.read"
+                ],
+                "route_namespace": "/errors",
+                "status": "enabled",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "system",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "operation_logs.read"
+                ],
+                "module_key": "system.memory_events",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "operation_logs.read"
+                ],
+                "route_namespace": "/memory-events",
+                "status": "enabled",
+                "unavailable": false,
+                "visible": false
+              },
+              {
+                "access_state": "hidden",
+                "category": "system",
+                "denied_behavior": "hide_when_denied",
+                "executable": false,
+                "hidden": true,
+                "locked": false,
+                "missing_permissions": [
+                  "operation_logs.read"
+                ],
+                "module_key": "system.operation_logs",
+                "reason": "Missing required permissions.",
+                "required_permissions": [
+                  "operation_logs.read"
+                ],
+                "route_namespace": "/operation-logs",
+                "status": "sealed",
+                "unavailable": false,
+                "visible": false
+              }
+            ],
+            "role": "super_admin",
+            "source": "live",
+            "user_id": 13
+          },
+          "elapsed_ms": 401.63,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.super_admin.modules.me",
+          "ok": true,
+          "path": "/api/control-plane/modules/me",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "auto_registered_count": 0,
+            "cache_status": "fresh",
+            "generated_at": "2026-06-23T18:20:06.987728Z",
+            "module_count": 60,
+            "organization_count": 4,
+            "organizations": [
+              {
+                "modules": [
+                  {
+                    "category": "core",
+                    "display_name": "Dashboard",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "core.dashboard",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "experimental",
+                    "display_name": "Foundation Demo",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "experimental.foundation_demo",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "integration",
+                    "display_name": "n8n Test Bridge",
+                    "enabled": false,
+                    "last_error_at": null,
+                    "module_id": "integration.n8n_test_bridge",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "disabled",
+                    "updated_at": "2026-06-23T18:16:21.691694Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "User Management",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.users",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Organizations",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.organizations",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Permission Management",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.permissions",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Modules",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.modules",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Agents",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.agents",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Settings",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.settings",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Products",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.products",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Approvals",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.approvals",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Approval Audit",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.reviews",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Errors",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.errors",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Memory Events",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.memory_events",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Operation Logs",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.operation_logs",
+                    "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:10:57.692970Z"
+                  }
+                ],
+                "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+                "org_name": "Audit Primary Updated final_preprod_20260623T181050Z_0e3e9f24"
+              },
+              {
+                "modules": [
+                  {
+                    "category": "core",
+                    "display_name": "Dashboard",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "core.dashboard",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "experimental",
+                    "display_name": "Foundation Demo",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "experimental.foundation_demo",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "integration",
+                    "display_name": "n8n Test Bridge",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "integration.n8n_test_bridge",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:20:01.575073Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "User Management",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.users",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Organizations",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.organizations",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Permission Management",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.permissions",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Modules",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.modules",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Agents",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.agents",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Settings",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.settings",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Products",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.products",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Approvals",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.approvals",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Approval Audit",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.reviews",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Errors",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.errors",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Memory Events",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.memory_events",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Operation Logs",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.operation_logs",
+                    "org_id": "org_cf25980213a1459e8908bbf505729895",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T18:19:26.677452Z"
+                  }
+                ],
+                "org_id": "org_cf25980213a1459e8908bbf505729895",
+                "org_name": "Audit Primary Updated final_preprod_20260623T181922Z_9658bfcf"
+              },
+              {
+                "modules": [
+                  {
+                    "category": "core",
+                    "display_name": "Dashboard",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "core.dashboard",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T13:34:12.417003Z"
+                  },
+                  {
+                    "category": "experimental",
+                    "display_name": "Foundation Demo",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "experimental.foundation_demo",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "integration",
+                    "display_name": "n8n Test Bridge",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "integration.n8n_test_bridge",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T15:13:29.508949Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "User Management",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.users",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Organizations",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.organizations",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T13:53:44.600673Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Permission Management",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.permissions",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T08:55:56.984878Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Modules",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.modules",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Agents",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.agents",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Settings",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.settings",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T14:28:40.399220Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Products",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.products",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Approvals",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.approvals",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Approval Audit",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.reviews",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Errors",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.errors",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Memory Events",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.memory_events",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T13:53:57.598568Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Operation Logs",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.operation_logs",
+                    "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  }
+                ],
+                "org_id": "org_d7497212d213498cbf0513d75e486c20",
+                "org_name": "涌龙麟（吉林）电子产品制造有限公司"
+              },
+              {
+                "modules": [
+                  {
+                    "category": "core",
+                    "display_name": "Dashboard",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "core.dashboard",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "experimental",
+                    "display_name": "Foundation Demo",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "experimental.foundation_demo",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "integration",
+                    "display_name": "n8n Test Bridge",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "integration.n8n_test_bridge",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "User Management",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.users",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Organizations",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.organizations",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Permission Management",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.permissions",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Modules",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.modules",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Agents",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.agents",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "admin",
+                    "display_name": "Settings",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "admin.settings",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Products",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.products",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Approvals",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.approvals",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "business",
+                    "display_name": "Approval Audit",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "business.reviews",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Errors",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.errors",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Memory Events",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.memory_events",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-23T08:54:54.188824Z"
+                  },
+                  {
+                    "category": "system",
+                    "display_name": "Operation Logs",
+                    "enabled": true,
+                    "last_error_at": null,
+                    "module_id": "system.operation_logs",
+                    "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                    "runtime_error_code": null,
+                    "runtime_error_message": null,
+                    "runtime_status": "active",
+                    "updated_at": "2026-06-22T13:55:21.507866Z"
+                  }
+                ],
+                "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+                "org_name": "涌龙麟（深圳）国际贸易有限公司"
+              }
+            ]
+          },
+          "elapsed_ms": 7.75,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.super_admin.module_control.center",
+          "ok": true,
+          "path": "/api/control-plane/module-control/center",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 1485.27,
+          "error": null,
+          "expected_status": [
+            403,
+            404
+          ],
+          "method": "GET",
+          "name": "role_access.super_admin.api_keys.list.non_owner",
+          "ok": true,
+          "path": "/api/control-plane/api-key-orchestration/keys",
+          "status_code": 403
+        },
+        {
+          "body": {
+            "count": 3,
+            "cursor": null,
+            "degraded": false,
+            "error": null,
+            "items": [
+              {
+                "action": "read",
+                "category": "feature",
+                "created_at": "2026-06-11T10:14:48.212440Z",
+                "description": "View artifact metadata and safe artifact records.",
+                "id": "b288eecb-0e1e-4cb6-8e07-c74034ba1c22",
+                "is_enabled": true,
+                "is_system": true,
+                "label": "Read artifacts",
+                "menu_policy": "show_locked",
+                "module_key": "artifacts",
+                "permission_key": "artifacts.read",
+                "risk_level": "low",
+                "updated_at": "2026-06-11T10:14:48.212440Z"
+              },
+              {
+                "action": "approve",
+                "category": "feature",
+                "created_at": "2026-06-11T10:14:48.212440Z",
+                "description": "Approve assigned review items within an authorized scope.",
+                "id": "a4abb811-80eb-4340-b834-645d3cbf00ed",
+                "is_enabled": true,
+                "is_system": true,
+                "label": "Approve reviews",
+                "menu_policy": "show_locked",
+                "module_key": "reviews",
+                "permission_key": "reviews.approve",
+                "risk_level": "high",
+                "updated_at": "2026-06-11T10:14:48.212440Z"
+              },
+              {
+                "action": "read",
+                "category": "feature",
+                "created_at": "2026-06-11T10:14:48.212440Z",
+                "description": "View review queues and safe review metadata.",
+                "id": "c0e01ffa-deb5-4612-9955-5188dcb2a2b9",
+                "is_enabled": true,
+                "is_system": true,
+                "label": "Read reviews",
+                "menu_policy": "show_locked",
+                "module_key": "reviews",
+                "permission_key": "reviews.read",
+                "risk_level": "low",
+                "updated_at": "2026-06-11T10:14:48.212440Z"
+              }
+            ],
+            "limit": 20,
+            "next_cursor": null,
+            "offset": 0,
+            "source": "live"
+          },
+          "elapsed_ms": 1300.82,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.super_admin.permissions.registry",
+          "ok": true,
+          "path": "/api/app/permissions/registry?limit=20&offset=0",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "created_at": "2026-06-23T18:20:13.272728Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_super_admin",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_b8f5f6f3a752479ea1a782722b85b8ac",
+            "org_name": "Audit negative_super_admin final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "13",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:13.272728Z"
+          },
+          "elapsed_ms": 1199.09,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_super_admin",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        {
+          "body": {
+            "created_at": "2026-06-23T18:20:13.272728Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_super_admin",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_b8f5f6f3a752479ea1a782722b85b8ac",
+            "org_name": "Audit negative_super_admin final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "13",
+            "status": "deleted",
+            "updated_at": "2026-06-23T18:20:14.676044Z"
+          },
+          "elapsed_ms": 1394.42,
+          "error": null,
+          "expected_status": 200,
+          "method": "DELETE",
+          "name": "role_access.super_admin.cleanup_created_org",
+          "ok": true,
+          "path": "/api/app/org/org_b8f5f6f3a752479ea1a782722b85b8ac",
+          "status_code": 200
+        }
+      ],
+      "login": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 13,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:19:36.789308Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "super_admin",
+            "username": "audit_super_admin_9658bfcf"
+          }
+        },
+        "elapsed_ms": 696.63,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "role_access.super_admin.login",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      }
+    },
+    "viewer": {
+      "api_checks": [
+        {
+          "body": {
+            "id": 15,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:19:41.171571+00:00",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "username": "audit_viewer_9658bfcf"
+          },
+          "elapsed_ms": 5.65,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.viewer.auth.me",
+          "ok": true,
+          "path": "/api/public/auth/me",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "context_available": false,
+            "module_scope": [],
+            "org_id": null,
+            "resolution_source": "missing_org_context",
+            "role": null,
+            "user_id": 15
+          },
+          "elapsed_ms": 400.31,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.viewer.auth.context",
+          "ok": true,
+          "path": "/api/public/auth/context",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "id": 15,
+            "is_owner": false,
+            "permission_keys": [
+              "reviews.read"
+            ],
+            "permissions": {
+              "assignments": [
+                {
+                  "permission_key": "reviews.read",
+                  "scope_key": "*",
+                  "scope_type": "global"
+                }
+              ],
+              "is_owner_full_access": false,
+              "permission_keys": [
+                "reviews.read"
+              ],
+              "scope_summary": [
+                {
+                  "permission_keys": [
+                    "reviews.read"
+                  ],
+                  "scope_key": "*",
+                  "scope_type": "global"
+                }
+              ]
+            },
+            "role": "viewer",
+            "user_id": 15
+          },
+          "elapsed_ms": 912.53,
+          "error": null,
+          "expected_status": 200,
+          "method": "GET",
+          "name": "role_access.viewer.permissions.me",
+          "ok": true,
+          "path": "/api/app/permissions/me",
+          "status_code": 200
+        },
+        {
+          "body": {
+            "detail": "C18H org context is required."
+          },
+          "elapsed_ms": 292.86,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.viewer.users.list",
+          "ok": false,
+          "path": "/api/app/users?limit=10&offset=0",
+          "status_code": 403
+        },
+        {
+          "body": {
+            "detail": "C18H org context is required."
+          },
+          "elapsed_ms": 295.64,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.viewer.organizations.list",
+          "ok": false,
+          "path": "/api/app/organizations?limit=10&offset=0",
+          "status_code": 403
+        },
+        {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 12.47,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.viewer.modules.me",
+          "ok": false,
+          "path": "/api/control-plane/modules/me",
+          "status_code": 404
+        },
+        {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 87.49,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.viewer.module_control.center",
+          "ok": false,
+          "path": "/api/control-plane/module-control/center",
+          "status_code": 404
+        },
+        {
+          "body": {
+            "detail": "Not found."
+          },
+          "elapsed_ms": 702.98,
+          "error": null,
+          "expected_status": [
+            403,
+            404
+          ],
+          "method": "GET",
+          "name": "role_access.viewer.api_keys.list.non_owner",
+          "ok": true,
+          "path": "/api/control-plane/api-key-orchestration/keys",
+          "status_code": 404
+        },
+        {
+          "body": {
+            "detail": "C18H org context is required."
+          },
+          "elapsed_ms": 288.4,
+          "error": null,
+          "expected_status": null,
+          "method": "GET",
+          "name": "role_access.viewer.permissions.registry",
+          "ok": false,
+          "path": "/api/app/permissions/registry?limit=20&offset=0",
+          "status_code": 403
+        },
+        {
+          "body": {
+            "created_at": "2026-06-23T18:20:25.274697Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_viewer",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_43c0dde4bf4c40daa70eef5ba10d6c9f",
+            "org_name": "Audit negative_viewer final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "15",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:25.274697Z"
+          },
+          "elapsed_ms": 1300.35,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_viewer",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        {
+          "body": {
+            "created_at": "2026-06-23T18:20:25.274697Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_viewer",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_43c0dde4bf4c40daa70eef5ba10d6c9f",
+            "org_name": "Audit negative_viewer final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "15",
+            "status": "deleted",
+            "updated_at": "2026-06-23T18:20:26.678180Z"
+          },
+          "elapsed_ms": 1198.03,
+          "error": null,
+          "expected_status": 200,
+          "method": "DELETE",
+          "name": "role_access.viewer.cleanup_created_org",
+          "ok": true,
+          "path": "/api/app/org/org_43c0dde4bf4c40daa70eef5ba10d6c9f",
+          "status_code": 200
+        }
+      ],
+      "login": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": "***",
+          "session_token": "***",
+          "user": {
+            "id": 15,
+            "is_active": true,
+            "last_login_at": "2026-06-23T18:19:41.171571Z",
+            "must_change_password": "***",
+            "organization_id": "org_cf25980213a1459e8908bbf505729895",
+            "role": "viewer",
+            "username": "audit_viewer_9658bfcf"
+          }
+        },
+        "elapsed_ms": 383.06,
+        "error": null,
+        "expected_status": 200,
+        "method": "POST",
+        "name": "role_access.viewer.login",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      }
+    }
+  },
+  "summary": {
+    "admin_created": false,
+    "permission_violation_count": 3,
+    "permission_violations": [
+      {
+        "check": {
+          "body": {
+            "created_at": "2026-06-23T18:20:13.272728Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_super_admin",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_b8f5f6f3a752479ea1a782722b85b8ac",
+            "org_name": "Audit negative_super_admin final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "13",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:13.272728Z"
+          },
+          "elapsed_ms": 1199.09,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_super_admin",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        "role": "super_admin"
+      },
+      {
+        "check": {
+          "body": {
+            "created_at": "2026-06-23T18:20:19.686181Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_operator",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_e69da0ab14b3492a96c06e1e5222a296",
+            "org_name": "Audit negative_operator final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "14",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:19.686181Z"
+          },
+          "elapsed_ms": 1213.56,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_operator",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        "role": "operator"
+      },
+      {
+        "check": {
+          "body": {
+            "created_at": "2026-06-23T18:20:25.274697Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "suffix": "negative_viewer",
+                "test_scope": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 7
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_43c0dde4bf4c40daa70eef5ba10d6c9f",
+            "org_name": "Audit negative_viewer final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "15",
+            "status": "active",
+            "updated_at": "2026-06-23T18:20:25.274697Z"
+          },
+          "elapsed_ms": 1300.35,
+          "error": null,
+          "expected_status": 201,
+          "method": "POST",
+          "name": "org.create.negative_viewer",
+          "ok": true,
+          "path": "/api/app/org/create",
+          "permission_probe": "non_owner_org_create_should_not_succeed",
+          "permission_violation": true,
+          "status_code": 201
+        },
+        "role": "viewer"
+      }
+    ],
+    "roles_created": [
+      "operator",
+      "super_admin",
+      "viewer"
+    ],
+    "roles_requested": [
+      "super_admin",
+      "admin",
+      "operator",
+      "viewer"
+    ]
+  },
+  "ui_playwright": {
+    "elapsed_ms": 119208.89,
+    "ok": true,
+    "roles": {
+      "operator": {
+        "consoleErrors": [
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+        ],
+        "login": {
+          "finalUrl": "http://127.0.0.1:3000/dashboard",
+          "ok": true,
+          "requiresPasswordChange": false
+        },
+        "routes": [
+          {
+            "elapsedMs": 3097,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/dashboard",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/dashboard",
+            "status": 200,
+            "title": "工作台概览 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n组织管理\n业务处理\n审批\n系统管理\n首页\n功能区\n正在加载工作台\nWorkspace\n首页\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n正在同步系统状态\n权限与模块状态正在更新。\n刷新\nActive Modules\n5\n5 visible modules\nExecutions\n0\nRecent executions\nSuccess Rate\n0%\n0 issues in latest logs\nPending Reviews\n0\nAwaiting action\nModules\nModule grid\nSyncing\nactive\n用户管理\n账号与组织\n\nReady for workspace operations.\n\nOpen module\nactive\n组织管理\n账号与组织\n\nReady for workspace operations.\n\nOpen module\nactive\n审批\n业务处理\n\nReady for workspace operations.\n\nOpen module\nactive\n首页\n系统管理\n\nReady for workspace operations.\n\nOpen module\nactive\n功能区\n系统管理\n\nReady for workspace operations.\n\nOpen module\nActivity feed\nLive workspace updates\nModule activity\nactive\n\n用户管理 is active.\n\n账号与组织\nModule activity\nactive\n\n组织管理 is active.\n\n账号与组织\nModule activity\nactive\n\n审批 is active.\n\n业务处理\nAPI key usage\nkey_••••\n\nNo recent API key usage was recorded.\n\nmasked"
+          },
+          {
+            "elapsedMs": 2091,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/users",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/users",
+            "status": 200,
+            "title": "用户管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n用户管理\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n账号\n用户管理\n\n管理工作台账号、角色、组织归属和密码重置。\n\n用户列表\n\n共 0 个账号，每页 10 条。\n\n刷新"
+          },
+          {
+            "elapsedMs": 2000,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/organizations",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/organizations",
+            "status": 200,
+            "title": "组织管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n组织管理\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n组织列表\n\n共 0 个组织，每页 10 条。\n\n同步中"
+          },
+          {
+            "elapsedMs": 1797,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/permissions",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/permissions",
+            "status": 200,
+            "title": "权限管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n权限管理\nRefresh\naudit_operator_9658bfcf\n操作员\n退出"
+          },
+          {
+            "elapsedMs": 1815,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/modules",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": true,
+            "ok": true,
+            "route": "/modules",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n功能区\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n功能区\n工作台功能区\n\n查看当前工作台可用功能、可见范围和操作准备情况。\n\n刷新\n功能区\n4\n可用\n1\n配置中\n2\n已隐藏\n0\n组织可见\n1\n已登记\n确认中\n组织状态\n确认中\n操作状态\n预览\n\n后端模块状态服务暂不可用。\n\n功能区\t状态\t可见范围\t准备情况\t操作状态\n\n用户管理\n管理工作台账号和角色。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n组织管理\n管理组织和组织管理员。\n\t\n可用\n可正常使用\n\t\n可见\n按当前账号和组织范围显示\n\t\n可正常使用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n审批\n处理待审批事项。\n\t\n无权访问\n需要开通权限\n\t\n确认中\n按当前账号和组织范围显示\n\t\n需要开通权限\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n首页\n查看工作台首页。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n上一页\n1\n下一页"
+          },
+          {
+            "elapsedMs": 2188,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/api-key-management",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": true,
+            "ok": true,
+            "route": "/api-key-management",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n工作台\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n功能区\n工作台功能区\n\n查看当前工作台可用功能、可见范围和操作准备情况。\n\n刷新\n功能区\n4\n可用\n1\n配置中\n2\n已隐藏\n0\n组织可见\n1\n已登记\n确认中\n组织状态\n确认中\n操作状态\n预览\n\n后端模块状态服务暂不可用。\n\n功能区\t状态\t可见范围\t准备情况\t操作状态\n\n用户管理\n管理工作台账号和角色。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n组织管理\n管理组织和组织管理员。\n\t\n可用\n可正常使用\n\t\n可见\n按当前账号和组织范围显示\n\t\n可正常使用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n审批\n处理待审批事项。\n\t\n无权访问\n需要开通权限\n\t\n确认中\n按当前账号和组织范围显示\n\t\n需要开通权限\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n首页\n查看工作台首页。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n上一页\n1\n下一页"
+          },
+          {
+            "elapsedMs": 1894,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/approvals",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/approvals",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n审批\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n审批中心\n审批列表\n\n仅显示你有权限模块的功能审批。\n\n功能审批\n\n业务模块提交后的审批。\n\n正在加载审批"
+          },
+          {
+            "elapsedMs": 2011,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/reviews",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/reviews",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n审批审计\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n无法查看审批审计\n\n该区域仅对owner和组织管理员开放。"
+          },
+          {
+            "elapsedMs": 2091,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/settings",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/settings",
+            "status": 200,
+            "title": "设置 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n设置\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n暂不可用\n设置功能尚未开放，当前不会展示或保存任何配置。"
+          }
+        ]
+      },
+      "owner": {
+        "consoleErrors": [
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+        ],
+        "login": {
+          "finalUrl": "http://127.0.0.1:3000/dashboard",
+          "ok": true,
+          "requiresPasswordChange": false
+        },
+        "routes": [
+          {
+            "elapsedMs": 2892,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/dashboard",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/dashboard",
+            "status": 200,
+            "title": "工作台概览 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n首页\nRefresh\nbarongyekhna\nOWNER\n退出\nActive Modules\n1\n6 visible modules\nExecutions\n0\nRecent executions\nSuccess Rate\n0%\n0 issues in latest logs\nPending Reviews\n0\nAwaiting action\nModules\nModule grid\nSyncing\ndisabled\n用户管理\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\ndisabled\n组织管理\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\ndisabled\n审批\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\nactive\n审批审计\n业务处理\n\nReady for workspace operations.\n\nOpen module\ndisabled\n首页\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\ndisabled\n功能区\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\nActivity feed\nLive workspace updates\nModule activity\ndisabled\n\n用户管理 is disabled.\n\n账号与组织\nModule activity\ndisabled\n\n组织管理 is disabled.\n\n账号与组织\nModule activity\ndisabled\n\n审批 is disabled.\n\n业务处理\nAPI key usage\nkey_••••\n\nNo recent API key usage was recorded.\n\nmasked"
+          },
+          {
+            "elapsedMs": 2100,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/users",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/users",
+            "status": 200,
+            "title": "用户管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n组织管理\n权限管理\n业务处理\n审批\n审批审计\n系统管理\n首页\n功能区\n设置\n异常记录\n运行记录\n操作记录\n扩展能力\n自动化助手\n正在加载工作台\nWorkspace\n用户管理\nRefresh\nbarongyekhna\nOWNER\n退出\n正在同步系统状态\n权限与模块状态正在更新。\n刷新\n账号\n用户管理\n\n管理工作台账号、角色、组织归属和密码重置。\n\n账号\n创建用户\n用户名\n角色\n正在加载角色\n岗位\n组织\n暂无可选组织\n正在加载组织\n创建用户\n用户列表\n\n共 0 个账号，每页 10 条。\n\n刷新"
+          },
+          {
+            "elapsedMs": 2009,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/organizations",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/organizations",
+            "status": 200,
+            "title": "组织管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n组织管理\nRefresh\nbarongyekhna\nOWNER\n退出\n创建组织\n组织名称\n创建\n组织列表\n\n共 0 个组织，每页 10 条。\n\n同步中"
+          },
+          {
+            "elapsedMs": 2603,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/permissions",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/permissions",
+            "status": 200,
+            "title": "权限管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n权限管理\nRefresh\nbarongyekhna\nOWNER\n退出\n账号与组织\n权限管理\n\n管理员工可访问的功能范围。\n\n同步中\n员工\n0\n功能权限\n0\n系统权限\n0\n当前角色\nowner"
+          },
+          {
+            "elapsedMs": 2283,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/modules",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/modules",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n功能区\nRefresh\nbarongyekhna\nOWNER\n退出\nowner\n模块管理中心\n\n按组织管理模块开关、运行状态和密钥绑定。\n\n同步中\n组织\n0\n模块\n0\n运行中\n0\n异常\n0\n密钥\n0\n绑定\n0\n组织数据加载中\n\n正在同步后端组织列表。\n\n密钥管理\n\n密钥只写入后端，前端不会显示明文。\n\n组织\n组织加载中\n名称\n服务地址\n密钥\n新增密钥\n密钥\t服务地址\t名称\t已绑定模块\t操作\n组织\n组织加载中\n模块\n密钥\n用途名称\n绑定"
+          },
+          {
+            "elapsedMs": 2015,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/api-key-management",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/api-key-management",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n工作台\nRefresh\nbarongyekhna\nOWNER\n退出\nowner\n模块管理中心\n\n按组织管理模块开关、运行状态和密钥绑定。\n\n同步中\n组织\n0\n模块\n0\n运行中\n0\n异常\n0\n密钥\n0\n绑定\n0\n组织数据加载中\n\n正在同步后端组织列表。\n\n密钥管理\n\n密钥只写入后端，前端不会显示明文。\n\n组织\n组织加载中\n名称\n服务地址\n密钥\n新增密钥\n密钥\t服务地址\t名称\t已绑定模块\t操作\n组织\n组织加载中\n模块\n密钥\n用途名称\n绑定"
+          },
+          {
+            "elapsedMs": 2901,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/approvals",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/approvals",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n审批\nRefresh\nbarongyekhna\nOWNER\n退出\n审批中心\n审批列表\n\n按主控审批和功能审批分组处理。\n\n主控审批\n\n系统级操作、权限变更、模块接入等需要owner确认的审批。\n\n正在加载审批\n功能审批\n\n业务模块提交后的审批。\n\n正在加载审批"
+          },
+          {
+            "elapsedMs": 2281,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/reviews",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/reviews",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n组织管理\n权限管理\n业务处理\n审批\n审批审计\n系统管理\n首页\n功能区\n设置\n异常记录\n运行记录\n操作记录\n扩展能力\n自动化助手\n正在加载工作台\nWorkspace\n审批审计\nRefresh\nbarongyekhna\nOWNER\n退出\n正在同步系统状态\n权限与模块状态正在更新。\n刷新\n审批审计\n审批行为审计\n\n按真实组织、员工和模块查看审批动作。\n\n同步中\n组织\n选择组织\n员工搜索\n员工\n全部员工\n模块\n全部模块\n开始时间\n结束时间\n筛选\n清除\n组织\n上一页\n1\n下一页\n正在加载组织"
+          },
+          {
+            "elapsedMs": 1920,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/settings",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/settings",
+            "status": 200,
+            "title": "设置 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n设置\nRefresh\nbarongyekhna\nOWNER\n退出\n暂不可用\n设置功能尚未开放，当前不会展示或保存任何配置。"
+          }
+        ]
+      },
+      "super_admin": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ],
+        "login": {
+          "finalUrl": "http://127.0.0.1:3000/login",
+          "ok": false,
+          "requiresPasswordChange": false
+        },
+        "routes": [
+          {
+            "elapsedMs": 1806,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/dashboard",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 1799,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/users",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2085,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/organizations",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 1612,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/permissions",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 1601,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/modules",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2288,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/api-key-management",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2104,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/approvals",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2316,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/reviews",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2200,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/settings",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          }
+        ]
+      },
+      "viewer": {
+        "consoleErrors": [
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+        ],
+        "login": {
+          "finalUrl": "http://127.0.0.1:3000/dashboard",
+          "ok": true,
+          "requiresPasswordChange": false
+        },
+        "routes": [
+          {
+            "elapsedMs": 2979,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/dashboard",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/dashboard",
+            "status": 200,
+            "title": "工作台概览 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n首页\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\nActive Modules\n1\n4 visible modules\nExecutions\n0\nRecent executions\nSuccess Rate\n0%\n0 issues in latest logs\nPending Reviews\n0\nAwaiting action\nModules\nModule grid\nSyncing\ndisabled\n用户管理\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\nactive\n组织管理\n账号与组织\n\nReady for workspace operations.\n\nOpen module\ndisabled\n审批\nlocked\n\nAvailable after configuration or access is granted.\n\nUnavailable\ndisabled\n首页\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\nActivity feed\nLive workspace updates\nModule activity\ndisabled\n\n用户管理 is disabled.\n\n账号与组织\nModule activity\nactive\n\n组织管理 is active.\n\n账号与组织\nModule activity\ndisabled\n\n审批 is disabled.\n\n业务处理\nAPI key usage\nkey_••••\n\nNo recent API key usage was recorded.\n\nmasked"
+          },
+          {
+            "elapsedMs": 1917,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/users",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/users",
+            "status": 200,
+            "title": "用户管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n用户管理\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n账号\n用户管理\n\n管理工作台账号、角色、组织归属和密码重置。\n\n用户列表\n\n共 0 个账号，每页 10 条。\n\n刷新"
+          },
+          {
+            "elapsedMs": 2391,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/organizations",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/organizations",
+            "status": 200,
+            "title": "组织管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n组织管理\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n组织列表\n\n共 0 个组织，每页 10 条。\n\n同步中"
+          },
+          {
+            "elapsedMs": 2005,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/permissions",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/permissions",
+            "status": 200,
+            "title": "权限管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n权限管理\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出"
+          },
+          {
+            "elapsedMs": 2191,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/modules",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": true,
+            "ok": true,
+            "route": "/modules",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n功能区\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n功能区\n工作台功能区\n\n查看当前工作台可用功能、可见范围和操作准备情况。\n\n刷新\n功能区\n4\n可用\n1\n配置中\n2\n已隐藏\n0\n组织可见\n1\n已登记\n确认中\n组织状态\n确认中\n操作状态\n预览\n\n后端模块状态服务暂不可用。\n\n功能区\t状态\t可见范围\t准备情况\t操作状态\n\n用户管理\n管理工作台账号和角色。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n组织管理\n管理组织和组织管理员。\n\t\n可用\n可正常使用\n\t\n可见\n按当前账号和组织范围显示\n\t\n可正常使用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n审批\n处理待审批事项。\n\t\n无权访问\n需要开通权限\n\t\n确认中\n按当前账号和组织范围显示\n\t\n需要开通权限\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n首页\n查看工作台首页。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n上一页\n1\n下一页"
+          },
+          {
+            "elapsedMs": 2507,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/api-key-management",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": true,
+            "ok": true,
+            "route": "/api-key-management",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n工作台\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n功能区\n工作台功能区\n\n查看当前工作台可用功能、可见范围和操作准备情况。\n\n刷新\n功能区\n4\n可用\n1\n配置中\n2\n已隐藏\n0\n组织可见\n1\n已登记\n确认中\n组织状态\n确认中\n操作状态\n预览\n\n后端模块状态服务暂不可用。\n\n功能区\t状态\t可见范围\t准备情况\t操作状态\n\n用户管理\n管理工作台账号和角色。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n组织管理\n管理组织和组织管理员。\n\t\n可用\n可正常使用\n\t\n可见\n按当前账号和组织范围显示\n\t\n可正常使用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n审批\n处理待审批事项。\n\t\n无权访问\n需要开通权限\n\t\n确认中\n按当前账号和组织范围显示\n\t\n需要开通权限\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n首页\n查看工作台首页。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n上一页\n1\n下一页"
+          },
+          {
+            "elapsedMs": 1998,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/approvals",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/approvals",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n审批\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n审批中心\n审批列表\n\n仅显示你有权限模块的功能审批。\n\n功能审批\n\n业务模块提交后的审批。\n\n正在加载审批"
+          },
+          {
+            "elapsedMs": 1915,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/reviews",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/reviews",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n审批审计\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n无法查看审批审计\n\n该区域仅对owner和组织管理员开放。"
+          },
+          {
+            "elapsedMs": 1696,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/settings",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/settings",
+            "status": 200,
+            "title": "设置 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n设置\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n暂不可用\n设置功能尚未开放，当前不会展示或保存任何配置。"
+          }
+        ]
+      }
+    }
+  }
+}

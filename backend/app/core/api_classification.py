@@ -1,6 +1,7 @@
 LIGHTWEIGHT_CONTROL_PLANE_PATHS = frozenset(
     (
         "/api/control-plane/modules/me",
+        "/api/control-plane/modules/registry",
         "/api/control-plane/module-control/center",
     )
 )

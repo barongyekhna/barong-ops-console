@@ -163,6 +163,9 @@ const ALLOWED_RESULT_NORMALIZATION_GET_PATHS = new Set([
 const ALLOWED_RESULT_NORMALIZATION_POST_PATHS = new Set([
   "result-normalization/normalize",
 ]);
+const ALLOWED_N8N_WEBHOOK_TEST_POST_PATHS = new Set([
+  "n8n-webhook-test/run",
+]);
 const API_KEY_ID_PATTERN = /^(?:key|akb)_[0-9a-f]{32}$/;
 const BLOCKED_SECURITY_ISOLATION_FIRST_SEGMENTS = new Set([
   "webhook",
@@ -626,7 +629,9 @@ export function getBackendApiPath(method: string, path: string[]) {
     (method === "GET" &&
       ALLOWED_RESULT_NORMALIZATION_GET_PATHS.has(requestedPath)) ||
     (method === "POST" &&
-      ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath))
+      ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath)) ||
+    (method === "POST" &&
+      ALLOWED_N8N_WEBHOOK_TEST_POST_PATHS.has(requestedPath))
   ) {
     return withApiLayer("control-plane", requestedPath);
   }

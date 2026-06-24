@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from datetime import datetime
 from typing import Literal
+from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, model_validator
 
 from .live_gate import ApprovalUnlockDecision
 
@@ -164,6 +165,11 @@ class ApprovalRequest(BaseModel):
         default_factory=tuple
     )
 
+    @computed_field
+    @property
+    def timestamp(self) -> datetime:
+        return self.request_time
+
     @model_validator(mode="after")
     def enforce_module_switch(self) -> "ApprovalRequest":
         _enforce_module_switch_before_c12(self.module_key)
@@ -218,14 +224,22 @@ class ApprovalRequestCreate(BaseModel):
         min_length=1,
         max_length=128,
     )
-    execution_id: str = Field(min_length=1, max_length=128)
+    execution_id: str = Field(
+        default_factory=lambda: f"execution-{uuid4()}",
+        min_length=1,
+        max_length=128,
+    )
     category: ApprovalCategory | None = None
     module_key: str = Field(min_length=1, max_length=128)
-    adapter_key: str = Field(min_length=1, max_length=180)
-    action_key: str = Field(min_length=1, max_length=180)
-    risk_level: ApprovalRiskLevel
-    execution_type: ApprovalExecutionType
-    reason: str = Field(min_length=1, max_length=1000)
+    adapter_key: str | None = Field(default=None, min_length=1, max_length=180)
+    action_key: str | None = Field(default=None, min_length=1, max_length=180)
+    risk_level: ApprovalRiskLevel = "medium"
+    execution_type: ApprovalExecutionType = "no_op"
+    reason: str = Field(
+        default="Approval requested.",
+        min_length=1,
+        max_length=1000,
+    )
     source_refs: tuple[str, ...] = Field(default_factory=tuple)
     context_facts: tuple[ApprovalContextFact, ...] = Field(
         default_factory=tuple
@@ -233,6 +247,10 @@ class ApprovalRequestCreate(BaseModel):
 
     @model_validator(mode="after")
     def enforce_module_switch(self) -> "ApprovalRequestCreate":
+        if self.adapter_key is None:
+            self.adapter_key = f"{self.module_key}.adapter"[:180]
+        if self.action_key is None:
+            self.action_key = f"{self.module_key}.request"[:180]
         _enforce_module_switch_before_c12(self.module_key)
         return self
 
@@ -303,10 +321,12 @@ class ApprovalListItem(BaseModel):
     action_key: str
     requester_id: int
     request_time: datetime
+    timestamp: datetime
     risk_level: ApprovalRiskLevel
     execution_type: ApprovalExecutionType
     category: ApprovalCategory = "feature"
     status: ApprovalRequestStatus
+    reason: str
     reviewer_id: int | None
     workflow_id: str | None = None
     workflow_state: ApprovalWorkflowState | None = None

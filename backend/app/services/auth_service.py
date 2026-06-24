@@ -34,7 +34,7 @@ from ..repositories.users import (
     get_login_user_by_username,
     update_password_hash,
 )
-from ..schemas.user import DEFAULT_INITIAL_PASSWORD, must_change_password_required
+from ..schemas.user import must_change_password_required
 from .event_collector import emit_event
 from .login_side_effects import (
     LoginFailureSideEffect,
@@ -197,6 +197,16 @@ def forget_cached_session_identity(session_id: str) -> None:
 def clear_session_identity_cache() -> None:
     with _session_identity_cache_lock:
         _session_identity_cache.clear()
+
+
+def get_cached_session_identity(
+    session_id: str,
+) -> AuthenticatedUserIdentity | None:
+    try:
+        cache_key = _cache_key_for_session_id(session_id)
+    except InvalidSessionIdError:
+        raise InvalidSessionError("Invalid session.") from None
+    return _identity_from_cache(cache_key, now=_now())
 
 
 def _retry_after_seconds(until: datetime, now: datetime) -> int:
@@ -398,6 +408,38 @@ def _transient_auth_session(
     auth_session.id = 0
     auth_session.user = user
     return auth_session
+
+
+def authenticated_session_from_identity(
+    identity: AuthenticatedUserIdentity,
+    *,
+    audit: AuditContext,
+) -> AuthenticatedSession:
+    user = User(
+        username=identity.username,
+        password_hash="",
+        role=normalize_role(identity.role),
+        organization_id=identity.organization_id,
+        must_change_password=identity.must_change_password,
+        is_active=identity.is_active,
+    )
+    user.id = identity.id
+    user.last_login_at = identity.last_login_at
+
+    auth_session = AuthSession(
+        session_id_hash=identity.session_id_hash,
+        user_id=identity.id,
+        issued_at=identity.session_expires_at,
+        expires_at=identity.session_expires_at,
+        last_seen_at=None,
+        ip_address=audit.ip_address,
+        user_agent=audit.user_agent,
+    )
+    auth_session.id = 0
+    auth_session.invalidated_at = None
+    auth_session.invalidation_reason = None
+    auth_session.user = user
+    return AuthenticatedSession(user=user, auth_session=auth_session)
 
 
 def _is_legacy_auth_session(auth_session: AuthSession) -> bool:
@@ -769,30 +811,6 @@ def change_password(
     audit: AuditContext,
     session_id_hash: str | None = None,
 ) -> User:
-    if (
-        must_change_password_required(
-            role=user.role,
-            must_change_password=user.must_change_password,
-        )
-        and current_password != DEFAULT_INITIAL_PASSWORD
-    ):
-        create_operation_log(
-            db,
-            actor_type="user",
-            actor_id=str(user.id),
-            action="auth.change_password",
-            target_type="user",
-            target_id=str(user.id),
-            result="failure",
-            error_code="invalid_current_password",
-            request_id=audit.request_id,
-            ip_address=audit.ip_address,
-            user_agent=audit.user_agent,
-            details={"outcome": "invalid_current_password"},
-        )
-        db.commit()
-        raise InvalidCredentialsError("Invalid current password.")
-
     if not verify_password(current_password, user.password_hash):
         create_operation_log(
             db,

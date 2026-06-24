@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
 from ...core.roles import list_standard_role_metadata, normalize_role
+from ...core.roles import is_owner_role
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.common import ListResponse
@@ -44,6 +45,45 @@ from ..deps import get_audit_context, get_current_user
 
 router = APIRouter(prefix="/users", tags=["users"])
 logger = logging.getLogger(__name__)
+
+
+def _actor_org_id(actor: User) -> str | None:
+    organization_id = actor.organization_id
+    if organization_id is None:
+        return None
+    organization_id = organization_id.strip()
+    return organization_id or None
+
+
+def _scoped_organization_id(
+    actor: User,
+    requested_org_id: str | None,
+) -> str | None:
+    if is_owner_role(actor.role):
+        return requested_org_id
+    actor_org_id = _actor_org_id(actor)
+    if actor_org_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Organization context is required.",
+        )
+    if requested_org_id is not None and requested_org_id != actor_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Users outside the current organization are not visible.",
+        )
+    return actor_org_id
+
+
+def _ensure_user_visible(actor: User, target: User) -> None:
+    if is_owner_role(actor.role):
+        return
+    actor_org_id = _actor_org_id(actor)
+    if actor_org_id is None or target.organization_id != actor_org_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Users outside the current organization are not visible.",
+        )
 
 
 def _raise_user_management_error(exc: Exception) -> None:
@@ -105,7 +145,7 @@ def users(
     requested_org = organization_id.strip() if organization_id else None
     requested_org = requested_org or None
     requested_role = normalize_role(role) if role and role.strip() else None
-    effective_org = requested_org or None
+    effective_org = _scoped_organization_id(actor, requested_org or None)
 
     cache_key = api_snapshot_key(
         "users.list",
@@ -203,11 +243,11 @@ def user_detail(
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ) -> UserResponse:
-    del actor
     try:
         user = get_managed_user(db, user_id)
     except Exception as exc:
         _raise_user_management_error(exc)
+    _ensure_user_visible(actor, user)
     return UserResponse.model_validate(user)
 
 

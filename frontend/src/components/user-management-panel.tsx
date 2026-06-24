@@ -24,6 +24,7 @@ import { useAuth } from "@/components/auth-provider";
 import { isApiAbortError } from "@/lib/api";
 import {
   canManageUsersForRole,
+  isOrgAdminLikeRole,
   isOwnerRole,
   isSuperAdminRole,
   normalizeRole,
@@ -67,6 +68,14 @@ const FALLBACK_ROLE_METADATA: UserRoleMetadata[] = [
     human_or_agent: "human",
     label: "组织管理员",
     name: "super_admin",
+  },
+  {
+    assignable: true,
+    c04_status: "assignable_admin_role",
+    description: "管理授权范围内的账号和模块。",
+    human_or_agent: "human",
+    label: "管理员",
+    name: "admin",
   },
   {
     assignable: true,
@@ -126,6 +135,7 @@ function validatePassword(password: string) {
 function roleLabel(role: string) {
   const normalizedRole = normalizeRole(role);
   const labels: Record<string, string> = {
+    admin: "管理员",
     operator: "操作员",
     owner: "owner",
     reviewer: "审核员",
@@ -138,6 +148,7 @@ function roleLabel(role: string) {
 function roleDescription(role: string) {
   const normalizedRole = normalizeRole(role);
   const descriptions: Record<string, string> = {
+    admin: "管理授权范围内的账号和模块。",
     operator: "处理已授权的业务操作。",
     owner: "拥有全部权限。",
     reviewer: "审核已授权的业务。",
@@ -305,7 +316,7 @@ export function UserManagementPanel() {
       if (isOwnerRole(currentUser?.role)) {
         return isManagedUserRole(normalizedRole);
       }
-      if (isSuperAdminRole(currentUser?.role)) {
+      if (isOrgAdminLikeRole(currentUser?.role)) {
         return (
           isManagedUserRole(normalizedRole) &&
           !isOwnerRole(normalizedRole) &&
@@ -325,7 +336,7 @@ export function UserManagementPanel() {
       if (isOwnerRole(currentUser?.role)) {
         return true;
       }
-      if (!isSuperAdminRole(currentUser?.role)) {
+      if (!isOrgAdminLikeRole(currentUser?.role)) {
         return false;
       }
       if (isOwnerRole(target.role) || isSuperAdminRole(target.role)) {
@@ -360,7 +371,7 @@ export function UserManagementPanel() {
     if (isOwnerRole(currentUser?.role)) {
       return organizations;
     }
-    if (isSuperAdminRole(currentUser?.role) && currentUserOrgId) {
+    if (isOrgAdminLikeRole(currentUser?.role) && currentUserOrgId) {
       return organizations.filter(
         (organization) => organization.org_id === currentUserOrgId,
       );

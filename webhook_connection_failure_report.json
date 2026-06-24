@@ -1,0 +1,9 @@
+{
+  "audit_id": "recovery_blocked_20260623T191510Z",
+  "generated_at": "2026-06-23T19:15:10.790593+00:00",
+  "mock_fallback_used": false,
+  "n8n_test_webhook_url_configured": false,
+  "root_cause": "N8N_TEST_WEBHOOK_URL is empty in .env.production and in the production backend container.",
+  "status": "failed",
+  "webhook_run_status": 503
+}

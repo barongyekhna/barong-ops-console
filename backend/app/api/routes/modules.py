@@ -1,4 +1,6 @@
 import logging
+from threading import Lock
+from time import monotonic
 
 from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
@@ -28,8 +30,11 @@ from ...services.api_stability import (
 )
 from ...services.api_request_guard import guarded_heavy_api_request
 from ...services.module_registry import (
-    list_module_manifests,
+    list_module_manifests_with_dynamic,
     list_modules_for_user,
+)
+from ...services.module_control_cache_service import (
+    refresh_module_control_center_cache_async,
 )
 from ..deps import (
     get_audit_context,
@@ -39,6 +44,21 @@ from ..deps import (
 
 router = APIRouter(prefix="/modules", tags=["modules"])
 logger = logging.getLogger(__name__)
+MODULE_READ_CACHE_TTL_SECONDS = 5.0
+_module_cache_lock = Lock()
+_modules_list_cache: dict[tuple[int, int], tuple[float, ListResponse[ModuleResponse]]] = {}
+_module_registry_cache: tuple[float, ModuleRegistryResponse] | None = None
+_modules_me_cache: dict[tuple[int, str], tuple[float, ModuleAccessListResponse]] = {}
+_module_detail_cache: dict[str, tuple[float, ModuleResponse]] = {}
+
+
+def _clear_module_read_caches() -> None:
+    global _module_registry_cache
+    with _module_cache_lock:
+        _modules_list_cache.clear()
+        _module_registry_cache = None
+        _modules_me_cache.clear()
+        _module_detail_cache.clear()
 
 
 @router.get("", response_model=ListResponse[ModuleResponse])
@@ -46,11 +66,23 @@ def modules(
     request: Request,
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    guard: None = Depends(guarded_heavy_api_request("modules.list")),
+    guard: None = Depends(
+        guarded_heavy_api_request(
+            "modules.list",
+            allow_idempotent_duplicates=True,
+        )
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ListResponse[ModuleResponse]:
     del guard, user
+    list_cache_key = (limit, offset)
+    now = monotonic()
+    with _module_cache_lock:
+        cached = _modules_list_cache.get(list_cache_key)
+        if cached is not None and cached[0] > now:
+            return cached[1].model_copy(deep=True)
+
     cache_key = api_snapshot_key("modules.list", limit, offset)
     try:
         items = list_modules(db, limit=limit, offset=offset)
@@ -61,6 +93,11 @@ def modules(
             offset=offset,
         )
         save_api_snapshot(cache_key, response)
+        with _module_cache_lock:
+            _modules_list_cache[list_cache_key] = (
+                monotonic() + MODULE_READ_CACHE_TTL_SECONDS,
+                response.model_copy(deep=True),
+            )
         return response
     except Exception as exc:
         db.rollback()
@@ -90,19 +127,37 @@ def modules(
 @router.get("/registry", response_model=ModuleRegistryResponse)
 def module_registry(
     request: Request,
-    guard: None = Depends(guarded_heavy_api_request("modules.registry")),
+    guard: None = Depends(
+        guarded_heavy_api_request(
+            "modules.registry",
+            allow_idempotent_duplicates=True,
+        )
+    ),
+    db: Session = Depends(get_db),
     user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ModuleRegistryResponse:
+    global _module_registry_cache
     del guard, user
+    now = monotonic()
+    with _module_cache_lock:
+        cached = _module_registry_cache
+        if cached is not None and cached[0] > now:
+            return cached[1].model_copy(deep=True)
+
     cache_key = api_snapshot_key("modules.registry")
     try:
-        manifests = list_module_manifests()
+        manifests = list_module_manifests_with_dynamic(db)
         items = [
             ModuleManifestRead.model_validate(manifest.model_dump())
             for manifest in manifests
         ]
         response = ModuleRegistryResponse(items=items, count=len(items))
         save_api_snapshot(cache_key, response)
+        with _module_cache_lock:
+            _module_registry_cache = (
+                monotonic() + MODULE_READ_CACHE_TTL_SECONDS,
+                response.model_copy(deep=True),
+            )
         return response
     except Exception as exc:
         stable_read_failure(
@@ -131,11 +186,23 @@ def module_registry(
 @router.get("/me", response_model=ModuleAccessListResponse)
 def modules_me(
     request: Request,
-    guard: None = Depends(guarded_heavy_api_request("modules.me")),
+    guard: None = Depends(
+        guarded_heavy_api_request(
+            "modules.me",
+            allow_idempotent_duplicates=True,
+        )
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(require_cached_control_plane_admin),
 ) -> ModuleAccessListResponse:
     del guard
+    me_cache_key = (int(user.id), str(user.role))
+    now = monotonic()
+    with _module_cache_lock:
+        cached = _modules_me_cache.get(me_cache_key)
+        if cached is not None and cached[0] > now:
+            return cached[1].model_copy(deep=True)
+
     cache_key = api_snapshot_key("modules.me", user.id, user.role)
     try:
         permission_info, items = list_modules_for_user(db, user, request=request)
@@ -147,6 +214,11 @@ def modules_me(
             count=len(items),
         )
         save_api_snapshot(cache_key, response)
+        with _module_cache_lock:
+            _modules_me_cache[me_cache_key] = (
+                monotonic() + MODULE_READ_CACHE_TTL_SECONDS,
+                response.model_copy(deep=True),
+            )
         return response
     except Exception as exc:
         db.rollback()
@@ -176,15 +248,32 @@ def modules_me(
 @router.get("/{module_key}", response_model=ModuleResponse)
 def module_detail(
     module_key: str,
-    guard: None = Depends(guarded_heavy_api_request("modules.detail")),
+    guard: None = Depends(
+        guarded_heavy_api_request(
+            "modules.detail",
+            allow_idempotent_duplicates=True,
+        )
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ModuleResponse:
     del guard, user
+    now = monotonic()
+    with _module_cache_lock:
+        cached = _module_detail_cache.get(module_key)
+        if cached is not None and cached[0] > now:
+            return cached[1].model_copy(deep=True)
+
     module = get_module(db, module_key)
     if module is None:
         raise not_found("Module", module_key)
-    return ModuleResponse.model_validate(module)
+    response = ModuleResponse.model_validate(module)
+    with _module_cache_lock:
+        _module_detail_cache[module_key] = (
+            monotonic() + MODULE_READ_CACHE_TTL_SECONDS,
+            response.model_copy(deep=True),
+        )
+    return response
 
 
 @router.post(
@@ -212,4 +301,6 @@ def module_create(
         details={"status": payload.status},
     )
     db.refresh(module)
+    _clear_module_read_caches()
+    refresh_module_control_center_cache_async(force=True)
     return ModuleResponse.model_validate(module)

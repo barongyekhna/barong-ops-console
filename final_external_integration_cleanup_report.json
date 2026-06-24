@@ -1,0 +1,133 @@
+{
+  "report_generated_at_utc": "2026-06-24T09:29:01Z",
+  "cleanup_transaction_timestamp_utc": "2026-06-24T09:27:16Z",
+  "execution_mode": "final_external_integration_secret_cleanup_transactional",
+  "database_target": "barong-ops-console-prod_console_postgres_1",
+  "constraints_observed": {
+    "production_users_deleted": false,
+    "production_organizations_deleted": false,
+    "production_modules_deleted": false,
+    "rbac_core_modified": false,
+    "backend_runtime_modified": false,
+    "database_reset": false,
+    "schema_migration": false,
+    "env_files_modified": false
+  },
+  "cleanup_scope": {
+    "n8n_webhook_urls": true,
+    "n8n_api_keys": true,
+    "webhook_test_bridge_records": true,
+    "encrypted_external_credentials": true,
+    "final_e2e_test_integration_metadata": true,
+    "integration_logs_containing_n8n_barongyekhna_com": true
+  },
+  "filter_policy": {
+    "key_name_patterns": [
+      "%n8n%",
+      "%webhook%",
+      "%E2E%",
+      "%Final Production%"
+    ],
+    "url_patterns": [
+      "%n8n.barongyekhna.com%"
+    ],
+    "namespace_or_metadata_patterns": [
+      "%final_e2e%",
+      "%audit_scope_%",
+      "%test_scope%"
+    ],
+    "production_preservation_rule": "Only records matching n8n/webhook/e2e/audit/test integration scope were removed. No non-matching production API key existed at cleanup time."
+  },
+  "deleted_entities_count": {
+    "total_rows_deleted": 3,
+    "api_key_records": 1,
+    "api_key_module_bindings": 1,
+    "module_control_states": 1,
+    "operation_logs": 0,
+    "event_streams": 0,
+    "audit_logs": 0,
+    "storage_events": 0
+  },
+  "deleted_summary": {
+    "deleted_n8n_records": 1,
+    "deleted_webhook_entries": 1,
+    "deleted_api_key_integrations": 1,
+    "deleted_external_integration_metadata": 1,
+    "deleted_integration_logs": 0
+  },
+  "deleted_records_redacted_samples": {
+    "api_key_records": [
+      {
+        "key_id": "key_435209a6500179b323249fe16e56f362",
+        "name": "Final E2E N8N Key 20260624013853_7yljssen",
+        "url": "https://n8n.barongyekhna.com",
+        "status": "active",
+        "secret_value_redacted": true
+      }
+    ],
+    "api_key_module_bindings": [
+      {
+        "binding_id": "akb_ff51508dd7712e301a788bb66d11627d",
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "key_alias": "n8n",
+        "key_id": "key_435209a6500179b323249fe16e56f362"
+      }
+    ]
+  },
+  "remaining_external_counts": {
+    "api_key_records": 0,
+    "api_key_module_bindings": 0,
+    "module_control_states": 0,
+    "operation_logs": 0,
+    "event_streams": 0
+  },
+  "preserved_production_credentials": {
+    "production_api_keys_deleted": false,
+    "non_matching_api_keys_preserved": 0,
+    "note": "No non-test production API key remained in api_key_records at cleanup time."
+  },
+  "preserved_core_entities": {
+    "users_total": 2,
+    "organizations_total": 3,
+    "module_registry_total": 0,
+    "owner_role_active_count": 1,
+    "super_admin_role_active_count": 1,
+    "admin_role_user_count": 0
+  },
+  "integrity_checks": {
+    "owner_role_active_present": true,
+    "super_admin_role_active_present": true,
+    "admin_role_user_leakage_absent": true,
+    "api_key_bindings_missing_key_absent": true,
+    "api_key_bindings_to_deleted_integration_absent": true,
+    "module_control_webhook_test_bridge_absent": true,
+    "storage_events_missing_event_stream_absent": true,
+    "operation_logs_missing_job_absent": true,
+    "org_memberships_missing_org_absent": true,
+    "no_orphan_webhook_references": true,
+    "no_broken_api_key_bindings": true,
+    "no_module_referencing_deleted_keys": true,
+    "execution_gate_dependency_failure_absent": true
+  },
+  "system_integrity_check_result": true,
+  "system_health_after_cleanup": {
+    "backend_internal_health": {
+      "path": "/health",
+      "http_status": 200,
+      "latency_seconds": 0.105,
+      "response": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "frontend_internal_health": {
+      "path": "/",
+      "http_status": 200,
+      "latency_seconds": 1.499
+    }
+  },
+  "production_cleanliness_confirmed": true,
+  "system_final_production_ready": "YES"
+}

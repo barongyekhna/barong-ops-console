@@ -1,0 +1,127 @@
+{
+  "audit_id": "go_live_20260624T082455Z_01b82d78",
+  "checks": {
+    "backend_sync_async": true,
+    "cache_invalidation_working": true,
+    "optimistic_ui_enabled": true,
+    "state_update_immediate": true
+  },
+  "details": {
+    "before": {
+      "category": "integration",
+      "display_name": "n8n Webhook Test Bridge",
+      "enabled": true,
+      "error": {
+        "code": null,
+        "message": null,
+        "timestamp": null
+      },
+      "last_error_at": null,
+      "module_id": "integration.n8n_webhook_test_bridge",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "runtime_error_code": null,
+      "runtime_error_message": null,
+      "runtime_status": "active",
+      "status": "active",
+      "updated_at": "2026-06-24T08:23:45.703946Z"
+    },
+    "frontend_static_checks": {
+      "backend_sync_async": true,
+      "immediate_state_replace": true,
+      "optimistic_ui_enabled": true,
+      "state_helper_present": true
+    },
+    "immediate_state": {
+      "category": "integration",
+      "display_name": "n8n Webhook Test Bridge",
+      "enabled": false,
+      "error": {
+        "code": null,
+        "message": null,
+        "timestamp": null
+      },
+      "last_error_at": null,
+      "module_id": "integration.n8n_webhook_test_bridge",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "runtime_error_code": null,
+      "runtime_error_message": null,
+      "runtime_status": "disabled",
+      "status": "disabled",
+      "updated_at": "2026-06-24T08:25:14.284220Z"
+    },
+    "restore_response": {
+      "body": {
+        "item": {
+          "category": "integration",
+          "display_name": "n8n Webhook Test Bridge",
+          "enabled": true,
+          "error": {
+            "code": null,
+            "message": null,
+            "timestamp": null
+          },
+          "last_error_at": null,
+          "module_id": "integration.n8n_webhook_test_bridge",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "runtime_error_code": null,
+          "runtime_error_message": null,
+          "runtime_status": "active",
+          "status": "active",
+          "updated_at": "2026-06-24T08:25:14.986594Z"
+        }
+      },
+      "elapsed_ms": 789.882,
+      "method": "PATCH",
+      "ok": true,
+      "path": "/api/control-plane/module-control/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/registry-entries/integration.n8n_webhook_test_bridge",
+      "status_code": 200
+    },
+    "restored_state": {
+      "category": "integration",
+      "display_name": "n8n Webhook Test Bridge",
+      "enabled": true,
+      "error": {
+        "code": null,
+        "message": null,
+        "timestamp": null
+      },
+      "last_error_at": null,
+      "module_id": "integration.n8n_webhook_test_bridge",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "runtime_error_code": null,
+      "runtime_error_message": null,
+      "runtime_status": "active",
+      "status": "active",
+      "updated_at": "2026-06-24T08:25:14.986594Z"
+    },
+    "toggle_response": {
+      "body": {
+        "item": {
+          "category": "integration",
+          "display_name": "n8n Webhook Test Bridge",
+          "enabled": false,
+          "error": {
+            "code": null,
+            "message": null,
+            "timestamp": null
+          },
+          "last_error_at": null,
+          "module_id": "integration.n8n_webhook_test_bridge",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "runtime_error_code": null,
+          "runtime_error_message": null,
+          "runtime_status": "disabled",
+          "status": "disabled",
+          "updated_at": "2026-06-24T08:25:14.284220Z"
+        }
+      },
+      "elapsed_ms": 607.056,
+      "method": "PATCH",
+      "ok": true,
+      "path": "/api/control-plane/module-control/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/registry-entries/integration.n8n_webhook_test_bridge",
+      "status_code": 200
+    }
+  },
+  "generated_at": "2026-06-24T08:25:15.398310+00:00",
+  "status": "passed"
+}

@@ -1,0 +1,83 @@
+{
+  "api_key_binding_summary": {
+    "avg_ms": 809.173,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 1012.689,
+    "p95_ms": 1012.689,
+    "success": 3,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "total": 3
+  },
+  "audit_id": "recovery_20260624T072323Z_c698c9ca",
+  "code_changes": [
+    "module-control center read path no longer writes missing state rows",
+    "short TTL read caches for organizations, permissions, modules",
+    "cached GET endpoints allow parallel idempotent reads"
+  ],
+  "generated_at": "2026-06-24T07:24:25.193483+00:00",
+  "login_summary": {
+    "avg_ms": 3538.189,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 4306.202,
+    "p95_ms": 4306.202,
+    "success": 10,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "total": 10
+  },
+  "module_toggle_final_enable": {
+    "body": {
+      "item": {
+        "category": "integration",
+        "display_name": "n8n Webhook Test Bridge",
+        "enabled": true,
+        "error": {
+          "code": null,
+          "message": null,
+          "timestamp": null
+        },
+        "last_error_at": null,
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "runtime_error_code": null,
+        "runtime_error_message": null,
+        "runtime_status": "active",
+        "status": "active",
+        "updated_at": "2026-06-24T07:24:18.290779Z"
+      }
+    },
+    "elapsed_ms": 899.085,
+    "ok": true,
+    "status_code": 200
+  },
+  "module_toggle_summary": {
+    "avg_ms": 4825.677,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 5698.128,
+    "p95_ms": 5698.128,
+    "success": 8,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "total": 8
+  },
+  "read_api_summary": {
+    "avg_ms": 233.094,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 690.874,
+    "p95_ms": 418.591,
+    "success": 50,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "total": 50
+  },
+  "status": "measured",
+  "target": {
+    "module_control_ms": 2000,
+    "read_api_p95_ms": 500
+  }
+}

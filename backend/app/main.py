@@ -1,9 +1,12 @@
 import logging
+from threading import Lock
+from time import monotonic
 
+import anyio
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from .api.deps import get_audit_context
@@ -49,6 +52,7 @@ from .api.routes.module_workflow_bindings import (
     router as module_workflow_bindings_router,
 )
 from .api.routes.n8n_test import router as n8n_test_router
+from .api.routes.n8n_webhook_test import router as n8n_webhook_test_router
 from .api.routes.operation_logs import router as operation_logs_router
 from .api.routes.organizations import router as organizations_router
 from .api.routes.payload_standardization import (
@@ -72,31 +76,48 @@ from .core.config import get_settings
 from .core.environments import is_production_like
 from .core.security_headers import apply_security_headers
 from .core.session_cookies import get_session_id_from_request
-from .core.roles import normalize_role
+from .core.roles import is_owner_role, normalize_role
 from .db.session import managed_read_session
 from .models.auth_session import AuthSession
+from .models.organization import OrganizationRecord
 from .models.user import User
+from .repositories.organizations import (
+    get_organization,
+    list_organizations as list_org_records,
+)
 from .middleware.event_collector import capture_audit_events
 from .middleware.data_isolation import enforce_org_data_isolation
 from .middleware.org_context import org_context_middleware
 from .middleware.permission import enforce_permission_isolation
 from .services.event_collector import emit_event
+from .services.data_isolation import without_org_data_isolation
 from .services.auth_service import (
     AuthenticatedSession,
     AuthenticatedUserIdentity,
     InvalidSessionError,
+    get_cached_session_identity,
     validate_session,
     validate_session_identity_fast,
+)
+from .schemas.common import ListResponse
+from .schemas.module import ModuleManifestRead, ModuleRegistryResponse
+from .schemas.organization import Organization, OrganizationMetadata
+from .schemas.permission import (
+    CurrentUserPermissionResponse,
+    CurrentUserPermissionsRead,
 )
 from .services.login_side_effects import (
     start_login_side_effect_worker,
     stop_login_side_effect_worker,
 )
 from .services.module_control_cache_service import (
+    get_module_control_center_cached_json,
     refresh_module_control_center_cache_async,
     start_module_control_cache_worker,
     stop_module_control_cache_worker,
 )
+from .services.module_registry import list_module_manifests_with_dynamic
+from .services.permission_service import resolve_current_user_permission_info
 from .services.permission_decision_engine import PermissionDecisionEngine
 from .services.request_session_cache import cache_authenticated_session
 from .services.session_seen_buffer import (
@@ -112,6 +133,17 @@ logger = logging.getLogger(__name__)
 PUBLIC_API_PREFIX = "/api/public"
 APPLICATION_API_PREFIX = "/api/app"
 CONTROL_PLANE_API_PREFIX = "/api/control-plane"
+HOT_READ_CACHE_TTL_SECONDS = 5.0
+HOT_READ_PATHS = frozenset(
+    (
+        "/api/app/organizations",
+        "/api/app/permissions/me",
+        "/api/control-plane/module-control/center",
+        "/api/control-plane/modules/registry",
+    )
+)
+_hot_read_cache_lock = Lock()
+_hot_read_cache: dict[tuple[object, ...], tuple[float, object]] = {}
 
 
 def _production_like() -> bool:
@@ -293,6 +325,184 @@ def _control_plane_denied_response(
             detail="Not found.",
         )
     return _json_security_response(status_code=status_code, detail=detail)
+
+
+def _organization_to_schema(record: OrganizationRecord) -> Organization:
+    return Organization(
+        org_id=record.org_id,
+        org_name=record.org_name,
+        org_type=record.org_type,
+        owner_user_id=record.owner_user_id,
+        status=record.status,
+        metadata=OrganizationMetadata.model_validate(record.metadata_json or {}),
+        created_at=record.created_at,
+        updated_at=record.updated_at,
+    )
+
+
+def _identity_to_user(identity: AuthenticatedUserIdentity) -> User:
+    user = User(
+        username=identity.username,
+        password_hash="",
+        role=normalize_role(identity.role),
+        organization_id=identity.organization_id,
+        must_change_password=identity.must_change_password,
+        is_active=identity.is_active,
+    )
+    user.id = identity.id
+    user.last_login_at = identity.last_login_at
+    return user
+
+
+def _cache_key_for_hot_read(
+    identity: AuthenticatedUserIdentity,
+    path: str,
+    query_params: tuple[tuple[str, str], ...],
+) -> tuple[object, ...]:
+    limit = next((value for key, value in query_params if key == "limit"), "")
+    offset = next((value for key, value in query_params if key == "offset"), "")
+    if path == "/api/app/organizations":
+        return (
+            path,
+            identity.id,
+            normalize_role(identity.role),
+            identity.organization_id,
+            limit or "100",
+            offset or "0",
+        )
+    if path == "/api/app/permissions/me":
+        return (path, identity.id, normalize_role(identity.role))
+    return (path, normalize_role(identity.role))
+
+
+def _cached_hot_read_payload(
+    key: tuple[object, ...],
+    loader,
+) -> object:
+    now = monotonic()
+    with _hot_read_cache_lock:
+        cached = _hot_read_cache.get(key)
+        if cached is not None and cached[0] > now:
+            return cached[1]
+        value = loader()
+        if len(_hot_read_cache) >= 512:
+            _hot_read_cache.clear()
+        _hot_read_cache[key] = (monotonic() + HOT_READ_CACHE_TTL_SECONDS, value)
+        return value
+
+
+def _get_cached_hot_read_payload(
+    key: tuple[object, ...],
+) -> object | None:
+    now = monotonic()
+    with _hot_read_cache_lock:
+        cached = _hot_read_cache.get(key)
+        if cached is None:
+            return None
+        if cached[0] <= now:
+            _hot_read_cache.pop(key, None)
+            return None
+        return cached[1]
+
+
+def _load_hot_read_payload(
+    identity: AuthenticatedUserIdentity,
+    path: str,
+    query_params: tuple[tuple[str, str], ...],
+) -> object:
+    role = normalize_role(identity.role)
+    key = _cache_key_for_hot_read(identity, path, query_params)
+
+    def load_organizations() -> object:
+        limit = min(
+            max(
+                1,
+                int(next((value for k, value in query_params if k == "limit"), 100)),
+            ),
+            100,
+        )
+        offset = max(
+            0,
+            int(next((value for k, value in query_params if k == "offset"), 0)),
+        )
+        with managed_read_session() as db:
+            if not is_owner_role(role):
+                org_id = (identity.organization_id or "").strip()
+                records = []
+                if org_id:
+                    record = get_organization(db, org_id)
+                    if record is not None and record.status != "deleted":
+                        records = [record]
+                page = records[offset : offset + limit]
+                response = ListResponse(
+                    items=[_organization_to_schema(record) for record in page],
+                    count=len(records),
+                    limit=limit,
+                    offset=offset,
+                )
+                return response.model_dump_json()
+            with without_org_data_isolation():
+                records = list_org_records(db, limit=limit, offset=offset)
+            response = ListResponse(
+                items=[_organization_to_schema(record) for record in records],
+                count=len(records),
+                limit=limit,
+                offset=offset,
+            )
+            return response.model_dump_json()
+
+    def load_permissions_me() -> object:
+        user = _identity_to_user(identity)
+        if is_owner_role(role):
+            permissions = CurrentUserPermissionsRead(
+                is_owner_full_access=True,
+                permission_keys=["*"],
+                assignments=[],
+                scope_summary=[],
+            )
+        else:
+            with managed_read_session() as db:
+                permissions = CurrentUserPermissionsRead.model_validate(
+                    resolve_current_user_permission_info(db, user)
+                )
+        response = CurrentUserPermissionResponse(
+            id=user.id,
+            user_id=user.id,
+            role=user.role,
+            is_owner=is_owner_role(user.role),
+            permission_keys=permissions.permission_keys,
+            permissions=permissions,
+        )
+        return response.model_dump_json()
+
+    def load_module_registry() -> object:
+        if not (is_owner_role(role) or role == "super_admin"):
+            return {
+                "detail": "Forbidden.",
+                "_status_code": status.HTTP_403_FORBIDDEN,
+            }
+        with managed_read_session() as db:
+            manifests = list_module_manifests_with_dynamic(db)
+        response = ModuleRegistryResponse(
+            items=[
+                ModuleManifestRead.model_validate(manifest.model_dump())
+                for manifest in manifests
+            ],
+            count=len(manifests),
+        )
+        return response.model_dump_json()
+
+    def load_module_control_center() -> object:
+        with managed_read_session() as db:
+            return get_module_control_center_cached_json(db=db)
+
+    if path == "/api/app/organizations":
+        return _cached_hot_read_payload(key, load_organizations)
+    if path == "/api/app/permissions/me":
+        return _cached_hot_read_payload(key, load_permissions_me)
+    if path == "/api/control-plane/module-control/center":
+        return load_module_control_center()
+    return _cached_hot_read_payload(key, load_module_registry)
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -569,6 +779,82 @@ async def short_circuit_removed_modules(request: Request, call_next):
     return await call_next(request)
 
 
+@app.middleware("http")
+async def short_circuit_authenticated_hot_reads(request: Request, call_next):
+    if (
+        request.method not in {"GET", "HEAD", "OPTIONS"}
+        or request.url.path not in HOT_READ_PATHS
+    ):
+        return await call_next(request)
+
+    session_id = get_session_id_from_request(request, settings=settings)
+    if session_id is None:
+        return _json_security_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated.",
+        )
+
+    audit = get_audit_context(request)
+
+    try:
+        identity = get_cached_session_identity(session_id)
+    except InvalidSessionError:
+        return _json_security_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated.",
+        )
+    if identity is None:
+        def load_identity() -> AuthenticatedUserIdentity:
+            with managed_read_session() as db:
+                return validate_session_identity_fast(db, session_id=session_id)
+
+        try:
+            identity = await anyio.to_thread.run_sync(load_identity)
+        except InvalidSessionError:
+            return _json_security_response(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated.",
+            )
+
+    request.state.user_id = str(identity.id)
+    query_params = tuple(request.query_params.multi_items())
+    cache_key = _cache_key_for_hot_read(identity, request.url.path, query_params)
+    if request.url.path == "/api/control-plane/module-control/center":
+        payload = await anyio.to_thread.run_sync(
+            _load_hot_read_payload,
+            identity,
+            request.url.path,
+            query_params,
+        )
+    else:
+        payload = _get_cached_hot_read_payload(cache_key)
+        if payload is None:
+            payload = await anyio.to_thread.run_sync(
+                _load_hot_read_payload,
+                identity,
+                request.url.path,
+                query_params,
+            )
+    if isinstance(payload, dict) and "_status_code" in payload:
+        status_code = int(payload.get("_status_code") or 500)
+        return _json_security_response(
+            status_code=status_code,
+            detail=payload.get("detail", "Request failed."),
+        )
+
+    if isinstance(payload, bytes):
+        response = Response(content=payload, media_type="application/json")
+        apply_security_headers(response, settings=settings)
+    elif isinstance(payload, str):
+        response = Response(content=payload, media_type="application/json")
+        apply_security_headers(response, settings=settings)
+    else:
+        response = _json_ok_security_response(jsonable_encoder(payload))
+    response.headers["X-Request-ID"] = audit.request_id
+    response.headers["X-Trace-ID"] = audit.request_id
+    return response
+
+
 @app.get("/health", response_model=HealthResponse, include_in_schema=False)
 @app.get(
     "/api/backend/health",
@@ -609,6 +895,7 @@ app.include_router(modules_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(foundation_demo_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(n8n_test_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(n8n_webhook_test_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_adapters_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_control_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_workflow_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)

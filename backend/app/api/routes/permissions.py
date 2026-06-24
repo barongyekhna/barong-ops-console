@@ -1,4 +1,6 @@
 import logging
+from threading import Lock
+from time import monotonic
 from uuid import UUID
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
@@ -54,6 +56,13 @@ from ..deps import get_audit_context, require_owner, require_rbac
 
 router = APIRouter(prefix="/permissions", tags=["permissions"])
 logger = logging.getLogger(__name__)
+PERMISSION_READ_CACHE_TTL_SECONDS = 5.0
+_permission_cache_lock = Lock()
+_permission_me_cache: dict[tuple[int, str], tuple[float, CurrentUserPermissionResponse]] = {}
+_permission_registry_cache: dict[
+    tuple[bool, int, int],
+    tuple[float, ListResponse[PermissionRegistryRead]],
+] = {}
 
 
 def _raise_permission_assignment_error(exc: Exception) -> None:
@@ -153,21 +162,45 @@ def _permission_registry_response_item(permission) -> PermissionRegistryRead:
 
 @router.get("/me", response_model=CurrentUserPermissionResponse)
 def permissions_me(
-    guard: None = Depends(guarded_heavy_api_request("permissions.me")),
+    guard: None = Depends(
+        guarded_heavy_api_request(
+            "permissions.me",
+            allow_idempotent_duplicates=True,
+        )
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("AUTH", "read")),
 ) -> CurrentUserPermissionResponse:
     del guard
+    cache_key = (int(user.id), str(user.role))
+    now = monotonic()
+    with _permission_cache_lock:
+        cached = _permission_me_cache.get(cache_key)
+        if cached is not None and cached[0] > now:
+            return cached[1].model_copy(deep=True)
+
     if is_owner_role(user.role):
-        return _owner_permissions_me_response(user)
+        response = _owner_permissions_me_response(user)
+        with _permission_cache_lock:
+            _permission_me_cache[cache_key] = (
+                monotonic() + PERMISSION_READ_CACHE_TTL_SECONDS,
+                response.model_copy(deep=True),
+            )
+        return response
 
     permissions = CurrentUserPermissionsRead.model_validate(
         resolve_current_user_permission_info(db, user)
     )
-    return _current_user_permission_response(
+    response = _current_user_permission_response(
         user=user,
         permissions=permissions,
     )
+    with _permission_cache_lock:
+        _permission_me_cache[cache_key] = (
+            monotonic() + PERMISSION_READ_CACHE_TTL_SECONDS,
+            response.model_copy(deep=True),
+        )
+    return response
 
 
 @router.get("/registry", response_model=ListResponse[PermissionRegistryRead])
@@ -175,11 +208,24 @@ def permissions_registry(
     request: Request,
     limit: int = Query(default=100, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
-    guard: None = Depends(guarded_heavy_api_request("permissions.registry")),
+    guard: None = Depends(
+        guarded_heavy_api_request(
+            "permissions.registry",
+            allow_idempotent_duplicates=True,
+        )
+    ),
     db: Session = Depends(get_db),
     user: User = Depends(require_rbac("C16", "admin")),
 ) -> ListResponse[PermissionRegistryRead]:
     del guard
+    is_owner = is_owner_role(user.role)
+    registry_cache_key = (is_owner, limit, offset)
+    now = monotonic()
+    with _permission_cache_lock:
+        cached = _permission_registry_cache.get(registry_cache_key)
+        if cached is not None and cached[0] > now:
+            return cached[1].model_copy(deep=True)
+
     cache_key = api_snapshot_key("permissions.registry", limit, offset)
     try:
         permissions = list_enabled_permissions(db)
@@ -188,7 +234,7 @@ def permissions_registry(
             permissions = list_enabled_permissions(db)
         visible_permissions = (
             permissions
-            if is_owner_role(user.role)
+            if is_owner
             else [
                 permission
                 for permission in permissions
@@ -222,6 +268,11 @@ def permissions_registry(
         )
         if permissions:
             save_api_snapshot(cache_key, response)
+            with _permission_cache_lock:
+                _permission_registry_cache[registry_cache_key] = (
+                    monotonic() + PERMISSION_READ_CACHE_TTL_SECONDS,
+                    response.model_copy(deep=True),
+                )
         return response
     except Exception as exc:
         db.rollback()

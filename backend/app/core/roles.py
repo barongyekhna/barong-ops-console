@@ -123,7 +123,7 @@ def is_super_admin_role(role: str | None) -> bool:
 
 
 def is_org_admin_like_role(role: str | None) -> bool:
-    return is_super_admin_role(role)
+    return normalize_role(role) in {ROLE_SUPER_ADMIN, ROLE_ADMIN}
 
 
 def role_filter_values(role: str | None) -> tuple[str, ...]:

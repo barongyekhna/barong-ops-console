@@ -167,27 +167,31 @@ def test_owner_request_persists_workflow_and_decision(
     assert [decision.status for decision in decisions] == ["pending"]
 
 
-def test_admin_can_approve_pending_approval(
+def test_super_admin_can_approve_pending_approval(
     auth_client: TestClient,
 ) -> None:
     org_id = "org_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     create_approval_user(username="c12d_owner", role="owner", org_id=org_id)
-    create_approval_user(username="c12d_admin", role="super_admin", org_id=org_id)
+    create_approval_user(
+        username="c12d_super_admin",
+        role="super_admin",
+        org_id=org_id,
+    )
     owner_headers = auth_headers(auth_client, username="c12d_owner")
-    admin_headers = auth_headers(auth_client, username="c12d_admin")
+    super_admin_headers = auth_headers(auth_client, username="c12d_super_admin")
 
     created = auth_client.post(
         "/api/app/approval/request",
         json=approval_payload(
-            approval_id="approval-api-admin",
-            execution_id="execution-api-admin",
+            approval_id="approval-api-super-admin",
+            execution_id="execution-api-super-admin",
         ),
         headers=owner_headers,
     )
     approved = auth_client.post(
-        "/api/app/approval/approval-api-admin/approve",
-        json={"reason": "Admin approved the pending approval request."},
-        headers=admin_headers,
+        "/api/app/approval/approval-api-super-admin/approve",
+        json={"reason": "Super admin approved the pending approval request."},
+        headers=super_admin_headers,
     )
 
     assert created.status_code == 201, created.text
@@ -199,7 +203,7 @@ def test_admin_can_approve_pending_approval(
     with SessionLocal() as db:
         approval = db.scalar(
             select(ApprovalRequestRecord).where(
-                ApprovalRequestRecord.approval_id == "approval-api-admin"
+                ApprovalRequestRecord.approval_id == "approval-api-super-admin"
             )
         )
         decisions = list(
@@ -207,7 +211,7 @@ def test_admin_can_approve_pending_approval(
                 select(ApprovalDecisionRecord)
                 .where(
                     ApprovalDecisionRecord.approval_id
-                    == "approval-api-admin"
+                    == "approval-api-super-admin"
                 )
                 .order_by(ApprovalDecisionRecord.id)
             )

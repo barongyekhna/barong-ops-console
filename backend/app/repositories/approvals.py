@@ -63,7 +63,7 @@ def _escape_like(value: str) -> str:
 
 
 def _request_values(request: ApprovalRequest) -> dict[str, object]:
-    payload = request.model_dump(mode="json")
+    payload = request.model_dump(mode="json", exclude={"timestamp"})
     return {
         "org_id": tenant_org_id_for_create(),
         "approval_id": request.approval_id,
@@ -96,7 +96,10 @@ def _workflow_values(workflow: ApprovalWorkflow) -> dict[str, object]:
         "state": workflow.state,
         "workflow_created_at": workflow.created_at,
         "workflow_updated_at": workflow.updated_at,
-        "workflow_payload": workflow.model_dump(mode="json"),
+        "workflow_payload": workflow.model_dump(
+            mode="json",
+            exclude={"approval_request": {"timestamp"}},
+        ),
     }
 
 

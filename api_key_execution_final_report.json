@@ -1,0 +1,581 @@
+{
+  "alt_binding": {
+    "binding_create": {
+      "body": {
+        "item": {
+          "binding_id": "akb_fc71d749af91b350b2cc0b2500ee7745",
+          "created_at": "2026-06-24T08:25:05.494939Z",
+          "key_alias": "n8n_audit_01b82d78",
+          "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+          "key_name": "Go live n8n_audit_01b82d78 go_live_20260624T082455Z_01b82d78",
+          "key_url": "https://example.invalid",
+          "module_id": "integration.n8n_webhook_test_bridge",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "status": "active",
+          "updated_at": "2026-06-24T08:25:05.494939Z"
+        }
+      },
+      "elapsed_ms": 802.77,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/bindings",
+      "status_code": 201
+    },
+    "created": true,
+    "item": {
+      "binding_id": "akb_fc71d749af91b350b2cc0b2500ee7745",
+      "created_at": "2026-06-24T08:25:05.494939Z",
+      "key_alias": "n8n_audit_01b82d78",
+      "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+      "key_name": "Go live n8n_audit_01b82d78 go_live_20260624T082455Z_01b82d78",
+      "key_url": "https://example.invalid",
+      "module_id": "integration.n8n_webhook_test_bridge",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "status": "active",
+      "updated_at": "2026-06-24T08:25:05.494939Z"
+    },
+    "key_create": {
+      "body": {
+        "item": {
+          "assigned_module_ids": [],
+          "created_at": "2026-06-24T08:25:04.802543Z",
+          "key_hash_prefix": "2321d28394cb",
+          "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+          "last_used_at": null,
+          "name": "Go live n8n_audit_01b82d78 go_live_20260624T082455Z_01b82d78",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "status": "active",
+          "updated_at": "2026-06-24T08:25:04.802543Z",
+          "url": "https://example.invalid"
+        }
+      },
+      "elapsed_ms": 395.081,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/keys",
+      "status_code": 201
+    }
+  },
+  "audit_id": "go_live_20260624T082455Z_01b82d78",
+  "checks": {
+    "fallback_behavior": true,
+    "key_isolation_between_modules": true,
+    "key_selection_correctness": true,
+    "logs_persisted": true,
+    "multi_key_per_module_routing": true
+  },
+  "fallback_run": {
+    "body": {
+      "detail": "Not found."
+    },
+    "elapsed_ms": 390.343,
+    "method": "POST",
+    "ok": false,
+    "path": "/api/control-plane/n8n-webhook-test/run",
+    "status_code": 403
+  },
+  "generated_at": "2026-06-24T08:25:13.980666+00:00",
+  "isolation_binding": {
+    "binding_create": {
+      "body": {
+        "item": {
+          "binding_id": "akb_6d6b0862afff749e3062336a27cf881b",
+          "created_at": "2026-06-24T08:25:07.101434Z",
+          "key_alias": "isolation_01b82d78",
+          "key_id": "key_a07472f3d9ee84d1574b3cb348d0250f",
+          "key_name": "Go live isolation_01b82d78 go_live_20260624T082455Z_01b82d78",
+          "key_url": "https://example.invalid",
+          "module_id": "experimental.foundation_demo",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "status": "active",
+          "updated_at": "2026-06-24T08:25:07.101434Z"
+        }
+      },
+      "elapsed_ms": 311.37,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/bindings",
+      "status_code": 201
+    },
+    "created": true,
+    "item": {
+      "binding_id": "akb_6d6b0862afff749e3062336a27cf881b",
+      "created_at": "2026-06-24T08:25:07.101434Z",
+      "key_alias": "isolation_01b82d78",
+      "key_id": "key_a07472f3d9ee84d1574b3cb348d0250f",
+      "key_name": "Go live isolation_01b82d78 go_live_20260624T082455Z_01b82d78",
+      "key_url": "https://example.invalid",
+      "module_id": "experimental.foundation_demo",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "status": "active",
+      "updated_at": "2026-06-24T08:25:07.101434Z"
+    },
+    "key_create": {
+      "body": {
+        "item": {
+          "assigned_module_ids": [],
+          "created_at": "2026-06-24T08:25:06.795449Z",
+          "key_hash_prefix": "8d93cd3b02c6",
+          "key_id": "key_a07472f3d9ee84d1574b3cb348d0250f",
+          "last_used_at": null,
+          "name": "Go live isolation_01b82d78 go_live_20260624T082455Z_01b82d78",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "status": "active",
+          "updated_at": "2026-06-24T08:25:06.795449Z",
+          "url": "https://example.invalid"
+        }
+      },
+      "elapsed_ms": 504.898,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/keys",
+      "status_code": 201
+    }
+  },
+  "isolation_run": {
+    "body": {
+      "detail": "Not found."
+    },
+    "elapsed_ms": 308.518,
+    "method": "POST",
+    "ok": false,
+    "path": "/api/control-plane/n8n-webhook-test/run",
+    "status_code": 403
+  },
+  "module_to_api_key_to_injection_to_execution_to_response_to_logs": {
+    "primary": {
+      "body": {
+        "attempts": 1,
+        "duration_ms": 708.783,
+        "error_code": null,
+        "error_message": null,
+        "injected_key": {
+          "header_name": "Authorization",
+          "injected": true,
+          "key_alias": "n8n",
+          "key_id": "key_23840420533cb8dca99237d16802f694",
+          "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca"
+        },
+        "logs_stored": true,
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "n8n_received": true,
+        "operation_log_id": "a93fa480-fee4-41b5-bd05-d910b40a1cdf",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "request_sent": true,
+        "response_body": {
+          "unparseable_json": true
+        },
+        "response_returned": true,
+        "retry_count": 0,
+        "run_id": "n8n_webhook_test_cba53b8919b5486fb9a8a43bd448aef8",
+        "status_code": 200,
+        "success": true
+      },
+      "elapsed_ms": 1595.497,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/n8n-webhook-test/run",
+      "status_code": 201
+    },
+    "primary_log_persisted": true,
+    "secondary_alias": {
+      "body": {
+        "attempts": 1,
+        "duration_ms": 805.083,
+        "error_code": null,
+        "error_message": null,
+        "injected_key": {
+          "header_name": "Authorization",
+          "injected": true,
+          "key_alias": "n8n_audit_01b82d78",
+          "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+          "key_name": "Go live n8n_audit_01b82d78 go_live_20260624T082455Z_01b82d78"
+        },
+        "logs_stored": true,
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "n8n_received": true,
+        "operation_log_id": "48515e3a-4934-4afb-8419-8f6adc3ad04c",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "request_sent": true,
+        "response_body": {
+          "unparseable_json": true
+        },
+        "response_returned": true,
+        "retry_count": 0,
+        "run_id": "n8n_webhook_test_c0966c8574a24f30b7ea06eca9da8e9a",
+        "status_code": 200,
+        "success": true
+      },
+      "elapsed_ms": 1600.587,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/n8n-webhook-test/run",
+      "status_code": 201
+    },
+    "secondary_log_persisted": true
+  },
+  "primary_binding": {
+    "binding_list": {
+      "body": {
+        "count": 28,
+        "items": [
+          {
+            "binding_id": "akb_bab8fddbd553313c2e9d64b0c4d1ef8c",
+            "created_at": "2026-06-24T07:19:06.187305Z",
+            "key_alias": "n8n",
+            "key_id": "key_7c04f142be158ab58566490e262463ae",
+            "key_name": "Recovery n8n key recovery_20260624T071847Z_cf4deb86",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+            "status": "active",
+            "updated_at": "2026-06-24T07:19:06.187305Z"
+          },
+          {
+            "binding_id": "akb_c2696ac80040eeca9f8d9356f7cac7dc",
+            "created_at": "2026-06-24T07:19:46.983515Z",
+            "key_alias": "n8n_route_0",
+            "key_id": "key_16be82921635c0ab205c08eddfa55871",
+            "key_name": "Recovery routing key 0 recovery_20260624T071847Z_cf4deb86",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+            "status": "active",
+            "updated_at": "2026-06-24T07:19:46.983515Z"
+          },
+          {
+            "binding_id": "akb_d801a2b199f0f61c806239f8f3b65116",
+            "created_at": "2026-06-24T07:19:46.985498Z",
+            "key_alias": "n8n_route_1",
+            "key_id": "key_ae998c5f6e3c69f03bbfc16d53be5caf",
+            "key_name": "Recovery routing key 1 recovery_20260624T071847Z_cf4deb86",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+            "status": "active",
+            "updated_at": "2026-06-24T07:19:46.985498Z"
+          },
+          {
+            "binding_id": "akb_9f4c05f8a6348d181607714aac87c0bd",
+            "created_at": "2026-06-24T07:19:46.999836Z",
+            "key_alias": "n8n_route_2",
+            "key_id": "key_df9098004475a1a30588d20f99b8aeb9",
+            "key_name": "Recovery routing key 2 recovery_20260624T071847Z_cf4deb86",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+            "status": "active",
+            "updated_at": "2026-06-24T07:19:46.999836Z"
+          },
+          {
+            "binding_id": "akb_34b257180ea987326147d4cbec97857b",
+            "created_at": "2026-06-24T01:39:12.508236Z",
+            "key_alias": "default",
+            "key_id": "key_435209a6500179b323249fe16e56f362",
+            "key_name": "Final E2E N8N Key 20260624013853_7yljssen",
+            "key_url": "https://n8n.barongyekhna.com",
+            "module_id": "demo.final_e2e_20260624013853_7yljssen",
+            "org_id": "org_19721ad17c6848d5aaf3a192e54eb3e8",
+            "status": "active",
+            "updated_at": "2026-06-24T01:39:12.508236Z"
+          },
+          {
+            "binding_id": "akb_ff51508dd7712e301a788bb66d11627d",
+            "created_at": "2026-06-24T01:39:15.407975Z",
+            "key_alias": "n8n",
+            "key_id": "key_435209a6500179b323249fe16e56f362",
+            "key_name": "Final E2E N8N Key 20260624013853_7yljssen",
+            "key_url": "https://n8n.barongyekhna.com",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_19721ad17c6848d5aaf3a192e54eb3e8",
+            "status": "active",
+            "updated_at": "2026-06-24T01:39:15.407975Z"
+          },
+          {
+            "binding_id": "akb_93102a219828d0d90616a0c7550b14aa",
+            "created_at": "2026-06-23T19:05:33.581873Z",
+            "key_alias": "n8n",
+            "key_id": "key_1a5fd06ab6de0f5c2cf65aa0df9baa73",
+            "key_name": "Recovery n8n key recovery_20260623T190449Z_91b6bdaa",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_25b3a5022b33462a91faf7e7944f6c64",
+            "status": "active",
+            "updated_at": "2026-06-23T19:05:33.581873Z"
+          },
+          {
+            "binding_id": "akb_1063e5ea588f5fd5e267a3c9485f37a3",
+            "created_at": "2026-06-24T08:03:36.603368Z",
+            "key_alias": "n8n",
+            "key_id": "key_dd6571b51e0e7f57549db72a64a6bf1e",
+            "key_name": "Go live n8n go_live_20260624T080328Z_82b84a63",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T08:03:36.603368Z"
+          },
+          {
+            "binding_id": "akb_9bf8edc191601bd8e9e10fd8035dcfc9",
+            "created_at": "2026-06-24T07:23:39.383752Z",
+            "key_alias": "n8n",
+            "key_id": "key_23840420533cb8dca99237d16802f694",
+            "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T07:23:39.383752Z"
+          },
+          {
+            "binding_id": "akb_f20cd0f6cd759d50f069bb3e89d8430b",
+            "created_at": "2026-06-24T07:24:23.475507Z",
+            "key_alias": "n8n_route_0",
+            "key_id": "key_be5fa78e7862dded687700e543ce1c2d",
+            "key_name": "Recovery routing key 0 recovery_20260624T072323Z_c698c9ca",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T07:24:23.475507Z"
+          },
+          {
+            "binding_id": "akb_36fb9651373e8ee4807be255e9e31bbf",
+            "created_at": "2026-06-24T07:24:23.398820Z",
+            "key_alias": "n8n_route_1",
+            "key_id": "key_e907a9e9956db610a5b7b6bbc11f4e5c",
+            "key_name": "Recovery routing key 1 recovery_20260624T072323Z_c698c9ca",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T07:24:23.398820Z"
+          },
+          {
+            "binding_id": "akb_415c277d20a5ac39e69114f7dbc0bba2",
+            "created_at": "2026-06-24T07:24:23.000112Z",
+            "key_alias": "n8n_route_2",
+            "key_id": "key_217a0c4bc14d707af9978f9e652ceec9",
+            "key_name": "Recovery routing key 2 recovery_20260624T072323Z_c698c9ca",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T07:24:23.000112Z"
+          },
+          {
+            "binding_id": "akb_5c869226fb999454e23b5204eb7d39ac",
+            "created_at": "2026-06-24T07:11:59.397659Z",
+            "key_alias": "n8n",
+            "key_id": "key_51659a5f1088e231d4ba1b402e960696",
+            "key_name": "Recovery n8n key recovery_20260624T071145Z_cf1e556f",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+            "status": "active",
+            "updated_at": "2026-06-24T07:11:59.397659Z"
+          },
+          {
+            "binding_id": "akb_ba1fc50c28806e0a360984cf544137c0",
+            "created_at": "2026-06-24T07:12:41.886145Z",
+            "key_alias": "n8n_route_0",
+            "key_id": "key_394833f798b3f5e7a7c359fc42055f3a",
+            "key_name": "Recovery routing key 0 recovery_20260624T071145Z_cf1e556f",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+            "status": "active",
+            "updated_at": "2026-06-24T07:12:41.886145Z"
+          },
+          {
+            "binding_id": "akb_39750936b1c737ee5ee27e02a2a89c87",
+            "created_at": "2026-06-24T07:12:41.887418Z",
+            "key_alias": "n8n_route_1",
+            "key_id": "key_1cb7e28956ff10127e669cb2f96311a8",
+            "key_name": "Recovery routing key 1 recovery_20260624T071145Z_cf1e556f",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+            "status": "active",
+            "updated_at": "2026-06-24T07:12:41.887418Z"
+          },
+          {
+            "binding_id": "akb_443d79bc428d83c9fd8538ebe985ccf8",
+            "created_at": "2026-06-24T07:12:41.884197Z",
+            "key_alias": "n8n_route_2",
+            "key_id": "key_c9725c513127c0072c247a5c63220f45",
+            "key_name": "Recovery routing key 2 recovery_20260624T071145Z_cf1e556f",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+            "status": "active",
+            "updated_at": "2026-06-24T07:12:41.884197Z"
+          },
+          {
+            "binding_id": "akb_f2fe0fbc5fb3c773f544713d962474d8",
+            "created_at": "2026-06-23T19:01:26.100137Z",
+            "key_alias": "n8n",
+            "key_id": "key_6e304d30b0d135766b2e28bf69dcbca6",
+            "key_name": "Recovery n8n key recovery_20260623T190042Z_ba899f37",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_4769b90c7f0e44ae96ce787ade28e8c1",
+            "status": "active",
+            "updated_at": "2026-06-23T19:01:26.100137Z"
+          },
+          {
+            "binding_id": "akb_179cdcc2339a4e3215fb46aef938bfd5",
+            "created_at": "2026-06-24T06:33:45.298916Z",
+            "key_alias": "n8n",
+            "key_id": "key_1fa01ae7130906247697bbd3fb5263d2",
+            "key_name": "Recovery n8n key recovery_20260624T063307Z_92bb1e70",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_7512577c7033447584b246ec0e3276fd",
+            "status": "active",
+            "updated_at": "2026-06-24T06:33:45.298916Z"
+          },
+          {
+            "binding_id": "akb_874fa2d7c45a53552ee8cac71114bcdc",
+            "created_at": "2026-06-24T06:35:41.498974Z",
+            "key_alias": "n8n_route_0",
+            "key_id": "key_ca558c6a6f0f3879773eaf3ac9746965",
+            "key_name": "Recovery routing key 1 recovery_20260624T063307Z_92bb1e70",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_7512577c7033447584b246ec0e3276fd",
+            "status": "active",
+            "updated_at": "2026-06-24T06:35:41.498974Z"
+          },
+          {
+            "binding_id": "akb_0fb6ce832e8356f1188b798a0142f2d6",
+            "created_at": "2026-06-24T06:35:41.498991Z",
+            "key_alias": "n8n_route_1",
+            "key_id": "key_0c828c994fc92ced3fc1c631d0af1dcd",
+            "key_name": "Recovery routing key 2 recovery_20260624T063307Z_92bb1e70",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_7512577c7033447584b246ec0e3276fd",
+            "status": "active",
+            "updated_at": "2026-06-24T06:35:41.498991Z"
+          },
+          {
+            "binding_id": "akb_18b40b0218ddeff9b897a5a3eefdee4e",
+            "created_at": "2026-06-23T19:10:40.491409Z",
+            "key_alias": "n8n",
+            "key_id": "key_be4eabe1f1a5a50a62fd9261f2134138",
+            "key_name": "Recovery n8n key recovery_20260623T190957Z_8e948ed7",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_8138a6cf74f04577a103138ee00357c4",
+            "status": "active",
+            "updated_at": "2026-06-23T19:10:40.491409Z"
+          },
+          {
+            "binding_id": "akb_1f80324c5c60395375faf9bddb88a447",
+            "created_at": "2026-06-23T18:19:58.475742Z",
+            "key_alias": "backup",
+            "key_id": "key_d611ebd2d3618f33cd96bf543651e26a",
+            "key_name": "Audit backup key final_preprod_20260623T181922Z_9658bfcf",
+            "key_url": "http://127.0.0.1:8788/audit/backup",
+            "module_id": "integration.n8n_test_bridge",
+            "org_id": "org_cf25980213a1459e8908bbf505729895",
+            "status": "active",
+            "updated_at": "2026-06-23T18:19:58.475742Z"
+          },
+          {
+            "binding_id": "akb_0a4e76caa058320929e4ef45beaa2b47",
+            "created_at": "2026-06-23T18:19:56.890757Z",
+            "key_alias": "n8n",
+            "key_id": "key_575957fb51b80804825c41a462c16b39",
+            "key_name": "Audit n8n key final_preprod_20260623T181922Z_9658bfcf",
+            "key_url": "http://127.0.0.1:8788/audit/n8n",
+            "module_id": "integration.n8n_test_bridge",
+            "org_id": "org_cf25980213a1459e8908bbf505729895",
+            "status": "active",
+            "updated_at": "2026-06-23T18:19:56.890757Z"
+          },
+          {
+            "binding_id": "akb_41d9d62faf62ebda43912f141151331d",
+            "created_at": "2026-06-24T06:23:41.001283Z",
+            "key_alias": "n8n",
+            "key_id": "key_39c36b142f320f1f98ae0ef266a0e90f",
+            "key_name": "Recovery n8n key recovery_20260624T062304Z_3cf203f3",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_d9e4fe922d9b4b258025670a229b036d",
+            "status": "active",
+            "updated_at": "2026-06-24T06:23:41.001283Z"
+          },
+          {
+            "binding_id": "akb_5983b78e117c004238d6a799d8ac9f4f",
+            "created_at": "2026-06-24T06:25:35.700581Z",
+            "key_alias": "n8n_route_0",
+            "key_id": "key_e0f980eb53a732db1a63843f2f435f58",
+            "key_name": "Recovery routing key 1 recovery_20260624T062304Z_3cf203f3",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_d9e4fe922d9b4b258025670a229b036d",
+            "status": "active",
+            "updated_at": "2026-06-24T06:25:35.700581Z"
+          },
+          {
+            "binding_id": "akb_8d0aebd369fa4e348c3a07db77c658ba",
+            "created_at": "2026-06-24T06:25:35.404573Z",
+            "key_alias": "n8n_route_1",
+            "key_id": "key_806d3597108b6ea4639da0877ef33eab",
+            "key_name": "Recovery routing key 2 recovery_20260624T062304Z_3cf203f3",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_d9e4fe922d9b4b258025670a229b036d",
+            "status": "active",
+            "updated_at": "2026-06-24T06:25:35.404573Z"
+          },
+          {
+            "binding_id": "akb_9c8cd88b66c960c9f78b6ce51c0fcd08",
+            "created_at": "2026-06-23T18:11:42.873235Z",
+            "key_alias": "backup",
+            "key_id": "key_14444ef2acae538ca750701fbd6bbb0b",
+            "key_name": "Audit backup key final_preprod_20260623T181050Z_0e3e9f24",
+            "key_url": "http://127.0.0.1:8788/audit/backup",
+            "module_id": "integration.n8n_test_bridge",
+            "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "status": "active",
+            "updated_at": "2026-06-23T18:11:42.873235Z"
+          },
+          {
+            "binding_id": "akb_7ef6cd8dfb2ba40d9ae6b2ed360360fa",
+            "created_at": "2026-06-23T18:11:40.292628Z",
+            "key_alias": "n8n",
+            "key_id": "key_9ae881ef8df2c9db1109eb0961f53696",
+            "key_name": "Audit n8n key final_preprod_20260623T181050Z_0e3e9f24",
+            "key_url": "http://127.0.0.1:8788/audit/n8n",
+            "module_id": "integration.n8n_test_bridge",
+            "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "status": "active",
+            "updated_at": "2026-06-23T18:11:40.292628Z"
+          }
+        ]
+      },
+      "elapsed_ms": 588.103,
+      "method": "GET",
+      "ok": true,
+      "path": "/api/control-plane/api-key-orchestration/bindings",
+      "status_code": 200
+    },
+    "created": false,
+    "item": {
+      "binding_id": "akb_1063e5ea588f5fd5e267a3c9485f37a3",
+      "created_at": "2026-06-24T08:03:36.603368Z",
+      "key_alias": "n8n",
+      "key_id": "key_dd6571b51e0e7f57549db72a64a6bf1e",
+      "key_name": "Go live n8n go_live_20260624T080328Z_82b84a63",
+      "key_url": "https://example.invalid",
+      "module_id": "integration.n8n_webhook_test_bridge",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "status": "active",
+      "updated_at": "2026-06-24T08:03:36.603368Z"
+    }
+  },
+  "status": "passed"
+}

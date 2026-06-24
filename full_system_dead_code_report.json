@@ -1,0 +1,2482 @@
+{
+  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+  "backend_routes": [
+    {
+      "file": "backend/app/api/routes/module_workflow_bindings.py",
+      "method": "GET",
+      "path": "/access-control"
+    },
+    {
+      "file": "backend/app/api/routes/agents.py",
+      "method": "GET",
+      "path": "/agents/{agent_key}"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "GET",
+      "path": "/approval/list"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "GET",
+      "path": "/approval/list"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "POST",
+      "path": "/approval/request"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "GET",
+      "path": "/approval/{approval_id}"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "POST",
+      "path": "/approval/{approval_id}/approve"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "POST",
+      "path": "/approval/{approval_id}/reject"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/assignment-model"
+    },
+    {
+      "file": "backend/app/api/routes/attachments.py",
+      "method": "POST",
+      "path": "/attachments/upload"
+    },
+    {
+      "file": "backend/app/api/routes/attachments.py",
+      "method": "GET",
+      "path": "/attachments/{message_id}"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "POST",
+      "path": "/auth/change-password"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "GET",
+      "path": "/auth/context"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "POST",
+      "path": "/auth/login"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "POST",
+      "path": "/auth/logout"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "GET",
+      "path": "/auth/me"
+    },
+    {
+      "file": "backend/app/api/routes/execution_prompts.py",
+      "method": "GET",
+      "path": "/binding-injection"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "GET",
+      "path": "/bindings"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "DELETE",
+      "path": "/bindings/{binding_id}"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/budget-system"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bootstrap.py",
+      "method": "GET",
+      "path": "/capability/bootstrap"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/categories"
+    },
+    {
+      "file": "backend/app/api/routes/cross_org_communication.py",
+      "method": "POST",
+      "path": "/comm/cross-org/check"
+    },
+    {
+      "file": "backend/app/api/routes/ai_execution_bindings.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bindings.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/execution_prompts.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/model_locks.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/module_workflow_bindings.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/payload_standardization.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/result_normalization.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/completion-status"
+    },
+    {
+      "file": "backend/app/api/routes/contacts.py",
+      "method": "GET",
+      "path": "/contacts/directory"
+    },
+    {
+      "file": "backend/app/api/routes/contacts.py",
+      "method": "GET",
+      "path": "/contacts/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/contacts.py",
+      "method": "PATCH",
+      "path": "/contacts/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/execution_prompts.py",
+      "method": "GET",
+      "path": "/context-assembly"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/context-binding"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "POST",
+      "path": "/context-bindings"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/context-packets"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "POST",
+      "path": "/context-packets"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/context-packets/{context_packet_id}"
+    },
+    {
+      "file": "backend/app/api/routes/payload_standardization.py",
+      "method": "GET",
+      "path": "/context-rules"
+    },
+    {
+      "file": "backend/app/api/routes/conversations.py",
+      "method": "POST",
+      "path": "/conversations/create"
+    },
+    {
+      "file": "backend/app/api/routes/conversations.py",
+      "method": "GET",
+      "path": "/conversations/user/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/conversations.py",
+      "method": "GET",
+      "path": "/conversations/{conversation_id}"
+    },
+    {
+      "file": "backend/app/api/routes/dashboard.py",
+      "method": "GET",
+      "path": "/dashboard/activity"
+    },
+    {
+      "file": "backend/app/api/routes/dashboard.py",
+      "method": "GET",
+      "path": "/dashboard/overview"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/dead-letter-queue"
+    },
+    {
+      "file": "backend/app/api/routes/module_workflow_bindings.py",
+      "method": "GET",
+      "path": "/decision"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/decision"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/design"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/design"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/dlq"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/dlq/{context_id}"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bindings.py",
+      "method": "GET",
+      "path": "/enforcement"
+    },
+    {
+      "file": "backend/app/api/routes/model_locks.py",
+      "method": "GET",
+      "path": "/enforcement"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/enforcement"
+    },
+    {
+      "file": "backend/app/api/routes/module_workflow_bindings.py",
+      "method": "GET",
+      "path": "/enforcement"
+    },
+    {
+      "file": "backend/app/api/routes/errors.py",
+      "method": "GET",
+      "path": "/errors/{error_id}"
+    },
+    {
+      "file": "backend/app/api/routes/ai_execution_bindings.py",
+      "method": "GET",
+      "path": "/execution-flow"
+    },
+    {
+      "file": "backend/app/api/routes/execution_providers.py",
+      "method": "GET",
+      "path": "/execution-providers/me"
+    },
+    {
+      "file": "backend/app/api/routes/execution_providers.py",
+      "method": "GET",
+      "path": "/execution-providers/registry"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/binding-audit"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/binding-rules"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/binding-validation"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/bindings"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/dependency-graph"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/proposals"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/registry"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "POST",
+      "path": "/failures"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/fallback-strategy"
+    },
+    {
+      "file": "backend/app/api/routes/foundation_demo.py",
+      "method": "GET",
+      "path": "/foundation-demo/latest"
+    },
+    {
+      "file": "backend/app/api/routes/foundation_demo.py",
+      "method": "POST",
+      "path": "/foundation-demo/run"
+    },
+    {
+      "file": "backend/app/api/routes/friends.py",
+      "method": "POST",
+      "path": "/friends/accept"
+    },
+    {
+      "file": "backend/app/api/routes/friends.py",
+      "method": "GET",
+      "path": "/friends/list"
+    },
+    {
+      "file": "backend/app/api/routes/friends.py",
+      "method": "POST",
+      "path": "/friends/reject"
+    },
+    {
+      "file": "backend/app/api/routes/friends.py",
+      "method": "POST",
+      "path": "/friends/request"
+    },
+    {
+      "file": "backend/app/api/routes/health.py",
+      "method": "GET",
+      "path": "/health"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "POST",
+      "path": "/ingress"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bindings.py",
+      "method": "GET",
+      "path": "/integration"
+    },
+    {
+      "file": "backend/app/api/routes/model_locks.py",
+      "method": "GET",
+      "path": "/integration"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/integration-flow"
+    },
+    {
+      "file": "backend/app/api/routes/module_workflow_bindings.py",
+      "method": "GET",
+      "path": "/isolation-rules"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "GET",
+      "path": "/keys"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "DELETE",
+      "path": "/keys/{key_id}"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "PATCH",
+      "path": "/keys/{key_id}"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/canary"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "GET",
+      "path": "/live-gate/policies"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/policies"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "GET",
+      "path": "/live-gate/production-readiness"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "GET",
+      "path": "/live-gate/readiness"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/rollback/consistency"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/rollback/failure"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/rollback/restore"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/memory-events"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "POST",
+      "path": "/memory-events"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/memory-events/{memory_event_id}"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/memory-summaries"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/memory-summaries/{summary_id}"
+    },
+    {
+      "file": "backend/app/api/routes/messages.py",
+      "method": "POST",
+      "path": "/messages/permission/check"
+    },
+    {
+      "file": "backend/app/api/routes/messages.py",
+      "method": "POST",
+      "path": "/messages/read"
+    },
+    {
+      "file": "backend/app/api/routes/messages.py",
+      "method": "POST",
+      "path": "/messages/send"
+    },
+    {
+      "file": "backend/app/api/routes/messages.py",
+      "method": "GET",
+      "path": "/messages/{conversation_id}"
+    },
+    {
+      "file": "backend/app/api/routes/module_workflow_bindings.py",
+      "method": "GET",
+      "path": "/model"
+    },
+    {
+      "file": "backend/app/api/routes/payload_standardization.py",
+      "method": "GET",
+      "path": "/model"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bindings.py",
+      "method": "GET",
+      "path": "/model-mapping"
+    },
+    {
+      "file": "backend/app/api/routes/result_normalization.py",
+      "method": "GET",
+      "path": "/module-adapters"
+    },
+    {
+      "file": "backend/app/api/routes/module_adapters.py",
+      "method": "GET",
+      "path": "/module-adapters/me"
+    },
+    {
+      "file": "backend/app/api/routes/module_adapters.py",
+      "method": "GET",
+      "path": "/module-adapters/registry"
+    },
+    {
+      "file": "backend/app/api/routes/module_adapters.py",
+      "method": "POST",
+      "path": "/module-adapters/{adapter_key}/actions/{action_key}/request"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bindings.py",
+      "method": "GET",
+      "path": "/module-bindings"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/module-bindings"
+    },
+    {
+      "file": "backend/app/api/routes/module_control.py",
+      "method": "GET",
+      "path": "/module-control/center"
+    },
+    {
+      "file": "backend/app/api/routes/module_control.py",
+      "method": "PATCH",
+      "path": "/module-control/organizations/{org_id}/registry-entries/{module_id}"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/module-notifications"
+    },
+    {
+      "file": "backend/app/api/module_binding.py",
+      "method": "POST",
+      "path": "/module/bind"
+    },
+    {
+      "file": "backend/app/api/shared_module.py",
+      "method": "POST",
+      "path": "/module/shared/create"
+    },
+    {
+      "file": "backend/app/api/shared_module.py",
+      "method": "GET",
+      "path": "/module/shared/list"
+    },
+    {
+      "file": "backend/app/api/shared_module.py",
+      "method": "POST",
+      "path": "/module/shared/update-orgs"
+    },
+    {
+      "file": "backend/app/api/module_binding.py",
+      "method": "GET",
+      "path": "/module/{module_id}/bindings"
+    },
+    {
+      "file": "backend/app/api/routes/modules.py",
+      "method": "GET",
+      "path": "/modules/me"
+    },
+    {
+      "file": "backend/app/api/routes/modules.py",
+      "method": "GET",
+      "path": "/modules/registry"
+    },
+    {
+      "file": "backend/app/api/routes/modules.py",
+      "method": "GET",
+      "path": "/modules/{module_key}"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/modules/{module}/workflows"
+    },
+    {
+      "file": "backend/app/api/routes/n8n_test.py",
+      "method": "POST",
+      "path": "/n8n-test/callback"
+    },
+    {
+      "file": "backend/app/api/routes/n8n_test.py",
+      "method": "GET",
+      "path": "/n8n-test/latest"
+    },
+    {
+      "file": "backend/app/api/routes/n8n_test.py",
+      "method": "POST",
+      "path": "/n8n-test/run"
+    },
+    {
+      "file": "backend/app/api/routes/payload_standardization.py",
+      "method": "GET",
+      "path": "/normalization-engine"
+    },
+    {
+      "file": "backend/app/api/routes/result_normalization.py",
+      "method": "GET",
+      "path": "/normalization-engine"
+    },
+    {
+      "file": "backend/app/api/routes/payload_standardization.py",
+      "method": "POST",
+      "path": "/normalize"
+    },
+    {
+      "file": "backend/app/api/routes/result_normalization.py",
+      "method": "POST",
+      "path": "/normalize"
+    },
+    {
+      "file": "backend/app/api/routes/operation_logs.py",
+      "method": "GET",
+      "path": "/operation-logs/{operation_id}"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "POST",
+      "path": "/org/create"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "DELETE",
+      "path": "/org/{org_id}"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "PATCH",
+      "path": "/org/{org_id}"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "POST",
+      "path": "/org/{org_id}/activate"
+    },
+    {
+      "file": "backend/app/api/org_membership.py",
+      "method": "GET",
+      "path": "/org/{org_id}/members"
+    },
+    {
+      "file": "backend/app/api/org_membership.py",
+      "method": "POST",
+      "path": "/org/{org_id}/members/add"
+    },
+    {
+      "file": "backend/app/api/org_membership.py",
+      "method": "POST",
+      "path": "/org/{org_id}/members/remove"
+    },
+    {
+      "file": "backend/app/api/module_binding.py",
+      "method": "GET",
+      "path": "/org/{org_id}/modules"
+    },
+    {
+      "file": "backend/app/api/shared_module.py",
+      "method": "GET",
+      "path": "/org/{org_id}/shared-modules"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "POST",
+      "path": "/org/{org_id}/suspend"
+    },
+    {
+      "file": "backend/app/api/module_visibility.py",
+      "method": "GET",
+      "path": "/org/{org_id}/visible-modules"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "POST",
+      "path": "/organizations/{org_id}/bindings"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "POST",
+      "path": "/organizations/{org_id}/keys"
+    },
+    {
+      "file": "backend/app/api/routes/execution_prompts.py",
+      "method": "GET",
+      "path": "/payload"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/payload-format"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "GET",
+      "path": "/permissions/me"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "GET",
+      "path": "/permissions/registry"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "GET",
+      "path": "/permissions/users/{user_id}/assignments"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "POST",
+      "path": "/permissions/users/{user_id}/assignments"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "DELETE",
+      "path": "/permissions/users/{user_id}/assignments/{assignment_id}"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "PATCH",
+      "path": "/permissions/users/{user_id}/assignments/{assignment_id}"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "POST",
+      "path": "/receiver"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/recovery-flow"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "POST",
+      "path": "/recovery/replay"
+    },
+    {
+      "file": "backend/app/api/routes/ai_execution_bindings.py",
+      "method": "GET",
+      "path": "/registry"
+    },
+    {
+      "file": "backend/app/api/routes/model_locks.py",
+      "method": "GET",
+      "path": "/registry"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/registry"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/registry"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bindings.py",
+      "method": "GET",
+      "path": "/request-validation"
+    },
+    {
+      "file": "backend/app/api/routes/model_locks.py",
+      "method": "GET",
+      "path": "/request-validation"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/request-validation"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/result-storage"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/results/{context_id}"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/retry-system-design"
+    },
+    {
+      "file": "backend/app/api/routes/reviews.py",
+      "method": "GET",
+      "path": "/reviews/module-registry"
+    },
+    {
+      "file": "backend/app/api/routes/reviews.py",
+      "method": "GET",
+      "path": "/reviews/organizations"
+    },
+    {
+      "file": "backend/app/api/routes/reviews.py",
+      "method": "GET",
+      "path": "/reviews/organizations/{organization_id}/users"
+    },
+    {
+      "file": "backend/app/api/routes/reviews.py",
+      "method": "GET",
+      "path": "/reviews/organizations/{organization_id}/users/{user_id}/actions"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bindings.py",
+      "method": "GET",
+      "path": "/routing-model"
+    },
+    {
+      "file": "backend/app/api/routes/ai_execution_bindings.py",
+      "method": "GET",
+      "path": "/rules"
+    },
+    {
+      "file": "backend/app/api/routes/model_locks.py",
+      "method": "GET",
+      "path": "/rules"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/rules"
+    },
+    {
+      "file": "backend/app/api/routes/result_normalization.py",
+      "method": "GET",
+      "path": "/schema-mapping"
+    },
+    {
+      "file": "backend/app/api/routes/execution_prompts.py",
+      "method": "GET",
+      "path": "/security-constraints"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/signature-model"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/status-management"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/status-management"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/system-flow"
+    },
+    {
+      "file": "backend/app/api/routes/execution_prompts.py",
+      "method": "GET",
+      "path": "/template-engine"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/timeout-handling"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "POST",
+      "path": "/timeouts/evaluate"
+    },
+    {
+      "file": "backend/app/api/routes/ai_execution_bindings.py",
+      "method": "GET",
+      "path": "/ui-interaction"
+    },
+    {
+      "file": "backend/app/api/routes/result_normalization.py",
+      "method": "GET",
+      "path": "/ui-output-structure"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "GET",
+      "path": "/users/roles"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "GET",
+      "path": "/users/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "PATCH",
+      "path": "/users/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "POST",
+      "path": "/users/{user_id}/disable"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "POST",
+      "path": "/users/{user_id}/enable"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "POST",
+      "path": "/users/{user_id}/reset-password"
+    },
+    {
+      "file": "backend/app/api/routes/ai_execution_bindings.py",
+      "method": "GET",
+      "path": "/validation"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bindings.py",
+      "method": "GET",
+      "path": "/validation"
+    },
+    {
+      "file": "backend/app/api/routes/execution_prompts.py",
+      "method": "GET",
+      "path": "/validation"
+    },
+    {
+      "file": "backend/app/api/routes/model_locks.py",
+      "method": "GET",
+      "path": "/validation"
+    },
+    {
+      "file": "backend/app/api/routes/module_allocations.py",
+      "method": "GET",
+      "path": "/validation"
+    },
+    {
+      "file": "backend/app/api/routes/module_workflow_bindings.py",
+      "method": "GET",
+      "path": "/validation"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/validation"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/workflow-lookup-flow"
+    },
+    {
+      "file": "backend/app/api/routes/payload_standardization.py",
+      "method": "GET",
+      "path": "/workflow-mapping"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/workflows/{workflow_id}"
+    }
+  ],
+  "db_schema_consistency": {
+    "migration_file_count": 20,
+    "migration_files": [
+      "backend/alembic/versions/20260608_01_create_core_foundation_tables.py",
+      "backend/alembic/versions/20260610_01_create_permission_tables.py",
+      "backend/alembic/versions/20260614_01_create_approval_tables.py",
+      "backend/alembic/versions/20260615_01_create_auth_sessions.py",
+      "backend/alembic/versions/20260615_02_add_login_lockout_fields.py",
+      "backend/alembic/versions/20260615_03_c16_adv_security_hardening.py",
+      "backend/alembic/versions/20260617_01_c18_tenant_consistency.py",
+      "backend/alembic/versions/20260617_02_execution_durable_state.py",
+      "backend/alembic/versions/20260617_03_c17_durable_observability.py",
+      "backend/alembic/versions/20260617_04_pre20_o_concurrency_performance.py",
+      "backend/alembic/versions/20260617_05_pre20_o_operations_disaster_recovery.py",
+      "backend/alembic/versions/20260617_06_pre20_q_live_enable_gate.py",
+      "backend/alembic/versions/20260618_01_fix_be_06_modules_me_performance.py",
+      "backend/alembic/versions/20260618_02_user_module_full_upgrade.py",
+      "backend/alembic/versions/20260619_01_user_module_schema_repair.py",
+      "backend/alembic/versions/20260619_02_force_password_reset_owner_only.py",
+      "backend/alembic/versions/20260619_03_permission_ui_support.py",
+      "backend/alembic/versions/20260620_01_approval_productization.py",
+      "backend/alembic/versions/20260621_01_approval_list_performance.py",
+      "backend/alembic/versions/20260622_01_module_control_api_key_orchestration.py"
+    ],
+    "model_file_count": 26,
+    "model_files": [
+      "backend/app/models/__init__.py",
+      "backend/app/models/api_keys.py",
+      "backend/app/models/approval.py",
+      "backend/app/models/artifact.py",
+      "backend/app/models/auth_session.py",
+      "backend/app/models/base_mixins.py",
+      "backend/app/models/contact_identity.py",
+      "backend/app/models/context.py",
+      "backend/app/models/error.py",
+      "backend/app/models/execution_state.py",
+      "backend/app/models/job.py",
+      "backend/app/models/memory.py",
+      "backend/app/models/message.py",
+      "backend/app/models/module_binding.py",
+      "backend/app/models/module_control.py",
+      "backend/app/models/observability.py",
+      "backend/app/models/operation_log.py",
+      "backend/app/models/ops.py",
+      "backend/app/models/org_membership.py",
+      "backend/app/models/organization.py",
+      "backend/app/models/permission.py",
+      "backend/app/models/registry.py",
+      "backend/app/models/review.py",
+      "backend/app/models/security.py",
+      "backend/app/models/shared_module.py",
+      "backend/app/models/user.py"
+    ]
+  },
+  "debug_endpoint_markers": [
+    {
+      "file": "backend/app/main.py",
+      "line": 239,
+      "text": "debug=False if _production_like() else settings.app_debug,"
+    },
+    {
+      "file": "backend/app/main.py",
+      "line": 240,
+      "text": "docs_url=\"/docs\" if _docs_enabled() else None,"
+    },
+    {
+      "file": "backend/app/main.py",
+      "line": 241,
+      "text": "redoc_url=\"/redoc\" if _docs_enabled() else None,"
+    },
+    {
+      "file": "backend/app/main.py",
+      "line": 242,
+      "text": "openapi_url=\"/openapi.json\" if _docs_enabled() else None,"
+    },
+    {
+      "file": "backend/app/core/config.py",
+      "line": 26,
+      "text": "app_debug: bool = False"
+    }
+  ],
+  "executed_at": "2026-06-23T18:25:27.695476+00:00",
+  "frontend_routes": [
+    "/",
+    "/admin/modules",
+    "/agents",
+    "/api-key-management",
+    "/approvals",
+    "/approvals/:approvalId",
+    "/approvals/more",
+    "/dashboard",
+    "/errors",
+    "/force-password-reset",
+    "/login",
+    "/memory-events",
+    "/modules",
+    "/operation-logs",
+    "/organizations",
+    "/organizations/:orgId/keys",
+    "/permissions",
+    "/reviews",
+    "/settings",
+    "/users"
+  ],
+  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+  "orphan_endpoint_candidates": [
+    {
+      "file": "backend/app/api/routes/agents.py",
+      "method": "GET",
+      "path": "/agents/{agent_key}"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "GET",
+      "path": "/approval/list"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "GET",
+      "path": "/approval/list"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "POST",
+      "path": "/approval/request"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "GET",
+      "path": "/approval/{approval_id}"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "POST",
+      "path": "/approval/{approval_id}/approve"
+    },
+    {
+      "file": "backend/app/api/routes/approval.py",
+      "method": "POST",
+      "path": "/approval/{approval_id}/reject"
+    },
+    {
+      "file": "backend/app/api/routes/attachments.py",
+      "method": "POST",
+      "path": "/attachments/upload"
+    },
+    {
+      "file": "backend/app/api/routes/attachments.py",
+      "method": "GET",
+      "path": "/attachments/{message_id}"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "POST",
+      "path": "/auth/change-password"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "GET",
+      "path": "/auth/context"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "POST",
+      "path": "/auth/login"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "POST",
+      "path": "/auth/logout"
+    },
+    {
+      "file": "backend/app/api/routes/auth.py",
+      "method": "GET",
+      "path": "/auth/me"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "DELETE",
+      "path": "/bindings/{binding_id}"
+    },
+    {
+      "file": "backend/app/api/routes/capability_bootstrap.py",
+      "method": "GET",
+      "path": "/capability/bootstrap"
+    },
+    {
+      "file": "backend/app/api/routes/cross_org_communication.py",
+      "method": "POST",
+      "path": "/comm/cross-org/check"
+    },
+    {
+      "file": "backend/app/api/routes/contacts.py",
+      "method": "GET",
+      "path": "/contacts/directory"
+    },
+    {
+      "file": "backend/app/api/routes/contacts.py",
+      "method": "GET",
+      "path": "/contacts/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/contacts.py",
+      "method": "PATCH",
+      "path": "/contacts/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/context-binding"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "POST",
+      "path": "/context-bindings"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/context-packets"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "POST",
+      "path": "/context-packets"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/context-packets/{context_packet_id}"
+    },
+    {
+      "file": "backend/app/api/routes/conversations.py",
+      "method": "POST",
+      "path": "/conversations/create"
+    },
+    {
+      "file": "backend/app/api/routes/conversations.py",
+      "method": "GET",
+      "path": "/conversations/user/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/conversations.py",
+      "method": "GET",
+      "path": "/conversations/{conversation_id}"
+    },
+    {
+      "file": "backend/app/api/routes/dashboard.py",
+      "method": "GET",
+      "path": "/dashboard/activity"
+    },
+    {
+      "file": "backend/app/api/routes/dashboard.py",
+      "method": "GET",
+      "path": "/dashboard/overview"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/dead-letter-queue"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/design"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/design"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/dlq"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/dlq/{context_id}"
+    },
+    {
+      "file": "backend/app/api/routes/errors.py",
+      "method": "GET",
+      "path": "/errors/{error_id}"
+    },
+    {
+      "file": "backend/app/api/routes/execution_providers.py",
+      "method": "GET",
+      "path": "/execution-providers/me"
+    },
+    {
+      "file": "backend/app/api/routes/execution_providers.py",
+      "method": "GET",
+      "path": "/execution-providers/registry"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/binding-audit"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/binding-rules"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/binding-validation"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/bindings"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/dependency-graph"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/proposals"
+    },
+    {
+      "file": "backend/app/api/routes/external_dependencies.py",
+      "method": "GET",
+      "path": "/external-dependencies/registry"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "POST",
+      "path": "/failures"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/fallback-strategy"
+    },
+    {
+      "file": "backend/app/api/routes/foundation_demo.py",
+      "method": "GET",
+      "path": "/foundation-demo/latest"
+    },
+    {
+      "file": "backend/app/api/routes/foundation_demo.py",
+      "method": "POST",
+      "path": "/foundation-demo/run"
+    },
+    {
+      "file": "backend/app/api/routes/friends.py",
+      "method": "POST",
+      "path": "/friends/accept"
+    },
+    {
+      "file": "backend/app/api/routes/friends.py",
+      "method": "GET",
+      "path": "/friends/list"
+    },
+    {
+      "file": "backend/app/api/routes/friends.py",
+      "method": "POST",
+      "path": "/friends/reject"
+    },
+    {
+      "file": "backend/app/api/routes/friends.py",
+      "method": "POST",
+      "path": "/friends/request"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "GET",
+      "path": "/keys"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "DELETE",
+      "path": "/keys/{key_id}"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "PATCH",
+      "path": "/keys/{key_id}"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/canary"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "GET",
+      "path": "/live-gate/policies"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/policies"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "GET",
+      "path": "/live-gate/production-readiness"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "GET",
+      "path": "/live-gate/readiness"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/rollback/consistency"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/rollback/failure"
+    },
+    {
+      "file": "backend/app/api/routes/live_gate.py",
+      "method": "POST",
+      "path": "/live-gate/rollback/restore"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/memory-events"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "POST",
+      "path": "/memory-events"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/memory-events/{memory_event_id}"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/memory-summaries"
+    },
+    {
+      "file": "backend/app/api/routes/memory.py",
+      "method": "GET",
+      "path": "/memory-summaries/{summary_id}"
+    },
+    {
+      "file": "backend/app/api/routes/messages.py",
+      "method": "POST",
+      "path": "/messages/permission/check"
+    },
+    {
+      "file": "backend/app/api/routes/messages.py",
+      "method": "POST",
+      "path": "/messages/read"
+    },
+    {
+      "file": "backend/app/api/routes/messages.py",
+      "method": "POST",
+      "path": "/messages/send"
+    },
+    {
+      "file": "backend/app/api/routes/messages.py",
+      "method": "GET",
+      "path": "/messages/{conversation_id}"
+    },
+    {
+      "file": "backend/app/api/routes/module_adapters.py",
+      "method": "GET",
+      "path": "/module-adapters/me"
+    },
+    {
+      "file": "backend/app/api/routes/module_adapters.py",
+      "method": "GET",
+      "path": "/module-adapters/registry"
+    },
+    {
+      "file": "backend/app/api/routes/module_adapters.py",
+      "method": "POST",
+      "path": "/module-adapters/{adapter_key}/actions/{action_key}/request"
+    },
+    {
+      "file": "backend/app/api/routes/module_control.py",
+      "method": "GET",
+      "path": "/module-control/center"
+    },
+    {
+      "file": "backend/app/api/routes/module_control.py",
+      "method": "PATCH",
+      "path": "/module-control/organizations/{org_id}/registry-entries/{module_id}"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/module-notifications"
+    },
+    {
+      "file": "backend/app/api/module_binding.py",
+      "method": "POST",
+      "path": "/module/bind"
+    },
+    {
+      "file": "backend/app/api/shared_module.py",
+      "method": "POST",
+      "path": "/module/shared/create"
+    },
+    {
+      "file": "backend/app/api/shared_module.py",
+      "method": "GET",
+      "path": "/module/shared/list"
+    },
+    {
+      "file": "backend/app/api/shared_module.py",
+      "method": "POST",
+      "path": "/module/shared/update-orgs"
+    },
+    {
+      "file": "backend/app/api/module_binding.py",
+      "method": "GET",
+      "path": "/module/{module_id}/bindings"
+    },
+    {
+      "file": "backend/app/api/routes/modules.py",
+      "method": "GET",
+      "path": "/modules/me"
+    },
+    {
+      "file": "backend/app/api/routes/modules.py",
+      "method": "GET",
+      "path": "/modules/registry"
+    },
+    {
+      "file": "backend/app/api/routes/modules.py",
+      "method": "GET",
+      "path": "/modules/{module_key}"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/modules/{module}/workflows"
+    },
+    {
+      "file": "backend/app/api/routes/n8n_test.py",
+      "method": "POST",
+      "path": "/n8n-test/callback"
+    },
+    {
+      "file": "backend/app/api/routes/n8n_test.py",
+      "method": "GET",
+      "path": "/n8n-test/latest"
+    },
+    {
+      "file": "backend/app/api/routes/n8n_test.py",
+      "method": "POST",
+      "path": "/n8n-test/run"
+    },
+    {
+      "file": "backend/app/api/routes/operation_logs.py",
+      "method": "GET",
+      "path": "/operation-logs/{operation_id}"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "POST",
+      "path": "/org/create"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "DELETE",
+      "path": "/org/{org_id}"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "PATCH",
+      "path": "/org/{org_id}"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "POST",
+      "path": "/org/{org_id}/activate"
+    },
+    {
+      "file": "backend/app/api/org_membership.py",
+      "method": "GET",
+      "path": "/org/{org_id}/members"
+    },
+    {
+      "file": "backend/app/api/org_membership.py",
+      "method": "POST",
+      "path": "/org/{org_id}/members/add"
+    },
+    {
+      "file": "backend/app/api/org_membership.py",
+      "method": "POST",
+      "path": "/org/{org_id}/members/remove"
+    },
+    {
+      "file": "backend/app/api/module_binding.py",
+      "method": "GET",
+      "path": "/org/{org_id}/modules"
+    },
+    {
+      "file": "backend/app/api/shared_module.py",
+      "method": "GET",
+      "path": "/org/{org_id}/shared-modules"
+    },
+    {
+      "file": "backend/app/api/org.py",
+      "method": "POST",
+      "path": "/org/{org_id}/suspend"
+    },
+    {
+      "file": "backend/app/api/module_visibility.py",
+      "method": "GET",
+      "path": "/org/{org_id}/visible-modules"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "POST",
+      "path": "/organizations/{org_id}/bindings"
+    },
+    {
+      "file": "backend/app/api/routes/api_key_orchestration.py",
+      "method": "POST",
+      "path": "/organizations/{org_id}/keys"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/payload-format"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "GET",
+      "path": "/permissions/me"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "GET",
+      "path": "/permissions/registry"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "GET",
+      "path": "/permissions/users/{user_id}/assignments"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "POST",
+      "path": "/permissions/users/{user_id}/assignments"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "DELETE",
+      "path": "/permissions/users/{user_id}/assignments/{assignment_id}"
+    },
+    {
+      "file": "backend/app/api/routes/permissions.py",
+      "method": "PATCH",
+      "path": "/permissions/users/{user_id}/assignments/{assignment_id}"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "POST",
+      "path": "/receiver"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/recovery-flow"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "POST",
+      "path": "/recovery/replay"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/result-storage"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/results/{context_id}"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/retry-system-design"
+    },
+    {
+      "file": "backend/app/api/routes/reviews.py",
+      "method": "GET",
+      "path": "/reviews/module-registry"
+    },
+    {
+      "file": "backend/app/api/routes/reviews.py",
+      "method": "GET",
+      "path": "/reviews/organizations"
+    },
+    {
+      "file": "backend/app/api/routes/reviews.py",
+      "method": "GET",
+      "path": "/reviews/organizations/{organization_id}/users"
+    },
+    {
+      "file": "backend/app/api/routes/reviews.py",
+      "method": "GET",
+      "path": "/reviews/organizations/{organization_id}/users/{user_id}/actions"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/signature-model"
+    },
+    {
+      "file": "backend/app/api/routes/callback_handler.py",
+      "method": "GET",
+      "path": "/status-management"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/status-management"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/system-flow"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "GET",
+      "path": "/timeout-handling"
+    },
+    {
+      "file": "backend/app/api/routes/failure_handling.py",
+      "method": "POST",
+      "path": "/timeouts/evaluate"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "GET",
+      "path": "/users/roles"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "GET",
+      "path": "/users/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "PATCH",
+      "path": "/users/{user_id}"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "POST",
+      "path": "/users/{user_id}/disable"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "POST",
+      "path": "/users/{user_id}/enable"
+    },
+    {
+      "file": "backend/app/api/routes/users.py",
+      "method": "POST",
+      "path": "/users/{user_id}/reset-password"
+    },
+    {
+      "file": "backend/app/api/routes/webhook_gateway.py",
+      "method": "GET",
+      "path": "/workflow-lookup-flow"
+    },
+    {
+      "file": "backend/app/api/routes/workflow_registry.py",
+      "method": "GET",
+      "path": "/workflows/{workflow_id}"
+    }
+  ],
+  "permission_middleware": {
+    "files": [
+      "backend/app/middleware/permission.py",
+      "backend/app/services/permission_decision_engine.py",
+      "backend/app/services/unified_permission_engine.py"
+    ],
+    "rbac_core_touched_by_audit": false
+  },
+  "stale_ui_text": {
+    "marker_counts": {
+      "demo": 16,
+      "foundation": 3,
+      "mock": 27,
+      "placeholder": 17,
+      "暂未": 42
+    },
+    "samples": [
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 1,
+        "markers": [
+          "mock"
+        ],
+        "text": "export type LiveExecutionMode = \"mock\" | \"staging\" | \"live\";"
+      },
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 18,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock\""
+      },
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 272,
+        "markers": [
+          "mock"
+        ],
+        "text": "execution_mode: \"mock\","
+      },
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 324,
+        "markers": [
+          "mock"
+        ],
+        "text": "canary_state: activePolicies.length > 0 ? \"mock\" : \"not_configured\","
+      },
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 325,
+        "markers": [
+          "mock"
+        ],
+        "text": "execution_mode: \"mock\","
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 53,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock\""
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 67,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock\""
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 263,
+        "markers": [
+          "mock"
+        ],
+        "text": "execution_mode: \"mock\","
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 344,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"该功能区暂未开放。\";"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 593,
+        "markers": [
+          "mock"
+        ],
+        "text": "function hasMockProvider("
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 598,
+        "markers": [
+          "mock"
+        ],
+        "text": "accessItems.some((provider) => provider.execution_mode === \"mock\") ||"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 600,
+        "markers": [
+          "mock"
+        ],
+        "text": "provider.supported_execution_modes.includes(\"mock\"),"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 688,
+        "markers": [
+          "暂未"
+        ],
+        "text": "reason: \"该功能区暂未开放。\","
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 724,
+        "markers": [
+          "暂未"
+        ],
+        "text": "reason: \"该能力暂未接入产品页面。\","
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 827,
+        "markers": [
+          "mock"
+        ],
+        "text": "(executionProviderAccessUnknown || hasMockProvider(providerAccess, providerContracts))"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 835,
+        "markers": [
+          "mock"
+        ],
+        "text": "state: executionProviderAccessUnknown ? \"partial\" as const : \"mock\" as const,"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 860,
+        "markers": [
+          "mock"
+        ],
+        "text": "if (state === \"mock\") {"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 861,
+        "markers": [
+          "mock"
+        ],
+        "text": "return \"mock\";"
+      },
+      {
+        "file": "frontend/src/lib/execution-provider.ts",
+        "line": 3,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock_provider\""
+      },
+      {
+        "file": "frontend/src/lib/execution-provider.ts",
+        "line": 26,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock\""
+      },
+      {
+        "file": "frontend/src/lib/execution-provider.ts",
+        "line": 271,
+        "markers": [
+          "mock"
+        ],
+        "text": "\"mock_provider\","
+      },
+      {
+        "file": "frontend/src/lib/execution-provider.ts",
+        "line": 294,
+        "markers": [
+          "mock"
+        ],
+        "text": "\"mock\","
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 1533,
+        "markers": [
+          "mock"
+        ],
+        "text": ".capability-state-pill.mock,"
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 3504,
+        "markers": [
+          "placeholder"
+        ],
+        "text": ".input-shell input::placeholder,"
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 3505,
+        "markers": [
+          "placeholder"
+        ],
+        "text": ".textarea-shell textarea::placeholder {"
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 3729,
+        "markers": [
+          "mock"
+        ],
+        "text": ".capability-state-pill.mock,"
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 4442,
+        "markers": [
+          "placeholder"
+        ],
+        "text": ".topbar-search input::placeholder {"
+      },
+      {
+        "file": "frontend/src/components/module-adapter-shell.tsx",
+        "line": 69,
+        "markers": [
+          "暂未"
+        ],
+        "text": "description = \"该功能暂不可用，暂未连接可执行操作。\","
+      },
+      {
+        "file": "frontend/src/components/module-adapter-shell.tsx",
+        "line": 108,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "export function AdapterSurfacePlaceholder({"
+      },
+      {
+        "file": "frontend/src/components/module-adapter-shell.tsx",
+        "line": 388,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"该功能暂不可用，暂未连接可执行操作。\""
+      },
+      {
+        "file": "frontend/src/components/module-adapter-shell.tsx",
+        "line": 393,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "<AdapterSurfacePlaceholder accessState={accessState} adapter={adapter} />"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 39,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder?: string;"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 124,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"数据暂未同步，请重试。\";"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 321,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder={field.placeholder}"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 336,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder={field.placeholder}"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 400,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setError(errorMessage(requestError, \"数据暂未同步，请重试。\"));"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 452,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<strong>关联数据暂未同步</strong>"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 561,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setError(errorMessage(requestError, \"数据暂未同步，请重试。\"));"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 615,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setDetailError(errorMessage(requestError, \"详情暂未同步，请重试。\"));"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 750,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<h2>数据暂未同步</h2>"
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 220,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"用户数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 232,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"权限数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 275,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setDialogError(\"部分员工权限暂未同步，已显示可用员工。\");"
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 425,
+        "markers": [
+          "暂未"
+        ],
+        "text": "? \"部分数据暂未同步\""
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 426,
+        "markers": [
+          "暂未"
+        ],
+        "text": ": \"权限数据暂未同步\"}"
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 552,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"员工姓名\""
+      },
+      {
+        "file": "frontend/src/components/user-permissions-panel.tsx",
+        "line": 522,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"name, area, category\""
+      },
+      {
+        "file": "frontend/src/components/user-permissions-panel.tsx",
+        "line": 598,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"*\""
+      },
+      {
+        "file": "frontend/src/components/user-permissions-panel.tsx",
+        "line": 656,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"Why this explicit assignment is needed\""
+      },
+      {
+        "file": "frontend/src/components/user-permissions-panel.tsx",
+        "line": 882,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"Reason for revoke\""
+      },
+      {
+        "file": "frontend/src/components/approval-product-view.tsx",
+        "line": 79,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"后端响应暂未返回可用数据。\";"
+      },
+      {
+        "file": "frontend/src/components/approval-product-view.tsx",
+        "line": 88,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return errorText(error, \"审批数据暂未同步，请重试。\");"
+      },
+      {
+        "file": "frontend/src/components/approval-product-view.tsx",
+        "line": 473,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setError(errorText(requestError, \"审批详情暂未同步。\"));"
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 201,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"角色数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 225,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"组织数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 235,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"组织数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 267,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"用户数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 277,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"用户数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 513,
+        "markers": [
+          "暂未"
+        ],
+        "text": "formatUsersApiError(error, \"账号详情暂未同步，请重试。\"),"
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 691,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"请输入用户名\""
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 898,
+        "markers": [
+          "暂未"
+        ],
+        "text": "用户数据暂未同步"
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 900,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<p>{listError || \"后端响应暂未返回可用数据。\"}</p>"
+      },
+      {
+        "file": "frontend/src/components/capability-record-list.tsx",
+        "line": 59,
+        "markers": [
+          "暂未"
+        ],
+        "text": "? \"数据暂未同步，请重试。\""
+      },
+      {
+        "file": "frontend/src/components/capability-record-list.tsx",
+        "line": 60,
+        "markers": [
+          "暂未"
+        ],
+        "text": ": \"数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/capability-record-list.tsx",
+        "line": 98,
+        "markers": [
+          "暂未"
+        ],
+        "text": "title={`${title}暂未同步`}"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 74,
+        "markers": [
+          "mock"
+        ],
+        "text": "mock: \"预览\","
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 96,
+        "markers": [
+          "mock"
+        ],
+        "text": "mock: \"预览\","
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 115,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"暂未开放\";"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 132,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"后端响应暂未返回可用数据。\";"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 165,
+        "markers": [
+          "mock"
+        ],
+        "text": "item.state === \"mock\" ||"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 476,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setError(messageFromError(loadError, \"后端响应暂未返回可用数据。\"));"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 813,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<strong>模块数据暂未返回</strong>"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 919,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"https://api.example.com\""
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 1014,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"留空表示不更换\""
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 45,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"后端响应暂未返回可用数据。\";"
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 183,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<strong>组织数据暂未同步</strong>"
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 184,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<span>{listError || \"后端响应暂未返回可用数据。\"}</span>"
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 370,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"后端响应暂未返回可用数据。\","
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 384,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"组织管理员信息暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/login-form.tsx",
+        "line": 13,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"登录服务暂未响应，请重试。\";"
+      }
+    ]
+  },
+  "summary": {
+    "backend_route_count": 204,
+    "debug_marker_count": 5,
+    "frontend_route_count": 20,
+    "orphan_endpoint_candidate_count": 136,
+    "stale_ui_marker_count": 105,
+    "unused_module_candidate_count": 1
+  },
+  "unused_module_candidates": [
+    "business.products"
+  ]
+}

@@ -1,9 +1,10 @@
-from collections.abc import Generator, Iterator
-from contextlib import contextmanager
+from collections.abc import AsyncIterator, Generator, Iterator
+from contextlib import asynccontextmanager, contextmanager
 from typing import Any
 
 from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..core.config import get_settings
@@ -52,9 +53,25 @@ def _engine_kwargs(database_url: str) -> dict[str, Any]:
     return kwargs
 
 
+def _async_database_url(database_url: str) -> str | None:
+    url = make_url(database_url)
+    if url.get_backend_name() != "postgresql":
+        return None
+    return database_url
+
+
 engine = create_engine(
     settings.database_url,
     **_engine_kwargs(settings.database_url),
+)
+async_database_url = _async_database_url(settings.database_url)
+async_engine = (
+    create_async_engine(
+        async_database_url,
+        **_engine_kwargs(async_database_url),
+    )
+    if async_database_url is not None
+    else None
 )
 
 
@@ -79,6 +96,15 @@ SessionLocal = sessionmaker(
     autoflush=False,
     close_resets_only=False,
     expire_on_commit=False,
+)
+AsyncSessionLocal = (
+    async_sessionmaker(
+        bind=async_engine,
+        autoflush=False,
+        expire_on_commit=False,
+    )
+    if async_engine is not None
+    else None
 )
 install_org_data_isolation_events()
 
@@ -125,3 +151,35 @@ def get_read_db() -> Generator[Session, None, None]:
     finally:
         rollback_open_transaction(db)
         db.close()
+
+
+async def rollback_open_async_transaction(db: AsyncSession) -> bool:
+    if not (db.in_transaction() or db.in_nested_transaction()):
+        return False
+    await db.rollback()
+    return True
+
+
+@asynccontextmanager
+async def managed_async_session() -> AsyncIterator[AsyncSession]:
+    if AsyncSessionLocal is None:
+        raise RuntimeError("Async DB sessions require a PostgreSQL async-capable URL.")
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+            await db.commit()
+        except Exception:
+            await rollback_open_async_transaction(db)
+            raise
+
+
+async def get_async_db() -> AsyncIterator[AsyncSession]:
+    if AsyncSessionLocal is None:
+        raise RuntimeError("Async DB sessions require a PostgreSQL async-capable URL.")
+    async with AsyncSessionLocal() as db:
+        try:
+            yield db
+            await db.commit()
+        except Exception:
+            await rollback_open_async_transaction(db)
+            raise

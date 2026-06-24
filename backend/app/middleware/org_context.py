@@ -15,7 +15,7 @@ from ..core.auth_paths import is_auth_me_path
 from ..core.config import get_settings
 from ..core.security_headers import apply_security_headers
 from ..core.session_cookies import get_session_id_from_request
-from ..core.roles import is_super_admin_role, normalize_role
+from ..core.roles import is_org_admin_like_role, normalize_role
 from ..db.compatibility import is_missing_table_error, table_exists
 from ..db.session import managed_read_session
 from ..models.auth_session import AuthSession
@@ -24,10 +24,18 @@ from ..models.organization import OrganizationRecord
 from ..models.user import User
 from ..schemas.module_binding import GLOBAL_MODULE_BOUND_ORG
 from ..repositories.tenant import ROLLOUT_BACKFILL_ORG_ID
-from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
+from ..services.auth_service import (
+    AuditContext,
+    InvalidSessionError,
+    authenticated_session_from_identity,
+    validate_session_identity_fast,
+)
 from ..services.event_collector import emit_event, set_current_event_context
 from ..services.module_binding_service import list_module_bindings
-from ..services.request_session_cache import cache_authenticated_session
+from ..services.request_session_cache import (
+    cache_authenticated_session,
+    get_cached_authenticated_session,
+)
 from ..services.session_seen_buffer import queue_session_seen
 
 settings = get_settings()
@@ -279,7 +287,7 @@ def _resolve_org(
             source="c18c_active_membership",
         )
 
-    if is_super_admin_role(user_role):
+    if is_org_admin_like_role(user_role):
         user_org_id = _string_value(user.organization_id)
         if user_org_id is not None:
             organization = db.get(OrganizationRecord, user_org_id)
@@ -287,7 +295,7 @@ def _resolve_org(
                 return OrgResolution(
                     org_id=organization.org_id,
                     role="admin",
-                    source="fallback_super_admin_user_org",
+                    source="fallback_org_admin_user_org",
                 )
 
     try:
@@ -415,25 +423,33 @@ async def org_context_middleware(request: Request, call_next):
         return await call_next(request)
 
     audit = _audit_context(request, request_id)
+    current_session = get_cached_authenticated_session(
+        request,
+        session_id=session_id,
+    )
     with managed_read_session() as db:
-        try:
-            current_session = validate_session(
-                db,
+        if current_session is None:
+            try:
+                identity = validate_session_identity_fast(
+                    db,
+                    session_id=session_id,
+                )
+                current_session = authenticated_session_from_identity(
+                    identity,
+                    audit=audit,
+                )
+            except InvalidSessionError:
+                return _security_response(
+                    status.HTTP_401_UNAUTHORIZED,
+                    "Not authenticated.",
+                )
+            cache_authenticated_session(
+                request,
                 session_id=session_id,
-                audit=audit,
-            )
-        except InvalidSessionError:
-            return _security_response(
-                status.HTTP_401_UNAUTHORIZED,
-                "Not authenticated.",
+                current_session=current_session,
             )
 
         queue_session_seen(current_session.auth_session.session_id_hash)
-        cache_authenticated_session(
-            request,
-            session_id=session_id,
-            current_session=current_session,
-        )
         request.state.user_id = str(current_session.user.id)
         context, resolution_source = build_org_context(
             db,

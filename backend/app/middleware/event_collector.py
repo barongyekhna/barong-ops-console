@@ -17,6 +17,22 @@ from ..services.event_collector import (
 CONTEXT_HEADER_CANDIDATES = ("x-request-id", "x-trace-id")
 REQUEST_ID_HEADER = "X-Request-ID"
 TRACE_ID_HEADER = "X-Trace-ID"
+HOT_READ_AUDIT_EXEMPT_PATHS = frozenset(
+    (
+        "/api/app/organizations",
+        "/api/app/permissions/me",
+        "/api/app/permissions/registry",
+        "/api/control-plane/modules/registry",
+        "/api/control-plane/module-control/center",
+    )
+)
+
+
+def _is_hot_success_read(request: Request) -> bool:
+    return (
+        request.method in {"GET", "HEAD", "OPTIONS"}
+        and request.url.path in HOT_READ_AUDIT_EXEMPT_PATHS
+    )
 
 
 def ensure_request_context_id(request: Request) -> str:
@@ -62,6 +78,54 @@ async def capture_audit_events(request: Request, call_next):
 
     context_id = ensure_request_context_id(request)
     tokens = set_current_event_context(context_id=context_id)
+    if _is_hot_success_read(request):
+        started_at = perf_counter()
+        try:
+            response = await call_next(request)
+        except Exception:
+            emit_event(
+                event_type="api.response.completed",
+                module=classify_module_from_path(request.url.path),
+                action=f"{request.method} {request.url.path}",
+                source="backend",
+                status="failed",
+                context_id=context_id,
+                user_id=getattr(request.state, "user_id", None),
+                org_id=getattr(request.state, "org_id", None),
+                latency_ms=(perf_counter() - started_at) * 1000,
+                payload={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": 500,
+                    "audit_mode": "hot_read_failure_only",
+                },
+                metadata={"exception": "unhandled"},
+            )
+            reset_current_event_context(tokens)
+            raise
+        response.headers[REQUEST_ID_HEADER] = context_id
+        response.headers[TRACE_ID_HEADER] = context_id
+        if response.status_code >= 400:
+            emit_event(
+                event_type="api.response.completed",
+                module=classify_module_from_path(request.url.path),
+                action=f"{request.method} {request.url.path}",
+                source="backend",
+                status="failed",
+                context_id=context_id,
+                user_id=getattr(request.state, "user_id", None),
+                org_id=getattr(request.state, "org_id", None),
+                latency_ms=(perf_counter() - started_at) * 1000,
+                payload={
+                    "method": request.method,
+                    "path": request.url.path,
+                    "status_code": response.status_code,
+                    "audit_mode": "hot_read_failure_only",
+                },
+            )
+        reset_current_event_context(tokens)
+        return response
+
     module = classify_module_from_path(request.url.path)
     started_at = perf_counter()
 

@@ -22,7 +22,7 @@ from ..services.organization_lifecycle import (
     suspend_organization,
     update_organization,
 )
-from .deps import get_audit_context, get_current_user
+from .deps import get_audit_context, get_current_user, require_owner
 
 router = APIRouter(prefix="/org", tags=["organization"])
 OrgIdPath = Annotated[str, Path(pattern=ORG_ID_PATTERN.pattern)]
@@ -56,7 +56,7 @@ def org_create(
     payload: OrganizationCreate,
     request: Request,
     db: Session = Depends(get_db),
-    actor: User = Depends(get_current_user),
+    actor: User = Depends(require_owner),
 ) -> Organization:
     try:
         return create_organization(

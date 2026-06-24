@@ -15,7 +15,11 @@ from ..schemas.module_control import (
     ModuleControlStateRead,
     ModuleControlUpdateRequest,
 )
-from .module_registry import get_module_manifest, list_module_manifests_snapshot
+from .module_registry import (
+    get_module_manifest_for_db,
+    list_module_manifests_snapshot,
+    list_module_manifests_with_dynamic,
+)
 
 
 class ModuleControlError(ValueError):
@@ -36,8 +40,12 @@ def list_module_control_org_summary(db: Session) -> list[OrganizationRecord]:
     return _active_organizations(db)
 
 
-def list_module_control_module_list() -> list[ModuleManifestV1]:
-    return list_module_manifests_snapshot()
+def list_module_control_module_list(
+    db: Session | None = None,
+) -> list[ModuleManifestV1]:
+    if db is None:
+        return list_module_manifests_snapshot()
+    return list_module_manifests_with_dynamic(db)
 
 
 def _state_lookup(
@@ -84,9 +92,6 @@ def _read_from_record(
     *,
     manifest: ModuleManifestV1 | None = None,
 ) -> ModuleControlStateRead:
-    manifest = (
-        manifest if manifest is not None else get_module_manifest(record.module_id)
-    )
     return ModuleControlStateRead(
         org_id=record.org_id,
         module_id=record.module_id,
@@ -101,6 +106,25 @@ def _read_from_record(
     )
 
 
+def _read_default_state(
+    organization: OrganizationRecord,
+    manifest: ModuleManifestV1,
+) -> ModuleControlStateRead:
+    timestamp = organization.updated_at or datetime.now(UTC)
+    return ModuleControlStateRead(
+        org_id=organization.org_id,
+        module_id=manifest.module_key,
+        display_name=manifest.display_name,
+        category=manifest.category,
+        enabled=True,
+        runtime_status="active",
+        runtime_error_code=None,
+        runtime_error_message=None,
+        last_error_at=None,
+        updated_at=timestamp,
+    )
+
+
 def ensure_module_control_states(
     db: Session,
     *,
@@ -111,7 +135,7 @@ def ensure_module_control_states(
         organizations if organizations is not None else _active_organizations(db)
     )
     manifests = (
-        manifests if manifests is not None else list_module_control_module_list()
+        manifests if manifests is not None else list_module_control_module_list(db)
     )
     lookup = _state_lookup(db, [organization.org_id for organization in organizations])
     created = 0
@@ -150,13 +174,22 @@ def build_module_control_center_from_parts(
         for module_id in module_ids:
             record = state_lookup.get((organization.org_id, module_id))
             if record is None:
-                continue
-            modules.append(
-                _read_from_record(
-                    record,
-                    manifest=manifest_by_key.get(module_id),
+                manifest = manifest_by_key.get(module_id)
+                if manifest is None:
+                    continue
+                modules.append(
+                    _read_default_state(
+                        organization,
+                        manifest,
+                    )
                 )
-            )
+            else:
+                modules.append(
+                    _read_from_record(
+                        record,
+                        manifest=manifest_by_key.get(module_id),
+                    )
+                )
         groups.append(
             ModuleControlOrgGroup(
                 org_id=organization.org_id,
@@ -174,18 +207,13 @@ def build_module_control_center_from_parts(
 
 def build_module_control_center(db: Session) -> ModuleControlCenterResponse:
     organizations = list_module_control_org_summary(db)
-    manifests = list_module_control_module_list()
-    created, organizations = ensure_module_control_states(
-        db,
-        organizations=organizations,
-        manifests=manifests,
-    )
+    manifests = list_module_control_module_list(db)
     lookup = list_module_control_status(
         db,
         [organization.org_id for organization in organizations],
     )
     return build_module_control_center_from_parts(
-        auto_registered_count=created,
+        auto_registered_count=0,
         organizations=organizations,
         manifests=manifests,
         state_lookup=lookup,
@@ -214,7 +242,7 @@ def update_module_control_state(
     payload: ModuleControlUpdateRequest,
     actor_user_id: str,
 ) -> ModuleControlStateRead:
-    manifest = get_module_manifest(module_id)
+    manifest = get_module_manifest_for_db(db, module_id)
     if manifest is None:
         raise ModuleControlError("module_not_registered")
     organization = db.get(OrganizationRecord, org_id)
@@ -248,7 +276,7 @@ def update_module_control_state(
             record.last_error_at = datetime.now(UTC)
     db.add(record)
     db.flush()
-    return _read_from_record(record)
+    return _read_from_record(record, manifest=manifest)
 
 
 def record_module_runtime_error(
@@ -259,7 +287,7 @@ def record_module_runtime_error(
     error_code: str,
     error_message: str,
 ) -> ModuleControlStateRead:
-    manifest = get_module_manifest(module_id)
+    manifest = get_module_manifest_for_db(db, module_id)
     if manifest is None:
         raise ModuleControlError("module_not_registered")
     record = get_module_control_state(db, org_id=org_id, module_id=module_id)
@@ -277,4 +305,4 @@ def record_module_runtime_error(
     record.last_error_at = datetime.now(UTC)
     db.add(record)
     db.flush()
-    return _read_from_record(record)
+    return _read_from_record(record, manifest=manifest)

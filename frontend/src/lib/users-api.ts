@@ -3,6 +3,7 @@ import { ApiError, apiRequest } from "@/lib/api";
 export const MANAGED_USER_ROLES = [
   "owner",
   "super_admin",
+  "admin",
   "operator",
   "viewer",
   "reviewer",
@@ -28,7 +29,9 @@ export type ManagedUser = {
   id: number;
   username: string;
   role: string;
+  title: string | null;
   job_title: string | null;
+  organization: string | null;
   organization_id: string | null;
   must_change_password: boolean;
   is_active: boolean;

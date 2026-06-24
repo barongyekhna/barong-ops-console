@@ -17,7 +17,12 @@ from ..db.compatibility import table_exists
 from ..db.session import managed_read_session
 from ..middleware.org_context import get_org_context
 from ..schemas.organization import ORG_ID_PATTERN
-from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
+from ..services.auth_service import (
+    AuditContext,
+    InvalidSessionError,
+    authenticated_session_from_identity,
+    validate_session_identity_fast,
+)
 from ..services.data_isolation import (
     OrgDataIsolationError,
     OrgDataIsolationUserContext,
@@ -262,9 +267,12 @@ async def enforce_org_data_isolation(request: Request, call_next):
         with without_org_data_isolation():
             with managed_read_session() as db:
                 try:
-                    current_session = validate_session(
+                    identity = validate_session_identity_fast(
                         db,
                         session_id=session_id,
+                    )
+                    current_session = authenticated_session_from_identity(
+                        identity,
                         audit=audit,
                     )
                 except InvalidSessionError:

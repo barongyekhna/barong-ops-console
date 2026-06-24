@@ -1,0 +1,49 @@
+{
+  "api_key_binding_concurrency": {
+    "avg_ms": 809.173,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 1012.689,
+    "p95_ms": 1012.689,
+    "success": 3,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "total": 3
+  },
+  "audit_id": "recovery_20260624T072323Z_c698c9ca",
+  "generated_at": "2026-06-24T07:24:25.194072+00:00",
+  "module_toggle_concurrency": {
+    "avg_ms": 4825.677,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 5698.128,
+    "p95_ms": 5698.128,
+    "success": 8,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "total": 8
+  },
+  "parallel_login": {
+    "avg_ms": 3538.189,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 4306.202,
+    "p95_ms": 4306.202,
+    "success": 10,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "total": 10
+  },
+  "read_50_rps": {
+    "avg_ms": 233.094,
+    "failure": 0,
+    "failure_rate": 0.0,
+    "max_ms": 690.874,
+    "p95_ms": 418.591,
+    "success": 50,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "total": 50
+  },
+  "status": "passed"
+}

@@ -16,12 +16,24 @@ class ModuleControlStateRead(BaseModel):
     module_id: str = Field(min_length=1, max_length=128)
     display_name: str = Field(min_length=1, max_length=120)
     category: str = Field(min_length=1, max_length=40)
+    status: ModuleRuntimeStatus = "active"
     enabled: bool
     runtime_status: ModuleRuntimeStatus
     runtime_error_code: str | None = Field(default=None, max_length=128)
     runtime_error_message: str | None = Field(default=None, max_length=1000)
     last_error_at: datetime | None = None
+    error: dict[str, str | datetime | None] = Field(default_factory=dict)
     updated_at: datetime
+
+    @model_validator(mode="after")
+    def sync_standard_fields(self) -> "ModuleControlStateRead":
+        self.status = self.runtime_status
+        self.error = {
+            "code": self.runtime_error_code,
+            "message": self.runtime_error_message,
+            "timestamp": self.last_error_at,
+        }
+        return self
 
 
 class ModuleControlOrgGroup(BaseModel):

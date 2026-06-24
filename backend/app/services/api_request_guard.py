@@ -12,9 +12,10 @@ from fastapi import Depends, HTTPException, Request, status
 from ..core.config import Settings, get_settings
 from ..core.session_cookies import get_session_id_from_request
 
-DEFAULT_HEAVY_REQUEST_LIMIT = 12
+DEFAULT_HEAVY_REQUEST_LIMIT = 60
 DEFAULT_HEAVY_REQUEST_WINDOW_SECONDS = 1.0
 IN_FLIGHT_REQUEST_MAX_AGE_SECONDS = 30.0
+IDEMPOTENT_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
 @dataclass(frozen=True)
@@ -68,6 +69,7 @@ def enter_heavy_api_request(
     scope: str,
     limit: int = DEFAULT_HEAVY_REQUEST_LIMIT,
     window_seconds: float = DEFAULT_HEAVY_REQUEST_WINDOW_SECONDS,
+    allow_idempotent_duplicates: bool = False,
 ) -> ApiRequestGuardToken:
     identity = _session_identity(request, settings)
     now = monotonic()
@@ -93,7 +95,11 @@ def enter_heavy_api_request(
                 headers={"Retry-After": "1"},
             )
 
-        if duplicate_key in _in_flight_requests:
+        duplicate_protected = not (
+            allow_idempotent_duplicates
+            and request.method.upper() in IDEMPOTENT_METHODS
+        )
+        if duplicate_protected and duplicate_key in _in_flight_requests:
             raise HTTPException(
                 status_code=status.HTTP_429_TOO_MANY_REQUESTS,
                 detail="Duplicate request already in progress.",
@@ -111,7 +117,11 @@ def exit_heavy_api_request(token: ApiRequestGuardToken) -> None:
         _in_flight_requests.pop(token.duplicate_key, None)
 
 
-def guarded_heavy_api_request(scope: str):
+def guarded_heavy_api_request(
+    scope: str,
+    *,
+    allow_idempotent_duplicates: bool = False,
+):
     def dependency(
         request: Request,
         settings: Settings = Depends(get_settings),
@@ -120,6 +130,7 @@ def guarded_heavy_api_request(scope: str):
             request,
             settings=settings,
             scope=scope,
+            allow_idempotent_duplicates=allow_idempotent_duplicates,
         )
         try:
             yield

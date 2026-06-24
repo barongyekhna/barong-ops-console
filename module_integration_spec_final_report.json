@@ -1,0 +1,151 @@
+{
+  "audit_id": "go_live_20260624T082455Z_01b82d78",
+  "checks": {
+    "api_key_dependency_mapping": true,
+    "execution_pipeline_definition": true,
+    "module_id_uniqueness": true,
+    "module_registration_required_fields": true,
+    "n8n_dependency_requirements": true,
+    "org_id_binding_rules": true
+  },
+  "duplicate_module_ids": [],
+  "generated_at": "2026-06-24T08:25:02.981760+00:00",
+  "missing_required_fields_by_module": {},
+  "module_count": 20,
+  "n8n_binding": {
+    "binding_id": "akb_1063e5ea588f5fd5e267a3c9485f37a3",
+    "created_at": "2026-06-24T08:03:36.603368Z",
+    "key_alias": "n8n",
+    "key_id": "key_dd6571b51e0e7f57549db72a64a6bf1e",
+    "key_name": "Go live n8n go_live_20260624T080328Z_82b84a63",
+    "key_url": "https://example.invalid",
+    "module_id": "integration.n8n_webhook_test_bridge",
+    "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+    "status": "active",
+    "updated_at": "2026-06-24T08:03:36.603368Z"
+  },
+  "n8n_control_state": {
+    "category": "integration",
+    "display_name": "n8n Webhook Test Bridge",
+    "enabled": true,
+    "error": {
+      "code": null,
+      "message": null,
+      "timestamp": null
+    },
+    "last_error_at": null,
+    "module_id": "integration.n8n_webhook_test_bridge",
+    "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+    "runtime_error_code": null,
+    "runtime_error_message": null,
+    "runtime_status": "active",
+    "status": "active",
+    "updated_at": "2026-06-24T08:23:45.703946Z"
+  },
+  "n8n_module": {
+    "allowed_scope_types": [
+      "global",
+      "module"
+    ],
+    "api_namespace": "/n8n-webhook-test",
+    "audit_log_actions": [
+      "n8n_webhook_test.run"
+    ],
+    "category": "integration",
+    "data_boundary": {
+      "blocked_objects": [
+        "server_local_config",
+        "external_provider_config",
+        "cross_module_writes"
+      ],
+      "reads": [
+        "credential_bindings",
+        "n8n_webhook_test_response"
+      ],
+      "writes": [
+        "operation_logs"
+      ]
+    },
+    "denied_behavior": "hide_when_denied",
+    "description": "Owner-configured production readiness test bridge that dispatches a real backend webhook request to the hidden n8n test endpoint.",
+    "display_name": "n8n Webhook Test Bridge",
+    "docs_path": "docs/C07_MODULE_REGISTRY_BACKEND.md",
+    "execution_provider_required": true,
+    "external_dependencies": [],
+    "feature_flag_key": "modules.integration.n8n_webhook_test_bridge",
+    "lifecycle": "production_released",
+    "module_adapter_required": false,
+    "module_key": "integration.n8n_webhook_test_bridge",
+    "navigation": {
+      "default_visible": false,
+      "group": "Overview",
+      "icon": "Webhook",
+      "label": "n8n Webhook Test Bridge",
+      "order": 31,
+      "owner_only": false
+    },
+    "no_api": false,
+    "operation_log_policy": {
+      "approve": "required",
+      "read": "optional",
+      "release": "required",
+      "write": "required"
+    },
+    "permission_manifest": [
+      {
+        "action": "read",
+        "allowed_scope_types": [
+          "global",
+          "module"
+        ],
+        "category": "integration",
+        "default_scope_type": "global",
+        "description": "View the real n8n webhook test bridge metadata.",
+        "high_risk_confirmation_required": false,
+        "label": "Read n8n webhook test bridge metadata",
+        "menu_policy": "hide_when_denied",
+        "module_key": "integration.n8n_webhook_test_bridge",
+        "operation_log_required": false,
+        "permission_key": "modules.read",
+        "risk_level": "low"
+      },
+      {
+        "action": "execute",
+        "allowed_scope_types": [
+          "global",
+          "module"
+        ],
+        "category": "integration",
+        "default_scope_type": "global",
+        "description": "Run the backend-gated n8n webhook test bridge.",
+        "high_risk_confirmation_required": false,
+        "label": "Execute n8n webhook test bridge",
+        "menu_policy": "hide_when_denied",
+        "module_key": "integration.n8n_webhook_test_bridge",
+        "operation_log_required": true,
+        "permission_key": "modules.execute",
+        "risk_level": "high"
+      }
+    ],
+    "production_release_required": false,
+    "release_requirements": {
+      "local_verify": true,
+      "production_archive": true,
+      "required_checks": [
+        "real n8n webhook endpoint configured",
+        "API key binding alias n8n active",
+        "execution gate dispatch verified"
+      ],
+      "staging_acceptance": true
+    },
+    "required_permissions": [
+      "modules.read"
+    ],
+    "route_namespace": "/n8n-webhook-test",
+    "sandbox_required": false,
+    "staging_acceptance_required": false,
+    "status": "sealed",
+    "unavailable_behavior": "show_unavailable"
+  },
+  "status": "passed"
+}

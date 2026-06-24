@@ -12,6 +12,7 @@ from sqlalchemy import func, select
 
 from ..db.session import SessionLocal, rollback_open_transaction
 from ..models.api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
+from ..models.module_control import ModuleControlStateRecord
 from ..schemas.module_control import (
     ModuleControlCenterResponse,
     ModuleControlStateRead,
@@ -36,6 +37,7 @@ class ModuleControlCenterSnapshot:
     expires_at_monotonic: float
     fresh_json: str
     stale_json: str
+    max_control_updated_at: datetime | None
     org_module_summary: dict[str, int]
     module_status: dict[str, dict[str, int]]
     execution_state_snapshot: dict[str, int]
@@ -55,6 +57,20 @@ _last_refresh_error: str | None = None
 
 def _now() -> datetime:
     return datetime.now(UTC)
+
+
+def _as_aware(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _snapshot_older_than_db(db, snapshot: ModuleControlCenterSnapshot) -> bool:
+    latest_updated_at = db.scalar(select(func.max(ModuleControlStateRecord.updated_at)))
+    if latest_updated_at is None:
+        return False
+    snapshot_updated_at = snapshot.max_control_updated_at or snapshot.generated_at
+    return _as_aware(latest_updated_at) > _as_aware(snapshot_updated_at)
 
 
 def _response_copy(
@@ -159,6 +175,15 @@ def _snapshot_from_response(
     }
     module_status = _module_status_summary(response)
     execution_state = _execution_state_snapshot(response)
+    module_updated_at_values = [
+        module.updated_at
+        for group in response.organizations
+        for module in group.modules
+        if module.updated_at is not None
+    ]
+    max_control_updated_at = (
+        max((_as_aware(value) for value in module_updated_at_values), default=None)
+    )
     if not execution_state["total"]:
         execution_state = build_module_control_execution_snapshot({})
     clean_response = response.model_copy(
@@ -175,6 +200,7 @@ def _snapshot_from_response(
         expires_at_monotonic=monotonic() + MODULE_CONTROL_CACHE_TTL_SECONDS,
         fresh_json=clean_response.model_dump_json(),
         stale_json=stale_response.model_dump_json(),
+        max_control_updated_at=max_control_updated_at,
         org_module_summary=org_module_summary,
         module_status=module_status,
         execution_state_snapshot=execution_state,
@@ -311,9 +337,15 @@ def refresh_module_control_center_cache_sync() -> ModuleControlCenterResponse:
 
 def get_module_control_center_cached(
     *,
+    db=None,
     max_wait_seconds: float = MODULE_CONTROL_CACHE_WAIT_TIMEOUT_SECONDS,
 ) -> ModuleControlCenterResponse:
     start_module_control_cache_worker()
+    if db is not None:
+        with _condition:
+            snapshot = _snapshot
+        if snapshot is None or _snapshot_older_than_db(db, snapshot):
+            return refresh_module_control_center_cache_sync()
     with _condition:
         snapshot = _snapshot
         if snapshot is not None:
@@ -323,6 +355,8 @@ def get_module_control_center_cached(
             return _response_copy(snapshot, cache_status="stale")
 
         _refresh_requested_nowait_locked(force=True)
+        if max_wait_seconds <= 0.01:
+            return _partial_response()
         deadline = monotonic() + max(0.0, max_wait_seconds)
         while _snapshot is None:
             remaining = deadline - monotonic()
@@ -334,9 +368,15 @@ def get_module_control_center_cached(
 
 def get_module_control_center_cached_json(
     *,
+    db=None,
     max_wait_seconds: float = MODULE_CONTROL_CACHE_WAIT_TIMEOUT_SECONDS,
 ) -> str:
     start_module_control_cache_worker()
+    if db is not None:
+        with _condition:
+            snapshot = _snapshot
+        if snapshot is None or _snapshot_older_than_db(db, snapshot):
+            return refresh_module_control_center_cache_sync().model_dump_json()
     with _condition:
         snapshot = _snapshot
         if snapshot is not None:
@@ -346,6 +386,8 @@ def get_module_control_center_cached_json(
             return snapshot.stale_json
 
         _refresh_requested_nowait_locked(force=True)
+        if max_wait_seconds <= 0.01:
+            return _partial_response_json()
         deadline = monotonic() + max(0.0, max_wait_seconds)
         while _snapshot is None:
             remaining = deadline - monotonic()
@@ -429,10 +471,12 @@ def get_module_control_cache_stats() -> dict[str, Any]:
 
 
 def reset_module_control_center_cache_for_tests() -> None:
-    global _force_refresh_requested, _last_refresh_error, _refresh_requested, _snapshot
+    global _force_refresh_requested, _last_refresh_error, _refresh_requested
+    global _refreshing, _snapshot
     with _condition:
         _snapshot = None
         _refresh_requested = False
         _force_refresh_requested = False
+        _refreshing = False
         _last_refresh_error = None
         _condition.notify_all()

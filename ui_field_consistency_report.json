@@ -1,0 +1,2275 @@
+{
+  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+  "checks": [
+    {
+      "api_call": {
+        "body": {
+          "count": 4,
+          "cursor": null,
+          "degraded": false,
+          "error": null,
+          "items": [
+            {
+              "created_at": "2026-06-23T18:10:52.787424Z",
+              "metadata": {
+                "country": "US",
+                "custom": {
+                  "audit_id": "final_preprod_20260623T181050Z_0e3e9f24",
+                  "namespace": "audit_scope_final_preprod_20260623T181050Z_0e3e9f24",
+                  "test_scope": true,
+                  "updated": true
+                },
+                "industry": "audit-updated",
+                "settings": {
+                  "allow_ai": false,
+                  "allow_n8n": true,
+                  "data_retention_days": 14
+                },
+                "timezone": "UTC"
+              },
+              "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "org_name": "Audit Primary Updated final_preprod_20260623T181050Z_0e3e9f24",
+              "org_type": "store",
+              "owner_user_id": "1",
+              "status": "active",
+              "updated_at": "2026-06-23T18:11:00.084178Z"
+            },
+            {
+              "created_at": "2026-06-23T18:19:23.982448Z",
+              "metadata": {
+                "country": "US",
+                "custom": {
+                  "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                  "test_scope": true,
+                  "updated": true
+                },
+                "industry": "audit-updated",
+                "settings": {
+                  "allow_ai": false,
+                  "allow_n8n": true,
+                  "data_retention_days": 14
+                },
+                "timezone": "UTC"
+              },
+              "org_id": "org_cf25980213a1459e8908bbf505729895",
+              "org_name": "Audit Primary Updated final_preprod_20260623T181922Z_9658bfcf",
+              "org_type": "store",
+              "owner_user_id": "1",
+              "status": "active",
+              "updated_at": "2026-06-23T18:19:29.074613Z"
+            },
+            {
+              "created_at": "2026-06-20T02:39:08.302108Z",
+              "metadata": {
+                "country": "",
+                "custom": {},
+                "industry": "",
+                "settings": {
+                  "allow_ai": false,
+                  "allow_n8n": false,
+                  "data_retention_days": 365
+                },
+                "timezone": "UTC"
+              },
+              "org_id": "org_d7497212d213498cbf0513d75e486c20",
+              "org_name": "涌龙麟（吉林）电子产品制造有限公司",
+              "org_type": "store",
+              "owner_user_id": "1",
+              "status": "active",
+              "updated_at": "2026-06-20T02:39:08.302108Z"
+            },
+            {
+              "created_at": "2026-06-19T15:41:12.489208Z",
+              "metadata": {
+                "country": "",
+                "custom": {},
+                "industry": "",
+                "settings": {
+                  "allow_ai": false,
+                  "allow_n8n": false,
+                  "data_retention_days": 365
+                },
+                "timezone": "UTC"
+              },
+              "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+              "org_name": "涌龙麟（深圳）国际贸易有限公司",
+              "org_type": "store",
+              "owner_user_id": "1",
+              "status": "active",
+              "updated_at": "2026-06-19T15:41:12.489208Z"
+            }
+          ],
+          "limit": 20,
+          "next_cursor": null,
+          "offset": 0,
+          "source": "live"
+        },
+        "elapsed_ms": 2196.1,
+        "error": null,
+        "expected_status": 200,
+        "method": "GET",
+        "name": "field_consistency.Organizations",
+        "ok": true,
+        "path": "/api/app/organizations?limit=20&offset=0",
+        "status_code": 200
+      },
+      "field_check": {
+        "checked": true,
+        "missing": [],
+        "present": [
+          "org_id",
+          "org_name",
+          "org_type",
+          "owner_user_id",
+          "status",
+          "metadata",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "module": "Organizations",
+      "required_fields": [
+        "org_id",
+        "org_name",
+        "org_type",
+        "owner_user_id",
+        "status",
+        "metadata",
+        "created_at",
+        "updated_at"
+      ],
+      "ui_render_check": {
+        "has_bad_marker": false,
+        "has_no_permission_text": false,
+        "route_record_found": true,
+        "status": 200,
+        "visible_text_sample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n组织管理\nRefresh\nbarongyekhna\nOWNER\n退出\n创建组织\n组织名称\n创建\n组织列表\n\n共 0 个组织，每页 10 条。\n\n同步中"
+      },
+      "ui_route": "/organizations"
+    },
+    {
+      "api_call": {
+        "body": {
+          "count": 16,
+          "cursor": null,
+          "degraded": false,
+          "error": null,
+          "items": [
+            {
+              "created_at": "2026-06-09T10:44:32.478968Z",
+              "id": 1,
+              "is_active": true,
+              "job_title": null,
+              "last_login_at": "2026-06-23T18:20:38.282661Z",
+              "must_change_password": "***",
+              "organization_id": null,
+              "role": "owner",
+              "updated_at": "2026-06-23T18:20:38.477111Z",
+              "username": "barongyekhna"
+            },
+            {
+              "created_at": "2026-06-19T15:42:13.488131Z",
+              "id": 2,
+              "is_active": true,
+              "job_title": "总经理",
+              "last_login_at": "2026-06-23T18:17:44.281274Z",
+              "must_change_password": "***",
+              "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+              "role": "super_admin",
+              "updated_at": "2026-06-23T18:17:44.472392Z",
+              "username": "王创鑫"
+            },
+            {
+              "created_at": "2026-06-23T15:49:06.487422Z",
+              "id": 3,
+              "is_active": true,
+              "job_title": "E2E Viewer",
+              "last_login_at": null,
+              "must_change_password": "***",
+              "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+              "role": "viewer",
+              "updated_at": "2026-06-23T17:15:59.392434Z",
+              "username": "codex_e2e_viewer"
+            },
+            {
+              "created_at": "2026-06-23T18:11:04.794609Z",
+              "id": 4,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=super_admin",
+              "last_login_at": "2026-06-23T18:11:14.578303Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "super_admin",
+              "updated_at": "2026-06-23T18:15:32.869863Z",
+              "username": "audit_super_admin_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:11:08.375442Z",
+              "id": 5,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+              "last_login_at": "2026-06-23T18:11:18.885988Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "operator",
+              "updated_at": "2026-06-23T18:15:29.468487Z",
+              "username": "audit_operator_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:11:10.976464Z",
+              "id": 6,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+              "last_login_at": "2026-06-23T18:11:23.771413Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "viewer",
+              "updated_at": "2026-06-23T18:15:33.774244Z",
+              "username": "audit_viewer_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:14:48.780436Z",
+              "id": 7,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+              "last_login_at": "2026-06-23T18:14:52.389050Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "operator",
+              "updated_at": "2026-06-23T18:15:34.973645Z",
+              "username": "audit_stress_0_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:14:54.880733Z",
+              "id": 8,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+              "last_login_at": "2026-06-23T18:14:58.489531Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "viewer",
+              "updated_at": "2026-06-23T18:15:31.788132Z",
+              "username": "audit_stress_1_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:15:00.970159Z",
+              "id": 9,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+              "last_login_at": "2026-06-23T18:15:05.492726Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "operator",
+              "updated_at": "2026-06-23T18:15:30.179360Z",
+              "username": "audit_stress_2_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:15:07.689427Z",
+              "id": 10,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+              "last_login_at": "2026-06-23T18:15:11.579673Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "viewer",
+              "updated_at": "2026-06-23T18:15:30.989476Z",
+              "username": "audit_stress_3_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:15:14.288663Z",
+              "id": 11,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=operator",
+              "last_login_at": "2026-06-23T18:15:18.275620Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "operator",
+              "updated_at": "2026-06-23T18:15:35.682788Z",
+              "username": "audit_stress_4_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:15:21.269361Z",
+              "id": 12,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181050Z_0e3e9f24; role=viewer",
+              "last_login_at": "2026-06-23T18:15:24.474728Z",
+              "must_change_password": "***",
+              "organization_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "role": "viewer",
+              "updated_at": "2026-06-23T18:15:34.380326Z",
+              "username": "audit_stress_5_0e3e9f24"
+            },
+            {
+              "created_at": "2026-06-23T18:19:31.079405Z",
+              "id": 13,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=super_admin",
+              "last_login_at": "2026-06-23T18:21:12.581042Z",
+              "must_change_password": "***",
+              "organization_id": "org_cf25980213a1459e8908bbf505729895",
+              "role": "super_admin",
+              "updated_at": "2026-06-23T18:21:12.672222Z",
+              "username": "audit_super_admin_9658bfcf"
+            },
+            {
+              "created_at": "2026-06-23T18:19:33.485096Z",
+              "id": 14,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=operator",
+              "last_login_at": "2026-06-23T18:21:38.276241Z",
+              "must_change_password": "***",
+              "organization_id": "org_cf25980213a1459e8908bbf505729895",
+              "role": "operator",
+              "updated_at": "2026-06-23T18:21:38.385415Z",
+              "username": "audit_operator_9658bfcf"
+            },
+            {
+              "created_at": "2026-06-23T18:19:35.672460Z",
+              "id": 15,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+              "last_login_at": "2026-06-23T18:22:05.167443Z",
+              "must_change_password": "***",
+              "organization_id": "org_cf25980213a1459e8908bbf505729895",
+              "role": "viewer",
+              "updated_at": "2026-06-23T18:22:05.271494Z",
+              "username": "audit_viewer_9658bfcf"
+            },
+            {
+              "created_at": "2026-06-23T18:19:43.382498Z",
+              "id": 16,
+              "is_active": true,
+              "job_title": "test_scope=true; namespace=audit_scope_final_preprod_20260623T181922Z_9658bfcf; role=viewer",
+              "last_login_at": "2026-06-23T18:19:46.186421Z",
+              "must_change_password": "***",
+              "organization_id": "org_cf25980213a1459e8908bbf505729895",
+              "role": "viewer",
+              "updated_at": "2026-06-23T18:19:46.273149Z",
+              "username": "audit_reset_probe_9658bfcf"
+            }
+          ],
+          "limit": 20,
+          "next_cursor": null,
+          "offset": 0,
+          "source": "live"
+        },
+        "elapsed_ms": 698.28,
+        "error": null,
+        "expected_status": 200,
+        "method": "GET",
+        "name": "field_consistency.Users",
+        "ok": true,
+        "path": "/api/app/users?limit=20&offset=0",
+        "status_code": 200
+      },
+      "field_check": {
+        "checked": true,
+        "missing": [],
+        "present": [
+          "id",
+          "username",
+          "role",
+          "job_title",
+          "organization_id",
+          "must_change_password",
+          "is_active",
+          "last_login_at",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "module": "Users",
+      "required_fields": [
+        "id",
+        "username",
+        "role",
+        "job_title",
+        "organization_id",
+        "must_change_password",
+        "is_active",
+        "last_login_at",
+        "created_at",
+        "updated_at"
+      ],
+      "ui_render_check": {
+        "has_bad_marker": false,
+        "has_no_permission_text": false,
+        "route_record_found": true,
+        "status": 200,
+        "visible_text_sample": "Barong\nOperations\n账号与组织\n用户管理\n组织管理\n权限管理\n业务处理\n审批\n审批审计\n系统管理\n首页\n功能区\n设置\n异常记录\n运行记录\n操作记录\n扩展能力\n自动化助手\n正在加载工作台\nWorkspace\n用户管理\nRefresh\nbarongyekhna\nOWNER\n退出\n正在同步系统状态\n权限与模块状态正在更新。\n刷新\n账号\n用户管理\n\n管理工作台账号、角色、组织归属和密码重置。\n\n账号\n创建用户\n用户名\n角色\n正在加载角色\n岗位\n组织\n暂无可选组织\n正在加载组织\n创建用户\n用户列表\n\n共 0 个账号，每页 10 条。\n\n刷新"
+      },
+      "ui_route": "/users"
+    },
+    {
+      "api_call": {
+        "body": {
+          "count": 18,
+          "cursor": null,
+          "degraded": false,
+          "error": null,
+          "items": [
+            {
+              "action": "read",
+              "category": "feature",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View artifact metadata and safe artifact records.",
+              "id": "b288eecb-0e1e-4cb6-8e07-c74034ba1c22",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read artifacts",
+              "menu_policy": "show_locked",
+              "module_key": "artifacts",
+              "permission_key": "artifacts.read",
+              "risk_level": "low",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "create",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Create allowed automation jobs in an assigned scope.",
+              "id": "c7512f59-8f77-43fc-a85d-5ca620e05f27",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Create jobs",
+              "menu_policy": "show_locked",
+              "module_key": "jobs",
+              "permission_key": "jobs.create",
+              "risk_level": "medium",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "manage",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Manage job lifecycle state for allowed automation jobs.",
+              "id": "27155bb6-6984-412a-8f56-6990927ab415",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Manage jobs",
+              "menu_policy": "show_locked",
+              "module_key": "jobs",
+              "permission_key": "jobs.manage",
+              "risk_level": "high",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "read",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View automation jobs and their safe metadata.",
+              "id": "1a4c3991-edeb-42fd-aa96-676753d409fa",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read jobs",
+              "menu_policy": "show_locked",
+              "module_key": "jobs",
+              "permission_key": "jobs.read",
+              "risk_level": "low",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "manage",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Manage module registry metadata and future module manifests.",
+              "id": "757088db-2bb5-4ba6-a5f5-b70340c34f6d",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Manage modules",
+              "menu_policy": "hide_when_denied",
+              "module_key": "modules",
+              "permission_key": "modules.manage",
+              "risk_level": "high",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "read",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View registered modules and module metadata.",
+              "id": "601221cf-cd22-4462-b751-7e832c660b13",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read modules",
+              "menu_policy": "hide_when_denied",
+              "module_key": "modules",
+              "permission_key": "modules.read",
+              "risk_level": "low",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "read",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View audit logs and operation history.",
+              "id": "932400e9-e2cf-47ee-a997-bb8c893f1a22",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read operation logs",
+              "menu_policy": "hide_when_denied",
+              "module_key": "operation_logs",
+              "permission_key": "operation_logs.read",
+              "risk_level": "high",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "manage",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Grant, disable, or change scoped user permission assignments.",
+              "id": "fb2e9220-9757-4103-b8b6-fee5ee0406fe",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Manage permissions",
+              "menu_policy": "hide_when_denied",
+              "module_key": "permissions",
+              "permission_key": "permissions.manage",
+              "risk_level": "critical",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "read",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View permission registry entries and assignment state.",
+              "id": "d2eabe03-6323-4da9-991a-bd7dc59f8760",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read permissions",
+              "menu_policy": "hide_when_denied",
+              "module_key": "permissions",
+              "permission_key": "permissions.read",
+              "risk_level": "medium",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "release",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Approve or execute future production release workflows.",
+              "id": "8fe8951a-0163-41ac-ac84-dec19f38668b",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Release production",
+              "menu_policy": "hide_when_denied",
+              "module_key": "production",
+              "permission_key": "production.release",
+              "risk_level": "critical",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "approve",
+              "category": "feature",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Approve assigned review items within an authorized scope.",
+              "id": "a4abb811-80eb-4340-b834-645d3cbf00ed",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Approve reviews",
+              "menu_policy": "show_locked",
+              "module_key": "reviews",
+              "permission_key": "reviews.approve",
+              "risk_level": "high",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "read",
+              "category": "feature",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View review queues and safe review metadata.",
+              "id": "c0e01ffa-deb5-4612-9955-5188dcb2a2b9",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read reviews",
+              "menu_policy": "show_locked",
+              "module_key": "reviews",
+              "permission_key": "reviews.read",
+              "risk_level": "low",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "read",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View the system role catalog and assignable role metadata.",
+              "id": "0306cb2d-38d6-48c2-9d9d-8b671d7cbb4e",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read roles",
+              "menu_policy": "hide_when_denied",
+              "module_key": "roles",
+              "permission_key": "roles.read",
+              "risk_level": "low",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "manage",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Change system settings when a settings API is added.",
+              "id": "bad6ef91-a761-4963-95cf-5c2e58cb3ba5",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Manage settings",
+              "menu_policy": "hide_when_denied",
+              "module_key": "settings",
+              "permission_key": "settings.manage",
+              "risk_level": "critical",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "read",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View safe system settings metadata.",
+              "id": "2b8c2919-4b03-4aca-8e86-d149f77f6994",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read settings",
+              "menu_policy": "hide_when_denied",
+              "module_key": "settings",
+              "permission_key": "settings.read",
+              "risk_level": "medium",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "admin",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Reserved high-risk system administration permission.",
+              "id": "f691d5f3-2635-4eb6-afb9-7ceff7deaa4a",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "System admin",
+              "menu_policy": "hide_when_denied",
+              "module_key": "system",
+              "permission_key": "system.admin",
+              "risk_level": "critical",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "manage",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "Create, update, disable, enable, and reset internal users.",
+              "id": "a62fbe83-9746-4c14-af6b-d4def0f95bb4",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Manage users",
+              "menu_policy": "hide_when_denied",
+              "module_key": "users",
+              "permission_key": "users.manage",
+              "risk_level": "high",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            },
+            {
+              "action": "read",
+              "category": "control_plane",
+              "created_at": "2026-06-11T10:14:48.212440Z",
+              "description": "View internal user accounts and basic user metadata.",
+              "id": "b3a6f66e-e2ff-4c21-aa93-3be818d28857",
+              "is_enabled": true,
+              "is_system": true,
+              "label": "Read users",
+              "menu_policy": "hide_when_denied",
+              "module_key": "users",
+              "permission_key": "users.read",
+              "risk_level": "medium",
+              "updated_at": "2026-06-11T10:14:48.212440Z"
+            }
+          ],
+          "limit": 20,
+          "next_cursor": null,
+          "offset": 0,
+          "source": "live"
+        },
+        "elapsed_ms": 1008.61,
+        "error": null,
+        "expected_status": 200,
+        "method": "GET",
+        "name": "field_consistency.Permissions",
+        "ok": true,
+        "path": "/api/app/permissions/registry?limit=20&offset=0",
+        "status_code": 200
+      },
+      "field_check": {
+        "checked": true,
+        "missing": [],
+        "present": [
+          "id",
+          "permission_key",
+          "module_key",
+          "category",
+          "action",
+          "label",
+          "description",
+          "risk_level",
+          "menu_policy",
+          "is_system",
+          "is_enabled",
+          "created_at",
+          "updated_at"
+        ]
+      },
+      "module": "Permissions",
+      "required_fields": [
+        "id",
+        "permission_key",
+        "module_key",
+        "category",
+        "action",
+        "label",
+        "description",
+        "risk_level",
+        "menu_policy",
+        "is_system",
+        "is_enabled",
+        "created_at",
+        "updated_at"
+      ],
+      "ui_render_check": {
+        "has_bad_marker": false,
+        "has_no_permission_text": false,
+        "route_record_found": true,
+        "status": 200,
+        "visible_text_sample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n权限管理\nRefresh\nbarongyekhna\nOWNER\n退出\n账号与组织\n权限管理\n\n管理员工可访问的功能范围。\n\n同步中\n员工\n0\n功能权限\n0\n系统权限\n0\n当前角色\nowner"
+      },
+      "ui_route": "/permissions"
+    },
+    {
+      "api_call": {
+        "body": {
+          "count": 0,
+          "cursor": null,
+          "degraded": false,
+          "error": null,
+          "items": [],
+          "limit": 20,
+          "next_cursor": null,
+          "offset": 0,
+          "source": "live"
+        },
+        "elapsed_ms": 999.66,
+        "error": null,
+        "expected_status": 200,
+        "method": "GET",
+        "name": "field_consistency.Approvals",
+        "ok": true,
+        "path": "/api/app/approval/list?limit=20&offset=0",
+        "status_code": 200
+      },
+      "field_check": {
+        "checked": false,
+        "missing": [
+          "approval_id",
+          "execution_id",
+          "module_key",
+          "status",
+          "risk_level",
+          "execution_type",
+          "requester_id",
+          "request_time"
+        ],
+        "present": [],
+        "reason": "body path is not an object"
+      },
+      "module": "Approvals",
+      "required_fields": [
+        "approval_id",
+        "execution_id",
+        "module_key",
+        "status",
+        "risk_level",
+        "execution_type",
+        "requester_id",
+        "request_time"
+      ],
+      "ui_render_check": {
+        "has_bad_marker": false,
+        "has_no_permission_text": false,
+        "route_record_found": true,
+        "status": 200,
+        "visible_text_sample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n审批\nRefresh\nbarongyekhna\nOWNER\n退出\n审批中心\n审批列表\n\n按主控审批和功能审批分组处理。\n\n主控审批\n\n系统级操作、权限变更、模块接入等需要owner确认的审批。\n\n正在加载审批\n功能审批\n\n业务模块提交后的审批。\n\n正在加载审批"
+      },
+      "ui_route": "/approvals"
+    },
+    {
+      "api_call": {
+        "body": {
+          "entrypoints": [
+            {
+              "description": "List organizations with approval decision audit activity.",
+              "method": "GET",
+              "path": "/reviews/organizations"
+            },
+            {
+              "description": "List modules available as approval audit filters.",
+              "method": "GET",
+              "path": "/reviews/module-registry"
+            },
+            {
+              "description": "List employees with approval decision audit activity.",
+              "method": "GET",
+              "path": "/reviews/organizations/{organization_id}/users"
+            },
+            {
+              "description": "List approval decisions for one employee.",
+              "method": "GET",
+              "path": "/reviews/organizations/{organization_id}/users/{user_id}/actions"
+            }
+          ],
+          "legacy_review_items_enabled": false,
+          "module": "approval_audit",
+          "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "owner_scope": true,
+          "scope_role": "owner",
+          "source": "approval_decisions"
+        },
+        "elapsed_ms": 790.31,
+        "error": null,
+        "expected_status": 200,
+        "method": "GET",
+        "name": "field_consistency.Reviews",
+        "ok": true,
+        "path": "/api/app/reviews",
+        "status_code": 200
+      },
+      "field_check": {
+        "checked": true,
+        "missing": [],
+        "present": [
+          "module",
+          "source",
+          "legacy_review_items_enabled",
+          "scope_role",
+          "owner_scope",
+          "entrypoints"
+        ]
+      },
+      "module": "Reviews",
+      "required_fields": [
+        "module",
+        "source",
+        "legacy_review_items_enabled",
+        "scope_role",
+        "owner_scope",
+        "entrypoints"
+      ],
+      "ui_render_check": {
+        "has_bad_marker": false,
+        "has_no_permission_text": false,
+        "route_record_found": true,
+        "status": 200,
+        "visible_text_sample": "Barong\nOperations\n账号与组织\n用户管理\n组织管理\n权限管理\n业务处理\n审批\n审批审计\n系统管理\n首页\n功能区\n设置\n异常记录\n运行记录\n操作记录\n扩展能力\n自动化助手\n正在加载工作台\nWorkspace\n审批审计\nRefresh\nbarongyekhna\nOWNER\n退出\n正在同步系统状态\n权限与模块状态正在更新。\n刷新\n审批审计\n审批行为审计\n\n按真实组织、员工和模块查看审批动作。\n\n同步中\n组织\n选择组织\n员工搜索\n员工\n全部员工\n模块\n全部模块\n开始时间\n结束时间\n筛选\n清除\n组织\n上一页\n1\n下一页\n正在加载组织"
+      },
+      "ui_route": "/reviews"
+    },
+    {
+      "api_call": {
+        "body": {
+          "detail": "C18F permission denied."
+        },
+        "elapsed_ms": 402.59,
+        "error": null,
+        "expected_status": 200,
+        "method": "GET",
+        "name": "field_consistency.Modules",
+        "ok": false,
+        "path": "/api/control-plane/modules/registry",
+        "status_code": 403
+      },
+      "field_check": {
+        "checked": false,
+        "missing": [
+          "module_key",
+          "display_name",
+          "description",
+          "category",
+          "status",
+          "lifecycle",
+          "route_namespace",
+          "api_namespace",
+          "required_permissions",
+          "permission_manifest"
+        ],
+        "present": [],
+        "reason": "body path is not an object"
+      },
+      "module": "Modules",
+      "required_fields": [
+        "module_key",
+        "display_name",
+        "description",
+        "category",
+        "status",
+        "lifecycle",
+        "route_namespace",
+        "api_namespace",
+        "required_permissions",
+        "permission_manifest"
+      ],
+      "ui_render_check": {
+        "has_bad_marker": false,
+        "has_no_permission_text": false,
+        "route_record_found": true,
+        "status": 200,
+        "visible_text_sample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n功能区\nRefresh\nbarongyekhna\nOWNER\n退出\nowner\n模块管理中心\n\n按组织管理模块开关、运行状态和密钥绑定。\n\n同步中\n组织\n0\n模块\n0\n运行中\n0\n异常\n0\n密钥\n0\n绑定\n0\n组织数据加载中\n\n正在同步后端组织列表。\n\n密钥管理\n\n密钥只写入后端，前端不会显示明文。\n\n组织\n组织加载中\n名称\n服务地址\n密钥\n新增密钥\n密钥\t服务地址\t名称\t已绑定模块\t操作\n组织\n组织加载中\n模块\n密钥\n用途名称\n绑定"
+      },
+      "ui_route": "/modules"
+    },
+    {
+      "api_call": {
+        "body": {
+          "count": 4,
+          "items": [
+            {
+              "assigned_module_ids": [
+                "integration.n8n_test_bridge"
+              ],
+              "created_at": "2026-06-23T18:19:55.682591Z",
+              "key_hash_prefix": "27649b89fb25",
+              "key_id": "key_d611ebd2d3618f33cd96bf543651e26a",
+              "last_used_at": null,
+              "name": "Audit backup key final_preprod_20260623T181922Z_9658bfcf",
+              "org_id": "org_cf25980213a1459e8908bbf505729895",
+              "status": "active",
+              "updated_at": "2026-06-23T18:19:55.682591Z",
+              "url": "http://127.0.0.1:8788/audit/backup"
+            },
+            {
+              "assigned_module_ids": [
+                "integration.n8n_test_bridge"
+              ],
+              "created_at": "2026-06-23T18:19:54.085965Z",
+              "key_hash_prefix": "d753ec2dd903",
+              "key_id": "key_575957fb51b80804825c41a462c16b39",
+              "last_used_at": null,
+              "name": "Audit n8n key final_preprod_20260623T181922Z_9658bfcf",
+              "org_id": "org_cf25980213a1459e8908bbf505729895",
+              "status": "active",
+              "updated_at": "2026-06-23T18:19:54.085965Z",
+              "url": "http://127.0.0.1:8788/audit/n8n"
+            },
+            {
+              "assigned_module_ids": [
+                "integration.n8n_test_bridge"
+              ],
+              "created_at": "2026-06-23T18:11:37.884221Z",
+              "key_hash_prefix": "2f43cdb728f3",
+              "key_id": "key_14444ef2acae538ca750701fbd6bbb0b",
+              "last_used_at": null,
+              "name": "Audit backup key final_preprod_20260623T181050Z_0e3e9f24",
+              "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "status": "active",
+              "updated_at": "2026-06-23T18:11:37.884221Z",
+              "url": "http://127.0.0.1:8788/audit/backup"
+            },
+            {
+              "assigned_module_ids": [
+                "integration.n8n_test_bridge"
+              ],
+              "created_at": "2026-06-23T18:11:35.578396Z",
+              "key_hash_prefix": "113d103b25aa",
+              "key_id": "key_9ae881ef8df2c9db1109eb0961f53696",
+              "last_used_at": null,
+              "name": "Audit n8n key final_preprod_20260623T181050Z_0e3e9f24",
+              "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "status": "active",
+              "updated_at": "2026-06-23T18:11:35.578396Z",
+              "url": "http://127.0.0.1:8788/audit/n8n"
+            }
+          ]
+        },
+        "elapsed_ms": 1492.17,
+        "error": null,
+        "expected_status": 200,
+        "method": "GET",
+        "name": "field_consistency.API Keys",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/keys",
+        "status_code": 200
+      },
+      "field_check": {
+        "checked": true,
+        "missing": [],
+        "present": [
+          "key_id",
+          "org_id",
+          "name",
+          "url",
+          "key_hash_prefix",
+          "status",
+          "assigned_module_ids",
+          "created_at",
+          "updated_at",
+          "last_used_at"
+        ]
+      },
+      "module": "API Keys",
+      "required_fields": [
+        "key_id",
+        "org_id",
+        "name",
+        "url",
+        "key_hash_prefix",
+        "status",
+        "assigned_module_ids",
+        "created_at",
+        "updated_at",
+        "last_used_at"
+      ],
+      "ui_render_check": {
+        "has_bad_marker": false,
+        "has_no_permission_text": false,
+        "route_record_found": true,
+        "status": 200,
+        "visible_text_sample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n功能区\nRefresh\nbarongyekhna\nOWNER\n退出\nowner\n模块管理中心\n\n按组织管理模块开关、运行状态和密钥绑定。\n\n同步中\n组织\n0\n模块\n0\n运行中\n0\n异常\n0\n密钥\n0\n绑定\n0\n组织数据加载中\n\n正在同步后端组织列表。\n\n密钥管理\n\n密钥只写入后端，前端不会显示明文。\n\n组织\n组织加载中\n名称\n服务地址\n密钥\n新增密钥\n密钥\t服务地址\t名称\t已绑定模块\t操作\n组织\n组织加载中\n模块\n密钥\n用途名称\n绑定"
+      },
+      "ui_route": "/modules"
+    }
+  ],
+  "executed_at": "2026-06-23T18:22:34.091275+00:00",
+  "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+  "stale_text_scan": {
+    "marker_counts": {
+      "demo": 16,
+      "foundation": 3,
+      "mock": 27,
+      "placeholder": 17,
+      "暂未": 42
+    },
+    "samples": [
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 1,
+        "markers": [
+          "mock"
+        ],
+        "text": "export type LiveExecutionMode = \"mock\" | \"staging\" | \"live\";"
+      },
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 18,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock\""
+      },
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 272,
+        "markers": [
+          "mock"
+        ],
+        "text": "execution_mode: \"mock\","
+      },
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 324,
+        "markers": [
+          "mock"
+        ],
+        "text": "canary_state: activePolicies.length > 0 ? \"mock\" : \"not_configured\","
+      },
+      {
+        "file": "frontend/src/lib/live-gate.ts",
+        "line": 325,
+        "markers": [
+          "mock"
+        ],
+        "text": "execution_mode: \"mock\","
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 53,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock\""
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 67,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock\""
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 263,
+        "markers": [
+          "mock"
+        ],
+        "text": "execution_mode: \"mock\","
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 344,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"该功能区暂未开放。\";"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 593,
+        "markers": [
+          "mock"
+        ],
+        "text": "function hasMockProvider("
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 598,
+        "markers": [
+          "mock"
+        ],
+        "text": "accessItems.some((provider) => provider.execution_mode === \"mock\") ||"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 600,
+        "markers": [
+          "mock"
+        ],
+        "text": "provider.supported_execution_modes.includes(\"mock\"),"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 688,
+        "markers": [
+          "暂未"
+        ],
+        "text": "reason: \"该功能区暂未开放。\","
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 724,
+        "markers": [
+          "暂未"
+        ],
+        "text": "reason: \"该能力暂未接入产品页面。\","
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 827,
+        "markers": [
+          "mock"
+        ],
+        "text": "(executionProviderAccessUnknown || hasMockProvider(providerAccess, providerContracts))"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 835,
+        "markers": [
+          "mock"
+        ],
+        "text": "state: executionProviderAccessUnknown ? \"partial\" as const : \"mock\" as const,"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 860,
+        "markers": [
+          "mock"
+        ],
+        "text": "if (state === \"mock\") {"
+      },
+      {
+        "file": "frontend/src/lib/frontend-capability-state.ts",
+        "line": 861,
+        "markers": [
+          "mock"
+        ],
+        "text": "return \"mock\";"
+      },
+      {
+        "file": "frontend/src/lib/execution-provider.ts",
+        "line": 3,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock_provider\""
+      },
+      {
+        "file": "frontend/src/lib/execution-provider.ts",
+        "line": 26,
+        "markers": [
+          "mock"
+        ],
+        "text": "| \"mock\""
+      },
+      {
+        "file": "frontend/src/lib/execution-provider.ts",
+        "line": 271,
+        "markers": [
+          "mock"
+        ],
+        "text": "\"mock_provider\","
+      },
+      {
+        "file": "frontend/src/lib/execution-provider.ts",
+        "line": 294,
+        "markers": [
+          "mock"
+        ],
+        "text": "\"mock\","
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 1533,
+        "markers": [
+          "mock"
+        ],
+        "text": ".capability-state-pill.mock,"
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 3504,
+        "markers": [
+          "placeholder"
+        ],
+        "text": ".input-shell input::placeholder,"
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 3505,
+        "markers": [
+          "placeholder"
+        ],
+        "text": ".textarea-shell textarea::placeholder {"
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 3729,
+        "markers": [
+          "mock"
+        ],
+        "text": ".capability-state-pill.mock,"
+      },
+      {
+        "file": "frontend/src/app/globals.css",
+        "line": 4442,
+        "markers": [
+          "placeholder"
+        ],
+        "text": ".topbar-search input::placeholder {"
+      },
+      {
+        "file": "frontend/src/components/module-adapter-shell.tsx",
+        "line": 69,
+        "markers": [
+          "暂未"
+        ],
+        "text": "description = \"该功能暂不可用，暂未连接可执行操作。\","
+      },
+      {
+        "file": "frontend/src/components/module-adapter-shell.tsx",
+        "line": 108,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "export function AdapterSurfacePlaceholder({"
+      },
+      {
+        "file": "frontend/src/components/module-adapter-shell.tsx",
+        "line": 388,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"该功能暂不可用，暂未连接可执行操作。\""
+      },
+      {
+        "file": "frontend/src/components/module-adapter-shell.tsx",
+        "line": 393,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "<AdapterSurfacePlaceholder accessState={accessState} adapter={adapter} />"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 39,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder?: string;"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 124,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"数据暂未同步，请重试。\";"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 321,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder={field.placeholder}"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 336,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder={field.placeholder}"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 400,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setError(errorMessage(requestError, \"数据暂未同步，请重试。\"));"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 452,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<strong>关联数据暂未同步</strong>"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 561,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setError(errorMessage(requestError, \"数据暂未同步，请重试。\"));"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 615,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setDetailError(errorMessage(requestError, \"详情暂未同步，请重试。\"));"
+      },
+      {
+        "file": "frontend/src/components/product-resource-console.tsx",
+        "line": 750,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<h2>数据暂未同步</h2>"
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 220,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"用户数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 232,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"权限数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 275,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setDialogError(\"部分员工权限暂未同步，已显示可用员工。\");"
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 425,
+        "markers": [
+          "暂未"
+        ],
+        "text": "? \"部分数据暂未同步\""
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 426,
+        "markers": [
+          "暂未"
+        ],
+        "text": ": \"权限数据暂未同步\"}"
+      },
+      {
+        "file": "frontend/src/components/permissions-product-view.tsx",
+        "line": 552,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"员工姓名\""
+      },
+      {
+        "file": "frontend/src/components/user-permissions-panel.tsx",
+        "line": 522,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"name, area, category\""
+      },
+      {
+        "file": "frontend/src/components/user-permissions-panel.tsx",
+        "line": 598,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"*\""
+      },
+      {
+        "file": "frontend/src/components/user-permissions-panel.tsx",
+        "line": 656,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"Why this explicit assignment is needed\""
+      },
+      {
+        "file": "frontend/src/components/user-permissions-panel.tsx",
+        "line": 882,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"Reason for revoke\""
+      },
+      {
+        "file": "frontend/src/components/approval-product-view.tsx",
+        "line": 79,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"后端响应暂未返回可用数据。\";"
+      },
+      {
+        "file": "frontend/src/components/approval-product-view.tsx",
+        "line": 88,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return errorText(error, \"审批数据暂未同步，请重试。\");"
+      },
+      {
+        "file": "frontend/src/components/approval-product-view.tsx",
+        "line": 473,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setError(errorText(requestError, \"审批详情暂未同步。\"));"
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 201,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"角色数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 225,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"组织数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 235,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"组织数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 267,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"用户数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 277,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"用户数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 513,
+        "markers": [
+          "暂未"
+        ],
+        "text": "formatUsersApiError(error, \"账号详情暂未同步，请重试。\"),"
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 691,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"请输入用户名\""
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 898,
+        "markers": [
+          "暂未"
+        ],
+        "text": "用户数据暂未同步"
+      },
+      {
+        "file": "frontend/src/components/user-management-panel.tsx",
+        "line": 900,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<p>{listError || \"后端响应暂未返回可用数据。\"}</p>"
+      },
+      {
+        "file": "frontend/src/components/capability-record-list.tsx",
+        "line": 59,
+        "markers": [
+          "暂未"
+        ],
+        "text": "? \"数据暂未同步，请重试。\""
+      },
+      {
+        "file": "frontend/src/components/capability-record-list.tsx",
+        "line": 60,
+        "markers": [
+          "暂未"
+        ],
+        "text": ": \"数据暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/capability-record-list.tsx",
+        "line": 98,
+        "markers": [
+          "暂未"
+        ],
+        "text": "title={`${title}暂未同步`}"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 74,
+        "markers": [
+          "mock"
+        ],
+        "text": "mock: \"预览\","
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 96,
+        "markers": [
+          "mock"
+        ],
+        "text": "mock: \"预览\","
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 115,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"暂未开放\";"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 132,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"后端响应暂未返回可用数据。\";"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 165,
+        "markers": [
+          "mock"
+        ],
+        "text": "item.state === \"mock\" ||"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 476,
+        "markers": [
+          "暂未"
+        ],
+        "text": "setError(messageFromError(loadError, \"后端响应暂未返回可用数据。\"));"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 813,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<strong>模块数据暂未返回</strong>"
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 919,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"https://api.example.com\""
+      },
+      {
+        "file": "frontend/src/components/module-registry-product-view.tsx",
+        "line": 1014,
+        "markers": [
+          "placeholder"
+        ],
+        "text": "placeholder=\"留空表示不更换\""
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 45,
+        "markers": [
+          "暂未"
+        ],
+        "text": "return \"后端响应暂未返回可用数据。\";"
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 183,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<strong>组织数据暂未同步</strong>"
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 184,
+        "markers": [
+          "暂未"
+        ],
+        "text": "<span>{listError || \"后端响应暂未返回可用数据。\"}</span>"
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 370,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"后端响应暂未返回可用数据。\","
+      },
+      {
+        "file": "frontend/src/components/organization-product-view.tsx",
+        "line": 384,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"组织管理员信息暂未同步，请重试。\","
+      },
+      {
+        "file": "frontend/src/components/login-form.tsx",
+        "line": 13,
+        "markers": [
+          "暂未"
+        ],
+        "text": "\"登录服务暂未响应，请重试。\";"
+      }
+    ]
+  },
+  "summary": {
+    "missing_fields": [
+      {
+        "missing": [
+          "approval_id",
+          "execution_id",
+          "module_key",
+          "status",
+          "risk_level",
+          "execution_type",
+          "requester_id",
+          "request_time"
+        ],
+        "module": "Approvals"
+      },
+      {
+        "missing": [
+          "module_key",
+          "display_name",
+          "description",
+          "category",
+          "status",
+          "lifecycle",
+          "route_namespace",
+          "api_namespace",
+          "required_permissions",
+          "permission_manifest"
+        ],
+        "module": "Modules"
+      }
+    ],
+    "module_count": 7,
+    "modules_with_missing_fields": 2,
+    "ui_playwright_ok": true
+  },
+  "ui_playwright": {
+    "elapsed_ms": 119208.89,
+    "ok": true,
+    "roles": {
+      "operator": {
+        "consoleErrors": [
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+        ],
+        "login": {
+          "finalUrl": "http://127.0.0.1:3000/dashboard",
+          "ok": true,
+          "requiresPasswordChange": false
+        },
+        "routes": [
+          {
+            "elapsedMs": 3097,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/dashboard",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/dashboard",
+            "status": 200,
+            "title": "工作台概览 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n组织管理\n业务处理\n审批\n系统管理\n首页\n功能区\n正在加载工作台\nWorkspace\n首页\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n正在同步系统状态\n权限与模块状态正在更新。\n刷新\nActive Modules\n5\n5 visible modules\nExecutions\n0\nRecent executions\nSuccess Rate\n0%\n0 issues in latest logs\nPending Reviews\n0\nAwaiting action\nModules\nModule grid\nSyncing\nactive\n用户管理\n账号与组织\n\nReady for workspace operations.\n\nOpen module\nactive\n组织管理\n账号与组织\n\nReady for workspace operations.\n\nOpen module\nactive\n审批\n业务处理\n\nReady for workspace operations.\n\nOpen module\nactive\n首页\n系统管理\n\nReady for workspace operations.\n\nOpen module\nactive\n功能区\n系统管理\n\nReady for workspace operations.\n\nOpen module\nActivity feed\nLive workspace updates\nModule activity\nactive\n\n用户管理 is active.\n\n账号与组织\nModule activity\nactive\n\n组织管理 is active.\n\n账号与组织\nModule activity\nactive\n\n审批 is active.\n\n业务处理\nAPI key usage\nkey_••••\n\nNo recent API key usage was recorded.\n\nmasked"
+          },
+          {
+            "elapsedMs": 2091,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/users",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/users",
+            "status": 200,
+            "title": "用户管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n用户管理\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n账号\n用户管理\n\n管理工作台账号、角色、组织归属和密码重置。\n\n用户列表\n\n共 0 个账号，每页 10 条。\n\n刷新"
+          },
+          {
+            "elapsedMs": 2000,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/organizations",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/organizations",
+            "status": 200,
+            "title": "组织管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n组织管理\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n组织列表\n\n共 0 个组织，每页 10 条。\n\n同步中"
+          },
+          {
+            "elapsedMs": 1797,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/permissions",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/permissions",
+            "status": 200,
+            "title": "权限管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n权限管理\nRefresh\naudit_operator_9658bfcf\n操作员\n退出"
+          },
+          {
+            "elapsedMs": 1815,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/modules",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": true,
+            "ok": true,
+            "route": "/modules",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n功能区\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n功能区\n工作台功能区\n\n查看当前工作台可用功能、可见范围和操作准备情况。\n\n刷新\n功能区\n4\n可用\n1\n配置中\n2\n已隐藏\n0\n组织可见\n1\n已登记\n确认中\n组织状态\n确认中\n操作状态\n预览\n\n后端模块状态服务暂不可用。\n\n功能区\t状态\t可见范围\t准备情况\t操作状态\n\n用户管理\n管理工作台账号和角色。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n组织管理\n管理组织和组织管理员。\n\t\n可用\n可正常使用\n\t\n可见\n按当前账号和组织范围显示\n\t\n可正常使用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n审批\n处理待审批事项。\n\t\n无权访问\n需要开通权限\n\t\n确认中\n按当前账号和组织范围显示\n\t\n需要开通权限\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n首页\n查看工作台首页。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n上一页\n1\n下一页"
+          },
+          {
+            "elapsedMs": 2188,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/api-key-management",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": true,
+            "ok": true,
+            "route": "/api-key-management",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n工作台\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n功能区\n工作台功能区\n\n查看当前工作台可用功能、可见范围和操作准备情况。\n\n刷新\n功能区\n4\n可用\n1\n配置中\n2\n已隐藏\n0\n组织可见\n1\n已登记\n确认中\n组织状态\n确认中\n操作状态\n预览\n\n后端模块状态服务暂不可用。\n\n功能区\t状态\t可见范围\t准备情况\t操作状态\n\n用户管理\n管理工作台账号和角色。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n组织管理\n管理组织和组织管理员。\n\t\n可用\n可正常使用\n\t\n可见\n按当前账号和组织范围显示\n\t\n可正常使用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n审批\n处理待审批事项。\n\t\n无权访问\n需要开通权限\n\t\n确认中\n按当前账号和组织范围显示\n\t\n需要开通权限\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n首页\n查看工作台首页。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n上一页\n1\n下一页"
+          },
+          {
+            "elapsedMs": 1894,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/approvals",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/approvals",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n审批\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n审批中心\n审批列表\n\n仅显示你有权限模块的功能审批。\n\n功能审批\n\n业务模块提交后的审批。\n\n正在加载审批"
+          },
+          {
+            "elapsedMs": 2011,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/reviews",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/reviews",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n审批审计\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n无法查看审批审计\n\n该区域仅对owner和组织管理员开放。"
+          },
+          {
+            "elapsedMs": 2091,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/settings",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/settings",
+            "status": 200,
+            "title": "设置 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n设置\nRefresh\naudit_operator_9658bfcf\n操作员\n退出\n暂不可用\n设置功能尚未开放，当前不会展示或保存任何配置。"
+          }
+        ]
+      },
+      "owner": {
+        "consoleErrors": [
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+        ],
+        "login": {
+          "finalUrl": "http://127.0.0.1:3000/dashboard",
+          "ok": true,
+          "requiresPasswordChange": false
+        },
+        "routes": [
+          {
+            "elapsedMs": 2892,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/dashboard",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/dashboard",
+            "status": 200,
+            "title": "工作台概览 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n首页\nRefresh\nbarongyekhna\nOWNER\n退出\nActive Modules\n1\n6 visible modules\nExecutions\n0\nRecent executions\nSuccess Rate\n0%\n0 issues in latest logs\nPending Reviews\n0\nAwaiting action\nModules\nModule grid\nSyncing\ndisabled\n用户管理\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\ndisabled\n组织管理\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\ndisabled\n审批\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\nactive\n审批审计\n业务处理\n\nReady for workspace operations.\n\nOpen module\ndisabled\n首页\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\ndisabled\n功能区\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\nActivity feed\nLive workspace updates\nModule activity\ndisabled\n\n用户管理 is disabled.\n\n账号与组织\nModule activity\ndisabled\n\n组织管理 is disabled.\n\n账号与组织\nModule activity\ndisabled\n\n审批 is disabled.\n\n业务处理\nAPI key usage\nkey_••••\n\nNo recent API key usage was recorded.\n\nmasked"
+          },
+          {
+            "elapsedMs": 2100,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/users",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/users",
+            "status": 200,
+            "title": "用户管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n组织管理\n权限管理\n业务处理\n审批\n审批审计\n系统管理\n首页\n功能区\n设置\n异常记录\n运行记录\n操作记录\n扩展能力\n自动化助手\n正在加载工作台\nWorkspace\n用户管理\nRefresh\nbarongyekhna\nOWNER\n退出\n正在同步系统状态\n权限与模块状态正在更新。\n刷新\n账号\n用户管理\n\n管理工作台账号、角色、组织归属和密码重置。\n\n账号\n创建用户\n用户名\n角色\n正在加载角色\n岗位\n组织\n暂无可选组织\n正在加载组织\n创建用户\n用户列表\n\n共 0 个账号，每页 10 条。\n\n刷新"
+          },
+          {
+            "elapsedMs": 2009,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/organizations",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/organizations",
+            "status": 200,
+            "title": "组织管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n组织管理\nRefresh\nbarongyekhna\nOWNER\n退出\n创建组织\n组织名称\n创建\n组织列表\n\n共 0 个组织，每页 10 条。\n\n同步中"
+          },
+          {
+            "elapsedMs": 2603,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/permissions",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/permissions",
+            "status": 200,
+            "title": "权限管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n权限管理\nRefresh\nbarongyekhna\nOWNER\n退出\n账号与组织\n权限管理\n\n管理员工可访问的功能范围。\n\n同步中\n员工\n0\n功能权限\n0\n系统权限\n0\n当前角色\nowner"
+          },
+          {
+            "elapsedMs": 2283,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/modules",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/modules",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n功能区\nRefresh\nbarongyekhna\nOWNER\n退出\nowner\n模块管理中心\n\n按组织管理模块开关、运行状态和密钥绑定。\n\n同步中\n组织\n0\n模块\n0\n运行中\n0\n异常\n0\n密钥\n0\n绑定\n0\n组织数据加载中\n\n正在同步后端组织列表。\n\n密钥管理\n\n密钥只写入后端，前端不会显示明文。\n\n组织\n组织加载中\n名称\n服务地址\n密钥\n新增密钥\n密钥\t服务地址\t名称\t已绑定模块\t操作\n组织\n组织加载中\n模块\n密钥\n用途名称\n绑定"
+          },
+          {
+            "elapsedMs": 2015,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/api-key-management",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/api-key-management",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n工作台\nRefresh\nbarongyekhna\nOWNER\n退出\nowner\n模块管理中心\n\n按组织管理模块开关、运行状态和密钥绑定。\n\n同步中\n组织\n0\n模块\n0\n运行中\n0\n异常\n0\n密钥\n0\n绑定\n0\n组织数据加载中\n\n正在同步后端组织列表。\n\n密钥管理\n\n密钥只写入后端，前端不会显示明文。\n\n组织\n组织加载中\n名称\n服务地址\n密钥\n新增密钥\n密钥\t服务地址\t名称\t已绑定模块\t操作\n组织\n组织加载中\n模块\n密钥\n用途名称\n绑定"
+          },
+          {
+            "elapsedMs": 2901,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/approvals",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/approvals",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n审批\nRefresh\nbarongyekhna\nOWNER\n退出\n审批中心\n审批列表\n\n按主控审批和功能审批分组处理。\n\n主控审批\n\n系统级操作、权限变更、模块接入等需要owner确认的审批。\n\n正在加载审批\n功能审批\n\n业务模块提交后的审批。\n\n正在加载审批"
+          },
+          {
+            "elapsedMs": 2281,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/reviews",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/reviews",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n组织管理\n权限管理\n业务处理\n审批\n审批审计\n系统管理\n首页\n功能区\n设置\n异常记录\n运行记录\n操作记录\n扩展能力\n自动化助手\n正在加载工作台\nWorkspace\n审批审计\nRefresh\nbarongyekhna\nOWNER\n退出\n正在同步系统状态\n权限与模块状态正在更新。\n刷新\n审批审计\n审批行为审计\n\n按真实组织、员工和模块查看审批动作。\n\n同步中\n组织\n选择组织\n员工搜索\n员工\n全部员工\n模块\n全部模块\n开始时间\n结束时间\n筛选\n清除\n组织\n上一页\n1\n下一页\n正在加载组织"
+          },
+          {
+            "elapsedMs": 1920,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/settings",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/settings",
+            "status": 200,
+            "title": "设置 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n部分可用\n业务处理\n审批\n部分可用\n审批审计\n系统管理\n首页\n部分可用\n功能区\n部分可用\n部分信息待刷新\nWorkspace\n设置\nRefresh\nbarongyekhna\nOWNER\n退出\n暂不可用\n设置功能尚未开放，当前不会展示或保存任何配置。"
+          }
+        ]
+      },
+      "super_admin": {
+        "consoleErrors": [
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)",
+          "Failed to load resource: the server responded with a status of 401 (Unauthorized)"
+        ],
+        "login": {
+          "finalUrl": "http://127.0.0.1:3000/login",
+          "ok": false,
+          "requiresPasswordChange": false
+        },
+        "routes": [
+          {
+            "elapsedMs": 1806,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/dashboard",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 1799,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/users",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2085,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/organizations",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 1612,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/permissions",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 1601,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/modules",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2288,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/api-key-management",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2104,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/approvals",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2316,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/reviews",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          },
+          {
+            "elapsedMs": 2200,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/login",
+            "hasBadMarker": false,
+            "hasLoginForm": true,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/settings",
+            "status": 200,
+            "title": "Login | Barong Operations",
+            "visibleTextSample": "Barong\n运营工作台\n安全访问\n运营工作台\n登录后进入你的组织空间\n登录\n进入工作台\n\n使用已分配的账号登录。\n\n账号\n密码\n登录"
+          }
+        ]
+      },
+      "viewer": {
+        "consoleErrors": [
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings.",
+          "Minified React error #418; visit https://react.dev/errors/418?args[]=HTML&args[]= for the full message or use the non-minified dev environment for full errors and additional helpful warnings."
+        ],
+        "login": {
+          "finalUrl": "http://127.0.0.1:3000/dashboard",
+          "ok": true,
+          "requiresPasswordChange": false
+        },
+        "routes": [
+          {
+            "elapsedMs": 2979,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/dashboard",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/dashboard",
+            "status": 200,
+            "title": "工作台概览 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n首页\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\nActive Modules\n1\n4 visible modules\nExecutions\n0\nRecent executions\nSuccess Rate\n0%\n0 issues in latest logs\nPending Reviews\n0\nAwaiting action\nModules\nModule grid\nSyncing\ndisabled\n用户管理\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\nactive\n组织管理\n账号与组织\n\nReady for workspace operations.\n\nOpen module\ndisabled\n审批\nlocked\n\nAvailable after configuration or access is granted.\n\nUnavailable\ndisabled\n首页\nread only\n\nAvailable after configuration or access is granted.\n\nUnavailable\nActivity feed\nLive workspace updates\nModule activity\ndisabled\n\n用户管理 is disabled.\n\n账号与组织\nModule activity\nactive\n\n组织管理 is active.\n\n账号与组织\nModule activity\ndisabled\n\n审批 is disabled.\n\n业务处理\nAPI key usage\nkey_••••\n\nNo recent API key usage was recorded.\n\nmasked"
+          },
+          {
+            "elapsedMs": 1917,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/users",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/users",
+            "status": 200,
+            "title": "用户管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n用户管理\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n账号\n用户管理\n\n管理工作台账号、角色、组织归属和密码重置。\n\n用户列表\n\n共 0 个账号，每页 10 条。\n\n刷新"
+          },
+          {
+            "elapsedMs": 2391,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/organizations",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/organizations",
+            "status": 200,
+            "title": "组织管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n组织管理\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n组织列表\n\n共 0 个组织，每页 10 条。\n\n同步中"
+          },
+          {
+            "elapsedMs": 2005,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/permissions",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/permissions",
+            "status": 200,
+            "title": "权限管理 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n权限管理\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出"
+          },
+          {
+            "elapsedMs": 2191,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/modules",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": true,
+            "ok": true,
+            "route": "/modules",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n功能区\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n功能区\n工作台功能区\n\n查看当前工作台可用功能、可见范围和操作准备情况。\n\n刷新\n功能区\n4\n可用\n1\n配置中\n2\n已隐藏\n0\n组织可见\n1\n已登记\n确认中\n组织状态\n确认中\n操作状态\n预览\n\n后端模块状态服务暂不可用。\n\n功能区\t状态\t可见范围\t准备情况\t操作状态\n\n用户管理\n管理工作台账号和角色。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n组织管理\n管理组织和组织管理员。\n\t\n可用\n可正常使用\n\t\n可见\n按当前账号和组织范围显示\n\t\n可正常使用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n审批\n处理待审批事项。\n\t\n无权访问\n需要开通权限\n\t\n确认中\n按当前账号和组织范围显示\n\t\n需要开通权限\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n首页\n查看工作台首页。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n上一页\n1\n下一页"
+          },
+          {
+            "elapsedMs": 2507,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/api-key-management",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": true,
+            "ok": true,
+            "route": "/api-key-management",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n工作台\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n功能区\n工作台功能区\n\n查看当前工作台可用功能、可见范围和操作准备情况。\n\n刷新\n功能区\n4\n可用\n1\n配置中\n2\n已隐藏\n0\n组织可见\n1\n已登记\n确认中\n组织状态\n确认中\n操作状态\n预览\n\n后端模块状态服务暂不可用。\n\n功能区\t状态\t可见范围\t准备情况\t操作状态\n\n用户管理\n管理工作台账号和角色。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n组织管理\n管理组织和组织管理员。\n\t\n可用\n可正常使用\n\t\n可见\n按当前账号和组织范围显示\n\t\n可正常使用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n审批\n处理待审批事项。\n\t\n无权访问\n需要开通权限\n\t\n确认中\n按当前账号和组织范围显示\n\t\n需要开通权限\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n\n\n首页\n查看工作台首页。\n\t\n部分可用\n暂不可用\n\t\n确认中\n按当前账号和组织范围显示\n\t\n暂不可用\n不显示内部配置字段\n\t\n预览\n按系统状态自动判断\n上一页\n1\n下一页"
+          },
+          {
+            "elapsedMs": 1998,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/approvals",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/approvals",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n审批\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n审批中心\n审批列表\n\n仅显示你有权限模块的功能审批。\n\n功能审批\n\n业务模块提交后的审批。\n\n正在加载审批"
+          },
+          {
+            "elapsedMs": 1915,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/reviews",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/reviews",
+            "status": 200,
+            "title": "Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n审批审计\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n无法查看审批审计\n\n该区域仅对owner和组织管理员开放。"
+          },
+          {
+            "elapsedMs": 1696,
+            "error": null,
+            "finalUrl": "http://127.0.0.1:3000/settings",
+            "hasBadMarker": false,
+            "hasLoginForm": false,
+            "hasNoPermissionText": false,
+            "ok": true,
+            "route": "/settings",
+            "status": 200,
+            "title": "设置 | Barong Operations",
+            "visibleTextSample": "Barong\nOperations\n账号与组织\n用户管理\n部分可用\n组织管理\n业务处理\n审批\n系统管理\n首页\n部分可用\n部分信息待刷新\nWorkspace\n设置\nRefresh\naudit_viewer_9658bfcf\n查看员\n退出\n暂不可用\n设置功能尚未开放，当前不会展示或保存任何配置。"
+          }
+        ]
+      }
+    }
+  }
+}

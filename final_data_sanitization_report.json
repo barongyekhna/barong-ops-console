@@ -1,0 +1,127 @@
+{
+  "report_generated_at_utc": "2026-06-24T08:59:10Z",
+  "cleanup_transaction_timestamp_utc": "2026-06-24T08:55:49Z",
+  "execution_mode": "transactional_field_filtered_cleanup",
+  "database_target": "barong-ops-console-prod_console_postgres_1",
+  "constraints_observed": {
+    "production_data_deleted": false,
+    "schema_reset": false,
+    "full_db_wipe": false,
+    "rbac_core_accounts_explicitly_deleted": false,
+    "manual_guessing_used_for_deletion": false
+  },
+  "filter_policy": {
+    "allowed_delete_markers": [
+      "test",
+      "demo",
+      "mock",
+      "sandbox",
+      "integration_test"
+    ],
+    "core_account_usernames_excluded_from_delete": [
+      "owner",
+      "super_admin",
+      "viewer"
+    ],
+    "matching_strategy": "field-token or field-prefix marker matching; avoids accidental production words such as latest or contest"
+  },
+  "deleted_entities_count": {
+    "total_rows_deleted": 4897,
+    "users": 0,
+    "organizations": 0,
+    "module_registry": 4,
+    "api_key_records": 0,
+    "api_key_module_bindings": 1,
+    "workflow_registry": 1,
+    "agent_registry": 1,
+    "automation_jobs": 1,
+    "artifacts": 1,
+    "review_items": 1,
+    "event_streams": 1493,
+    "audit_logs": 1121,
+    "storage_events": 2166,
+    "operation_logs": 99,
+    "job_events": 6,
+    "memory_events": 1,
+    "module_control_states": 1,
+    "messages": 0,
+    "auth_sessions": 0,
+    "org_memberships": 0,
+    "permission_registry": 0,
+    "role_default_permissions": 0,
+    "user_permission_assignments": 0,
+    "approval_requests": 0,
+    "approval_workflows": 0,
+    "approval_decisions": 0,
+    "execution_callbacks": 0,
+    "execution_results": 0,
+    "callback_state": 0,
+    "callback_state_transitions": 0,
+    "execution_dlq": 0,
+    "dlq_state": 0,
+    "context_packets": 0,
+    "agent_memory_access_logs": 0,
+    "system_errors": 0,
+    "shared_modules": 0,
+    "module_bindings": 0,
+    "contact_identities": 0,
+    "memory_summaries": 0,
+    "replay_jobs": 0,
+    "anomaly_events": 0,
+    "ops_alerts": 0,
+    "ops_alert_deliveries": 0,
+    "ops_execution_unlock_tokens": 0
+  },
+  "remaining_allowed_marker_counts": {
+    "users": 0,
+    "organizations": 0,
+    "module_registry": 0,
+    "api_key_records": 0,
+    "operation_logs": 0
+  },
+  "preserved_production_entities_count": {
+    "users_total": 125,
+    "organizations_total": 18,
+    "module_registry_total": 0,
+    "api_key_records_total": 45,
+    "operation_logs_total": 965,
+    "event_streams_total": 28769,
+    "owner_role_active_count": 1,
+    "super_admin_role_active_count": 11,
+    "viewer_role_active_count": 97,
+    "literal_owner_super_admin_viewer_usernames_count": 0
+  },
+  "integrity_checks": {
+    "owner_role_still_exists_active": true,
+    "super_admin_role_still_exists_active": true,
+    "viewer_role_still_exists_active": true,
+    "literal_owner_super_admin_viewer_usernames_exist": false,
+    "admin_role_user_leakage_count": 0,
+    "api_key_bindings_missing_key": 0,
+    "org_memberships_missing_org": 0,
+    "operation_logs_missing_job": 0,
+    "storage_events_missing_event_stream": 0,
+    "rbac_core_structure_changed": false,
+    "module_registry_fk_integrity_ok": true
+  },
+  "not_deleted_due_to_scope_constraints": {
+    "reason": "These rows look like audit/recovery/stress/load/e2e test-phase artifacts, but they do not use the allowed delete markers test/demo/mock/sandbox/integration_test. They were intentionally not deleted under the user's strong constraints.",
+    "users_audit_recovery_stress_load_e2e": 123,
+    "organizations_audit_recovery_e2e": 15,
+    "api_keys_audit_recovery_e2e": 35,
+    "operation_logs_audit_recovery_e2e": 121
+  },
+  "risk_assessment": {
+    "executed_cleanup_risk": "LOW",
+    "data_integrity_risk": "LOW",
+    "rbac_corruption_risk": "LOW",
+    "production_cleanliness_risk": "HIGH",
+    "reason": "Allowed-marker cleanup completed and orphan checks passed, but substantial non-allowed test-like audit/recovery/e2e data remains and cannot be removed without expanding the deletion criteria."
+  },
+  "production_cleanliness_confirmation": {
+    "allowed_marker_clean": true,
+    "full_production_clean_state": false,
+    "blocking_reason": "Residual audit/recovery/stress/load/e2e artifacts remain outside the permitted deletion marker set."
+  },
+  "c_series_final_cleanup_ready": "NO"
+}

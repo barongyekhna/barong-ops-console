@@ -16,10 +16,18 @@ from ..db.compatibility import table_exists
 from ..db.session import managed_read_session
 from ..middleware.org_context import get_org_context
 from ..schemas.permission import PermissionAction
-from ..services.auth_service import AuditContext, InvalidSessionError, validate_session
+from ..services.auth_service import (
+    AuditContext,
+    InvalidSessionError,
+    authenticated_session_from_identity,
+    validate_session_identity_fast,
+)
 from ..services.event_collector import emit_event, set_current_event_context
 from ..services.permission_isolation import check_permission
-from ..services.request_session_cache import cache_authenticated_session
+from ..services.request_session_cache import (
+    cache_authenticated_session,
+    get_cached_authenticated_session,
+)
 from ..services.session_seen_buffer import queue_session_seen
 
 settings = get_settings()
@@ -51,6 +59,9 @@ C15_PATH_MARKERS = (
 C14_PATH_MARKERS = (
     "/execution-prompts/payload",
     "/ai-execution-bindings",
+)
+CONTROL_PLANE_METADATA_GET_PREFIXES = (
+    "/api/control-plane/modules/",
 )
 
 
@@ -122,6 +133,16 @@ def _path_has_marker(path: str, markers: tuple[str, ...]) -> bool:
     return any(marker in path for marker in markers)
 
 
+def _is_control_plane_metadata_get(request: Request) -> bool:
+    if request.method.upper() != "GET":
+        return False
+    path = request.url.path
+    return any(
+        path == prefix.rstrip("/") or path.startswith(prefix)
+        for prefix in CONTROL_PLANE_METADATA_GET_PREFIXES
+    )
+
+
 def _action_for_request(request: Request) -> PermissionAction:
     path = request.url.path
     if "/operation-logs" in path:
@@ -167,6 +188,8 @@ def resolve_permission_request_context(
 ) -> PermissionRequestContext | None:
     path = request.url.path
     if not path.startswith(API_PATH_PREFIXES):
+        return None
+    if _is_control_plane_metadata_get(request):
         return None
 
     org_context = get_org_context(request)
@@ -229,39 +252,47 @@ async def enforce_permission_isolation(request: Request, call_next):
         )
 
     skipped_c05b_compat = False
+    current_session = get_cached_authenticated_session(
+        request,
+        session_id=session_id,
+    )
     with managed_read_session() as db:
-        try:
-            current_session = validate_session(
-                db,
+        if current_session is None:
+            try:
+                identity = validate_session_identity_fast(
+                    db,
+                    session_id=session_id,
+                )
+                current_session = authenticated_session_from_identity(
+                    identity,
+                    audit=audit,
+                )
+            except InvalidSessionError:
+                emit_event(
+                    event_type="permission_isolation.check",
+                    module="system",
+                    action="c18f.permission_check",
+                    source="backend",
+                    status="failed",
+                    context_id=audit.request_id,
+                    payload={
+                        "org_id": context.org_id,
+                        "module_id": context.module_id,
+                        "permission_action": context.action,
+                        "reason": "invalid_session",
+                    },
+                )
+                return _security_response(
+                    status.HTTP_401_UNAUTHORIZED,
+                    "Not authenticated.",
+                )
+            cache_authenticated_session(
+                request,
                 session_id=session_id,
-                audit=audit,
-            )
-        except InvalidSessionError:
-            emit_event(
-                event_type="permission_isolation.check",
-                module="system",
-                action="c18f.permission_check",
-                source="backend",
-                status="failed",
-                context_id=audit.request_id,
-                payload={
-                    "org_id": context.org_id,
-                    "module_id": context.module_id,
-                    "permission_action": context.action,
-                    "reason": "invalid_session",
-                },
-            )
-            return _security_response(
-                status.HTTP_401_UNAUTHORIZED,
-                "Not authenticated.",
+                current_session=current_session,
             )
 
         queue_session_seen(current_session.auth_session.session_id_hash)
-        cache_authenticated_session(
-            request,
-            session_id=session_id,
-            current_session=current_session,
-        )
         request.state.user_id = str(current_session.user.id)
         set_current_event_context(user_id=str(current_session.user.id))
         if not _c18_permission_tables_available(db):

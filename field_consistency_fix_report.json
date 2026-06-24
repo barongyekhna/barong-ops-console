@@ -1,0 +1,62 @@
+{
+  "audit_id": "recovery_20260624T072323Z_c698c9ca",
+  "field_checks": {
+    "Approvals": {
+      "missing": [],
+      "present": [
+        "reason",
+        "request_time",
+        "status",
+        "timestamp"
+      ],
+      "required": [
+        "status",
+        "reason",
+        "timestamp"
+      ]
+    },
+    "Modules": {
+      "missing": [],
+      "present": [
+        "enabled",
+        "error",
+        "runtime_status",
+        "status"
+      ],
+      "required": [
+        "status",
+        "enabled",
+        "error",
+        "runtime_status"
+      ]
+    },
+    "Users": {
+      "missing": [],
+      "present": [
+        "job_title",
+        "organization",
+        "organization_id",
+        "role",
+        "title"
+      ],
+      "required": [
+        "organization",
+        "organization_id",
+        "role",
+        "title",
+        "job_title"
+      ]
+    }
+  },
+  "generated_at": "2026-06-24T07:24:25.193801+00:00",
+  "raw_statuses": {
+    "approval_create": 201,
+    "approval_detail": 200,
+    "approvals_list": 200,
+    "modules": 200,
+    "organizations": 200,
+    "permissions": 200,
+    "users": 200
+  },
+  "status": "passed"
+}

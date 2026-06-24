@@ -1,0 +1,164 @@
+{
+  "report_generated_at_utc": "2026-06-24T09:16:17Z",
+  "cleanup_transaction_timestamp_utc": "2026-06-24T09:12:55Z",
+  "execution_mode": "safe_production_audit_artifact_cleanup_transactional",
+  "database_target": "barong-ops-console-prod_console_postgres_1",
+  "constraints_observed": {
+    "production_users_deleted": false,
+    "production_organizations_deleted": false,
+    "production_api_keys_deleted": false,
+    "production_modules_deleted": false,
+    "schema_reset": false,
+    "schema_migration": false,
+    "rbac_core_engine_modified": false
+  },
+  "filter_policy": {
+    "deleted_markers": [
+      "audit_",
+      "recovery_",
+      "stress_",
+      "codex_e2e_",
+      "e2e_test_",
+      "final_e2e_",
+      "final_preprod",
+      "test_scope=true",
+      "audit_scope_"
+    ],
+    "protected_usernames": [
+      "owner",
+      "super_admin",
+      "viewer"
+    ],
+    "protected_roles": [
+      "owner"
+    ],
+    "notes": [
+      "No generic namespace column exists in the current schema; audit_scope_ was evaluated in scope/access_scope fields and JSON/text metadata fields.",
+      "storage_events were physically deleted before event_streams because storage_events.record_id has a foreign key to event_streams.record_id."
+    ]
+  },
+  "deleted_entities_count": {
+    "total_rows_deleted": 5900,
+    "users": 123,
+    "organizations": 15,
+    "api_key_records": 44,
+    "api_key_module_bindings": 42,
+    "module_registry": 0,
+    "workflow_registry": 0,
+    "agent_registry": 0,
+    "automation_jobs": 0,
+    "job_events": 0,
+    "execution_callbacks": 0,
+    "execution_results": 0,
+    "callback_state": 0,
+    "callback_state_transitions": 0,
+    "execution_dlq": 0,
+    "dlq_state": 0,
+    "audit_logs": 1385,
+    "event_streams": 1628,
+    "storage_events": 1747,
+    "operation_logs": 453,
+    "auth_sessions": 327,
+    "org_memberships": 21,
+    "module_control_states": 113,
+    "user_permission_assignments": 2,
+    "messages": 0,
+    "artifacts": 0,
+    "review_items": 0,
+    "approval_requests": 0,
+    "approval_workflows": 0,
+    "approval_decisions": 0,
+    "memory_events": 0,
+    "memory_summaries": 0,
+    "context_packets": 0,
+    "agent_memory_access_logs": 0,
+    "system_errors": 0,
+    "shared_modules": 0,
+    "module_bindings": 0,
+    "contact_identities": 0,
+    "replay_jobs": 0,
+    "anomaly_events": 0,
+    "ops_alerts": 0,
+    "ops_alert_deliveries": 0,
+    "ops_execution_unlock_tokens": 0,
+    "ops_canary_rollouts": 0,
+    "ops_live_gate_policies": 0,
+    "ops_rollback_guards": 0,
+    "security_rate_limit_buckets": 0,
+    "security_replay_nonces": 0,
+    "permission_registry": 0,
+    "role_default_permissions": 0
+  },
+  "deleted_summary": {
+    "deleted_audit_users_count": 123,
+    "deleted_recovery_entities_count": 5395,
+    "deleted_audit_organizations_count": 15,
+    "deleted_audit_api_keys_count": 44
+  },
+  "remaining_artifact_counts": {
+    "users": 0,
+    "organizations": 0,
+    "api_key_records": 0,
+    "module_registry": 0,
+    "operation_logs": 0
+  },
+  "remaining_production_users_count": 2,
+  "preserved_production_entities_count": {
+    "users_total": 2,
+    "organizations_total": 3,
+    "api_key_records_total": 1,
+    "module_registry_total": 0,
+    "owner_role_active_count": 1,
+    "super_admin_role_active_count": 1,
+    "viewer_role_active_count": 0,
+    "literal_owner_super_admin_viewer_usernames_count": 0
+  },
+  "protected_account_status": {
+    "owner_role_preserved": true,
+    "super_admin_role_preserved": true,
+    "literal_owner_username_present_before_cleanup": false,
+    "literal_super_admin_username_present_before_cleanup": false,
+    "literal_viewer_username_present_before_cleanup": false,
+    "viewer_role_active_after_cleanup": false,
+    "viewer_note": "All remaining viewer-role accounts matched artifact prefixes such as audit_, recovery_, stress_, or codex_e2e_; no literal protected viewer username was present."
+  },
+  "integrity_checks": {
+    "owner_role_active_present": true,
+    "super_admin_role_active_present": true,
+    "admin_role_user_leakage_absent": true,
+    "api_key_bindings_missing_key_absent": true,
+    "org_memberships_missing_org_absent": true,
+    "module_control_missing_org_absent": true,
+    "job_events_missing_job_absent": true,
+    "operation_logs_missing_job_absent": true,
+    "artifacts_missing_job_absent": true,
+    "artifacts_missing_module_absent": true,
+    "storage_events_missing_event_stream_absent": true
+  },
+  "integrity_check_result": true,
+  "system_health_after_cleanup": {
+    "database_transaction_committed": true,
+    "backend_container_status": "up",
+    "frontend_container_status": "up",
+    "postgres_container_status": "healthy",
+    "backend_internal_health": {
+      "path": "/health",
+      "http_status": 200,
+      "latency_seconds": 0.184,
+      "response": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "frontend_internal_health": {
+      "path": "/",
+      "http_status": 200,
+      "latency_seconds": 1.208
+    },
+    "host_local_curl_note": "Host-side curl from the execution sandbox to 127.0.0.1:8000/3000 returned connection refused, while Docker container status and container-internal health checks passed."
+  },
+  "production_cleanliness_confirmed": true,
+  "c_series_final_cleanup_ready": "YES"
+}

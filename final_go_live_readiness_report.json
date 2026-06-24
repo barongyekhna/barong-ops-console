@@ -1,0 +1,2202 @@
+{
+  "api_key_system_readiness": {
+    "alt_binding": {
+      "binding_create": {
+        "body": {
+          "item": {
+            "binding_id": "akb_fc71d749af91b350b2cc0b2500ee7745",
+            "created_at": "2026-06-24T08:25:05.494939Z",
+            "key_alias": "n8n_audit_01b82d78",
+            "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+            "key_name": "Go live n8n_audit_01b82d78 go_live_20260624T082455Z_01b82d78",
+            "key_url": "https://example.invalid",
+            "module_id": "integration.n8n_webhook_test_bridge",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T08:25:05.494939Z"
+          }
+        },
+        "elapsed_ms": 802.77,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/bindings",
+        "status_code": 201
+      },
+      "created": true,
+      "item": {
+        "binding_id": "akb_fc71d749af91b350b2cc0b2500ee7745",
+        "created_at": "2026-06-24T08:25:05.494939Z",
+        "key_alias": "n8n_audit_01b82d78",
+        "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+        "key_name": "Go live n8n_audit_01b82d78 go_live_20260624T082455Z_01b82d78",
+        "key_url": "https://example.invalid",
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "status": "active",
+        "updated_at": "2026-06-24T08:25:05.494939Z"
+      },
+      "key_create": {
+        "body": {
+          "item": {
+            "assigned_module_ids": [],
+            "created_at": "2026-06-24T08:25:04.802543Z",
+            "key_hash_prefix": "2321d28394cb",
+            "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+            "last_used_at": null,
+            "name": "Go live n8n_audit_01b82d78 go_live_20260624T082455Z_01b82d78",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T08:25:04.802543Z",
+            "url": "https://example.invalid"
+          }
+        },
+        "elapsed_ms": 395.081,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/keys",
+        "status_code": 201
+      }
+    },
+    "audit_id": "go_live_20260624T082455Z_01b82d78",
+    "checks": {
+      "fallback_behavior": true,
+      "key_isolation_between_modules": true,
+      "key_selection_correctness": true,
+      "logs_persisted": true,
+      "multi_key_per_module_routing": true
+    },
+    "fallback_run": {
+      "body": {
+        "detail": "Not found."
+      },
+      "elapsed_ms": 390.343,
+      "method": "POST",
+      "ok": false,
+      "path": "/api/control-plane/n8n-webhook-test/run",
+      "status_code": 403
+    },
+    "generated_at": "2026-06-24T08:25:13.980666+00:00",
+    "isolation_binding": {
+      "binding_create": {
+        "body": {
+          "item": {
+            "binding_id": "akb_6d6b0862afff749e3062336a27cf881b",
+            "created_at": "2026-06-24T08:25:07.101434Z",
+            "key_alias": "isolation_01b82d78",
+            "key_id": "key_a07472f3d9ee84d1574b3cb348d0250f",
+            "key_name": "Go live isolation_01b82d78 go_live_20260624T082455Z_01b82d78",
+            "key_url": "https://example.invalid",
+            "module_id": "experimental.foundation_demo",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T08:25:07.101434Z"
+          }
+        },
+        "elapsed_ms": 311.37,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/bindings",
+        "status_code": 201
+      },
+      "created": true,
+      "item": {
+        "binding_id": "akb_6d6b0862afff749e3062336a27cf881b",
+        "created_at": "2026-06-24T08:25:07.101434Z",
+        "key_alias": "isolation_01b82d78",
+        "key_id": "key_a07472f3d9ee84d1574b3cb348d0250f",
+        "key_name": "Go live isolation_01b82d78 go_live_20260624T082455Z_01b82d78",
+        "key_url": "https://example.invalid",
+        "module_id": "experimental.foundation_demo",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "status": "active",
+        "updated_at": "2026-06-24T08:25:07.101434Z"
+      },
+      "key_create": {
+        "body": {
+          "item": {
+            "assigned_module_ids": [],
+            "created_at": "2026-06-24T08:25:06.795449Z",
+            "key_hash_prefix": "8d93cd3b02c6",
+            "key_id": "key_a07472f3d9ee84d1574b3cb348d0250f",
+            "last_used_at": null,
+            "name": "Go live isolation_01b82d78 go_live_20260624T082455Z_01b82d78",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "status": "active",
+            "updated_at": "2026-06-24T08:25:06.795449Z",
+            "url": "https://example.invalid"
+          }
+        },
+        "elapsed_ms": 504.898,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/organizations/org_2a038f7f7bd9483a92ac7de8957bacde/keys",
+        "status_code": 201
+      }
+    },
+    "isolation_run": {
+      "body": {
+        "detail": "Not found."
+      },
+      "elapsed_ms": 308.518,
+      "method": "POST",
+      "ok": false,
+      "path": "/api/control-plane/n8n-webhook-test/run",
+      "status_code": 403
+    },
+    "module_to_api_key_to_injection_to_execution_to_response_to_logs": {
+      "primary": {
+        "body": {
+          "attempts": 1,
+          "duration_ms": 708.783,
+          "error_code": null,
+          "error_message": null,
+          "injected_key": {
+            "header_name": "Authorization",
+            "injected": true,
+            "key_alias": "n8n",
+            "key_id": "key_23840420533cb8dca99237d16802f694",
+            "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca"
+          },
+          "logs_stored": true,
+          "module_id": "integration.n8n_webhook_test_bridge",
+          "n8n_received": true,
+          "operation_log_id": "a93fa480-fee4-41b5-bd05-d910b40a1cdf",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "request_sent": true,
+          "response_body": {
+            "unparseable_json": true
+          },
+          "response_returned": true,
+          "retry_count": 0,
+          "run_id": "n8n_webhook_test_cba53b8919b5486fb9a8a43bd448aef8",
+          "status_code": 200,
+          "success": true
+        },
+        "elapsed_ms": 1595.497,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/control-plane/n8n-webhook-test/run",
+        "status_code": 201
+      },
+      "primary_log_persisted": true,
+      "secondary_alias": {
+        "body": {
+          "attempts": 1,
+          "duration_ms": 805.083,
+          "error_code": null,
+          "error_message": null,
+          "injected_key": {
+            "header_name": "Authorization",
+            "injected": true,
+            "key_alias": "n8n_audit_01b82d78",
+            "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+            "key_name": "Go live n8n_audit_01b82d78 go_live_20260624T082455Z_01b82d78"
+          },
+          "logs_stored": true,
+          "module_id": "integration.n8n_webhook_test_bridge",
+          "n8n_received": true,
+          "operation_log_id": "48515e3a-4934-4afb-8419-8f6adc3ad04c",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "request_sent": true,
+          "response_body": {
+            "unparseable_json": true
+          },
+          "response_returned": true,
+          "retry_count": 0,
+          "run_id": "n8n_webhook_test_c0966c8574a24f30b7ea06eca9da8e9a",
+          "status_code": 200,
+          "success": true
+        },
+        "elapsed_ms": 1600.587,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/control-plane/n8n-webhook-test/run",
+        "status_code": 201
+      },
+      "secondary_log_persisted": true
+    },
+    "primary_binding": {
+      "binding_list": {
+        "body": {
+          "count": 28,
+          "items": [
+            {
+              "binding_id": "akb_bab8fddbd553313c2e9d64b0c4d1ef8c",
+              "created_at": "2026-06-24T07:19:06.187305Z",
+              "key_alias": "n8n",
+              "key_id": "key_7c04f142be158ab58566490e262463ae",
+              "key_name": "Recovery n8n key recovery_20260624T071847Z_cf4deb86",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+              "status": "active",
+              "updated_at": "2026-06-24T07:19:06.187305Z"
+            },
+            {
+              "binding_id": "akb_c2696ac80040eeca9f8d9356f7cac7dc",
+              "created_at": "2026-06-24T07:19:46.983515Z",
+              "key_alias": "n8n_route_0",
+              "key_id": "key_16be82921635c0ab205c08eddfa55871",
+              "key_name": "Recovery routing key 0 recovery_20260624T071847Z_cf4deb86",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+              "status": "active",
+              "updated_at": "2026-06-24T07:19:46.983515Z"
+            },
+            {
+              "binding_id": "akb_d801a2b199f0f61c806239f8f3b65116",
+              "created_at": "2026-06-24T07:19:46.985498Z",
+              "key_alias": "n8n_route_1",
+              "key_id": "key_ae998c5f6e3c69f03bbfc16d53be5caf",
+              "key_name": "Recovery routing key 1 recovery_20260624T071847Z_cf4deb86",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+              "status": "active",
+              "updated_at": "2026-06-24T07:19:46.985498Z"
+            },
+            {
+              "binding_id": "akb_9f4c05f8a6348d181607714aac87c0bd",
+              "created_at": "2026-06-24T07:19:46.999836Z",
+              "key_alias": "n8n_route_2",
+              "key_id": "key_df9098004475a1a30588d20f99b8aeb9",
+              "key_name": "Recovery routing key 2 recovery_20260624T071847Z_cf4deb86",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+              "status": "active",
+              "updated_at": "2026-06-24T07:19:46.999836Z"
+            },
+            {
+              "binding_id": "akb_34b257180ea987326147d4cbec97857b",
+              "created_at": "2026-06-24T01:39:12.508236Z",
+              "key_alias": "default",
+              "key_id": "key_435209a6500179b323249fe16e56f362",
+              "key_name": "Final E2E N8N Key 20260624013853_7yljssen",
+              "key_url": "https://n8n.barongyekhna.com",
+              "module_id": "demo.final_e2e_20260624013853_7yljssen",
+              "org_id": "org_19721ad17c6848d5aaf3a192e54eb3e8",
+              "status": "active",
+              "updated_at": "2026-06-24T01:39:12.508236Z"
+            },
+            {
+              "binding_id": "akb_ff51508dd7712e301a788bb66d11627d",
+              "created_at": "2026-06-24T01:39:15.407975Z",
+              "key_alias": "n8n",
+              "key_id": "key_435209a6500179b323249fe16e56f362",
+              "key_name": "Final E2E N8N Key 20260624013853_7yljssen",
+              "key_url": "https://n8n.barongyekhna.com",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_19721ad17c6848d5aaf3a192e54eb3e8",
+              "status": "active",
+              "updated_at": "2026-06-24T01:39:15.407975Z"
+            },
+            {
+              "binding_id": "akb_93102a219828d0d90616a0c7550b14aa",
+              "created_at": "2026-06-23T19:05:33.581873Z",
+              "key_alias": "n8n",
+              "key_id": "key_1a5fd06ab6de0f5c2cf65aa0df9baa73",
+              "key_name": "Recovery n8n key recovery_20260623T190449Z_91b6bdaa",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_25b3a5022b33462a91faf7e7944f6c64",
+              "status": "active",
+              "updated_at": "2026-06-23T19:05:33.581873Z"
+            },
+            {
+              "binding_id": "akb_1063e5ea588f5fd5e267a3c9485f37a3",
+              "created_at": "2026-06-24T08:03:36.603368Z",
+              "key_alias": "n8n",
+              "key_id": "key_dd6571b51e0e7f57549db72a64a6bf1e",
+              "key_name": "Go live n8n go_live_20260624T080328Z_82b84a63",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "status": "active",
+              "updated_at": "2026-06-24T08:03:36.603368Z"
+            },
+            {
+              "binding_id": "akb_9bf8edc191601bd8e9e10fd8035dcfc9",
+              "created_at": "2026-06-24T07:23:39.383752Z",
+              "key_alias": "n8n",
+              "key_id": "key_23840420533cb8dca99237d16802f694",
+              "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "status": "active",
+              "updated_at": "2026-06-24T07:23:39.383752Z"
+            },
+            {
+              "binding_id": "akb_f20cd0f6cd759d50f069bb3e89d8430b",
+              "created_at": "2026-06-24T07:24:23.475507Z",
+              "key_alias": "n8n_route_0",
+              "key_id": "key_be5fa78e7862dded687700e543ce1c2d",
+              "key_name": "Recovery routing key 0 recovery_20260624T072323Z_c698c9ca",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "status": "active",
+              "updated_at": "2026-06-24T07:24:23.475507Z"
+            },
+            {
+              "binding_id": "akb_36fb9651373e8ee4807be255e9e31bbf",
+              "created_at": "2026-06-24T07:24:23.398820Z",
+              "key_alias": "n8n_route_1",
+              "key_id": "key_e907a9e9956db610a5b7b6bbc11f4e5c",
+              "key_name": "Recovery routing key 1 recovery_20260624T072323Z_c698c9ca",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "status": "active",
+              "updated_at": "2026-06-24T07:24:23.398820Z"
+            },
+            {
+              "binding_id": "akb_415c277d20a5ac39e69114f7dbc0bba2",
+              "created_at": "2026-06-24T07:24:23.000112Z",
+              "key_alias": "n8n_route_2",
+              "key_id": "key_217a0c4bc14d707af9978f9e652ceec9",
+              "key_name": "Recovery routing key 2 recovery_20260624T072323Z_c698c9ca",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "status": "active",
+              "updated_at": "2026-06-24T07:24:23.000112Z"
+            },
+            {
+              "binding_id": "akb_5c869226fb999454e23b5204eb7d39ac",
+              "created_at": "2026-06-24T07:11:59.397659Z",
+              "key_alias": "n8n",
+              "key_id": "key_51659a5f1088e231d4ba1b402e960696",
+              "key_name": "Recovery n8n key recovery_20260624T071145Z_cf1e556f",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+              "status": "active",
+              "updated_at": "2026-06-24T07:11:59.397659Z"
+            },
+            {
+              "binding_id": "akb_ba1fc50c28806e0a360984cf544137c0",
+              "created_at": "2026-06-24T07:12:41.886145Z",
+              "key_alias": "n8n_route_0",
+              "key_id": "key_394833f798b3f5e7a7c359fc42055f3a",
+              "key_name": "Recovery routing key 0 recovery_20260624T071145Z_cf1e556f",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+              "status": "active",
+              "updated_at": "2026-06-24T07:12:41.886145Z"
+            },
+            {
+              "binding_id": "akb_39750936b1c737ee5ee27e02a2a89c87",
+              "created_at": "2026-06-24T07:12:41.887418Z",
+              "key_alias": "n8n_route_1",
+              "key_id": "key_1cb7e28956ff10127e669cb2f96311a8",
+              "key_name": "Recovery routing key 1 recovery_20260624T071145Z_cf1e556f",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+              "status": "active",
+              "updated_at": "2026-06-24T07:12:41.887418Z"
+            },
+            {
+              "binding_id": "akb_443d79bc428d83c9fd8538ebe985ccf8",
+              "created_at": "2026-06-24T07:12:41.884197Z",
+              "key_alias": "n8n_route_2",
+              "key_id": "key_c9725c513127c0072c247a5c63220f45",
+              "key_name": "Recovery routing key 2 recovery_20260624T071145Z_cf1e556f",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+              "status": "active",
+              "updated_at": "2026-06-24T07:12:41.884197Z"
+            },
+            {
+              "binding_id": "akb_f2fe0fbc5fb3c773f544713d962474d8",
+              "created_at": "2026-06-23T19:01:26.100137Z",
+              "key_alias": "n8n",
+              "key_id": "key_6e304d30b0d135766b2e28bf69dcbca6",
+              "key_name": "Recovery n8n key recovery_20260623T190042Z_ba899f37",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_4769b90c7f0e44ae96ce787ade28e8c1",
+              "status": "active",
+              "updated_at": "2026-06-23T19:01:26.100137Z"
+            },
+            {
+              "binding_id": "akb_179cdcc2339a4e3215fb46aef938bfd5",
+              "created_at": "2026-06-24T06:33:45.298916Z",
+              "key_alias": "n8n",
+              "key_id": "key_1fa01ae7130906247697bbd3fb5263d2",
+              "key_name": "Recovery n8n key recovery_20260624T063307Z_92bb1e70",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_7512577c7033447584b246ec0e3276fd",
+              "status": "active",
+              "updated_at": "2026-06-24T06:33:45.298916Z"
+            },
+            {
+              "binding_id": "akb_874fa2d7c45a53552ee8cac71114bcdc",
+              "created_at": "2026-06-24T06:35:41.498974Z",
+              "key_alias": "n8n_route_0",
+              "key_id": "key_ca558c6a6f0f3879773eaf3ac9746965",
+              "key_name": "Recovery routing key 1 recovery_20260624T063307Z_92bb1e70",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_7512577c7033447584b246ec0e3276fd",
+              "status": "active",
+              "updated_at": "2026-06-24T06:35:41.498974Z"
+            },
+            {
+              "binding_id": "akb_0fb6ce832e8356f1188b798a0142f2d6",
+              "created_at": "2026-06-24T06:35:41.498991Z",
+              "key_alias": "n8n_route_1",
+              "key_id": "key_0c828c994fc92ced3fc1c631d0af1dcd",
+              "key_name": "Recovery routing key 2 recovery_20260624T063307Z_92bb1e70",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_7512577c7033447584b246ec0e3276fd",
+              "status": "active",
+              "updated_at": "2026-06-24T06:35:41.498991Z"
+            },
+            {
+              "binding_id": "akb_18b40b0218ddeff9b897a5a3eefdee4e",
+              "created_at": "2026-06-23T19:10:40.491409Z",
+              "key_alias": "n8n",
+              "key_id": "key_be4eabe1f1a5a50a62fd9261f2134138",
+              "key_name": "Recovery n8n key recovery_20260623T190957Z_8e948ed7",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_8138a6cf74f04577a103138ee00357c4",
+              "status": "active",
+              "updated_at": "2026-06-23T19:10:40.491409Z"
+            },
+            {
+              "binding_id": "akb_1f80324c5c60395375faf9bddb88a447",
+              "created_at": "2026-06-23T18:19:58.475742Z",
+              "key_alias": "backup",
+              "key_id": "key_d611ebd2d3618f33cd96bf543651e26a",
+              "key_name": "Audit backup key final_preprod_20260623T181922Z_9658bfcf",
+              "key_url": "http://127.0.0.1:8788/audit/backup",
+              "module_id": "integration.n8n_test_bridge",
+              "org_id": "org_cf25980213a1459e8908bbf505729895",
+              "status": "active",
+              "updated_at": "2026-06-23T18:19:58.475742Z"
+            },
+            {
+              "binding_id": "akb_0a4e76caa058320929e4ef45beaa2b47",
+              "created_at": "2026-06-23T18:19:56.890757Z",
+              "key_alias": "n8n",
+              "key_id": "key_575957fb51b80804825c41a462c16b39",
+              "key_name": "Audit n8n key final_preprod_20260623T181922Z_9658bfcf",
+              "key_url": "http://127.0.0.1:8788/audit/n8n",
+              "module_id": "integration.n8n_test_bridge",
+              "org_id": "org_cf25980213a1459e8908bbf505729895",
+              "status": "active",
+              "updated_at": "2026-06-23T18:19:56.890757Z"
+            },
+            {
+              "binding_id": "akb_41d9d62faf62ebda43912f141151331d",
+              "created_at": "2026-06-24T06:23:41.001283Z",
+              "key_alias": "n8n",
+              "key_id": "key_39c36b142f320f1f98ae0ef266a0e90f",
+              "key_name": "Recovery n8n key recovery_20260624T062304Z_3cf203f3",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_d9e4fe922d9b4b258025670a229b036d",
+              "status": "active",
+              "updated_at": "2026-06-24T06:23:41.001283Z"
+            },
+            {
+              "binding_id": "akb_5983b78e117c004238d6a799d8ac9f4f",
+              "created_at": "2026-06-24T06:25:35.700581Z",
+              "key_alias": "n8n_route_0",
+              "key_id": "key_e0f980eb53a732db1a63843f2f435f58",
+              "key_name": "Recovery routing key 1 recovery_20260624T062304Z_3cf203f3",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_d9e4fe922d9b4b258025670a229b036d",
+              "status": "active",
+              "updated_at": "2026-06-24T06:25:35.700581Z"
+            },
+            {
+              "binding_id": "akb_8d0aebd369fa4e348c3a07db77c658ba",
+              "created_at": "2026-06-24T06:25:35.404573Z",
+              "key_alias": "n8n_route_1",
+              "key_id": "key_806d3597108b6ea4639da0877ef33eab",
+              "key_name": "Recovery routing key 2 recovery_20260624T062304Z_3cf203f3",
+              "key_url": "https://example.invalid",
+              "module_id": "integration.n8n_webhook_test_bridge",
+              "org_id": "org_d9e4fe922d9b4b258025670a229b036d",
+              "status": "active",
+              "updated_at": "2026-06-24T06:25:35.404573Z"
+            },
+            {
+              "binding_id": "akb_9c8cd88b66c960c9f78b6ce51c0fcd08",
+              "created_at": "2026-06-23T18:11:42.873235Z",
+              "key_alias": "backup",
+              "key_id": "key_14444ef2acae538ca750701fbd6bbb0b",
+              "key_name": "Audit backup key final_preprod_20260623T181050Z_0e3e9f24",
+              "key_url": "http://127.0.0.1:8788/audit/backup",
+              "module_id": "integration.n8n_test_bridge",
+              "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "status": "active",
+              "updated_at": "2026-06-23T18:11:42.873235Z"
+            },
+            {
+              "binding_id": "akb_7ef6cd8dfb2ba40d9ae6b2ed360360fa",
+              "created_at": "2026-06-23T18:11:40.292628Z",
+              "key_alias": "n8n",
+              "key_id": "key_9ae881ef8df2c9db1109eb0961f53696",
+              "key_name": "Audit n8n key final_preprod_20260623T181050Z_0e3e9f24",
+              "key_url": "http://127.0.0.1:8788/audit/n8n",
+              "module_id": "integration.n8n_test_bridge",
+              "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+              "status": "active",
+              "updated_at": "2026-06-23T18:11:40.292628Z"
+            }
+          ]
+        },
+        "elapsed_ms": 588.103,
+        "method": "GET",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/bindings",
+        "status_code": 200
+      },
+      "created": false,
+      "item": {
+        "binding_id": "akb_1063e5ea588f5fd5e267a3c9485f37a3",
+        "created_at": "2026-06-24T08:03:36.603368Z",
+        "key_alias": "n8n",
+        "key_id": "key_dd6571b51e0e7f57549db72a64a6bf1e",
+        "key_name": "Go live n8n go_live_20260624T080328Z_82b84a63",
+        "key_url": "https://example.invalid",
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "status": "active",
+        "updated_at": "2026-06-24T08:03:36.603368Z"
+      }
+    },
+    "status": "passed"
+  },
+  "audit_id": "go_live_20260624T082455Z_01b82d78",
+  "blocking_issues": [],
+  "cleanup": {
+    "persistent_created": {
+      "bindings": [],
+      "keys": []
+    },
+    "results": [
+      {
+        "body": {
+          "binding_id": "akb_6d6b0862afff749e3062336a27cf881b",
+          "status": "disabled"
+        },
+        "elapsed_ms": 493.805,
+        "method": "DELETE",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/bindings/akb_6d6b0862afff749e3062336a27cf881b",
+        "status_code": 200
+      },
+      {
+        "body": {
+          "binding_id": "akb_fc71d749af91b350b2cc0b2500ee7745",
+          "status": "disabled"
+        },
+        "elapsed_ms": 304.456,
+        "method": "DELETE",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/bindings/akb_fc71d749af91b350b2cc0b2500ee7745",
+        "status_code": 200
+      },
+      {
+        "body": {
+          "key_id": "key_a07472f3d9ee84d1574b3cb348d0250f",
+          "status": "deleted"
+        },
+        "elapsed_ms": 399.287,
+        "method": "DELETE",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/keys/key_a07472f3d9ee84d1574b3cb348d0250f",
+        "status_code": 200
+      },
+      {
+        "body": {
+          "key_id": "key_faf8bc3b441ec602bb7155849683dfdc",
+          "status": "deleted"
+        },
+        "elapsed_ms": 309.346,
+        "method": "DELETE",
+        "ok": true,
+        "path": "/api/control-plane/api-key-orchestration/keys/key_faf8bc3b441ec602bb7155849683dfdc",
+        "status_code": 200
+      }
+    ],
+    "temporary_created": {
+      "bindings": [
+        "akb_fc71d749af91b350b2cc0b2500ee7745",
+        "akb_6d6b0862afff749e3062336a27cf881b"
+      ],
+      "keys": [
+        "key_faf8bc3b441ec602bb7155849683dfdc",
+        "key_a07472f3d9ee84d1574b3cb348d0250f"
+      ]
+    }
+  },
+  "deployment_restart": {
+    "backend_restart": {
+      "container": "barong-ops-console-prod_console_backend_1",
+      "health_cold": "200 14.796521",
+      "health_hot": "200 0.097125",
+      "n8n_internal_webhook_probe_status": 200,
+      "workers_active": 2
+    },
+    "executed": true,
+    "executed_after_all_conditions_passed": true,
+    "frontend_restart": {
+      "container": "barong-ops-console-prod_console_frontend_1",
+      "http_status": "200 0.911811"
+    }
+  },
+  "generated_at": "2026-06-24T08:25:41.703954+00:00",
+  "module_system_readiness": {
+    "audit_id": "go_live_20260624T082455Z_01b82d78",
+    "checks": {
+      "api_key_dependency_mapping": true,
+      "execution_pipeline_definition": true,
+      "module_id_uniqueness": true,
+      "module_registration_required_fields": true,
+      "n8n_dependency_requirements": true,
+      "org_id_binding_rules": true
+    },
+    "duplicate_module_ids": [],
+    "generated_at": "2026-06-24T08:25:02.981760+00:00",
+    "missing_required_fields_by_module": {},
+    "module_count": 20,
+    "n8n_binding": {
+      "binding_id": "akb_1063e5ea588f5fd5e267a3c9485f37a3",
+      "created_at": "2026-06-24T08:03:36.603368Z",
+      "key_alias": "n8n",
+      "key_id": "key_dd6571b51e0e7f57549db72a64a6bf1e",
+      "key_name": "Go live n8n go_live_20260624T080328Z_82b84a63",
+      "key_url": "https://example.invalid",
+      "module_id": "integration.n8n_webhook_test_bridge",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "status": "active",
+      "updated_at": "2026-06-24T08:03:36.603368Z"
+    },
+    "n8n_control_state": {
+      "category": "integration",
+      "display_name": "n8n Webhook Test Bridge",
+      "enabled": true,
+      "error": {
+        "code": null,
+        "message": null,
+        "timestamp": null
+      },
+      "last_error_at": null,
+      "module_id": "integration.n8n_webhook_test_bridge",
+      "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+      "runtime_error_code": null,
+      "runtime_error_message": null,
+      "runtime_status": "active",
+      "status": "active",
+      "updated_at": "2026-06-24T08:23:45.703946Z"
+    },
+    "n8n_module": {
+      "allowed_scope_types": [
+        "global",
+        "module"
+      ],
+      "api_namespace": "/n8n-webhook-test",
+      "audit_log_actions": [
+        "n8n_webhook_test.run"
+      ],
+      "category": "integration",
+      "data_boundary": {
+        "blocked_objects": [
+          "server_local_config",
+          "external_provider_config",
+          "cross_module_writes"
+        ],
+        "reads": [
+          "credential_bindings",
+          "n8n_webhook_test_response"
+        ],
+        "writes": [
+          "operation_logs"
+        ]
+      },
+      "denied_behavior": "hide_when_denied",
+      "description": "Owner-configured production readiness test bridge that dispatches a real backend webhook request to the hidden n8n test endpoint.",
+      "display_name": "n8n Webhook Test Bridge",
+      "docs_path": "docs/C07_MODULE_REGISTRY_BACKEND.md",
+      "execution_provider_required": true,
+      "external_dependencies": [],
+      "feature_flag_key": "modules.integration.n8n_webhook_test_bridge",
+      "lifecycle": "production_released",
+      "module_adapter_required": false,
+      "module_key": "integration.n8n_webhook_test_bridge",
+      "navigation": {
+        "default_visible": false,
+        "group": "Overview",
+        "icon": "Webhook",
+        "label": "n8n Webhook Test Bridge",
+        "order": 31,
+        "owner_only": false
+      },
+      "no_api": false,
+      "operation_log_policy": {
+        "approve": "required",
+        "read": "optional",
+        "release": "required",
+        "write": "required"
+      },
+      "permission_manifest": [
+        {
+          "action": "read",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "integration",
+          "default_scope_type": "global",
+          "description": "View the real n8n webhook test bridge metadata.",
+          "high_risk_confirmation_required": false,
+          "label": "Read n8n webhook test bridge metadata",
+          "menu_policy": "hide_when_denied",
+          "module_key": "integration.n8n_webhook_test_bridge",
+          "operation_log_required": false,
+          "permission_key": "modules.read",
+          "risk_level": "low"
+        },
+        {
+          "action": "execute",
+          "allowed_scope_types": [
+            "global",
+            "module"
+          ],
+          "category": "integration",
+          "default_scope_type": "global",
+          "description": "Run the backend-gated n8n webhook test bridge.",
+          "high_risk_confirmation_required": false,
+          "label": "Execute n8n webhook test bridge",
+          "menu_policy": "hide_when_denied",
+          "module_key": "integration.n8n_webhook_test_bridge",
+          "operation_log_required": true,
+          "permission_key": "modules.execute",
+          "risk_level": "high"
+        }
+      ],
+      "production_release_required": false,
+      "release_requirements": {
+        "local_verify": true,
+        "production_archive": true,
+        "required_checks": [
+          "real n8n webhook endpoint configured",
+          "API key binding alias n8n active",
+          "execution gate dispatch verified"
+        ],
+        "staging_acceptance": true
+      },
+      "required_permissions": [
+        "modules.read"
+      ],
+      "route_namespace": "/n8n-webhook-test",
+      "sandbox_required": false,
+      "staging_acceptance_required": false,
+      "status": "sealed",
+      "unavailable_behavior": "show_unavailable"
+    },
+    "status": "passed"
+  },
+  "performance_summary": {
+    "approval_concurrency": {
+      "avg_ms": 1150.69,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 1422.739,
+      "p95_ms": 1422.739,
+      "success": 3,
+      "timeout": 0,
+      "total": 3
+    },
+    "audit_id": "go_live_20260624T082455Z_01b82d78",
+    "checks": {
+      "approval_concurrency": true,
+      "db_pool_stable": true,
+      "fifty_rps_api_load": true,
+      "module_toggle_stress": true,
+      "ten_concurrent_user_logins": true,
+      "webhook_stress": true,
+      "workers_distributed": true
+    },
+    "db_pool_usage": {
+      "after": {
+        "by_state": {
+          "argv": [
+            "docker",
+            "exec",
+            "barong-ops-console-prod_console_postgres_1",
+            "psql",
+            "-U",
+            "barong_ops_console",
+            "-d",
+            "barong_ops_console",
+            "-At",
+            "-F",
+            "\t",
+            "-c",
+            "select coalesce(state,'[null]'), count(*) from pg_stat_activity group by 1 order by 1;"
+          ],
+          "elapsed_ms": 811.55,
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[null]\t5\nactive\t1\nidle\t18\n"
+        },
+        "database_connection_count": 19,
+        "idle_in_transaction_count": 0,
+        "stable": true
+      },
+      "before": {
+        "by_state": {
+          "argv": [
+            "docker",
+            "exec",
+            "barong-ops-console-prod_console_postgres_1",
+            "psql",
+            "-U",
+            "barong_ops_console",
+            "-d",
+            "barong_ops_console",
+            "-At",
+            "-F",
+            "\t",
+            "-c",
+            "select coalesce(state,'[null]'), count(*) from pg_stat_activity group by 1 order by 1;"
+          ],
+          "elapsed_ms": 1307.364,
+          "ok": true,
+          "returncode": 0,
+          "stderr": "",
+          "stdout": "[null]\t5\nactive\t1\nidle\t16\n"
+        },
+        "database_connection_count": 17,
+        "idle_in_transaction_count": 0,
+        "stable": true
+      }
+    },
+    "generated_at": "2026-06-24T08:25:39.198932+00:00",
+    "login_load": {
+      "avg_ms": 2434.162,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 3094.18,
+      "p95_ms": 3094.18,
+      "success": 10,
+      "timeout": 0,
+      "total": 10
+    },
+    "module_toggle_stress": {
+      "avg_ms": 5608.055,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 6199.31,
+      "p95_ms": 6199.31,
+      "success": 8,
+      "timeout": 0,
+      "total": 8
+    },
+    "read_50_rps": {
+      "avg_ms": 805.428,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 1600.021,
+      "p95_ms": 1499.534,
+      "success": 50,
+      "timeout": 0,
+      "total": 50
+    },
+    "samples": {
+      "read_failures": [],
+      "webhook_failures": []
+    },
+    "status": "passed",
+    "webhook_stress": {
+      "avg_ms": 2706.978,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 3395.455,
+      "p95_ms": 3395.455,
+      "success": 3,
+      "timeout": 0,
+      "total": 3
+    },
+    "worker_distribution": {
+      "active_worker_processes": 2,
+      "configured_workers": 2,
+      "docker_top_ok": true,
+      "gunicorn_master_present": true,
+      "raw_process_lines": [
+        "UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD",
+        "dnsmasq             2446278             2446252             0                   08:21               ?                   00:00:00            sh -c gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --worker-class uvicorn.workers.UvicornWorker --timeout ${GUNICORN_TIMEOUT:-120} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-30} --access-logfile - --error-logfile - --forwarded-allow-ips='*'",
+        "dnsmasq             2446334             2446278             2                   08:21               ?                   00:00:04            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*",
+        "dnsmasq             2446483             2446334             12                  08:21               ?                   00:00:26            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*",
+        "dnsmasq             2446484             2446334             15                  08:21               ?                   00:00:31            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*"
+      ],
+      "uvicorn_worker_class_configured": true
+    }
+  },
+  "rbac_correctness_summary": {
+    "admin_create_negative": {
+      "body": {
+        "detail": "Invalid request."
+      },
+      "elapsed_ms": 401.234,
+      "method": "POST",
+      "ok": false,
+      "path": "/api/app/users",
+      "status_code": 422
+    },
+    "audit_id": "go_live_20260624T082455Z_01b82d78",
+    "checks": {
+      "no_admin_role_leakage": true,
+      "no_zero_org_false_state": true,
+      "org_list_correct": true,
+      "owner_full_access": true,
+      "super_admin_org_scoped_access": true,
+      "user_list_correct": true,
+      "viewer_read_only_access": true
+    },
+    "generated_at": "2026-06-24T08:25:17.486630+00:00",
+    "logins": {
+      "org_admin": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": false,
+          "session_token": "oY3LzCAUvcf10zLtqoGYVKMQzz8u8DxiGGHk1uckAHs",
+          "user": {
+            "id": 114,
+            "is_active": true,
+            "last_login_at": "2026-06-24T08:23:53.181207Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "operator",
+            "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+          }
+        },
+        "elapsed_ms": 301.662,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "owner": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": false,
+          "session_token": "4ABN2t-C2-pUamgYqmL-fWRcS611gKUG5owNzBn87-8",
+          "user": {
+            "id": 1,
+            "is_active": true,
+            "last_login_at": "2026-06-24T08:23:53.683566Z",
+            "must_change_password": false,
+            "organization_id": null,
+            "role": "owner",
+            "username": "barongyekhna"
+          }
+        },
+        "elapsed_ms": 390.239,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "super_admin": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": false,
+          "session_token": "LSJLrkvg_DNCZHLfYD_52xVwra2FLO1s6jn2yEgP_SI",
+          "user": {
+            "id": 113,
+            "is_active": true,
+            "last_login_at": "2026-06-24T08:23:53.792098Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "super_admin",
+            "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+          }
+        },
+        "elapsed_ms": 307.251,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      },
+      "viewer": {
+        "body": {
+          "auth_complete": true,
+          "message": null,
+          "require_password_change": false,
+          "session_token": "Ay28-LrxT0-k-CsZetXSKRyO3z9OCATgBF_t1vg1jrE",
+          "user": {
+            "id": 115,
+            "is_active": true,
+            "last_login_at": "2026-06-24T08:23:53.485182Z",
+            "must_change_password": false,
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+          }
+        },
+        "elapsed_ms": 710.415,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/public/auth/login",
+        "status_code": 200
+      }
+    },
+    "owner_orgs": {
+      "body": {
+        "count": 13,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [
+          {
+            "created_at": "2026-06-23T18:10:52.787424Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181050Z_0e3e9f24",
+                "namespace": "audit_scope_final_preprod_20260623T181050Z_0e3e9f24",
+                "test_scope": true,
+                "updated": true
+              },
+              "industry": "audit-updated",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 14
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_ffb2dddd4ede4581abca65c1c8cf9e71",
+            "org_name": "Audit Primary Updated final_preprod_20260623T181050Z_0e3e9f24",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-23T18:11:00.084178Z"
+          },
+          {
+            "created_at": "2026-06-23T18:19:23.982448Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "final_preprod_20260623T181922Z_9658bfcf",
+                "namespace": "audit_scope_final_preprod_20260623T181922Z_9658bfcf",
+                "test_scope": true,
+                "updated": true
+              },
+              "industry": "audit-updated",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 14
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_cf25980213a1459e8908bbf505729895",
+            "org_name": "Audit Primary Updated final_preprod_20260623T181922Z_9658bfcf",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-23T18:19:29.074613Z"
+          },
+          {
+            "created_at": "2026-06-24T01:39:00.324790Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "purpose": "final_production_regression",
+                "run_id": "20260624013853_7yljssen"
+              },
+              "industry": "regression",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 365
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_19721ad17c6848d5aaf3a192e54eb3e8",
+            "org_name": "Final Production E2E 20260624013853_7yljssen",
+            "org_type": "factory",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-24T01:39:00.324790Z"
+          },
+          {
+            "created_at": "2026-06-23T19:00:46.087903Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260623T190042Z_ba899f37",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_4769b90c7f0e44ae96ce787ade28e8c1",
+            "org_name": "Recovery Audit recovery_20260623T190042Z_ba899f37",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-23T19:00:46.087903Z"
+          },
+          {
+            "created_at": "2026-06-23T19:04:53.585246Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260623T190449Z_91b6bdaa",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_25b3a5022b33462a91faf7e7944f6c64",
+            "org_name": "Recovery Audit recovery_20260623T190449Z_91b6bdaa",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-23T19:04:53.585246Z"
+          },
+          {
+            "created_at": "2026-06-23T19:10:02.798162Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260623T190957Z_8e948ed7",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_8138a6cf74f04577a103138ee00357c4",
+            "org_name": "Recovery Audit recovery_20260623T190957Z_8e948ed7",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-23T19:10:02.798162Z"
+          },
+          {
+            "created_at": "2026-06-24T06:23:07.907551Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260624T062304Z_3cf203f3",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_d9e4fe922d9b4b258025670a229b036d",
+            "org_name": "Recovery Audit recovery_20260624T062304Z_3cf203f3",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-24T06:23:07.907551Z"
+          },
+          {
+            "created_at": "2026-06-24T06:33:11.398433Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260624T063307Z_92bb1e70",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_7512577c7033447584b246ec0e3276fd",
+            "org_name": "Recovery Audit recovery_20260624T063307Z_92bb1e70",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-24T06:33:11.398433Z"
+          },
+          {
+            "created_at": "2026-06-24T07:11:47.487095Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260624T071145Z_cf1e556f",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_435fbb8091d54931ab12b1094eebc2f8",
+            "org_name": "Recovery Audit recovery_20260624T071145Z_cf1e556f",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-24T07:11:47.487095Z"
+          },
+          {
+            "created_at": "2026-06-24T07:18:50.577432Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260624T071847Z_cf4deb86",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_05b46a975bee4504b5d49f32b2b7a8bc",
+            "org_name": "Recovery Audit recovery_20260624T071847Z_cf4deb86",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-24T07:18:50.577432Z"
+          },
+          {
+            "created_at": "2026-06-24T07:23:24.995621Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260624T072323Z_c698c9ca",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "org_name": "Recovery Audit recovery_20260624T072323Z_c698c9ca",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-24T07:23:24.995621Z"
+          },
+          {
+            "created_at": "2026-06-20T02:39:08.302108Z",
+            "metadata": {
+              "country": "",
+              "custom": {},
+              "industry": "",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 365
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_d7497212d213498cbf0513d75e486c20",
+            "org_name": "涌龙麟（吉林）电子产品制造有限公司",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-20T02:39:08.302108Z"
+          },
+          {
+            "created_at": "2026-06-19T15:41:12.489208Z",
+            "metadata": {
+              "country": "",
+              "custom": {},
+              "industry": "",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": false,
+                "data_retention_days": 365
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+            "org_name": "涌龙麟（深圳）国际贸易有限公司",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-19T15:41:12.489208Z"
+          }
+        ],
+        "limit": 100,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 198.329,
+      "method": "GET",
+      "ok": true,
+      "path": "/api/app/organizations?limit=100&offset=0",
+      "status_code": 200
+    },
+    "owner_users": {
+      "body": {
+        "count": 13,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [
+          {
+            "created_at": "2026-06-24T07:23:26.278524Z",
+            "id": 113,
+            "is_active": true,
+            "job_title": "Recovery super_admin",
+            "last_login_at": "2026-06-24T08:24:57.082440Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "super_admin",
+            "title": "Recovery super_admin",
+            "updated_at": "2026-06-24T08:24:57.088574Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+          },
+          {
+            "created_at": "2026-06-24T07:23:30.301805Z",
+            "id": 114,
+            "is_active": true,
+            "job_title": "Recovery org_admin",
+            "last_login_at": "2026-06-24T08:24:57.582652Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "operator",
+            "title": "Recovery org_admin",
+            "updated_at": "2026-06-24T08:24:57.588206Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+          },
+          {
+            "created_at": "2026-06-24T07:23:34.599824Z",
+            "id": 115,
+            "is_active": true,
+            "job_title": "Recovery viewer",
+            "last_login_at": "2026-06-24T08:24:58.492856Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery viewer",
+            "updated_at": "2026-06-24T08:24:58.582461Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+          },
+          {
+            "created_at": "2026-06-24T07:23:44.494239Z",
+            "id": 116,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.491328Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:11.589592Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_0"
+          },
+          {
+            "created_at": "2026-06-24T07:23:46.499449Z",
+            "id": 117,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:10.596473Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:10.785490Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_1"
+          },
+          {
+            "created_at": "2026-06-24T07:23:48.789201Z",
+            "id": 118,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.497450Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:13.789720Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_2"
+          },
+          {
+            "created_at": "2026-06-24T07:23:51.188101Z",
+            "id": 119,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.499205Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:12.605770Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_3"
+          },
+          {
+            "created_at": "2026-06-24T07:23:53.192513Z",
+            "id": 120,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:12.784745Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:15.077083Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_4"
+          },
+          {
+            "created_at": "2026-06-24T07:23:55.886090Z",
+            "id": 121,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:08.785916Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:09.077965Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_5"
+          },
+          {
+            "created_at": "2026-06-24T07:23:57.898284Z",
+            "id": 122,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:12.392138Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:14.577626Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_6"
+          },
+          {
+            "created_at": "2026-06-24T07:24:00.293487Z",
+            "id": 123,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.297396Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:11.692411Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_7"
+          },
+          {
+            "created_at": "2026-06-24T07:24:02.380195Z",
+            "id": 124,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.491268Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:14.284881Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_8"
+          },
+          {
+            "created_at": "2026-06-24T07:24:04.088426Z",
+            "id": 125,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.587476Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:12.597768Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_9"
+          }
+        ],
+        "limit": 100,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 305.392,
+      "method": "GET",
+      "ok": true,
+      "path": "/api/app/users?organization_id=org_2a038f7f7bd9483a92ac7de8957bacde&limit=100&offset=0",
+      "status_code": 200
+    },
+    "role_catalog": {
+      "body": {
+        "assignable_roles": [
+          {
+            "assignable": true,
+            "c04_status": "bootstrap_only",
+            "description": "Bootstrap/system owner account.",
+            "human_or_agent": "human",
+            "label": "Owner",
+            "name": "owner"
+          },
+          {
+            "assignable": true,
+            "c04_status": "legacy_admin_alias",
+            "description": "Legacy admin role; mapped to admin by RBAC.",
+            "human_or_agent": "human",
+            "label": "Super Admin",
+            "name": "super_admin"
+          },
+          {
+            "assignable": true,
+            "c04_status": "assignable_user_role",
+            "description": "Assignable managed user role.",
+            "human_or_agent": "human",
+            "label": "Operator",
+            "name": "operator"
+          },
+          {
+            "assignable": true,
+            "c04_status": "assignable_user_role",
+            "description": "Assignable managed user role.",
+            "human_or_agent": "human",
+            "label": "Viewer",
+            "name": "viewer"
+          },
+          {
+            "assignable": true,
+            "c04_status": "assignable_user_role",
+            "description": "Assignable managed user role.",
+            "human_or_agent": "human",
+            "label": "Reviewer",
+            "name": "reviewer"
+          }
+        ],
+        "standard_roles": [
+          {
+            "assignable": false,
+            "c04_status": "bootstrap_only",
+            "description": "Bootstrap/system owner account.",
+            "human_or_agent": "human",
+            "label": "Owner",
+            "name": "owner"
+          },
+          {
+            "assignable": true,
+            "c04_status": "assignable_admin_role",
+            "description": "Module-level RBAC administrator.",
+            "human_or_agent": "human",
+            "label": "Admin",
+            "name": "admin"
+          },
+          {
+            "assignable": false,
+            "c04_status": "legacy_admin_alias",
+            "description": "Legacy admin role; mapped to admin by RBAC.",
+            "human_or_agent": "human",
+            "label": "Super Admin",
+            "name": "super_admin"
+          },
+          {
+            "assignable": false,
+            "c04_status": "legacy_admin_alias",
+            "description": "Legacy module admin role; mapped to admin by RBAC.",
+            "human_or_agent": "human",
+            "label": "Module Admin",
+            "name": "module_admin"
+          },
+          {
+            "assignable": true,
+            "c04_status": "assignable_user_role",
+            "description": "Assignable managed user role.",
+            "human_or_agent": "human",
+            "label": "Operator",
+            "name": "operator"
+          },
+          {
+            "assignable": true,
+            "c04_status": "assignable_user_role",
+            "description": "Assignable managed user role.",
+            "human_or_agent": "human",
+            "label": "Reviewer",
+            "name": "reviewer"
+          },
+          {
+            "assignable": true,
+            "c04_status": "assignable_user_role",
+            "description": "Assignable managed user role.",
+            "human_or_agent": "human",
+            "label": "Viewer",
+            "name": "viewer"
+          },
+          {
+            "assignable": false,
+            "c04_status": "internal_only",
+            "description": "Internal system principal for signed callbacks and service boundaries.",
+            "human_or_agent": "agent",
+            "label": "System",
+            "name": "system"
+          },
+          {
+            "assignable": false,
+            "c04_status": "legacy_system_alias",
+            "description": "Legacy agent role; mapped to system by RBAC.",
+            "human_or_agent": "agent",
+            "label": "Bot Agent",
+            "name": "bot_agent"
+          }
+        ]
+      },
+      "elapsed_ms": 304.356,
+      "method": "GET",
+      "ok": true,
+      "path": "/api/app/users/roles",
+      "status_code": 200
+    },
+    "status": "passed",
+    "super_admin_orgs": {
+      "body": {
+        "count": 1,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [
+          {
+            "created_at": "2026-06-24T07:23:24.995621Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260624T072323Z_c698c9ca",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "org_name": "Recovery Audit recovery_20260624T072323Z_c698c9ca",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-24T07:23:24.995621Z"
+          }
+        ],
+        "limit": 100,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 95.195,
+      "method": "GET",
+      "ok": true,
+      "path": "/api/app/organizations?limit=100&offset=0",
+      "status_code": 200
+    },
+    "super_admin_users": {
+      "body": {
+        "count": 13,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [
+          {
+            "created_at": "2026-06-24T07:23:26.278524Z",
+            "id": 113,
+            "is_active": true,
+            "job_title": "Recovery super_admin",
+            "last_login_at": "2026-06-24T08:24:57.082440Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "super_admin",
+            "title": "Recovery super_admin",
+            "updated_at": "2026-06-24T08:24:57.088574Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+          },
+          {
+            "created_at": "2026-06-24T07:23:30.301805Z",
+            "id": 114,
+            "is_active": true,
+            "job_title": "Recovery org_admin",
+            "last_login_at": "2026-06-24T08:24:57.582652Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "operator",
+            "title": "Recovery org_admin",
+            "updated_at": "2026-06-24T08:24:57.588206Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+          },
+          {
+            "created_at": "2026-06-24T07:23:34.599824Z",
+            "id": 115,
+            "is_active": true,
+            "job_title": "Recovery viewer",
+            "last_login_at": "2026-06-24T08:24:58.492856Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery viewer",
+            "updated_at": "2026-06-24T08:24:58.582461Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+          },
+          {
+            "created_at": "2026-06-24T07:23:44.494239Z",
+            "id": 116,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.491328Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:11.589592Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_0"
+          },
+          {
+            "created_at": "2026-06-24T07:23:46.499449Z",
+            "id": 117,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:10.596473Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:10.785490Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_1"
+          },
+          {
+            "created_at": "2026-06-24T07:23:48.789201Z",
+            "id": 118,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.497450Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:13.789720Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_2"
+          },
+          {
+            "created_at": "2026-06-24T07:23:51.188101Z",
+            "id": 119,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.499205Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:12.605770Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_3"
+          },
+          {
+            "created_at": "2026-06-24T07:23:53.192513Z",
+            "id": 120,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:12.784745Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:15.077083Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_4"
+          },
+          {
+            "created_at": "2026-06-24T07:23:55.886090Z",
+            "id": 121,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:08.785916Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:09.077965Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_5"
+          },
+          {
+            "created_at": "2026-06-24T07:23:57.898284Z",
+            "id": 122,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:12.392138Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:14.577626Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_6"
+          },
+          {
+            "created_at": "2026-06-24T07:24:00.293487Z",
+            "id": 123,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.297396Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:11.692411Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_7"
+          },
+          {
+            "created_at": "2026-06-24T07:24:02.380195Z",
+            "id": 124,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.491268Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:14.284881Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_8"
+          },
+          {
+            "created_at": "2026-06-24T07:24:04.088426Z",
+            "id": 125,
+            "is_active": true,
+            "job_title": "Recovery load user",
+            "last_login_at": "2026-06-24T07:24:11.587476Z",
+            "must_change_password": false,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery load user",
+            "updated_at": "2026-06-24T07:24:12.597768Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_load_9"
+          }
+        ],
+        "limit": 100,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 398.772,
+      "method": "GET",
+      "ok": true,
+      "path": "/api/app/users?organization_id=org_2a038f7f7bd9483a92ac7de8957bacde&limit=100&offset=0",
+      "status_code": 200
+    },
+    "viewer_orgs": {
+      "body": {
+        "count": 1,
+        "cursor": null,
+        "degraded": false,
+        "error": null,
+        "items": [
+          {
+            "created_at": "2026-06-24T07:23:24.995621Z",
+            "metadata": {
+              "country": "US",
+              "custom": {
+                "audit_id": "recovery_20260624T072323Z_c698c9ca",
+                "isolated": true
+              },
+              "industry": "audit",
+              "settings": {
+                "allow_ai": false,
+                "allow_n8n": true,
+                "data_retention_days": 30
+              },
+              "timezone": "UTC"
+            },
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "org_name": "Recovery Audit recovery_20260624T072323Z_c698c9ca",
+            "org_type": "store",
+            "owner_user_id": "1",
+            "status": "active",
+            "updated_at": "2026-06-24T07:23:24.995621Z"
+          }
+        ],
+        "limit": 100,
+        "next_cursor": null,
+        "offset": 0,
+        "source": "live"
+      },
+      "elapsed_ms": 87.782,
+      "method": "GET",
+      "ok": true,
+      "path": "/api/app/organizations?limit=100&offset=0",
+      "status_code": 200
+    },
+    "viewer_write_negative": {
+      "body": {
+        "detail": "Forbidden."
+      },
+      "elapsed_ms": 406.216,
+      "method": "POST",
+      "ok": false,
+      "path": "/api/app/org/create",
+      "status_code": 403
+    }
+  },
+  "system_can_go_live": "YES",
+  "test_suite_alignment": {
+    "focused_pytest_note": "Run separately by Codex; integration tests may skip without TEST_DATABASE_URL.",
+    "no_admin_login_or_flow_tests": true
+  },
+  "warnings": [],
+  "webhook_validation_result": {
+    "audit_id": "go_live_20260624T082455Z_01b82d78",
+    "callback_mode": "synchronous_n8n_response",
+    "checks": {
+      "backend_received_callback_response": true,
+      "logs_persisted": true,
+      "n8n_received_request": true,
+      "no_timeout": true,
+      "request_sent_successfully": true,
+      "response_received_successfully": true,
+      "retry_mechanism_after_failure": true
+    },
+    "generated_at": "2026-06-24T08:25:13.982942+00:00",
+    "module_id": "integration.n8n_webhook_test_bridge",
+    "request": {
+      "body": {
+        "attempts": 1,
+        "duration_ms": 708.783,
+        "error_code": null,
+        "error_message": null,
+        "injected_key": {
+          "header_name": "Authorization",
+          "injected": true,
+          "key_alias": "n8n",
+          "key_id": "key_23840420533cb8dca99237d16802f694",
+          "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca"
+        },
+        "logs_stored": true,
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "n8n_received": true,
+        "operation_log_id": "a93fa480-fee4-41b5-bd05-d910b40a1cdf",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "request_sent": true,
+        "response_body": {
+          "unparseable_json": true
+        },
+        "response_returned": true,
+        "retry_count": 0,
+        "run_id": "n8n_webhook_test_cba53b8919b5486fb9a8a43bd448aef8",
+        "status_code": 200,
+        "success": true
+      },
+      "elapsed_ms": 1595.497,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/n8n-webhook-test/run",
+      "status_code": 201
+    },
+    "retry_probe": {
+      "first_failure": {
+        "body": {
+          "detail": "Not found."
+        },
+        "elapsed_ms": 390.343,
+        "method": "POST",
+        "ok": false,
+        "path": "/api/control-plane/n8n-webhook-test/run",
+        "status_code": 403
+      },
+      "retry_after_failure": {
+        "body": {
+          "attempts": 1,
+          "duration_ms": 810.688,
+          "error_code": null,
+          "error_message": null,
+          "injected_key": {
+            "header_name": "Authorization",
+            "injected": true,
+            "key_alias": "n8n",
+            "key_id": "key_23840420533cb8dca99237d16802f694",
+            "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca"
+          },
+          "logs_stored": true,
+          "module_id": "integration.n8n_webhook_test_bridge",
+          "n8n_received": true,
+          "operation_log_id": "660286a9-e3ae-4e12-bab5-a64b3675a91f",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "request_sent": true,
+          "response_body": {
+            "unparseable_json": true
+          },
+          "response_returned": true,
+          "retry_count": 0,
+          "run_id": "n8n_webhook_test_efff2aad060c43eb999588c655732167",
+          "status_code": 200,
+          "success": true
+        },
+        "elapsed_ms": 1707.413,
+        "method": "POST",
+        "ok": true,
+        "path": "/api/control-plane/n8n-webhook-test/run",
+        "status_code": 201
+      },
+      "service_retry_fields_present": {
+        "attempts": 1,
+        "retry_count": 0
+      }
+    },
+    "status": "passed"
+  },
+  "worker_stability_result": {
+    "audit_id": "go_live_20260624T082455Z_01b82d78",
+    "checks": {
+      "concurrency_stable_under_load": true,
+      "current_worker_mode_detected": true,
+      "db_connection_pool_per_worker": true,
+      "gunicorn_config_correct": true,
+      "no_db_contention": true,
+      "no_request_starvation": true,
+      "two_workers_active": true,
+      "uvicorn_worker_mapping": true
+    },
+    "db_after": {
+      "by_state": {
+        "argv": [
+          "docker",
+          "exec",
+          "barong-ops-console-prod_console_postgres_1",
+          "psql",
+          "-U",
+          "barong_ops_console",
+          "-d",
+          "barong_ops_console",
+          "-At",
+          "-F",
+          "\t",
+          "-c",
+          "select coalesce(state,'[null]'), count(*) from pg_stat_activity group by 1 order by 1;"
+        ],
+        "elapsed_ms": 811.55,
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "[null]\t5\nactive\t1\nidle\t18\n"
+      },
+      "database_connection_count": 19,
+      "idle_in_transaction_count": 0,
+      "stable": true
+    },
+    "db_before": {
+      "by_state": {
+        "argv": [
+          "docker",
+          "exec",
+          "barong-ops-console-prod_console_postgres_1",
+          "psql",
+          "-U",
+          "barong_ops_console",
+          "-d",
+          "barong_ops_console",
+          "-At",
+          "-F",
+          "\t",
+          "-c",
+          "select coalesce(state,'[null]'), count(*) from pg_stat_activity group by 1 order by 1;"
+        ],
+        "elapsed_ms": 1307.364,
+        "ok": true,
+        "returncode": 0,
+        "stderr": "",
+        "stdout": "[null]\t5\nactive\t1\nidle\t16\n"
+      },
+      "database_connection_count": 17,
+      "idle_in_transaction_count": 0,
+      "stable": true
+    },
+    "db_pool_per_worker": {
+      "configured_max_overflow": 20,
+      "configured_pool_size": 10,
+      "max_possible_connections_from_app": 60,
+      "workers": 2
+    },
+    "generated_at": "2026-06-24T08:25:39.195019+00:00",
+    "load_balancing_behavior": {
+      "request_starvation_detected": false,
+      "requests_served_under_load": 50
+    },
+    "status": "passed",
+    "worker_status": {
+      "active_worker_processes": 2,
+      "configured_workers": 2,
+      "docker_top_ok": true,
+      "gunicorn_master_present": true,
+      "raw_process_lines": [
+        "UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD",
+        "dnsmasq             2446278             2446252             0                   08:21               ?                   00:00:00            sh -c gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --worker-class uvicorn.workers.UvicornWorker --timeout ${GUNICORN_TIMEOUT:-120} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-30} --access-logfile - --error-logfile - --forwarded-allow-ips='*'",
+        "dnsmasq             2446334             2446278             2                   08:21               ?                   00:00:04            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*",
+        "dnsmasq             2446483             2446334             12                  08:21               ?                   00:00:26            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*",
+        "dnsmasq             2446484             2446334             15                  08:21               ?                   00:00:31            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*"
+      ],
+      "uvicorn_worker_class_configured": true
+    }
+  }
+}

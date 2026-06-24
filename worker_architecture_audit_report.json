@@ -1,0 +1,93 @@
+{
+  "audit_id": "go_live_20260624T082455Z_01b82d78",
+  "checks": {
+    "concurrency_stable_under_load": true,
+    "current_worker_mode_detected": true,
+    "db_connection_pool_per_worker": true,
+    "gunicorn_config_correct": true,
+    "no_db_contention": true,
+    "no_request_starvation": true,
+    "two_workers_active": true,
+    "uvicorn_worker_mapping": true
+  },
+  "db_after": {
+    "by_state": {
+      "argv": [
+        "docker",
+        "exec",
+        "barong-ops-console-prod_console_postgres_1",
+        "psql",
+        "-U",
+        "barong_ops_console",
+        "-d",
+        "barong_ops_console",
+        "-At",
+        "-F",
+        "\t",
+        "-c",
+        "select coalesce(state,'[null]'), count(*) from pg_stat_activity group by 1 order by 1;"
+      ],
+      "elapsed_ms": 811.55,
+      "ok": true,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "[null]\t5\nactive\t1\nidle\t18\n"
+    },
+    "database_connection_count": 19,
+    "idle_in_transaction_count": 0,
+    "stable": true
+  },
+  "db_before": {
+    "by_state": {
+      "argv": [
+        "docker",
+        "exec",
+        "barong-ops-console-prod_console_postgres_1",
+        "psql",
+        "-U",
+        "barong_ops_console",
+        "-d",
+        "barong_ops_console",
+        "-At",
+        "-F",
+        "\t",
+        "-c",
+        "select coalesce(state,'[null]'), count(*) from pg_stat_activity group by 1 order by 1;"
+      ],
+      "elapsed_ms": 1307.364,
+      "ok": true,
+      "returncode": 0,
+      "stderr": "",
+      "stdout": "[null]\t5\nactive\t1\nidle\t16\n"
+    },
+    "database_connection_count": 17,
+    "idle_in_transaction_count": 0,
+    "stable": true
+  },
+  "db_pool_per_worker": {
+    "configured_max_overflow": 20,
+    "configured_pool_size": 10,
+    "max_possible_connections_from_app": 60,
+    "workers": 2
+  },
+  "generated_at": "2026-06-24T08:25:39.195019+00:00",
+  "load_balancing_behavior": {
+    "request_starvation_detected": false,
+    "requests_served_under_load": 50
+  },
+  "status": "passed",
+  "worker_status": {
+    "active_worker_processes": 2,
+    "configured_workers": 2,
+    "docker_top_ok": true,
+    "gunicorn_master_present": true,
+    "raw_process_lines": [
+      "UID                 PID                 PPID                C                   STIME               TTY                 TIME                CMD",
+      "dnsmasq             2446278             2446252             0                   08:21               ?                   00:00:00            sh -c gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers ${GUNICORN_WORKERS:-2} --worker-class uvicorn.workers.UvicornWorker --timeout ${GUNICORN_TIMEOUT:-120} --graceful-timeout ${GUNICORN_GRACEFUL_TIMEOUT:-30} --access-logfile - --error-logfile - --forwarded-allow-ips='*'",
+      "dnsmasq             2446334             2446278             2                   08:21               ?                   00:00:04            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*",
+      "dnsmasq             2446483             2446334             12                  08:21               ?                   00:00:26            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*",
+      "dnsmasq             2446484             2446334             15                  08:21               ?                   00:00:31            /usr/local/bin/python /usr/local/bin/gunicorn backend.app.main:app --bind 0.0.0.0:8000 --workers 2 --worker-class uvicorn.workers.UvicornWorker --timeout 120 --graceful-timeout 30 --access-logfile - --error-logfile - --forwarded-allow-ips=*"
+    ],
+    "uvicorn_worker_class_configured": true
+  }
+}

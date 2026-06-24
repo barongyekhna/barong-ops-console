@@ -333,10 +333,12 @@ def _list_item(
         action_key=request.action_key,
         requester_id=request.requester_id,
         request_time=request.request_time,
+        timestamp=request.request_time,
         risk_level=cast(ApprovalRiskLevel, request.risk_level),
         execution_type=cast(ApprovalExecutionType, request.execution_type),
         category=category,
         status=cast(ApprovalRequestStatus, request.status),
+        reason=request.reason,
         reviewer_id=request.reviewer_id,
         workflow_id=workflow.workflow_id if workflow is not None else None,
         workflow_state=workflow.state if workflow is not None else None,
@@ -521,7 +523,9 @@ class WorkflowService:
         workflow: ApprovalWorkflow,
     ) -> None:
         self.approval_repo.save(workflow.approval_request)
+        self.db.flush()
         self.workflow_repo.save(workflow)
+        self.db.flush()
         self._record_c12b_decision(workflow)
 
     def apply_manual_decision(
@@ -628,15 +632,19 @@ class ApprovalService:
         if payload.approval_id is not None:
             existing = self.approval_repo.load_record(payload.approval_id)
             if existing is not None:
-                raise ApprovalConflictError(
-                    f"Approval '{payload.approval_id}' already exists."
+                return self._detail_response(
+                    existing.approval_id,
+                    actor=actor,
+                    user=user,
                 )
         active = self.approval_repo.find_active_by_execution_id(
             payload.execution_id
         )
         if active is not None:
-            raise ApprovalConflictError(
-                f"Execution '{payload.execution_id}' already has a pending approval."
+            return self._detail_response(
+                active.approval_id,
+                actor=actor,
+                user=user,
             )
 
         event_time = _utc_now()

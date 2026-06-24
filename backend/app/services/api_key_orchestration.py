@@ -20,7 +20,7 @@ from ..schemas.api_key_orchestration import (
     ApiKeyRead,
     ApiKeyUpdateRequest,
 )
-from .module_registry import get_module_manifest
+from .module_registry import get_module_manifest_for_db
 
 
 class ApiKeyOrchestrationError(ValueError):
@@ -337,7 +337,7 @@ def create_api_key_binding(
     actor_user_id: str,
 ) -> ApiKeyBindingRead:
     _get_active_organization(db, org_id)
-    if get_module_manifest(payload.module_id) is None:
+    if get_module_manifest_for_db(db, payload.module_id) is None:
         raise ApiKeyOrchestrationError("module_not_registered")
     key = get_api_key_record(db, payload.key_id)
     if key is None or key.status != "active":

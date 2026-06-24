@@ -1,0 +1,435 @@
+{
+  "audit_id": "recovery_20260624T072323Z_c698c9ca",
+  "db_performance_result": {
+    "api_key_binding_summary": {
+      "avg_ms": 809.173,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 1012.689,
+      "p95_ms": 1012.689,
+      "success": 3,
+      "timeout": 0,
+      "timeout_rate": 0.0,
+      "total": 3
+    },
+    "audit_id": "recovery_20260624T072323Z_c698c9ca",
+    "code_changes": [
+      "module-control center read path no longer writes missing state rows",
+      "short TTL read caches for organizations, permissions, modules",
+      "cached GET endpoints allow parallel idempotent reads"
+    ],
+    "generated_at": "2026-06-24T07:24:25.193483+00:00",
+    "login_summary": {
+      "avg_ms": 3538.189,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 4306.202,
+      "p95_ms": 4306.202,
+      "success": 10,
+      "timeout": 0,
+      "timeout_rate": 0.0,
+      "total": 10
+    },
+    "module_toggle_final_enable": {
+      "body": {
+        "item": {
+          "category": "integration",
+          "display_name": "n8n Webhook Test Bridge",
+          "enabled": true,
+          "error": {
+            "code": null,
+            "message": null,
+            "timestamp": null
+          },
+          "last_error_at": null,
+          "module_id": "integration.n8n_webhook_test_bridge",
+          "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+          "runtime_error_code": null,
+          "runtime_error_message": null,
+          "runtime_status": "active",
+          "status": "active",
+          "updated_at": "2026-06-24T07:24:18.290779Z"
+        }
+      },
+      "elapsed_ms": 899.085,
+      "ok": true,
+      "status_code": 200
+    },
+    "module_toggle_summary": {
+      "avg_ms": 4825.677,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 5698.128,
+      "p95_ms": 5698.128,
+      "success": 8,
+      "timeout": 0,
+      "timeout_rate": 0.0,
+      "total": 8
+    },
+    "read_api_summary": {
+      "avg_ms": 233.094,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 690.874,
+      "p95_ms": 418.591,
+      "success": 50,
+      "timeout": 0,
+      "timeout_rate": 0.0,
+      "total": 50
+    },
+    "status": "measured",
+    "target": {
+      "module_control_ms": 2000,
+      "read_api_p95_ms": 500
+    }
+  },
+  "generated_at": "2026-06-24T07:24:25.195283+00:00",
+  "rbac_correctness": {
+    "core_model_preserved": true,
+    "global_admin_login_flow_removed": true,
+    "org_admin_is_derived_membership": true,
+    "role_user_creation": [
+      {
+        "change_password": {
+          "body": {
+            "message": "Password changed.",
+            "user": {
+              "id": 113,
+              "is_active": true,
+              "last_login_at": "2026-06-24T07:23:27.494118Z",
+              "must_change_password": false,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "super_admin",
+              "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+            }
+          },
+          "elapsed_ms": 1016.408,
+          "method": "POST",
+          "ok": true,
+          "path": "/api/public/auth/change-password",
+          "status_code": 200
+        },
+        "create_user": {
+          "body": {
+            "created_at": "2026-06-24T07:23:26.278524Z",
+            "id": 113,
+            "is_active": true,
+            "job_title": "Recovery super_admin",
+            "last_login_at": null,
+            "must_change_password": true,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "super_admin",
+            "title": "Recovery super_admin",
+            "updated_at": "2026-06-24T07:23:26.278524Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+          },
+          "elapsed_ms": 1791.401,
+          "ok": true,
+          "status_code": 201
+        },
+        "final_login": {
+          "body": {
+            "auth_complete": true,
+            "message": null,
+            "require_password_change": false,
+            "session_token": "SyXEzL7mbGkkVovU7PDlMSvzDht5wuBYCuUq7GDcH7o",
+            "user": {
+              "id": 113,
+              "is_active": true,
+              "last_login_at": "2026-06-24T07:23:27.494118Z",
+              "must_change_password": false,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "super_admin",
+              "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+            }
+          },
+          "elapsed_ms": 498.05,
+          "ok": true,
+          "status_code": 200
+        },
+        "initial_login": {
+          "body": {
+            "auth_complete": true,
+            "message": "首次登录默认密码为123456，请立即修改密码",
+            "require_password_change": true,
+            "session_token": "1ZzgS-nUKaIdL5whNe2MZ7NnCsNrV29ZcgOXnpz8yV4",
+            "user": {
+              "id": 113,
+              "is_active": true,
+              "last_login_at": null,
+              "must_change_password": true,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "super_admin",
+              "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+            }
+          },
+          "elapsed_ms": 385.881,
+          "method": "POST",
+          "ok": true,
+          "path": "/api/public/auth/login",
+          "status_code": 200
+        },
+        "role": "super_admin",
+        "user_role": "super_admin",
+        "username": "recovery_20260624T072323Z_c698c9ca_super_admin"
+      },
+      {
+        "change_password": {
+          "body": {
+            "message": "Password changed.",
+            "user": {
+              "id": 114,
+              "is_active": true,
+              "last_login_at": "2026-06-24T07:23:32.696072Z",
+              "must_change_password": false,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "operator",
+              "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+            }
+          },
+          "elapsed_ms": 1013.173,
+          "method": "POST",
+          "ok": true,
+          "path": "/api/public/auth/change-password",
+          "status_code": 200
+        },
+        "create_user": {
+          "body": {
+            "created_at": "2026-06-24T07:23:30.301805Z",
+            "id": 114,
+            "is_active": true,
+            "job_title": "Recovery org_admin",
+            "last_login_at": null,
+            "must_change_password": true,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "operator",
+            "title": "Recovery org_admin",
+            "updated_at": "2026-06-24T07:23:30.301805Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+          },
+          "elapsed_ms": 1815.475,
+          "ok": true,
+          "status_code": 201
+        },
+        "derived_membership": {
+          "body": {
+            "joined_at": "2026-06-24T07:23:31.986184Z",
+            "membership_id": "mem_01601bf7aa754dd69a1bc292010aeebc",
+            "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "admin",
+            "status": "active",
+            "user_id": "114"
+          },
+          "elapsed_ms": 999.471,
+          "ok": true,
+          "status_code": 201
+        },
+        "final_login": {
+          "body": {
+            "auth_complete": true,
+            "message": null,
+            "require_password_change": false,
+            "session_token": "z-YcwbXPNR05ALxoyXl6UOy2U-yPOI_uUKcr4AoRskQ",
+            "user": {
+              "id": 114,
+              "is_active": true,
+              "last_login_at": "2026-06-24T07:23:32.696072Z",
+              "must_change_password": false,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "operator",
+              "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+            }
+          },
+          "elapsed_ms": 296.225,
+          "ok": true,
+          "status_code": 200
+        },
+        "initial_login": {
+          "body": {
+            "auth_complete": true,
+            "message": "首次登录默认密码为123456，请立即修改密码",
+            "require_password_change": true,
+            "session_token": "biivNVw9T7QXswHXUJZ-rt-vgXtOl-vanXJ-hWx9dh8",
+            "user": {
+              "id": 114,
+              "is_active": true,
+              "last_login_at": null,
+              "must_change_password": true,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "operator",
+              "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+            }
+          },
+          "elapsed_ms": 387.319,
+          "method": "POST",
+          "ok": true,
+          "path": "/api/public/auth/login",
+          "status_code": 200
+        },
+        "role": "org_admin",
+        "user_role": "operator",
+        "username": "recovery_20260624T072323Z_c698c9ca_org_admin"
+      },
+      {
+        "change_password": {
+          "body": {
+            "message": "Password changed.",
+            "user": {
+              "id": 115,
+              "is_active": true,
+              "last_login_at": "2026-06-24T07:23:35.490807Z",
+              "must_change_password": false,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "viewer",
+              "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+            }
+          },
+          "elapsed_ms": 906.323,
+          "method": "POST",
+          "ok": true,
+          "path": "/api/public/auth/change-password",
+          "status_code": 200
+        },
+        "create_user": {
+          "body": {
+            "created_at": "2026-06-24T07:23:34.599824Z",
+            "id": 115,
+            "is_active": true,
+            "job_title": "Recovery viewer",
+            "last_login_at": null,
+            "must_change_password": true,
+            "organization": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+            "role": "viewer",
+            "title": "Recovery viewer",
+            "updated_at": "2026-06-24T07:23:34.599824Z",
+            "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+          },
+          "elapsed_ms": 800.444,
+          "ok": true,
+          "status_code": 201
+        },
+        "final_login": {
+          "body": {
+            "auth_complete": true,
+            "message": null,
+            "require_password_change": false,
+            "session_token": "UNbMxPOUDBC11Xn5PR-mjfX6hiue3kbo31Lk-wUeVXc",
+            "user": {
+              "id": 115,
+              "is_active": true,
+              "last_login_at": "2026-06-24T07:23:35.490807Z",
+              "must_change_password": false,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "viewer",
+              "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+            }
+          },
+          "elapsed_ms": 300.294,
+          "ok": true,
+          "status_code": 200
+        },
+        "initial_login": {
+          "body": {
+            "auth_complete": true,
+            "message": "首次登录默认密码为123456，请立即修改密码",
+            "require_password_change": true,
+            "session_token": "4XcgNEeNTOSUJjLv-Lcyz_zzH5cLmqK-3ZK6k_MeTr4",
+            "user": {
+              "id": 115,
+              "is_active": true,
+              "last_login_at": null,
+              "must_change_password": true,
+              "organization_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+              "role": "viewer",
+              "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+            }
+          },
+          "elapsed_ms": 380.414,
+          "method": "POST",
+          "ok": true,
+          "path": "/api/public/auth/login",
+          "status_code": 200
+        },
+        "role": "viewer",
+        "user_role": "viewer",
+        "username": "recovery_20260624T072323Z_c698c9ca_viewer"
+      }
+    ]
+  },
+  "system_can_go_live": "YES",
+  "test_suite_alignment": {
+    "admin_role_test_removed": true,
+    "mock_concurrency_results": false,
+    "read_50_rps": {
+      "avg_ms": 233.094,
+      "failure": 0,
+      "failure_rate": 0.0,
+      "max_ms": 690.874,
+      "p95_ms": 418.591,
+      "success": 50,
+      "timeout": 0,
+      "timeout_rate": 0.0,
+      "total": 50
+    },
+    "roles_executed": [
+      "owner",
+      "super_admin",
+      "org_admin",
+      "viewer"
+    ]
+  },
+  "webhook_status": {
+    "details": {
+      "body": {
+        "duration_ms": 811.48,
+        "error_code": null,
+        "error_message": null,
+        "injected_key": {
+          "header_name": "Authorization",
+          "injected": true,
+          "key_alias": "n8n",
+          "key_id": "key_23840420533cb8dca99237d16802f694",
+          "key_name": "Recovery n8n key recovery_20260624T072323Z_c698c9ca"
+        },
+        "logs_stored": true,
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "n8n_received": true,
+        "operation_log_id": "3d13077c-7203-4e9c-88b7-79b8cd57c473",
+        "org_id": "org_2a038f7f7bd9483a92ac7de8957bacde",
+        "request_sent": true,
+        "response_body": {
+          "unparseable_json": true
+        },
+        "response_returned": true,
+        "run_id": "n8n_webhook_test_8154b791471447a89372f63260d8a9ae",
+        "status_code": 200,
+        "success": true
+      },
+      "elapsed_ms": 1402.435,
+      "method": "POST",
+      "ok": true,
+      "path": "/api/control-plane/n8n-webhook-test/run",
+      "status_code": 201
+    },
+    "logs_persisted": true,
+    "no_timeout": true,
+    "request_sent": true,
+    "response_received": true
+  },
+  "worker_mode_status": {
+    "config_ok": true,
+    "configured_workers": 2,
+    "mode": "gunicorn_uvicorn_workers"
+  },
+  "deployment_restart": {
+    "backend_restarted": true,
+    "frontend_restarted": true,
+    "backend_health_after_restart": "ok",
+    "frontend_http_after_restart": 200,
+    "workers_active_after_restart": 2,
+    "executed_at": "2026-06-24T07:25:00Z"
+  }
+}
