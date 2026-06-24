@@ -4,6 +4,7 @@ import { LogOut, Menu, RefreshCcw, Search } from "lucide-react";
 
 import { Logo } from "@/components/brand-logo";
 import { CapabilitySidebarEngine } from "@/components/capability-sidebar-engine";
+import { RELEASE_STATUS, RELEASE_VERSION } from "@/lib/release-metadata";
 
 type SidebarProps = {
   isOpen: boolean;
@@ -75,9 +76,14 @@ export function TopHeader({
         <span className="brand-mark topbar-brand-mark">
           <Logo decorative />
         </span>
-        <div>
+        <div className="topbar-heading-copy">
           <span className="eyebrow">Workspace</span>
-          <h1>{title}</h1>
+          <div className="topbar-title-row">
+            <h1>{title}</h1>
+            <span className="release-badge" title={`Release status: ${RELEASE_STATUS}`}>
+              {RELEASE_VERSION}
+            </span>
+          </div>
         </div>
       </div>
 

@@ -4,6 +4,8 @@ from typing import Any, Literal
 from pydantic import AliasChoices, Field, SecretStr, ValidationInfo, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from .release_registry import SYSTEM_RELEASE_VERSION
+
 EXAMPLE_DATABASE_URL = (
     "postgresql+psycopg://"
     "barong_console_example:barong_console_example"
@@ -25,7 +27,7 @@ class Settings(BaseSettings):
     )
     app_debug: bool = False
     app_docs_enabled: bool | None = None
-    app_version: str = "0.1.0"
+    app_version: str = SYSTEM_RELEASE_VERSION
     database_url: str = EXAMPLE_DATABASE_URL
     auth_session_expire_minutes: int = Field(default=60, gt=0, le=1440)
     auth_session_cookie_name: str = Field(

@@ -852,6 +852,28 @@ textarea:focus-visible {
   line-height: 1;
 }
 
+.topbar-heading-copy {
+  min-width: 0;
+}
+
+.topbar-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.release-badge {
+  color: var(--signal-dark);
+  border-left: 1px solid var(--line);
+  padding-left: 10px;
+  font-size: 0.68rem;
+  font-weight: 760;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .menu-button {
   display: none;
 }
@@ -4416,6 +4438,28 @@ p {
   line-height: 1.1;
 }
 
+.topbar-heading-copy {
+  min-width: 0;
+}
+
+.topbar-title-row {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.release-badge {
+  color: #0f766e;
+  border-left: 1px solid #cbd5e1;
+  padding-left: 10px;
+  font-size: 12px;
+  font-weight: 760;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
 .eyebrow {
   color: #64748b;
   font-size: 12px;
@@ -4949,6 +4993,10 @@ svg.spin {
 
   .topbar h1 {
     font-size: 22px;
+  }
+
+  .release-badge {
+    font-size: 10px;
   }
 
   .topbar-action {
