@@ -8,6 +8,7 @@ import {
   FileText,
   LayoutDashboard,
   LockKeyhole,
+  PackageSearch,
   Settings,
   UserRoundCog,
   type LucideIcon,
@@ -80,6 +81,17 @@ export const navigationGroups: NavigationGroup[] = [
   {
     label: "业务处理",
     items: [
+      {
+        category: "business",
+        denied_behavior: "show_locked",
+        href: "/products",
+        icon: PackageSearch,
+        label: "产品知识库",
+        module_key: "k.product_knowledge",
+        required_permission: "k.product_knowledge.read",
+        route_namespace: "/products",
+        status: "active",
+      },
       {
         category: "business",
         denied_behavior: "show_locked",

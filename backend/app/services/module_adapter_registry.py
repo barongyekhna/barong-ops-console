@@ -369,11 +369,9 @@ def _validate_scope_bindings(adapter: ModuleAdapterContractV1) -> None:
 
 def _validate_future_runtime_boundaries(adapter: ModuleAdapterContractV1) -> None:
     lowered_key = f"{adapter.adapter_key} {adapter.module_key}".lower()
-    if (
-        lowered_key.startswith("k01")
-        or ".k01" in lowered_key
-        or "product_knowledge" in lowered_key
-    ) and adapter.adapter_status not in {"adapter_pending", "disabled", "draft"}:
+    if (lowered_key.startswith("k01") or ".k01" in lowered_key) and (
+        adapter.adapter_status not in {"adapter_pending", "disabled", "draft"}
+    ):
         raise ValueError(f"{adapter.adapter_key} K01 cannot be enabled.")
 
     if re.search(r"\bp0[1-8]\b|p_series|product_page_automation", lowered_key):

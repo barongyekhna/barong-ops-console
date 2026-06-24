@@ -1,0 +1,370 @@
+.panel {
+  display: grid;
+  gap: 16px;
+  padding: clamp(20px, 3vw, 28px);
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.headingTitle {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.headingTitle svg {
+  flex: 0 0 auto;
+  color: #9f312f;
+}
+
+.heading h3 {
+  margin: 4px 0 0;
+  font-size: 1rem;
+}
+
+.summary {
+  min-width: 96px;
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+  padding: 10px 12px;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+}
+
+.summary strong {
+  font-size: 1rem;
+}
+
+.summary span,
+.field span,
+.filterField span {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 780;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.inputBar {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.field,
+.filterField {
+  display: grid;
+  min-width: 0;
+  gap: 7px;
+}
+
+.field input,
+.field select,
+.filterField select {
+  width: 100%;
+  min-width: 0;
+  height: 40px;
+  padding: 0 11px;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #cfd4d1;
+  border-radius: 6px;
+  outline: 0;
+}
+
+.field input:focus,
+.field select:focus,
+.filterField select:focus {
+  border-color: #9f312f;
+  box-shadow: 0 0 0 3px rgb(159 49 47 / 12%);
+}
+
+.iconTextButton,
+.iconButton,
+.iconButtonSecondary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #cfd4d1;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.iconTextButton {
+  min-width: 84px;
+  height: 40px;
+  gap: 7px;
+  padding: 0 12px;
+  color: #ffffff;
+  background: #9f312f;
+  border-color: #9f312f;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.iconButton,
+.iconButtonSecondary {
+  width: 34px;
+  height: 34px;
+}
+
+.iconButton {
+  color: #7b271f;
+  background: #fff1ed;
+  border-color: #fdc6b6;
+}
+
+.iconButtonSecondary {
+  color: #45505a;
+  background: #f8fafb;
+  border-color: #d9e0e3;
+}
+
+.iconTextButton:disabled,
+.iconButton:disabled,
+.iconButtonSecondary:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.tableSection {
+  display: grid;
+  gap: 10px;
+}
+
+.tableToolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.filterGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filterField {
+  width: min(42vw, 180px);
+}
+
+.tableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.table {
+  width: 100%;
+  min-width: 1040px;
+  border-collapse: collapse;
+  background: #ffffff;
+}
+
+.table th,
+.table td {
+  padding: 11px 12px;
+  border-bottom: 1px solid #e7ebea;
+  text-align: left;
+  vertical-align: top;
+}
+
+.table th {
+  color: var(--muted);
+  background: #f8fafb;
+  font-size: 0.66rem;
+  font-weight: 820;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.table tr:last-child td {
+  border-bottom: 0;
+}
+
+.termCell {
+  min-width: 250px;
+  max-width: 360px;
+}
+
+.termCell > span,
+.monoCell {
+  overflow-wrap: anywhere;
+}
+
+.termCell > span {
+  font-weight: 730;
+}
+
+.monoCell {
+  color: #39414a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.76rem;
+}
+
+.riskBadge,
+.statusBadge,
+.sourceBadge,
+.categoryBadge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.low {
+  color: #075b45;
+  background: #e5f6ef;
+  border-color: #bde7d6;
+}
+
+.medium {
+  color: #73510f;
+  background: #fff2d5;
+  border-color: #efd29b;
+}
+
+.high {
+  color: #8d3415;
+  background: #ffeadb;
+  border-color: #f6c4a6;
+}
+
+.critical {
+  color: #8e1f1b;
+  background: #fee2e2;
+  border-color: #f7b5b5;
+}
+
+.active {
+  color: #8d3415;
+  background: #ffeadb;
+  border-color: #f6c4a6;
+}
+
+.resolved {
+  color: #075b45;
+  background: #e5f6ef;
+  border-color: #bde7d6;
+}
+
+.ignored {
+  color: #5a626b;
+  background: #edf0f2;
+  border-color: #d7dde1;
+}
+
+.categoryBadge {
+  color: #25313b;
+  background: #edf5fb;
+  border-color: #c6dce9;
+}
+
+.sourceK13 {
+  color: #6f3a91;
+  background: #f3eafb;
+  border-color: #dbc5ef;
+}
+
+.sourceK17 {
+  color: #155d7c;
+  background: #e4f3fb;
+  border-color: #b7dff0;
+}
+
+.sourceK18 {
+  color: #79510b;
+  background: #fff1d4;
+  border-color: #efd29b;
+}
+
+.sourceManual {
+  color: #4b5259;
+  background: #eef1f3;
+  border-color: #d7dde1;
+}
+
+.rowActions,
+.editorActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 10px;
+}
+
+.emptyCell {
+  height: 84px;
+  color: var(--muted);
+  text-align: center;
+  vertical-align: middle;
+}
+
+.message {
+  min-height: 20px;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.error {
+  color: #a32f2f;
+}
+
+@media (max-width: 820px) {
+  .heading,
+  .tableToolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .summary {
+    justify-items: start;
+  }
+
+  .filterGroup,
+  .filterField {
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .editor {
+    grid-template-columns: 1fr;
+  }
+
+  .editorActions {
+    flex-wrap: wrap;
+  }
+}

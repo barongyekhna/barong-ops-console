@@ -221,6 +221,15 @@ const registryItems = [
     status: "enabled",
   }),
   manifest({
+    category: "business",
+    denied_behavior: "show_locked",
+    external_dependencies: ["serp", "deepseek", "ai_provider", "n8n"],
+    module_key: "k.product_knowledge",
+    required_permissions: ["k.product_knowledge.read"],
+    route_namespace: "/products",
+    status: "active",
+  }),
+  manifest({
     category: "core",
     denied_behavior: "hide_when_denied",
     module_key: "core.dashboard",
@@ -944,6 +953,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "admin.users",
     "admin.organizations",
     "admin.permissions",
+    "k.product_knowledge",
     "business.approvals",
     "business.reviews",
     "core.dashboard",
@@ -960,6 +970,12 @@ test("sidebar navigation exposes the full productized capability structure", () 
   ]) {
     assert.equal(moduleKeys.includes(legacyKey), false);
   }
+  const productKnowledge = item("k.product_knowledge");
+  assert.equal(productKnowledge.label, "产品知识库");
+  assert.equal(productKnowledge.href, "/products");
+  assert.equal(productKnowledge.required_permission, "k.product_knowledge.read");
+  assert.equal(productKnowledge.denied_behavior, "show_locked");
+  assert.equal(productKnowledge.category, "business");
   assert.equal(moduleKeys.some((key) => key.startsWith("k01")), false);
   assert.equal(
     navigationItems.some((entry) => /P0[1-8]|K01|WooCommerce/i.test(entry.label)),
@@ -967,7 +983,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
   );
   assert.equal(
     navigationModuleRecords.some((entry) =>
-      /k01|product_knowledge|p0[1-8]|p_series|woocommerce|minio|filebrowser/i.test(
+      /k01|p0[1-8]|p_series|woocommerce|minio|filebrowser/i.test(
         `${entry.module_key} ${entry.label}`,
       ),
     ),

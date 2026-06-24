@@ -1,0 +1,121 @@
+{
+  "report_name": "k_series_ui_live_state_report",
+  "generated_at_utc": "2026-06-24T00:00:00Z",
+  "source_policy": {
+    "historical_audit_reports_used": false,
+    "old_codex_outputs_used": false,
+    "basis": "live filesystem scan only"
+  },
+  "scanned_directories": [
+    "/opt/barong-ops-console/frontend/src/",
+    "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/"
+  ],
+  "main_repository_ui_state": {
+    "product_knowledge_ui_accessible": false,
+    "frontend_route_mounted": false,
+    "sidebar_has_product_knowledge_label": false,
+    "sidebar_has_products_item": false,
+    "can_create_product": false,
+    "can_edit_product": false,
+    "api_proxy_allows_k_paths": false,
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console/frontend/src/app/(console)/products",
+        "observation": "Directory exists but live scan found no page.tsx route file."
+      },
+      {
+        "path": "/opt/barong-ops-console/frontend/src/lib/navigation.ts",
+        "lines": "42-193,199-200",
+        "observation": "Navigation contains existing Chinese console modules but no products or product knowledge item; embeddedNavigationModules is empty."
+      },
+      {
+        "path": "/opt/barong-ops-console/frontend/src/app/api/backend/[...path]/route.ts",
+        "lines": "571-640",
+        "observation": "Backend proxy maps public/app/control-plane paths and does not allow /k/* paths."
+      }
+    ]
+  },
+  "k_series_worktree_ui_state": {
+    "product_knowledge_ui_accessible_in_worktree": true,
+    "frontend_route_mounted_in_worktree": true,
+    "route_path": "/products",
+    "sidebar_item_exists": true,
+    "sidebar_label": "Products",
+    "sidebar_has_chinese_product_knowledge_label": false,
+    "can_create_product_ui_present": true,
+    "can_create_product_real_backend_persistence": false,
+    "can_edit_product_ui_present": false,
+    "can_edit_product_real_backend_persistence": false,
+    "api_proxy_allows_k_paths": true,
+    "k15_panel_present": true,
+    "k15_backend_route_mounted": false,
+    "k16_panel_present": true,
+    "k16_backend_route_mounted": false,
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/app/(console)/products/page.tsx",
+        "lines": "3-7,13,29-34",
+        "observation": "Products page renders product list plus research, SERP, keyword, and risk panels."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/lib/navigation.ts",
+        "lines": "77-82",
+        "observation": "Sidebar entry exists as label 'Products', href /products, module_key products, permission products.read."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/components/console-shell.tsx",
+        "lines": "57-98",
+        "observation": "Console shell renders navigation groups, so the Products item is visible only when permission policy allows it."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/lib/permissions.ts",
+        "lines": "18-25",
+        "observation": "Navigation visibility is controlled by required_permission; Products requires products.read."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/modules/k/product-knowledge/api.ts",
+        "lines": "10,77-97",
+        "observation": "Product UI calls /api/backend/k/products for list and create."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/modules/k/product-knowledge/ProductList.tsx",
+        "lines": "77-120",
+        "observation": "Create flow calls createProduct then reloads. Backend returns mock-id and list remains empty, so creation is not a real persisted workflow."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/modules/k/product-knowledge/ProductDetail.tsx",
+        "observation": "Detail component is read-oriented and does not expose an edit form or PATCH workflow."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/modules/k16/serp-trigger/api.ts",
+        "lines": "5-11",
+        "observation": "SERP panel calls /k/serp/search, but no matching backend route is mounted."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/modules/k15/research-trigger/api.ts",
+        "lines": "5-13",
+        "observation": "Research panel calls /k/keyword-research/start, but its backend router is not included in backend main.py."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/app/api/backend/[...path]/route.ts",
+        "lines": "122-124",
+        "observation": "Worktree proxy permits paths starting with k."
+      }
+    ]
+  },
+  "ui_blocking_points_list": [
+    "Main frontend has no mounted /products page and no sidebar product knowledge entry.",
+    "Main frontend proxy rejects /api/backend/k/* paths.",
+    "Worktree sidebar label is 'Products', not the requested Chinese '产品知识库' label.",
+    "Worktree create UI exists but backend create returns a mock id and list returns an empty collection.",
+    "Worktree product edit UI is missing.",
+    "Worktree K15/K16 panels call endpoints that are not mounted in the backend."
+  ],
+  "final_conclusion": {
+    "product_knowledge_ui_truly_accessible_in_main_system": "NO",
+    "product_knowledge_ui_accessible_in_worktree_only": "PARTIAL",
+    "can_create_product": "NO",
+    "can_edit_product": "NO",
+    "k_series_ready_for_ui_integration": "NO"
+  }
+}

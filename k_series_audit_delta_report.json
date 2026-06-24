@@ -1,0 +1,208 @@
+{
+  "report_name": "k_series_audit_delta_report",
+  "generated_at_utc": "2026-06-24T00:00:00Z",
+  "source_policy": {
+    "historical_audit_reports_used": false,
+    "old_codex_outputs_used": false,
+    "reason": "The user explicitly prohibited using historical audit files or old Codex output. Delta is therefore computed against audit claim categories required by the current request, using only live filesystem evidence.",
+    "basis": "live filesystem scan only"
+  },
+  "delta_method": {
+    "previous_audit_artifacts_consumed": false,
+    "comparison_axis": "previous audit claim categories versus real live system state",
+    "statuses_used": [
+      "still_valid",
+      "outdated",
+      "completed",
+      "missing"
+    ]
+  },
+  "previous_audit_vs_real_system_state": [
+    {
+      "claim_category": "K data model exists",
+      "delta_status": "still_valid",
+      "real_state": "Exists in the K worktree with broad model and migration coverage, but is absent from the main repository runtime.",
+      "evidence": [
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/models.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/alembic/versions/20260611_01_k_series_product_knowledge_tables.py"
+      ]
+    },
+    {
+      "claim_category": "K backend is integrated into live main system",
+      "delta_status": "outdated",
+      "real_state": "Main backend has no K module package, no K migration, and no K router registration.",
+      "evidence": [
+        "/opt/barong-ops-console/backend/app/main.py",
+        "/opt/barong-ops-console/backend/app"
+      ]
+    },
+    {
+      "claim_category": "K CRUD API is complete",
+      "delta_status": "outdated",
+      "real_state": "Worktree service functions exist, but router list/create are mock paths; feature flag blocks protected operations.",
+      "evidence": [
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/router.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/service.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/feature_flags.py"
+      ]
+    },
+    {
+      "claim_category": "AI pipeline is executable",
+      "delta_status": "outdated",
+      "real_state": "Only deterministic mock K13 engine and mock bridge are present; live provider/API key/runtime integration is disabled or not implemented.",
+      "evidence": [
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k13_ai_analysis/engine.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k13_ai_bridge/ai_bridge.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k13_ai_bridge/live_provider.py"
+      ]
+    },
+    {
+      "claim_category": "SERP integration exists",
+      "delta_status": "outdated",
+      "real_state": "K16 SERP code is mock-only with external provider disabled; the expected UI endpoint is not mounted.",
+      "evidence": [
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k16_serp/service.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k16_serp/engine.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/modules/k16/serp-trigger/api.ts"
+      ]
+    },
+    {
+      "claim_category": "DeepSeek layer is integrated",
+      "delta_status": "outdated",
+      "real_state": "DeepSeek is explicitly represented by a mock adapter with no live provider, environment, database, router, or service integration.",
+      "evidence": [
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/k10_mock_adapter.py"
+      ]
+    },
+    {
+      "claim_category": "Unit conversion is complete",
+      "delta_status": "still_valid",
+      "real_state": "Pure helper coverage for structured length/weight/volume/temperature values is strong, but it is not wired into product API persistence or routes.",
+      "evidence": [
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/unit_conversion.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/unit_payloads.py"
+      ]
+    },
+    {
+      "claim_category": "Product schema is complete",
+      "delta_status": "outdated",
+      "real_state": "Database model is broad, but API create/update/read schemas expose only a limited product subset and omit many productization fields.",
+      "evidence": [
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/models.py",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/schemas.py"
+      ]
+    },
+    {
+      "claim_category": "Product knowledge UI is accessible",
+      "delta_status": "outdated",
+      "real_state": "Main UI does not mount a products page or K proxy path. Worktree UI has /products, but real create/edit workflows are not complete.",
+      "evidence": [
+        "/opt/barong-ops-console/frontend/src/app/(console)/products",
+        "/opt/barong-ops-console/frontend/src/lib/navigation.ts",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/app/(console)/products/page.tsx"
+      ]
+    },
+    {
+      "claim_category": "Sidebar shows product knowledge",
+      "delta_status": "missing",
+      "real_state": "Main sidebar has no product knowledge item; worktree sidebar label is Products and is permission-gated.",
+      "evidence": [
+        "/opt/barong-ops-console/frontend/src/lib/navigation.ts",
+        "/opt/barong-ops-console-worktrees/k-series-product-knowledge/frontend/src/lib/navigation.ts"
+      ]
+    },
+    {
+      "claim_category": "K integrates with module system",
+      "delta_status": "missing",
+      "real_state": "Main module system has business.products as a planned no_api placeholder, but not k.product_knowledge.",
+      "evidence": [
+        "/opt/barong-ops-console/backend/app/core/modules.py",
+        "/opt/barong-ops-console/backend/app/core/module_adapters.py"
+      ]
+    },
+    {
+      "claim_category": "K integrates with API key system",
+      "delta_status": "missing",
+      "real_state": "API key orchestration cannot bind K because module manifest registration is missing.",
+      "evidence": [
+        "/opt/barong-ops-console/backend/app/services/api_key_orchestration.py"
+      ]
+    },
+    {
+      "claim_category": "K integrates with execution gate",
+      "delta_status": "missing",
+      "real_state": "No K adapter/provider/action contract exists in main runtime; placeholder business.products providers are mock/no-op.",
+      "evidence": [
+        "/opt/barong-ops-console/backend/app/services/module_execution_gate.py",
+        "/opt/barong-ops-console/backend/app/services/execution_flow_gate.py",
+        "/opt/barong-ops-console/backend/app/core/execution_providers.py"
+      ]
+    },
+    {
+      "claim_category": "K integrates with webhook/n8n",
+      "delta_status": "missing",
+      "real_state": "No K workflow registry entry or n8n dependency binding exists.",
+      "evidence": [
+        "/opt/barong-ops-console/backend/app/core/workflow_registry.py",
+        "/opt/barong-ops-console/backend/app/core/dependency_bindings.py",
+        "/opt/barong-ops-console/backend/app/services/webhook_gateway.py"
+      ]
+    },
+    {
+      "claim_category": "K is ready for P/GMC/SEO pipeline",
+      "delta_status": "outdated",
+      "real_state": "Generic result normalization recognizes K/P/SEO-like shapes, but no real K output chain to P, GMC, or SEO exists.",
+      "evidence": [
+        "/opt/barong-ops-console/backend/app/services/result_normalization.py",
+        "/opt/barong-ops-console/backend/app/core/modules.py"
+      ]
+    }
+  ],
+  "blocking_issues": [
+    "Main repository does not contain or mount K product knowledge backend code.",
+    "Main frontend does not contain or mount the K product knowledge page.",
+    "K worktree create/list API is mocked and not persistent.",
+    "K worktree feature flag disables protected product knowledge operations.",
+    "AI, DeepSeek, and SERP are mock-only and not connected to provider/API key/runtime execution.",
+    "K15 and K16 UI-triggered endpoints are not mounted in backend main.py.",
+    "No k.product_knowledge registration exists in module registry, API key orchestration, execution gate, or workflow registry.",
+    "No downstream P/GMC/SEO product pipeline consumes K output."
+  ],
+  "missing_modules": [
+    "main backend k.product_knowledge module package",
+    "main Alembic K product knowledge migration",
+    "main module registry manifest for k.product_knowledge",
+    "main module adapter and execution provider for K product knowledge",
+    "main frontend /products route",
+    "main sidebar product knowledge navigation entry",
+    "K live DeepSeek provider",
+    "K live SERP provider",
+    "K to P/GMC/SEO exporter or pipeline module"
+  ],
+  "missing_pipelines": [
+    "persisted product create/list/update pipeline in mounted runtime",
+    "AI enrichment pipeline with API key/provider injection",
+    "DeepSeek enrichment pipeline",
+    "SERP keyword/research pipeline",
+    "webhook/n8n product processing pipeline",
+    "P/GMC/SEO publication pipeline"
+  ],
+  "integration_failures": [
+    "frontend main route and backend main route do not meet at /k/products",
+    "K module key exists only in worktree constants and not in main module registry",
+    "API key system rejects unregistered modules",
+    "execution gate cannot resolve K adapter/provider/action contract",
+    "workflow registry has no K workflow",
+    "result normalizer is generic support only and does not create a runnable product pipeline"
+  ],
+  "final_conclusion": {
+    "k_series_ready_for_integration": "NO",
+    "k_series_ready_for_productization": "NO",
+    "k_series_blocking_points_list": [
+      "K exists as a worktree skeleton/mock implementation, not as a main runtime integration.",
+      "K product CRUD is not fully persistent through routed APIs.",
+      "K UI is not mounted in the main frontend.",
+      "AI, DeepSeek, SERP, API key, execution gate, webhook, and P/GMC/SEO integrations are missing or mock-only."
+    ]
+  }
+}

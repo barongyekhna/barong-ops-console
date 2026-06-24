@@ -1,0 +1,258 @@
+{
+  "report_name": "k_series_live_state_report",
+  "generated_at_utc": "2026-06-24T00:00:00Z",
+  "source_policy": {
+    "historical_audit_reports_used": false,
+    "old_codex_outputs_used": false,
+    "basis": "live filesystem scan only"
+  },
+  "scanned_directories": [
+    {
+      "path": "/opt/barong-ops-console/",
+      "status": "scanned"
+    },
+    {
+      "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/",
+      "status": "scanned"
+    },
+    {
+      "path": "/opt/barong-ops-console/backend/app/",
+      "status": "scanned"
+    },
+    {
+      "path": "/opt/barong-ops-console/frontend/src/",
+      "status": "scanned"
+    }
+  ],
+  "live_state_summary": {
+    "main_repository_state": "not_integrated",
+    "k_worktree_state": "isolated_product_knowledge_skeleton_with_mock_ai_and_mock_serp_layers",
+    "k_data_model_exists": true,
+    "k_data_model_in_main_runtime": false,
+    "ai_pipeline_real_executable": false,
+    "ai_pipeline_mock_executable": true,
+    "serp_integration_exists": "mock_only_not_live",
+    "deepseek_layer_real": false,
+    "unit_conversion_complete": "partial_pure_helper_complete_not_pipeline_wired",
+    "product_schema_complete": "partial_database_model_broad_api_schema_incomplete"
+  },
+  "backend_runtime_presence": {
+    "main_repository": {
+      "k_backend_modules_present_under_backend_app": false,
+      "k_router_registered": false,
+      "k_alembic_migration_present": false,
+      "evidence": [
+        {
+          "path": "/opt/barong-ops-console/backend/app/main.py",
+          "lines": "13-67,868-917",
+          "observation": "Registered routers are app/control-plane/public routers; no k_series product knowledge router is imported or included."
+        },
+        {
+          "path": "/opt/barong-ops-console/backend/app",
+          "observation": "Live scan found no backend/app/modules/k_series product knowledge package in the main repository."
+        }
+      ]
+    },
+    "k_series_worktree": {
+      "k_backend_modules_present": true,
+      "product_knowledge_router_registered_in_worktree": true,
+      "product_knowledge_api_prefix": "/k/products",
+      "k_migration_present_in_worktree": true,
+      "evidence": [
+        {
+          "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/main.py",
+          "lines": "19-20,44",
+          "observation": "Imports and includes the product knowledge router with prefix /k."
+        },
+        {
+          "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/router.py",
+          "lines": "44-70",
+          "observation": "Defines router prefix /products; list returns an empty response and create returns a mock id/status instead of persisted data."
+        },
+        {
+          "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/alembic/versions/20260611_01_k_series_product_knowledge_tables.py",
+          "lines": "3-4,24-33,66-201",
+          "observation": "Worktree migration creates the K product knowledge table family and revises c05b_permissions_001."
+        }
+      ]
+    }
+  },
+  "k_data_model_assessment": {
+    "exists": true,
+    "main_repository_runtime_available": false,
+    "worktree_model_scope": "broad",
+    "tables_identified": [
+      "k_product_knowledge_products",
+      "k_product_knowledge_attributes",
+      "k_product_knowledge_translations",
+      "k_product_knowledge_keywords",
+      "k_product_knowledge_risk_terms",
+      "k_product_knowledge_research_runs",
+      "k_product_knowledge_ai_events",
+      "k_product_knowledge_versions",
+      "k_product_knowledge_media_assets",
+      "k_product_knowledge_review_items"
+    ],
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/models.py",
+        "lines": "61-248,250-693",
+        "observation": "Defines the main product model and related attribute, translation, keyword, risk, research, AI event, version, media, and review models."
+      }
+    ]
+  },
+  "crud_and_service_assessment": {
+    "service_functions_exist": true,
+    "router_list_is_persistent": false,
+    "router_create_is_persistent": false,
+    "detail_update_archive_use_service": true,
+    "feature_flag_enabled": false,
+    "access_layer_effective_state": "disabled",
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/service.py",
+        "lines": "74-196,199-373,407-413",
+        "observation": "Contains real-looking CRUD helpers for products, attributes, keywords, and risk terms."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/router.py",
+        "lines": "47-70",
+        "observation": "GET /products returns an empty list and POST /products returns mock-id; neither path calls the service layer."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/feature_flags.py",
+        "lines": "1-10",
+        "observation": "is_k_product_knowledge_enabled returns False."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/access.py",
+        "lines": "24-55",
+        "observation": "Access check blocks when the feature flag is disabled; future K-prefixed permission check always returns False."
+      }
+    ]
+  },
+  "ai_pipeline_assessment": {
+    "real_ai_pipeline_executable": false,
+    "mock_ai_pipeline_executable": true,
+    "provider_api_key_integration": false,
+    "runtime_router_registered": false,
+    "persistence": false,
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k13_ai_analysis/engine.py",
+        "lines": "1-6,17-19,50-73",
+        "observation": "K13 engine is deterministic mock AI; runtime constants disable external API execution."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k13_ai_bridge/ai_bridge.py",
+        "lines": "1-8,21-25",
+        "observation": "Bridge mode is mock and production execution is marked disabled/future-only."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k13_ai_bridge/live_provider.py",
+        "observation": "Live provider raises NotImplementedError and requires C14 activation."
+      }
+    ]
+  },
+  "deepseek_layer_assessment": {
+    "deepseek_layer_real": false,
+    "deepseek_layer_mock_present": true,
+    "database_integration": false,
+    "router_integration": false,
+    "service_integration": false,
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/k10_mock_adapter.py",
+        "lines": "1-16,23-24,135",
+        "observation": "Explicitly documents no live DeepSeek, no DB/env/router/service integration, and exposes only a deepseek_mock adapter result."
+      }
+    ]
+  },
+  "serp_integration_assessment": {
+    "live_serp_provider": false,
+    "mock_serp_components_present": true,
+    "backend_route_registered": false,
+    "external_access": false,
+    "persistence": false,
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k16_serp/models.py",
+        "lines": "13-15",
+        "observation": "K16 runtime is disabled and external access is false."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k16_serp/service.py",
+        "lines": "17-20,82",
+        "observation": "SERP provider is disabled; deterministic results are returned from a mock source."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k/k16_serp/engine.py",
+        "lines": "19-21",
+        "observation": "Execution mode is mock/no-side-effect with provider disabled."
+      }
+    ]
+  },
+  "unit_conversion_assessment": {
+    "pure_helper_exists": true,
+    "supported_groups": [
+      "length",
+      "weight",
+      "volume",
+      "temperature"
+    ],
+    "free_text_parsing": false,
+    "product_service_pipeline_wired": false,
+    "api_route_wired": false,
+    "status": "partial",
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/unit_conversion.py",
+        "lines": "1-14,20-65,232-368,389-483",
+        "observation": "Implements deterministic unit normalization and payload validation for explicit structured values."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/unit_payloads.py",
+        "lines": "1-15,389-434",
+        "observation": "Builds structured unit payloads, but remains a helper layer rather than a routed or persisted pipeline."
+      }
+    ]
+  },
+  "product_schema_assessment": {
+    "database_schema_complete_enough_for_product_knowledge": true,
+    "api_create_schema_complete": false,
+    "api_update_schema_complete": false,
+    "api_read_schema_complete": false,
+    "gmc_fields_in_database_model": true,
+    "gmc_fields_exposed_in_api_schema": false,
+    "seo_fields_in_database_model": true,
+    "seo_fields_exposed_in_api_schema": "partial",
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/models.py",
+        "lines": "61-248",
+        "observation": "Product model includes broad product, pricing, inventory, unit JSON, SEO/GMC-ish, raw input, and AI output fields."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/schemas.py",
+        "lines": "91-116,126-143,154-200",
+        "observation": "Create/update/read schemas expose only a limited subset and omit many model fields needed for full productization."
+      }
+    ]
+  },
+  "final_conclusion": {
+    "k_series_ready_for_integration": "NO",
+    "k_series_ready_for_productization": "NO",
+    "k_series_blocking_points_list": [
+      "K product knowledge code is not present in the main repository runtime under /opt/barong-ops-console/backend/app.",
+      "Main backend does not register a /k product knowledge router.",
+      "Main repository does not contain the K product knowledge Alembic migration.",
+      "Worktree feature flag is hard-disabled.",
+      "Worktree product list/create routes are mocked and do not persist or read data.",
+      "K15 keyword research and K16 SERP components are mock layers and are not mounted in the worktree backend main router.",
+      "DeepSeek layer is explicitly mock-only and has no DB/env/router/service integration.",
+      "No live AI provider, API key binding, or execution gate integration exists for k.product_knowledge.",
+      "Product API schemas are incomplete relative to the database model.",
+      "P/GMC/SEO downstream pipelines are not wired to K product knowledge output."
+    ]
+  }
+}

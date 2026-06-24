@@ -84,6 +84,7 @@ def owner_permission_info() -> CurrentUserPermissionInfo:
         permission_keys=["*"],
         assignments=[],
         scope_summary=[],
+        is_platform_owner=True,
     )
 
 
@@ -94,6 +95,16 @@ def adapter_items_by_key(
         str(item["adapter_key"]): item
         for item in payload["items"]  # type: ignore[index]
     }
+
+
+def raw_adapter_by_key(adapter_key: str) -> dict[str, Any]:
+    return copy.deepcopy(
+        next(
+            raw
+            for raw in MODULE_ADAPTER_CONTRACTS_V1
+            if raw["adapter_key"] == adapter_key
+        )
+    )
 
 
 def string_values(value: Any):
@@ -137,6 +148,7 @@ def test_module_adapter_registry_api_requires_login_and_owner_can_read(
         "core.dashboard.adapter",
         "admin.users.adapter",
         "admin.permissions.adapter",
+        "k.product_knowledge.adapter",
         "business.products.placeholder.adapter",
         "integration.n8n_test_bridge.adapter",
     } == adapter_keys
@@ -167,6 +179,7 @@ def test_static_adapter_registry_contract_rules() -> None:
         "core.dashboard.adapter",
         "admin.users.adapter",
         "admin.permissions.adapter",
+        "k.product_knowledge.adapter",
         "business.products.placeholder.adapter",
         "integration.n8n_test_bridge.adapter",
     } == set(adapter_keys)
@@ -290,17 +303,17 @@ def test_adapter_contract_rejects_invalid_shapes_and_escapes() -> None:
     with pytest.raises(ValueError, match="operation log binding drift"):
         validate_adapter_contracts([action_drift])
 
-    executable_action = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[3])
+    executable_action = raw_adapter_by_key("business.products.placeholder.adapter")
     executable_action["actions"][0]["executable_before_c09"] = True
     with pytest.raises(ValueError, match="action is executable"):
         validate_adapter_contracts([executable_action])
 
-    execution_drift = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[3])
+    execution_drift = raw_adapter_by_key("business.products.placeholder.adapter")
     execution_drift["execution_requirements"]["requires_execution_provider"] = False
     with pytest.raises(ValueError, match="execution action lacks requirement"):
         validate_adapter_contracts([execution_drift])
 
-    dependency_sensitive = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[4])
+    dependency_sensitive = raw_adapter_by_key("integration.n8n_test_bridge.adapter")
     dependency_sensitive["dependency_declarations"][0][
         "safe_unavailable_message"
     ] = "https://example.invalid/hook"
@@ -326,7 +339,7 @@ def test_adapter_contract_rejects_c08d_runtime_regressions() -> None:
     with pytest.raises(Exception):
         validate_adapter_contracts([missing_contract_operation_log])
 
-    approval_drift = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[3])
+    approval_drift = raw_adapter_by_key("business.products.placeholder.adapter")
     approval_drift["actions"][0]["requires_approval"] = True
     with pytest.raises(ValueError, match="approval action lacks requirement"):
         validate_adapter_contracts([approval_drift])
@@ -338,14 +351,14 @@ def test_adapter_contract_rejects_c08d_runtime_regressions() -> None:
     with pytest.raises(ValueError, match="contract lacks execution requirement"):
         validate_adapter_contracts([contract_execution_drift])
 
-    live_dependency = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[4])
+    live_dependency = raw_adapter_by_key("integration.n8n_test_bridge.adapter")
     live_dependency["dependency_declarations"][0][
         "live_connection_allowed"
     ] = True
     with pytest.raises(ValueError, match="dependency declares live connection"):
         validate_adapter_contracts([live_dependency])
 
-    connected_provider = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[4])
+    connected_provider = raw_adapter_by_key("integration.n8n_test_bridge.adapter")
     connected_provider["dependency_declarations"][0][
         "provider_status"
     ] = "not_connected"
@@ -463,7 +476,6 @@ def test_adapter_dependency_and_runtime_safety_metadata() -> None:
     ).lower()
 
     assert "k01" not in serialized
-    assert "product_knowledge" not in serialized
     assert not re.search(
         r"\bp0[1-8]\b|p_series|product_page_automation",
         serialized,
@@ -498,6 +510,21 @@ def test_adapter_dependency_and_runtime_safety_metadata() -> None:
         adapter
         for adapter in adapters
         if adapter.adapter_key == "integration.n8n_test_bridge.adapter"
+    )
+    k_adapter = next(
+        adapter
+        for adapter in adapters
+        if adapter.adapter_key == "k.product_knowledge.adapter"
+    )
+    assert k_adapter.adapter_status == "production_ready"
+    assert k_adapter.module_key == "k.product_knowledge"
+    assert {
+        dependency.dependency_key
+        for dependency in k_adapter.dependency_declarations
+    } == {"serp", "deepseek", "ai_provider", "n8n"}
+    assert all(
+        dependency.live_connection_allowed is False
+        for dependency in k_adapter.dependency_declarations
     )
     assert n8n_bridge.adapter_status == "adapter_pending"
     assert n8n_bridge.dependency_declarations[0].dependency_key == "n8n"
@@ -718,7 +745,7 @@ def test_role_defaults_super_admin_and_pending_disabled_adapter_access(
 
 
 def test_execution_action_contracts_are_unavailable_before_c09() -> None:
-    execution_raw = copy.deepcopy(MODULE_ADAPTER_CONTRACTS_V1[3])
+    execution_raw = raw_adapter_by_key("business.products.placeholder.adapter")
     execution_raw["adapter_status"] = "contract_ready"
     execution_raw["lifecycle"] = "contract_ready"
     execution_adapter = validate_adapter_contracts([execution_raw])[0]

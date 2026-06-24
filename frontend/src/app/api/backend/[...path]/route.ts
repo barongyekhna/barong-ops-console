@@ -552,6 +552,105 @@ function isAllowedApiKeyOrchestrationPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedKPath(method: string, path: string[]) {
+  if (path[0] !== "k") {
+    return false;
+  }
+
+  if (path.length === 2 && path[1] === "products") {
+    return method === "GET" || method === "POST";
+  }
+
+  if (
+    path.length === 3 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "GET" || method === "PATCH";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "archive"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    ["attributes", "keywords", "risk-terms"].includes(path[3])
+  ) {
+    return method === "GET" || method === "PATCH";
+  }
+
+  if (
+    path.length === 2 &&
+    ["keywords", "risks", "risk", "media"].includes(path[1])
+  ) {
+    return method === "GET" || method === "POST";
+  }
+
+  if (
+    path.length === 3 &&
+    ["keywords", "risks", "risk"].includes(path[1])
+  ) {
+    if (path[1] === "keywords" && method === "GET") {
+      return true;
+    }
+    return (
+      isUuidPathSegment(path[2]) &&
+      (method === "PATCH" || method === "DELETE")
+    );
+  }
+
+  if (
+    path.length === 3 &&
+    path[1] === "keyword-research" &&
+    path[2] === "start"
+  ) {
+    return method === "POST";
+  }
+
+  if (path.length === 2 && path[1] === "research") {
+    return method === "POST";
+  }
+
+  if (path.length === 3 && path[1] === "serp" && path[2] === "search") {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 3 &&
+    path[1] === "selling-points" &&
+    path[2] === "generate"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    path[3] === "enrich" &&
+    path[4] === "deepseek"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    ["translate", "risk-filter"].includes(path[3])
+  ) {
+    return method === "POST";
+  }
+
+  return false;
+}
+
 type BackendApiLayer = "public" | "app" | "control-plane";
 
 function apiLayerPrefix(layer: BackendApiLayer) {
@@ -593,7 +692,8 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedApprovalPath(method, path) ||
     isAllowedOrgPath(method, path) ||
     isAllowedPermissionPath(method, path) ||
-    isAllowedUsersPath(method, path)
+    isAllowedUsersPath(method, path) ||
+    isAllowedKPath(method, path)
   ) {
     return withApiLayer("app", requestedPath);
   }

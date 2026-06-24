@@ -50,6 +50,16 @@ from .review import ReviewItem
 from .security import SecurityRateLimitBucket, SecurityReplayNonce
 from .shared_module import SharedModuleRecord
 from .user import User
+from ..modules.k_series.product_knowledge.models import (
+    KProductKnowledgeAIEvent,
+    KProductKnowledgeAttribute,
+    KProductKnowledgeKeyword,
+    KProductKnowledgeMediaAsset,
+    KProductKnowledgeProduct,
+    KProductKnowledgeResearchRun,
+    KProductKnowledgeRiskTerm,
+    KProductKnowledgeTranslation,
+)
 
 __all__ = [
     "AgentMemoryAccessLog",
@@ -74,6 +84,14 @@ __all__ = [
     "ExecutionResultRecord",
     "EventStreamRecord",
     "JobEvent",
+    "KProductKnowledgeAIEvent",
+    "KProductKnowledgeAttribute",
+    "KProductKnowledgeKeyword",
+    "KProductKnowledgeMediaAsset",
+    "KProductKnowledgeProduct",
+    "KProductKnowledgeResearchRun",
+    "KProductKnowledgeRiskTerm",
+    "KProductKnowledgeTranslation",
     "MemoryEvent",
     "MemorySummary",
     "MessageRecord",

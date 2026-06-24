@@ -49,22 +49,29 @@ def test_c15a_default_registry_defines_hidden_workflow_bindings() -> None:
     flow = get_workflow_system_flow_diagram()
     completion = get_workflow_registry_completion_status()
 
-    assert registry.count == 2
-    assert registry.active_count == 1
+    assert registry.count == 5
+    assert registry.active_count == 4
     assert registry.registry_is_single_source_of_truth is True
     assert registry.real_n8n_webhook_address_exposed is False
     assert registry.registry_executes_workflow is False
     assert validation.valid is True
-    assert validation.workflow_count == 2
-    assert validation.module_binding_count == 1
-    assert bindings.count == 1
-    assert bindings.items[0].module == "integration.n8n_test_bridge"
-    assert bindings.items[0].workflow_count == 2
+    assert validation.workflow_count == 5
+    assert validation.module_binding_count == 2
+    assert bindings.count == 2
+    binding_by_module = {item.module: item for item in bindings.items}
+    assert binding_by_module["integration.n8n_test_bridge"].workflow_count == 2
+    assert binding_by_module["k.product_knowledge"].workflow_count == 3
+    assert binding_by_module["k.product_knowledge"].active_workflow_ids == (
+        "n8n.workflow.k.product_knowledge.to_p_series.v1",
+        "n8n.workflow.k.product_knowledge.to_gmc.v1",
+        "n8n.workflow.k.product_knowledge.to_seo.v1",
+    )
     assert rules.unregistered_workflow_callable is False
     assert rules.explicit_module_binding_required is True
     assert rules.real_n8n_webhook_address_exposure_allowed is False
     assert flow.diagram == (
-        "Module -> C15A Registry -> C15B -> n8n webhook -> C15D callback"
+        "C15A workflow match -> C15F whitelist check -> "
+        "ExecutionRouter -> Provider execution mode plan"
     )
     assert flow.registry_executes_workflow is False
     assert completion.completion_status == "complete"

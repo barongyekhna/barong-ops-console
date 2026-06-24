@@ -51,10 +51,15 @@ def test_c15f_default_binding_model_uses_c15a_registry_whitelist() -> None:
         for item in model.items
         if item.module_id == "integration.n8n_test_bridge"
     )
+    k_binding = next(
+        item
+        for item in model.items
+        if item.module_id == "k.product_knowledge"
+    )
 
     assert model.c15a_registry_required is True
     assert model.whitelist_only_access is True
-    assert model.allowed_workflow_count == 1
+    assert model.allowed_workflow_count == 4
     assert binding.module_id == "integration.n8n_test_bridge"
     assert binding.allowed_workflows == (
         "n8n.workflow.integration.n8n_test_bridge.dispatch.v1",
@@ -63,11 +68,18 @@ def test_c15f_default_binding_model_uses_c15a_registry_whitelist() -> None:
         "n8n.workflow.integration.n8n_test_bridge.legacy.v1",
     )
     assert binding.binding_status == "active"
+    assert k_binding.binding_status == "active"
+    assert k_binding.allowed_workflows == (
+        "n8n.workflow.k.product_knowledge.to_gmc.v1",
+        "n8n.workflow.k.product_knowledge.to_p_series.v1",
+        "n8n.workflow.k.product_knowledge.to_seo.v1",
+    )
+    assert k_binding.read_only_workflows == ()
     assert binding.workflow_must_exist_in_c15a_registry is True
     assert binding.module_can_call_unlisted_workflow is False
     assert validation.valid is True
-    assert validation.allowed_workflow_count == 1
-    assert validation.c15a_registry_workflow_count == 2
+    assert validation.allowed_workflow_count == 4
+    assert validation.c15a_registry_workflow_count == 5
     assert enforcement.unbound_workflow_behavior == "reject"
     assert enforcement.cross_module_workflow_behavior == "reject"
     assert access_control.module_can_access_only_allowed_workflows is True

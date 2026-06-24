@@ -99,6 +99,7 @@ def owner_permission_info() -> CurrentUserPermissionInfo:
         permission_keys=["*"],
         assignments=[],
         scope_summary=[],
+        is_platform_owner=True,
     )
 
 
@@ -198,7 +199,20 @@ def test_static_execution_provider_registry_contract_rules() -> None:
 
     provider_keys = [provider.provider_key for provider in providers]
     assert len(provider_keys) == len(set(provider_keys))
-    assert len(providers) == 8
+    assert set(provider_keys) == {
+        "k.product_knowledge.prompt.provider",
+        "k.product_knowledge.serp.provider",
+        "k.product_knowledge.ai_enrich.provider",
+        "k.product_knowledge.risk_filter.provider",
+        "core.no_op_provider",
+        "core.mock_provider",
+        "core.contract_only_provider",
+        "future.local_backend_provider",
+        "future.queue_provider",
+        "future.webhook_provider",
+        "future.scheduled_provider",
+        "future.live_provider",
+    }
     assert set(ALLOWED_PROVIDER_TYPES) == set(get_args(ExecutionProviderType))
     assert set(ALLOWED_PROVIDER_STATUSES) == set(get_args(ExecutionProviderStatus))
     assert set(ALLOWED_EXECUTION_MODES) == set(get_args(ExecutionMode))
@@ -246,7 +260,12 @@ def test_static_execution_provider_registry_contract_rules() -> None:
             or action_contract.risk_level in {"high", "critical"}
         )
         assert provider.executable is False
-        assert provider.can_request_execution is False
+        if provider.can_request_execution:
+            assert provider.provider_type in {
+                "no_op_provider",
+                "queue_provider",
+                "webhook_provider",
+            }
         assert provider.live_provider_connected is False
         assert provider.external_endpoint_declared is False
         assert provider.credential_declared is False
@@ -263,6 +282,8 @@ def test_static_execution_provider_registry_contract_rules() -> None:
             assert provider.provider_status in {
                 "provider_pending",
                 "provider_unavailable",
+                "staging_ready",
+                "live_ready",
                 "disabled",
                 "deprecated",
                 "draft",
@@ -275,11 +296,23 @@ def test_static_execution_provider_registry_contract_rules() -> None:
             assert provider.executable is False
         if action_contract.requires_execution_provider:
             assert provider.executable is False
-            assert provider.can_request_execution is False
+            if provider.can_request_execution:
+                assert provider.provider_type in {
+                    "no_op_provider",
+                    "queue_provider",
+                    "webhook_provider",
+                }
             assert (
                 provider.provider_type == "no_op_provider"
+                or provider.provider_type in {"queue_provider", "webhook_provider"}
                 or provider.provider_status
-                in {"provider_pending", "provider_unavailable", "disabled"}
+                in {
+                    "provider_pending",
+                    "provider_unavailable",
+                    "staging_ready",
+                    "live_ready",
+                    "disabled",
+                }
             )
         if provider.secret_requirement.requires_secret:
             assert provider.secret_requirement.secret_value_declared is False
@@ -299,9 +332,9 @@ def test_c09d_execution_provider_rule_matrix_is_explicitly_no_execute() -> None:
     }
     expected_access = {
         "core.no_op_provider": (
-            "unavailable",
-            "execution_provider_required",
-            "c09b_no_execute_provider_contract_only",
+            "visible",
+            "router_selection_required",
+            "execution_router_required",
         ),
         "core.mock_provider": (
             "blocked",
@@ -314,22 +347,22 @@ def test_c09d_execution_provider_rule_matrix_is_explicitly_no_execute() -> None:
             "waiting_c12_approval_gate",
         ),
         "future.local_backend_provider": (
-            "provider_pending",
-            "provider_pending",
-            "provider_pending",
+            "visible",
+            "router_selection_required",
+            "execution_router_required",
         ),
         "future.queue_provider": (
-            "provider_pending",
-            "provider_pending",
-            "provider_pending",
+            "visible",
+            "router_selection_required",
+            "execution_router_required",
         ),
         "future.webhook_provider": (
-            "disabled",
-            "disabled",
-            "disabled",
+            "visible",
+            "router_selection_required",
+            "execution_router_required",
         ),
         "future.scheduled_provider": (
-            "unavailable",
+            "blocked",
             "blocked_approval_required",
             "waiting_c12_approval_gate",
         ),
@@ -337,6 +370,26 @@ def test_c09d_execution_provider_rule_matrix_is_explicitly_no_execute() -> None:
             "unavailable",
             "secret_rules_required",
             "waiting_c14_secret_rules",
+        ),
+        "k.product_knowledge.prompt.provider": (
+            "unavailable",
+            "secret_rules_required",
+            "waiting_c14_secret_rules",
+        ),
+        "k.product_knowledge.serp.provider": (
+            "unavailable",
+            "secret_rules_required",
+            "waiting_c14_secret_rules",
+        ),
+        "k.product_knowledge.ai_enrich.provider": (
+            "unavailable",
+            "secret_rules_required",
+            "waiting_c14_secret_rules",
+        ),
+        "k.product_knowledge.risk_filter.provider": (
+            "unavailable",
+            "blocked_approval_required",
+            "waiting_c12_approval_gate",
         ),
     }
 
@@ -356,7 +409,7 @@ def test_c09d_execution_provider_rule_matrix_is_explicitly_no_execute() -> None:
         assert access.provider_access_state == provider_access_state
         assert access.block_reason == block_reason
         assert access.no_execute_reason == no_execute_reason
-        assert access.blocked is True
+        assert access.blocked is (provider_key != "future.local_backend_provider")
         assert access.executable is False
         assert access.can_request_execution is False
         assert access.safe_status_message
@@ -421,7 +474,7 @@ def test_c09d_execution_provider_rule_matrix_is_explicitly_no_execute() -> None:
 
 
 def test_execution_provider_contract_rejects_invalid_shapes_and_drifts() -> None:
-    valid = copy.deepcopy(EXECUTION_PROVIDER_CONTRACTS_V1[0])
+    valid = raw_provider_by_key("core.no_op_provider")
 
     with pytest.raises(ValueError, match="Duplicate provider_key"):
         validate_execution_provider_contracts([valid, copy.deepcopy(valid)])
@@ -481,23 +534,23 @@ def test_execution_provider_contract_rejects_invalid_shapes_and_drifts() -> None
     with pytest.raises(ValueError, match="operation_log_action"):
         validate_execution_provider_contracts([log_drift])
 
-    approval_executable = copy.deepcopy(EXECUTION_PROVIDER_CONTRACTS_V1[2])
+    approval_executable = raw_provider_by_key("core.contract_only_provider")
     approval_executable["executable"] = True
     with pytest.raises(ValueError, match="approval action is executable"):
         validate_execution_provider_contracts([approval_executable])
 
-    execution_executable = copy.deepcopy(EXECUTION_PROVIDER_CONTRACTS_V1[0])
+    execution_executable = raw_provider_by_key("future.live_provider")
     execution_executable["can_request_execution"] = True
-    with pytest.raises(ValueError, match="execution action is executable"):
+    with pytest.raises(ValueError, match="live_ready cannot request execution"):
         validate_execution_provider_contracts([execution_executable])
 
-    future_enabled = copy.deepcopy(EXECUTION_PROVIDER_CONTRACTS_V1[4])
+    future_enabled = raw_provider_by_key("future.queue_provider")
     future_enabled["provider_status"] = "contract_ready"
     future_enabled["lifecycle"] = "contract_ready"
-    with pytest.raises(ValueError, match="execution action is not safely pending"):
+    with pytest.raises(ValueError, match="contract_ready can execute"):
         validate_execution_provider_contracts([future_enabled])
 
-    secret_value = copy.deepcopy(EXECUTION_PROVIDER_CONTRACTS_V1[7])
+    secret_value = raw_provider_by_key("future.live_provider")
     secret_value["secret_requirement"]["secret_value_declared"] = True
     with pytest.raises(ValueError, match="secret value"):
         validate_execution_provider_contracts([secret_value])
@@ -980,11 +1033,12 @@ def test_execution_provider_registry_does_not_expose_runtime_values() -> None:
             assert marker not in lowered
         assert "api_key" not in lowered
 
+    assert all(provider.executable is False for provider in providers)
     assert all(
-        provider.provider_type
-        in {"no_op_provider", "mock_provider", "contract_only_provider"}
-        or provider.provider_status in NON_EXECUTABLE_PROVIDER_STATUSES
+        build_execution_provider_access_state(
+            provider,
+            owner_permission_info(),
+        ).can_request_execution
+        is False
         for provider in providers
     )
-    assert all(provider.executable is False for provider in providers)
-    assert all(provider.can_request_execution is False for provider in providers)

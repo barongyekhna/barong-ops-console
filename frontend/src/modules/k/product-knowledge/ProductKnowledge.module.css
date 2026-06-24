@@ -1,0 +1,441 @@
+.workspace {
+  display: grid;
+  gap: 22px;
+}
+
+.form,
+.listPanel,
+.detail {
+  min-width: 0;
+  padding: clamp(20px, 3vw, 28px);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.form {
+  display: grid;
+  gap: 18px;
+}
+
+.panelHeading,
+.detailHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.panelHeading h3,
+.detailHeading h3,
+.detail h3 {
+  margin: 4px 0 0;
+  font-size: 1rem;
+}
+
+.eyebrow {
+  display: block;
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 780;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.formGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  color: #3e4542;
+  font-size: 0.75rem;
+  font-weight: 740;
+}
+
+.field input,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  color: var(--ink);
+  background: #ffffff;
+  border: 1px solid #cfd4d1;
+  border-radius: 6px;
+  outline: 0;
+}
+
+.field input {
+  height: 42px;
+  padding: 0 12px;
+}
+
+.field textarea {
+  min-height: 118px;
+  padding: 11px 12px;
+  resize: vertical;
+}
+
+.field input:focus,
+.field textarea:focus {
+  border-color: var(--signal-dark);
+  box-shadow: 0 0 0 3px rgb(32 180 134 / 12%);
+}
+
+.formMessage {
+  min-height: 18px;
+  margin: 0;
+  color: #a32f2f;
+  font-size: 0.78rem;
+}
+
+.contentGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.75fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.listPanel {
+  display: grid;
+  gap: 16px;
+}
+
+.state,
+.errorState {
+  min-height: 176px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 22px;
+  color: var(--muted);
+  background: #f7f9f8;
+  border: 1px dashed #ccd3cf;
+  border-radius: 6px;
+}
+
+.errorState {
+  justify-content: flex-start;
+  color: #9b3030;
+  border-color: #e2bcbc;
+}
+
+.errorState div {
+  display: grid;
+  gap: 4px;
+}
+
+.errorState strong {
+  color: #8d2c2c;
+  font-size: 0.86rem;
+}
+
+.errorState span {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.tableScroll {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.table th,
+.table td {
+  padding: 13px 14px;
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--line);
+}
+
+.table th {
+  color: var(--muted);
+  background: #f7f9f8;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.table tbody tr {
+  cursor: pointer;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table tbody tr:hover td,
+.table tbody tr:focus-visible td,
+.selectedRow td {
+  background: #eef8f4;
+}
+
+.table tbody tr:focus-visible {
+  outline: 3px solid rgb(32 180 134 / 28%);
+  outline-offset: -3px;
+}
+
+.table td:first-child {
+  min-width: 210px;
+}
+
+.table td:first-child strong,
+.table td:first-child span {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.table td:first-child span {
+  margin-top: 4px;
+  color: var(--signal-dark);
+  font-size: 0.68rem;
+  font-weight: 760;
+}
+
+.statusBadge {
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  padding: 0 8px;
+  color: #087c5e;
+  background: #e5f6ef;
+  border: 1px solid #bde7d6;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.detail {
+  position: sticky;
+  top: 96px;
+  display: grid;
+  gap: 18px;
+}
+
+.detail p {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.emptyDetailIcon {
+  width: 42px;
+  height: 42px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--signal-dark);
+  background: #e4f6ef;
+  border: 1px solid #c5eadc;
+  border-radius: 6px;
+}
+
+.detailGrid {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.detailGrid div {
+  min-width: 0;
+  padding: 12px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+.detailGrid dt {
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detailGrid dd {
+  margin: 6px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.sellingPointsSection {
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+}
+
+.sellingPointsHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sellingPointsHeading h4 {
+  margin: 4px 0 0;
+  font-size: 0.94rem;
+}
+
+.sellingPointsError,
+.sellingPointsEmpty {
+  margin: 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.sellingPointsError {
+  color: #a32f2f;
+}
+
+.sellingPointsEmpty {
+  color: var(--muted);
+}
+
+.sellingPointsResult {
+  display: grid;
+  gap: 12px;
+}
+
+.sellingPointsMetrics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.sellingPointsMetrics div {
+  min-width: 0;
+  padding: 10px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+.sellingPointsMetrics dt,
+.sellingPointTagGroup > span,
+.sellingPointBullets span {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.sellingPointsMetrics dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.sellingPointBullets {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sellingPointBullets li {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(74px, 0.28fr) minmax(0, 1fr) 42px;
+  gap: 8px;
+  align-items: start;
+  padding: 10px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+.sellingPointBullets strong {
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.sellingPointBullets em {
+  justify-self: end;
+  color: #087c5e;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 800;
+}
+
+.sellingPointTagGroup {
+  display: grid;
+  gap: 8px;
+}
+
+.sellingPointTagGroup div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.sellingPointTagGroup strong {
+  min-height: 24px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #087c5e;
+  background: #e5f6ef;
+  border: 1px solid #bde7d6;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+@media (max-width: 1000px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .detail {
+    position: static;
+  }
+}
+
+@media (max-width: 760px) {
+  .panelHeading,
+  .detailHeading,
+  .sellingPointsHeading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .panelHeading button,
+  .sellingPointsHeading button {
+    align-self: flex-start;
+  }
+
+  .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .sellingPointBullets li,
+  .sellingPointsMetrics {
+    grid-template-columns: 1fr;
+  }
+}

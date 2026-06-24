@@ -1,0 +1,211 @@
+{
+  "report_name": "k_series_cross_system_integration_report",
+  "generated_at_utc": "2026-06-24T00:00:00Z",
+  "source_policy": {
+    "historical_audit_reports_used": false,
+    "old_codex_outputs_used": false,
+    "basis": "live filesystem scan only"
+  },
+  "integration_summary": {
+    "k_to_c_system_call_chain": "not_wired",
+    "k_to_module_system": "not_registered_as_k_product_knowledge",
+    "k_to_api_key_system": "not_available",
+    "k_to_execution_gate": "blocked_missing_k_module_adapter_provider_contracts",
+    "k_to_webhook_or_n8n": "not_wired",
+    "k_to_p_gmc_seo_pipeline_readiness": "not_ready",
+    "generic_result_normalizer_has_k_p_seo_awareness": true
+  },
+  "k_to_c_system_call_chain": {
+    "status": "missing",
+    "expected_chain": [
+      "frontend /products",
+      "/api/backend/k/products",
+      "backend /k/products",
+      "module registry entry",
+      "execution gate",
+      "API key/provider binding",
+      "downstream P/GMC/SEO pipeline"
+    ],
+    "actual_chain": [
+      "main frontend has no /products page",
+      "main frontend proxy does not permit /k/*",
+      "main backend does not register /k router",
+      "main module registry has only business.products placeholder, not k.product_knowledge",
+      "K worktree contains isolated /k/products skeleton"
+    ],
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console/frontend/src/app/(console)/products",
+        "observation": "No page route in the main frontend."
+      },
+      {
+        "path": "/opt/barong-ops-console/frontend/src/app/api/backend/[...path]/route.ts",
+        "lines": "571-640",
+        "observation": "No /k path mapping in main proxy."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/main.py",
+        "lines": "868-917",
+        "observation": "No K router included."
+      }
+    ]
+  },
+  "module_system_integration": {
+    "k_product_knowledge_module_registered": false,
+    "business_products_placeholder_exists": true,
+    "business_products_placeholder_status": "planned_no_api",
+    "runtime_access_state": "unavailable_or_non_executable",
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console/backend/app/core/modules.py",
+        "lines": "624-669",
+        "observation": "business.products is a planned placeholder with api_namespace no_api and no product/commerce connection."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/core/module_adapters.py",
+        "lines": "992-1142",
+        "observation": "business.products has a placeholder adapter, no_api binding, and placeholder prepare action."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/services/module_registry.py",
+        "lines": "48-53,424-459",
+        "observation": "Planned/adapter_pending modules are treated as non-executable or unavailable."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/constants.py",
+        "lines": "3,11-17",
+        "observation": "Worktree defines MODULE_KEY k.product_knowledge and permission constants, but this module is not present in the main registry."
+      }
+    ]
+  },
+  "api_key_system_integration": {
+    "k_api_key_binding_possible_in_main": false,
+    "reason": "API key binding validates module manifest registration; k.product_knowledge is absent from the main module registry.",
+    "business_products_api_key_binding_useful": false,
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console/backend/app/services/api_key_orchestration.py",
+        "lines": "332-341,398-433",
+        "observation": "Binding creation rejects unregistered modules and injection resolution requires an active module binding."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/core/modules.py",
+        "lines": "624-669",
+        "observation": "business.products is no_api/planned; it is not a live K provider integration target."
+      }
+    ]
+  },
+  "execution_gate_integration": {
+    "k_product_knowledge_execution_ready": false,
+    "failure_mode": "MODULE_NOT_REGISTERED_or_missing_adapter_provider_contract",
+    "business_products_execution_ready": false,
+    "business_products_provider": "mock_noop_placeholder",
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console/backend/app/services/module_execution_gate.py",
+        "lines": "31-34,171-202,253-345",
+        "observation": "Execution gate has only legacy module mappings and requires registered module manifests plus control/API key state."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/services/execution_flow_gate.py",
+        "lines": "338-409",
+        "observation": "C13E blocks execution when adapter/provider/action contracts are missing or unsafe."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/core/execution_providers.py",
+        "lines": "372-395,458-477",
+        "observation": "business.products providers are no-op/future queue placeholders, not K product knowledge execution providers."
+      }
+    ]
+  },
+  "webhook_and_n8n_integration": {
+    "k_workflows_registered": false,
+    "k_n8n_dependency_binding": false,
+    "webhook_dispatch_ready": false,
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console/backend/app/core/workflow_registry.py",
+        "lines": "7-34",
+        "observation": "Workflow registry contains n8n_test_bridge workflows only, not K/P/GMC/SEO product workflows."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/core/dependency_bindings.py",
+        "lines": "6-35",
+        "observation": "Only integration.n8n_test_bridge has a disabled n8n binding; no K binding exists."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/services/webhook_gateway.py",
+        "lines": "238-244",
+        "observation": "Webhook gateway records completion status; no K dispatch workflow is present."
+      }
+    ]
+  },
+  "p_gmc_seo_pipeline_readiness": {
+    "p_pipeline_ready": false,
+    "gmc_pipeline_ready": false,
+    "seo_pipeline_ready": false,
+    "generic_normalization_support_present": true,
+    "reason": "Main runtime can classify/adapt some K/P/SEO result shapes, but no K product source pipeline, GMC exporter, SEO publishing path, or P product output chain is wired.",
+    "evidence": [
+      {
+        "path": "/opt/barong-ops-console/backend/app/services/result_normalization.py",
+        "lines": "187-199,426-470",
+        "observation": "Normalizer recognizes K/P/SEO module families and adapts generic result shapes."
+      },
+      {
+        "path": "/opt/barong-ops-console/backend/app/core/modules.py",
+        "lines": "624-669",
+        "observation": "business.products is only a planned placeholder and explicitly does not connect commerce systems."
+      },
+      {
+        "path": "/opt/barong-ops-console-worktrees/k-series-product-knowledge/backend/app/modules/k_series/product_knowledge/models.py",
+        "lines": "61-248",
+        "observation": "K model has fields useful for GMC/SEO, but downstream pipeline code is not connected in main runtime."
+      }
+    ]
+  },
+  "integration_failures": [
+    {
+      "area": "K to C call chain",
+      "status": "missing",
+      "blocker": "Main frontend/backend do not expose /k/products."
+    },
+    {
+      "area": "K to module system",
+      "status": "missing",
+      "blocker": "k.product_knowledge is not registered in the main module registry."
+    },
+    {
+      "area": "K to API key system",
+      "status": "missing",
+      "blocker": "API key binding requires registered module manifest; K is absent."
+    },
+    {
+      "area": "K to execution gate",
+      "status": "blocked",
+      "blocker": "No K adapter/provider/action contract is available in main runtime."
+    },
+    {
+      "area": "K to webhook/n8n",
+      "status": "missing",
+      "blocker": "No K workflow registry entry or n8n dependency binding exists."
+    },
+    {
+      "area": "K to P/GMC/SEO",
+      "status": "not_ready",
+      "blocker": "No downstream product export, GMC, or SEO pipeline consumes K product output."
+    }
+  ],
+  "final_conclusion": {
+    "k_series_ready_for_integration": "NO",
+    "k_series_ready_for_productization": "NO",
+    "k_series_blocking_points_list": [
+      "No main runtime /k/products route or frontend route.",
+      "No k.product_knowledge module registry manifest in main.",
+      "No API key binding target for K live providers.",
+      "No execution gate adapter/provider/action contract for K.",
+      "No webhook/n8n workflow for K product processing.",
+      "No wired K to P/GMC/SEO pipeline beyond generic result normalization."
+    ]
+  }
+}

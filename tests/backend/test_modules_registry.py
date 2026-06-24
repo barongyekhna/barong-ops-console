@@ -501,9 +501,21 @@ def test_module_registry_dependency_and_runtime_safety_metadata() -> None:
         manifest
         for manifest in manifests
         if manifest.module_key.startswith("k01")
-        or "product_knowledge" in manifest.module_key
     ]
     assert k01_modules == []
+    k_product_knowledge = next(
+        manifest
+        for manifest in manifests
+        if manifest.module_key == "k.product_knowledge"
+    )
+    assert k_product_knowledge.status == "active"
+    assert k_product_knowledge.api_namespace == "/k"
+    assert set(k_product_knowledge.external_dependencies) == {
+        "serp",
+        "deepseek",
+        "ai_provider",
+        "n8n",
+    }
     assert not re.search(
         r"\bp0[1-8]\b|p_series|product_page_automation|woocommerce",
         serialized,

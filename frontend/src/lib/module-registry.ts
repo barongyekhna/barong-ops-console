@@ -17,6 +17,7 @@ export type ModuleStatus =
   | "adapter_pending"
   | "installed"
   | "enabled"
+  | "active"
   | "disabled"
   | "unavailable"
   | "deprecated"
@@ -168,6 +169,7 @@ const MODULE_STATUSES = new Set<ModuleStatus>([
   "adapter_pending",
   "installed",
   "enabled",
+  "active",
   "disabled",
   "unavailable",
   "deprecated",

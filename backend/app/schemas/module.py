@@ -18,6 +18,7 @@ ModuleStatus = Literal[
     "adapter_pending",
     "installed",
     "enabled",
+    "active",
     "disabled",
     "unavailable",
     "deprecated",
