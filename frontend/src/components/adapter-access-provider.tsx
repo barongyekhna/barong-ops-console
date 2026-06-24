@@ -158,14 +158,22 @@ export function AdapterAccessProvider({
     executionAccessResult?.data.is_owner_full_access === true;
 
   const filteredAdapters = useMemo(
-    () =>
-      getFilteredAdapters({
+    () => {
+      adapterAccessMemoryCache.clear();
+      return getFilteredAdapters({
         accessItems,
         adapterAccessUnknown,
         adapters,
         isOwnerFullAccess,
-      }),
-    [accessItems, adapterAccessUnknown, adapters, isOwnerFullAccess],
+      });
+    },
+    [
+      accessItems,
+      adapterAccessUnknown,
+      adapters,
+      capabilityState.refreshGeneration,
+      isOwnerFullAccess,
+    ],
   );
 
   const value = useMemo(

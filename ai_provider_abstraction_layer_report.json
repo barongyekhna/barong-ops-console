@@ -1,0 +1,228 @@
+{
+  "report": "ai_provider_abstraction_layer_report",
+  "generated_at": "2026-06-24T17:55:00Z",
+  "status": "completed",
+  "scope": {
+    "module": "k.product_knowledge",
+    "organization": "涌龙麟（深圳）国际贸易有限公司",
+    "business_logic_changed": false,
+    "provider_urls_merged": false,
+    "frontend_model_selection_added": false
+  },
+  "provider_registry_mapping": {
+    "serp": {
+      "adapter": "SerperAdapter",
+      "provider_config_source": "provider_config.base_url synced from API key URL",
+      "api_key_alias": "serp",
+      "endpoint_rule": "base_url + /search",
+      "model": null
+    },
+    "chatgpt": {
+      "adapter": "OpenAIAdapter",
+      "provider_config_source": "provider_config.base_url synced from API key URL",
+      "api_key_alias": "chatgpt",
+      "endpoint_rule": "base_url + /v1/chat/completions",
+      "model": "gpt-5.5-xhigh"
+    },
+    "claude": {
+      "adapter": "ClaudeAdapter",
+      "provider_config_source": "provider_config.base_url synced from API key URL",
+      "api_key_alias": "claude_opus",
+      "endpoint_rule": "base_url + /v1/messages",
+      "model": "claude-opus-4-8-thinking"
+    },
+    "deepseek": {
+      "adapter": "DeepSeekAdapter",
+      "provider_config_source": "provider_config.base_url synced from API key URL",
+      "api_key_alias": "deepseek",
+      "endpoint_rule": "base_url + /v1/chat/completions",
+      "model": "deepseek-v4-pro"
+    }
+  },
+  "model_routing_layer": {
+    "router": "AIModelRouter",
+    "business_layer_hardcoded_models": false,
+    "ui_model_selection": false,
+    "mapping": {
+      "serp": {
+        "default": null,
+        "search": null
+      },
+      "deepseek": {
+        "default": "deepseek-v4-pro",
+        "chat": "deepseek-v4-pro",
+        "generate": "deepseek-v4-pro"
+      },
+      "chatgpt": {
+        "default": "gpt-5.5-xhigh",
+        "chat": "gpt-5.5-xhigh",
+        "generate": "gpt-5.5-xhigh"
+      },
+      "claude": {
+        "default": "claude-opus-4-8-thinking",
+        "chat": "claude-opus-4-8-thinking",
+        "generate": "claude-opus-4-8-thinking"
+      }
+    }
+  },
+  "execution_routing_decisions": {
+    "entrypoint": "AIExecutionRouter.execute(provider, task_type, payload, org)",
+    "flow": [
+      "resolve provider",
+      "resolve model",
+      "resolve endpoint",
+      "inject api key",
+      "execute request"
+    ],
+    "execution_gate": {
+      "module_control_required": true,
+      "api_key_resolution_required": true,
+      "org_validation_required": true,
+      "validated_org": "涌龙麟（深圳）国际贸易有限公司"
+    },
+    "payload_contract": {
+      "model": "injected by AIModelRouter",
+      "messages": "normalized by provider adapter",
+      "task_type": "injected by provider adapter"
+    },
+    "retry_and_fallback": {
+      "default_retry_attempts": 2,
+      "timeout_seconds": 30,
+      "fallback_providers": {
+        "deepseek": "chatgpt",
+        "claude": "chatgpt"
+      },
+      "structured_errors": true
+    }
+  },
+  "endpoint_resolution_logs": [
+    {
+      "provider": "serp",
+      "task_type": "search",
+      "adapter": "SerperAdapter",
+      "resolved_endpoint": "/search",
+      "resolved_model": null,
+      "verified_by": "tests/backend/test_ai_provider_abstraction_layer.py"
+    },
+    {
+      "provider": "chatgpt",
+      "task_type": "generate",
+      "adapter": "OpenAIAdapter",
+      "resolved_endpoint": "/v1/chat/completions",
+      "resolved_model": "gpt-5.5-xhigh",
+      "verified_by": "tests/backend/test_ai_provider_abstraction_layer.py"
+    },
+    {
+      "provider": "claude",
+      "task_type": "chat",
+      "adapter": "ClaudeAdapter",
+      "resolved_endpoint": "/v1/messages",
+      "resolved_model": "claude-opus-4-8-thinking",
+      "verified_by": "tests/backend/test_ai_provider_abstraction_layer.py"
+    },
+    {
+      "provider": "deepseek",
+      "task_type": "chat",
+      "adapter": "DeepSeekAdapter",
+      "resolved_endpoint": "/v1/chat/completions",
+      "resolved_model": "deepseek-v4-pro",
+      "verified_by": "tests/backend/test_ai_provider_abstraction_layer.py"
+    }
+  ],
+  "replaced_direct_http_calls": [
+    {
+      "file": "backend/app/modules/k_series/product_knowledge/workflow_engine.py",
+      "business_step": "serp_keyword_fetch",
+      "provider": "serp",
+      "task_type": "search",
+      "new_call": "AIExecutionRouter.execute"
+    },
+    {
+      "file": "backend/app/modules/k_series/product_knowledge/workflow_engine.py",
+      "business_step": "ai_filter_chatgpt",
+      "provider": "chatgpt",
+      "task_type": "chat",
+      "new_call": "AIExecutionRouter.execute"
+    },
+    {
+      "file": "backend/app/modules/k_series/product_knowledge/workflow_engine.py",
+      "business_step": "ai_filter_claude_opus",
+      "provider": "claude",
+      "task_type": "chat",
+      "new_call": "AIExecutionRouter.execute"
+    },
+    {
+      "file": "backend/app/modules/k_series/product_knowledge/router.py",
+      "business_step": "k16_serp_search",
+      "provider": "serp",
+      "task_type": "search",
+      "new_call": "AIExecutionRouter.execute"
+    },
+    {
+      "file": "backend/app/modules/k_series/product_knowledge/router.py",
+      "business_step": "deepseek_enrichment",
+      "provider": "deepseek",
+      "task_type": "generate",
+      "new_call": "AIExecutionRouter.execute"
+    },
+    {
+      "file": "backend/app/modules/k_series/product_knowledge/router.py",
+      "business_step": "translate_product",
+      "provider": "chatgpt",
+      "task_type": "generate",
+      "new_call": "AIExecutionRouter.execute"
+    },
+    {
+      "file": "backend/app/modules/k_series/product_knowledge/router.py",
+      "business_step": "risk_filter_product",
+      "provider": "chatgpt",
+      "task_type": "generate",
+      "new_call": "AIExecutionRouter.execute"
+    },
+    {
+      "file": "backend/app/modules/k_series/product_knowledge/router.py",
+      "business_step": "generate_selling_points",
+      "provider": "chatgpt",
+      "task_type": "generate",
+      "new_call": "AIExecutionRouter.execute"
+    }
+  ],
+  "logging_contract": {
+    "event_type": "ai_provider.execute",
+    "fields": [
+      "provider_used",
+      "base_url_used",
+      "endpoint_called",
+      "api_key_alias",
+      "latency_ms",
+      "success",
+      "error",
+      "model",
+      "task_type"
+    ]
+  },
+  "system_wide_impact_analysis": {
+    "frontend_key_url_input": "unchanged",
+    "api_key_url_storage": "still stored on api_key_records.url",
+    "provider_config_storage": "new provider_config table stores runtime provider base_url per org/module/provider",
+    "business_layer_http": "removed from K router/workflow business layer",
+    "provider_independence": "serp, chatgpt, claude and deepseek retain independent base URLs and API keys",
+    "module_control_integration": "AIExecutionRouter requires module execution gate before provider calls",
+    "capability_bootstrap": "no schema change required; K visibility remains from module registry/module control chain"
+  },
+  "validation": {
+    "compileall": "passed",
+    "direct_http_static_scan": "passed",
+    "pytest_ai_provider_and_k_workflow": "6 passed",
+    "pytest_module_control_registry_selection": "17 passed, 15 skipped",
+    "pytest_migration_integration": "1 skipped because BARONG_TEST_DB_READY is not enabled",
+    "runtime_alembic_current": "ai_provider_layer_001",
+    "runtime_provider_config_table_exists": true,
+    "runtime_backend_health_inside_container": {
+      "status": "ok",
+      "service": "barong-ops-console",
+      "mode": "lightweight",
+      "db": "not_checked"
+    }
+  }
+}

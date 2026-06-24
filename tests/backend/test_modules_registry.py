@@ -217,8 +217,11 @@ def test_modules_registry_api_requires_login_and_owner_can_read(
     assert {"admin.users", "admin.permissions", "core.dashboard"}.issubset(
         module_keys
     )
+    assert "k.product_knowledge" in module_keys
     assert "password_hash" not in json.dumps(registry_payload, sort_keys=True)
-    assert me.json()["is_owner_full_access"] is False
+    me_payload = me.json()
+    assert me_payload["is_owner_full_access"] is False
+    assert "k.product_knowledge" in access_items_by_key(me_payload)
 
     def fail_user_modules(*args, **kwargs):
         del args, kwargs
@@ -240,6 +243,9 @@ def test_modules_registry_api_requires_login_and_owner_can_read(
     assert {"admin.users", "admin.permissions", "core.dashboard"}.issubset(
         {item["module_key"] for item in fallback_payload["items"]}
     )
+    assert "k.product_knowledge" in {
+        item["module_key"] for item in fallback_payload["items"]
+    }
 
 
 def test_static_module_registry_validation_rules() -> None:
@@ -252,6 +258,8 @@ def test_static_module_registry_validation_rules() -> None:
     assert {"admin.users", "admin.permissions", "business.products"}.issubset(
         set(module_keys)
     )
+    assert "k.product_knowledge" in module_keys
+    assert "production_ready" in ALLOWED_MODULE_STATUSES
     assert "business.artifacts" not in module_keys
     assert {
         "module_key",
@@ -533,6 +541,43 @@ def test_module_registry_dependency_and_runtime_safety_metadata() -> None:
     assert n8n_bridge.external_dependencies == ["n8n"]
     assert "test" in n8n_bridge.module_key
     assert "test" in n8n_bridge.description.lower()
+
+
+def test_capability_bootstrap_exposes_k_module_and_module_control_state(
+    auth_client: TestClient,
+) -> None:
+    seed_permission_registry()
+    create_module_registry_user(username="c07b_owner_k_bootstrap", role="owner")
+    owner_token = login_token(auth_client, username="c07b_owner_k_bootstrap")
+
+    response = auth_client.get(
+        "/api/control-plane/capability/bootstrap?force_refresh=1",
+        headers={
+            **auth_headers(owner_token),
+            "X-Frontend-Force-Refresh": "1",
+        },
+    )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["modules_registry"]["ok"] is True
+    assert payload["modules_me"]["ok"] is True
+    assert payload["module_control_center"]["ok"] is True
+    assert "k.product_knowledge" in {
+        item["module_key"]
+        for item in payload["modules_registry"]["data"]["items"]
+    }
+    assert "k.product_knowledge" in {
+        item["module_key"] for item in payload["modules_me"]["data"]["items"]
+    }
+    control_center = payload["module_control_center"]["data"]
+    assert any(
+        module["module_id"] == "k.product_knowledge"
+        and module["enabled"] is True
+        and module["runtime_status"] == "active"
+        for group in control_center["organizations"]
+        for module in group["modules"]
+    )
 
 
 def test_non_executable_statuses_never_return_executable_access() -> None:

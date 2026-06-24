@@ -18,6 +18,7 @@ import {
   getCapabilityBootstrap,
   type CapabilityBootstrapResult,
 } from "@/lib/capability-bootstrap-api";
+import { clearFrontendRequestCache } from "@/lib/request-cache";
 import {
   buildFrontendCapabilityGraph,
   buildFrontendUiCapabilityGraph,
@@ -64,6 +65,7 @@ type CapabilityStateContextValue = FrontendCapabilityGraph & {
   };
   getCapabilityForPath: (pathname: string) => ProductCapabilityItem | null;
   refresh: () => Promise<void>;
+  refreshGeneration: number;
 };
 
 const CapabilityStateContext =
@@ -237,6 +239,7 @@ function createContextValue({
   isLoading,
   loadError,
   refresh,
+  refreshGeneration,
   isOwner,
   role,
 }: {
@@ -245,6 +248,7 @@ function createContextValue({
   isLoading: boolean;
   loadError: string | null;
   refresh: () => Promise<void>;
+  refreshGeneration: number;
   isOwner: boolean;
   role: string;
 }): CapabilityStateContextValue {
@@ -312,6 +316,7 @@ function createContextValue({
     },
     moduleAccessResult: bootstrap?.moduleAccessResult ?? null,
     refresh,
+    refreshGeneration,
     registryResult: bootstrap?.registryResult ?? null,
     uiState,
   };
@@ -323,6 +328,7 @@ const SAFE_CONTEXT_VALUE = createContextValue({
   isLoading: false,
   loadError: null,
   refresh: async () => {},
+  refreshGeneration: 0,
   isOwner: false,
   role: "",
 });
@@ -359,6 +365,7 @@ export function CapabilityStateProvider({
   const [isLoading, setIsLoading] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadRetryNonce, setLoadRetryNonce] = useState(0);
+  const [refreshGeneration, setRefreshGeneration] = useState(0);
 
   const abortCapabilityBootstrap = useCallback((message: string) => {
     const controller = bootstrapAbortControllerRef.current;
@@ -398,6 +405,14 @@ export function CapabilityStateProvider({
         return;
       }
 
+      if (force) {
+        clearFrontendRequestCache({ includeInFlight: true });
+        loadedAuthKeyRef.current = null;
+        loadingPromiseRef.current = null;
+        setBootstrap(null);
+        setRefreshGeneration((value) => value + 1);
+      }
+
       // alreadyLoading or alreadyLoaded, return cachedState
       setIsLoading(true);
       setLoadError(null);
@@ -409,6 +424,7 @@ export function CapabilityStateProvider({
       bootstrapAbortControllerRef.current = controller;
 
       const loadPromise = getCapabilityBootstrap({
+        forceRefresh: force,
         signal: controller.signal,
       })
         .then((result) => {
@@ -420,7 +436,9 @@ export function CapabilityStateProvider({
             return;
           }
 
-          setBootstrap((current) => mergeCapabilityBootstrap(current, result));
+          setBootstrap((current) =>
+            force ? result : mergeCapabilityBootstrap(current, result),
+          );
           loadedAuthKeyRef.current = currentAuthKey;
         })
         .catch((error) => {
@@ -499,10 +517,20 @@ export function CapabilityStateProvider({
         isLoading,
         loadError,
         refresh,
+        refreshGeneration,
         isOwner,
         role,
       }),
-    [bootstrap, isLoading, isOwner, loadError, refresh, role, status],
+    [
+      bootstrap,
+      isLoading,
+      isOwner,
+      loadError,
+      refresh,
+      refreshGeneration,
+      role,
+      status,
+    ],
   );
 
   return (

@@ -45,6 +45,7 @@ from .permission import (
     RoleDefaultPermission,
     UserPermissionAssignment,
 )
+from .provider_config import ProviderConfigRecord
 from .registry import AgentRegistry, ModuleRegistry, WorkflowRegistry
 from .review import ReviewItem
 from .security import SecurityRateLimitBucket, SecurityReplayNonce
@@ -110,6 +111,7 @@ __all__ = [
     "OrgMembershipRecord",
     "OrganizationRecord",
     "PermissionRegistry",
+    "ProviderConfigRecord",
     "ReviewItem",
     "ReplayJobRecord",
     "RoleDefaultPermission",

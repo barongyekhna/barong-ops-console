@@ -138,6 +138,12 @@ export type KWorkflowStartPayload = {
   competitors?: string[];
 };
 
+export type KWorkflowControlPayload = {
+  execution_id?: string | null;
+  step?: string | null;
+  workflow_payload?: KWorkflowStartPayload | null;
+};
+
 export type KRiskReviewDecision = {
   risk_term_id?: string | null;
   term: string;

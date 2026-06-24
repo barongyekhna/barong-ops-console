@@ -8,6 +8,7 @@ import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 
 import {
   bindProductImage,
+  controlWorkflow,
   createMediaAsset,
   createProduct,
   exportWorkflow,
@@ -338,6 +339,35 @@ export function ProductList() {
     });
   }
 
+  async function handleWorkflowControl(
+    action: "pause" | "resume" | "retry" | "rollback",
+    step?: string,
+  ) {
+    if (!selectedProduct) {
+      return;
+    }
+    const workflow = workflowByProductId[selectedProduct.id] ?? null;
+
+    await runWorkflowAction(action, async () => {
+      const updated = await controlWorkflow(selectedProduct.id, action, {
+        execution_id: workflow?.id ?? null,
+        step: step ?? workflow?.current_step ?? null,
+        workflow_payload:
+          action === "retry"
+            ? {
+                target_market: workflow?.target_market ?? "US",
+                target_region: workflow?.target_region ?? null,
+              }
+            : null,
+      });
+      setWorkflowByProductId((current) => ({
+        ...current,
+        [selectedProduct.id]: updated,
+      }));
+      await loadWorkflowRuntime(selectedProduct.id);
+    });
+  }
+
   return (
     <section className={styles.workspace} aria-label="Product Knowledge">
       <ProductForm
@@ -465,9 +495,13 @@ export function ProductList() {
           }
           onCreateMedia={(url) => void handleCreateMedia(url)}
           onExportWorkflow={() => void handleExportWorkflow()}
+          onPauseWorkflow={() => void handleWorkflowControl("pause")}
           onRefreshWorkflow={() =>
             selectedProduct ? void loadWorkflowRuntime(selectedProduct.id) : undefined
           }
+          onResumeWorkflow={() => void handleWorkflowControl("resume")}
+          onRetryWorkflow={(step) => void handleWorkflowControl("retry", step)}
+          onRollbackWorkflow={(step) => void handleWorkflowControl("rollback", step)}
           onStartWorkflow={(payload) => void handleStartWorkflow(payload)}
           onSubmitRiskReview={(decisions, confirmNoRiskTerms) =>
             void handleSubmitRiskReview(decisions, confirmNoRiskTerms)

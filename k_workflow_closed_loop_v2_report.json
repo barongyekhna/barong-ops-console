@@ -1,0 +1,177 @@
+{
+  "report": "k_workflow_closed_loop_v2_report",
+  "generated_at": "2026-06-24T18:41:00Z",
+  "status": "completed",
+  "module": "k.product_knowledge",
+  "organization": "涌龙麟（深圳）国际贸易有限公司",
+  "closed_loop_state_machine": {
+    "class": "KWorkflowStateMachineV2",
+    "states": [
+      "PRODUCT_CREATED",
+      "AI_DEEPSEEK_ENRICHED",
+      "SERP_ANALYZED",
+      "CHATGPT_FILTERED",
+      "CLAUDE_FILTERED",
+      "RISK_PENDING_REVIEW",
+      "RISK_APPROVED",
+      "KEYWORD_OPTIMIZED",
+      "UNIT_NORMALIZED",
+      "IMAGE_BOUND",
+      "EXPORT_READY",
+      "EXPORTED"
+    ],
+    "state_storage": "workflow_state_machine_v2 entries in execution_gate_logs_json",
+    "state_derivation_fallback": "existing workflow execution outputs and trace_json"
+  },
+  "closed_loop_execution_chain": [
+    "product_ingestion",
+    "deepseek_enrichment",
+    "serp_keyword_fetch",
+    "ai_filter_chatgpt",
+    "ai_filter_claude_opus",
+    "risk_term_manual_review",
+    "keyword_optimization_ai",
+    "unit_conversion_normalization",
+    "image_binding",
+    "export_p_series",
+    "export_gmc",
+    "export_seo"
+  ],
+  "orchestrator": {
+    "class": "KWorkflowOrchestratorV2",
+    "entrypoints": {
+      "run": "starts the full closed-loop execution and stops at hard human gates",
+      "pause": "persists WORKFLOW_PAUSED without losing current state",
+      "resume": "continues only from valid gates and never bypasses risk review",
+      "retry": "clears selected step outputs and re-executes from the requested step",
+      "rollback": "clears selected step and downstream outputs, records rollback, then waits for retry"
+    },
+    "legacy_compatibility": "KWorkflowOrchestratorV1 remains available for existing unit coverage"
+  },
+  "serp_and_dual_ai_filtering": {
+    "deepseek": {
+      "step": "deepseek_enrichment",
+      "provider": "deepseek",
+      "stored_outputs": [
+        "product.deepseek_structured_output_json",
+        "product.field_diff_json.deepseek_enrichment",
+        "KProductKnowledgeAIEvent"
+      ]
+    },
+    "serp": {
+      "step": "serp_keyword_fetch",
+      "provider": "serp",
+      "stored_outputs": [
+        "KProductKnowledgeResearchRun.serp_result_summary_json",
+        "KProductKnowledgeKeyword candidate rows"
+      ]
+    },
+    "chatgpt": {
+      "step": "ai_filter_chatgpt",
+      "provider": "chatgpt",
+      "stored_outputs": [
+        "execution.chatgpt_filter_result_json",
+        "KProductKnowledgeAIEvent"
+      ]
+    },
+    "claude": {
+      "step": "ai_filter_claude_opus",
+      "provider": "claude",
+      "stored_outputs": [
+        "execution.claude_filter_result_json",
+        "product.risk_keywords_json",
+        "KProductKnowledgeRiskTerm candidate rows",
+        "KProductKnowledgeAIEvent"
+      ],
+      "final_keywords_rule": "final_keywords are accepted only after Claude validation"
+    }
+  },
+  "risk_review_hard_gate": {
+    "ui_screen": "frontend/src/modules/k/product-knowledge/ProductDetail.tsx",
+    "api": "POST /api/app/k/products/{product_id}/workflow/risk-review",
+    "approve_reject_per_keyword": true,
+    "reject_behavior": "pipeline remains blocked with RISK_TERM_REJECTED",
+    "auto_approval_allowed": false,
+    "resume_bypass_allowed": false
+  },
+  "image_binding": {
+    "step": "image_binding",
+    "manual_upload": "K UI creates manual_upload_image assets and binds by asset_id",
+    "i_system": "I-system image_asset_id is stored as i_system_asset reference",
+    "product_binding": "all bindings are checked against product_id",
+    "k_image_processing": false
+  },
+  "export_gate": {
+    "required_before_export": [
+      "RISK_APPROVED",
+      "KEYWORDS_FINALIZED",
+      "IMAGE_BOUND"
+    ],
+    "outputs": [
+      "p_series_payload",
+      "gmc_feed_structure",
+      "seo_keyword_pack"
+    ],
+    "trace_steps": [
+      "export_p_series",
+      "export_gmc",
+      "export_seo"
+    ]
+  },
+  "execution_gate": {
+    "module_control": true,
+    "api_key_resolution": true,
+    "organization_validation": "涌龙麟（深圳）国际贸易有限公司",
+    "required_ai_key_order": [
+      "deepseek_enrichment",
+      "serp_keyword_fetch",
+      "ai_filter_chatgpt",
+      "ai_filter_claude_opus"
+    ]
+  },
+  "failure_and_recovery": {
+    "failure_behavior": [
+      "stop pipeline immediately",
+      "persist failed or blocked state",
+      "write error_report_json",
+      "append trace_json failure or blocked entry",
+      "allow retry or rollback only"
+    ],
+    "rollback_scope": "selected step and all downstream workflow outputs",
+    "deepseek_rollback": "restores fields recorded in product.field_diff_json.deepseek_enrichment"
+  },
+  "audit_logging": {
+    "step_execution_trace": "execution.trace_json",
+    "state_machine_trace": "execution.execution_gate_logs_json gate=workflow_state_machine_v2",
+    "provider_events": "KProductKnowledgeAIEvent plus ai_provider.execute audit events",
+    "risk_decision_history": "execution.risk_approval_log_json and KProductKnowledgeRiskTerm status updates",
+    "keyword_evolution": "SERP candidate keywords, AI optimized keywords, final_keyword_set_json"
+  },
+  "api_surface": {
+    "start": "POST /api/app/k/products/{product_id}/workflow/start",
+    "latest": "GET /api/app/k/products/{product_id}/workflow/latest",
+    "risk_review": "POST /api/app/k/products/{product_id}/workflow/risk-review",
+    "pause": "POST /api/app/k/products/{product_id}/workflow/pause",
+    "resume": "POST /api/app/k/products/{product_id}/workflow/resume",
+    "retry": "POST /api/app/k/products/{product_id}/workflow/retry",
+    "rollback": "POST /api/app/k/products/{product_id}/workflow/rollback",
+    "bind_image": "POST /api/app/k/products/{product_id}/images/bind",
+    "export": "POST /api/app/k/products/{product_id}/workflow/export"
+  },
+  "validation": {
+    "backend_compileall": "passed",
+    "backend_workflow_tests": "9 passed",
+    "frontend_typecheck": "passed",
+    "frontend_unit_tests": "14 passed",
+    "staging_proxy_contract_tests": "5 passed",
+    "production_backend_frontend_build": "passed",
+    "production_backend_frontend_recreated": true,
+    "production_postgres_restarted": false,
+    "production_backend_health": {
+      "status": "ok",
+      "service": "barong-ops-console",
+      "mode": "lightweight",
+      "db": "not_checked"
+    }
+  }
+}

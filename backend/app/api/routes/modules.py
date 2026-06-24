@@ -30,6 +30,7 @@ from ...services.api_stability import (
 )
 from ...services.api_request_guard import guarded_heavy_api_request
 from ...services.module_registry import (
+    clear_module_registry_cache,
     list_module_manifests_with_dynamic,
     list_modules_for_user,
 )
@@ -45,6 +46,7 @@ from ..deps import (
 router = APIRouter(prefix="/modules", tags=["modules"])
 logger = logging.getLogger(__name__)
 MODULE_READ_CACHE_TTL_SECONDS = 5.0
+FRONTEND_FORCE_REFRESH_HEADER = "x-frontend-force-refresh"
 _module_cache_lock = Lock()
 _modules_list_cache: dict[tuple[int, int], tuple[float, ListResponse[ModuleResponse]]] = {}
 _module_registry_cache: tuple[float, ModuleRegistryResponse] | None = None
@@ -59,6 +61,20 @@ def _clear_module_read_caches() -> None:
         _module_registry_cache = None
         _modules_me_cache.clear()
         _module_detail_cache.clear()
+
+
+def _is_force_refresh_request(request: Request) -> bool:
+    return (
+        request.headers.get(FRONTEND_FORCE_REFRESH_HEADER) == "1"
+        or request.query_params.get("force_refresh") == "1"
+        or request.query_params.get("_force_refresh") == "1"
+    )
+
+
+def clear_module_read_caches() -> None:
+    _clear_module_read_caches()
+    clear_module_registry_cache()
+    refresh_module_control_center_cache_async(force=True)
 
 
 @router.get("", response_model=ListResponse[ModuleResponse])
@@ -76,6 +92,8 @@ def modules(
     user: User = Depends(require_rbac("REGISTRY", "admin")),
 ) -> ListResponse[ModuleResponse]:
     del guard, user
+    if _is_force_refresh_request(request):
+        clear_module_read_caches()
     list_cache_key = (limit, offset)
     now = monotonic()
     with _module_cache_lock:
@@ -138,6 +156,8 @@ def module_registry(
 ) -> ModuleRegistryResponse:
     global _module_registry_cache
     del guard, user
+    if _is_force_refresh_request(request):
+        clear_module_read_caches()
     now = monotonic()
     with _module_cache_lock:
         cached = _module_registry_cache
@@ -196,6 +216,8 @@ def modules_me(
     user: User = Depends(require_cached_control_plane_admin),
 ) -> ModuleAccessListResponse:
     del guard
+    if _is_force_refresh_request(request):
+        clear_module_read_caches()
     me_cache_key = (int(user.id), str(user.role))
     now = monotonic()
     with _module_cache_lock:

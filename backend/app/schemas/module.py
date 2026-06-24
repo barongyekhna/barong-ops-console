@@ -19,6 +19,7 @@ ModuleStatus = Literal[
     "installed",
     "enabled",
     "active",
+    "production_ready",
     "disabled",
     "unavailable",
     "deprecated",

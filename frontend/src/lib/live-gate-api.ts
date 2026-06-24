@@ -11,6 +11,7 @@ import {
 } from "@/lib/live-gate";
 
 type LiveGateRequestOptions = {
+  forceRefresh?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
 };
@@ -159,6 +160,7 @@ export async function getPreLiveReadiness(
 ): Promise<LiveGateApiResult<PreLiveValidationReport>> {
   try {
     const response = await apiRequest<unknown>("/live-gate/readiness", {
+      bypassCache: options.forceRefresh,
       method: "GET",
       signal: options.signal,
       timeoutMs: options.timeoutMs,
@@ -176,6 +178,7 @@ export async function getProductionReadiness(
     const response = await apiRequest<unknown>(
       "/live-gate/production-readiness",
       {
+        bypassCache: options.forceRefresh,
         method: "GET",
         signal: options.signal,
         timeoutMs: options.timeoutMs,
@@ -192,6 +195,7 @@ export async function listLiveGatePolicies(
 ): Promise<LiveGateApiResult<LiveGatePolicyRead[]>> {
   try {
     const response = await apiRequest<unknown>("/live-gate/policies", {
+      bypassCache: options.forceRefresh,
       method: "GET",
       signal: options.signal,
       timeoutMs: options.timeoutMs,

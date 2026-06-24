@@ -1,12 +1,12 @@
 {
-  "alembic_head": "module_api_key_orch_001",
+  "alembic_head": "ai_provider_layer_001",
   "environment": "staging",
-  "expected_alembic_head": "module_api_key_orch_001",
+  "expected_alembic_head": "ai_provider_layer_001",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 20,
-  "migration_hash": "c76e185b4acbaf2b7fd947e7c5f2e369cc60a0f22f9c62d6797526a1d8e91b04",
+  "migration_count": 23,
+  "migration_hash": "f567b2751a1116ecb05ec651a5c3b86deac926286f483f3faa03718b6ea1287a",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -27,9 +27,12 @@
     "permission_ui_support_001",
     "approval_productization_001",
     "approval_list_perf_001",
-    "module_api_key_orch_001"
+    "module_api_key_orch_001",
+    "k_product_knowledge_001",
+    "k_workflow_gate_002",
+    "ai_provider_layer_001"
   ],
-  "migration_order_checksum": "c4ee6fde96beeebe2325fbff9c1fc319ec815f1b0091ba616dda8d4782dd506d",
+  "migration_order_checksum": "6685f3248ab8ce968e282722ed908bebedd0c58a19b2c536a8280d435cd9428d",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -170,6 +173,27 @@
       "down_revision": "approval_list_perf_001",
       "path": "backend/alembic/versions/20260622_01_module_control_api_key_orchestration.py",
       "version": "module_api_key_orch_001"
+    },
+    {
+      "applied_at": "2026-06-24T00:00:00Z",
+      "checksum": "96b125965ce14a728229e973f956c88192e7f38c8a949eb652121e201354d715",
+      "down_revision": "module_api_key_orch_001",
+      "path": "backend/alembic/versions/20260624_01_k_series_product_knowledge_activation.py",
+      "version": "k_product_knowledge_001"
+    },
+    {
+      "applied_at": "2026-06-24T00:00:00Z",
+      "checksum": "1a80176fb47628d7de9cf773cc1824e8446053eac9655d2b1233518ea0517a34",
+      "down_revision": "k_product_knowledge_001",
+      "path": "backend/alembic/versions/20260624_02_k_series_workflow_execution_gate.py",
+      "version": "k_workflow_gate_002"
+    },
+    {
+      "applied_at": "2026-06-24T00:00:00Z",
+      "checksum": "7e7babe21ae4ca133e43a88827eeee83c0b4e2d798eecc9fab01be501e5f6016",
+      "down_revision": "k_workflow_gate_002",
+      "path": "backend/alembic/versions/20260624_03_ai_provider_abstraction_layer.py",
+      "version": "ai_provider_layer_001"
     }
   ]
 }

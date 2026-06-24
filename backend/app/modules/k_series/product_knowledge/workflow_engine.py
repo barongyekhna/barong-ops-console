@@ -7,9 +7,6 @@ from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
-from urllib.error import HTTPError, URLError
-from urllib.request import Request as UrlRequest
-from urllib.request import urlopen
 from uuid import NAMESPACE_URL, UUID, uuid4, uuid5
 
 from fastapi import Request
@@ -18,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from ....models.organization import OrganizationRecord
 from ....models.user import User
+from ....services.ai_provider_router import AIExecutionRouter, AIProviderExecutionError
 from ....services.module_execution_gate import (
     ModuleExecutionContext,
     ModuleExecutionGateError,
@@ -66,12 +64,138 @@ DUAL_AI_KEY_REQUIREMENTS = {
     "ai_filter_claude_opus": "claude_opus",
 }
 
+CLOSED_LOOP_WORKFLOW_STEPS_V2 = (
+    "product_ingestion",
+    "deepseek_enrichment",
+    "serp_keyword_fetch",
+    "ai_filter_chatgpt",
+    "ai_filter_claude_opus",
+    "risk_term_manual_review",
+    "keyword_optimization_ai",
+    "unit_conversion_normalization",
+    "image_binding",
+    "export_p_series",
+    "export_gmc",
+    "export_seo",
+)
+
+CLOSED_LOOP_AI_KEY_REQUIREMENTS = {
+    "deepseek_enrichment": "deepseek",
+    "serp_keyword_fetch": "serp",
+    "ai_filter_chatgpt": "chatgpt",
+    "ai_filter_claude_opus": "claude_opus",
+}
+
+DEEPSEEK_ENRICHMENT_FIELDS = (
+    "product_name_en",
+    "brand_name",
+    "manufacturer",
+    "product_type",
+    "short_description_en",
+    "long_description_en",
+    "primary_use_case_en",
+    "target_customer_en",
+    "category_hint",
+    "google_product_category",
+    "merchant_product_type",
+)
+
 IMPERIAL_TARGET_MARKETS = {"US", "USA", "UNITED STATES", "UNITED STATES OF AMERICA"}
 UNIT_CONVERSIONS = {
     "cm": ("inch", Decimal("0.3937007874")),
     "kg": ("lb", Decimal("2.2046226218")),
     "g": ("oz", Decimal("0.03527396195")),
 }
+
+
+class KWorkflowStateMachineV2:
+    STATES = (
+        "PRODUCT_CREATED",
+        "AI_DEEPSEEK_ENRICHED",
+        "SERP_ANALYZED",
+        "CHATGPT_FILTERED",
+        "CLAUDE_FILTERED",
+        "RISK_PENDING_REVIEW",
+        "RISK_APPROVED",
+        "KEYWORD_OPTIMIZED",
+        "UNIT_NORMALIZED",
+        "IMAGE_BOUND",
+        "EXPORT_READY",
+        "EXPORTED",
+    )
+    STATE_INDEX = {state: index for index, state in enumerate(STATES)}
+    STEP_TO_STATE = {
+        "product_ingestion": "PRODUCT_CREATED",
+        "deepseek_enrichment": "AI_DEEPSEEK_ENRICHED",
+        "serp_keyword_fetch": "SERP_ANALYZED",
+        "ai_filter_chatgpt": "CHATGPT_FILTERED",
+        "ai_filter_claude_opus": "CLAUDE_FILTERED",
+        "risk_term_manual_review": "RISK_PENDING_REVIEW",
+        "risk_term_review_manual": "RISK_PENDING_REVIEW",
+        "keyword_optimization_ai": "KEYWORD_OPTIMIZED",
+        "unit_conversion_normalization": "UNIT_NORMALIZED",
+        "image_binding": "IMAGE_BOUND",
+        "image_handling": "IMAGE_BOUND",
+        "export_p_series": "EXPORT_READY",
+        "export_gmc": "EXPORT_READY",
+        "export_seo": "EXPORTED",
+        "export_p_gmc_seo": "EXPORTED",
+    }
+
+    @classmethod
+    def assert_state(cls, state: str) -> None:
+        if state not in cls.STATE_INDEX:
+            raise KWorkflowExecutionError(
+                "K_WORKFLOW_STATE_UNKNOWN",
+                f"K workflow state '{state}' is not registered.",
+                status_code=500,
+            )
+
+    @classmethod
+    def can_transition(cls, current: str | None, target: str) -> bool:
+        cls.assert_state(target)
+        if current is None:
+            return target == cls.STATES[0]
+        cls.assert_state(current)
+        return cls.STATE_INDEX[target] >= cls.STATE_INDEX[current]
+
+    @classmethod
+    def current_state(
+        cls,
+        execution: KProductKnowledgeWorkflowExecution,
+        product: KProductKnowledgeProduct | None = None,
+    ) -> str:
+        for entry in reversed(execution.execution_gate_logs_json or []):
+            if entry.get("gate") == "workflow_state_machine_v2":
+                state = str(entry.get("details", {}).get("state") or "").strip()
+                if state in cls.STATE_INDEX:
+                    return state
+        if execution.status == "exported" or execution.export_payloads_json:
+            return "EXPORTED"
+        if execution.status == "ready_for_export":
+            return "EXPORT_READY"
+        if execution.image_binding_json and execution.image_binding_json.get("status") == "bound":
+            return "IMAGE_BOUND"
+        if execution.unit_conversion_json:
+            return "UNIT_NORMALIZED"
+        if execution.final_keyword_set_json:
+            return "KEYWORD_OPTIMIZED"
+        if (execution.risk_approval_log_json or {}).get("approved") is True:
+            return "RISK_APPROVED"
+        if execution.current_step in {"risk_term_review_manual", "risk_term_manual_review"}:
+            return "RISK_PENDING_REVIEW"
+        if execution.claude_filter_result_json:
+            return "CLAUDE_FILTERED"
+        if execution.chatgpt_filter_result_json:
+            return "CHATGPT_FILTERED"
+        if _trace_has_step(execution, "serp_keyword_fetch"):
+            return "SERP_ANALYZED"
+        if (product is not None and product.deepseek_structured_output_json) or _trace_has_step(
+            execution,
+            "deepseek_enrichment",
+        ):
+            return "AI_DEEPSEEK_ENRICHED"
+        return "PRODUCT_CREATED"
 
 
 class KWorkflowExecutionError(RuntimeError):
@@ -102,53 +226,6 @@ ProviderClient = Callable[[ModuleExecutionKey, dict[str, Any]], dict[str, Any]]
 GateResolver = Callable[..., ModuleExecutionContext]
 
 
-def post_provider_json(
-    key: ModuleExecutionKey,
-    payload: dict[str, Any],
-) -> dict[str, Any]:
-    data = json.dumps(payload).encode("utf-8")
-    request = UrlRequest(
-        key.url,
-        data=data,
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            key.header_name: key.header_value,
-        },
-        method="POST",
-    )
-    try:
-        with urlopen(request, timeout=30) as response:
-            response_body = response.read().decode("utf-8")
-    except HTTPError as exc:
-        raise KWorkflowProviderError(
-            "PROVIDER_HTTP_ERROR",
-            f"Provider '{key.name}' returned HTTP {exc.code}.",
-            status_code=502,
-        ) from exc
-    except URLError as exc:
-        raise KWorkflowProviderError(
-            "PROVIDER_REQUEST_FAILED",
-            f"Provider '{key.name}' request failed.",
-            status_code=502,
-        ) from exc
-    try:
-        parsed = json.loads(response_body)
-    except json.JSONDecodeError as exc:
-        raise KWorkflowProviderError(
-            "PROVIDER_NON_JSON",
-            f"Provider '{key.name}' returned non-JSON output.",
-            status_code=502,
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise KWorkflowProviderError(
-            "PROVIDER_UNSUPPORTED_SHAPE",
-            f"Provider '{key.name}' returned an unsupported JSON shape.",
-            status_code=502,
-        )
-    return parsed
-
-
 class KProductKnowledgeWorkflowEngine:
     def __init__(
         self,
@@ -158,7 +235,7 @@ class KProductKnowledgeWorkflowEngine:
         gate_resolver: GateResolver | None = None,
     ) -> None:
         self.db = db
-        self.provider_client = provider_client or post_provider_json
+        self.provider_client = provider_client
         self.gate_resolver = gate_resolver or require_module_execution_ready
 
     def start_pipeline(
@@ -599,10 +676,114 @@ class KProductKnowledgeWorkflowEngine:
                 "module_id": context.control_module_id,
                 "org_id": context.org_id,
                 "resolved_keys": context.redacted_key_map(),
-                "required_order": list(DUAL_AI_KEY_REQUIREMENTS),
+                "required_order": list(key_requirements),
             },
         )
         return context
+
+    def _execute_provider(
+        self,
+        *,
+        provider: str,
+        task_type: str,
+        key: ModuleExecutionKey,
+        gate_context: ModuleExecutionContext,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        if self.provider_client is not None:
+            return self.provider_client(key, payload)
+        try:
+            return AIExecutionRouter(self.db).execute(
+                provider=provider,
+                task_type=task_type,  # type: ignore[arg-type]
+                payload=payload,
+                org=TARGET_ORGANIZATION_NAME,
+                module_id=MODULE_KEY,
+                execution_context=gate_context,
+            )
+        except AIProviderExecutionError as exc:
+            raise KWorkflowProviderError(
+                exc.code,
+                str(exc),
+                status_code=exc.status_code,
+                error_report=exc.structured_error(),
+            ) from exc
+
+    def _run_deepseek_enrichment(
+        self,
+        *,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        gate_context: ModuleExecutionContext,
+        user: User,
+    ) -> dict[str, Any]:
+        self._append_trace(
+            execution,
+            "deepseek_enrichment",
+            "running",
+            input_summary={
+                "product_id": str(product.id),
+                "product_key": product.product_key,
+            },
+        )
+        key = gate_context.key_for_step("deepseek_enrichment")
+        ai_input = {
+            "module_id": MODULE_KEY,
+            "task": "deepseek_enrichment",
+            "product": _product_snapshot(product),
+            "raw_input_text": product.raw_input_text,
+            "raw_input_language": product.raw_input_language,
+            "required_output": list(DEEPSEEK_ENRICHMENT_FIELDS),
+        }
+        provider_output = self._execute_provider(
+            provider="deepseek",
+            task_type="generate",
+            key=key,
+            gate_context=gate_context,
+            payload=ai_input,
+        )
+        diff: dict[str, dict[str, Any]] = {}
+        for field in DEEPSEEK_ENRICHMENT_FIELDS:
+            value = provider_output.get(field)
+            if isinstance(value, str):
+                value = value.strip()
+            if value in (None, ""):
+                continue
+            before = getattr(product, field, None)
+            if before == value:
+                continue
+            diff[field] = {"before": before, "after": value}
+            setattr(product, field, value)
+
+        product.deepseek_structured_output_json = provider_output
+        product.review_status = "ai_structured"
+        product.ai_confidence_scores_json = {
+            **(product.ai_confidence_scores_json or {}),
+            "deepseek_enrichment": provider_output.get("confidence_score"),
+        }
+        product.field_diff_json = {
+            **(product.field_diff_json or {}),
+            "deepseek_enrichment": diff,
+        }
+        self._add_ai_event(
+            product=product,
+            execution=execution,
+            event_type="deepseek_enrichment",
+            provider_key=key,
+            ai_input=ai_input,
+            result=provider_output,
+            user=user,
+        )
+        self._append_trace(
+            execution,
+            "deepseek_enrichment",
+            "completed",
+            output_summary={
+                "updated_fields": sorted(diff),
+                "provider": key.name,
+            },
+        )
+        return provider_output
 
     def _fetch_serp_keywords(
         self,
@@ -629,9 +810,12 @@ class KProductKnowledgeWorkflowEngine:
             or product.primary_keyword
             or product.product_key
         )
-        provider_output = self.provider_client(
-            key,
-            {
+        provider_output = self._execute_provider(
+            provider="serp",
+            task_type="search",
+            key=key,
+            gate_context=gate_context,
+            payload={
                 "module_id": MODULE_KEY,
                 "task": "serp_keyword_fetch",
                 "product_id": str(product.id),
@@ -747,7 +931,13 @@ class KProductKnowledgeWorkflowEngine:
                 "rationale",
             ],
         }
-        provider_output = self.provider_client(key, ai_input)
+        provider_output = self._execute_provider(
+            provider="chatgpt",
+            task_type="chat",
+            key=key,
+            gate_context=gate_context,
+            payload=ai_input,
+        )
         result = _normalize_chatgpt_result(provider_output)
         if not result["cleaned_keywords"]:
             self._fail_execution(
@@ -810,7 +1000,13 @@ class KProductKnowledgeWorkflowEngine:
                 "risk_keywords",
             ],
         }
-        provider_output = self.provider_client(key, ai_input)
+        provider_output = self._execute_provider(
+            provider="claude",
+            task_type="chat",
+            key=key,
+            gate_context=gate_context,
+            payload=ai_input,
+        )
         result = _normalize_claude_result(provider_output)
         if not result["final_keywords"]:
             self._fail_execution(
@@ -1564,6 +1760,73 @@ class KProductKnowledgeWorkflowEngine:
         return report
 
 
+CLOSED_LOOP_STEP_ALIASES = {
+    "risk_term_review_manual": "risk_term_manual_review",
+    "image_handling": "image_binding",
+    "export_p_gmc_seo": "export_p_series",
+}
+CLOSED_LOOP_STEP_ORDER = {
+    step: index for index, step in enumerate(CLOSED_LOOP_WORKFLOW_STEPS_V2)
+}
+CLOSED_LOOP_PREVIOUS_STATE = {
+    "product_ingestion": "PRODUCT_CREATED",
+    "deepseek_enrichment": "PRODUCT_CREATED",
+    "serp_keyword_fetch": "AI_DEEPSEEK_ENRICHED",
+    "ai_filter_chatgpt": "SERP_ANALYZED",
+    "ai_filter_claude_opus": "CHATGPT_FILTERED",
+    "risk_term_manual_review": "CLAUDE_FILTERED",
+    "keyword_optimization_ai": "RISK_APPROVED",
+    "unit_conversion_normalization": "KEYWORD_OPTIMIZED",
+    "image_binding": "UNIT_NORMALIZED",
+    "export_p_series": "IMAGE_BOUND",
+    "export_gmc": "EXPORT_READY",
+    "export_seo": "EXPORT_READY",
+}
+
+
+def _canonical_closed_loop_step(step: str) -> str:
+    normalized = step.strip()
+    normalized = CLOSED_LOOP_STEP_ALIASES.get(normalized, normalized)
+    if normalized not in CLOSED_LOOP_STEP_ORDER:
+        raise KWorkflowExecutionError(
+            "K_WORKFLOW_STEP_UNKNOWN",
+            f"K workflow step '{step}' is not part of the closed loop.",
+            status_code=422,
+        )
+    return normalized
+
+
+def _closed_loop_step_order(step: str) -> int:
+    return CLOSED_LOOP_STEP_ORDER[_canonical_closed_loop_step(step)]
+
+
+def _state_before_closed_loop_step(step: str) -> str:
+    return CLOSED_LOOP_PREVIOUS_STATE[_canonical_closed_loop_step(step)]
+
+
+def _trace_has_step(
+    execution: KProductKnowledgeWorkflowExecution,
+    step: str,
+) -> bool:
+    return any(item.get("step") == step for item in execution.trace_json or [])
+
+
+def _rollback_deepseek_product_fields(product: KProductKnowledgeProduct) -> None:
+    diff = (product.field_diff_json or {}).get("deepseek_enrichment")
+    if isinstance(diff, dict):
+        for field, change in diff.items():
+            if field not in DEEPSEEK_ENRICHMENT_FIELDS or not isinstance(change, dict):
+                continue
+            setattr(product, field, change.get("before"))
+    product.deepseek_structured_output_json = None
+    product.review_status = "draft"
+    product.field_diff_json = {
+        key: value
+        for key, value in (product.field_diff_json or {}).items()
+        if key != "deepseek_enrichment"
+    }
+
+
 def _now() -> datetime:
     return datetime.now(UTC)
 
@@ -1809,3 +2072,801 @@ def _i_system_asset_id(asset: KProductKnowledgeMediaAsset) -> str | None:
 
 class KWorkflowOrchestratorV1(KProductKnowledgeWorkflowEngine):
     """K-series product knowledge orchestrator with image-system separation."""
+
+
+class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
+    """Closed-loop K-series workflow state machine and orchestration layer."""
+
+    state_machine = KWorkflowStateMachineV2
+
+    def run(
+        self,
+        *,
+        product_id: UUID,
+        payload: ProductKnowledgeWorkflowStartRequest,
+        scope_context: KScopeContext,
+        request: Request,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        product = self._require_product(product_id, scope_context)
+        execution = self._create_execution(
+            product=product,
+            payload=payload,
+            scope_context=scope_context,
+            user=user,
+        )
+        try:
+            self._validate_organization(product, scope_context, execution)
+            self._append_trace(
+                execution,
+                "product_ingestion",
+                "completed",
+                output_summary={
+                    "product_id": str(product.id),
+                    "product_key": product.product_key,
+                    "organization": product.organization_name,
+                },
+            )
+            self._transition_state(
+                product,
+                execution,
+                "PRODUCT_CREATED",
+                step="product_ingestion",
+            )
+            gate_context = self._require_execution_gate(
+                execution=execution,
+                request=request,
+                user=user,
+                key_requirements=CLOSED_LOOP_AI_KEY_REQUIREMENTS,
+            )
+            self._run_deepseek_enrichment(
+                product=product,
+                execution=execution,
+                gate_context=gate_context,
+                user=user,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "AI_DEEPSEEK_ENRICHED",
+                step="deepseek_enrichment",
+            )
+            serp_result = self._fetch_serp_keywords(
+                product=product,
+                execution=execution,
+                payload=payload,
+                gate_context=gate_context,
+                user=user,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "SERP_ANALYZED",
+                step="serp_keyword_fetch",
+            )
+            chatgpt_result = self._run_chatgpt_filter(
+                product=product,
+                execution=execution,
+                serp_result=serp_result,
+                gate_context=gate_context,
+                user=user,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "CHATGPT_FILTERED",
+                step="ai_filter_chatgpt",
+            )
+            claude_result = self._run_claude_filter(
+                product=product,
+                execution=execution,
+                chatgpt_result=chatgpt_result,
+                gate_context=gate_context,
+                user=user,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "CLAUDE_FILTERED",
+                step="ai_filter_claude_opus",
+            )
+            self._create_manual_risk_review_block(
+                product=product,
+                execution=execution,
+                claude_result=claude_result,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "RISK_PENDING_REVIEW",
+                step="risk_term_manual_review",
+                event="hard_gate_blocked",
+                details={"manual_approval_required": True},
+            )
+            return execution
+        except KWorkflowExecutionError as exc:
+            if execution.error_report_json is None:
+                self._fail_execution(
+                    execution,
+                    code=exc.code,
+                    message=str(exc),
+                    step=execution.current_step,
+                    status_code=exc.status_code,
+                    raw_error=exc,
+                )
+            raise
+        except Exception as exc:
+            self._fail_execution(
+                execution,
+                code="K_WORKFLOW_UNEXPECTED_FAILURE",
+                message="K workflow execution failed unexpectedly.",
+                step=execution.current_step,
+                status_code=500,
+                raw_error=exc,
+            )
+            raise
+
+    def start_pipeline(
+        self,
+        *,
+        product_id: UUID,
+        payload: ProductKnowledgeWorkflowStartRequest,
+        scope_context: KScopeContext,
+        request: Request,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        return self.run(
+            product_id=product_id,
+            payload=payload,
+            scope_context=scope_context,
+            request=request,
+            user=user,
+        )
+
+    def review_risk_terms(
+        self,
+        *,
+        product_id: UUID,
+        payload: ProductKnowledgeRiskReviewRequest,
+        scope_context: KScopeContext,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        return super().review_risk_terms(
+            product_id=product_id,
+            payload=payload,
+            scope_context=scope_context,
+            user=user,
+        )
+
+    def bind_image_asset(
+        self,
+        *,
+        product_id: UUID,
+        payload: ProductKnowledgeImageBindRequest,
+        scope_context: KScopeContext,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        execution = super().bind_image_asset(
+            product_id=product_id,
+            payload=payload,
+            scope_context=scope_context,
+            user=user,
+        )
+        product = self._require_product(product_id, scope_context)
+        self._transition_state(product, execution, "IMAGE_BOUND", step="image_binding")
+        if self._risk_review_is_approved(execution) and execution.final_keyword_set_json:
+            self._mark_export_ready(product, execution)
+        return execution
+
+    def export_payloads(
+        self,
+        *,
+        product_id: UUID,
+        payload: ProductKnowledgeWorkflowExportRequest,
+        scope_context: KScopeContext,
+        user: User,
+    ) -> tuple[KProductKnowledgeWorkflowExecution, ProductKnowledgeWorkflowReport]:
+        product = self._require_product(product_id, scope_context)
+        execution = self._require_execution(product, payload.execution_id)
+        blockers = self._export_blockers(product, execution)
+        if blockers:
+            execution.status = "blocked"
+            execution.current_step = "export_p_series"
+            execution.error_report_json = self._error_report(
+                execution,
+                code="EXPORT_GATE_BLOCKED",
+                message="K export is blocked until the complete workflow is satisfied.",
+                step="export_p_series",
+                details={"blockers": blockers},
+            )
+            self._append_trace(
+                execution,
+                "export_p_series",
+                "blocked",
+                error=execution.error_report_json,
+            )
+            self.db.add(execution)
+            self.db.commit()
+            raise KWorkflowExecutionError(
+                "EXPORT_GATE_BLOCKED",
+                "K export is blocked until the complete workflow is satisfied.",
+                error_report=execution.error_report_json,
+            )
+
+        export_payloads = self._build_export_payloads(product, execution)
+        execution.export_payloads_json = export_payloads
+        for step, key in (
+            ("export_p_series", "p_series_payload"),
+            ("export_gmc", "gmc_feed_structure"),
+            ("export_seo", "seo_keyword_pack"),
+        ):
+            self._append_trace(
+                execution,
+                step,
+                "completed",
+                output_summary={"payload": key, "generated": key in export_payloads},
+            )
+        execution.status = "exported"
+        execution.current_step = "export_seo"
+        execution.finished_at = _now()
+        execution.updated_by_user_id = _user_uuid(user)
+        execution.error_report_json = None
+        self._transition_state(
+            product,
+            execution,
+            "EXPORTED",
+            step="export_seo",
+            event="closed_loop_completed",
+            details={"payloads": ["p_series_payload", "gmc_feed_structure", "seo_keyword_pack"]},
+        )
+        self.db.add(execution)
+        self.db.flush()
+        return execution, self.build_report(execution)
+
+    def pause(
+        self,
+        *,
+        workflow_id: UUID,
+        scope_context: KScopeContext,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        product, execution = self._require_workflow_execution(
+            workflow_id=workflow_id,
+            scope_context=scope_context,
+        )
+        del product
+        if execution.status in {"exported", "failed"}:
+            raise KWorkflowExecutionError(
+                "WORKFLOW_PAUSE_NOT_ALLOWED",
+                "Only active or blocked workflows can be paused.",
+                status_code=409,
+            )
+        execution.status = "blocked"
+        execution.error_report_json = self._error_report(
+            execution,
+            code="WORKFLOW_PAUSED",
+            message="K workflow was paused by the operator.",
+            step=execution.current_step,
+            details={"paused_by_user_id": str(user.id)},
+        )
+        self._append_trace(execution, execution.current_step, "paused")
+        self._append_gate_log(
+            execution,
+            "workflow_control",
+            "paused",
+            {"workflow_id": str(workflow_id), "paused_by_user_id": str(user.id)},
+        )
+        self.db.add(execution)
+        self.db.flush()
+        return execution
+
+    def resume(
+        self,
+        *,
+        workflow_id: UUID,
+        scope_context: KScopeContext,
+        request: Request,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        product, execution = self._require_workflow_execution(
+            workflow_id=workflow_id,
+            scope_context=scope_context,
+        )
+        error_code = (execution.error_report_json or {}).get("code")
+        if execution.status == "failed":
+            raise KWorkflowExecutionError(
+                "WORKFLOW_RETRY_OR_ROLLBACK_REQUIRED",
+                "Failed K workflows can only continue through retry or rollback.",
+                status_code=409,
+            )
+        if error_code == "WORKFLOW_PAUSED":
+            execution.error_report_json = None
+        state = self.state_machine.current_state(execution, product)
+        if state == "RISK_PENDING_REVIEW":
+            self._block_risk_review(execution)
+            return execution
+        if not self._risk_review_is_approved(execution):
+            self._block_risk_review(execution)
+            return execution
+        if state in {"RISK_APPROVED", "KEYWORD_OPTIMIZED", "UNIT_NORMALIZED"}:
+            return self._continue_after_risk_review(product, execution, user)
+        if self._image_is_bound(product, execution):
+            self._mark_export_ready(product, execution)
+            exported, _report = self.export_payloads(
+                product_id=product.id,
+                payload=ProductKnowledgeWorkflowExportRequest(execution_id=execution.id),
+                scope_context=scope_context,
+                user=user,
+            )
+            return exported
+        execution.status = "blocked"
+        execution.current_step = "image_binding"
+        execution.error_report_json = self._error_report(
+            execution,
+            code="IMAGE_BINDING_REQUIRED",
+            message="A manual upload or I-system image asset must be bound before export.",
+            step="image_binding",
+        )
+        self._append_trace(execution, "image_binding", "blocked", error=execution.error_report_json)
+        self.db.add(execution)
+        self.db.flush()
+        return execution
+
+    def retry(
+        self,
+        *,
+        workflow_id: UUID,
+        step: str,
+        payload: ProductKnowledgeWorkflowStartRequest | None,
+        scope_context: KScopeContext,
+        request: Request,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        product, execution = self._require_workflow_execution(
+            workflow_id=workflow_id,
+            scope_context=scope_context,
+        )
+        canonical_step = _canonical_closed_loop_step(step)
+        retry_payload = payload or ProductKnowledgeWorkflowStartRequest(
+            target_market=execution.target_market,
+            target_region=execution.target_region,
+        )
+        self._clear_outputs_from_step(product, execution, canonical_step, user=user)
+        execution.status = "running"
+        execution.error_report_json = None
+        execution.finished_at = None
+        self._append_gate_log(
+            execution,
+            "workflow_control",
+            "retry",
+            {"workflow_id": str(workflow_id), "step": canonical_step},
+        )
+        return self._rerun_from_step(
+            product=product,
+            execution=execution,
+            step=canonical_step,
+            payload=retry_payload,
+            scope_context=scope_context,
+            request=request,
+            user=user,
+        )
+
+    def rollback(
+        self,
+        *,
+        workflow_id: UUID,
+        step: str,
+        scope_context: KScopeContext,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        product, execution = self._require_workflow_execution(
+            workflow_id=workflow_id,
+            scope_context=scope_context,
+        )
+        canonical_step = _canonical_closed_loop_step(step)
+        self._clear_outputs_from_step(product, execution, canonical_step, user=user)
+        self._transition_state(
+            product,
+            execution,
+            _state_before_closed_loop_step(canonical_step),
+            step=canonical_step,
+            event="rolled_back",
+            allow_backward=True,
+        )
+        execution.status = "blocked"
+        execution.current_step = canonical_step
+        execution.error_report_json = self._error_report(
+            execution,
+            code="WORKFLOW_ROLLED_BACK",
+            message="K workflow was rolled back. Use retry to continue from this step.",
+            step=canonical_step,
+            details={"rollback_by_user_id": str(user.id)},
+        )
+        self._append_trace(execution, canonical_step, "rolled_back", error=execution.error_report_json)
+        self._append_gate_log(
+            execution,
+            "workflow_control",
+            "rolled_back",
+            {"workflow_id": str(workflow_id), "step": canonical_step},
+        )
+        self.db.add_all([product, execution])
+        self.db.flush()
+        return execution
+
+    def _continue_after_risk_review(
+        self,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        self._transition_state(
+            product,
+            execution,
+            "RISK_APPROVED",
+            step="risk_term_manual_review",
+            event="manual_gate_approved",
+        )
+        self._optimize_keywords(product, execution, user)
+        self._transition_state(
+            product,
+            execution,
+            "KEYWORD_OPTIMIZED",
+            step="keyword_optimization_ai",
+        )
+        self._normalize_units(product, execution)
+        self._transition_state(
+            product,
+            execution,
+            "UNIT_NORMALIZED",
+            step="unit_conversion_normalization",
+        )
+        if not self._image_is_bound(product, execution):
+            execution.status = "blocked"
+            execution.current_step = "image_binding"
+            execution.error_report_json = self._error_report(
+                execution,
+                code="IMAGE_BINDING_REQUIRED",
+                message="A manual upload or I-system image asset must be bound before export.",
+                step="image_binding",
+            )
+            self._append_trace(
+                execution,
+                "image_binding",
+                "blocked",
+                error=execution.error_report_json,
+            )
+            self.db.add_all([product, execution])
+            self.db.flush()
+            return execution
+        self._transition_state(product, execution, "IMAGE_BOUND", step="image_binding")
+        self._mark_export_ready(product, execution)
+        self.db.add_all([product, execution])
+        self.db.flush()
+        return execution
+
+    def _bind_image(
+        self,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        asset: KProductKnowledgeMediaAsset,
+    ) -> None:
+        product.selected_image_path = (
+            asset.object_key or asset.file_url_placeholder or str(asset.id)
+        )
+        source_type = _image_source_type(asset)
+        product.image_asset_status = "bound"
+        product.media_notes_json = {
+            **(product.media_notes_json or {}),
+            "bound_asset_id": str(asset.id),
+            "image_source_type": source_type,
+            "i_system_image_asset_id": _i_system_asset_id(asset),
+            "bound_at": _now_iso(),
+            "k_image_ai_generation_allowed": False,
+            "k_image_review_allowed": False,
+        }
+        execution.image_binding_json = {
+            "status": "bound",
+            "source_type": source_type,
+            "asset_id": str(asset.id),
+            "i_system_image_asset_id": _i_system_asset_id(asset),
+            "object_key": asset.object_key,
+            "file_url_placeholder": asset.file_url_placeholder,
+            "bound_at": _now_iso(),
+        }
+        self._append_trace(
+            execution,
+            "image_binding",
+            "completed",
+            output_summary=execution.image_binding_json,
+        )
+
+    def _mark_export_ready(
+        self,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+    ) -> None:
+        execution.status = "ready_for_export"
+        execution.current_step = "export_p_series"
+        execution.error_report_json = None
+        self._transition_state(
+            product,
+            execution,
+            "EXPORT_READY",
+            step="export_p_series",
+            event="export_gate_unlocked",
+            details={
+                "risk_approved": self._risk_review_is_approved(execution),
+                "keywords_finalized": bool(execution.final_keyword_set_json),
+                "image_bound": self._image_is_bound(product, execution),
+            },
+        )
+
+    def _block_risk_review(
+        self,
+        execution: KProductKnowledgeWorkflowExecution,
+    ) -> None:
+        execution.status = "blocked"
+        execution.current_step = "risk_term_manual_review"
+        execution.error_report_json = self._error_report(
+            execution,
+            code="RISK_REVIEW_REQUIRED",
+            message="Manual risk keyword review is required before continuing.",
+            step="risk_term_manual_review",
+            details={"auto_approval_allowed": False},
+        )
+        self._append_trace(
+            execution,
+            "risk_term_manual_review",
+            "blocked",
+            error=execution.error_report_json,
+        )
+        self.db.add(execution)
+        self.db.flush()
+
+    def _transition_state(
+        self,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        state: str,
+        *,
+        step: str,
+        event: str = "transition",
+        details: dict[str, Any] | None = None,
+        allow_backward: bool = False,
+    ) -> None:
+        current = self.state_machine.current_state(execution, product)
+        if not allow_backward and not self.state_machine.can_transition(current, state):
+            raise KWorkflowExecutionError(
+                "K_WORKFLOW_INVALID_TRANSITION",
+                f"K workflow cannot transition from {current} to {state}.",
+                status_code=409,
+            )
+        self._append_gate_log(
+            execution,
+            "workflow_state_machine_v2",
+            "allowed",
+            {
+                "event": event,
+                "from_state": current,
+                "state": state,
+                "step": step,
+                "closed_loop": True,
+                **(details or {}),
+            },
+        )
+
+    def _require_workflow_execution(
+        self,
+        *,
+        workflow_id: UUID,
+        scope_context: KScopeContext,
+    ) -> tuple[KProductKnowledgeProduct, KProductKnowledgeWorkflowExecution]:
+        execution = self.db.get(KProductKnowledgeWorkflowExecution, workflow_id)
+        if execution is None:
+            raise KWorkflowExecutionError(
+                "WORKFLOW_EXECUTION_NOT_FOUND",
+                "K workflow execution was not found.",
+                status_code=404,
+            )
+        product = self._require_product(execution.product_id, scope_context)
+        return product, execution
+
+    def _rerun_from_step(
+        self,
+        *,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        step: str,
+        payload: ProductKnowledgeWorkflowStartRequest,
+        scope_context: KScopeContext,
+        request: Request,
+        user: User,
+    ) -> KProductKnowledgeWorkflowExecution:
+        del scope_context
+        order = _closed_loop_step_order(step)
+        if order <= _closed_loop_step_order("product_ingestion"):
+            self._validate_organization(product, KScopeContext(
+                workspace_key=execution.workspace_key,
+                business_context=execution.business_context,
+                scope_mode=execution.scope_mode,
+            ), execution)
+            self._append_trace(execution, "product_ingestion", "completed")
+            self._transition_state(
+                product,
+                execution,
+                "PRODUCT_CREATED",
+                step="product_ingestion",
+                allow_backward=True,
+            )
+
+        gate_context = self._require_execution_gate(
+            execution=execution,
+            request=request,
+            user=user,
+            key_requirements=CLOSED_LOOP_AI_KEY_REQUIREMENTS,
+        )
+        if order <= _closed_loop_step_order("deepseek_enrichment"):
+            self._run_deepseek_enrichment(
+                product=product,
+                execution=execution,
+                gate_context=gate_context,
+                user=user,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "AI_DEEPSEEK_ENRICHED",
+                step="deepseek_enrichment",
+                allow_backward=True,
+            )
+
+        if order <= _closed_loop_step_order("serp_keyword_fetch"):
+            serp_result = self._fetch_serp_keywords(
+                product=product,
+                execution=execution,
+                payload=payload,
+                gate_context=gate_context,
+                user=user,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "SERP_ANALYZED",
+                step="serp_keyword_fetch",
+                allow_backward=True,
+            )
+        else:
+            serp_result = self._latest_serp_result(product, execution)
+
+        if order <= _closed_loop_step_order("ai_filter_chatgpt"):
+            chatgpt_result = self._run_chatgpt_filter(
+                product=product,
+                execution=execution,
+                serp_result=serp_result,
+                gate_context=gate_context,
+                user=user,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "CHATGPT_FILTERED",
+                step="ai_filter_chatgpt",
+                allow_backward=True,
+            )
+        else:
+            chatgpt_result = execution.chatgpt_filter_result_json
+            if not chatgpt_result:
+                raise KWorkflowExecutionError(
+                    "CHATGPT_RESULT_REQUIRED_FOR_RETRY",
+                    "ChatGPT result is required before retrying downstream steps.",
+                    status_code=409,
+                )
+
+        if order <= _closed_loop_step_order("ai_filter_claude_opus"):
+            claude_result = self._run_claude_filter(
+                product=product,
+                execution=execution,
+                chatgpt_result=chatgpt_result,
+                gate_context=gate_context,
+                user=user,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "CLAUDE_FILTERED",
+                step="ai_filter_claude_opus",
+                allow_backward=True,
+            )
+        else:
+            claude_result = execution.claude_filter_result_json
+            if not claude_result:
+                raise KWorkflowExecutionError(
+                    "CLAUDE_RESULT_REQUIRED_FOR_RETRY",
+                    "Claude result is required before retrying downstream steps.",
+                    status_code=409,
+                )
+
+        if order <= _closed_loop_step_order("risk_term_manual_review"):
+            self._create_manual_risk_review_block(
+                product=product,
+                execution=execution,
+                claude_result=claude_result,
+            )
+            self._transition_state(
+                product,
+                execution,
+                "RISK_PENDING_REVIEW",
+                step="risk_term_manual_review",
+                event="hard_gate_blocked",
+                allow_backward=True,
+            )
+            return execution
+
+        if not self._risk_review_is_approved(execution):
+            self._block_risk_review(execution)
+            return execution
+        return self._continue_after_risk_review(product, execution, user)
+
+    def _latest_serp_result(
+        self,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+    ) -> dict[str, Any]:
+        run = self.db.scalar(
+            select(KProductKnowledgeResearchRun)
+            .where(
+                KProductKnowledgeResearchRun.product_id == product.id,
+                KProductKnowledgeResearchRun.run_type == "serp_keyword_fetch",
+            )
+            .order_by(KProductKnowledgeResearchRun.created_at.desc())
+            .limit(1)
+        )
+        if run is None or not isinstance(run.serp_result_summary_json, dict):
+            raise KWorkflowExecutionError(
+                "SERP_RESULT_REQUIRED_FOR_RETRY",
+                "SERP result is required before retrying downstream steps.",
+                status_code=409,
+            )
+        summary = run.serp_result_summary_json
+        return {
+            "query": summary.get("query"),
+            "keywords": _safe_string_list(summary.get("keywords")),
+            "organic_results": _organic_results(summary.get("organic_results")),
+            "competitors": _safe_string_list(summary.get("competitors")),
+            "research_run_id": str(run.id),
+            "provider": run.serp_provider,
+        }
+
+    def _clear_outputs_from_step(
+        self,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        step: str,
+        *,
+        user: User,
+    ) -> None:
+        order = _closed_loop_step_order(step)
+        if order <= _closed_loop_step_order("deepseek_enrichment"):
+            _rollback_deepseek_product_fields(product)
+        if order <= _closed_loop_step_order("ai_filter_chatgpt"):
+            execution.chatgpt_filter_result_json = None
+        if order <= _closed_loop_step_order("ai_filter_claude_opus"):
+            execution.claude_filter_result_json = None
+            product.risk_keywords_json = None
+        if order <= _closed_loop_step_order("risk_term_manual_review"):
+            execution.risk_approval_log_json = None
+        if order <= _closed_loop_step_order("keyword_optimization_ai"):
+            execution.final_keyword_set_json = None
+            product.primary_keyword = None
+            product.secondary_keywords_json = None
+            product.long_tail_keywords_json = None
+        if order <= _closed_loop_step_order("unit_conversion_normalization"):
+            execution.unit_conversion_json = None
+        if order <= _closed_loop_step_order("image_binding"):
+            execution.image_binding_json = None
+            product.selected_image_path = None
+            product.image_asset_status = None
+        if order <= _closed_loop_step_order("export_p_series"):
+            execution.export_payloads_json = None
+        execution.current_step = step
+        execution.updated_by_user_id = _user_uuid(user)

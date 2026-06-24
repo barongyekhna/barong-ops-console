@@ -10,6 +10,7 @@ export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 const API_PROXY_BASE = "/api/backend";
 const AUTH_SESSION_STORAGE_KEY = "barong-auth-session";
 const SESSION_TOKEN_HEADER = "X-Session-Token";
+const FRONTEND_FORCE_REFRESH_HEADER = "X-Frontend-Force-Refresh";
 export const DEFAULT_API_TIMEOUT_MS = 15_000;
 const CAPABILITY_BOOTSTRAP_TIMEOUT_MS = 30_000;
 const MODULE_CONTROL_TIMEOUT_MS = 60_000;
@@ -45,6 +46,7 @@ export class ApiTimeoutError extends ApiRequestAbortedError {
 
 type ApiRequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
+  bypassCache?: boolean;
   retryLimit?: number;
   timeoutMs?: number;
 };
@@ -272,6 +274,7 @@ export async function apiRequest<T>(
 ): Promise<T> {
   const {
     body,
+    bypassCache = false,
     retryLimit: retryLimitOption,
     timeoutMs: timeoutMsOption,
     ...fetchOptions
@@ -293,11 +296,15 @@ export async function apiRequest<T>(
   if (sessionToken && !headers.has(SESSION_TOKEN_HEADER)) {
     headers.set(SESSION_TOKEN_HEADER, sessionToken);
   }
+  if (bypassCache) {
+    headers.set(FRONTEND_FORCE_REFRESH_HEADER, "1");
+  }
 
   return requestWithFrontendCache<T>(
     path,
     {
       body,
+      bypassCache,
       method,
     },
     async () => {

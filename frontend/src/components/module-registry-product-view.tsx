@@ -41,6 +41,12 @@ import {
   type ModuleControlState,
 } from "@/lib/module-control-api";
 import {
+  listControlPlaneModules,
+  listModuleRegistry,
+  listMyModules,
+} from "@/lib/module-registry-api";
+import type { ModuleManifest } from "@/lib/module-registry";
+import {
   moduleControlToggleKey,
   optimisticModuleControlState,
   replaceModuleControlCenterItem,
@@ -56,6 +62,15 @@ import {
 } from "@/lib/users-api";
 
 const MODULE_PAGE_LIMIT = 10;
+const KEY_BINDING_ALIAS_OPTIONS = [
+  "default",
+  "serp",
+  "chatgpt",
+  "deepseek",
+  "claude_opus",
+  "n8n",
+];
+const K_PRODUCT_KNOWLEDGE_MODULE_ID = "k.product_knowledge";
 const MODULE_DESCRIPTIONS: Record<string, string> = {
   "admin.agents": "查看已接入的自动化助手。",
   "admin.modules": "查看当前工作台已开放的功能区。",
@@ -69,6 +84,12 @@ const MODULE_DESCRIPTIONS: Record<string, string> = {
   "system.errors": "查看系统异常记录。",
   "system.memory_events": "查看运行记录。",
   "system.operation_logs": "查看操作记录。",
+};
+
+type BindingModuleOption = {
+  display_name: string;
+  module_id: string;
+  source: "module_control_center" | "module_registry";
 };
 
 function humanState(value: string) {
@@ -356,6 +377,55 @@ function organizationLabel(organization: OrganizationOption) {
   return organization.org_name.trim() || "未命名组织";
 }
 
+function uniqueStrings(values: string[]) {
+  return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
+}
+
+function moduleRegistryBindingOptions(
+  registryItems: readonly ModuleManifest[],
+): BindingModuleOption[] {
+  return registryItems.map((item) => ({
+    display_name:
+      item.display_name || item.navigation.label || item.module_key,
+    module_id: item.module_key,
+    source: "module_registry",
+  }));
+}
+
+function mergeBindingModuleOptions({
+  controlModules,
+  registryModules,
+}: {
+  controlModules: readonly ModuleControlState[];
+  registryModules: readonly BindingModuleOption[];
+}): BindingModuleOption[] {
+  const options = new Map<string, BindingModuleOption>();
+
+  for (const module of controlModules) {
+    options.set(module.module_id, {
+      display_name: module.display_name,
+      module_id: module.module_id,
+      source: "module_control_center",
+    });
+  }
+
+  for (const module of registryModules) {
+    if (!options.has(module.module_id)) {
+      options.set(module.module_id, module);
+    }
+  }
+
+  return Array.from(options.values()).sort((left, right) => {
+    if (left.module_id === K_PRODUCT_KNOWLEDGE_MODULE_ID) {
+      return -1;
+    }
+    if (right.module_id === K_PRODUCT_KNOWLEDGE_MODULE_ID) {
+      return 1;
+    }
+    return 0;
+  });
+}
+
 function validOrganizationId(
   organizations: OrganizationOption[],
   currentOrgId: string,
@@ -370,6 +440,10 @@ function validOrganizationId(
 }
 
 function OwnerModuleControlCenter() {
+  const {
+    refresh: refreshCapabilityState,
+    registryResult: capabilityRegistryResult,
+  } = useFrontendCapabilityState();
   const [controlCenter, setControlCenter] =
     useState<ModuleControlCenterResponse | null>(null);
   const [organizations, setOrganizations] = useState<OrganizationOption[]>([]);
@@ -409,11 +483,50 @@ function OwnerModuleControlCenter() {
     name: "",
     url: "",
   });
+  const registryModuleOptions = useMemo(
+    () =>
+      moduleRegistryBindingOptions(
+        capabilityRegistryResult?.data.items ?? [],
+      ),
+    [capabilityRegistryResult],
+  );
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async ({ force = false }: { force?: boolean } = {}) => {
     setError("");
     setIsOrganizationsLoading(true);
     setIsControlDataLoading(true);
+    let forcedRegistryModuleOptions: BindingModuleOption[] = [];
+
+    if (force) {
+      setNotice("");
+      setWebhookResult(null);
+      setEditingKeyId(null);
+      setBindingForm({
+        key_alias: "default",
+        key_id: "",
+        module_id: "",
+        org_id: "",
+      });
+      setControlCenter(null);
+      setApiKeys([]);
+      setBindings([]);
+
+      const registryRefreshResults = await Promise.allSettled([
+        refreshCapabilityState(),
+        listControlPlaneModules({ forceRefresh: true }),
+        listModuleRegistry({ forceRefresh: true }),
+        listMyModules({ forceRefresh: true }),
+      ]);
+      const registryResult = registryRefreshResults[2];
+      if (
+        registryResult.status === "fulfilled" &&
+        registryResult.value.ok === true
+      ) {
+        forcedRegistryModuleOptions = moduleRegistryBindingOptions(
+          registryResult.value.data.items,
+        );
+      }
+    }
 
     let hydratedOrganizations: OrganizationOption[] = [];
     try {
@@ -474,6 +587,13 @@ function OwnerModuleControlCenter() {
           current.org_id,
         );
         const orgModules = controlGroupsByOrgId.get(selectedOrg)?.modules ?? [];
+        const bindingModules = mergeBindingModuleOptions({
+          controlModules: orgModules,
+          registryModules:
+            forcedRegistryModuleOptions.length > 0
+              ? forcedRegistryModuleOptions
+              : registryModuleOptions,
+        });
         const orgKeys = keys.items.filter((key) => key.org_id === selectedOrg);
 
         return {
@@ -484,9 +604,11 @@ function OwnerModuleControlCenter() {
               : orgKeys[0]?.key_id || "",
           module_id:
             current.module_id &&
-            orgModules.some((module) => module.module_id === current.module_id)
+            bindingModules.some(
+              (module) => module.module_id === current.module_id,
+            )
               ? current.module_id
-              : orgModules[0]?.module_id || "",
+              : bindingModules[0]?.module_id || "",
           org_id: selectedOrg,
         };
       });
@@ -495,7 +617,7 @@ function OwnerModuleControlCenter() {
     } finally {
       setIsControlDataLoading(false);
     }
-  }, []);
+  }, [refreshCapabilityState, registryModuleOptions]);
 
   useEffect(() => {
     void refresh();
@@ -513,6 +635,41 @@ function OwnerModuleControlCenter() {
     const orgId = bindingForm.org_id || keyForm.org_id;
     return controlGroupsByOrgId.get(orgId)?.modules ?? [];
   }, [bindingForm.org_id, controlGroupsByOrgId, keyForm.org_id]);
+  const selectedBindingModules = useMemo(
+    () =>
+      mergeBindingModuleOptions({
+        controlModules: selectedOrgModules,
+        registryModules: registryModuleOptions,
+      }),
+    [registryModuleOptions, selectedOrgModules],
+  );
+  const bindingAliasOptions = useMemo(
+    () => uniqueStrings([...KEY_BINDING_ALIAS_OPTIONS, bindingForm.key_alias]),
+    [bindingForm.key_alias],
+  );
+
+  useEffect(() => {
+    setBindingForm((current) => {
+      if (
+        current.module_id &&
+        selectedBindingModules.some(
+          (module) => module.module_id === current.module_id,
+        )
+      ) {
+        return current;
+      }
+
+      const nextModuleId = selectedBindingModules[0]?.module_id || "";
+      if (current.module_id === nextModuleId) {
+        return current;
+      }
+
+      return {
+        ...current,
+        module_id: nextModuleId,
+      };
+    });
+  }, [selectedBindingModules]);
 
   const hasPendingModuleToggles = pendingModuleToggleIds.size > 0;
 
@@ -551,8 +708,13 @@ function OwnerModuleControlCenter() {
         names.set(module.module_id, module.display_name);
       }
     }
+    for (const module of registryModuleOptions) {
+      if (!names.has(module.module_id)) {
+        names.set(module.module_id, module.display_name);
+      }
+    }
     return names;
-  }, [controlCenter]);
+  }, [controlCenter, registryModuleOptions]);
 
   function handleKeyOrganizationChange(orgId: string) {
     setKeyForm((current) => ({
@@ -562,8 +724,10 @@ function OwnerModuleControlCenter() {
   }
 
   function handleBindingOrganizationChange(orgId: string) {
-    const modules =
-      controlGroupsByOrgId.get(orgId)?.modules ?? [];
+    const modules = mergeBindingModuleOptions({
+      controlModules: controlGroupsByOrgId.get(orgId)?.modules ?? [],
+      registryModules: registryModuleOptions,
+    });
     const keys = apiKeys.filter((key) => key.org_id === orgId);
     setBindingForm((current) => ({
       ...current,
@@ -767,7 +931,7 @@ function OwnerModuleControlCenter() {
         <button
           className="secondary-button"
           disabled={isLoading || isSaving || hasPendingModuleToggles}
-          onClick={() => void refresh()}
+          onClick={() => void refresh({ force: true })}
           type="button"
         >
           <RotateCcw aria-hidden="true" size={17} />
@@ -840,7 +1004,7 @@ function OwnerModuleControlCenter() {
               <button
                 className="secondary-button"
                 disabled={isLoading || isSaving || hasPendingModuleToggles}
-                onClick={() => void refresh()}
+                onClick={() => void refresh({ force: true })}
                 type="button"
               >
                 <RotateCcw aria-hidden="true" size={17} />
@@ -1154,7 +1318,7 @@ function OwnerModuleControlCenter() {
             <span>模块</span>
             <span className="input-shell">
               <select
-                disabled={isSaving || selectedOrgModules.length === 0}
+                disabled={isSaving || selectedBindingModules.length === 0}
                 onChange={(event) =>
                   setBindingForm((current) => ({
                     ...current,
@@ -1164,7 +1328,7 @@ function OwnerModuleControlCenter() {
                 required
                 value={bindingForm.module_id}
               >
-                {selectedOrgModules.map((module) => (
+                {selectedBindingModules.map((module) => (
                   <option key={module.module_id} value={module.module_id}>
                     {module.display_name}
                   </option>
@@ -1197,7 +1361,7 @@ function OwnerModuleControlCenter() {
           <label className="field-group">
             <span>用途名称</span>
             <span className="input-shell">
-              <input
+              <select
                 onChange={(event) =>
                   setBindingForm((current) => ({
                     ...current,
@@ -1206,7 +1370,13 @@ function OwnerModuleControlCenter() {
                 }
                 required
                 value={bindingForm.key_alias}
-              />
+              >
+                {bindingAliasOptions.map((alias) => (
+                  <option key={alias} value={alias}>
+                    {alias}
+                  </option>
+                ))}
+              </select>
             </span>
           </label>
           <button

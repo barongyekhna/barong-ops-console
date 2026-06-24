@@ -21,6 +21,10 @@ from ..schemas.api_key_orchestration import (
     ApiKeyUpdateRequest,
 )
 from .module_registry import get_module_manifest_for_db
+from .provider_config_service import (
+    ProviderConfigError,
+    upsert_provider_config,
+)
 
 
 class ApiKeyOrchestrationError(ValueError):
@@ -197,6 +201,30 @@ def _get_active_organization(db: Session, org_id: str) -> OrganizationRecord:
     return organization
 
 
+def _sync_provider_config_for_binding(
+    db: Session,
+    *,
+    binding: ApiKeyModuleBindingRecord,
+    key: ApiKeyRecord,
+    source: str,
+) -> None:
+    try:
+        upsert_provider_config(
+            db,
+            org_id=binding.org_id,
+            module_id=binding.module_id,
+            provider=binding.key_alias,
+            base_url=key.url,
+            source_key_id=key.key_id,
+            metadata={
+                "source": source,
+                "key_name": key.name,
+            },
+        )
+    except ProviderConfigError:
+        return
+
+
 def list_api_keys(db: Session) -> list[ApiKeyRead]:
     records = list(
         db.scalars(
@@ -269,6 +297,13 @@ def update_api_key(
     db.add(record)
     db.flush()
     bindings = _active_bindings_for_keys(db, [record.key_id]).get(record.key_id, [])
+    for binding in bindings:
+        _sync_provider_config_for_binding(
+            db,
+            binding=binding,
+            key=record,
+            source="api_key_update",
+        )
     return _read_key(record, bindings)
 
 
@@ -358,6 +393,12 @@ def create_api_key_binding(
         existing.updated_by_user_id = actor_user_id
         db.add(existing)
         db.flush()
+        _sync_provider_config_for_binding(
+            db,
+            binding=existing,
+            key=key,
+            source="api_key_binding_update",
+        )
         return _read_binding(existing, key)
 
     binding = ApiKeyModuleBindingRecord(
@@ -372,6 +413,12 @@ def create_api_key_binding(
     )
     db.add(binding)
     db.flush()
+    _sync_provider_config_for_binding(
+        db,
+        binding=binding,
+        key=key,
+        source="api_key_binding_create",
+    )
     return _read_binding(binding, key)
 
 
@@ -418,6 +465,12 @@ def resolve_module_api_key_for_injection(
         raise ApiKeyIsolationError("api_key_not_active")
     if key.org_id != org_id:
         raise ApiKeyIsolationError("api_key_org_mismatch")
+    _sync_provider_config_for_binding(
+        db,
+        binding=binding,
+        key=key,
+        source="api_key_resolution",
+    )
     secret_value = _decrypt_key_value(key.encrypted_key_value)
     key.last_used_at = datetime.now(UTC)
     db.add(key)

@@ -73,11 +73,13 @@ type CapabilityBootstrapPayload = {
   live_gate_readiness?: CapabilityBootstrapEntry;
   module_adapters_me?: CapabilityBootstrapEntry;
   module_adapters_registry?: CapabilityBootstrapEntry;
+  module_control_center?: CapabilityBootstrapEntry;
   modules_me?: CapabilityBootstrapEntry;
   modules_registry?: CapabilityBootstrapEntry;
 };
 
 type CapabilityBootstrapOptions = {
+  forceRefresh?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
 };
@@ -177,6 +179,7 @@ export async function getCapabilityBootstrap(
     const payload = await apiRequest<CapabilityBootstrapPayload>(
       "/capability/bootstrap",
       {
+        bypassCache: options.forceRefresh,
         method: "GET",
         signal: options.signal,
         timeoutMs: options.timeoutMs ?? CAPABILITY_BOOTSTRAP_TIMEOUT_MS,

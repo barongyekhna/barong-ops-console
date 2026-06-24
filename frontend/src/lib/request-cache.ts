@@ -141,6 +141,7 @@ export function getFrontendRequestCacheKey(
   path: string,
   options: {
     body?: unknown;
+    bypassCache?: boolean;
     method?: string;
   } = {},
 ) {
@@ -157,6 +158,7 @@ export async function requestWithFrontendCache<T>(
   path: string,
   options: {
     body?: unknown;
+    bypassCache?: boolean;
     method?: string;
   },
   request: () => Promise<T>,
@@ -166,11 +168,17 @@ export async function requestWithFrontendCache<T>(
     body: options.body,
     method,
   });
-  const canUseMemoryCache = method === "GET";
+  const bypassCache = options.bypassCache === true;
+  const canUseMemoryCache = method === "GET" && !bypassCache;
   const ttl = canUseMemoryCache ? cacheTtlForPath(path) : 0;
 
   if (method !== "GET") {
     clearFrontendRequestCache({ includeInFlight: false });
+  }
+
+  if (bypassCache) {
+    memoryCache.delete(cacheKey);
+    inFlightRequests.delete(cacheKey);
   }
 
   if (ttl > 0) {
@@ -183,9 +191,11 @@ export async function requestWithFrontendCache<T>(
     }
   }
 
-  const inFlight = inFlightRequests.get(cacheKey);
-  if (inFlight) {
-    return inFlight as Promise<T>;
+  if (!bypassCache) {
+    const inFlight = inFlightRequests.get(cacheKey);
+    if (inFlight) {
+      return inFlight as Promise<T>;
+    }
   }
 
   let promise: Promise<T>;
@@ -208,7 +218,9 @@ export async function requestWithFrontendCache<T>(
       }
     });
 
-  inFlightRequests.set(cacheKey, promise);
+  if (!bypassCache) {
+    inFlightRequests.set(cacheKey, promise);
+  }
 
   return promise;
 }

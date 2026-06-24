@@ -1,12 +1,8 @@
 from __future__ import annotations
 
 import hashlib
-import json
 from datetime import UTC, datetime
 from typing import Any, Literal
-from urllib.error import HTTPError, URLError
-from urllib.request import Request as UrlRequest
-from urllib.request import urlopen
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
@@ -19,9 +15,10 @@ from ....api.deps import get_current_user
 from ....db.session import get_db
 from ....models.user import User
 from ....services.api_key_orchestration import ApiKeyIsolationError
+from ....services.ai_provider_router import AIExecutionRouter, AIProviderExecutionError
 from ....services.module_execution_gate import (
+    ModuleExecutionContext,
     ModuleExecutionGateError,
-    ModuleExecutionKey,
     require_module_execution_ready,
 )
 from ....services.permission_service import resolve_current_user_permission_info
@@ -70,6 +67,7 @@ from .schemas import (
     ProductKnowledgeRiskTermListResponse,
     ProductKnowledgeRiskTermPatch,
     ProductKnowledgeUpdate,
+    ProductKnowledgeWorkflowControlRequest,
     ProductKnowledgeWorkflowExecutionRead,
     ProductKnowledgeWorkflowExportRequest,
     ProductKnowledgeWorkflowExportResponse,
@@ -91,7 +89,7 @@ from .service import (
 )
 from .workflow_engine import (
     IMAGE_SOURCE_MANUAL,
-    KWorkflowOrchestratorV1,
+    KWorkflowOrchestratorV2,
     KWorkflowExecutionError,
 )
 
@@ -519,47 +517,28 @@ def _execution_context(
         raise _gate_error(exc) from exc
 
 
-def _post_provider_json(
-    key: ModuleExecutionKey,
+def _execute_provider_json(
+    db: Session,
+    *,
+    context: ModuleExecutionContext,
+    provider: str,
+    task_type: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
-    data = json.dumps(payload).encode("utf-8")
-    request = UrlRequest(
-        key.url,
-        data=data,
-        headers={
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            key.header_name: key.header_value,
-        },
-        method="POST",
-    )
     try:
-        with urlopen(request, timeout=30) as response:
-            response_body = response.read().decode("utf-8")
-    except HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"K provider returned HTTP {exc.code}.",
-        ) from exc
-    except URLError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="K provider request failed.",
-        ) from exc
-    try:
-        parsed = json.loads(response_body)
-    except json.JSONDecodeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="K provider returned non-JSON output.",
-        ) from exc
-    if not isinstance(parsed, dict):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="K provider returned an unsupported JSON shape.",
+        return AIExecutionRouter(db).execute(
+            provider=provider,
+            task_type=task_type,  # type: ignore[arg-type]
+            payload=payload,
+            org=TARGET_ORGANIZATION_NAME,
+            module_id=MODULE_KEY,
+            execution_context=context,
         )
-    return parsed
+    except AIProviderExecutionError as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=exc.structured_error(),
+        ) from exc
 
 
 def _safe_string_list(value: Any) -> list[str]:
@@ -884,7 +863,7 @@ def product_knowledge_workflow_latest(
 ) -> ProductKnowledgeWorkflowExecutionRead:
     del user
     try:
-        execution = KWorkflowOrchestratorV1(db).latest_execution_for_product(
+        execution = KWorkflowOrchestratorV2(db).latest_execution_for_product(
             product_id=product_id,
             scope_context=_scope_context(request),
         )
@@ -911,7 +890,7 @@ def product_knowledge_workflow_start(
     user: User = Depends(_require_k_permission(PERMISSION_WORKFLOW_EXECUTE)),
 ) -> ProductKnowledgeWorkflowExecutionRead:
     try:
-        execution = KWorkflowOrchestratorV1(db).start_pipeline(
+        execution = KWorkflowOrchestratorV2(db).start_pipeline(
             product_id=product_id,
             payload=payload,
             scope_context=_scope_context(request),
@@ -937,7 +916,7 @@ def product_knowledge_workflow_risk_review(
     user: User = Depends(_require_k_permission(PERMISSION_RISK_TERMS_MANAGE)),
 ) -> ProductKnowledgeWorkflowExecutionRead:
     try:
-        execution = KWorkflowOrchestratorV1(db).review_risk_terms(
+        execution = KWorkflowOrchestratorV2(db).review_risk_terms(
             product_id=product_id,
             payload=payload,
             scope_context=_scope_context(request),
@@ -962,7 +941,7 @@ def product_knowledge_workflow_export(
     user: User = Depends(_require_k_permission(PERMISSION_EXPORT)),
 ) -> ProductKnowledgeWorkflowExportResponse:
     try:
-        execution, report = KWorkflowOrchestratorV1(db).export_payloads(
+        execution, report = KWorkflowOrchestratorV2(db).export_payloads(
             product_id=product_id,
             payload=payload or ProductKnowledgeWorkflowExportRequest(),
             scope_context=_scope_context(request),
@@ -976,6 +955,144 @@ def product_knowledge_workflow_export(
         execution=ProductKnowledgeWorkflowExecutionRead.model_validate(execution),
         report=report,
     )
+
+
+def _workflow_control_id(
+    db: Session,
+    *,
+    product_id: UUID,
+    payload: ProductKnowledgeWorkflowControlRequest | None,
+    request: Request,
+) -> UUID:
+    if payload is not None and payload.execution_id is not None:
+        return payload.execution_id
+    execution = KWorkflowOrchestratorV2(db).latest_execution_for_product(
+        product_id=product_id,
+        scope_context=_scope_context(request),
+    )
+    if execution is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="K workflow execution was not found.",
+        )
+    return execution.id
+
+
+@router.post(
+    "/products/{product_id}/workflow/pause",
+    response_model=ProductKnowledgeWorkflowExecutionRead,
+)
+def product_knowledge_workflow_pause(
+    product_id: UUID,
+    request: Request,
+    payload: ProductKnowledgeWorkflowControlRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_WORKFLOW_EXECUTE)),
+) -> ProductKnowledgeWorkflowExecutionRead:
+    try:
+        execution = KWorkflowOrchestratorV2(db).pause(
+            workflow_id=_workflow_control_id(
+                db,
+                product_id=product_id,
+                payload=payload,
+                request=request,
+            ),
+            scope_context=_scope_context(request),
+            user=user,
+        )
+    except KWorkflowExecutionError as exc:
+        raise _workflow_error(exc) from exc
+    return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
+
+
+@router.post(
+    "/products/{product_id}/workflow/resume",
+    response_model=ProductKnowledgeWorkflowExecutionRead,
+)
+def product_knowledge_workflow_resume(
+    product_id: UUID,
+    request: Request,
+    payload: ProductKnowledgeWorkflowControlRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_WORKFLOW_EXECUTE)),
+) -> ProductKnowledgeWorkflowExecutionRead:
+    try:
+        execution = KWorkflowOrchestratorV2(db).resume(
+            workflow_id=_workflow_control_id(
+                db,
+                product_id=product_id,
+                payload=payload,
+                request=request,
+            ),
+            scope_context=_scope_context(request),
+            request=request,
+            user=user,
+        )
+    except KWorkflowExecutionError as exc:
+        raise _workflow_error(exc) from exc
+    return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
+
+
+@router.post(
+    "/products/{product_id}/workflow/retry",
+    response_model=ProductKnowledgeWorkflowExecutionRead,
+)
+def product_knowledge_workflow_retry(
+    product_id: UUID,
+    payload: ProductKnowledgeWorkflowControlRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_WORKFLOW_EXECUTE)),
+) -> ProductKnowledgeWorkflowExecutionRead:
+    if not payload.step:
+        raise HTTPException(status_code=422, detail="retry requires step.")
+    try:
+        execution = KWorkflowOrchestratorV2(db).retry(
+            workflow_id=_workflow_control_id(
+                db,
+                product_id=product_id,
+                payload=payload,
+                request=request,
+            ),
+            step=payload.step,
+            payload=payload.workflow_payload,
+            scope_context=_scope_context(request),
+            request=request,
+            user=user,
+        )
+    except KWorkflowExecutionError as exc:
+        raise _workflow_error(exc) from exc
+    return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
+
+
+@router.post(
+    "/products/{product_id}/workflow/rollback",
+    response_model=ProductKnowledgeWorkflowExecutionRead,
+)
+def product_knowledge_workflow_rollback(
+    product_id: UUID,
+    payload: ProductKnowledgeWorkflowControlRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_WORKFLOW_EXECUTE)),
+) -> ProductKnowledgeWorkflowExecutionRead:
+    if not payload.step:
+        raise HTTPException(status_code=422, detail="rollback requires step.")
+    try:
+        execution = KWorkflowOrchestratorV2(db).rollback(
+            workflow_id=_workflow_control_id(
+                db,
+                product_id=product_id,
+                payload=payload,
+                request=request,
+            ),
+            step=payload.step,
+            scope_context=_scope_context(request),
+            user=user,
+        )
+    except KWorkflowExecutionError as exc:
+        raise _workflow_error(exc) from exc
+    return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
 
 
 @router.get("/keywords/{product_id}", response_model=KeywordListResponse)
@@ -1277,10 +1394,12 @@ def k16_serp_search(
         user=user,
         key_requirements={"serp": "serp"},
     )
-    key = context.key_for_step("serp")
-    provider_output = _post_provider_json(
-        key,
-        {
+    provider_output = _execute_provider_json(
+        db,
+        context=context,
+        provider="serp",
+        task_type="search",
+        payload={
             "product_id": payload.product_id,
             "market": payload.market,
             "query": payload.query,
@@ -1355,10 +1474,12 @@ def deepseek_enrich_product(
         product_ref=product_id,
         scope_context=_scope_context(request),
     )
-    key = context.key_for_step("deepseek")
-    provider_output = _post_provider_json(
-        key,
-        {
+    provider_output = _execute_provider_json(
+        db,
+        context=context,
+        provider="deepseek",
+        task_type="generate",
+        payload={
             "product": ProductKnowledgeRead.model_validate(product).model_dump(mode="json"),
             "module_id": MODULE_KEY,
             "task": "deepseek_enrichment",
@@ -1406,11 +1527,13 @@ def translate_product(
         product_ref=product_id,
         scope_context=_scope_context(request),
     )
-    key = context.key_for_step("ai_provider")
     source_text = product.long_description_en or product.raw_input_text or product.product_key
-    provider_output = _post_provider_json(
-        key,
-        {
+    provider_output = _execute_provider_json(
+        db,
+        context=context,
+        provider="chatgpt",
+        task_type="generate",
+        payload={
             "product_id": _product_public_ref(product),
             "source_language": product.canonical_language,
             "target_language": target_language,
@@ -1458,10 +1581,12 @@ def risk_filter_product(
         product_ref=product_id,
         scope_context=_scope_context(request),
     )
-    key = context.key_for_step("ai_provider")
-    provider_output = _post_provider_json(
-        key,
-        {
+    provider_output = _execute_provider_json(
+        db,
+        context=context,
+        provider="chatgpt",
+        task_type="generate",
+        payload={
             "product": ProductKnowledgeRead.model_validate(product).model_dump(mode="json"),
             "module_id": MODULE_KEY,
             "task": "risk_filtering",
@@ -1520,10 +1645,12 @@ def generate_selling_points(
         user=user,
         key_requirements={"ai_provider": "ai_provider"},
     )
-    key = context.key_for_step("ai_provider")
-    provider_output = _post_provider_json(
-        key,
-        {
+    provider_output = _execute_provider_json(
+        db,
+        context=context,
+        provider="chatgpt",
+        task_type="generate",
+        payload={
             "product": payload.product,
             "module_id": MODULE_KEY,
             "task": "selling_points",
@@ -1668,7 +1795,7 @@ def bind_product_image(
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
 ) -> ProductKnowledgeWorkflowExecutionRead:
     try:
-        execution = KWorkflowOrchestratorV1(db).bind_image_asset(
+        execution = KWorkflowOrchestratorV2(db).bind_image_asset(
             product_id=product_id,
             payload=payload,
             scope_context=_scope_context(request),

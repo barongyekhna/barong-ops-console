@@ -16,6 +16,7 @@ from ...schemas.module import (
     ModuleManifestRead,
     ModuleRegistryResponse,
 )
+from ...schemas.module_control import ModuleControlCenterResponse
 from ...schemas.module_adapter import (
     ModuleAdapterAccessListResponse,
     ModuleAdapterRead,
@@ -26,15 +27,32 @@ from ...services.module_adapter_registry import (
     list_adapter_contracts,
     list_adapters_for_user,
 )
-from ...services.module_registry import list_module_manifests, list_modules_for_user
+from ...services.module_control_cache_service import (
+    get_module_control_center_cached,
+    refresh_module_control_center_cache_sync,
+)
+from ...services.module_registry import (
+    clear_module_registry_cache,
+    list_module_manifests_with_dynamic,
+    list_modules_for_user,
+)
 from ...services.permission_decision_engine import PermissionDecisionEngine
 from ...services.unified_permission_engine import UnifiedPermissionRequest
 from ..deps import require_cached_control_plane_admin
 
 router = APIRouter(prefix="/capability", tags=["capability-bootstrap"])
 logger = logging.getLogger(__name__)
+FRONTEND_FORCE_REFRESH_HEADER = "x-frontend-force-refresh"
 
 CapabilityEntry = dict[str, Any]
+
+
+def _is_force_refresh_request(request: Request) -> bool:
+    return (
+        request.headers.get(FRONTEND_FORCE_REFRESH_HEADER) == "1"
+        or request.query_params.get("force_refresh") == "1"
+        or request.query_params.get("_force_refresh") == "1"
+    )
 
 
 def _entry(*, ok: bool, status: int, data: Any = None, detail: Any = None) -> CapabilityEntry:
@@ -117,8 +135,12 @@ def capability_bootstrap(
     db: Session = Depends(get_db),
     user: User = Depends(require_cached_control_plane_admin),
 ) -> dict[str, CapabilityEntry]:
+    force_refresh = _is_force_refresh_request(request)
+    if force_refresh:
+        clear_module_registry_cache()
+
     def modules_registry() -> ModuleRegistryResponse:
-        manifests = list_module_manifests()
+        manifests = list_module_manifests_with_dynamic(db)
         items = [
             ModuleManifestRead.model_validate(manifest.model_dump())
             for manifest in manifests
@@ -156,6 +178,11 @@ def capability_bootstrap(
     def live_gate_policies() -> list[LiveGatePolicyRead]:
         return LiveGatingController(db).list_policies(org_id=PLATFORM_ORG_ID)
 
+    def module_control_center() -> ModuleControlCenterResponse:
+        if force_refresh:
+            return refresh_module_control_center_cache_sync()
+        return get_module_control_center_cached(db=db)
+
     return {
         "modules_registry": _target_entry(
             db=db,
@@ -172,6 +199,14 @@ def capability_bootstrap(
             module_id="C16",
             action="admin",
             loader=modules_me,
+        ),
+        "module_control_center": _target_entry(
+            db=db,
+            request=request,
+            user=user,
+            module_id="REGISTRY",
+            action="admin",
+            loader=module_control_center,
         ),
         "module_adapters_registry": _target_entry(
             db=db,

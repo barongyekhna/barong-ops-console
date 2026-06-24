@@ -9,6 +9,7 @@ import {
 } from "@/lib/execution-provider";
 
 type ExecutionProviderRequestOptions = {
+  forceRefresh?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
 };
@@ -136,6 +137,7 @@ export async function getExecutionProviderRegistry(
 ): Promise<ExecutionProviderApiResult<ExecutionProviderRegistryResponse>> {
   try {
     const response = await apiRequest<unknown>("/execution-providers/registry", {
+      bypassCache: options.forceRefresh,
       method: "GET",
       signal: options.signal,
       timeoutMs: options.timeoutMs,
@@ -151,6 +153,7 @@ export async function getMyExecutionProviders(
 ): Promise<ExecutionProviderApiResult<UserExecutionProvidersResponse>> {
   try {
     const response = await apiRequest<unknown>("/execution-providers/me", {
+      bypassCache: options.forceRefresh,
       method: "GET",
       signal: options.signal,
       timeoutMs: options.timeoutMs,

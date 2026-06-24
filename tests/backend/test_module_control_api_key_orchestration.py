@@ -71,6 +71,13 @@ def test_module_control_center_auto_registers(owner_client: TestClient) -> None:
     assert {"module_id", "enabled", "runtime_status"}.issubset(
         default_group["modules"][0]
     )
+    k_module = next(
+        item
+        for item in default_group["modules"]
+        if item["module_id"] == "k.product_knowledge"
+    )
+    assert k_module["enabled"] is True
+    assert k_module["runtime_status"] == "active"
 
 
 def test_module_control_center_uses_cached_snapshot(
@@ -262,6 +269,38 @@ def test_api_key_binding_enforces_org_isolation_and_backend_injection(
         },
     )
     assert bound.status_code == 201, bound.text
+
+    for alias in ("serp", "chatgpt", "claude_opus"):
+        key = owner_client.post(
+            "/api/control-plane/api-key-orchestration/organizations/"
+            f"{DEFAULT_ORG_ID}/keys",
+            json={
+                "name": f"k-{alias}",
+                "url": f"https://{alias}.example",
+                "key_value": f"k-{alias}-secret-value",
+            },
+        ).json()["item"]
+        k_binding = owner_client.post(
+            "/api/control-plane/api-key-orchestration/organizations/"
+            f"{DEFAULT_ORG_ID}/bindings",
+            json={
+                "module_id": "k.product_knowledge",
+                "key_id": key["key_id"],
+                "key_alias": alias,
+            },
+        )
+        assert k_binding.status_code == 201, k_binding.text
+
+    bindings = owner_client.get(
+        "/api/control-plane/api-key-orchestration/bindings"
+    )
+    assert bindings.status_code == 200, bindings.text
+    k_aliases = {
+        item["key_alias"]
+        for item in bindings.json()["items"]
+        if item["module_id"] == "k.product_knowledge"
+    }
+    assert {"serp", "chatgpt", "claude_opus"}.issubset(k_aliases)
 
     with SessionLocal() as db:
         context = resolve_module_api_key_for_injection(

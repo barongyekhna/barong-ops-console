@@ -347,6 +347,18 @@ class ProductKnowledgeWorkflowExportRequest(BaseModel):
     execution_id: UUID | None = None
 
 
+class ProductKnowledgeWorkflowControlRequest(BaseModel):
+    execution_id: UUID | None = None
+    step: str | None = Field(default=None, max_length=100)
+    workflow_payload: ProductKnowledgeWorkflowStartRequest | None = None
+
+    @model_validator(mode="after")
+    def normalize_step(self) -> "ProductKnowledgeWorkflowControlRequest":
+        if self.step is not None:
+            self.step = self.step.strip() or None
+        return self
+
+
 class ProductKnowledgeImageBindRequest(BaseModel):
     source_type: ImageSourceType = "manual_upload_image"
     asset_id: UUID | None = None

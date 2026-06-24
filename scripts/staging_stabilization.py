@@ -37,7 +37,7 @@ STAGING_INTEGRATION_REPORT_FILE = REPOSITORY_ROOT / "staging_integration_report.
 ROLLBACK_DRILL_REPORT_FILE = REPOSITORY_ROOT / "rollback_drill_report.json"
 STAGING_OBSERVABILITY_REPORT_FILE = REPOSITORY_ROOT / "staging_observability_report.json"
 
-EXPECTED_ALEMBIC_HEAD = "module_api_key_orch_001"
+EXPECTED_ALEMBIC_HEAD = "ai_provider_layer_001"
 PINNED_COMPOSE_VERSION = "1.29.2"
 STAGING_PROJECT = "barong-ops-console-staging"
 STAGING_FRONTEND_URL = "http://127.0.0.1:3100"
@@ -687,7 +687,10 @@ def validate_error_format() -> dict[str, Any]:
         {
             "id": "proxy_unavailable_detail_shape",
             "status": "passed"
-            if "加载失败，请稍后重试。" in proxy_route
+            if (
+                "加载失败，请稍后重试。" in proxy_route
+                or "服务暂时不可用，请稍后再试。" in proxy_route
+            )
             else "failed",
         },
     ]

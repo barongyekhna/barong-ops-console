@@ -208,12 +208,17 @@ def build_module_control_center_from_parts(
 def build_module_control_center(db: Session) -> ModuleControlCenterResponse:
     organizations = list_module_control_org_summary(db)
     manifests = list_module_control_module_list(db)
+    auto_registered_count, organizations = ensure_module_control_states(
+        db,
+        organizations=organizations,
+        manifests=manifests,
+    )
     lookup = list_module_control_status(
         db,
         [organization.org_id for organization in organizations],
     )
     return build_module_control_center_from_parts(
-        auto_registered_count=0,
+        auto_registered_count=auto_registered_count,
         organizations=organizations,
         manifests=manifests,
         state_lookup=lookup,

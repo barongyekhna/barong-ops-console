@@ -4,6 +4,7 @@ const PUBLIC_API_PREFIX = "/api/public";
 const APPLICATION_API_PREFIX = "/api/app";
 const CONTROL_PLANE_API_PREFIX = "/api/control-plane";
 const SESSION_TOKEN_HEADER = "x-session-token";
+const FRONTEND_FORCE_REFRESH_HEADER = "x-frontend-force-refresh";
 
 const ALLOWED_PUBLIC_GET_PATHS = new Set([
   "health",
@@ -198,6 +199,7 @@ type CapabilityBootstrapTarget = {
 const capabilityBootstrapTargets: CapabilityBootstrapTarget[] = [
   { key: "modules_registry", path: ["modules", "registry"] },
   { key: "modules_me", path: ["modules", "me"] },
+  { key: "module_control_center", path: ["module-control", "center"] },
   {
     key: "module_adapters_registry",
     path: ["module-adapters", "registry"],
@@ -224,6 +226,26 @@ const capabilityBootstrapInFlight = new Map<
   string,
   Promise<Record<string, CapabilityBootstrapEntry>>
 >();
+let capabilityBootstrapCacheGeneration = 0;
+
+function clearCapabilityBootstrapCache(cacheKey: string | null = null) {
+  capabilityBootstrapCacheGeneration += 1;
+  if (cacheKey) {
+    capabilityBootstrapCache.delete(cacheKey);
+    capabilityBootstrapInFlight.delete(cacheKey);
+    return;
+  }
+  capabilityBootstrapCache.clear();
+  capabilityBootstrapInFlight.clear();
+}
+
+function isFrontendForceRefreshRequest(request: NextRequest) {
+  return (
+    request.headers.get(FRONTEND_FORCE_REFRESH_HEADER) === "1" ||
+    request.nextUrl.searchParams.get("force_refresh") === "1" ||
+    request.nextUrl.searchParams.get("_force_refresh") === "1"
+  );
+}
 
 function applySessionHeaders(headers: Headers, request: NextRequest) {
   const cookie = request.headers.get("cookie");
@@ -234,6 +256,12 @@ function applySessionHeaders(headers: Headers, request: NextRequest) {
   }
   if (sessionToken) {
     headers.set("X-Session-Token", sessionToken);
+  }
+}
+
+function applyForceRefreshHeaders(headers: Headers, request: NextRequest) {
+  if (isFrontendForceRefreshRequest(request)) {
+    headers.set(FRONTEND_FORCE_REFRESH_HEADER, "1");
   }
 }
 
@@ -648,6 +676,35 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "POST";
   }
 
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "workflow" &&
+    [
+      "latest",
+      "start",
+      "risk-review",
+      "export",
+      "pause",
+      "resume",
+      "retry",
+      "rollback",
+    ].includes(path[4])
+  ) {
+    return path[4] === "latest" ? method === "GET" : method === "POST";
+  }
+
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "images" &&
+    path[4] === "bind"
+  ) {
+    return method === "POST";
+  }
+
   return false;
 }
 
@@ -783,6 +840,7 @@ async function proxyRequest(
     const contentType = request.headers.get("content-type");
 
     applySessionHeaders(headers, request);
+    applyForceRefreshHeaders(headers, request);
     if (contentType) {
       headers.set("Content-Type", contentType);
     }
@@ -882,6 +940,10 @@ async function fetchCapabilityBootstrapTarget(
     const headers = new Headers({ Accept: "application/json" });
 
     applySessionHeaders(headers, request);
+    applyForceRefreshHeaders(headers, request);
+    if (isFrontendForceRefreshRequest(request)) {
+      targetUrl.searchParams.set("force_refresh", "1");
+    }
 
     const backendResponse = await fetch(targetUrl, {
       cache: "no-store",
@@ -952,6 +1014,10 @@ async function fetchCapabilityBootstrapBatch(
     const headers = new Headers({ Accept: "application/json" });
 
     applySessionHeaders(headers, request);
+    applyForceRefreshHeaders(headers, request);
+    if (isFrontendForceRefreshRequest(request)) {
+      targetUrl.searchParams.set("force_refresh", "1");
+    }
 
     const backendResponse = await fetch(targetUrl, {
       cache: "no-store",
@@ -976,17 +1042,24 @@ async function fetchCapabilityBootstrapBatch(
 
 async function capabilityBootstrapRequest(request: NextRequest) {
   const cacheKey = getCapabilityBootstrapCacheKey(request);
-  const cached = readCapabilityBootstrapCache(cacheKey);
+  const forceRefresh = isFrontendForceRefreshRequest(request);
+
+  if (forceRefresh) {
+    clearCapabilityBootstrapCache(cacheKey);
+  }
+
+  const cached = forceRefresh ? null : readCapabilityBootstrapCache(cacheKey);
 
   if (cached) {
     return Response.json(cached);
   }
 
-  const inFlight = capabilityBootstrapInFlight.get(cacheKey);
+  const inFlight = forceRefresh ? null : capabilityBootstrapInFlight.get(cacheKey);
   if (inFlight) {
     return Response.json(await inFlight);
   }
 
+  const requestCacheGeneration = capabilityBootstrapCacheGeneration;
   const promise = (async () => {
     const batched = await fetchCapabilityBootstrapBatch(request);
     if (batched) {
@@ -1000,10 +1073,12 @@ async function capabilityBootstrapRequest(request: NextRequest) {
   capabilityBootstrapInFlight.set(cacheKey, promise);
 
   const payload = await promise;
-  capabilityBootstrapCache.set(cacheKey, {
-    expiresAt: Date.now() + CAPABILITY_BOOTSTRAP_CACHE_TTL_MS,
-    payload,
-  });
+  if (requestCacheGeneration === capabilityBootstrapCacheGeneration) {
+    capabilityBootstrapCache.set(cacheKey, {
+      expiresAt: Date.now() + CAPABILITY_BOOTSTRAP_CACHE_TTL_MS,
+      payload,
+    });
+  }
 
   return Response.json(payload);
 }

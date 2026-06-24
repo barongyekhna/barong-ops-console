@@ -18,6 +18,7 @@ export type ModuleStatus =
   | "installed"
   | "enabled"
   | "active"
+  | "production_ready"
   | "disabled"
   | "unavailable"
   | "deprecated"
@@ -170,6 +171,7 @@ const MODULE_STATUSES = new Set<ModuleStatus>([
   "installed",
   "enabled",
   "active",
+  "production_ready",
   "disabled",
   "unavailable",
   "deprecated",
@@ -197,6 +199,10 @@ const UNAVAILABLE_BEHAVIORS = new Set<ModuleUnavailableBehavior>([
 ]);
 const SAFE_EXTERNAL_DEPENDENCIES = new Set([
   "n8n",
+  "serp",
+  "chatgpt",
+  "claude_opus",
+  "deepseek",
   "woocommerce",
   "minio",
   "filebrowser",

@@ -1,7 +1,7 @@
 """add K series workflow execution gate records
 
-Revision ID: k_series_workflow_gate_002
-Revises: k_series_product_knowledge_activation_001
+Revision ID: k_workflow_gate_002
+Revises: k_product_knowledge_001
 Create Date: 2026-06-24
 
 """
@@ -11,8 +11,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision: str = "k_series_workflow_gate_002"
-down_revision: str | Sequence[str] | None = "k_series_product_knowledge_activation_001"
+revision: str = "k_workflow_gate_002"
+down_revision: str | Sequence[str] | None = "k_product_knowledge_001"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

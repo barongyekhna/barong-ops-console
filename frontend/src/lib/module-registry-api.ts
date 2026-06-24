@@ -9,6 +9,7 @@ import {
 } from "@/lib/module-registry";
 
 type ModuleRegistryRequestOptions = {
+  forceRefresh?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
 };
@@ -131,6 +132,7 @@ export async function listModuleRegistry(
 ): Promise<ModuleApiResult<ModuleRegistryResponse>> {
   try {
     const response = await apiRequest<unknown>("/modules/registry", {
+      bypassCache: options.forceRefresh,
       method: "GET",
       signal: options.signal,
       timeoutMs: options.timeoutMs,
@@ -141,11 +143,23 @@ export async function listModuleRegistry(
   }
 }
 
+export async function listControlPlaneModules(
+  options: ModuleRegistryRequestOptions = {},
+): Promise<unknown> {
+  return apiRequest<unknown>("/modules", {
+    bypassCache: options.forceRefresh,
+    method: "GET",
+    signal: options.signal,
+    timeoutMs: options.timeoutMs,
+  });
+}
+
 export async function listMyModules(
   options: ModuleRegistryRequestOptions = {},
 ): Promise<ModuleApiResult<UserModulesResponse>> {
   try {
     const response = await apiRequest<unknown>("/modules/me", {
+      bypassCache: options.forceRefresh,
       method: "GET",
       signal: options.signal,
       timeoutMs: options.timeoutMs,

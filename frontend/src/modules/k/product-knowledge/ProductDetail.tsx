@@ -29,15 +29,23 @@ import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 const TARGET_ORGANIZATION = "涌龙麟（深圳）国际贸易有限公司";
 const WORKFLOW_STEPS = [
   "product_ingestion",
+  "deepseek_enrichment",
   "serp_keyword_fetch",
   "ai_filter_chatgpt",
   "ai_filter_claude_opus",
-  "risk_term_review_manual",
+  "risk_term_manual_review",
   "keyword_optimization_ai",
   "unit_conversion_normalization",
-  "image_handling",
-  "export_p_gmc_seo",
+  "image_binding",
+  "export_p_series",
+  "export_gmc",
+  "export_seo",
 ];
+const WORKFLOW_STEP_ALIASES: Record<string, string[]> = {
+  export_p_series: ["export_p_series", "export_p_gmc_seo"],
+  image_binding: ["image_binding", "image_handling"],
+  risk_term_manual_review: ["risk_term_manual_review", "risk_term_review_manual"],
+};
 
 type RiskDecisionValue = "approve" | "reject";
 
@@ -51,7 +59,11 @@ type ProductDetailProps = {
   onCreateMedia?: (url: string) => void;
   onExportWorkflow?: () => void;
   onGenerateSellingPoints?: () => void;
+  onPauseWorkflow?: () => void;
   onRefreshWorkflow?: () => void;
+  onResumeWorkflow?: () => void;
+  onRetryWorkflow?: (step: string) => void;
+  onRollbackWorkflow?: (step: string) => void;
   onStartWorkflow?: (payload: KWorkflowStartPayload) => void;
   onSubmitRiskReview?: (
     decisions: KRiskReviewDecision[],
@@ -88,9 +100,12 @@ function workflowStepStatus(workflow: KWorkflowExecution | null, step: string) {
   if (!workflow) {
     return "pending";
   }
-  const latest = [...workflow.trace_json].reverse().find((item) => item.step === step);
+  const aliases = new Set(WORKFLOW_STEP_ALIASES[step] ?? [step]);
+  const latest = [...workflow.trace_json]
+    .reverse()
+    .find((item) => aliases.has(item.step));
 
-  return latest?.status ?? (workflow.current_step === step ? workflow.status : "pending");
+  return latest?.status ?? (aliases.has(workflow.current_step) ? workflow.status : "pending");
 }
 
 function normalizeRiskKeywords(workflow: KWorkflowExecution | null) {
@@ -120,7 +135,11 @@ export function ProductDetail({
   onCreateMedia,
   onExportWorkflow,
   onGenerateSellingPoints,
+  onPauseWorkflow,
   onRefreshWorkflow,
+  onResumeWorkflow,
+  onRetryWorkflow,
+  onRollbackWorkflow,
   onStartWorkflow,
   onSubmitRiskReview,
   product,
@@ -319,6 +338,45 @@ export function ProductDetail({
               <Play aria-hidden="true" size={16} />
             )}
             Start
+          </button>
+        </div>
+
+        <div className={styles.workflowStartGrid}>
+          <button
+            className="secondary-button"
+            disabled={!workflow || isWorkflowBusy || workflow.status === "exported"}
+            onClick={onPauseWorkflow}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={16} />
+            Pause
+          </button>
+          <button
+            className="secondary-button"
+            disabled={!workflow || isWorkflowBusy || workflow.status === "exported"}
+            onClick={onResumeWorkflow}
+            type="button"
+          >
+            <Play aria-hidden="true" size={16} />
+            Resume
+          </button>
+          <button
+            className="secondary-button"
+            disabled={!workflow || isWorkflowBusy || workflow.status === "exported"}
+            onClick={() => workflow && onRetryWorkflow?.(workflow.current_step)}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={16} />
+            Retry
+          </button>
+          <button
+            className="secondary-button"
+            disabled={!workflow || isWorkflowBusy || workflow.status === "exported"}
+            onClick={() => workflow && onRollbackWorkflow?.(workflow.current_step)}
+            type="button"
+          >
+            <RotateCcw aria-hidden="true" size={16} />
+            Rollback
           </button>
         </div>
 

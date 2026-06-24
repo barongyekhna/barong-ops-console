@@ -1,0 +1,206 @@
+{
+  "api_key_binding_visibility_status": {
+    "alias_options_visible": [
+      "serp",
+      "chatgpt",
+      "claude_opus"
+    ],
+    "existing_k_binding_aliases": [],
+    "existing_k_binding_count": 0,
+    "required_alias_options_visible": true,
+    "required_aliases_bound": false,
+    "status": "alias_options_visible"
+  },
+  "cache_invalidation_status": {
+    "direct_backend": {
+      "capability_bootstrap_cache": "force_refreshed",
+      "module_control_cache": "force_refreshed",
+      "module_registry_cache": "force_refreshed"
+    },
+    "frontend_proxy": {
+      "capability_bootstrap_cache": "force_refreshed",
+      "module_control_cache": "force_refreshed",
+      "module_registry_cache": "force_refreshed"
+    }
+  },
+  "capability_bootstrap_status": {
+    "direct_backend": {
+      "module_control_center_ok": true,
+      "module_control_k_visible": true,
+      "modules_me_count": 18,
+      "modules_me_k_visible": true,
+      "modules_registry_count": 18,
+      "modules_registry_k_visible": true,
+      "ok": true
+    },
+    "frontend_proxy": {
+      "module_control_center_ok": true,
+      "module_control_k_visible": true,
+      "modules_me_count": 18,
+      "modules_me_k_visible": true,
+      "modules_registry_count": 18,
+      "modules_registry_k_visible": true,
+      "ok": true
+    }
+  },
+  "frontend_visibility_status": {
+    "k_visible": true,
+    "module_count": 18,
+    "no_cached_empty_state": true,
+    "selected_org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+    "selected_org_name": "涌龙麟（深圳）国际贸易有限公司",
+    "source_for_k": "module_control_center"
+  },
+  "generated_at": "2026-06-24T15:52:33.026Z",
+  "k_module_visibility_status": {
+    "success": true,
+    "direct_backend": {
+      "api": {
+        "modules": {
+          "count": 0,
+          "k_visible": false,
+          "note": "legacy dynamic DB registry list; canonical runtime registry is /modules/registry",
+          "status": 200
+        },
+        "modules_me": {
+          "count": 18,
+          "k_visible": true,
+          "status": 200
+        },
+        "modules_registry": {
+          "count": 18,
+          "k_visible": true,
+          "status": 200
+        }
+      },
+      "dropdown": {
+        "k_visible": true,
+        "module_count": 18,
+        "no_cached_empty_state": true,
+        "selected_org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+        "selected_org_name": "涌龙麟（深圳）国际贸易有限公司",
+        "source_for_k": "module_control_center"
+      },
+      "module_control_state": {
+        "cache_status": "fresh",
+        "k_state_count": 2,
+        "k_visible": true,
+        "module_count": 36,
+        "organization_count": 2,
+        "target_org_exists": true,
+        "target_org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+        "target_org_k_state": {
+          "enabled": true,
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "org_name": "涌龙麟（深圳）国际贸易有限公司",
+          "runtime_status": "active"
+        }
+      }
+    },
+    "frontend_proxy": {
+      "api": {
+        "modules": {
+          "count": 0,
+          "k_visible": false,
+          "note": "legacy dynamic DB registry list; canonical runtime registry is /modules/registry",
+          "status": 200
+        },
+        "modules_me": {
+          "count": 18,
+          "k_visible": true,
+          "status": 200
+        },
+        "modules_registry": {
+          "count": 18,
+          "k_visible": true,
+          "status": 200
+        }
+      },
+      "dropdown": {
+        "k_visible": true,
+        "module_count": 18,
+        "no_cached_empty_state": true,
+        "selected_org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+        "selected_org_name": "涌龙麟（深圳）国际贸易有限公司",
+        "source_for_k": "module_control_center"
+      },
+      "module_control_state": {
+        "cache_status": "fresh",
+        "k_state_count": 2,
+        "k_visible": true,
+        "module_count": 36,
+        "organization_count": 2,
+        "target_org_exists": true,
+        "target_org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+        "target_org_k_state": {
+          "enabled": true,
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "org_name": "涌龙麟（深圳）国际贸易有限公司",
+          "runtime_status": "active"
+        }
+      }
+    }
+  },
+  "module_control_state_status": {
+    "cache_status": "fresh",
+    "k_state_count": 2,
+    "k_visible": true,
+    "module_count": 36,
+    "organization_count": 2,
+    "target_org_exists": true,
+    "target_org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+    "target_org_k_state": {
+      "enabled": true,
+      "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+      "org_name": "涌龙麟（深圳）国际贸易有限公司",
+      "runtime_status": "active"
+    }
+  },
+  "modules_fetched": {
+    "direct_backend": {
+      "modules": {
+        "count": 0,
+        "k_visible": false,
+        "note": "legacy dynamic DB registry list; canonical runtime registry is /modules/registry",
+        "status": 200
+      },
+      "modules_me": {
+        "count": 18,
+        "k_visible": true,
+        "status": 200
+      },
+      "modules_registry": {
+        "count": 18,
+        "k_visible": true,
+        "status": 200
+      }
+    },
+    "frontend_proxy": {
+      "modules": {
+        "count": 0,
+        "k_visible": false,
+        "note": "legacy dynamic DB registry list; canonical runtime registry is /modules/registry",
+        "status": 200
+      },
+      "modules_me": {
+        "count": 18,
+        "k_visible": true,
+        "status": 200
+      },
+      "modules_registry": {
+        "count": 18,
+        "k_visible": true,
+        "status": 200
+      }
+    }
+  },
+  "registration_status": {
+    "module_key": "k.product_knowledge",
+    "required_alias_options": [
+      "serp",
+      "chatgpt",
+      "claude_opus"
+    ],
+    "status": "registered_and_visible"
+  }
+}

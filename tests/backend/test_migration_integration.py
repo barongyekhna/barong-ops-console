@@ -5,7 +5,7 @@ from backend.app.db.session import engine
 
 pytestmark = pytest.mark.integration
 
-ALEMBIC_HEAD = "module_api_key_orch_001"
+ALEMBIC_HEAD = "ai_provider_layer_001"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",
@@ -34,6 +34,18 @@ REQUIRED_ALEMBIC_TABLES = {
     "ops_execution_unlock_tokens",
     "ops_canary_rollouts",
     "ops_rollback_guards",
+    "k_product_knowledge_products",
+    "k_product_knowledge_attributes",
+    "k_product_knowledge_translations",
+    "k_product_knowledge_keywords",
+    "k_product_knowledge_risk_terms",
+    "k_product_knowledge_research_runs",
+    "k_product_knowledge_ai_events",
+    "k_product_knowledge_workflow_executions",
+    "k_product_knowledge_versions",
+    "k_product_knowledge_media_assets",
+    "k_product_knowledge_review_items",
+    "provider_config",
 }
 
 

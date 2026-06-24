@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from ...db.session import get_db
@@ -16,19 +16,35 @@ from ...services.module_control_cache_service import (
     apply_module_control_state_to_cache,
     get_module_control_center_cached_json,
     refresh_module_control_center_cache_async,
+    refresh_module_control_center_cache_sync,
 )
 from ...services.data_isolation import without_org_data_isolation
 from ..deps import require_lightweight_control_plane_admin, require_owner
 
 router = APIRouter(prefix="/module-control", tags=["module-control"])
+FRONTEND_FORCE_REFRESH_HEADER = "x-frontend-force-refresh"
+
+
+def _is_force_refresh_request(request: Request) -> bool:
+    return (
+        request.headers.get(FRONTEND_FORCE_REFRESH_HEADER) == "1"
+        or request.query_params.get("force_refresh") == "1"
+        or request.query_params.get("_force_refresh") == "1"
+    )
 
 
 @router.get("/center", response_model=ModuleControlCenterResponse)
 def module_control_center(
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(require_lightweight_control_plane_admin),
 ) -> Response:
     del user
+    if _is_force_refresh_request(request):
+        return Response(
+            content=refresh_module_control_center_cache_sync().model_dump_json(),
+            media_type="application/json",
+        )
     return Response(
         content=get_module_control_center_cached_json(db=db),
         media_type="application/json",

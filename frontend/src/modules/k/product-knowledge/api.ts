@@ -5,6 +5,7 @@ import type {
   KMediaCreatePayload,
   KMediaListResponse,
   KRiskReviewPayload,
+  KWorkflowControlPayload,
   KWorkflowExecution,
   KWorkflowExportResponse,
   KWorkflowStartPayload,
@@ -186,6 +187,24 @@ export async function exportWorkflow(
   );
 
   return readJson<KWorkflowExportResponse>(response);
+}
+
+export async function controlWorkflow(
+  productId: string,
+  action: "pause" | "resume" | "retry" | "rollback",
+  payload: KWorkflowControlPayload,
+): Promise<KWorkflowExecution> {
+  const response = await fetch(
+    `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${productId}/workflow/${action}`,
+    {
+      body: JSON.stringify(payload),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+
+  return readJson<KWorkflowExecution>(response);
 }
 
 export async function getMediaAssets(

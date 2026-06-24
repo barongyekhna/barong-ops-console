@@ -9,6 +9,7 @@ import {
 } from "@/lib/module-adapter";
 
 type ModuleAdapterRequestOptions = {
+  forceRefresh?: boolean;
   signal?: AbortSignal;
   timeoutMs?: number;
 };
@@ -134,6 +135,7 @@ export async function listModuleAdapterRegistry(
 ): Promise<ModuleAdapterApiResult<ModuleAdapterRegistryResponse>> {
   try {
     const response = await apiRequest<unknown>("/module-adapters/registry", {
+      bypassCache: options.forceRefresh,
       method: "GET",
       signal: options.signal,
       timeoutMs: options.timeoutMs,
@@ -149,6 +151,7 @@ export async function listMyModuleAdapters(
 ): Promise<ModuleAdapterApiResult<UserModuleAdaptersResponse>> {
   try {
     const response = await apiRequest<unknown>("/module-adapters/me", {
+      bypassCache: options.forceRefresh,
       method: "GET",
       signal: options.signal,
       timeoutMs: options.timeoutMs,

@@ -51,6 +51,7 @@ NON_EXECUTABLE_STATUS_STATES = {
     "unavailable": "unavailable",
     "disabled": "unavailable",
 }
+RUNTIME_ACTIVE_MODULE_STATUSES = frozenset({"active", "production_ready"})
 DYNAMIC_STATUS_TO_MODULE_STATUS = {
     "foundation": "installed",
     "demo": "enabled",
@@ -191,6 +192,10 @@ def _cached_module_manifests() -> tuple[ModuleManifestV1, ...]:
     return tuple(validate_module_manifests())
 
 
+def clear_module_registry_cache() -> None:
+    _cached_module_manifests.cache_clear()
+
+
 def list_module_manifests() -> list[ModuleManifestV1]:
     manifests = list(_cached_module_manifests())
     emit_event(
@@ -309,6 +314,14 @@ def list_dynamic_module_manifests(db: Session) -> list[ModuleManifestV1]:
 
 def list_module_manifests_with_dynamic(db: Session) -> list[ModuleManifestV1]:
     return [*list_module_manifests_snapshot(), *list_dynamic_module_manifests(db)]
+
+
+def list_active_module_manifests(db: Session) -> list[ModuleManifestV1]:
+    return [
+        manifest
+        for manifest in list_module_manifests_with_dynamic(db)
+        if manifest.status in RUNTIME_ACTIVE_MODULE_STATUSES
+    ]
 
 
 def get_module_manifest(module_key: str) -> ModuleManifestV1 | None:

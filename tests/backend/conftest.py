@@ -60,6 +60,7 @@ from backend.app.models.permission import (
     RoleDefaultPermission,
     UserPermissionAssignment,
 )
+from backend.app.models.provider_config import ProviderConfigRecord
 from backend.app.models.registry import (
     AgentRegistry,
     ModuleRegistry,
@@ -315,6 +316,7 @@ def clear_auth_tables() -> None:
         db.execute(delete(UserPermissionAssignment))
         db.execute(delete(RoleDefaultPermission))
         db.execute(delete(PermissionRegistry))
+        db.execute(delete(ProviderConfigRecord))
         db.execute(delete(AgentRegistry))
         db.execute(delete(WorkflowRegistry))
         db.execute(delete(ModuleRegistry))

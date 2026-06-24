@@ -1,0 +1,170 @@
+{
+  "generated_at": "2026-06-24T15:12:42.387Z",
+  "target_base_url": "http://127.0.0.1:3000/api/backend",
+  "constraints": {
+    "backend_code_modified": false,
+    "containers_restarted": false,
+    "database_modified": false,
+    "frontend_only_refresh": true
+  },
+  "modules_fetched": {
+    "modules": {
+      "count": 0,
+      "ok": true,
+      "status": 200
+    },
+    "modules_registry": {
+      "count": 16,
+      "k_module_present": false,
+      "ok": true,
+      "status": 200
+    },
+    "modules_me": {
+      "count": 16,
+      "k_module_present": false,
+      "ok": true,
+      "status": 200
+    },
+    "capability_bootstrap": {
+      "modules_registry_count": 16,
+      "modules_me_count": 16,
+      "ok": true,
+      "status": 200
+    },
+    "module_control_center": {
+      "module_count": 32,
+      "k_module_present": false,
+      "ok": true,
+      "status": 200
+    },
+    "api_key_bindings": {
+      "alias_values": [],
+      "count": 0,
+      "ok": true,
+      "status": 200
+    },
+    "api_keys": {
+      "count": 0,
+      "ok": true,
+      "status": 200
+    }
+  },
+  "cache_invalidation_status": {
+    "capability_bootstrap_cache": "force_refresh_header_and_query_sent; source clears proxy cache by session",
+    "module_registry_cache": "force_refresh_requests_sent; source clears frontend request cache before rehydrate",
+    "frontend_request_cache": "clearFrontendRequestCache(includeInFlight=true) wired to CapabilityStateProvider.refresh",
+    "force_refresh_header_sent": true,
+    "force_refresh_query_sent": true
+  },
+  "key_management_dropdown_state": {
+    "alias_options_visible": true,
+    "binding_alias_options": [
+      "default",
+      "serp",
+      "deepseek",
+      "claude_opus",
+      "n8n"
+    ],
+    "binding_records_count": 0,
+    "dropdown_module_count": 16,
+    "module_dropdown_options_sample": [
+      {
+        "display_name": "Dashboard",
+        "module_id": "core.dashboard",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "Foundation Demo",
+        "module_id": "experimental.foundation_demo",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "n8n Test Bridge",
+        "module_id": "integration.n8n_test_bridge",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "n8n Webhook Test Bridge",
+        "module_id": "integration.n8n_webhook_test_bridge",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "User Management",
+        "module_id": "admin.users",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "Organizations",
+        "module_id": "admin.organizations",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "Permission Management",
+        "module_id": "admin.permissions",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "Modules",
+        "module_id": "admin.modules",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "Agents",
+        "module_id": "admin.agents",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "Settings",
+        "module_id": "admin.settings",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "Products",
+        "module_id": "business.products",
+        "source": "module_control_center"
+      },
+      {
+        "display_name": "Approvals",
+        "module_id": "business.approvals",
+        "source": "module_control_center"
+      }
+    ],
+    "source_priority": [
+      "module_control_center",
+      "module_registry"
+    ]
+  },
+  "k_module_visibility_status": {
+    "appears_in_capability_bootstrap_registry": false,
+    "appears_in_key_management_dropdown": false,
+    "appears_in_module_control_center": false,
+    "appears_in_modules_registry": false,
+    "module_key": "k.product_knowledge"
+  },
+  "verification": {
+    "k_module_appears_in_key_management_dropdown": false,
+    "module_binding_list_is_not_stale": true,
+    "no_cached_empty_state_remains": false,
+    "required_aliases_visible": true
+  },
+  "authenticated_role": "owner",
+  "direct_backend_verification": {
+    "target_base_url": "http://127.0.0.1:8000",
+    "modules_registry": {
+      "status": 200,
+      "count": 16,
+      "k_module_present": false
+    },
+    "modules_me": {
+      "status": 200,
+      "count": 16,
+      "k_module_present": false
+    },
+    "module_control_center": {
+      "status": 200,
+      "count": 32,
+      "k_module_present": false
+    }
+  },
+  "blocker": "After forced frontend refresh, the running backend registry still does not return k.product_knowledge; under the no-backend/no-database/no-container-restart constraints the UI cannot truthfully show K from live registry data."
+}
