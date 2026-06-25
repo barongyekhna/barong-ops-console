@@ -81,6 +81,7 @@ class ApiKeyRead(BaseModel):
     url: str = Field(min_length=1, max_length=500)
     key_hash_prefix: str = Field(min_length=1, max_length=16)
     status: ApiKeyStatus
+    runtime_state: Literal["enabled", "disabled"] = "disabled"
     assigned_module_ids: list[str] = Field(default_factory=list)
     created_at: datetime
     updated_at: datetime

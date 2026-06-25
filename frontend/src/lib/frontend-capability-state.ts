@@ -247,6 +247,10 @@ const INTERNAL_EXERCISE_MODULE_KEY = [
   ["foun", "dation_", "de", "mo"].join(""),
 ].join(".");
 const K_PRODUCT_KNOWLEDGE_MODULE_KEY = "k.product_knowledge";
+const OWNER_ONLY_ADMIN_MODULE_KEYS = new Set([
+  "admin.modules",
+  "admin.key_management",
+]);
 
 export const PRODUCT_HIDDEN_MODULE_KEYS = new Set([
   "admin.agents",
@@ -283,7 +287,20 @@ function isOwnerFullAccess(
 function isSuperAdminVisibleAdminModule(role: string, moduleKey: string) {
   return (
     isSuperAdminRole(role) &&
+    !OWNER_ONLY_ADMIN_MODULE_KEYS.has(moduleKey) &&
     !PRODUCT_HIDDEN_MODULE_KEYS.has(moduleKey)
+  );
+}
+
+function isOwnerOnlyModule(
+  moduleKey: string,
+  record: ModuleAwareNavigationRecord,
+  manifest: ModuleManifest | null,
+) {
+  return (
+    OWNER_ONLY_ADMIN_MODULE_KEYS.has(moduleKey) ||
+    record.owner_only === true ||
+    manifest?.navigation.owner_only === true
   );
 }
 
@@ -375,6 +392,11 @@ export function buildFrontendUiCapabilityGraph({
   const items = navigationGroups
     .flatMap((group) =>
       group.items.map((record) => {
+        const ownerOnlyModule = isOwnerOnlyModule(
+          record.module_key,
+          record,
+          null,
+        );
         const hiddenPermissionModule =
           authStatus === "authenticated" &&
           isPermissionManagementModule(record.module_key) &&
@@ -392,7 +414,9 @@ export function buildFrontendUiCapabilityGraph({
               isApprovalModule(record.module_key)) ||
             (canSeeReviewAudit(normalizedRole) &&
               isReviewAuditModule(record.module_key)));
-        const state = hiddenPermissionModule
+        const state = ownerOnlyModule && !owner
+          ? "hidden"
+          : hiddenPermissionModule
           ? "hidden"
           : hiddenReviewAuditModule
             ? "hidden"
@@ -468,14 +492,21 @@ export function buildFrontendUiCapabilityGraph({
       }
       return left.label.localeCompare(right.label);
     });
-  const sidebarItems = items.filter(
+  const visibleSidebarItems = items.filter(
     (item) => item.route_bound && item.sidebar_state !== "hidden",
   );
+  const sidebarItems = owner || authStatus !== "authenticated"
+    ? visibleSidebarItems
+    : [];
   const grouped = new Map<string, ProductCapabilityItem[]>();
-  for (const item of sidebarItems) {
-    const groupItems = grouped.get(item.nav_group) ?? [];
-    groupItems.push(item);
-    grouped.set(item.nav_group, groupItems);
+  if (owner || authStatus !== "authenticated") {
+    for (const item of sidebarItems) {
+      const groupItems = grouped.get(item.nav_group) ?? [];
+      groupItems.push(item);
+      grouped.set(item.nav_group, groupItems);
+    }
+  } else {
+    grouped.set("Modules", sidebarItems);
   }
   const groups = Array.from(grouped.entries())
     .map(([label, groupItems]) => ({ items: groupItems, label }))
@@ -1377,6 +1408,21 @@ export function buildFrontendCapabilityGraph({
         unlock_condition: sourceState.unlock_condition,
       };
 
+      if (!owner && isOwnerOnlyModule(moduleKey, record, manifest)) {
+        return {
+          ...item,
+          badge: null,
+          can_enter: false,
+          org_visibility: "hidden" as const,
+          permission_state: "hidden" as const,
+          reason: "该功能区仅owner可见。",
+          required_permission: "需要owner权限。",
+          sidebar_state: "hidden" as const,
+          state: "hidden" as const,
+          unlock_condition: "请使用左侧已开放功能。",
+        };
+      }
+
       if (isReviewAuditModule(moduleKey)) {
         return reviewAuditCapabilityItem({
           item,
@@ -1446,14 +1492,14 @@ export function buildFrontendCapabilityGraph({
         return {
           ...item,
           can_enter: false,
-          badge: "locked" as const,
-          org_visibility: "visible" as const,
-          permission_state: "locked" as const,
+          badge: null,
+          org_visibility: "hidden" as const,
+          permission_state: "hidden" as const,
           reason: "该功能区需要owner权限。",
           required_permission: "需要owner权限。",
-          sidebar_state: "forbidden" as const,
-          state: "forbidden" as const,
-          unlock_condition: "请联系owner开通访问权限。",
+          sidebar_state: "hidden" as const,
+          state: "hidden" as const,
+          unlock_condition: "请使用左侧已开放功能。",
         };
       }
 
@@ -1470,14 +1516,30 @@ export function buildFrontendCapabilityGraph({
       return left.label.localeCompare(right.label);
     });
 
-  const sidebarItems = items.filter(
+  const assignedVisibleModuleKeys = new Set(
+    moduleAccessItems
+      .filter((item) => item.visible && !item.hidden && !item.locked)
+      .map((item) => item.module_key),
+  );
+  const visibleSidebarItems = items.filter(
     (item) => item.route_bound && item.sidebar_state !== "hidden",
   );
+  const sidebarItems = owner
+    ? visibleSidebarItems
+    : visibleSidebarItems.filter(
+        (item) =>
+          assignedVisibleModuleKeys.has(item.module_key) &&
+          !OWNER_ONLY_ADMIN_MODULE_KEYS.has(item.module_key),
+      );
   const grouped = new Map<string, ProductCapabilityItem[]>();
-  for (const item of sidebarItems) {
-    const groupItems = grouped.get(item.nav_group) ?? [];
-    groupItems.push(item);
-    grouped.set(item.nav_group, groupItems);
+  if (owner) {
+    for (const item of sidebarItems) {
+      const groupItems = grouped.get(item.nav_group) ?? [];
+      groupItems.push(item);
+      grouped.set(item.nav_group, groupItems);
+    }
+  } else {
+    grouped.set("Modules", sidebarItems);
   }
   const groups = Array.from(grouped.entries())
     .map(([label, groupItems]) => ({ items: groupItems, label }))

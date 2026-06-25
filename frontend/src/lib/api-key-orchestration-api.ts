@@ -5,6 +5,7 @@ import { apiRequest } from "@/lib/api";
 const API_KEY_ORCHESTRATION_TIMEOUT_MS = 15_000;
 
 export type ApiKeyStatus = "active" | "disabled" | "deleted";
+export type ApiKeyRuntimeState = "enabled" | "disabled";
 
 export type ApiKeyRecord = {
   key_id: string;
@@ -13,6 +14,7 @@ export type ApiKeyRecord = {
   url: string;
   key_hash_prefix: string;
   status: ApiKeyStatus;
+  runtime_state: ApiKeyRuntimeState;
   assigned_module_ids: string[];
   created_at: string;
   updated_at: string;

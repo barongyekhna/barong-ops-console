@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.db.base import Base
@@ -16,6 +17,7 @@ from backend.app.modules.k_series.product_knowledge.models import (
     KProductKnowledgeMediaAsset,
     KProductKnowledgeProduct,
     KProductKnowledgeVariant,
+    KProductKnowledgeWorkflowExecution,
 )
 from backend.app.modules.k_series.product_knowledge.schemas import (
     ProductKnowledgeImageBindRequest,
@@ -24,6 +26,7 @@ from backend.app.modules.k_series.product_knowledge.schemas import (
     ProductKnowledgeWorkflowExportRequest,
     ProductKnowledgeWorkflowStartRequest,
 )
+from backend.app.modules.k_series.product_knowledge import workflow_engine as workflow_module
 from backend.app.modules.k_series.product_knowledge.scope_shim import KScopeContext
 from backend.app.modules.k_series.product_knowledge.workflow_engine import (
     KWorkflowOrchestratorV2,
@@ -69,7 +72,7 @@ def _provider(key: ModuleExecutionKey, _payload: dict):
     if key.step_name == "deepseek_enrichment":
         return {
             "product_name_en": "DeepSeek enriched steel pump",
-            "product_type": "Industrial pump",
+            "product_type": "simple_product",
             "short_description_en": "AI structured steel pump for wholesale buyers.",
             "confidence_score": 0.91,
         }
@@ -243,6 +246,149 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
         KProductKnowledgeMediaAsset,
         UUID(exported.image_binding_json["asset_id"]),
     )
+
+
+def test_v2_provider_failure_returns_blocked_partial_state_without_broken_session():
+    db, user, scope, _engine, product = _setup_engine()
+    attempts = {"serp_keyword_fetch": 0}
+
+    def provider(key: ModuleExecutionKey, payload: dict):
+        if key.step_name == "serp_keyword_fetch":
+            attempts["serp_keyword_fetch"] += 1
+            raise RuntimeError("serp provider unavailable")
+        return _provider(key, payload)
+
+    engine = KWorkflowOrchestratorV2(
+        db,
+        provider_client=provider,
+        gate_resolver=_gate_resolver,
+    )
+
+    execution = engine.run(
+        product_id=product.id,
+        payload=ProductKnowledgeWorkflowStartRequest(target_market="US"),
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert attempts["serp_keyword_fetch"] == 2
+    assert execution.status == "blocked"
+    assert execution.current_step == "serp_keyword_fetch"
+    assert execution.error_report_json["code"] == "K_WORKFLOW_PROVIDER_STEP_FAILED"
+    assert execution.error_report_json["details"]["db_rollback_reason"] == (
+        "provider_step_failure"
+    )
+    assert execution.error_report_json["details"]["attempts"] == 2
+    assert db.scalar(
+        select(KProductKnowledgeWorkflowExecution).where(
+            KProductKnowledgeWorkflowExecution.id == execution.id
+        )
+    )
+    persisted_product = db.get(KProductKnowledgeProduct, product.id)
+    assert persisted_product is not None
+    assert persisted_product.deepseek_structured_output_json["confidence_score"] == 0.91
+
+
+def test_v2_provider_step_retries_once_then_continues():
+    db, user, scope, _engine, product = _setup_engine()
+    attempts = {"ai_filter_chatgpt": 0}
+
+    def provider(key: ModuleExecutionKey, payload: dict):
+        if key.step_name == "ai_filter_chatgpt":
+            attempts["ai_filter_chatgpt"] += 1
+            if attempts["ai_filter_chatgpt"] == 1:
+                raise RuntimeError("temporary chatgpt failure")
+        return _provider(key, payload)
+
+    engine = KWorkflowOrchestratorV2(
+        db,
+        provider_client=provider,
+        gate_resolver=_gate_resolver,
+    )
+
+    execution = engine.run(
+        product_id=product.id,
+        payload=ProductKnowledgeWorkflowStartRequest(target_market="US"),
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert attempts["ai_filter_chatgpt"] == 2
+    assert execution.status == "blocked"
+    assert execution.current_step == "risk_term_review_manual"
+    assert execution.chatgpt_filter_result_json["cleaned_keywords"] == [
+        "steel pump wholesale",
+        "industrial steel pump",
+    ]
+    retry_logs = [
+        item
+        for item in execution.execution_gate_logs_json
+        if item["gate"] == "workflow_resilience" and item["status"] == "retry"
+    ]
+    assert retry_logs
+    assert retry_logs[0]["details"]["step"] == "ai_filter_chatgpt"
+
+
+def test_v2_execute_provider_releases_router_transaction(monkeypatch):
+    db, _user, _scope, _engine, _product = _setup_engine()
+    engine = KWorkflowOrchestratorV2(db, gate_resolver=_gate_resolver)
+    context = _gate_resolver(
+        db,
+        module_id="k.product_knowledge",
+        key_requirements={"deepseek_enrichment": "deepseek"},
+    )
+    observed: dict[str, Any] = {}
+
+    class FakeProviderSession:
+        def __init__(self):
+            self.invalidated = False
+
+        def in_transaction(self):
+            return True
+
+        def in_nested_transaction(self):
+            return False
+
+        def invalidate(self):
+            self.invalidated = True
+
+    def provider_session_factory():
+        session = FakeProviderSession()
+        observed["provider_session"] = session
+        return session
+
+    monkeypatch.setattr(workflow_module, "SessionLocal", provider_session_factory)
+
+    class FakeAIExecutionRouter:
+        def __init__(self, session):
+            self.db = session
+
+        def execute(self, **_kwargs):
+            assert self.db is not db
+            assert self.db is observed["provider_session"]
+            observed["provider_session_used"] = self.db.in_transaction()
+            return {
+                "product_name_en": "Router released steel pump",
+                "product_type": "simple_product",
+            }
+
+    monkeypatch.setattr(workflow_module, "AIExecutionRouter", FakeAIExecutionRouter)
+
+    result = engine._execute_provider(
+        provider="deepseek",
+        task_type="generate",
+        key=context.key_for_step("deepseek_enrichment"),
+        gate_context=context,
+        payload={"task": "deepseek_enrichment"},
+    )
+
+    assert result["product_name_en"] == "Router released steel pump"
+    assert observed["provider_session_used"] is True
+    assert observed["provider_session"].invalidated is True
+    assert not db.in_transaction()
+    assert db.scalar(select(OrganizationRecord).limit(1)) is not None
 
 
 def test_v2_pause_resume_does_not_bypass_manual_risk_gate():

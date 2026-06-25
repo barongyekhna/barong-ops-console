@@ -754,14 +754,16 @@ def test_role_defaults_do_not_grant_viewer_access_and_super_admin_inherits_modul
     for module_key in (
         "admin.users",
         "admin.permissions",
-        "admin.modules",
-        "admin.key_management",
         "k.product_knowledge",
     ):
         assert super_admin_items[module_key]["visible"] is True
         assert super_admin_items[module_key]["hidden"] is False
         assert super_admin_items[module_key]["access_state"] == "available"
         assert super_admin_items[module_key]["missing_permissions"] == []
+    for module_key in ("admin.modules", "admin.key_management"):
+        assert super_admin_items[module_key]["visible"] is False
+        assert super_admin_items[module_key]["hidden"] is True
+        assert super_admin_items[module_key]["access_state"] == "hidden"
 
 
 def test_c07b_regressions_users_register_assignments_and_permissions_me(

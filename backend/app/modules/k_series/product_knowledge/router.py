@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
@@ -108,6 +109,7 @@ from .workflow_engine import (
 )
 
 router = APIRouter(prefix="/k", tags=["k-product-knowledge"])
+logger = logging.getLogger(__name__)
 
 PRODUCT_CREATE_IDEMPOTENCY_TTL_SECONDS = 20.0
 
@@ -1256,6 +1258,40 @@ def product_knowledge_workflow_start(
         _raise_k_error(exc)
     except KWorkflowExecutionError as exc:
         raise _workflow_error(exc) from exc
+    except Exception as exc:
+        logger.exception(
+            "K workflow start failed after resilience layer: product_id=%s",
+            product_id,
+        )
+        try:
+            db.rollback()
+        except Exception:
+            logger.exception(
+                "K workflow start rollback failed: product_id=%s",
+                product_id,
+            )
+        try:
+            execution = KWorkflowOrchestratorV2(db).latest_execution_for_product(
+                product_id=product_id,
+                scope_context=_scope_context(request),
+            )
+        except Exception:
+            logger.exception(
+                "K workflow start partial state reload failed: product_id=%s",
+                product_id,
+            )
+            execution = None
+        if execution is not None:
+            return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "K_WORKFLOW_START_UNAVAILABLE",
+                "message": "K workflow start could not complete, and no partial workflow state was available.",
+                "product_id": str(product_id),
+                "raw_error_class": exc.__class__.__name__,
+            },
+        ) from exc
     return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
 
 

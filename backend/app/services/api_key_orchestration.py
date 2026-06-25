@@ -21,8 +21,10 @@ from ..schemas.api_key_orchestration import (
     ApiKeyUpdateRequest,
 )
 from .module_registry import get_module_manifest_for_db
+from .module_control_cache_service import refresh_module_control_center_cache_async
 from .provider_config_service import (
     ProviderConfigError,
+    provider_key_alias,
     upsert_provider_config,
 )
 
@@ -50,6 +52,15 @@ class ApiKeyInjectionContext:
 ENVELOPE_VERSION = "akv1"
 NONCE_BYTES = 16
 MAC_BYTES = 32
+K_SERIES_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
+K_SERIES_MODULE_ID = "k.product_knowledge"
+K_SERIES_PROVIDER_ALIASES = ("serp", "chatgpt", "claude_opus", "deepseek")
+K_SERIES_PROVIDER_MARKERS = {
+    "serp": ("serp", "serper"),
+    "claude_opus": ("claude", "anthropic", "opus"),
+    "deepseek": ("deepseek",),
+    "chatgpt": ("chatgpt", "openai", "4sapi"),
+}
 
 
 def _settings_secret_material() -> str:
@@ -160,6 +171,8 @@ def _read_key(
     record: ApiKeyRecord,
     bindings: list[ApiKeyModuleBindingRecord] | None = None,
 ) -> ApiKeyRead:
+    metadata = record.metadata_json or {}
+    runtime_state = "enabled" if metadata.get("runtime_state") == "enabled" else "disabled"
     return ApiKeyRead(
         key_id=record.key_id,
         org_id=record.org_id,
@@ -167,6 +180,7 @@ def _read_key(
         url=record.url,
         key_hash_prefix=record.key_hash_prefix,
         status=record.status,  # type: ignore[arg-type]
+        runtime_state=runtime_state,  # type: ignore[arg-type]
         assigned_module_ids=sorted(
             {binding.module_id for binding in bindings or [] if binding.status == "active"}
         ),
@@ -192,6 +206,31 @@ def _read_binding(
         created_at=binding.created_at,
         updated_at=binding.updated_at,
     )
+
+
+def _enable_key_runtime(
+    key: ApiKeyRecord,
+    *,
+    actor_user_id: str,
+) -> None:
+    key.status = "active"
+    key.updated_by_user_id = actor_user_id
+    key.metadata_json = {
+        **(key.metadata_json or {}),
+        "runtime_state": "enabled",
+    }
+
+
+def _disable_key_runtime(
+    key: ApiKeyRecord,
+    *,
+    actor_user_id: str,
+) -> None:
+    key.updated_by_user_id = actor_user_id
+    key.metadata_json = {
+        **(key.metadata_json or {}),
+        "runtime_state": "disabled",
+    }
 
 
 def _get_active_organization(db: Session, org_id: str) -> OrganizationRecord:
@@ -223,6 +262,138 @@ def _sync_provider_config_for_binding(
         )
     except ProviderConfigError:
         return
+
+
+def _find_k_series_organization(db: Session) -> OrganizationRecord:
+    organization = db.scalar(
+        select(OrganizationRecord).where(
+            OrganizationRecord.org_name == K_SERIES_ORGANIZATION_NAME,
+            OrganizationRecord.status != "deleted",
+        )
+    )
+    if organization is None:
+        raise ApiKeyOrchestrationError("organization_not_found")
+    return organization
+
+
+def _infer_k_series_key_alias(key: ApiKeyRecord) -> str | None:
+    haystack = " ".join(
+        [
+            key.name,
+            key.url,
+            str((key.metadata_json or {}).get("provider") or ""),
+            str((key.metadata_json or {}).get("key_alias") or ""),
+        ]
+    ).lower()
+    for alias, markers in K_SERIES_PROVIDER_MARKERS.items():
+        if any(marker in haystack for marker in markers):
+            return alias
+    return None
+
+
+def _active_binding_for_key_alias(
+    db: Session,
+    *,
+    org_id: str,
+    module_id: str,
+    key_id: str,
+) -> ApiKeyModuleBindingRecord | None:
+    return db.scalar(
+        select(ApiKeyModuleBindingRecord).where(
+            ApiKeyModuleBindingRecord.org_id == org_id,
+            ApiKeyModuleBindingRecord.module_id == module_id,
+            ApiKeyModuleBindingRecord.key_id == key_id,
+        )
+    )
+
+
+def reevaluate_k_series_api_keys(
+    db: Session,
+    *,
+    actor_user_id: str = "system",
+) -> dict[str, object]:
+    organization = _find_k_series_organization(db)
+    if get_module_manifest_for_db(db, K_SERIES_MODULE_ID) is None:
+        raise ApiKeyOrchestrationError("module_not_registered")
+
+    keys = list(
+        db.scalars(
+            select(ApiKeyRecord)
+            .where(ApiKeyRecord.status != "deleted")
+            .order_by(ApiKeyRecord.key_id)
+        )
+    )
+    activated: list[dict[str, str]] = []
+    alias_counts: dict[str, int] = {alias: 0 for alias in K_SERIES_PROVIDER_ALIASES}
+
+    for key in keys:
+        alias = _infer_k_series_key_alias(key)
+        if alias is None:
+            continue
+        key.org_id = organization.org_id
+        _enable_key_runtime(key, actor_user_id=actor_user_id)
+        key.metadata_json = {
+            **(key.metadata_json or {}),
+            "k_series_module_id": K_SERIES_MODULE_ID,
+            "key_alias": alias,
+            "provider": provider_key_alias(alias),
+            "runtime_state": "enabled",
+        }
+        db.add(key)
+
+        binding = _active_binding_for_key_alias(
+            db,
+            org_id=organization.org_id,
+            module_id=K_SERIES_MODULE_ID,
+            key_id=key.key_id,
+        )
+        if binding is None:
+            binding = ApiKeyModuleBindingRecord(
+                binding_id=_new_binding_id(),
+                org_id=organization.org_id,
+                module_id=K_SERIES_MODULE_ID,
+                key_id=key.key_id,
+                key_alias=alias,
+                status="active",
+                created_by_user_id=actor_user_id,
+                updated_by_user_id=actor_user_id,
+            )
+        else:
+            binding.key_alias = alias
+            binding.status = "active"
+            binding.updated_by_user_id = actor_user_id
+        db.add(binding)
+        db.flush()
+        _sync_provider_config_for_binding(
+            db,
+            binding=binding,
+            key=key,
+            source="k_series_key_reevaluation",
+        )
+        alias_counts[alias] += 1
+        activated.append(
+            {
+                "key_alias": alias,
+                "key_id": key.key_id,
+                "org_id": organization.org_id,
+                "module_id": K_SERIES_MODULE_ID,
+                "status": key.status,
+                "runtime_state": str(key.metadata_json.get("runtime_state")),
+            }
+        )
+
+    refresh_module_control_center_cache_async(force=True)
+    return {
+        "organization": organization.org_name,
+        "org_id": organization.org_id,
+        "module_id": K_SERIES_MODULE_ID,
+        "activated": activated,
+        "alias_counts": alias_counts,
+        "required_aliases_available": {
+            alias: alias_counts.get(alias, 0) > 0
+            for alias in K_SERIES_PROVIDER_ALIASES
+        },
+    }
 
 
 def list_api_keys(db: Session) -> list[ApiKeyRead]:
@@ -258,10 +429,14 @@ def create_api_key(
         status="active",
         created_by_user_id=actor_user_id,
         updated_by_user_id=actor_user_id,
-        metadata_json={"storage": "backend_envelope"},
+        metadata_json={
+            "runtime_state": "enabled",
+            "storage": "backend_envelope",
+        },
     )
     db.add(record)
     db.flush()
+    refresh_module_control_center_cache_async(force=True)
     return _read_key(record, [])
 
 
@@ -293,6 +468,10 @@ def update_api_key(
         if payload.status == "deleted":
             return delete_api_key(db, key_id=key_id, actor_user_id=actor_user_id)
         record.status = payload.status
+        if payload.status == "active":
+            _enable_key_runtime(record, actor_user_id=actor_user_id)
+        else:
+            _disable_key_runtime(record, actor_user_id=actor_user_id)
     record.updated_by_user_id = actor_user_id
     db.add(record)
     db.flush()
@@ -304,6 +483,7 @@ def update_api_key(
             key=record,
             source="api_key_update",
         )
+    refresh_module_control_center_cache_async(force=True)
     return _read_key(record, bindings)
 
 
@@ -320,6 +500,7 @@ def delete_api_key(
     record.status = "deleted"
     record.deleted_at = now
     record.updated_by_user_id = actor_user_id
+    _disable_key_runtime(record, actor_user_id=actor_user_id)
     bindings = list(
         db.scalars(
             select(ApiKeyModuleBindingRecord).where(
@@ -334,6 +515,7 @@ def delete_api_key(
         db.add(binding)
     db.add(record)
     db.flush()
+    refresh_module_control_center_cache_async(force=True)
     return _read_key(record, [])
 
 
@@ -375,10 +557,12 @@ def create_api_key_binding(
     if get_module_manifest_for_db(db, payload.module_id) is None:
         raise ApiKeyOrchestrationError("module_not_registered")
     key = get_api_key_record(db, payload.key_id)
-    if key is None or key.status != "active":
-        raise ApiKeyOrchestrationError("api_key_not_active")
+    if key is None or key.status == "deleted":
+        raise ApiKeyOrchestrationError("api_key_not_found")
     if key.org_id != org_id:
         raise ApiKeyIsolationError("api_key_org_mismatch")
+    _enable_key_runtime(key, actor_user_id=actor_user_id)
+    db.add(key)
 
     existing = db.scalar(
         select(ApiKeyModuleBindingRecord).where(
@@ -399,6 +583,7 @@ def create_api_key_binding(
             key=key,
             source="api_key_binding_update",
         )
+        refresh_module_control_center_cache_async(force=True)
         return _read_binding(existing, key)
 
     binding = ApiKeyModuleBindingRecord(
@@ -419,6 +604,7 @@ def create_api_key_binding(
         key=key,
         source="api_key_binding_create",
     )
+    refresh_module_control_center_cache_async(force=True)
     return _read_binding(binding, key)
 
 
@@ -439,6 +625,7 @@ def delete_api_key_binding(
     binding.updated_by_user_id = actor_user_id
     db.add(binding)
     db.flush()
+    refresh_module_control_center_cache_async(force=True)
     return binding.binding_id
 
 

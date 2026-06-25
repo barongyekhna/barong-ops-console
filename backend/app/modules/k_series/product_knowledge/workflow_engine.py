@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
@@ -13,6 +14,7 @@ from fastapi import Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ....db.session import SessionLocal
 from ....models.organization import OrganizationRecord
 from ....models.user import User
 from ....services.ai_provider_router import AIExecutionRouter, AIProviderExecutionError
@@ -43,9 +45,12 @@ from .schemas import (
 )
 from .scope_shim import KScopeContext, apply_scope_filters
 
+logger = logging.getLogger(__name__)
+
 IMAGE_SOURCE_MANUAL = "manual_upload_image"
 IMAGE_SOURCE_I_SYSTEM = "i_system_asset"
 BOUND_IMAGE_SOURCES = {IMAGE_SOURCE_MANUAL, IMAGE_SOURCE_I_SYSTEM}
+K_WORKFLOW_PROVIDER_STEP_MAX_ATTEMPTS = 2
 
 WORKFLOW_STEPS = (
     "product_ingestion",
@@ -693,8 +698,11 @@ class KProductKnowledgeWorkflowEngine:
     ) -> dict[str, Any]:
         if self.provider_client is not None:
             return self.provider_client(key, payload)
+        step = str(payload.get("task") or provider)
+        provider_db = SessionLocal()
+        provider_error: Exception | None = None
         try:
-            return AIExecutionRouter(self.db).execute(
+            return AIExecutionRouter(provider_db).execute(
                 provider=provider,
                 task_type=task_type,  # type: ignore[arg-type]
                 payload=payload,
@@ -703,12 +711,23 @@ class KProductKnowledgeWorkflowEngine:
                 execution_context=gate_context,
             )
         except AIProviderExecutionError as exc:
+            provider_error = exc
             raise KWorkflowProviderError(
                 exc.code,
                 str(exc),
                 status_code=exc.status_code,
                 error_report=exc.structured_error(),
             ) from exc
+        except Exception as exc:
+            provider_error = exc
+            raise
+        finally:
+            self._dispose_provider_session(
+                provider_db,
+                step=step,
+                reason="provider_call_finished",
+                raw_error=provider_error,
+            )
 
     def _run_deepseek_enrichment(
         self,
@@ -726,6 +745,12 @@ class KProductKnowledgeWorkflowEngine:
                 "product_id": str(product.id),
                 "product_key": product.product_key,
             },
+        )
+        self._commit_workflow_progress(
+            product=product,
+            execution=execution,
+            step="deepseek_enrichment",
+            reason="provider_call_started",
         )
         key = gate_context.key_for_step("deepseek_enrichment")
         ai_input = {
@@ -803,6 +828,12 @@ class KProductKnowledgeWorkflowEngine:
                 "target_market": payload.target_market,
                 "seed_keywords": payload.seed_keywords,
             },
+        )
+        self._commit_workflow_progress(
+            product=product,
+            execution=execution,
+            step="serp_keyword_fetch",
+            reason="provider_call_started",
         )
         key = gate_context.key_for_step("serp_keyword_fetch")
         query = (
@@ -918,6 +949,12 @@ class KProductKnowledgeWorkflowEngine:
             "running",
             input_summary={"keyword_count": len(serp_result["keywords"])},
         )
+        self._commit_workflow_progress(
+            product=product,
+            execution=execution,
+            step="ai_filter_chatgpt",
+            reason="provider_call_started",
+        )
         key = gate_context.key_for_step("ai_filter_chatgpt")
         ai_input = {
             "module_id": MODULE_KEY,
@@ -987,6 +1024,12 @@ class KProductKnowledgeWorkflowEngine:
             input_summary={
                 "chatgpt_cleaned_keywords": len(chatgpt_result["cleaned_keywords"])
             },
+        )
+        self._commit_workflow_progress(
+            product=product,
+            execution=execution,
+            step="ai_filter_claude_opus",
+            reason="provider_call_started",
         )
         key = gate_context.key_for_step("ai_filter_claude_opus")
         ai_input = {
@@ -1758,6 +1801,291 @@ class KProductKnowledgeWorkflowEngine:
         )
         execution.execution_gate_logs_json = logs
 
+    def _rollback_session_for_workflow(
+        self,
+        *,
+        step: str,
+        reason: str,
+        raw_error: Exception | None = None,
+    ) -> bool:
+        try:
+            needs_rollback = self.db.in_transaction() or self.db.in_nested_transaction()
+        except Exception:
+            needs_rollback = True
+        if not needs_rollback:
+            return False
+        try:
+            self.db.rollback()
+        except Exception as rollback_error:
+            logger.exception(
+                "K workflow DB rollback failed: step=%s reason=%s raw_error=%s",
+                step,
+                reason,
+                raw_error.__class__.__name__ if raw_error else None,
+            )
+            raise
+        logger.warning(
+            "K workflow DB session rolled back: step=%s reason=%s error_class=%s",
+            step,
+            reason,
+            raw_error.__class__.__name__ if raw_error else None,
+        )
+        return True
+
+    def _dispose_provider_session(
+        self,
+        provider_db: Session,
+        *,
+        step: str,
+        reason: str,
+        raw_error: Exception | None = None,
+    ) -> None:
+        try:
+            provider_db.invalidate()
+        except Exception as invalidate_error:
+            logger.warning(
+                "K workflow provider DB session invalidation failed: "
+                "step=%s reason=%s raw_error=%s invalidate_error=%s",
+                step,
+                reason,
+                raw_error.__class__.__name__ if raw_error else None,
+                invalidate_error.__class__.__name__,
+            )
+
+    def _commit_workflow_progress(
+        self,
+        *,
+        product: KProductKnowledgeProduct | None,
+        execution: KProductKnowledgeWorkflowExecution,
+        step: str,
+        reason: str,
+    ) -> None:
+        try:
+            if product is not None:
+                self.db.add(product)
+            self.db.add(execution)
+            self.db.commit()
+        except Exception as exc:
+            self._rollback_session_for_workflow(
+                step=step,
+                reason=f"{reason}_commit_failed",
+                raw_error=exc,
+            )
+            logger.exception(
+                "K workflow state commit failed: step=%s reason=%s status=%s",
+                step,
+                reason,
+                execution.status,
+            )
+            raise KWorkflowExecutionError(
+                "K_WORKFLOW_STATE_PERSIST_FAILED",
+                "K workflow state could not be persisted safely.",
+                status_code=503,
+                error_report={
+                    "code": "K_WORKFLOW_STATE_PERSIST_FAILED",
+                    "message": "K workflow state could not be persisted safely.",
+                    "blocking_step": step,
+                    "workflow_id": str(execution.id),
+                    "product_id": str(execution.product_id),
+                    "organization": execution.organization_name,
+                    "rollback_reason": f"{reason}_commit_failed",
+                    "raw_error_class": exc.__class__.__name__,
+                    "must_stop": True,
+                    "timestamp": _now_iso(),
+                },
+            ) from exc
+
+    def _reload_workflow_objects(
+        self,
+        *,
+        product_id: UUID,
+        execution_id: UUID,
+        step: str,
+    ) -> tuple[KProductKnowledgeProduct, KProductKnowledgeWorkflowExecution]:
+        product = self.db.get(KProductKnowledgeProduct, product_id)
+        execution = self.db.get(KProductKnowledgeWorkflowExecution, execution_id)
+        if product is None or execution is None:
+            raise KWorkflowExecutionError(
+                "K_WORKFLOW_PARTIAL_STATE_NOT_FOUND",
+                "K workflow partial state could not be reloaded after rollback.",
+                status_code=503,
+                error_report={
+                    "code": "K_WORKFLOW_PARTIAL_STATE_NOT_FOUND",
+                    "message": "K workflow partial state could not be reloaded after rollback.",
+                    "blocking_step": step,
+                    "product_id": str(product_id),
+                    "workflow_id": str(execution_id),
+                    "must_stop": True,
+                    "timestamp": _now_iso(),
+                },
+            )
+        return product, execution
+
+    def _persist_step_failure_after_rollback(
+        self,
+        *,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        step: str,
+        raw_error: Exception,
+        attempts: int,
+    ) -> KProductKnowledgeWorkflowExecution:
+        self._rollback_session_for_workflow(
+            step=step,
+            reason="provider_step_failure",
+            raw_error=raw_error,
+        )
+        product, execution = self._reload_workflow_objects(
+            product_id=product.id,
+            execution_id=execution.id,
+            step=step,
+        )
+        if isinstance(raw_error, KWorkflowExecutionError):
+            code = raw_error.code
+            status_code = raw_error.status_code
+            provider_failure_reason = str(raw_error)
+        else:
+            code = "K_WORKFLOW_PROVIDER_STEP_FAILED"
+            status_code = 502
+            provider_failure_reason = "K workflow provider step failed."
+        error_report = self._error_report(
+            execution,
+            code=code,
+            message=provider_failure_reason,
+            step=step,
+            details={
+                "failed_step": step,
+                "db_rollback_reason": "provider_step_failure",
+                "provider_failure_reason": provider_failure_reason,
+                "raw_error_class": raw_error.__class__.__name__,
+                "attempts": attempts,
+                "retry_available": True,
+                "status_code": status_code,
+                "partial_state": "blocked",
+            },
+            raw_error=raw_error,
+        )
+        execution.status = "blocked"
+        execution.current_step = step
+        execution.error_report_json = error_report
+        execution.finished_at = None
+        self._append_trace(execution, step, "failed", error=error_report)
+        self._append_gate_log(
+            execution,
+            "workflow_resilience",
+            "blocked",
+            {
+                "failed_step": step,
+                "code": code,
+                "db_rollback_reason": "provider_step_failure",
+                "provider_failure_reason": provider_failure_reason,
+                "raw_error_class": raw_error.__class__.__name__,
+                "attempts": attempts,
+                "retry_available": True,
+                "partial_state": "blocked",
+            },
+        )
+        self._commit_workflow_progress(
+            product=product,
+            execution=execution,
+            step=step,
+            reason="provider_step_failure_persisted",
+        )
+        logger.warning(
+            "K workflow provider step isolated: workflow_id=%s product_id=%s step=%s attempts=%s error=%s",
+            execution.id,
+            product.id,
+            step,
+            attempts,
+            raw_error.__class__.__name__,
+        )
+        return execution
+
+    def _run_resilient_provider_step(
+        self,
+        *,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        step: str,
+        runner: Callable[
+            [KProductKnowledgeProduct, KProductKnowledgeWorkflowExecution],
+            Any,
+        ],
+    ) -> tuple[bool, Any, KProductKnowledgeProduct, KProductKnowledgeWorkflowExecution]:
+        product_id = product.id
+        execution_id = execution.id
+        last_error: Exception | None = None
+        for attempt in range(1, K_WORKFLOW_PROVIDER_STEP_MAX_ATTEMPTS + 1):
+            try:
+                self._append_gate_log(
+                    execution,
+                    "workflow_resilience",
+                    "attempt",
+                    {
+                        "step": step,
+                        "attempt": attempt,
+                        "max_attempts": K_WORKFLOW_PROVIDER_STEP_MAX_ATTEMPTS,
+                    },
+                )
+                self._commit_workflow_progress(
+                    product=product,
+                    execution=execution,
+                    step=step,
+                    reason="provider_step_attempt_started",
+                )
+                result = runner(product, execution)
+                return True, result, product, execution
+            except Exception as exc:
+                last_error = exc
+                self._rollback_session_for_workflow(
+                    step=step,
+                    reason="provider_step_attempt_failed",
+                    raw_error=exc,
+                )
+                product, execution = self._reload_workflow_objects(
+                    product_id=product_id,
+                    execution_id=execution_id,
+                    step=step,
+                )
+                if attempt < K_WORKFLOW_PROVIDER_STEP_MAX_ATTEMPTS:
+                    execution.status = "running"
+                    execution.current_step = step
+                    execution.error_report_json = None
+                    execution.finished_at = None
+                    self._append_gate_log(
+                        execution,
+                        "workflow_resilience",
+                        "retry",
+                        {
+                            "step": step,
+                            "attempt": attempt,
+                            "next_attempt": attempt + 1,
+                            "db_rollback_reason": "provider_step_attempt_failed",
+                            "provider_failure_reason": str(exc),
+                            "raw_error_class": exc.__class__.__name__,
+                        },
+                    )
+                    self._commit_workflow_progress(
+                        product=product,
+                        execution=execution,
+                        step=step,
+                        reason="provider_step_retry_scheduled",
+                    )
+                    continue
+                blocked = self._persist_step_failure_after_rollback(
+                    product=product,
+                    execution=execution,
+                    step=step,
+                    raw_error=exc,
+                    attempts=attempt,
+                )
+                return False, None, product, blocked
+        raise last_error or KWorkflowExecutionError(
+            "K_WORKFLOW_PROVIDER_STEP_FAILED",
+            "K workflow provider step failed.",
+            status_code=502,
+        )
+
     def _fail_execution(
         self,
         execution: KProductKnowledgeWorkflowExecution,
@@ -1788,8 +2116,12 @@ class KProductKnowledgeWorkflowEngine:
             "blocked",
             {"code": code, "message": message},
         )
-        self.db.add(execution)
-        self.db.commit()
+        self._commit_workflow_progress(
+            product=None,
+            execution=execution,
+            step=step,
+            reason="workflow_failed",
+        )
         raise KWorkflowExecutionError(
             code,
             message,
@@ -2177,62 +2509,143 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 "PRODUCT_CREATED",
                 step="product_ingestion",
             )
-            gate_context = self._require_execution_gate(
-                execution=execution,
-                request=request,
-                user=user,
-                key_requirements=CLOSED_LOOP_AI_KEY_REQUIREMENTS,
-            )
-            self._run_deepseek_enrichment(
+            self._commit_workflow_progress(
                 product=product,
                 execution=execution,
-                gate_context=gate_context,
-                user=user,
+                step="product_ingestion",
+                reason="product_ingestion_completed",
             )
+            try:
+                gate_context = self._require_execution_gate(
+                    execution=execution,
+                    request=request,
+                    user=user,
+                    key_requirements=CLOSED_LOOP_AI_KEY_REQUIREMENTS,
+                )
+            except Exception as exc:
+                return self._persist_step_failure_after_rollback(
+                    product=product,
+                    execution=execution,
+                    step=execution.current_step,
+                    raw_error=exc,
+                    attempts=1,
+                )
+            self._commit_workflow_progress(
+                product=product,
+                execution=execution,
+                step="execution_gate",
+                reason="execution_gate_allowed",
+            )
+            ok, _deepseek_result, product, execution = self._run_resilient_provider_step(
+                product=product,
+                execution=execution,
+                step="deepseek_enrichment",
+                runner=lambda current_product, current_execution: (
+                    self._run_deepseek_enrichment(
+                        product=current_product,
+                        execution=current_execution,
+                        gate_context=gate_context,
+                        user=user,
+                    )
+                ),
+            )
+            if not ok:
+                return execution
             self._transition_state(
                 product,
                 execution,
                 "AI_DEEPSEEK_ENRICHED",
                 step="deepseek_enrichment",
             )
-            serp_result = self._fetch_serp_keywords(
+            self._commit_workflow_progress(
                 product=product,
                 execution=execution,
-                payload=payload,
-                gate_context=gate_context,
-                user=user,
+                step="deepseek_enrichment",
+                reason="provider_step_completed",
             )
+            ok, serp_result, product, execution = self._run_resilient_provider_step(
+                product=product,
+                execution=execution,
+                step="serp_keyword_fetch",
+                runner=lambda current_product, current_execution: (
+                    self._fetch_serp_keywords(
+                        product=current_product,
+                        execution=current_execution,
+                        payload=payload,
+                        gate_context=gate_context,
+                        user=user,
+                    )
+                ),
+            )
+            if not ok:
+                return execution
             self._transition_state(
                 product,
                 execution,
                 "SERP_ANALYZED",
                 step="serp_keyword_fetch",
             )
-            chatgpt_result = self._run_chatgpt_filter(
+            self._commit_workflow_progress(
                 product=product,
                 execution=execution,
-                serp_result=serp_result,
-                gate_context=gate_context,
-                user=user,
+                step="serp_keyword_fetch",
+                reason="provider_step_completed",
             )
+            ok, chatgpt_result, product, execution = self._run_resilient_provider_step(
+                product=product,
+                execution=execution,
+                step="ai_filter_chatgpt",
+                runner=lambda current_product, current_execution: (
+                    self._run_chatgpt_filter(
+                        product=current_product,
+                        execution=current_execution,
+                        serp_result=serp_result,
+                        gate_context=gate_context,
+                        user=user,
+                    )
+                ),
+            )
+            if not ok:
+                return execution
             self._transition_state(
                 product,
                 execution,
                 "CHATGPT_FILTERED",
                 step="ai_filter_chatgpt",
             )
-            claude_result = self._run_claude_filter(
+            self._commit_workflow_progress(
                 product=product,
                 execution=execution,
-                chatgpt_result=chatgpt_result,
-                gate_context=gate_context,
-                user=user,
+                step="ai_filter_chatgpt",
+                reason="provider_step_completed",
             )
+            ok, claude_result, product, execution = self._run_resilient_provider_step(
+                product=product,
+                execution=execution,
+                step="ai_filter_claude_opus",
+                runner=lambda current_product, current_execution: (
+                    self._run_claude_filter(
+                        product=current_product,
+                        execution=current_execution,
+                        chatgpt_result=chatgpt_result,
+                        gate_context=gate_context,
+                        user=user,
+                    )
+                ),
+            )
+            if not ok:
+                return execution
             self._transition_state(
                 product,
                 execution,
                 "CLAUDE_FILTERED",
                 step="ai_filter_claude_opus",
+            )
+            self._commit_workflow_progress(
+                product=product,
+                execution=execution,
+                step="ai_filter_claude_opus",
+                reason="provider_step_completed",
             )
             self._create_manual_risk_review_block(
                 product=product,
@@ -2247,28 +2660,29 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
                 event="hard_gate_blocked",
                 details={"manual_approval_required": True},
             )
+            self._commit_workflow_progress(
+                product=product,
+                execution=execution,
+                step="risk_term_manual_review",
+                reason="manual_risk_review_required",
+            )
             return execution
         except KWorkflowExecutionError as exc:
-            if execution.error_report_json is None:
-                self._fail_execution(
-                    execution,
-                    code=exc.code,
-                    message=str(exc),
-                    step=execution.current_step,
-                    status_code=exc.status_code,
-                    raw_error=exc,
-                )
-            raise
-        except Exception as exc:
-            self._fail_execution(
-                execution,
-                code="K_WORKFLOW_UNEXPECTED_FAILURE",
-                message="K workflow execution failed unexpectedly.",
+            return self._persist_step_failure_after_rollback(
+                product=product,
+                execution=execution,
                 step=execution.current_step,
-                status_code=500,
                 raw_error=exc,
+                attempts=1,
             )
-            raise
+        except Exception as exc:
+            return self._persist_step_failure_after_rollback(
+                product=product,
+                execution=execution,
+                step=execution.current_step,
+                raw_error=exc,
+                attempts=1,
+            )
 
     def start_pipeline(
         self,

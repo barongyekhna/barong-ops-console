@@ -507,6 +507,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             label="Module Control",
             icon="Boxes",
             order=20,
+            owner_only=True,
         ),
         required_permissions=("modules.read",),
         permission_manifest=(
@@ -551,6 +552,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             label="API Key Management",
             icon="LockKeyhole",
             order=25,
+            owner_only=True,
         ),
         required_permissions=("modules.read",),
         permission_manifest=(

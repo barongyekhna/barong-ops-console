@@ -45,10 +45,12 @@ import type {
   UserModuleAdaptersResponse,
 } from "@/lib/module-adapter";
 import {
+  formatModuleApiError,
   listModuleRegistry,
   listMyModules,
   moduleRegistryResultFromError,
   moduleRegistryResultFromResponse,
+  type ModuleApiErrorSummary,
   userModulesResultFromError,
   userModulesResultFromResponse,
   type ModuleApiResult,
@@ -57,6 +59,7 @@ import type {
   ModuleRegistryResponse,
   UserModulesResponse,
 } from "@/lib/module-registry";
+import type { ModuleControlCenterResponse } from "@/lib/module-control-api";
 
 type CapabilityBootstrapEntry = {
   ok?: boolean;
@@ -92,11 +95,70 @@ export type CapabilityBootstrapResult = {
   executionAccessResult: ExecutionProviderApiResult<UserExecutionProvidersResponse>;
   executionRegistryResult: ExecutionProviderApiResult<ExecutionProviderRegistryResponse>;
   moduleAccessResult: ModuleApiResult<UserModulesResponse>;
+  moduleControlResult: ModuleApiResult<ModuleControlCenterResponse>;
   policiesResult: LiveGateApiResult<LiveGatePolicyRead[]>;
   productionResult: LiveGateApiResult<ProductionReadinessReport>;
   readinessResult: LiveGateApiResult<PreLiveValidationReport>;
   registryResult: ModuleApiResult<ModuleRegistryResponse>;
 };
+
+const EMPTY_MODULE_CONTROL_CENTER: ModuleControlCenterResponse = {
+  auto_registered_count: 0,
+  module_count: 0,
+  organization_count: 0,
+  organizations: [],
+};
+
+function moduleControlResultFromResponse(
+  response: unknown,
+): ModuleApiResult<ModuleControlCenterResponse> {
+  const record =
+    response && typeof response === "object"
+      ? (response as Partial<ModuleControlCenterResponse>)
+      : {};
+  const organizations = Array.isArray(record.organizations)
+    ? record.organizations
+    : [];
+
+  return {
+    data: {
+      auto_registered_count:
+        typeof record.auto_registered_count === "number"
+          ? record.auto_registered_count
+          : 0,
+      module_count:
+        typeof record.module_count === "number"
+          ? record.module_count
+          : organizations.reduce(
+              (count, organization) =>
+                count +
+                (Array.isArray(organization.modules)
+                  ? organization.modules.length
+                  : 0),
+              0,
+            ),
+      organization_count:
+        typeof record.organization_count === "number"
+          ? record.organization_count
+          : organizations.length,
+      organizations,
+    },
+    error: null,
+    module_access_unknown: false,
+    ok: true,
+  };
+}
+
+function moduleControlResultFromError(
+  error: unknown,
+): ModuleApiResult<ModuleControlCenterResponse> {
+  return {
+    data: EMPTY_MODULE_CONTROL_CENTER,
+    error: formatModuleApiError(error) as ModuleApiErrorSummary,
+    module_access_unknown: true,
+    ok: false,
+  };
+}
 
 function detailMessage(detail: unknown, fallback: string) {
   if (typeof detail === "string" && detail.trim().length > 0) {
@@ -147,6 +209,7 @@ async function fallbackCapabilityBootstrap(
     readinessResult,
     productionResult,
     policiesResult,
+    moduleControlResult,
   ] = await Promise.all([
     listModuleRegistry(options),
     listMyModules(options),
@@ -157,6 +220,14 @@ async function fallbackCapabilityBootstrap(
     getPreLiveReadiness(options),
     getProductionReadiness(options),
     listLiveGatePolicies(options),
+    Promise.resolve(
+      moduleControlResultFromError(
+        new ApiError(
+          "Module control center is unavailable in fallback bootstrap.",
+          503,
+        ),
+      ),
+    ),
   ]);
 
   return {
@@ -165,6 +236,7 @@ async function fallbackCapabilityBootstrap(
     executionAccessResult,
     executionRegistryResult,
     moduleAccessResult,
+    moduleControlResult,
     policiesResult,
     productionResult,
     readinessResult,
@@ -211,6 +283,11 @@ export async function getCapabilityBootstrap(
         payload.modules_me,
         userModulesResultFromResponse,
         userModulesResultFromError,
+      ),
+      moduleControlResult: dataOrError(
+        payload.module_control_center,
+        moduleControlResultFromResponse,
+        moduleControlResultFromError,
       ),
       policiesResult: dataOrError(
         payload.live_gate_policies,

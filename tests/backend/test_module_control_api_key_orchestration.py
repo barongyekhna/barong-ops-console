@@ -10,10 +10,16 @@ from backend.app.db.session import SessionLocal
 from backend.app import main as app_main
 from backend.app.middleware import data_isolation as data_isolation_middleware
 from backend.app.middleware import org_context as org_context_middleware
+from backend.app.models.api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
 from backend.app.models.organization import OrganizationRecord
+from backend.app.models.provider_config import ProviderConfigRecord
 from backend.app.models.user import User
 from backend.app.services.api_key_orchestration import (
     ApiKeyIsolationError,
+    K_SERIES_MODULE_ID,
+    K_SERIES_ORGANIZATION_NAME,
+    K_SERIES_PROVIDER_ALIASES,
+    reevaluate_k_series_api_keys,
     resolve_module_api_key_for_injection,
 )
 from backend.app.services import module_control_cache_service
@@ -209,6 +215,8 @@ def test_api_key_orchestration_never_exposes_key_material(
     assert "key_fingerprint" not in serialized
     item = created.json()["item"]
     assert item["key_hash_prefix"]
+    assert item["status"] == "active"
+    assert item["runtime_state"] == "enabled"
     assert item["assigned_module_ids"] == []
 
 
@@ -238,6 +246,14 @@ def test_api_key_binding_enforces_org_isolation_and_backend_injection(
             "key_value": "serper-secret-value",
         },
     ).json()["item"]
+    disabled_first_key = owner_client.patch(
+        "/api/control-plane/api-key-orchestration/keys/"
+        f"{first_key['key_id']}",
+        json={"status": "disabled"},
+    )
+    assert disabled_first_key.status_code == 200, disabled_first_key.text
+    assert disabled_first_key.json()["item"]["status"] == "disabled"
+    assert disabled_first_key.json()["item"]["runtime_state"] == "disabled"
     second_key = owner_client.post(
         "/api/control-plane/api-key-orchestration/organizations/"
         f"{SECOND_ORG_ID}/keys",
@@ -269,6 +285,17 @@ def test_api_key_binding_enforces_org_isolation_and_backend_injection(
         },
     )
     assert bound.status_code == 201, bound.text
+    keys_after_bind = owner_client.get(
+        "/api/control-plane/api-key-orchestration/keys"
+    )
+    rebound_key = next(
+        item
+        for item in keys_after_bind.json()["items"]
+        if item["key_id"] == first_key["key_id"]
+    )
+    assert rebound_key["status"] == "active"
+    assert rebound_key["runtime_state"] == "enabled"
+    assert "core.dashboard" in rebound_key["assigned_module_ids"]
 
     for alias in ("serp", "chatgpt", "claude_opus"):
         key = owner_client.post(
@@ -318,3 +345,89 @@ def test_api_key_binding_enforces_org_isolation_and_backend_injection(
                 module_id="core.dashboard",
                 key_alias="deepseek",
             )
+
+
+def test_k_series_key_reevaluation_activates_target_org_runtime(
+    owner_client: TestClient,
+) -> None:
+    owner_id = owner_client.get("/api/public/auth/me").json()["id"]
+    target_org_id = "org_kseries_target_111111111111111111"
+    with SessionLocal() as db:
+        db.add(
+            OrganizationRecord(
+                org_id=target_org_id,
+                org_name=K_SERIES_ORGANIZATION_NAME,
+                org_type="store",
+                owner_user_id=str(owner_id),
+                status="active",
+                metadata_json={},
+            )
+        )
+        db.commit()
+
+    for alias in K_SERIES_PROVIDER_ALIASES:
+        created = owner_client.post(
+            "/api/control-plane/api-key-orchestration/organizations/"
+            f"{DEFAULT_ORG_ID}/keys",
+            json={
+                "name": f"k-series-{alias}",
+                "url": f"https://{alias}.example",
+                "key_value": f"k-series-{alias}-secret-value",
+            },
+        )
+        assert created.status_code == 201, created.text
+        disabled = owner_client.patch(
+            "/api/control-plane/api-key-orchestration/keys/"
+            f"{created.json()['item']['key_id']}",
+            json={"status": "disabled"},
+        )
+        assert disabled.status_code == 200, disabled.text
+
+    with SessionLocal() as db:
+        result = reevaluate_k_series_api_keys(
+            db,
+            actor_user_id="test_k_series_key_reevaluation",
+        )
+        db.commit()
+
+    assert result["organization"] == K_SERIES_ORGANIZATION_NAME
+    assert result["org_id"] == target_org_id
+    assert result["required_aliases_available"] == {
+        alias: True for alias in K_SERIES_PROVIDER_ALIASES
+    }
+
+    with SessionLocal() as db:
+        keys = list(
+            db.query(ApiKeyRecord).filter(ApiKeyRecord.org_id == target_org_id)
+        )
+        assert {key.metadata_json["key_alias"] for key in keys} == set(
+            K_SERIES_PROVIDER_ALIASES
+        )
+        assert all(key.status == "active" for key in keys)
+        assert all(
+            key.metadata_json.get("runtime_state") == "enabled"
+            for key in keys
+        )
+        bindings = list(
+            db.query(ApiKeyModuleBindingRecord).filter(
+                ApiKeyModuleBindingRecord.org_id == target_org_id,
+                ApiKeyModuleBindingRecord.module_id == K_SERIES_MODULE_ID,
+                ApiKeyModuleBindingRecord.status == "active",
+            )
+        )
+        assert {binding.key_alias for binding in bindings} == set(
+            K_SERIES_PROVIDER_ALIASES
+        )
+        provider_configs = list(
+            db.query(ProviderConfigRecord).filter(
+                ProviderConfigRecord.org_id == target_org_id,
+                ProviderConfigRecord.module_id == K_SERIES_MODULE_ID,
+                ProviderConfigRecord.status == "active",
+            )
+        )
+        assert {config.provider for config in provider_configs} == {
+            "serp",
+            "chatgpt",
+            "claude",
+            "deepseek",
+        }

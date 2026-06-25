@@ -32,6 +32,7 @@ export function PermissionRouteGuard({
   const isAuthenticated = status === "authenticated";
   const isPrivilegedRole =
     isOwnerRole(user?.role) || isSuperAdminRole(user?.role);
+  const isOwner = isOwnerRole(user?.role);
   const isUserManagerRoute =
     pathname === "/users" && isAuthenticated;
   const isOrganizationListRoute =
@@ -41,9 +42,9 @@ export function PermissionRouteGuard({
   const isModuleControlRoute =
     (pathname === "/modules" || pathname === "/module-control") &&
     isAuthenticated &&
-    isPrivilegedRole;
+    isOwner;
   const isApiKeyManagementRoute =
-    pathname === "/api-key-management" && isAuthenticated && isPrivilegedRole;
+    pathname === "/api-key-management" && isAuthenticated && isOwner;
 
   if (
     isUserManagerRoute ||

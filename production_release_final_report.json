@@ -1,239 +1,338 @@
 {
-  "report_name": "BARONG OPS CONSOLE FULL PRODUCTION DEPLOYMENT (C + K SYSTEM)",
-  "generated_at_utc": "2026-06-25T13:11:46Z",
-  "deployment_status": {
-    "status": "completed_with_warnings",
-    "production_compose_file": "docker-compose.production.yml",
-    "deployment_command": "docker-compose -f docker-compose.production.yml up -d --build",
+  "report_name": "BARONG OPS CONSOLE FINAL PRODUCTION DEPLOYMENT",
+  "generated_at_utc": "2026-06-25T17:38:36Z",
+  "deployment_success_status": {
+    "production_deploy_completed": true,
+    "service_runtime_healthy": true,
+    "production_ready_release": false,
+    "status": "deployed_with_k_workflow_real_provider_blocker",
+    "blocker": "Real API POST /api/app/k/products/{id}/workflow/start returned HTTP 500 during production smoke verification. Backend logs show SQLAlchemy PendingRollbackError while handling the workflow failure. No code/schema changes or rollback were performed.",
     "rollback_ready": true,
-    "rollback_backup_path": "/opt/barong-backup-20260625_125235",
-    "code_modified_during_deploy": false,
-    "database_schema_changed_during_deploy": false,
     "rollback_performed": false,
-    "warnings": [
-      "Direct K provider execution endpoints returned sanitized 5xx responses during verification: /api/app/k/serp/search=502, /api/app/k/products/{id}/enrich/deepseek=500.",
-      "Full K workflow gate correctly blocked execution with API_KEY_BINDING_MISSING because the active owner organization lacks an active claude_opus binding."
-    ]
+    "code_modified_during_deployment": false,
+    "schema_changed_during_deployment": false,
+    "report_file_updated": true
   },
-  "build_confirmation": {
-    "frontend_build": {
-      "status": "success",
-      "command": "npm --prefix frontend run build",
-      "next_version": "16.2.7",
-      "routes_generated": 23
-    },
-    "backend_import_check": {
-      "status": "success",
-      "command": "docker-compose -f docker-compose.production.yml exec -T console_backend python -c \"import backend.app.main; print('backend import ok')\""
-    },
-    "docker_image_build": {
-      "backend": "success",
-      "frontend": "success",
-      "frontend_embedded_checks": [
-        "npm test",
-        "npm run verify",
-        "npm run typecheck",
-        "npm run build"
-      ]
-    }
-  },
-  "backup": {
-    "status": "success",
-    "path": "/opt/barong-backup-20260625_125235",
-    "size": "612M",
-    "included": [
-      "backend",
-      "frontend",
+  "deployment": {
+    "compose_file": "docker-compose.production.yml",
+    "stop_command": "docker-compose -f docker-compose.production.yml down",
+    "start_command": "docker-compose -f docker-compose.production.yml up -d --build",
+    "compose_project": "barong-ops-console",
+    "backup_path": "/opt/barong-backup-prod-20260625_170859",
+    "backup_status": "success",
+    "backup_size": "612M",
+    "backup_included": [
+      "backend/",
+      "frontend/",
       ".env.production",
       "docker-compose.production.yml",
-      "database_schema.sql",
-      "database_full.dump",
-      "migration_state.txt",
-      "alembic_version.txt",
-      "docker_compose_ps_before.txt",
-      "git_revision.txt",
-      "git_status_short.txt"
+      "barong_prod_database.dump",
+      "provider_config.sql",
+      "docker_images_before_deploy.txt"
     ],
-    "migration_state": "k_sku_variant_001 (head)"
+    "images_after_deploy": {
+      "backend": {
+        "image": "barong-ops-console_console_backend:latest",
+        "id": "sha256:b7ef41fa65667cd5401994bb1281732fb67e3dc61cc961a71959d6181d76adb7",
+        "created": "2026-06-25T17:12:36.387479278Z"
+      },
+      "frontend": {
+        "image": "barong-ops-console_console_frontend:latest",
+        "id": "sha256:d397b09b67428a24ab629a8c265bece5c4356f8b435a08960f9225e5e0d3c09e",
+        "created": "2026-06-25T17:17:38.189320661Z"
+      }
+    }
+  },
+  "build_confirmation": {
+    "docker_build": "success",
+    "frontend_embedded_checks": {
+      "npm_run_test": "passed",
+      "npm_run_verify": "passed",
+      "npm_run_typecheck": "passed",
+      "npm_run_build": "passed",
+      "next_static_pages": 23
+    },
+    "backend_image_build": "success"
   },
   "service_health": {
-    "compose_services": {
-      "console_postgres": "Up (healthy)",
-      "console_backend": "Up",
-      "console_frontend": "Up"
+    "containers": {
+      "console_frontend": "Up, 127.0.0.1:3000->3000/tcp",
+      "console_backend": "Up, 127.0.0.1:8000->8000/tcp",
+      "console_postgres": "Up healthy, 5432/tcp"
     },
-    "database_activity_final": {
-      "active": 1,
-      "idle": 4
-    },
-    "checks": [
-      {
-        "target": "backend /health",
-        "url": "http://127.0.0.1:8000/health",
-        "http_code": 200
+    "http_checks": {
+      "/health": {
+        "status": 200,
+        "ok": true
       },
-      {
-        "target": "frontend /",
-        "url": "http://127.0.0.1:3000/",
-        "http_code": 200
+      "/api/control-plane/modules": {
+        "status": 200,
+        "ok": true
       },
-      {
-        "target": "frontend /module-control",
-        "url": "http://127.0.0.1:3000/module-control",
-        "http_code": 200
+      "/api/control-plane/modules/me": {
+        "status": 200,
+        "ok": true,
+        "visible_count_for_owner": 19
       },
-      {
-        "target": "frontend /permissions",
-        "url": "http://127.0.0.1:3000/permissions",
-        "http_code": 200
+      "/api/app/permissions/me": {
+        "status": 200,
+        "ok": true
       },
-      {
-        "target": "frontend /api-key-management",
-        "url": "http://127.0.0.1:3000/api-key-management",
-        "http_code": 200
+      "/api/app/k/products": {
+        "status": 200,
+        "ok": true
       },
-      {
-        "target": "frontend /products",
-        "url": "http://127.0.0.1:3000/products",
-        "http_code": 200
-      },
-      {
-        "target": "backend /k/products",
-        "url": "http://127.0.0.1:8000/k/products",
-        "http_code": 200,
-        "auth": "owner x-session-token"
-      },
-      {
-        "target": "frontend /k/products",
-        "url": "http://127.0.0.1:3000/k/products",
-        "http_code": 404,
-        "note": "No frontend /k/products page is registered; K product UI is mounted at /products and K API is /k/products."
+      "frontend /login": {
+        "status": 200,
+        "ok": true,
+        "bytes": 9255
       }
-    ]
+    }
   },
-  "module_registry_status": {
-    "status": "stable",
-    "static_manifest_count": 18,
-    "runtime_registry_count": 19,
-    "k_product_knowledge": {
-      "present": true,
-      "module_key": "k.product_knowledge",
-      "status": "active",
-      "lifecycle": "production_released",
-      "route_namespace": "/products",
-      "api_namespace": "/k",
-      "navigation": {
-        "group": "Registry",
-        "label": "产品知识库",
-        "icon": "PackageSearch",
-        "order": 8,
-        "default_visible": true,
-        "owner_only": false
-      }
+  "module_visibility": {
+    "runtime_owner_module_keys": [
+      "core.dashboard",
+      "experimental.foundation_demo",
+      "integration.n8n_test_bridge",
+      "integration.n8n_webhook_test_bridge",
+      "admin.users",
+      "admin.organizations",
+      "admin.permissions",
+      "admin.modules",
+      "admin.key_management",
+      "admin.agents",
+      "admin.settings",
+      "k.product_knowledge",
+      "business.products",
+      "i.image_system",
+      "business.approvals",
+      "business.reviews",
+      "system.errors",
+      "system.memory_events",
+      "system.operation_logs"
+    ],
+    "duplicate_runtime_module_keys": [],
+    "module_control_entry": {
+      "module_key": "admin.modules",
+      "route_namespace": "/module-control",
+      "separate_from_api_key_management": true,
+      "owner_only_source_check": true
     },
-    "module_control_center": {
-      "http_code": 200,
-      "contains_k_product_knowledge": true
+    "api_key_management_entry": {
+      "module_key": "admin.key_management",
+      "route_namespace": "/api-key-management",
+      "separate_from_module_control": true,
+      "owner_only_source_check": true
+    },
+    "sidebar_source_checks": {
+      "owner_organization_tree_present": true,
+      "owner_tree_label": "Organizations",
+      "owner_org_name": "涌龙麟（深圳）国际贸易有限公司",
+      "employee_flat_list_path_present": true,
+      "no_duplicate_sidebar_content_source_check": true
     }
   },
   "rbac_status": {
-    "owner_full_access": {
+    "owner": {
       "status": "pass",
-      "verification": "API /api/app/permissions/me",
-      "role": "owner",
-      "is_owner": true,
-      "is_owner_full_access": true,
-      "permission_keys": [
-        "*"
+      "login_status": 200,
+      "permissions_me_status": 200,
+      "modules_me_status": 200,
+      "full_access": true,
+      "sensitive_modules_available": [
+        "admin.modules",
+        "admin.key_management"
       ]
     },
-    "super_admin_org_access": {
-      "status": "pass_db_verified",
-      "verification": "Read-only DB role/org/membership check plus backend role helper",
-      "role_helper_is_super_admin": true,
-      "organization_status": "active",
-      "active_memberships": 1,
-      "note": "No super_admin plaintext credential was used or changed during deployment."
+    "super_admin": {
+      "status": "pass_db_and_prior_runtime_check",
+      "user_id": 2,
+      "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+      "organization_full_access_scope": "org",
+      "module_control_visible": false,
+      "api_key_management_visible": false
     },
-    "k_module_visible": {
-      "status": "pass",
-      "source": "module registry API",
-      "visible": true
+    "employee": {
+      "status": "not_runtime_tested",
+      "reason": "Production database currently has no active employee/operator/viewer/reviewer/module_admin account. No production test user was created because this deployment was constrained to no logic/data setup changes beyond temporary K smoke products.",
+      "source_guard": "employee path renders flat module list and owner_only navigation items are excluded by deployed source/build"
     },
-    "sidebar_complete": {
-      "status": "pass",
-      "visible_navigation_count": 13,
-      "k_navigation_present": true
-    }
+    "active_users": [
+      {
+        "id": 1,
+        "role": "owner",
+        "organization_id": null,
+        "is_active": true
+      },
+      {
+        "id": 2,
+        "role": "super_admin",
+        "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+        "is_active": true
+      }
+    ]
   },
-  "k_workflow_status": {
-    "product_create": {
-      "status": "pass",
-      "http_code": 201,
-      "product_id": "9592330e-78ca-4b25-99a2-e5786d788966",
-      "product_key": "a6b8f363-fab4-44c6-9821-e1625ac55064",
-      "parent_sku": "PROD-VERIFY-20260625130528"
+  "api_key_activation_status": {
+    "organization": {
+      "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+      "org_name": "涌龙麟（深圳）国际贸易有限公司"
     },
-    "variant_system": {
-      "status": "pass",
-      "variant_count": 2,
-      "variant_skus_auto_generated": true
-    },
-    "delete_system": {
-      "status": "pass",
-      "delete_http_code": 200,
-      "after_delete_http_code": 404,
-      "deleted_counts": {
-        "ai_events": 0,
-        "workflow_traces": 1,
-        "media_references": 0,
-        "review_items": 0,
-        "versions": 0,
-        "translations": 0,
-        "attributes": 1,
-        "keywords": 1,
-        "risk_terms": 1,
-        "research_runs": 0,
-        "variants": 2,
-        "products": 1
+    "active_k_keys": {
+      "serp": {
+        "key_id": "key_96a64e1e6e3632309a3bc7c28eda597e",
+        "binding_status": "active",
+        "key_status": "active",
+        "runtime_state": "enabled",
+        "org_binding_correct": true
+      },
+      "chatgpt": {
+        "key_id": "key_7d1660f0841d863b7cf291ba661eb5fc",
+        "binding_status": "active",
+        "key_status": "active",
+        "runtime_state": "enabled",
+        "org_binding_correct": true
+      },
+      "claude_opus": {
+        "key_id": "key_7446877ef42d050a30f94f88ad399b8d",
+        "binding_status": "active",
+        "key_status": "active",
+        "runtime_state": "enabled",
+        "org_binding_correct": true
+      },
+      "deepseek": {
+        "key_id": "key_b45fa4994253da9fc84838d0032e01d9",
+        "binding_status": "active",
+        "key_status": "active",
+        "runtime_state": "enabled",
+        "org_binding_correct": true
       }
     },
-    "serp_workflow_accessible": {
-      "status": "pass_with_provider_warning",
-      "workflow_start_http_code": 503,
-      "workflow_latest_http_code": 200,
-      "workflow_error_code": "API_KEY_BINDING_MISSING",
-      "state_machine_entered": "PRODUCT_CREATED",
-      "organization_gate": "allowed",
-      "direct_serp_search_http_code": 502
+    "provider_config": {
+      "serp": {
+        "status": "active",
+        "source_key_id": "key_96a64e1e6e3632309a3bc7c28eda597e",
+        "base_url_present": true
+      },
+      "chatgpt": {
+        "status": "active",
+        "source_key_id": "key_7d1660f0841d863b7cf291ba661eb5fc",
+        "base_url_present": true
+      },
+      "claude": {
+        "status": "active",
+        "source_key_id": "key_7446877ef42d050a30f94f88ad399b8d",
+        "base_url_present": true
+      },
+      "deepseek": {
+        "status": "active",
+        "source_key_id": "key_b45fa4994253da9fc84838d0032e01d9",
+        "base_url_present": true
+      }
     },
-    "ai_pipeline_gated": {
+    "execution_gate": {
       "status": "pass",
-      "gate_code": "API_KEY_BINDING_MISSING",
-      "reason": "Active owner organization has active serp/chatgpt/deepseek bindings but lacks active claude_opus binding; claude_opus active binding exists under a different organization.",
-      "direct_deepseek_enrich_http_code": 500,
-      "direct_deepseek_warning": "Direct provider execution reached runtime and returned sanitized 500 after provider/DB timeout; no code or schema change was made."
+      "resolved_all_required_k_steps": true,
+      "resolved_steps": [
+        "deepseek_enrichment",
+        "serp_keyword_fetch",
+        "ai_filter_chatgpt",
+        "ai_filter_claude_opus"
+      ],
+      "stale_key_cache_detected": false,
+      "inactive_key_blocking_valid_requests": false
+    },
+    "legacy_disabled_serp_binding": {
+      "present": true,
+      "binding_status": "disabled",
+      "key_status": "deleted",
+      "runtime_selected": false
     }
   },
-  "api_status": {
-    "authenticated_owner_api": {
-      "/api/app/permissions/me": 200,
-      "/api/control-plane/modules/registry": 200,
-      "/api/control-plane/module-control/center": 200,
-      "/api/app/k/products": 200,
-      "/api/app/organizations": 200,
-      "/api/app/k/products/{id}": 200,
-      "/api/app/k/products/{id}/workflow/start": 503,
-      "/api/app/k/products/{id}/workflow/latest": 200,
-      "/api/app/k/serp/search": 502,
-      "/api/app/k/products/{id}/enrich/deepseek": 500,
-      "DELETE /api/app/k/products/{id}": 200
+  "k_system_status": {
+    "api_product_smoke": {
+      "product_creation": {
+        "status": "pass",
+        "http_status": 201
+      },
+      "variant_system": {
+        "status": "pass",
+        "variant_count": 1,
+        "auto_generated_variant_sku": true
+      },
+      "delete_system": {
+        "status": "pass",
+        "http_status": 200,
+        "deleted_counts": {
+          "products": 1,
+          "variants": 1,
+          "keywords": 1
+        }
+      }
     },
-    "unauthenticated_api": {
-      "/api/app/k/products": 401
+    "real_provider_workflow_smoke": {
+      "status": "fail",
+      "workflow_start_http_status": 500,
+      "error": "Internal server error",
+      "backend_log_signal": "sqlalchemy.exc.PendingRollbackError during workflow/start failure handling",
+      "temporary_product_cleanup": "pass"
     },
-    "public_health": {
-      "/health": 200
+    "internal_deterministic_export_pipeline_smoke": {
+      "status": "pass",
+      "mode": "provider outputs stubbed in memory; real production DB and execution gate used",
+      "workflow_run": "pass",
+      "risk_review": "pass",
+      "image_bind": "pass",
+      "export": "pass",
+      "export_payload_keys": [
+        "gmc_feed_structure",
+        "p_series_payload",
+        "seo_keyword_pack"
+      ],
+      "temporary_product_cleanup": {
+        "status": "pass",
+        "deleted_counts": {
+          "products": 1,
+          "variants": 1,
+          "workflow_traces": 1,
+          "research_runs": 1,
+          "ai_events": 4,
+          "media_references": 1,
+          "keywords": 6,
+          "risk_terms": 1
+        }
+      }
+    },
+    "existing_ready_or_exported_workflows": 0
+  },
+  "ai_provider_availability": {
+    "runtime_key_resolution": {
+      "serp": "available",
+      "chatgpt": "available",
+      "claude_opus": "available",
+      "deepseek": "available"
+    },
+    "provider_config_resolution": {
+      "serp": "active",
+      "chatgpt": "active",
+      "claude": "active",
+      "deepseek": "active"
+    },
+    "external_provider_execution": {
+      "status": "not_green",
+      "reason": "Full real-provider K workflow start returned HTTP 500 before export could be reached.",
+      "keys_and_gate_available": true
     }
+  },
+  "final_verification": {
+    "no_duplicate_sidebar_modules": true,
+    "owner_organization_tree": true,
+    "employee_flat_modules_only": "source_verified_not_runtime_tested_no_employee_user",
+    "module_control_hidden_for_employees": "source_verified_not_runtime_tested_no_employee_user",
+    "api_key_management_hidden_for_employees": "source_verified_not_runtime_tested_no_employee_user",
+    "all_k_keys_active": true,
+    "serp_chatgpt_claude_deepseek_runtime_gate_available": true,
+    "frontend_build_passed": true,
+    "backend_runtime_healthy": true,
+    "k_export_pipeline_functional": "internal_deterministic_smoke_passed; real_provider_workflow_start_failed"
   }
 }

@@ -47,6 +47,7 @@ type CapabilityStateContextValue = FrontendCapabilityGraph & {
   executionAccessResult: CapabilityBootstrapResult["executionAccessResult"] | null;
   executionRegistryResult: CapabilityBootstrapResult["executionRegistryResult"] | null;
   moduleAccessResult: CapabilityBootstrapResult["moduleAccessResult"] | null;
+  moduleControlResult: CapabilityBootstrapResult["moduleControlResult"] | null;
   registryResult: CapabilityBootstrapResult["registryResult"] | null;
   isLoading: boolean;
   uiState: CapabilityUiState;
@@ -214,6 +215,10 @@ function mergeCapabilityBootstrap(
       previous.moduleAccessResult,
       next.moduleAccessResult,
     ),
+    moduleControlResult: preservePreviousResult(
+      previous.moduleControlResult,
+      next.moduleControlResult,
+    ),
     policiesResult: preservePreviousResult(
       previous.policiesResult,
       next.policiesResult,
@@ -274,6 +279,7 @@ function createContextValue({
       loadError ||
         bootstrap?.registryResult.ok === false ||
         bootstrap?.moduleAccessResult.ok === false ||
+        bootstrap?.moduleControlResult.ok === false ||
         bootstrap?.adapterRegistryResult.ok === false ||
         bootstrap?.adapterAccessResult.ok === false ||
         bootstrap?.executionRegistryResult.ok === false ||
@@ -315,6 +321,7 @@ function createContextValue({
       readiness: bootstrap?.readinessResult.data ?? null,
     },
     moduleAccessResult: bootstrap?.moduleAccessResult ?? null,
+    moduleControlResult: bootstrap?.moduleControlResult ?? null,
     refresh,
     refreshGeneration,
     registryResult: bootstrap?.registryResult ?? null,

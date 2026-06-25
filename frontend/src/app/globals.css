@@ -770,6 +770,49 @@ textarea:focus-visible {
   border-color: #3d4944;
 }
 
+.navigation-tree-toggle {
+  width: 100%;
+  min-height: 40px;
+  display: grid;
+  grid-template-columns: 15px 17px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  color: #e2e8f0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.navigation-tree-toggle:hover {
+  background: #1e2321;
+  border-color: #35413c;
+}
+
+.navigation-tree-toggle svg {
+  flex: 0 0 auto;
+}
+
+.navigation-tree-toggle span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.28;
+}
+
+.navigation-tree-items {
+  margin-top: 6px;
+  padding-left: 18px;
+}
+
+.navigation-tree-link {
+  min-height: 36px;
+}
+
 .navigation-lock {
   margin-left: auto;
   color: #d5a14c;
