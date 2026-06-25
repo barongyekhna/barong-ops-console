@@ -24,6 +24,7 @@ ReviewStatus = Literal[
 KeywordType = Literal["primary", "secondary", "long_tail", "b2b", "negative", "risk"]
 KeywordStatus = Literal["candidate", "approved", "rejected", "removed"]
 RiskTermStatus = Literal["candidate", "confirmed", "removed", "false_positive"]
+ProductType = Literal["simple_product", "variable_product"]
 ImageSourceType = Literal["manual_upload_image", "i_system_asset"]
 WorkflowStatus = Literal[
     "created",
@@ -98,38 +99,90 @@ class ProductKnowledgeRiskTermItem(BaseModel):
         return self
 
 
+class ProductKnowledgeVariantItem(BaseModel):
+    variant_sku: str | None = Field(default=None, max_length=180)
+    color: str | None = Field(default=None, max_length=128)
+    size: str | None = Field(default=None, max_length=128)
+    function: str | None = Field(default=None, max_length=128)
+    quantity: int | None = Field(default=None, ge=0)
+    price_override: Decimal | None = Field(default=None, ge=0)
+    attributes: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("attributes")
+    @classmethod
+    def validate_variant_attributes(cls, value: dict[str, Any]) -> dict[str, Any]:
+        return reject_sensitive_data(value)
+
+    @model_validator(mode="after")
+    def normalize_variant_strings(self) -> "ProductKnowledgeVariantItem":
+        if self.variant_sku is not None:
+            self.variant_sku = self.variant_sku.strip() or None
+        if self.color is not None:
+            self.color = self.color.strip() or None
+        if self.size is not None:
+            self.size = self.size.strip() or None
+        if self.function is not None:
+            self.function = self.function.strip() or None
+        return self
+
+
 class ProductKnowledgeCreate(BaseModel):
-    product_key: str = Field(min_length=1, max_length=128)
+    product_key: str | None = Field(default=None, max_length=128)
     raw_input_text: str = Field(min_length=1)
-    raw_input_language: str = Field(min_length=1, max_length=16)
+    target_market: str = Field(default="US", min_length=1, max_length=50)
+    target_locale: str | None = Field(default=None, max_length=16)
+    parent_sku: str | None = Field(default=None, max_length=128)
+    raw_input_language: str | None = Field(default=None, max_length=16)
     source_system: str | None = Field(default="manual", max_length=100)
     source_record_id: str | None = Field(default=None, max_length=255)
     sku: str | None = Field(default=None, max_length=128)
     product_status: str = Field(default="draft", min_length=1, max_length=50)
     review_status: ReviewStatus = "draft"
-    canonical_language: str = Field(
-        default=DEFAULT_CANONICAL_LANGUAGE,
-        min_length=1,
-        max_length=16,
-    )
+    canonical_language: str | None = Field(default=None, max_length=16)
     product_name_en: str | None = Field(default=None, max_length=512)
     brand_name: str | None = Field(default=None, max_length=255)
     manufacturer: str | None = Field(default=None, max_length=255)
-    product_type: str | None = Field(default=None, max_length=128)
+    product_type: ProductType = "simple_product"
+    regular_price: Decimal | None = Field(default=None, ge=0)
+    price_currency: str | None = Field(default=None, max_length=3)
+    dimensions_json: dict[str, Any] | list[Any] | None = None
+    weight_json: dict[str, Any] | list[Any] | None = None
     short_description_en: str | None = None
     long_description_en: str | None = None
     primary_use_case_en: str | None = None
     target_customer_en: str | None = None
     manual_notes: str | None = None
+    variants: list[ProductKnowledgeVariantItem] = Field(default_factory=list)
     attributes: list[ProductKnowledgeAttributeItem] = Field(default_factory=list)
     keywords: list[ProductKnowledgeKeywordItem] = Field(default_factory=list)
     risk_terms: list[ProductKnowledgeRiskTermItem] = Field(default_factory=list)
 
+    @field_validator("dimensions_json", "weight_json")
+    @classmethod
+    def validate_physical_json(cls, value: Any) -> Any:
+        return reject_sensitive_data(value)
+
     @model_validator(mode="after")
     def normalize_required_strings(self) -> "ProductKnowledgeCreate":
-        self.product_key = self.product_key.strip()
-        self.raw_input_language = self.raw_input_language.strip().lower()
-        self.canonical_language = self.canonical_language.strip().lower()
+        if self.product_key is not None and self.product_key.strip():
+            raise ValueError("product_key is auto-generated and cannot be provided.")
+        self.target_market = self.target_market.strip().upper()
+        if self.target_locale is not None:
+            self.target_locale = self.target_locale.strip().lower() or None
+        if self.raw_input_language is not None:
+            self.raw_input_language = self.raw_input_language.strip().lower() or None
+        if self.canonical_language is not None:
+            self.canonical_language = self.canonical_language.strip().lower() or None
+        if self.parent_sku is not None:
+            self.parent_sku = self.parent_sku.strip() or None
+        if self.sku is not None:
+            self.sku = self.sku.strip() or None
+        if self.price_currency is not None:
+            self.price_currency = self.price_currency.strip().upper() or None
+        if self.product_type == "variable_product" and not self.variants:
+            raise ValueError("variable_product requires at least one variant.")
+        if self.product_type == "simple_product" and self.variants:
+            raise ValueError("simple_product does not accept variant rows.")
         return self
 
 
@@ -137,6 +190,8 @@ class ProductKnowledgeUpdate(BaseModel):
     source_system: str | None = Field(default=None, max_length=100)
     source_record_id: str | None = Field(default=None, max_length=255)
     sku: str | None = Field(default=None, max_length=128)
+    parent_sku: str | None = Field(default=None, max_length=128)
+    target_market: str | None = Field(default=None, max_length=50)
     product_status: str | None = Field(default=None, min_length=1, max_length=50)
     review_status: ReviewStatus | None = None
     canonical_language: str | None = Field(default=None, min_length=1, max_length=16)
@@ -145,7 +200,11 @@ class ProductKnowledgeUpdate(BaseModel):
     product_name_en: str | None = Field(default=None, max_length=512)
     brand_name: str | None = Field(default=None, max_length=255)
     manufacturer: str | None = Field(default=None, max_length=255)
-    product_type: str | None = Field(default=None, max_length=128)
+    product_type: ProductType | None = None
+    regular_price: Decimal | None = Field(default=None, ge=0)
+    price_currency: str | None = Field(default=None, max_length=3)
+    dimensions_json: dict[str, Any] | list[Any] | None = None
+    weight_json: dict[str, Any] | list[Any] | None = None
     short_description_en: str | None = None
     long_description_en: str | None = None
     primary_use_case_en: str | None = None
@@ -158,7 +217,33 @@ class ProductKnowledgeUpdate(BaseModel):
             self.raw_input_language = self.raw_input_language.strip().lower()
         if self.canonical_language is not None:
             self.canonical_language = self.canonical_language.strip().lower()
+        if self.parent_sku is not None:
+            self.parent_sku = self.parent_sku.strip() or None
+        if self.target_market is not None:
+            self.target_market = self.target_market.strip().upper() or None
+        if self.price_currency is not None:
+            self.price_currency = self.price_currency.strip().upper() or None
         return self
+
+
+class ProductKnowledgeVariantRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    product_id: UUID
+    parent_sku: str
+    variant_sku: str
+    variant_hash: str
+    color: str | None
+    size: str | None
+    function: str | None
+    quantity: int | None
+    price_override: Decimal | None
+    attributes_json: dict[str, Any] | list[Any] | None
+    image_folder: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class ProductKnowledgeRead(BaseModel):
@@ -180,6 +265,8 @@ class ProductKnowledgeRead(BaseModel):
     primary_use_case_en: str | None
     target_customer_en: str | None
     sku: str | None
+    parent_sku: str | None = None
+    target_market: str | None = None
     workspace_key: str
     business_context: str
     scope_mode: str
@@ -189,6 +276,8 @@ class ProductKnowledgeRead(BaseModel):
     attributes_count: int | None = None
     keywords_count: int | None = None
     risk_terms_count: int | None = None
+    variant_count: int | None = None
+    variants: list[ProductKnowledgeVariantRead] = Field(default_factory=list)
 
 
 class ProductKnowledgeListItem(BaseModel):
@@ -203,6 +292,10 @@ class ProductKnowledgeListItem(BaseModel):
     product_status: str
     review_status: str
     canonical_language: str
+    parent_sku: str | None = None
+    target_market: str | None = None
+    variant_count: int | None = None
+    variants: list[ProductKnowledgeVariantRead] = Field(default_factory=list)
     workspace_key: str
     business_context: str
     scope_mode: str
@@ -361,12 +454,15 @@ class ProductKnowledgeWorkflowControlRequest(BaseModel):
 
 class ProductKnowledgeImageBindRequest(BaseModel):
     source_type: ImageSourceType = "manual_upload_image"
+    variant_sku: str | None = Field(default=None, max_length=180)
     asset_id: UUID | None = None
     manual_asset_id: UUID | None = None
     i_system_image_asset_id: str | None = Field(default=None, max_length=255)
 
     @model_validator(mode="after")
     def require_source_identifier(self) -> "ProductKnowledgeImageBindRequest":
+        if self.variant_sku is not None:
+            self.variant_sku = self.variant_sku.strip() or None
         if self.i_system_image_asset_id is not None:
             self.i_system_image_asset_id = self.i_system_image_asset_id.strip() or None
         if self.source_type == "manual_upload_image" and not (

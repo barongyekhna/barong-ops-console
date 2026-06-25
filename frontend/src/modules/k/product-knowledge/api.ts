@@ -119,6 +119,21 @@ export async function createProduct(
   return readJson<ProductKnowledgeDetail>(response);
 }
 
+export async function enrichProductWithDeepSeek(
+  productId: string,
+): Promise<void> {
+  const response = await fetch(
+    `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${productId}/enrich/deepseek`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+
+  await readJson<unknown>(response);
+}
+
 export async function getLatestWorkflow(
   productId: string,
 ): Promise<KWorkflowExecution | null> {
@@ -238,8 +253,12 @@ export async function createMediaAsset(
 export async function bindProductImage(
   productId: string,
   payload:
-    | { source_type: "manual_upload_image"; asset_id: string }
-    | { source_type: "i_system_asset"; i_system_image_asset_id: string },
+    | { source_type: "manual_upload_image"; asset_id: string; variant_sku: string }
+    | {
+        source_type: "i_system_asset";
+        i_system_image_asset_id: string;
+        variant_sku: string;
+      },
 ): Promise<KWorkflowExecution> {
   const response = await fetch(
     `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${productId}/images/bind`,

@@ -1,0 +1,231 @@
+{
+  "generated_at": "2026-06-25T06:51:31Z",
+  "deployment": {
+    "status": "deployed",
+    "method": "docker-compose",
+    "compose_file": "docker-compose.production.yml",
+    "build_then_backup_then_deploy": true,
+    "containers": {
+      "backend": {
+        "name": "barong-ops-console_console_backend_1",
+        "state": "running",
+        "restart_count": 0,
+        "port": "127.0.0.1:8000"
+      },
+      "frontend": {
+        "name": "barong-ops-console_console_frontend_1",
+        "state": "running",
+        "restart_count": 0,
+        "port": "127.0.0.1:3000"
+      },
+      "postgres": {
+        "name": "barong-ops-console_console_postgres_1",
+        "state": "running",
+        "restart_count": 0
+      }
+    }
+  },
+  "build_status": {
+    "frontend_npm_build": "passed",
+    "frontend_standalone_server": "frontend/.next/standalone/server.js exists",
+    "frontend_typecheck": "passed",
+    "backend_syntax_validation": "passed: parsed 424 python files",
+    "backend_host_pytest": "not_run: host Python has no pytest module",
+    "docker_backend_build": "passed",
+    "docker_frontend_build": "passed",
+    "docker_frontend_image_checks": [
+      "npm test passed",
+      "npm run verify passed",
+      "npm run typecheck passed",
+      "npm run build passed"
+    ]
+  },
+  "backup": {
+    "status": "completed",
+    "path": "/opt/barong-ops-console-backup-20260625T062802Z",
+    "included": [
+      "backend/",
+      "frontend/",
+      "docker-compose.production.yml",
+      ".env.production",
+      "database_schema.sql"
+    ],
+    "database_schema_snapshot": {
+      "path": "/opt/barong-ops-console-backup-20260625T062802Z/database_schema.sql",
+      "line_count": 5707,
+      "snapshot_timing": "pre-deployment rollback snapshot"
+    }
+  },
+  "database": {
+    "migration_status": "passed",
+    "alembic_revision": "k_sku_variant_001",
+    "k_product_tables_intact": true,
+    "variant_system_intact": true,
+    "verified_columns": {
+      "k_product_knowledge_products": [
+        "parent_sku",
+        "product_type",
+        "target_market"
+      ],
+      "k_product_knowledge_variants": [
+        "id",
+        "product_id",
+        "parent_sku",
+        "variant_sku",
+        "variant_hash",
+        "color",
+        "size",
+        "function",
+        "quantity",
+        "price_override",
+        "attributes_json",
+        "image_folder"
+      ]
+    },
+    "language_column_on_products": false
+  },
+  "service_health": {
+    "backend_health": {
+      "path": "/health",
+      "status_code": 200
+    },
+    "frontend_products": {
+      "path": "/products",
+      "status_code": 200
+    },
+    "api_health": [
+      {
+        "path": "/api/control-plane/modules",
+        "auth": "x-session-token",
+        "status_code": 200
+      },
+      {
+        "path": "/k/products",
+        "auth": "x-session-token",
+        "status_code": 200
+      },
+      {
+        "path": "/api/app/k/products",
+        "auth": "x-session-token",
+        "status_code": 200
+      },
+      {
+        "requested_logical_path": "/capability/bootstrap",
+        "resolved_backend_path": "/api/control-plane/capability/bootstrap",
+        "frontend_proxy_path": "/api/backend/capability/bootstrap",
+        "auth": "x-session-token",
+        "status_code": 200
+      }
+    ],
+    "frontend_proxy_health": [
+      {
+        "path": "/api/backend/k/products",
+        "status_code": 200
+      },
+      {
+        "path": "/api/backend/capability/bootstrap",
+        "status_code": 200
+      },
+      {
+        "path": "/api/backend/modules",
+        "status_code": 200
+      }
+    ]
+  },
+  "frontend_status": {
+    "runtime_hydration_check": "passed",
+    "products_page_loads": true,
+    "product_type_dropdown_visible": true,
+    "variant_system_visible": true,
+    "target_market_searchable_dropdown_visible": true,
+    "target_market_required_options_present": true,
+    "dimensions_visible": true,
+    "weight_visible": true,
+    "product_key_editable": false,
+    "language_field_visible": false,
+    "console_error_count": 0
+  },
+  "k_workflow_status": {
+    "k_products_api_status": 200,
+    "k_products_count": 0,
+    "simple_product_backward_compatibility": "schema and API compatible",
+    "variable_product_support": "verified by DB schema and frontend runtime UI",
+    "variant_sku_preview": "visible in Product Create Form",
+    "variant_image_ui": "verified in ProductDetail source: Variant SKU selector, variant image folder, manual URL upload, I-system image_asset_id binding",
+    "variant_image_runtime_transaction": "not_performed: production has no K products and no test product was created",
+    "image_storage_rule": "images/{product_key}/{variant_sku}/{filename}",
+    "i_system_boundary": "K binds image_asset_id or manual upload reference; I system remains image owner"
+  },
+  "ai_provider_status": {
+    "registry_endpoints": {
+      "execution_providers_registry": 200,
+      "execution_providers_me": 200,
+      "external_dependencies_registry": 200,
+      "external_dependency_bindings": 200
+    },
+    "external_services_registered": {
+      "serp": true,
+      "chatgpt": true,
+      "claude_opus": true,
+      "deepseek": true,
+      "ai_provider": true
+    },
+    "k_providers": {
+      "k.product_knowledge.prompt.provider": {
+        "provider_status": "live_ready",
+        "provider_readiness": "live_ready",
+        "provider_access_state": "blocked",
+        "no_execute_reason": "waiting_c14_secret_rules"
+      },
+      "k.product_knowledge.serp.provider": {
+        "provider_status": "live_ready",
+        "provider_readiness": "live_ready",
+        "provider_access_state": "blocked",
+        "no_execute_reason": "waiting_c14_secret_rules"
+      },
+      "k.product_knowledge.ai_enrich.provider": {
+        "provider_status": "live_ready",
+        "provider_readiness": "live_ready",
+        "provider_access_state": "blocked",
+        "no_execute_reason": "waiting_c14_secret_rules"
+      },
+      "k.product_knowledge.risk_filter.provider": {
+        "provider_status": "live_ready",
+        "provider_readiness": "live_ready",
+        "provider_access_state": "blocked",
+        "no_execute_reason": "waiting_c12_approval_gate"
+      }
+    },
+    "external_model_call_performed": false,
+    "external_model_call_note": "Provider registry is callable and live_ready; actual SERP/ChatGPT/Claude/DeepSeek execution is intentionally blocked until C14 secret rules and, for risk filtering, C12 approval gate are satisfied."
+  },
+  "execution_gate": {
+    "live_gate_readiness_status_code": 200,
+    "live_gate_production_readiness_status_code": 200,
+    "live_gate_policies_status_code": 200,
+    "active": true,
+    "evidence": [
+      "execution provider access states block missing C14 secret rules",
+      "risk filtering provider blocks on C12 approval gate",
+      "external dependency bindings report execution_gate_enforced=true"
+    ]
+  },
+  "rollback": {
+    "supported": true,
+    "backup_path": "/opt/barong-ops-console-backup-20260625T062802Z",
+    "database_snapshot": "/opt/barong-ops-console-backup-20260625T062802Z/database_schema.sql",
+    "steps": [
+      "docker-compose -f docker-compose.production.yml down",
+      "restore backend/ and frontend/ from /opt/barong-ops-console-backup-20260625T062802Z",
+      "restore database from the pre-deployment schema/data backup process as required",
+      "docker-compose -f docker-compose.production.yml up -d --build",
+      "run /health, /api/control-plane/modules, /k/products, and /api/control-plane/capability/bootstrap checks"
+    ]
+  },
+  "warnings": [
+    "The first in-container alembic exec was interrupted because backend startup safety restarted on revision mismatch; migration was then completed successfully with a one-off backend container.",
+    "Host Python cannot run backend pytest because pytest is not installed in the host environment.",
+    "No live external AI model call was executed; provider execution is correctly gated by C14/C12.",
+    "No production test product was created, so variant image upload was not transaction-tested against live product data."
+  ]
+}

@@ -49,6 +49,7 @@ from .models import (
     KProductKnowledgeResearchRun,
     KProductKnowledgeRiskTerm,
     KProductKnowledgeTranslation,
+    KProductKnowledgeVariant,
 )
 from .schemas import (
     ArchiveProductKnowledgeRequest,
@@ -68,6 +69,7 @@ from .schemas import (
     ProductKnowledgeRiskTermListResponse,
     ProductKnowledgeRiskTermPatch,
     ProductKnowledgeUpdate,
+    ProductKnowledgeVariantRead,
     ProductKnowledgeWorkflowControlRequest,
     ProductKnowledgeWorkflowExecutionRead,
     ProductKnowledgeWorkflowExportRequest,
@@ -249,6 +251,7 @@ class GenerateSellingPointsRequest(BaseModel):
 
 class MediaAssetCreate(BaseModel):
     product_id: str = Field(min_length=1)
+    variant_sku: str = Field(min_length=1, max_length=180)
     asset_type: str = Field(min_length=1, max_length=50)
     asset_role: str = Field(default="gallery", min_length=1, max_length=50)
     filename: str | None = Field(default=None, max_length=255)
@@ -261,6 +264,7 @@ class MediaAssetCreate(BaseModel):
 class MediaAssetRead(BaseModel):
     id: str
     product_id: str
+    variant_sku: str | None
     asset_type: str
     asset_role: str
     status: str
@@ -320,12 +324,49 @@ def _scope_context(request: Request | None) -> KScopeContext:
     )
 
 
-def _product_read(product: KProductKnowledgeProduct) -> ProductKnowledgeRead:
-    return ProductKnowledgeRead.model_validate(product)
+def _product_variants(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> list[KProductKnowledgeVariant]:
+    return list(
+        db.scalars(
+            select(KProductKnowledgeVariant)
+            .where(KProductKnowledgeVariant.product_id == product.id)
+            .order_by(KProductKnowledgeVariant.created_at.asc())
+        )
+    )
 
 
-def _product_list_item(product: KProductKnowledgeProduct) -> ProductKnowledgeListItem:
-    return ProductKnowledgeListItem.model_validate(product)
+def _product_read(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> ProductKnowledgeRead:
+    variants = _product_variants(db, product)
+    return ProductKnowledgeRead.model_validate(product).model_copy(
+        update={
+            "variant_count": len(variants),
+            "variants": [
+                ProductKnowledgeVariantRead.model_validate(variant)
+                for variant in variants
+            ],
+        }
+    )
+
+
+def _product_list_item(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> ProductKnowledgeListItem:
+    variants = _product_variants(db, product)
+    return ProductKnowledgeListItem.model_validate(product).model_copy(
+        update={
+            "variant_count": len(variants),
+            "variants": [
+                ProductKnowledgeVariantRead.model_validate(variant)
+                for variant in variants
+            ],
+        }
+    )
 
 
 def _count_products(
@@ -350,6 +391,8 @@ def _count_products(
         query = query.where(
             KProductKnowledgeProduct.product_key.ilike(term)
             | KProductKnowledgeProduct.sku.ilike(term)
+            | KProductKnowledgeProduct.parent_sku.ilike(term)
+            | KProductKnowledgeProduct.source_record_id.ilike(term)
             | KProductKnowledgeProduct.product_name_en.ilike(term)
             | KProductKnowledgeProduct.brand_name.ilike(term)
         )
@@ -377,7 +420,10 @@ def _product_by_ref(
 
     query = apply_scope_filters(
         select(KProductKnowledgeProduct).where(
-            KProductKnowledgeProduct.product_key == normalized,
+            (KProductKnowledgeProduct.product_key == normalized)
+            | (KProductKnowledgeProduct.parent_sku == normalized)
+            | (KProductKnowledgeProduct.sku == normalized)
+            | (KProductKnowledgeProduct.source_record_id == normalized),
         ),
         KProductKnowledgeProduct,
         scope_context,
@@ -394,21 +440,65 @@ def _product_by_ref(
         business_context=scope_context.business_context,
         scope_mode=scope_context.scope_mode,
         organization_name=TARGET_ORGANIZATION_NAME,
-        product_key=normalized,
+        product_key=f"kprod_{uuid4()}",
+        source_record_id=normalized,
         product_status="draft",
+        product_type="simple_product",
         review_status="draft",
         canonical_language="en",
         raw_input_text=f"Runtime shell for {normalized}",
         raw_input_language="en",
+        parent_sku=normalized,
+        sku=normalized,
         source_system="k_adapter",
     )
     db.add(product)
+    default_variant_sku = f"{normalized}-SHELL"
+    db.add(
+        KProductKnowledgeVariant(
+            id=uuid4(),
+            product_id=product.id,
+            parent_sku=normalized,
+            variant_sku=default_variant_sku,
+            variant_hash="SHELL",
+            attributes_json={"default_variant": True, "shell_product": True},
+            image_folder=f"images/{product.product_key}/{default_variant_sku}",
+        )
+    )
     try:
         db.flush()
     except IntegrityError as exc:
         db.rollback()
         raise KConflictError() from exc
     return product
+
+
+def _variant_by_sku(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    variant_sku: str | None,
+) -> KProductKnowledgeVariant:
+    normalized = (variant_sku or product.parent_sku or product.sku or "").strip()
+    if not normalized:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="variant_sku is required for image operations.",
+        )
+    variant = db.scalar(
+        select(KProductKnowledgeVariant)
+        .where(
+            KProductKnowledgeVariant.product_id == product.id,
+            KProductKnowledgeVariant.variant_sku == normalized,
+        )
+        .limit(1)
+    )
+    if variant is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Variant SKU was not found for this product.",
+        )
+    return variant
 
 
 def _product_public_ref(product: KProductKnowledgeProduct) -> str:
@@ -606,7 +696,7 @@ def product_knowledge_list(
         q=q,
     )
     return ProductKnowledgeListResponse(
-        items=[_product_list_item(item) for item in items],
+        items=[_product_list_item(db, item) for item in items],
         count=_count_products(
             db,
             scope_context=scope_context,
@@ -639,7 +729,7 @@ def product_knowledge_create(
         )
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
-    return _product_read(product)
+    return _product_read(db, product)
 
 
 @router.get("/products/{product_id}", response_model=ProductKnowledgeRead)
@@ -658,7 +748,7 @@ def product_knowledge_detail(
         )
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
-    return _product_read(product)
+    return _product_read(db, product)
 
 
 @router.patch("/products/{product_id}", response_model=ProductKnowledgeRead)
@@ -679,7 +769,7 @@ def product_knowledge_update(
         )
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
-    return _product_read(product)
+    return _product_read(db, product)
 
 
 @router.post("/products/{product_id}/archive", response_model=ProductKnowledgeRead)
@@ -700,7 +790,7 @@ def product_knowledge_archive(
         )
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
-    return _product_read(product)
+    return _product_read(db, product)
 
 
 @router.get(
@@ -1702,6 +1792,7 @@ def list_media_assets(
         MediaAssetRead(
             id=str(row.id),
             product_id=str(row.product_id),
+            variant_sku=row.variant_sku,
             asset_type=row.asset_type,
             asset_role=row.asset_role,
             status=row.status,
@@ -1741,15 +1832,18 @@ def create_media_asset(
         scope_context=_scope_context(request),
         create_shell=True,
     )
+    variant = _variant_by_sku(db, product=product, variant_sku=payload.variant_sku)
     filename = (
         payload.filename
         or (payload.file_url_placeholder or "image").rsplit("/", 1)[-1]
         or "image"
     )
-    object_key = f"k-products/{product.product_key}/images/{filename}"
+    object_key = f"images/{product.product_key}/{variant.variant_sku}/{filename}"
     row = KProductKnowledgeMediaAsset(
         id=uuid4(),
         product_id=product.id,
+        variant_id=variant.id,
+        variant_sku=variant.variant_sku,
         asset_type=payload.asset_type,
         asset_role=payload.asset_role,
         status="available",
@@ -1761,9 +1855,11 @@ def create_media_asset(
         metadata_json={
             **payload.metadata,
             "filename": filename,
-            "product_folder": f"k-products/{product.product_key}",
+            "product_folder": f"images/{product.product_key}",
             "source_type": IMAGE_SOURCE_MANUAL,
             "product_key": product.product_key,
+            "variant_folder": f"images/{product.product_key}/{variant.variant_sku}",
+            "variant_sku": variant.variant_sku,
             "sku": product.sku,
             "k_image_ai_generation_allowed": False,
             "k_image_review_allowed": False,
@@ -1775,6 +1871,7 @@ def create_media_asset(
     return MediaAssetRead(
         id=str(row.id),
         product_id=_product_public_ref(product),
+        variant_sku=row.variant_sku,
         asset_type=row.asset_type,
         asset_role=row.asset_role,
         status=row.status,

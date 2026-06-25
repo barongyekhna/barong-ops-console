@@ -16,6 +16,7 @@ from backend.app.modules.k_series.product_knowledge.models import (
     KProductKnowledgeMediaAsset,
     KProductKnowledgeProduct,
     KProductKnowledgeRiskTerm,
+    KProductKnowledgeVariant,
 )
 from backend.app.modules.k_series.product_knowledge.schemas import (
     ProductKnowledgeImageBindRequest,
@@ -121,6 +122,9 @@ def _workflow_ready_for_image():
         scope_mode="production",
         organization_name=TARGET_ORGANIZATION_NAME,
         product_key="pump-001",
+        parent_sku="PUMP-001",
+        sku="PUMP-001",
+        product_type="simple_product",
         product_name_en="Industrial steel pump",
         raw_input_text="Industrial steel pump for wholesale buyers",
         raw_input_language="en",
@@ -129,6 +133,17 @@ def _workflow_ready_for_image():
         weight_json={"value": 2, "unit": "kg"},
     )
     db.add(product)
+    db.add(
+        KProductKnowledgeVariant(
+            id=uuid4(),
+            product_id=product.id,
+            parent_sku="PUMP-001",
+            variant_sku="PUMP-001-DEFAULT",
+            variant_hash="DEFAULT",
+            attributes_json={"default_variant": True},
+            image_folder="images/pump-001/PUMP-001-DEFAULT",
+        )
+    )
     db.commit()
 
     engine = KWorkflowOrchestratorV1(
@@ -185,6 +200,9 @@ def test_k_workflow_blocks_until_manual_risk_and_image_gates_pass():
         scope_mode="production",
         organization_name=TARGET_ORGANIZATION_NAME,
         product_key="pump-001",
+        parent_sku="PUMP-001",
+        sku="PUMP-001",
+        product_type="simple_product",
         product_name_en="Industrial steel pump",
         raw_input_text="Industrial steel pump for wholesale buyers",
         raw_input_language="en",
@@ -193,6 +211,17 @@ def test_k_workflow_blocks_until_manual_risk_and_image_gates_pass():
         weight_json={"value": 2, "unit": "kg"},
     )
     db.add(product)
+    db.add(
+        KProductKnowledgeVariant(
+            id=uuid4(),
+            product_id=product.id,
+            parent_sku="PUMP-001",
+            variant_sku="PUMP-001-DEFAULT",
+            variant_hash="DEFAULT",
+            attributes_json={"default_variant": True},
+            image_folder="images/pump-001/PUMP-001-DEFAULT",
+        )
+    )
     db.commit()
 
     engine = KWorkflowOrchestratorV1(
@@ -253,10 +282,15 @@ def test_k_workflow_blocks_until_manual_risk_and_image_gates_pass():
         asset_role="main",
         status="available",
         review_status="not_applicable",
-        object_key="k-products/pump-001/images/main.jpg",
+        object_key="images/pump-001/PUMP-001-DEFAULT/main.jpg",
         file_url_placeholder="https://cdn.example/main.jpg",
         source="manual_upload_image",
-        metadata_json={"filename": "main.jpg", "source_type": "manual_upload_image"},
+        variant_sku="PUMP-001-DEFAULT",
+        metadata_json={
+            "filename": "main.jpg",
+            "source_type": "manual_upload_image",
+            "variant_sku": "PUMP-001-DEFAULT",
+        },
     )
     db.add(asset)
     db.flush()
@@ -266,6 +300,7 @@ def test_k_workflow_blocks_until_manual_risk_and_image_gates_pass():
         payload=ProductKnowledgeImageBindRequest(
             source_type="manual_upload_image",
             asset_id=asset.id,
+            variant_sku="PUMP-001-DEFAULT",
         ),
         scope_context=scope,
         user=user,
@@ -296,6 +331,7 @@ def test_k_workflow_binds_i_system_image_asset_without_k_review():
         payload=ProductKnowledgeImageBindRequest(
             source_type="i_system_asset",
             i_system_image_asset_id="i-img-001",
+            variant_sku="PUMP-001-DEFAULT",
         ),
         scope_context=scope,
         user=user,
@@ -304,6 +340,7 @@ def test_k_workflow_binds_i_system_image_asset_without_k_review():
     assert ready.status == "ready_for_export"
     assert ready.image_binding_json["source_type"] == "i_system_asset"
     assert ready.image_binding_json["i_system_image_asset_id"] == "i-img-001"
+    assert ready.image_binding_json["variant_sku"] == "PUMP-001-DEFAULT"
     assert ready.image_binding_json["asset_id"]
     assert execution.image_binding_json == ready.image_binding_json
 

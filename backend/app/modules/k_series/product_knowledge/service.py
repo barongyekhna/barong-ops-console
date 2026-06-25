@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import re
 from uuid import UUID, uuid4
 
 from sqlalchemy import or_, select
@@ -14,6 +16,7 @@ from .models import (
     KProductKnowledgeKeyword,
     KProductKnowledgeProduct,
     KProductKnowledgeRiskTerm,
+    KProductKnowledgeVariant,
 )
 from .schemas import (
     ArchiveProductKnowledgeRequest,
@@ -28,12 +31,13 @@ from .constants import TARGET_ORGANIZATION_NAME
 
 PRODUCT_CREATE_FIELDS = frozenset(
     {
-        "product_key",
         "raw_input_text",
         "raw_input_language",
         "source_system",
         "source_record_id",
         "sku",
+        "parent_sku",
+        "target_market",
         "product_status",
         "review_status",
         "canonical_language",
@@ -41,6 +45,10 @@ PRODUCT_CREATE_FIELDS = frozenset(
         "brand_name",
         "manufacturer",
         "product_type",
+        "regular_price",
+        "price_currency",
+        "dimensions_json",
+        "weight_json",
         "short_description_en",
         "long_description_en",
         "primary_use_case_en",
@@ -54,6 +62,8 @@ PRODUCT_UPDATE_FIELDS = frozenset(
         "source_system",
         "source_record_id",
         "sku",
+        "parent_sku",
+        "target_market",
         "product_status",
         "review_status",
         "canonical_language",
@@ -63,6 +73,10 @@ PRODUCT_UPDATE_FIELDS = frozenset(
         "brand_name",
         "manufacturer",
         "product_type",
+        "regular_price",
+        "price_currency",
+        "dimensions_json",
+        "weight_json",
         "short_description_en",
         "long_description_en",
         "primary_use_case_en",
@@ -97,6 +111,8 @@ def list_products(
             or_(
                 KProductKnowledgeProduct.product_key.ilike(term),
                 KProductKnowledgeProduct.sku.ilike(term),
+                KProductKnowledgeProduct.parent_sku.ilike(term),
+                KProductKnowledgeProduct.source_record_id.ilike(term),
                 KProductKnowledgeProduct.product_name_en.ilike(term),
                 KProductKnowledgeProduct.brand_name.ilike(term),
             )
@@ -113,6 +129,27 @@ def create_product(
 ) -> KProductKnowledgeProduct:
     context = normalize_scope_context(scope_context)
     product_data = _selected_model_dump(payload, PRODUCT_CREATE_FIELDS)
+    parent_sku = _normalize_sku(payload.parent_sku or payload.sku)
+    target_locale = (
+        payload.target_locale
+        or payload.canonical_language
+        or payload.raw_input_language
+        or "en"
+    )
+    product_key = _generate_product_key()
+    product_type = payload.product_type or "simple_product"
+    product_data.update(
+        {
+            "canonical_language": target_locale,
+            "parent_sku": parent_sku,
+            "product_key": product_key,
+            "product_type": product_type,
+            "raw_input_language": target_locale,
+            "sku": parent_sku,
+            "target_market": payload.target_market,
+            "variant_group_key": product_key if product_type == "variable_product" else None,
+        }
+    )
     product = KProductKnowledgeProduct(
         id=uuid4(),
         **product_data,
@@ -122,6 +159,14 @@ def create_product(
         organization_name=TARGET_ORGANIZATION_NAME,
     )
     db.add(product)
+
+    variants = _variant_rows_for_payload(
+        product=product,
+        parent_sku=parent_sku,
+        payload=payload,
+    )
+    for variant in variants:
+        db.add(variant)
 
     for item in payload.attributes:
         db.add(
@@ -404,6 +449,84 @@ def _selected_model_dump(
         for key, value in payload.model_dump(exclude_unset=exclude_unset).items()
         if key in allowed_fields
     }
+
+
+def _generate_product_key() -> str:
+    return f"kprod_{uuid4()}"
+
+
+def _normalize_sku(value: str | None) -> str:
+    if value is None:
+        return f"SKU-{uuid4().hex[:12].upper()}"
+    normalized = re.sub(r"[^A-Za-z0-9_-]+", "-", value.strip()).strip("-_").upper()
+    return normalized or f"SKU-{uuid4().hex[:12].upper()}"
+
+
+def _variant_hash(seed: dict[str, object]) -> str:
+    canonical = json.dumps(seed, sort_keys=True, separators=(",", ":"), default=str)
+    value = 0x811C9DC5
+    for byte in canonical.encode("utf-8"):
+        value ^= byte
+        value = (value * 0x01000193) & 0xFFFFFFFF
+    return f"{value:08X}"
+
+
+def _variant_image_folder(product_key: str, variant_sku: str) -> str:
+    return f"images/{product_key}/{variant_sku}"
+
+
+def _variant_rows_for_payload(
+    *,
+    product: KProductKnowledgeProduct,
+    parent_sku: str,
+    payload: ProductKnowledgeCreate,
+) -> list[KProductKnowledgeVariant]:
+    raw_variants = (
+        payload.variants
+        if payload.product_type == "variable_product"
+        else [
+            {
+                "color": None,
+                "size": None,
+                "function": None,
+                "quantity": None,
+                "price_override": None,
+                "attributes": {"default_variant": True},
+            }
+        ]
+    )
+    rows: list[KProductKnowledgeVariant] = []
+    for index, item in enumerate(raw_variants):
+        if isinstance(item, dict):
+            data = item
+        else:
+            data = item.model_dump()
+        seed = {
+            "attributes": data.get("attributes") or {},
+            "color": data.get("color"),
+            "function": data.get("function"),
+            "index": index,
+            "size": data.get("size"),
+        }
+        variant_hash = _variant_hash(seed)
+        variant_sku = f"{parent_sku}-{variant_hash}"
+        rows.append(
+            KProductKnowledgeVariant(
+                id=uuid4(),
+                product_id=product.id,
+                parent_sku=parent_sku,
+                variant_sku=variant_sku,
+                variant_hash=variant_hash,
+                color=data.get("color"),
+                size=data.get("size"),
+                function=data.get("function"),
+                quantity=data.get("quantity"),
+                price_override=data.get("price_override"),
+                attributes_json=data.get("attributes") or {},
+                image_folder=_variant_image_folder(product.product_key, variant_sku),
+            )
+        )
+    return rows
 
 
 def _commit(db: Session) -> None:

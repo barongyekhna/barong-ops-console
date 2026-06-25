@@ -15,6 +15,7 @@ from backend.app.modules.k_series.product_knowledge.constants import (
 from backend.app.modules.k_series.product_knowledge.models import (
     KProductKnowledgeMediaAsset,
     KProductKnowledgeProduct,
+    KProductKnowledgeVariant,
 )
 from backend.app.modules.k_series.product_knowledge.schemas import (
     ProductKnowledgeImageBindRequest,
@@ -124,6 +125,9 @@ def _setup_engine():
         scope_mode="production",
         organization_name=TARGET_ORGANIZATION_NAME,
         product_key="pump-001",
+        parent_sku="PUMP-001",
+        sku="PUMP-001",
+        product_type="simple_product",
         product_name_en="Industrial steel pump",
         raw_input_text="Industrial steel pump for wholesale buyers",
         raw_input_language="en",
@@ -132,6 +136,17 @@ def _setup_engine():
         weight_json={"value": 2, "unit": "kg"},
     )
     db.add(product)
+    db.add(
+        KProductKnowledgeVariant(
+            id=uuid4(),
+            product_id=product.id,
+            parent_sku="PUMP-001",
+            variant_sku="PUMP-001-DEFAULT",
+            variant_hash="DEFAULT",
+            attributes_json={"default_variant": True},
+            image_folder="images/pump-001/PUMP-001-DEFAULT",
+        )
+    )
     db.commit()
     engine = KWorkflowOrchestratorV2(
         db,
@@ -196,6 +211,7 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
         payload=ProductKnowledgeImageBindRequest(
             source_type="i_system_asset",
             i_system_image_asset_id="i-img-closed-loop",
+            variant_sku="PUMP-001-DEFAULT",
         ),
         scope_context=scope,
         user=user,

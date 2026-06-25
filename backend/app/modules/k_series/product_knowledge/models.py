@@ -75,6 +75,16 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
             "product_key",
             name="uq_kpk_products_scope_product_key",
         ),
+        UniqueConstraint(
+            "product_key",
+            name="uq_kpk_products_product_key_global",
+        ),
+        CheckConstraint(
+            "product_type IS NULL OR product_type IN ("
+            "'simple_product', 'variable_product'"
+            ")",
+            name=conv("ck_kpk_products_valid_product_type"),
+        ),
         Index(
             "ix_kpk_products_scope_status",
             "workspace_key",
@@ -93,6 +103,13 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
             "business_context",
             "sku",
         ),
+        Index(
+            "ix_kpk_products_scope_parent_sku",
+            "workspace_key",
+            "business_context",
+            "parent_sku",
+        ),
+        Index("ix_kpk_products_target_market", "target_market"),
         Index("ix_kpk_products_parent", "parent_product_id"),
         Index("ix_kpk_products_variant", "variant_group_key"),
         Index("ix_kpk_products_created", "created_at"),
@@ -123,6 +140,8 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     source_system: Mapped[str | None] = mapped_column(String(100), nullable=True)
     source_record_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sku: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    parent_sku: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    target_market: Mapped[str | None] = mapped_column(String(50), nullable=True)
     parent_product_id: Mapped[UUID | None] = mapped_column(
         Uuid,
         ForeignKey(
@@ -251,6 +270,55 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     )
     manual_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     field_diff_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+
+
+class KProductKnowledgeVariant(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
+    __tablename__ = "k_product_knowledge_variants"
+    __table_args__ = (
+        UniqueConstraint(
+            "variant_sku",
+            name="uq_kpk_variants_variant_sku_global",
+        ),
+        UniqueConstraint(
+            "product_id",
+            "variant_hash",
+            name="uq_kpk_variants_product_hash",
+        ),
+        Index("ix_kpk_variants_product", "product_id"),
+        Index("ix_kpk_variants_parent_sku", "parent_sku"),
+        Index("ix_kpk_variants_variant_sku", "variant_sku"),
+        Index("ix_kpk_variants_status", "status"),
+        Index("ix_kpk_variants_created", "created_at"),
+    )
+
+    product_id: Mapped[UUID] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "k_product_knowledge_products.id",
+            name="fk_kpk_variants_product_id_products",
+        ),
+        nullable=False,
+    )
+    parent_sku: Mapped[str] = mapped_column(String(128), nullable=False)
+    variant_sku: Mapped[str] = mapped_column(String(180), nullable=False)
+    variant_hash: Mapped[str] = mapped_column(String(40), nullable=False)
+    color: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    size: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    function: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    price_override: Mapped[Decimal | None] = mapped_column(
+        Numeric(12, 2),
+        nullable=True,
+    )
+    attributes_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    image_folder: Mapped[str] = mapped_column(String(1024), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        server_default="active",
+    )
+    created_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+    updated_by_user_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
 
 
 class KProductKnowledgeAttribute(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
@@ -684,6 +752,7 @@ class KProductKnowledgeMediaAsset(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     __tablename__ = "k_product_knowledge_media_assets"
     __table_args__ = (
         Index("ix_kpk_media_assets_product_role", "product_id", "asset_role"),
+        Index("ix_kpk_media_assets_variant_sku", "product_id", "variant_sku"),
         Index("ix_kpk_media_assets_type", "asset_type"),
         Index("ix_kpk_media_assets_status", "status"),
         Index("ix_kpk_media_assets_review", "review_status"),
@@ -704,6 +773,15 @@ class KProductKnowledgeMediaAsset(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
         ),
         nullable=False,
     )
+    variant_id: Mapped[UUID | None] = mapped_column(
+        Uuid,
+        ForeignKey(
+            "k_product_knowledge_variants.id",
+            name="fk_kpk_media_assets_variant_id_variants",
+        ),
+        nullable=True,
+    )
+    variant_sku: Mapped[str | None] = mapped_column(String(180), nullable=True)
     asset_type: Mapped[str] = mapped_column(String(50), nullable=False)
     asset_role: Mapped[str] = mapped_column(String(50), nullable=False)
     status: Mapped[str] = mapped_column(

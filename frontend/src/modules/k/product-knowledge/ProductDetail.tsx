@@ -54,9 +54,9 @@ type ProductDetailProps = {
   isGeneratingSellingPoints?: boolean;
   isWorkflowBusy?: boolean;
   mediaAssets?: KMediaAsset[];
-  onBindImage?: (assetId: string) => void;
-  onBindISystemImage?: (imageAssetId: string) => void;
-  onCreateMedia?: (url: string) => void;
+  onBindImage?: (assetId: string, variantSku: string) => void;
+  onBindISystemImage?: (imageAssetId: string, variantSku: string) => void;
+  onCreateMedia?: (url: string, variantSku: string) => void;
   onExportWorkflow?: () => void;
   onGenerateSellingPoints?: () => void;
   onPauseWorkflow?: () => void;
@@ -151,6 +151,7 @@ export function ProductDetail({
   const [targetMarket, setTargetMarket] = useState("US");
   const [serpQuery, setSerpQuery] = useState("");
   const [mediaUrl, setMediaUrl] = useState("");
+  const [selectedVariantSku, setSelectedVariantSku] = useState("");
   const [iSystemImageAssetId, setISystemImageAssetId] = useState("");
   const [riskDecisions, setRiskDecisions] = useState<Record<string, RiskDecisionValue>>(
     {},
@@ -159,11 +160,23 @@ export function ProductDetail({
 
   const riskKeywords = useMemo(() => normalizeRiskKeywords(workflow), [workflow]);
   const canExport = workflow?.status === "ready_for_export" || workflow?.status === "exported";
+  const selectedVariant = useMemo(
+    () =>
+      (product?.variants ?? []).find(
+        (variant) => variant.variant_sku === selectedVariantSku,
+      ) ?? null,
+    [product?.variants, selectedVariantSku],
+  );
 
   useEffect(() => {
     setRiskDecisions({});
     setRiskDecisionError("");
   }, [workflow?.id]);
+
+  useEffect(() => {
+    const firstVariantSku = product?.variants?.[0]?.variant_sku ?? "";
+    setSelectedVariantSku(firstVariantSku);
+  }, [product?.id, product?.variants]);
 
   if (!product) {
     return (
@@ -219,7 +232,10 @@ export function ProductDetail({
     if (!value) {
       return;
     }
-    onCreateMedia?.(value);
+    if (!selectedVariantSku) {
+      return;
+    }
+    onCreateMedia?.(value, selectedVariantSku);
     setMediaUrl("");
   }
 
@@ -228,7 +244,10 @@ export function ProductDetail({
     if (!value) {
       return;
     }
-    onBindISystemImage?.(value);
+    if (!selectedVariantSku) {
+      return;
+    }
+    onBindISystemImage?.(value, selectedVariantSku);
     setISystemImageAssetId("");
   }
 
@@ -313,9 +332,14 @@ export function ProductDetail({
               value={targetMarket}
             >
               <option value="US">US</option>
-              <option value="EU">EU</option>
               <option value="UK">UK</option>
+              <option value="EU">EU</option>
               <option value="CN">CN</option>
+              <option value="JP">JP</option>
+              <option value="KR">KR</option>
+              <option value="RU">RU</option>
+              <option value="GCC">Middle East</option>
+              <option value="LATAM">LATAM</option>
             </select>
           </label>
           <label className={styles.field}>
@@ -464,9 +488,30 @@ export function ProductDetail({
         <div className={styles.sellingPointsHeading}>
           <div>
             <span className={styles.eyebrow}>Image Handling</span>
-            <h4 id="k-image-system">Manual Or I-System</h4>
+            <h4 id="k-image-system">Variant Images</h4>
           </div>
         </div>
+
+        <label className={styles.field}>
+          <span>Variant SKU</span>
+          <select
+            onChange={(event) => setSelectedVariantSku(event.target.value)}
+            value={selectedVariantSku}
+          >
+            {(product.variants ?? []).map((variant) => (
+              <option key={variant.variant_sku} value={variant.variant_sku}>
+                {variant.variant_sku}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        {selectedVariant ? (
+          <div className={styles.variantImageFolder}>
+            <strong>Variant image folder</strong>
+            <span>{selectedVariant.image_folder}</span>
+          </div>
+        ) : null}
 
         <div className={styles.mediaCreateRow}>
           <label className={styles.field}>
@@ -479,7 +524,7 @@ export function ProductDetail({
           </label>
           <button
             className="secondary-button"
-            disabled={isWorkflowBusy || !mediaUrl.trim()}
+            disabled={isWorkflowBusy || !mediaUrl.trim() || !selectedVariantSku}
             onClick={createMedia}
             type="button"
           >
@@ -499,7 +544,9 @@ export function ProductDetail({
           </label>
           <button
             className="secondary-button"
-            disabled={isWorkflowBusy || !iSystemImageAssetId.trim()}
+            disabled={
+              isWorkflowBusy || !iSystemImageAssetId.trim() || !selectedVariantSku
+            }
             onClick={bindISystemImage}
             type="button"
           >
@@ -514,6 +561,7 @@ export function ProductDetail({
               <div>
                 <strong>{asset.object_key || asset.id}</strong>
                 <span>
+                  {asset.variant_sku || "no variant"} /{" "}
                   {asset.source || "manual_upload_image"} / {asset.status}
                 </span>
               </div>
@@ -531,8 +579,16 @@ export function ProductDetail({
                 ) : null}
                 <button
                   className="secondary-button"
-                  disabled={isWorkflowBusy || asset.source === "i_system_asset"}
-                  onClick={() => onBindImage?.(asset.id)}
+                  disabled={
+                    isWorkflowBusy ||
+                    asset.source === "i_system_asset" ||
+                    !asset.variant_sku
+                  }
+                  onClick={() =>
+                    asset.variant_sku
+                      ? onBindImage?.(asset.id, asset.variant_sku)
+                      : undefined
+                  }
                   type="button"
                 >
                   <Send aria-hidden="true" size={15} />

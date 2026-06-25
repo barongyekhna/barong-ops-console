@@ -31,6 +31,7 @@ from .models import (
     KProductKnowledgeProduct,
     KProductKnowledgeResearchRun,
     KProductKnowledgeRiskTerm,
+    KProductKnowledgeVariant,
     KProductKnowledgeWorkflowExecution,
 )
 from .schemas import (
@@ -1266,6 +1267,7 @@ class KProductKnowledgeWorkflowEngine:
             "bound_asset_id": str(asset.id),
             "image_source_type": source_type,
             "i_system_image_asset_id": _i_system_asset_id(asset),
+            "variant_sku": asset.variant_sku,
             "bound_at": _now_iso(),
             "k_image_ai_generation_allowed": False,
             "k_image_review_allowed": False,
@@ -1275,6 +1277,7 @@ class KProductKnowledgeWorkflowEngine:
             "source_type": source_type,
             "asset_id": str(asset.id),
             "i_system_image_asset_id": _i_system_asset_id(asset),
+            "variant_sku": asset.variant_sku,
             "object_key": asset.object_key,
             "file_url_placeholder": asset.file_url_placeholder,
             "bound_at": _now_iso(),
@@ -1292,6 +1295,7 @@ class KProductKnowledgeWorkflowEngine:
         payload: ProductKnowledgeImageBindRequest,
         user: User,
     ) -> KProductKnowledgeMediaAsset | None:
+        variant = self._resolve_variant_for_image(product, payload.variant_sku)
         if payload.source_type == IMAGE_SOURCE_MANUAL:
             asset_id = payload.asset_id or payload.manual_asset_id
             if asset_id is None:
@@ -1303,6 +1307,12 @@ class KProductKnowledgeWorkflowEngine:
             asset = self.db.get(KProductKnowledgeMediaAsset, asset_id)
             if asset is None or asset.product_id != product.id:
                 return None
+            if asset.variant_sku != variant.variant_sku:
+                raise KWorkflowExecutionError(
+                    "IMAGE_VARIANT_MISMATCH",
+                    "Manual image asset must be stored under the requested variant_sku.",
+                    status_code=409,
+                )
             if _image_source_type(asset) != IMAGE_SOURCE_MANUAL:
                 raise KWorkflowExecutionError(
                     "IMAGE_SOURCE_MISMATCH",
@@ -1321,22 +1331,34 @@ class KProductKnowledgeWorkflowEngine:
                 "I-system image binding requires an I-system image_asset_id.",
                 status_code=422,
             )
-        asset = self._i_system_asset_reference(product, i_system_asset_id)
+        asset = self._i_system_asset_reference(
+            product,
+            i_system_asset_id,
+            variant.variant_sku,
+        )
         if asset is not None:
             return asset
         asset = KProductKnowledgeMediaAsset(
             id=uuid4(),
             product_id=product.id,
+            variant_id=variant.id,
+            variant_sku=variant.variant_sku,
             asset_type="image",
             asset_role="main",
             status="available",
             review_status="i_system_managed",
             storage_provider="i_series",
-            object_key=f"i-series/{i_system_asset_id}",
+            object_key=(
+                f"images/{product.product_key}/{variant.variant_sku}/"
+                f"i-series/{i_system_asset_id}"
+            ),
             source=IMAGE_SOURCE_I_SYSTEM,
             metadata_json={
                 "source_type": IMAGE_SOURCE_I_SYSTEM,
                 "i_system_image_asset_id": i_system_asset_id,
+                "product_key": product.product_key,
+                "variant_folder": f"images/{product.product_key}/{variant.variant_sku}",
+                "variant_sku": variant.variant_sku,
                 "k_image_ai_generation_allowed": False,
                 "k_image_review_allowed": False,
             },
@@ -1431,16 +1453,58 @@ class KProductKnowledgeWorkflowEngine:
         self,
         product: KProductKnowledgeProduct,
         i_system_asset_id: str,
+        variant_sku: str,
     ) -> KProductKnowledgeMediaAsset | None:
         return self.db.scalar(
             select(KProductKnowledgeMediaAsset)
             .where(
                 KProductKnowledgeMediaAsset.product_id == product.id,
+                KProductKnowledgeMediaAsset.variant_sku == variant_sku,
                 KProductKnowledgeMediaAsset.source == IMAGE_SOURCE_I_SYSTEM,
-                KProductKnowledgeMediaAsset.object_key == f"i-series/{i_system_asset_id}",
+                KProductKnowledgeMediaAsset.object_key
+                == (
+                    f"images/{product.product_key}/{variant_sku}/"
+                    f"i-series/{i_system_asset_id}"
+                ),
             )
             .order_by(KProductKnowledgeMediaAsset.updated_at.desc())
             .limit(1)
+        )
+
+    def _resolve_variant_for_image(
+        self,
+        product: KProductKnowledgeProduct,
+        variant_sku: str | None,
+    ) -> KProductKnowledgeVariant:
+        variants = list(
+            self.db.scalars(
+                select(KProductKnowledgeVariant)
+                .where(KProductKnowledgeVariant.product_id == product.id)
+                .order_by(KProductKnowledgeVariant.created_at.asc())
+            )
+        )
+        if not variants:
+            raise KWorkflowExecutionError(
+                "VARIANT_REQUIRED",
+                "Image binding requires an existing product variant.",
+                status_code=422,
+            )
+        if variant_sku:
+            normalized = variant_sku.strip()
+            for variant in variants:
+                if variant.variant_sku == normalized:
+                    return variant
+            raise KWorkflowExecutionError(
+                "VARIANT_NOT_FOUND",
+                "variant_sku was not found for this product.",
+                status_code=404,
+            )
+        if product.product_type == "simple_product" and len(variants) == 1:
+            return variants[0]
+        raise KWorkflowExecutionError(
+            "VARIANT_SKU_REQUIRED",
+            "variant_sku is required for variable product image binding.",
+            status_code=422,
         )
 
     def _image_is_bound(
@@ -2560,6 +2624,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "bound_asset_id": str(asset.id),
             "image_source_type": source_type,
             "i_system_image_asset_id": _i_system_asset_id(asset),
+            "variant_sku": asset.variant_sku,
             "bound_at": _now_iso(),
             "k_image_ai_generation_allowed": False,
             "k_image_review_allowed": False,
@@ -2569,6 +2634,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "source_type": source_type,
             "asset_id": str(asset.id),
             "i_system_image_asset_id": _i_system_asset_id(asset),
+            "variant_sku": asset.variant_sku,
             "object_key": asset.object_key,
             "file_url_placeholder": asset.file_url_placeholder,
             "bound_at": _now_iso(),

@@ -11,23 +11,25 @@ export type ProductKnowledgeListItem = {
   id: string;
   product_key: string;
   sku: string | null;
+  parent_sku?: string | null;
+  target_market?: string | null;
   product_name_en: string | null;
   brand_name: string | null;
   product_type: string | null;
   product_status: string;
   review_status: ProductReviewStatus | string;
-  canonical_language: string;
   workspace_key: string;
   business_context: string;
   scope_mode: string;
   organization_name: string;
+  variant_count?: number | null;
+  variants?: ProductKnowledgeVariant[];
   created_at: string;
   updated_at: string;
 };
 
 export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
   raw_input_text?: string | null;
-  raw_input_language?: string | null;
   manufacturer?: string | null;
   short_description_en?: string | null;
   long_description_en?: string | null;
@@ -46,34 +48,113 @@ export type ProductKnowledgeListResponse = {
 };
 
 export type ProductKnowledgeCreatePayload = {
-  product_key: string;
   raw_input_text: string;
-  raw_input_language: string;
+  target_market: string;
+  target_market_label?: string;
+  target_locale?: string;
+  parent_sku?: string | null;
   source_system?: string | null;
   source_record_id?: string | null;
   sku?: string | null;
   product_status?: string;
   review_status?: ProductReviewStatus;
-  canonical_language?: string;
   product_name_en?: string | null;
   brand_name?: string | null;
   manufacturer?: string | null;
-  product_type?: string | null;
+  product_type: "simple_product" | "variable_product";
+  regular_price?: number | null;
+  price_currency?: string | null;
+  dimensions_json?: Record<string, unknown> | null;
+  weight_json?: Record<string, unknown> | null;
   short_description_en?: string | null;
   long_description_en?: string | null;
   primary_use_case_en?: string | null;
   target_customer_en?: string | null;
   manual_notes?: string | null;
+  variants?: ProductVariantInput[];
+  attributes?: ProductKnowledgeAttributeInput[];
+};
+
+export type ProductCreateFormPayload = Omit<
+  ProductKnowledgeCreatePayload,
+  "target_market" | "target_market_label"
+> & {
+  target_locale: string;
+  target_market: string;
+  target_market_label: string;
+};
+
+export type ProductKnowledgeAttributeInput = {
+  attribute_key: string;
+  attribute_value_text?: string | null;
+  attribute_value_json?: Record<string, unknown> | unknown[] | null;
+  attribute_unit?: string | null;
+  attribute_group?: string | null;
+  source?: string | null;
+  confidence?: number | null;
+  requires_review?: boolean;
+};
+
+export type ProductDimensionsInput = {
+  length: string;
+  width: string;
+  height: string;
+  unit: "cm" | "inch";
+};
+
+export type ProductWeightInput = {
+  value: string;
+  unit: "kg" | "lb" | "g" | "oz";
+};
+
+export type ProductVariantInput = {
+  color?: string | null;
+  size?: string | null;
+  function?: string | null;
+  quantity?: number | null;
+  price_override?: number | null;
+  attributes?: Record<string, unknown>;
+};
+
+export type ProductVariantFormInput = {
+  color: string;
+  size: string;
+  function: string;
+  quantity: string;
+  price_override: string;
+  attributes_text: string;
+};
+
+export type ProductKnowledgeVariant = {
+  id: string;
+  product_id: string;
+  parent_sku: string;
+  variant_sku: string;
+  variant_hash: string;
+  color: string | null;
+  size: string | null;
+  function: string | null;
+  quantity: number | null;
+  price_override: number | null;
+  attributes_json: Record<string, unknown> | unknown[] | null;
+  image_folder: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
 };
 
 export type ProductFormValues = {
-  product_key: string;
   product_name_en: string;
-  sku: string;
+  parent_sku: string;
   brand_name: string;
-  product_type: string;
-  raw_input_language: string;
+  product_type: "simple_product" | "variable_product";
+  price_value: string;
+  price_currency: string;
+  target_market: string;
+  dimensions_input: ProductDimensionsInput;
+  weight_input: ProductWeightInput;
   raw_input_text: string;
+  variants: ProductVariantFormInput[];
 };
 
 export type KWorkflowStatus =
@@ -160,6 +241,7 @@ export type KRiskReviewPayload = {
 export type KMediaAsset = {
   id: string;
   product_id: string;
+  variant_sku: string | null;
   asset_type: string;
   asset_role: string;
   status: string;
@@ -180,6 +262,7 @@ export type KMediaListResponse = {
 
 export type KMediaCreatePayload = {
   product_id: string;
+  variant_sku: string;
   asset_type: string;
   asset_role?: string;
   filename?: string | null;

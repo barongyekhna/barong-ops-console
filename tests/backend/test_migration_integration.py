@@ -5,7 +5,7 @@ from backend.app.db.session import engine
 
 pytestmark = pytest.mark.integration
 
-ALEMBIC_HEAD = "ai_provider_layer_001"
+ALEMBIC_HEAD = "k_sku_variant_001"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",
@@ -38,6 +38,7 @@ REQUIRED_ALEMBIC_TABLES = {
     "k_product_knowledge_attributes",
     "k_product_knowledge_translations",
     "k_product_knowledge_keywords",
+    "k_product_knowledge_variants",
     "k_product_knowledge_risk_terms",
     "k_product_knowledge_research_runs",
     "k_product_knowledge_ai_events",

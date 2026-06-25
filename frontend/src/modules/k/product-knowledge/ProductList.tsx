@@ -11,6 +11,7 @@ import {
   controlWorkflow,
   createMediaAsset,
   createProduct,
+  enrichProductWithDeepSeek,
   exportWorkflow,
   getLatestWorkflow,
   getMediaAssets,
@@ -23,7 +24,7 @@ import { ProductDetail } from "./ProductDetail";
 import { ProductForm } from "./ProductForm";
 import styles from "./ProductKnowledge.module.css";
 import type {
-  ProductKnowledgeCreatePayload,
+  ProductCreateFormPayload,
   KMediaAsset,
   KRiskReviewDecision,
   KWorkflowExecution,
@@ -163,13 +164,29 @@ export function ProductList() {
     void loadWorkflowRuntime(selectedProductId);
   }, [loadWorkflowRuntime, selectedProductId]);
 
-  async function handleCreate(payload: ProductKnowledgeCreatePayload) {
+  async function handleCreate(payload: ProductCreateFormPayload) {
     setIsCreating(true);
     setCreateError("");
 
     try {
       const createdProduct = await createProduct(payload);
+      let deepSeekError = "";
+
+      if (payload.target_market) {
+        try {
+          await enrichProductWithDeepSeek(createdProduct.id);
+        } catch (error) {
+          deepSeekError = formatError(
+            error,
+            "Product was created, but DeepSeek conversion could not be completed.",
+          );
+        }
+      }
+
       await loadProducts(createdProduct.id);
+      if (deepSeekError) {
+        setCreateError(deepSeekError);
+      }
     } catch (error) {
       setCreateError(
         formatError(error, "The product could not be created."),
@@ -264,7 +281,7 @@ export function ProductList() {
     });
   }
 
-  async function handleCreateMedia(url: string) {
+  async function handleCreateMedia(url: string, variantSku: string) {
     if (!selectedProduct) {
       return;
     }
@@ -274,17 +291,18 @@ export function ProductList() {
         asset_role: "main",
         asset_type: "image",
         file_url_placeholder: url,
-        filename: url.split("/").pop() || `${selectedProduct.product_key}.jpg`,
+        filename: url.split("/").pop() || `${variantSku}.jpg`,
         metadata: { upload_mode: "url_placeholder" },
         mime_type: "image/jpeg",
         product_id: selectedProduct.id,
         source: "manual_upload_image",
+        variant_sku: variantSku,
       });
       await loadWorkflowRuntime(selectedProduct.id);
     });
   }
 
-  async function handleBindImage(assetId: string) {
+  async function handleBindImage(assetId: string, variantSku: string) {
     if (!selectedProduct) {
       return;
     }
@@ -293,6 +311,7 @@ export function ProductList() {
       const workflow = await bindProductImage(selectedProduct.id, {
         asset_id: assetId,
         source_type: "manual_upload_image",
+        variant_sku: variantSku,
       });
       setWorkflowByProductId((current) => ({
         ...current,
@@ -302,7 +321,7 @@ export function ProductList() {
     });
   }
 
-  async function handleBindISystemImage(imageAssetId: string) {
+  async function handleBindISystemImage(imageAssetId: string, variantSku: string) {
     if (!selectedProduct) {
       return;
     }
@@ -311,6 +330,7 @@ export function ProductList() {
       const workflow = await bindProductImage(selectedProduct.id, {
         i_system_image_asset_id: imageAssetId,
         source_type: "i_system_asset",
+        variant_sku: variantSku,
       });
       setWorkflowByProductId((current) => ({
         ...current,
@@ -489,11 +509,13 @@ export function ProductList() {
             selectedProduct ? mediaByProductId[selectedProduct.id] ?? [] : []
           }
           onGenerateSellingPoints={handleGenerateSellingPoints}
-          onBindImage={(assetId) => void handleBindImage(assetId)}
-          onBindISystemImage={(imageAssetId) =>
-            void handleBindISystemImage(imageAssetId)
+          onBindImage={(assetId, variantSku) =>
+            void handleBindImage(assetId, variantSku)
           }
-          onCreateMedia={(url) => void handleCreateMedia(url)}
+          onBindISystemImage={(imageAssetId, variantSku) =>
+            void handleBindISystemImage(imageAssetId, variantSku)
+          }
+          onCreateMedia={(url, variantSku) => void handleCreateMedia(url, variantSku)}
           onExportWorkflow={() => void handleExportWorkflow()}
           onPauseWorkflow={() => void handleWorkflowControl("pause")}
           onRefreshWorkflow={() =>
@@ -535,8 +557,9 @@ function toSellingPointsProductPayload(
     brand_name: product.brand_name,
     raw_input: product.product_name_en ?? product.product_key,
     raw_input_text: product.product_name_en ?? product.product_key,
-    language: product.canonical_language,
-    canonical_language: product.canonical_language,
-    market_tags: ["general"],
+    parent_sku: product.parent_sku ?? product.sku,
+    target_market: product.target_market ?? "US",
+    market_tags: [product.target_market ?? "general"],
+    variants: product.variants ?? [],
   };
 }

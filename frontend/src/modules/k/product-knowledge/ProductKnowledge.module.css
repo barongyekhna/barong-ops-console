@@ -49,6 +49,140 @@
   gap: 14px;
 }
 
+.formSection {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+  background: #fbfcfb;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.formSectionHeading {
+  display: flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 8px;
+  color: #26332e;
+}
+
+.formSectionHeading h4 {
+  margin: 0;
+  font-size: 0.86rem;
+  font-weight: 800;
+}
+
+.formSectionHeading span {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.inlineFields {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(84px, 0.45fr);
+  gap: 10px;
+}
+
+.measurementGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.autoKeyNotice {
+  display: grid;
+  min-height: 42px;
+  align-content: center;
+  gap: 4px;
+  padding: 9px 12px;
+  background: #eef8f4;
+  border: 1px solid #c5eadc;
+  border-radius: 6px;
+}
+
+.autoKeyNotice strong {
+  color: #26332e;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.autoKeyNotice span {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.variantEditor {
+  display: grid;
+  gap: 12px;
+}
+
+.variantRow {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.variantPreview {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.35fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.variantPreview strong {
+  color: #3e4542;
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.variantPreview span {
+  min-height: 28px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 8px;
+  color: #087c5e;
+  background: #e5f6ef;
+  border: 1px solid #bde7d6;
+  border-radius: 4px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.variantGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.variantImageFolder {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  background: #f7f9f8;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.variantImageFolder strong {
+  color: #3e4542;
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.variantImageFolder span {
+  color: #087c5e;
+  font-size: 0.75rem;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
 .field {
   display: grid;
   gap: 8px;
@@ -574,6 +708,23 @@
   }
 
   .formGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .formSectionHeading {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .formSectionHeading span {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .inlineFields,
+  .measurementGrid,
+  .variantGrid,
+  .variantPreview {
     grid-template-columns: 1fr;
   }
 
