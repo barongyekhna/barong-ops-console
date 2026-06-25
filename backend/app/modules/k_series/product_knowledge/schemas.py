@@ -117,6 +117,8 @@ class ProductKnowledgeVariantItem(BaseModel):
     def normalize_variant_strings(self) -> "ProductKnowledgeVariantItem":
         if self.variant_sku is not None:
             self.variant_sku = self.variant_sku.strip() or None
+        if self.variant_sku is not None:
+            raise ValueError("variant_sku is auto-generated and cannot be provided.")
         if self.color is not None:
             self.color = self.color.strip() or None
         if self.size is not None:

@@ -16,6 +16,8 @@ import type {
 
 const API_PROXY_BASE = "/api/backend";
 export const K_PRODUCTS_PATH = "/k/products";
+export const PRODUCT_CREATE_FAILURE_MESSAGE =
+  "产品创建失败，请稍后重试或检查SKU/变体信息";
 
 const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
 const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
@@ -38,7 +40,37 @@ function readAccessToken() {
   return window.localStorage.getItem(ACCESS_TOKEN_STORAGE_KEY);
 }
 
-function buildHeaders(hasBody = false) {
+function stableJson(value: unknown): string {
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value);
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((item) => stableJson(item)).join(",")}]`;
+  }
+
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
+    .join(",")}}`;
+}
+
+function hashString(value: string) {
+  let hash = 0x811c9dc5;
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+
+  return hash.toString(16).padStart(8, "0");
+}
+
+function productCreateIdempotencyKey(payload: ProductKnowledgeCreatePayload) {
+  return `k-product-create-${hashString(stableJson(payload))}`;
+}
+
+function buildHeaders(hasBody = false, idempotencyKey?: string) {
   const headers = new Headers({
     Accept: "application/json",
   });
@@ -49,6 +81,9 @@ function buildHeaders(hasBody = false) {
   }
   if (accessToken) {
     headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+  if (idempotencyKey) {
+    headers.set("Idempotency-Key", idempotencyKey);
   }
 
   return headers;
@@ -112,11 +147,38 @@ export async function createProduct(
   const response = await fetch(`${API_PROXY_BASE}${K_PRODUCTS_PATH}`, {
     body: JSON.stringify(payload),
     cache: "no-store",
-    headers: buildHeaders(true),
+    headers: buildHeaders(true, productCreateIdempotencyKey(payload)),
     method: "POST",
   });
 
   return readJson<ProductKnowledgeDetail>(response);
+}
+
+export async function deleteProduct(
+  productId: string,
+  productKey: string,
+): Promise<{
+  status: "deleted";
+  product_id: string;
+  product_key: string;
+  deleted_counts: Record<string, number>;
+}> {
+  const response = await fetch(
+    `${API_PROXY_BASE}${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}`,
+    {
+      body: JSON.stringify({ product_key: productKey }),
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "DELETE",
+    },
+  );
+
+  return readJson<{
+    status: "deleted";
+    product_id: string;
+    product_key: string;
+    deleted_counts: Record<string, number>;
+  }>(response);
 }
 
 export async function enrichProductWithDeepSeek(

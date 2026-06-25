@@ -6,17 +6,24 @@ import json
 import re
 from uuid import UUID, uuid4
 
-from sqlalchemy import or_, select
+from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .errors import KConflictError, KInvalidStateError, KProductNotFoundError
 from .models import (
+    KProductKnowledgeAIEvent,
     KProductKnowledgeAttribute,
     KProductKnowledgeKeyword,
+    KProductKnowledgeMediaAsset,
     KProductKnowledgeProduct,
+    KProductKnowledgeResearchRun,
+    KProductKnowledgeReviewItem,
     KProductKnowledgeRiskTerm,
+    KProductKnowledgeTranslation,
     KProductKnowledgeVariant,
+    KProductKnowledgeVersion,
+    KProductKnowledgeWorkflowExecution,
 )
 from .schemas import (
     ArchiveProductKnowledgeRequest,
@@ -85,6 +92,11 @@ PRODUCT_UPDATE_FIELDS = frozenset(
     }
 )
 
+PRODUCT_CREATE_MAX_ATTEMPTS = 3
+PRODUCT_CREATE_CONFLICT_MESSAGE = (
+    "Product creation conflicted; retry or check SKU and variant data."
+)
+
 
 def list_products(
     db: Session,
@@ -136,63 +148,83 @@ def create_product(
         or payload.raw_input_language
         or "en"
     )
-    product_key = _generate_product_key()
     product_type = payload.product_type or "simple_product"
-    product_data.update(
-        {
-            "canonical_language": target_locale,
-            "parent_sku": parent_sku,
-            "product_key": product_key,
-            "product_type": product_type,
-            "raw_input_language": target_locale,
-            "sku": parent_sku,
-            "target_market": payload.target_market,
-            "variant_group_key": product_key if product_type == "variable_product" else None,
-        }
-    )
-    product = KProductKnowledgeProduct(
-        id=uuid4(),
-        **product_data,
-        workspace_key=context.workspace_key,
-        business_context=context.business_context,
-        scope_mode=context.scope_mode,
-        organization_name=TARGET_ORGANIZATION_NAME,
-    )
-    db.add(product)
 
-    variants = _variant_rows_for_payload(
-        product=product,
-        parent_sku=parent_sku,
-        payload=payload,
-    )
-    for variant in variants:
-        db.add(variant)
-
-    for item in payload.attributes:
-        db.add(
-            KProductKnowledgeAttribute(
-                product_id=product.id,
-                **item.model_dump(),
-            )
+    for attempt in range(PRODUCT_CREATE_MAX_ATTEMPTS):
+        _ensure_sku_available(db, scope_context=context, sku=parent_sku)
+        product_key = _generate_unique_product_key(db)
+        attempt_data = dict(product_data)
+        attempt_data.update(
+            {
+                "canonical_language": target_locale,
+                "parent_sku": parent_sku,
+                "product_key": product_key,
+                "product_type": product_type,
+                "raw_input_language": target_locale,
+                "sku": parent_sku,
+                "target_market": payload.target_market,
+                "variant_group_key": (
+                    product_key if product_type == "variable_product" else None
+                ),
+            }
         )
-    for item in payload.keywords:
-        db.add(
-            KProductKnowledgeKeyword(
-                product_id=product.id,
-                **item.model_dump(),
-            )
+        product = KProductKnowledgeProduct(
+            id=uuid4(),
+            **attempt_data,
+            workspace_key=context.workspace_key,
+            business_context=context.business_context,
+            scope_mode=context.scope_mode,
+            organization_name=TARGET_ORGANIZATION_NAME,
         )
-    for item in payload.risk_terms:
-        db.add(
-            KProductKnowledgeRiskTerm(
-                product_id=product.id,
-                **item.model_dump(),
-            )
+        variants = _variant_rows_for_payload(
+            db=db,
+            product=product,
+            parent_sku=parent_sku,
+            payload=payload,
         )
 
-    _commit(db)
-    db.refresh(product)
-    return product
+        db.add(product)
+        for variant in variants:
+            db.add(variant)
+
+        try:
+            db.flush()
+            for item in payload.attributes:
+                db.add(
+                    KProductKnowledgeAttribute(
+                        product_id=product.id,
+                        **item.model_dump(),
+                    )
+                )
+            for item in payload.keywords:
+                db.add(
+                    KProductKnowledgeKeyword(
+                        product_id=product.id,
+                        **item.model_dump(),
+                    )
+                )
+            for item in payload.risk_terms:
+                db.add(
+                    KProductKnowledgeRiskTerm(
+                        product_id=product.id,
+                        **item.model_dump(),
+                    )
+                )
+            db.commit()
+        except IntegrityError as exc:
+            db.rollback()
+            if _sku_exists(db, scope_context=context, sku=parent_sku):
+                raise KConflictError("SKU already exists for this workspace.") from exc
+            if _variant_skus_exist(db, [variant.variant_sku for variant in variants]):
+                raise KConflictError("Variant SKU already exists.") from exc
+            if attempt + 1 >= PRODUCT_CREATE_MAX_ATTEMPTS:
+                raise KConflictError(PRODUCT_CREATE_CONFLICT_MESSAGE) from exc
+            continue
+
+        db.refresh(product)
+        return product
+
+    raise KConflictError(PRODUCT_CREATE_CONFLICT_MESSAGE)
 
 
 def get_product(
@@ -241,6 +273,71 @@ def archive_product(
     _commit(db)
     db.refresh(product)
     return product
+
+
+def delete_product(
+    db: Session,
+    *,
+    product_id: UUID,
+    product_key: str,
+    scope_context: KScopeContext,
+) -> dict[str, int]:
+    product = _require_scoped_product(db, product_id, scope_context)
+    if product.product_key != product_key:
+        raise KConflictError("Product key confirmation did not match.")
+
+    product_ids = [product.id]
+    counts = {
+        "ai_events": _delete_for_products(db, KProductKnowledgeAIEvent, product_ids),
+        "workflow_traces": _delete_for_products(
+            db,
+            KProductKnowledgeWorkflowExecution,
+            product_ids,
+        ),
+        "media_references": _delete_for_products(
+            db,
+            KProductKnowledgeMediaAsset,
+            product_ids,
+        ),
+        "review_items": _delete_for_products(
+            db,
+            KProductKnowledgeReviewItem,
+            product_ids,
+        ),
+        "versions": _delete_for_products(db, KProductKnowledgeVersion, product_ids),
+        "translations": _delete_for_products(
+            db,
+            KProductKnowledgeTranslation,
+            product_ids,
+        ),
+        "attributes": _delete_for_products(
+            db,
+            KProductKnowledgeAttribute,
+            product_ids,
+        ),
+        "keywords": _delete_for_products(db, KProductKnowledgeKeyword, product_ids),
+        "risk_terms": _delete_for_products(
+            db,
+            KProductKnowledgeRiskTerm,
+            product_ids,
+        ),
+        "research_runs": _delete_for_products(
+            db,
+            KProductKnowledgeResearchRun,
+            product_ids,
+        ),
+        "variants": _delete_for_products(db, KProductKnowledgeVariant, product_ids),
+    }
+
+    db.delete(product)
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        raise KConflictError("Product delete conflicted; retry later.") from exc
+
+    counts["products"] = 1
+    return counts
 
 
 def get_attributes(
@@ -452,7 +549,46 @@ def _selected_model_dump(
 
 
 def _generate_product_key() -> str:
-    return f"kprod_{uuid4()}"
+    return str(uuid4())
+
+
+def _generate_unique_product_key(db: Session) -> str:
+    for _ in range(PRODUCT_CREATE_MAX_ATTEMPTS):
+        product_key = _generate_product_key()
+        exists = db.scalar(
+            select(KProductKnowledgeProduct.id)
+            .where(KProductKnowledgeProduct.product_key == product_key)
+            .limit(1)
+        )
+        if exists is None:
+            return product_key
+    raise KConflictError(PRODUCT_CREATE_CONFLICT_MESSAGE)
+
+
+def _sku_exists(
+    db: Session,
+    *,
+    scope_context: KScopeContext,
+    sku: str,
+) -> bool:
+    query = apply_scope_filters(
+        select(KProductKnowledgeProduct.id).where(
+            KProductKnowledgeProduct.sku == sku
+        ),
+        KProductKnowledgeProduct,
+        scope_context,
+    )
+    return db.scalar(query.limit(1)) is not None
+
+
+def _ensure_sku_available(
+    db: Session,
+    *,
+    scope_context: KScopeContext,
+    sku: str,
+) -> None:
+    if _sku_exists(db, scope_context=scope_context, sku=sku):
+        raise KConflictError("SKU already exists for this workspace.")
 
 
 def _normalize_sku(value: str | None) -> str:
@@ -475,8 +611,59 @@ def _variant_image_folder(product_key: str, variant_sku: str) -> str:
     return f"images/{product_key}/{variant_sku}"
 
 
+def _variant_skus_exist(db: Session, variant_skus: list[str]) -> bool:
+    if not variant_skus:
+        return False
+    return (
+        db.scalar(
+            select(KProductKnowledgeVariant.id)
+            .where(KProductKnowledgeVariant.variant_sku.in_(variant_skus))
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _delete_for_products(
+    db: Session,
+    model: type,
+    product_ids: list[UUID],
+) -> int:
+    if not product_ids:
+        return 0
+    result = db.execute(delete(model).where(model.product_id.in_(product_ids)))
+    return int(result.rowcount or 0)
+
+
+def _variant_identity(
+    db: Session,
+    *,
+    parent_sku: str,
+    seed: dict[str, object],
+    used_variant_hashes: set[str],
+    used_variant_skus: set[str],
+) -> tuple[str, str]:
+    for collision_index in range(PRODUCT_CREATE_MAX_ATTEMPTS * 4):
+        candidate_seed = (
+            seed
+            if collision_index == 0
+            else {**seed, "collision_index": collision_index}
+        )
+        variant_hash = _variant_hash(candidate_seed)
+        variant_sku = f"{parent_sku}-{variant_hash}"
+        if variant_hash in used_variant_hashes or variant_sku in used_variant_skus:
+            continue
+        if _variant_skus_exist(db, [variant_sku]):
+            continue
+        used_variant_hashes.add(variant_hash)
+        used_variant_skus.add(variant_sku)
+        return variant_hash, variant_sku
+    raise KConflictError("Variant SKU already exists.")
+
+
 def _variant_rows_for_payload(
     *,
+    db: Session,
     product: KProductKnowledgeProduct,
     parent_sku: str,
     payload: ProductKnowledgeCreate,
@@ -496,6 +683,8 @@ def _variant_rows_for_payload(
         ]
     )
     rows: list[KProductKnowledgeVariant] = []
+    used_variant_hashes: set[str] = set()
+    used_variant_skus: set[str] = set()
     for index, item in enumerate(raw_variants):
         if isinstance(item, dict):
             data = item
@@ -508,8 +697,13 @@ def _variant_rows_for_payload(
             "index": index,
             "size": data.get("size"),
         }
-        variant_hash = _variant_hash(seed)
-        variant_sku = f"{parent_sku}-{variant_hash}"
+        variant_hash, variant_sku = _variant_identity(
+            db,
+            parent_sku=parent_sku,
+            seed=seed,
+            used_variant_hashes=used_variant_hashes,
+            used_variant_skus=used_variant_skus,
+        )
         rows.append(
             KProductKnowledgeVariant(
                 id=uuid4(),

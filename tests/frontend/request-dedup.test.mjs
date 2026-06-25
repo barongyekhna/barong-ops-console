@@ -196,6 +196,114 @@ test("jobs-specific frontend API handling is removed", () => {
   assert.match(consoleSource, /isApiAbortError/);
 });
 
+test("product creation uses idempotency and dropdown-only market selection", () => {
+  const productFormSource = readFileSync(
+    "frontend/src/modules/k/product-knowledge/ProductForm.tsx",
+    "utf8",
+  );
+  const productApiSource = readFileSync(
+    "frontend/src/modules/k/product-knowledge/api.ts",
+    "utf8",
+  );
+  const productListSource = readFileSync(
+    "frontend/src/modules/k/product-knowledge/ProductList.tsx",
+    "utf8",
+  );
+  const proxySource = readFileSync(
+    "frontend/src/app/api/backend/[...path]/route.ts",
+    "utf8",
+  );
+
+  assert.doesNotMatch(productFormSource, /marketSearch/);
+  assert.doesNotMatch(productFormSource, /市场搜索|Market Search/);
+  assert.match(productFormSource, /submitLockRef/);
+  assert.match(productFormSource, /<select[\s\S]*value=\{values\.target_market\}/);
+  assert.equal((productFormSource.match(/type="submit"/g) ?? []).length, 1);
+  assert.match(productFormSource, /styles\.formFooter/);
+  assert.ok(
+    productFormSource.indexOf('type="submit"') >
+      productFormSource.indexOf("styles.formFooter"),
+  );
+  assert.match(productApiSource, /Idempotency-Key/);
+  assert.match(proxySource, /idempotency-key/);
+  assert.match(
+    productApiSource,
+    /产品创建失败，请稍后重试或检查SKU\/变体信息/,
+  );
+  assert.match(productListSource, /PRODUCT_CREATE_FAILURE_MESSAGE/);
+});
+
+test("product management uses full-list route, safe delete, and clean K labels", () => {
+  const productPageSource = readFileSync(
+    "frontend/src/app/(console)/products/page.tsx",
+    "utf8",
+  );
+  const fullProductPageSource = readFileSync(
+    "frontend/src/app/(console)/products/full/page.tsx",
+    "utf8",
+  );
+  const productListSource = readFileSync(
+    "frontend/src/modules/k/product-knowledge/ProductList.tsx",
+    "utf8",
+  );
+  const productFormSource = readFileSync(
+    "frontend/src/modules/k/product-knowledge/ProductForm.tsx",
+    "utf8",
+  );
+  const productDetailSource = readFileSync(
+    "frontend/src/modules/k/product-knowledge/ProductDetail.tsx",
+    "utf8",
+  );
+  const proxySource = readFileSync(
+    "frontend/src/app/api/backend/[...path]/route.ts",
+    "utf8",
+  );
+  const researchPanelSource = readFileSync(
+    "frontend/src/modules/k15/research-trigger/ResearchTriggerPanel.tsx",
+    "utf8",
+  );
+  const serpPanelSource = readFileSync(
+    "frontend/src/modules/k16/serp-trigger/SERPTriggerPanel.tsx",
+    "utf8",
+  );
+  const keywordTypesSource = readFileSync(
+    "frontend/src/modules/k19/keywords/types.ts",
+    "utf8",
+  );
+  const riskTypesSource = readFileSync(
+    "frontend/src/modules/k20/risk/types.ts",
+    "utf8",
+  );
+
+  assert.match(productPageSource, /<ProductList \/>/);
+  assert.match(fullProductPageSource, /ProductListFull/);
+  assert.match(productListSource, /window\.open\(\s*"\/products\/full"/);
+  assert.match(productListSource, /Open Product List/);
+  assert.match(productListSource, /PRODUCT_LIST_PAGE_SIZE\s*=\s*25/);
+  assert.match(productListSource, /openProductId/);
+  assert.doesNotMatch(productListSource, /selectedProductId/);
+  assert.match(productListSource, /deleteProduct/);
+  assert.match(productListSource, /Confirm Delete/);
+  assert.match(productListSource, /deleteConfirmation\.trim\(\) === deleteConfirmationKey/);
+  assert.match(productListSource, /displayProductKey/);
+  assert.match(productDetailSource, /onCollapse/);
+  assert.match(productDetailSource, /Start Keyword Research/);
+  assert.match(productDetailSource, /WORKFLOW_STAGES/);
+  assert.match(productDetailSource, /workflowProgress/);
+  assert.match(productDetailSource, /formatVariantDisplayName/);
+  assert.match(productFormSource, /variantAttributeBuilder/);
+  assert.match(productFormSource, /addVariantAttribute/);
+  assert.match(productFormSource, /attribute_schema: "attribute_builder_v1"/);
+  assert.doesNotMatch(productFormSource, /attributesJson|attributes_text|Variant SKU Preview/);
+  assert.match(proxySource, /method === "GET" \|\| method === "PATCH" \|\| method === "DELETE"/);
+
+  assert.doesNotMatch(productDetailSource, />K14|K14 Selling Points|auxiliary K14/);
+  assert.doesNotMatch(researchPanelSource, />K15</);
+  assert.doesNotMatch(serpPanelSource, />K16</);
+  assert.doesNotMatch(keywordTypesSource, /K15 research|K16 SERP|K17 ChatGPT|K18 Claude/);
+  assert.doesNotMatch(riskTypesSource, /K17 pre-filter|K18 validated/);
+});
+
 test("dashboard initial load renders partial state without all-settled blocking", () => {
   const dashboardSource = readFileSync(
     "frontend/src/components/operations-dashboard.tsx",

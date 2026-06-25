@@ -25,7 +25,7 @@ from ..core.rbac import (
     RoleMetadata,
     get_role_metadata,
 )
-from ..core.roles import is_owner_role, normalize_role
+from ..core.roles import is_owner_role, is_super_admin_role, normalize_role
 from ..models.org_membership import OrgMembershipRecord
 from ..models.permission import PermissionRegistry, UserPermissionAssignment
 from ..models.user import User
@@ -395,6 +395,46 @@ class UnifiedPermissionEngine:
                 owner_platform_role=is_owner_role(user.role),
             )
 
+        if is_super_admin_role(user.role):
+            role = normalize_role(user.role)
+            rbac_metadata = _legacy_metadata(role, module_id, action_text)
+            module_actions = _module_actions(module_id)
+            if action not in module_actions:
+                return self._deny(
+                    request,
+                    user_id=user_id,
+                    org_id=org_id,
+                    module_id=module_id,
+                    action=action.value,
+                    role=role,
+                    denial_code="c18f_module_action_denied",
+                    reason="C18F module action policy denies the requested action.",
+                    legacy_rbac_metadata=rbac_metadata,
+                    c18c_org_membership_checked=True,
+                    c18d_module_binding_checked=True,
+                    c18f_isolation_applied=True,
+                    owner_platform_role=False,
+                )
+
+            return self._allow(
+                request,
+                user_id=user_id,
+                org_id=org_id,
+                module_id=module_id,
+                action=action.value,
+                role=role,
+                reason=(
+                    "Super admin role inherited all module actions within "
+                    "the active organization scope."
+                ),
+                allowed_actions=_sorted_actions(module_actions),
+                legacy_rbac_metadata=rbac_metadata,
+                c18c_org_membership_checked=True,
+                c18d_module_binding_checked=True,
+                c18f_isolation_applied=True,
+                owner_platform_role=False,
+            )
+
         role_actions = _role_actions(role)
         if action not in role_actions:
             return self._deny(
@@ -563,6 +603,26 @@ class UnifiedPermissionEngine:
                 c05_assignment_checked=True,
                 c05_role_defaults_count=role_defaults_count,
                 owner_platform_role=True,
+            )
+
+        if is_super_admin_role(user.role):
+            return self._allow(
+                request,
+                user_id=user_id,
+                org_id=request.org_id,
+                module_id=permission.module_key,
+                action=permission.action,
+                role=user.role,
+                reason=(
+                    "Super admin role inherited all enabled permissions "
+                    "within organization scope."
+                ),
+                permission_key=permission_key,
+                permission=permission,
+                legacy_rbac_metadata=rbac_metadata,
+                c05_assignment_checked=True,
+                c05_role_defaults_count=role_defaults_count,
+                owner_platform_role=False,
             )
 
         matched, has_other_scope = self._assignment_state(

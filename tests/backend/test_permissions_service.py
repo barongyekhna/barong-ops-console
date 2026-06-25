@@ -120,7 +120,7 @@ def test_owner_has_platform_admin_scope_without_assignments(
         assert "artifacts.read" not in effective.permissions
 
 
-def test_super_admin_requires_assignment_and_scope_matches(
+def test_super_admin_inherits_enabled_permissions_without_assignment(
     clean_auth_tables: None,
 ) -> None:
     super_admin_id = create_permission_test_user(
@@ -133,19 +133,11 @@ def test_super_admin_requires_assignment_and_scope_matches(
         super_admin = db.get(User, super_admin_id)
         assert super_admin is not None
 
-        assert not user_has_permission(db, super_admin, "users.manage")
-
-        assignment = grant_permission(
-            db,
-            user_id=super_admin_id,
-            permission_key="users.manage",
-            scope_type="company",
-            scope_key="independent_site",
-            reason="C05B scoped assignment test.",
-        )
         effective = resolve_effective_permissions(db, super_admin)
 
-        assert assignment.scope_type == "company"
+        assert user_has_permission(db, super_admin, "users.manage")
+        assert user_has_permission(db, super_admin, "permissions.manage")
+        assert user_has_permission(db, super_admin, "k.product_knowledge.update")
         assert user_has_permission(
             db,
             super_admin,
@@ -153,15 +145,14 @@ def test_super_admin_requires_assignment_and_scope_matches(
             scope_type="company",
             scope_key="independent_site",
         )
-        assert not user_has_permission(db, super_admin, "users.manage")
-        assert not user_has_permission(
+        assert user_has_permission(
             db,
             super_admin,
             "users.manage",
             scope_type="company",
             scope_key="factory_company",
         )
-        assert not user_has_permission(
+        assert user_has_permission(
             db,
             super_admin,
             "users.manage",
@@ -169,7 +160,11 @@ def test_super_admin_requires_assignment_and_scope_matches(
             scope_key="factory_a",
         )
         assert effective.is_owner_full_access is False
-        assert effective.permissions == ["users.manage"]
+        assert effective.is_platform_owner is False
+        assert "*" not in effective.permissions
+        assert {"users.manage", "permissions.manage", "k.product_knowledge.update"}.issubset(
+            set(effective.permissions)
+        )
 
 
 def test_disabled_and_expired_assignments_do_not_apply(
@@ -210,7 +205,7 @@ def test_disabled_and_expired_assignments_do_not_apply(
         assert not user_has_permission(db, user, "modules.read")
 
 
-def test_role_default_permissions_do_not_grant_effective_access(
+def test_role_default_permissions_do_not_change_super_admin_inheritance(
     clean_auth_tables: None,
 ) -> None:
     super_admin_id = create_permission_test_user(
@@ -235,8 +230,9 @@ def test_role_default_permissions_do_not_grant_effective_access(
 
         assert default_permission.is_enabled is True
         assert stored_defaults == [default_permission]
-        assert not user_has_permission(db, super_admin, "permissions.manage")
-        assert effective.permissions == []
+        assert user_has_permission(db, super_admin, "permissions.manage")
+        assert "permissions.manage" in effective.permissions
+        assert "*" not in effective.permissions
 
 
 def list_user_assignments(

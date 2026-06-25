@@ -255,7 +255,7 @@ test("permission display names and UI groups do not expose raw keys", () => {
   assert.equal(getPermissionUiCategory(highRiskPermission), "control_plane");
 });
 
-test("permission registry filtering limits super admin to feature permissions", () => {
+test("permission registry filtering gives owner and super admin full active registry", () => {
   const removedArtifactPermission = {
     ...ordinaryPermission,
     id: "removed-artifacts",
@@ -274,7 +274,7 @@ test("permission registry filtering limits super admin to feature permissions", 
     filterPermissionRegistryForRole(registry, "super_admin").map(
       (permission) => permission.permission_key,
     ),
-    ["reviews.read"],
+    ["reviews.read", "permissions.manage"],
   );
   assert.deepEqual(filterPermissionRegistryForRole(registry, "viewer"), []);
 });

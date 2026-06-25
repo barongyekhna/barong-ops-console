@@ -465,13 +465,8 @@ export function filterPermissionRegistryForRole(
     (permission) => !isRemovedPermission(permission),
   );
   const normalized = normalizeRole(role);
-  if (normalized === "owner") {
+  if (normalized === "owner" || normalized === "super_admin") {
     return activeRegistry;
-  }
-  if (normalized === "super_admin") {
-    return activeRegistry.filter(
-      (permission) => getPermissionUiCategory(permission) === "feature",
-    );
   }
   return [];
 }

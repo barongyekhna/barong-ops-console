@@ -372,22 +372,22 @@ def test_c09d_execution_provider_rule_matrix_is_explicitly_no_execute() -> None:
             "waiting_c14_secret_rules",
         ),
         "k.product_knowledge.prompt.provider": (
-            "unavailable",
+            "blocked",
             "secret_rules_required",
             "waiting_c14_secret_rules",
         ),
         "k.product_knowledge.serp.provider": (
-            "unavailable",
+            "blocked",
             "secret_rules_required",
             "waiting_c14_secret_rules",
         ),
         "k.product_knowledge.ai_enrich.provider": (
-            "unavailable",
+            "blocked",
             "secret_rules_required",
             "waiting_c14_secret_rules",
         ),
         "k.product_knowledge.risk_filter.provider": (
-            "unavailable",
+            "blocked",
             "blocked_approval_required",
             "waiting_c12_approval_gate",
         ),
@@ -792,7 +792,7 @@ def test_execution_provider_access_states_are_safe_for_owner_and_non_owner(
     ]
 
 
-def test_role_defaults_super_admin_and_direct_access_state_do_not_grant_execution(
+def test_role_defaults_viewer_locked_super_admin_sees_provider_metadata_without_execution(
     auth_client: TestClient,
 ) -> None:
     seed_permission_registry()
@@ -847,12 +847,22 @@ def test_role_defaults_super_admin_and_direct_access_state_do_not_grant_executio
     assert viewer_items["future.live_provider"]["provider_access_state"] == (
         "hidden"
     )
+    assert super_admin_items["core.contract_only_provider"]["visible"] is True
+    assert super_admin_items["core.contract_only_provider"]["hidden"] is False
     assert super_admin_items["core.contract_only_provider"][
         "provider_access_state"
-    ] == "hidden"
+    ] in {"blocked", "unavailable"}
+    assert super_admin_items["core.contract_only_provider"][
+        "can_request_execution"
+    ] is False
+    assert super_admin_items["future.local_backend_provider"]["visible"] is True
+    assert super_admin_items["future.local_backend_provider"]["hidden"] is False
     assert super_admin_items["future.local_backend_provider"][
         "provider_access_state"
-    ] == "hidden"
+    ] != "hidden"
+    assert super_admin_items["future.local_backend_provider"][
+        "can_request_execution"
+    ] is False
 
     contract_only = next(
         provider

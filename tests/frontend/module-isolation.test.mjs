@@ -248,7 +248,15 @@ const registryItems = [
     denied_behavior: "hide_when_denied",
     module_key: "admin.modules",
     required_permissions: ["modules.read"],
-    route_namespace: "/modules",
+    route_namespace: "/module-control",
+    status: "sealed",
+  }),
+  manifest({
+    category: "admin",
+    denied_behavior: "hide_when_denied",
+    module_key: "admin.key_management",
+    required_permissions: ["modules.read"],
+    route_namespace: "/api-key-management",
     status: "sealed",
   }),
   manifest({
@@ -623,7 +631,7 @@ test("every navigation module is registered and aligned with registry metadata",
   );
 });
 
-test("admin.users stays visible while admin.permissions remains hidden when denied", () => {
+test("admin.users stays visible and admin.permissions follows read permission visibility", () => {
   const adminUsers = item("admin.users");
   const adminPermissions = item("admin.permissions");
 
@@ -635,7 +643,7 @@ test("admin.users stays visible while admin.permissions remains hidden when deni
   assert.equal(adminUsers.category, "admin");
   assert.equal(adminPermissions.label, "权限管理");
   assert.equal(adminPermissions.module_key, "admin.permissions");
-  assert.equal(adminPermissions.owner_only, true);
+  assert.equal(adminPermissions.owner_only, undefined);
   assert.equal(adminPermissions.denied_behavior, "hide_when_denied");
   assert.equal(adminPermissions.category, "admin");
 
@@ -647,12 +655,21 @@ test("admin.users stays visible while admin.permissions remains hidden when deni
   );
   assert.equal(
     getNavigationStateForModule(
-      permissionsReadPermissions,
+      noPermissions,
       adminPermissions,
       [],
       { moduleAccessUnknown: true },
     ).isVisible,
     false,
+  );
+  assert.equal(
+    getNavigationStateForModule(
+      permissionsReadPermissions,
+      adminPermissions,
+      [],
+      { moduleAccessUnknown: true },
+    ).isVisible,
+    true,
   );
   assert.equal(
     getNavigationStateForModule(ownerPermissions, adminUsers, [], {
@@ -744,7 +761,7 @@ test("business modules stay locked for users without permission", () => {
   }
 });
 
-test("owner-only admin entries and system logs stay hidden when access is unknown", () => {
+test("permission-gated admin entries and system logs stay hidden when access is unknown", () => {
   const usersState = getNavigationStateForModule(
     noPermissions,
     item("admin.users"),
@@ -885,7 +902,7 @@ test("C05 and C06 regression assumptions remain intact", () => {
   );
 });
 
-test("role defaults and super_admin do not become implicit module access", () => {
+test("backend locked and hidden access states remain authoritative in route helpers", () => {
   const approvalsWithoutExplicitAssignment = getNavigationStateForModule(
     noPermissions,
     item("business.approvals"),
@@ -982,6 +999,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "business.reviews",
     "core.dashboard",
     "admin.modules",
+    "admin.key_management",
     "admin.settings",
     "system.errors",
     "system.memory_events",
@@ -1000,6 +1018,10 @@ test("sidebar navigation exposes the full productized capability structure", () 
   assert.equal(productKnowledge.required_permission, "products.read");
   assert.equal(productKnowledge.denied_behavior, "show_locked");
   assert.equal(productKnowledge.category, "business");
+  const moduleControl = item("admin.modules");
+  assert.equal(moduleControl.label, "模块控制");
+  assert.equal(moduleControl.href, "/module-control");
+  assert.equal(moduleControl.route_namespace, "/module-control");
   assert.equal(moduleKeys.some((key) => key.startsWith("k01")), false);
   assert.equal(
     navigationItems.some((entry) => /P0[1-8]|K01|WooCommerce/i.test(entry.label)),

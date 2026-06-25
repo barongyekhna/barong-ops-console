@@ -16,7 +16,7 @@ from ..core.permissions import (
     validate_permission_key,
     validate_scope,
 )
-from ..core.roles import is_owner_role, normalize_role
+from ..core.roles import is_owner_role, is_super_admin_role, normalize_role
 from ..models.permission import (
     PermissionRegistry,
     RoleDefaultPermission,
@@ -639,6 +639,15 @@ def get_permission(
 
 def list_enabled_permissions(db: Session) -> list[PermissionRegistry]:
     return list_enabled_permission_records(db)
+
+
+def _enabled_permission_keys(db: Session) -> list[str]:
+    return sorted(
+        {
+            permission.permission_key
+            for permission in list_enabled_permission_records(db)
+        }
+    )
 
 
 def upsert_permission_registry(
@@ -1473,6 +1482,16 @@ def resolve_effective_permissions(
             is_platform_owner=True,
         )
 
+    if is_super_admin_role(role):
+        return EffectivePermissions(
+            user_id=user.id,
+            role=role,
+            is_owner_full_access=False,
+            permissions=_enabled_permission_keys(db),
+            scoped_permissions=[],
+            is_platform_owner=False,
+        )
+
     now = _utc_now()
     assignments = list_enabled_user_assignments(db, user.id, now=now)
     scoped_permissions = [
@@ -1505,7 +1524,7 @@ def resolve_current_user_permission_info(
     request: object | None = None,
 ) -> CurrentUserPermissionInfo:
     role = normalize_role(user.role)
-    if request is None or is_owner_role(role):
+    if request is None or is_owner_role(role) or is_super_admin_role(role):
         effective = resolve_effective_permissions(db, user)
         return _current_user_permission_info_from_effective(effective)
 
@@ -1591,15 +1610,8 @@ def resolve_current_user_module_permission_info(
         request_cache.request_material_hits += 1
         return request_cache.materials[cache_key]
 
-    if is_owner_role(role):
-        effective = EffectivePermissions(
-            user_id=user.id,
-            role=role,
-            is_owner_full_access=True,
-            permissions=["*"],
-            scoped_permissions=[],
-            is_platform_owner=True,
-        )
+    if is_owner_role(role) or is_super_admin_role(role):
+        effective = resolve_effective_permissions(db, user)
     else:
         resolution_cache = PermissionResolutionCache(request=request)
         now = _utc_now()

@@ -38,11 +38,19 @@ export function PermissionRouteGuard({
     pathname === "/organizations" && isAuthenticated;
   const isPermissionCenterRoute =
     pathname === "/permissions" && isAuthenticated && isPrivilegedRole;
+  const isModuleControlRoute =
+    (pathname === "/modules" || pathname === "/module-control") &&
+    isAuthenticated &&
+    isPrivilegedRole;
+  const isApiKeyManagementRoute =
+    pathname === "/api-key-management" && isAuthenticated && isPrivilegedRole;
 
   if (
     isUserManagerRoute ||
     isOrganizationListRoute ||
-    isPermissionCenterRoute
+    isPermissionCenterRoute ||
+    isModuleControlRoute ||
+    isApiKeyManagementRoute
   ) {
     return children;
   }

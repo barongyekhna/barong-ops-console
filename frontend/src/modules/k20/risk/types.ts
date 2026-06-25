@@ -73,9 +73,9 @@ export const riskSources: RiskSource[] = ["K13", "K17", "K18", "manual"];
 export const riskStatuses: RiskStatus[] = ["active", "resolved", "ignored"];
 
 export const sourceLabels: Record<RiskSource, string> = {
-  K13: "K13 AI detected",
-  K17: "K17 pre-filter",
-  K18: "K18 validated",
+  K13: "AI detected",
+  K17: "pre-filter",
+  K18: "validated",
   manual: "manual override",
 };
 

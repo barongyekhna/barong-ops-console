@@ -332,8 +332,8 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         module_key="admin.users",
         display_name="User Management",
         description=(
-            "Owner-only internal user management for sub-account lifecycle "
-            "operations."
+            "Internal user management for owner and organization administrator "
+            "sub-account lifecycle operations."
         ),
         category="admin",
         status="sealed",
@@ -345,7 +345,6 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             label="User Management",
             icon="UserRoundCog",
             order=10,
-            owner_only=True,
         ),
         required_permissions=("users.manage",),
         permission_manifest=(
@@ -382,7 +381,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         data_boundary=_data_boundary(reads=("users",), writes=("users",)),
         release_requirements=_release_requirements(
             production_archive=True,
-            required_checks=("owner-only user API regression",),
+            required_checks=("user API role-scope regression",),
         ),
         production_release_required=True,
     ),
@@ -436,21 +435,19 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         module_key="admin.permissions",
         display_name="Permission Management",
         description=(
-            "Owner-only permission assignment and registry management surface "
-            "from C05 and C06."
+            "Permission assignment and registry management surface from C05 "
+            "and C06 for owner and organization administrators."
         ),
         category="admin",
         status="sealed",
         lifecycle="sealed",
-        route_namespace="/users",
+        route_namespace="/permissions",
         api_namespace="/permissions",
         navigation=_navigation(
             group="System",
             label="Permission Management",
             icon="LockKeyhole",
             order=20,
-            default_visible=False,
-            owner_only=True,
         ),
         required_permissions=("permissions.read",),
         permission_manifest=(
@@ -495,19 +492,19 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
     ),
     _manifest(
         module_key="admin.modules",
-        display_name="Modules",
+        display_name="Module Control",
         description=(
-            "Existing foundation module metadata page plus C07B read-only "
-            "manifest registry endpoints."
+            "Module control center plus C07B read-only manifest registry "
+            "endpoints."
         ),
         category="admin",
         status="sealed",
         lifecycle="sealed",
-        route_namespace="/modules",
+        route_namespace="/module-control",
         api_namespace="/modules",
         navigation=_navigation(
             group="Registry",
-            label="Modules",
+            label="Module Control",
             icon="Boxes",
             order=20,
         ),
@@ -539,6 +536,37 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         denied_behavior="hide_when_denied",
         audit_log_actions=("module.create_demo",),
         data_boundary=_data_boundary(reads=("module_registry",)),
+    ),
+    _manifest(
+        module_key="admin.key_management",
+        display_name="API Key Management",
+        description="API key management module entry for organization administrators.",
+        category="admin",
+        status="sealed",
+        lifecycle="sealed",
+        route_namespace="/api-key-management",
+        api_namespace="/api-key-orchestration",
+        navigation=_navigation(
+            group="Registry",
+            label="API Key Management",
+            icon="LockKeyhole",
+            order=25,
+        ),
+        required_permissions=("modules.read",),
+        permission_manifest=(
+            _permission(
+                module_key="admin.key_management",
+                permission_key="modules.read",
+                category="admin",
+                action="read",
+                label="Read API key management module",
+                description="View API key management module metadata and entry point.",
+                risk_level="medium",
+                menu_policy="hide_when_denied",
+            ),
+        ),
+        denied_behavior="hide_when_denied",
+        data_boundary=_data_boundary(reads=("credential_registry",)),
     ),
     _manifest(
         module_key="admin.agents",

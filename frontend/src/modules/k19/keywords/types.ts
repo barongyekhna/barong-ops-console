@@ -54,9 +54,9 @@ export const keywordStatuses: KeywordStatus[] = [
 ];
 
 export const sourceLabels: Record<KeywordSource, string> = {
-  K15: "K15 research",
-  K16: "K16 SERP",
-  K17: "K17 ChatGPT",
-  K18: "K18 Claude",
+  K15: "research",
+  K16: "SERP",
+  K17: "ChatGPT",
+  K18: "Claude",
   manual: "manual user",
 };

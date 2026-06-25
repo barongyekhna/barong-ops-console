@@ -1,0 +1,148 @@
+{
+  "generated_at": "2026-06-25T08:57:38Z",
+  "objective": "K-SERIES PRODUCT MANAGEMENT FINAL FIX + PERMISSION + UI/UX RESTRUCTURE + SAFE DELETE SYSTEM",
+  "delete_flow_status": {
+    "implemented": true,
+    "backend_endpoint": "DELETE /api/backend/k/products/{product_id}",
+    "confirmation_required": "product_key exact match",
+    "confirm_modal": true,
+    "cancel_without_delete": true,
+    "cascade_delete": {
+      "product": true,
+      "variants": true,
+      "keywords": true,
+      "risk_terms": true,
+      "media_references": true,
+      "ai_events": true,
+      "workflow_traces": true,
+      "additional_product_records": [
+        "attributes",
+        "research_runs",
+        "translations",
+        "review_items",
+        "versions"
+      ]
+    },
+    "focused_test": "passed",
+    "production_verified": false,
+    "production_verification_blocker": "Production deployment was not allowed because full backend tests did not pass."
+  },
+  "permission_fix_status": {
+    "implemented": true,
+    "owner_full_access": true,
+    "super_admin_full_k_access": true,
+    "assigned_roles_per_module_permission": true,
+    "selling_points_generate_permission": "uses k.product_knowledge.update with owner/super_admin override and assigned permission support",
+    "focused_test": "passed",
+    "production_verified": false
+  },
+  "ui_restructure_status": {
+    "implemented": true,
+    "products_default_page": {
+      "renders_full_product_list": false,
+      "entry_button": "Open Product List",
+      "opens_new_window": "/products/full"
+    },
+    "full_list_route": "/products/full",
+    "single_detail_control": {
+      "state": "openProductId",
+      "only_one_open": true,
+      "clicking_another_closes_previous": true,
+      "manual_collapse_button": true
+    },
+    "delete_button_per_product": true,
+    "k_number_ui_labels_removed": {
+      "K14": true,
+      "K15": true,
+      "K16": true,
+      "K17": true,
+      "K18": true,
+      "top_left_k_logo_retained": true
+    },
+    "focused_test": "passed"
+  },
+  "performance_optimization_status": {
+    "main_products_page_lazy_load": true,
+    "full_list_lazy_load": true,
+    "pagination": {
+      "enabled": true,
+      "page_size": 25
+    },
+    "no_full_page_blocking_render": true
+  },
+  "validation_status": {
+    "frontend_focused_tests": {
+      "command": "node tests/frontend/request-dedup.test.mjs",
+      "status": "passed",
+      "tests": 10
+    },
+    "backend_focused_tests": {
+      "command": ".venv/bin/python -m pytest tests/backend/test_k_series_product_model_upgrade.py -q",
+      "status": "passed",
+      "tests": 8
+    },
+    "frontend_typecheck": {
+      "command": "npm run typecheck",
+      "workdir": "frontend",
+      "status": "passed"
+    },
+    "frontend_build": {
+      "command": "npm run build",
+      "workdir": "frontend",
+      "status": "passed",
+      "routes": ["/products", "/products/full"]
+    },
+    "runtime_sanity_check": {
+      "standalone": "passed",
+      "products_status": 200,
+      "products_full_status": 200,
+      "api_proxy_health_status": 200
+    },
+    "frontend_full_tests": {
+      "command": "npm run test",
+      "workdir": "frontend",
+      "status": "passed",
+      "tests": 14
+    },
+    "frontend_verify": {
+      "command": "npm run verify",
+      "workdir": "frontend",
+      "status": "passed"
+    },
+    "backend_full_tests": {
+      "command": ".venv/bin/python -m pytest tests/backend -q",
+      "status": "failed",
+      "rerun_with_escalated_permissions": "failed",
+      "summary": {
+        "passed": 297,
+        "failed": 36,
+        "errors": 61,
+        "skipped": 194
+      },
+      "primary_error_pattern": "Several tests attempted to connect to postgresql://...@db:5432/... and failed with psycopg OperationalError: Name or service not known.",
+      "deployment_impact": "Blocks production deployment under the requested rule: all tests passed before deploy."
+    }
+  },
+  "production_deployment_status": {
+    "attempted": false,
+    "status": "blocked",
+    "blocked_reason": "Full backend test suite did not pass after normal and escalated reruns.",
+    "docker_compose_down_executed": false,
+    "docker_compose_up_build_executed": false,
+    "production_health_check": "not_run_due_to_blocked_deploy"
+  },
+  "constraints": {
+    "database_structure_changed": false,
+    "k_workflow_engine_changed": false,
+    "ai_pipeline_changed": false,
+    "variant_system_deleted": false,
+    "sku_system_broken": false
+  },
+  "notes": [
+    "No K workflow engine file was modified.",
+    "No database migration or model schema change was added.",
+    "The frontend proxy now allows DELETE for scoped product deletion.",
+    "The visible K14-K18 UI numbering was removed while API/module paths remain unchanged for compatibility.",
+    "Production was intentionally not redeployed because the requested deployment precondition was not met."
+  ]
+}

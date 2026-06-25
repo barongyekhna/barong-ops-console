@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 import hashlib
+import json
+from dataclasses import dataclass
 from datetime import UTC, datetime
+from threading import Lock
+from time import monotonic
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
@@ -12,13 +16,19 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from ....api.deps import get_current_user
+from ....core.roles import is_super_admin_role
 from ....db.session import get_db
 from ....models.user import User
 from ....services.api_key_orchestration import ApiKeyIsolationError
 from ....services.ai_provider_router import AIExecutionRouter, AIProviderExecutionError
 from ....services.module_execution_gate import (
+    API_KEY_BINDING_MISSING_CODE,
+    API_KEY_INJECTION_FAILED_CODE,
+    MODULE_DISABLED_CODE,
+    MODULE_NOT_REGISTERED_CODE,
     ModuleExecutionContext,
     ModuleExecutionGateError,
+    ORG_CONTEXT_REQUIRED_CODE,
     require_module_execution_ready,
 )
 from ....services.permission_service import resolve_current_user_permission_info
@@ -80,6 +90,7 @@ from .scope_shim import KScopeContext, apply_scope_filters
 from .service import (
     archive_product,
     create_product,
+    delete_product,
     get_attributes,
     get_keywords,
     get_product,
@@ -97,6 +108,23 @@ from .workflow_engine import (
 )
 
 router = APIRouter(prefix="/k", tags=["k-product-knowledge"])
+
+PRODUCT_CREATE_IDEMPOTENCY_TTL_SECONDS = 20.0
+
+
+@dataclass
+class ProductCreateIdempotencyRecord:
+    fingerprint: str
+    lock: Lock
+    expires_at: float
+    product_id: UUID | None = None
+
+
+_product_create_idempotency_lock = Lock()
+_product_create_idempotency_records: dict[
+    str,
+    ProductCreateIdempotencyRecord,
+] = {}
 
 
 class KeywordEntry(BaseModel):
@@ -249,6 +277,17 @@ class GenerateSellingPointsRequest(BaseModel):
     mode: str | None = None
 
 
+class ProductDeleteRequest(BaseModel):
+    product_key: str = Field(min_length=1, max_length=128)
+
+
+class ProductDeleteResponse(BaseModel):
+    status: Literal["deleted"] = "deleted"
+    product_id: str
+    product_key: str
+    deleted_counts: dict[str, int]
+
+
 class MediaAssetCreate(BaseModel):
     product_id: str = Field(min_length=1)
     variant_sku: str = Field(min_length=1, max_length=180)
@@ -297,8 +336,10 @@ def _require_k_permission(permission_key: str):
         allowed_permission_keys = {permission_key}
         if permission_key == PERMISSION_READ:
             allowed_permission_keys.add(PERMISSION_PRODUCTS_READ)
-        if permissions.is_owner_full_access or allowed_permission_keys.intersection(
-            permissions.permission_keys
+        if (
+            permissions.is_owner_full_access
+            or is_super_admin_role(user.role)
+            or allowed_permission_keys.intersection(permissions.permission_keys)
         ):
             return user
         raise HTTPException(
@@ -322,6 +363,109 @@ def _scope_context(request: Request | None) -> KScopeContext:
         business_context=DEFAULT_BUSINESS_CONTEXT,
         scope_mode="production",
     )
+
+
+def _canonical_payload(value: Any) -> str:
+    return json.dumps(
+        value,
+        default=str,
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
+
+
+def _product_create_fingerprint(
+    payload: ProductKnowledgeCreate,
+    scope_context: KScopeContext,
+) -> str:
+    body = {
+        "business_context": scope_context.business_context,
+        "payload": payload.model_dump(mode="json"),
+        "scope_mode": scope_context.scope_mode,
+        "workspace_key": scope_context.workspace_key,
+    }
+    return hashlib.sha256(_canonical_payload(body).encode("utf-8")).hexdigest()
+
+
+def _product_create_idempotency_cache_key(
+    request: Request,
+    *,
+    fingerprint: str,
+    scope_context: KScopeContext,
+    user: User,
+) -> str:
+    supplied_key = (request.headers.get("idempotency-key") or "").strip()
+    key = supplied_key or f"auto:{fingerprint}"
+    raw = _canonical_payload(
+        {
+            "business_context": scope_context.business_context,
+            "key": key,
+            "scope_mode": scope_context.scope_mode,
+            "user_id": str(user.id),
+            "workspace_key": scope_context.workspace_key,
+        }
+    )
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
+def _cleanup_product_create_idempotency(now: float) -> None:
+    expired_keys = [
+        key
+        for key, record in _product_create_idempotency_records.items()
+        if record.expires_at <= now and not record.lock.locked()
+    ]
+    for key in expired_keys:
+        _product_create_idempotency_records.pop(key, None)
+
+
+def _claim_product_create_idempotency(
+    *,
+    cache_key: str,
+    fingerprint: str,
+) -> ProductCreateIdempotencyRecord:
+    now = monotonic()
+    with _product_create_idempotency_lock:
+        _cleanup_product_create_idempotency(now)
+        record = _product_create_idempotency_records.get(cache_key)
+        if record is None:
+            record = ProductCreateIdempotencyRecord(
+                fingerprint=fingerprint,
+                lock=Lock(),
+                expires_at=now + PRODUCT_CREATE_IDEMPOTENCY_TTL_SECONDS,
+            )
+            record.lock.acquire()
+            _product_create_idempotency_records[cache_key] = record
+            return record
+        if record.fingerprint != fingerprint:
+            raise KConflictError(
+                "Idempotency key was reused for a different product payload."
+            )
+
+    record.lock.acquire()
+    return record
+
+
+def _complete_product_create_idempotency(
+    *,
+    cache_key: str,
+    record: ProductCreateIdempotencyRecord,
+    product_id: UUID,
+) -> None:
+    with _product_create_idempotency_lock:
+        record.product_id = product_id
+        record.expires_at = monotonic() + PRODUCT_CREATE_IDEMPOTENCY_TTL_SECONDS
+        _product_create_idempotency_records[cache_key] = record
+
+
+def _discard_product_create_idempotency(
+    *,
+    cache_key: str,
+    record: ProductCreateIdempotencyRecord,
+) -> None:
+    with _product_create_idempotency_lock:
+        if _product_create_idempotency_records.get(cache_key) is record:
+            _product_create_idempotency_records.pop(cache_key, None)
 
 
 def _product_variants(
@@ -434,13 +578,14 @@ def _product_by_ref(
     if not create_shell:
         raise KProductNotFoundError(f"K product '{normalized}' was not found.")
 
+    product_key = _router_unique_product_key(db)
     product = KProductKnowledgeProduct(
         id=uuid4(),
         workspace_key=scope_context.workspace_key,
         business_context=scope_context.business_context,
         scope_mode=scope_context.scope_mode,
         organization_name=TARGET_ORGANIZATION_NAME,
-        product_key=f"kprod_{uuid4()}",
+        product_key=product_key,
         source_record_id=normalized,
         product_status="draft",
         product_type="simple_product",
@@ -471,6 +616,19 @@ def _product_by_ref(
         db.rollback()
         raise KConflictError() from exc
     return product
+
+
+def _router_unique_product_key(db: Session) -> str:
+    for _ in range(3):
+        product_key = str(uuid4())
+        exists = db.scalar(
+            select(KProductKnowledgeProduct.id)
+            .where(KProductKnowledgeProduct.product_key == product_key)
+            .limit(1)
+        )
+        if exists is None:
+            return product_key
+    raise KConflictError("Product creation conflicted; retry or check SKU data.")
 
 
 def _variant_by_sku(
@@ -578,12 +736,41 @@ def _risk_entry(db: Session, risk: KProductKnowledgeRiskTerm) -> RiskTermEntry:
     )
 
 
+def _is_execution_configuration_error(code: str | None) -> bool:
+    return code in {
+        API_KEY_BINDING_MISSING_CODE,
+        API_KEY_INJECTION_FAILED_CODE,
+        MODULE_DISABLED_CODE,
+        MODULE_NOT_REGISTERED_CODE,
+        ORG_CONTEXT_REQUIRED_CODE,
+    }
+
+
+def _execution_configuration_message() -> str:
+    return (
+        "K module execution is not fully configured. The current user permission "
+        "is valid, but the module requires an active organization context and "
+        "usable API key binding."
+    )
+
+
 def _gate_error(exc: ModuleExecutionGateError) -> HTTPException:
+    is_configuration_error = _is_execution_configuration_error(exc.code)
+    status_code = (
+        status.HTTP_503_SERVICE_UNAVAILABLE
+        if is_configuration_error
+        else exc.status_code
+    )
+    message = (
+        _execution_configuration_message()
+        if is_configuration_error
+        else str(exc)
+    )
     return HTTPException(
-        status_code=exc.status_code,
+        status_code=status_code,
         detail={
             "code": exc.code,
-            "message": str(exc),
+            "message": message,
             "module_id": exc.module_id,
             "org_id": exc.org_id,
         },
@@ -591,6 +778,14 @@ def _gate_error(exc: ModuleExecutionGateError) -> HTTPException:
 
 
 def _workflow_error(exc: KWorkflowExecutionError) -> HTTPException:
+    code = exc.error_report.get("code") if isinstance(exc.error_report, dict) else None
+    if _is_execution_configuration_error(code if isinstance(code, str) else None):
+        detail = dict(exc.error_report)
+        detail["message"] = _execution_configuration_message()
+        return HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=detail,
+        )
     return HTTPException(status_code=exc.status_code, detail=exc.error_report)
 
 
@@ -720,15 +915,54 @@ def product_knowledge_create(
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_CREATE)),
 ) -> ProductKnowledgeRead:
-    del user
+    scope_context = _scope_context(request)
+    fingerprint = _product_create_fingerprint(payload, scope_context)
+    cache_key = _product_create_idempotency_cache_key(
+        request,
+        fingerprint=fingerprint,
+        scope_context=scope_context,
+        user=user,
+    )
+    record: ProductCreateIdempotencyRecord | None = None
     try:
+        record = _claim_product_create_idempotency(
+            cache_key=cache_key,
+            fingerprint=fingerprint,
+        )
+        if record.product_id is not None:
+            try:
+                product = get_product(
+                    db,
+                    product_id=record.product_id,
+                    scope_context=scope_context,
+                )
+                return _product_read(db, product)
+            except KProductKnowledgeError:
+                _discard_product_create_idempotency(
+                    cache_key=cache_key,
+                    record=record,
+                )
+
         product = create_product(
             db,
             payload=payload,
-            scope_context=_scope_context(request),
+            scope_context=scope_context,
+        )
+        _complete_product_create_idempotency(
+            cache_key=cache_key,
+            record=record,
+            product_id=product.id,
         )
     except KProductKnowledgeError as exc:
+        if record is not None and record.product_id is None:
+            _discard_product_create_idempotency(
+                cache_key=cache_key,
+                record=record,
+            )
         _raise_k_error(exc)
+    finally:
+        if record is not None:
+            record.lock.release()
     return _product_read(db, product)
 
 
@@ -791,6 +1025,31 @@ def product_knowledge_archive(
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
     return _product_read(db, product)
+
+
+@router.delete("/products/{product_id}", response_model=ProductDeleteResponse)
+def product_knowledge_delete(
+    product_id: UUID,
+    request: Request,
+    payload: ProductDeleteRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_ARCHIVE)),
+) -> ProductDeleteResponse:
+    del user
+    try:
+        deleted_counts = delete_product(
+            db,
+            product_id=product_id,
+            product_key=payload.product_key,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    return ProductDeleteResponse(
+        product_id=str(product_id),
+        product_key=payload.product_key,
+        deleted_counts=deleted_counts,
+    )
 
 
 @router.get(
@@ -1759,7 +2018,7 @@ def generate_selling_points(
                 "seo_keywords": provider_output.get("seo_keywords", []),
                 "market_tags": provider_output.get("market_tags", []),
                 "confidence_score": provider_output.get("confidence_score", 0),
-                "source": key.name,
+                "source": "chatgpt",
             }
         )
     except Exception as exc:

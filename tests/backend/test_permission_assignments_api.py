@@ -498,7 +498,7 @@ def test_revoke_soft_disables_assignment_removes_effective_permission_and_logs(
     assert revoke_logs[-1].details["after"]["enabled"] is False
 
 
-def test_security_boundaries_remain_owner_only_without_role_default_grants(
+def test_super_admin_inherits_read_permissions_while_assignment_writes_stay_owner_only(
     auth_client: TestClient,
 ) -> None:
     seed_registry()
@@ -545,8 +545,13 @@ def test_security_boundaries_remain_owner_only_without_role_default_grants(
     owner_users = auth_client.get("/api/app/users", headers=auth_headers(owner_token))
 
     assert super_admin_me.status_code == 200
-    assert super_admin_me.json()["permissions"]["permission_keys"] == []
+    super_admin_permissions = set(
+        super_admin_me.json()["permissions"]["permission_keys"]
+    )
+    assert {"users.manage", "permissions.manage", "k.product_knowledge.update"}.issubset(
+        super_admin_permissions
+    )
     assert super_admin_grant.status_code == 403
-    assert super_admin_users.status_code == 403
+    assert super_admin_users.status_code == 200
     assert auth_register.status_code == 404
     assert owner_users.status_code == 200

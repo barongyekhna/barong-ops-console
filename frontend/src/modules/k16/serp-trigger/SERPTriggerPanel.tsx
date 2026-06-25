@@ -66,11 +66,11 @@ export function SERPTriggerPanel() {
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="k16-serp-trigger">
+    <section className={styles.panel} aria-labelledby="serp-trigger">
       <div className={styles.heading}>
         <div>
-          <span className="section-index">K16</span>
-          <h3 id="k16-serp-trigger">SERP Search Trigger</h3>
+          <span className="section-index">SERP</span>
+          <h3 id="serp-trigger">SERP Search Trigger</h3>
           <p>
             Select a product and market, then run a market search request for
             the future SERP result pipeline.

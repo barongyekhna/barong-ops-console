@@ -594,7 +594,7 @@ function isAllowedKPath(method: string, path: string[]) {
     path[1] === "products" &&
     isUuidPathSegment(path[2])
   ) {
-    return method === "GET" || method === "PATCH";
+    return method === "GET" || method === "PATCH" || method === "DELETE";
   }
 
   if (
@@ -838,11 +838,15 @@ async function proxyRequest(
       Accept: "application/json",
     });
     const contentType = request.headers.get("content-type");
+    const idempotencyKey = request.headers.get("idempotency-key");
 
     applySessionHeaders(headers, request);
     applyForceRefreshHeaders(headers, request);
     if (contentType) {
       headers.set("Content-Type", contentType);
+    }
+    if (idempotencyKey) {
+      headers.set("Idempotency-Key", idempotencyKey);
     }
 
     const requestBody =

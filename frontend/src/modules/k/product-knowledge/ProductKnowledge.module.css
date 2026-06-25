@@ -157,8 +157,30 @@
 
 .variantGrid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.variantAttributeBuilder {
+  display: grid;
+  gap: 10px;
+}
+
+.variantAttributeBuilder > button {
+  justify-self: start;
+}
+
+.variantAttributeRow {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.32fr) minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
+.variantEmpty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
 }
 
 .variantImageFolder {
@@ -232,6 +254,26 @@
   font-size: 0.78rem;
 }
 
+.formFooter {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  display: flex;
+  justify-content: flex-end;
+  padding: 12px 0 0;
+  background: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0%) 0%,
+    var(--surface) 34%
+  );
+  border-top: 1px solid var(--line);
+}
+
+.formSubmitButton {
+  min-width: 168px;
+  justify-content: center;
+}
+
 .contentGrid {
   display: grid;
   grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.75fr);
@@ -285,9 +327,32 @@
   border-radius: 8px;
 }
 
+.listMeta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 720;
+}
+
+.pagination {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination strong {
+  min-width: 54px;
+  color: var(--ink);
+  font-size: 0.76rem;
+  text-align: center;
+}
+
 .table {
   width: 100%;
-  min-width: 760px;
+  min-width: 920px;
   border-collapse: collapse;
   font-size: 0.8rem;
 }
@@ -345,6 +410,24 @@
   font-weight: 760;
 }
 
+.rowActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dangerButton {
+  color: #9b3030;
+  border-color: #e2bcbc;
+  background: #fff7f7;
+}
+
+.dangerButton:hover {
+  color: #842727;
+  border-color: #d79b9b;
+  background: #fff0f0;
+}
+
 .statusBadge {
   display: inline-flex;
   min-height: 24px;
@@ -365,6 +448,13 @@
   top: 96px;
   display: grid;
   gap: 18px;
+}
+
+.detailActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
 }
 
 .detail p {
@@ -500,6 +590,7 @@
 }
 
 .workflowSteps,
+.workflowStages,
 .riskDecisionList,
 .mediaList {
   display: grid;
@@ -507,6 +598,25 @@
   margin: 0;
   padding: 0;
   list-style: none;
+}
+
+.workflowProgress {
+  height: 8px;
+  overflow: hidden;
+  background: #e9efec;
+  border-radius: 999px;
+}
+
+.workflowProgress span {
+  height: 100%;
+  display: block;
+  background: #20b486;
+  border-radius: inherit;
+  transition: width 160ms ease;
+}
+
+.workflowStages {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .workflowSteps li {
@@ -521,13 +631,59 @@
   border-radius: 6px;
 }
 
+.workflowStages li {
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+  align-content: center;
+  min-height: 74px;
+  padding: 10px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+.workflowStages li[data-status="running"] {
+  background: #eef8f4;
+  border-color: #bde7d6;
+}
+
+.workflowStages li[data-status="completed"] {
+  background: #e5f6ef;
+  border-color: #91dabc;
+}
+
+.workflowStages li[data-status="failed"],
+.workflowStages li[data-status="blocked"] {
+  background: #fff4f4;
+  border-color: #e2bcbc;
+}
+
 .workflowSteps span,
+.workflowStages span,
 .riskDecisionList strong,
 .mediaList strong,
 .exportSummary strong {
   overflow-wrap: anywhere;
   font-size: 0.76rem;
   font-weight: 780;
+}
+
+.workflowStages strong {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.workflowStages li[data-status="running"] strong,
+.workflowStages li[data-status="completed"] strong {
+  color: #087c5e;
+}
+
+.workflowStages li[data-status="failed"] strong,
+.workflowStages li[data-status="blocked"] strong {
+  color: #a32f2f;
 }
 
 .workflowSteps strong {
@@ -684,6 +840,80 @@
   font-weight: 800;
 }
 
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background: rgb(20 26 23 / 52%);
+}
+
+.confirmModal {
+  width: min(100%, 540px);
+  display: grid;
+  gap: 16px;
+  padding: 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 24px 70px rgb(19 27 23 / 28%);
+}
+
+.confirmModalHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.confirmModalHeading h3 {
+  margin: 4px 0 0;
+  font-size: 1rem;
+}
+
+.confirmMeta {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.confirmMeta div {
+  min-width: 0;
+  padding: 10px 12px;
+  background: #f7f9f8;
+  border: 1px solid #e3e7e5;
+  border-radius: 6px;
+}
+
+.confirmMeta dt {
+  color: var(--muted);
+  font-size: 0.64rem;
+  font-weight: 780;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.confirmMeta dd {
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+  font-size: 0.78rem;
+  font-weight: 760;
+}
+
+.confirmActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.confirmDeleteButton {
+  min-width: 154px;
+  justify-content: center;
+}
+
 @media (max-width: 1000px) {
   .contentGrid {
     grid-template-columns: 1fr;
@@ -697,7 +927,9 @@
 @media (max-width: 760px) {
   .panelHeading,
   .detailHeading,
-  .sellingPointsHeading {
+  .sellingPointsHeading,
+  .confirmModalHeading,
+  .listMeta {
     align-items: stretch;
     flex-direction: column;
   }
@@ -705,6 +937,22 @@
   .panelHeading button,
   .sellingPointsHeading button {
     align-self: flex-start;
+  }
+
+  .formFooter {
+    justify-content: stretch;
+  }
+
+  .formSubmitButton {
+    width: 100%;
+  }
+
+  .detailActions,
+  .pagination,
+  .rowActions,
+  .confirmActions {
+    align-items: stretch;
+    flex-direction: column;
   }
 
   .formGrid {
@@ -723,6 +971,7 @@
 
   .inlineFields,
   .measurementGrid,
+  .variantAttributeRow,
   .variantGrid,
   .variantPreview {
     grid-template-columns: 1fr;
@@ -731,6 +980,7 @@
   .mediaCreateRow,
   .sellingPointBullets li,
   .sellingPointsMetrics,
+  .workflowStages,
   .workflowMetrics,
   .workflowStartGrid {
     grid-template-columns: 1fr;

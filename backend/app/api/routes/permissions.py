@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
-from ...core.roles import is_owner_role
+from ...core.roles import is_owner_role, is_super_admin_role
 from ...db.session import get_db
 from ...models.user import User
 from ...schemas.common import ListResponse
@@ -218,8 +218,8 @@ def permissions_registry(
     user: User = Depends(require_rbac("C16", "admin")),
 ) -> ListResponse[PermissionRegistryRead]:
     del guard
-    is_owner = is_owner_role(user.role)
-    registry_cache_key = (is_owner, limit, offset)
+    can_read_full_registry = is_owner_role(user.role) or is_super_admin_role(user.role)
+    registry_cache_key = (can_read_full_registry, limit, offset)
     now = monotonic()
     with _permission_cache_lock:
         cached = _permission_registry_cache.get(registry_cache_key)
@@ -234,7 +234,7 @@ def permissions_registry(
             permissions = list_enabled_permissions(db)
         visible_permissions = (
             permissions
-            if is_owner
+            if can_read_full_registry
             else [
                 permission
                 for permission in permissions

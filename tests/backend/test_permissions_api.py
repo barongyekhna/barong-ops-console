@@ -238,39 +238,27 @@ def test_require_permission_scope_does_not_promote_to_global(
     assert scoped_response.status_code == 200
 
 
-def test_super_admin_requires_explicit_assignment(
+def test_super_admin_inherits_permission_access_without_assignment(
     auth_client: TestClient,
 ) -> None:
-    user_id = create_permission_api_user(
+    create_permission_api_user(
         username="c05c_super_admin",
         role="super_admin",
     )
     seed_permission_registry()
     token = login_token(auth_client, username="c05c_super_admin")
 
-    missing_global = auth_client.get(
+    allowed_global = auth_client.get(
         f"{TEST_ROUTE_PREFIX}/permissions-manage-global",
         headers=auth_headers(token),
-    )
-
-    grant_test_permission(
-        user_id=user_id,
-        permission_key="permissions.manage",
-        scope_type="company",
-        scope_key="independent_site",
     )
     allowed_scoped = auth_client.get(
         f"{TEST_ROUTE_PREFIX}/permissions-manage-company-independent-site",
         headers=auth_headers(token),
     )
-    still_missing_global = auth_client.get(
-        f"{TEST_ROUTE_PREFIX}/permissions-manage-global",
-        headers=auth_headers(token),
-    )
 
-    assert missing_global.status_code == 403
+    assert allowed_global.status_code == 200
     assert allowed_scoped.status_code == 200
-    assert still_missing_global.status_code == 403
 
 
 def test_auth_me_returns_basic_identity_without_permission_payload(

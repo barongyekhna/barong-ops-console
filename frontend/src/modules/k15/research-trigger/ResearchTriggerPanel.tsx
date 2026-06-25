@@ -50,11 +50,11 @@ export function ResearchTriggerPanel() {
   }
 
   return (
-    <section className={styles.panel} aria-labelledby="k15-research-trigger">
+    <section className={styles.panel} aria-labelledby="research-trigger">
       <div className={styles.heading}>
         <div>
-          <span className="section-index">K15</span>
-          <h3 id="k15-research-trigger">Keyword Research Trigger</h3>
+          <span className="section-index">Research</span>
+          <h3 id="research-trigger">Keyword Research Trigger</h3>
           <p>
             Start a keyword research run for a product record and track the
             latest run state.

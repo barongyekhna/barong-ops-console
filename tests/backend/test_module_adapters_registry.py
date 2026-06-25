@@ -151,6 +151,7 @@ def test_module_adapter_registry_api_requires_login_and_owner_can_read(
         "k.product_knowledge.adapter",
         "business.products.placeholder.adapter",
         "integration.n8n_test_bridge.adapter",
+        "i.image_system.adapter",
     } == adapter_keys
     assert me.json()["is_owner_full_access"] is True
 
@@ -182,6 +183,7 @@ def test_static_adapter_registry_contract_rules() -> None:
         "k.product_knowledge.adapter",
         "business.products.placeholder.adapter",
         "integration.n8n_test_bridge.adapter",
+        "i.image_system.adapter",
     } == set(adapter_keys)
 
     for adapter in adapters:
@@ -655,7 +657,7 @@ def test_owner_and_non_owner_adapter_access_states(
     )
 
 
-def test_role_defaults_super_admin_and_pending_disabled_adapter_access(
+def test_role_defaults_viewer_locked_super_admin_inherits_admin_adapters(
     auth_client: TestClient,
 ) -> None:
     seed_permission_registry()
@@ -707,12 +709,14 @@ def test_role_defaults_super_admin_and_pending_disabled_adapter_access(
     assert viewer_items["integration.n8n_test_bridge.adapter"][
         "adapter_access_state"
     ] == "hidden"
+    assert super_admin_items["admin.users.adapter"]["visible"] is True
     assert super_admin_items["admin.users.adapter"]["adapter_access_state"] == (
-        "hidden"
+        "available"
     )
+    assert super_admin_items["admin.permissions.adapter"]["visible"] is True
     assert super_admin_items["admin.permissions.adapter"][
         "adapter_access_state"
-    ] == "hidden"
+    ] == "available"
 
     pending_adapter = next(
         adapter

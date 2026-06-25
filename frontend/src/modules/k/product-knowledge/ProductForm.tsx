@@ -1,14 +1,20 @@
 "use client";
 
 import { Globe2, LoaderCircle, Plus, Ruler, Scale } from "lucide-react";
-import { useMemo, useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 
 import styles from "./ProductKnowledge.module.css";
+import {
+  formatVariantAttributes,
+  normalizeVariantAttributes,
+} from "./display";
 import type {
   ProductDimensionsInput,
   ProductCreateFormPayload,
   ProductFormValues,
   ProductKnowledgeAttributeInput,
+  ProductVariantAttributeInput,
+  ProductVariantAttributeType,
   ProductVariantFormInput,
   ProductVariantInput,
   ProductWeightInput,
@@ -79,6 +85,12 @@ const CM_PER_INCH = 2.54;
 const GRAMS_PER_KG = 1000;
 const GRAMS_PER_LB = 453.59237;
 const GRAMS_PER_OZ = 28.349523125;
+const VARIANT_ATTRIBUTE_TYPES: ProductVariantAttributeType[] = [
+  "size",
+  "color",
+  "function",
+  "quantity",
+];
 
 const TARGET_MARKETS: TargetMarketOption[] = [
   {
@@ -247,8 +259,10 @@ const PRODUCT_FORM_LABELS = {
   zh: {
     brand: "品牌",
     category: "类目",
+    addAttribute: "添加属性",
     addVariant: "添加变体",
-    attributesJson: "属性 JSON",
+    attributeType: "属性类型",
+    attributeValue: "属性值",
     color: "颜色",
     create: "创建",
     createProduct: "创建产品",
@@ -264,8 +278,6 @@ const PRODUCT_FORM_LABELS = {
     length: "长",
     market: "目标市场",
     marketInvalid: "请选择有效的目标市场。",
-    marketSearch: "市场搜索",
-    marketSearchPlaceholder: "搜索国家或地区",
     name: "产品名称",
     newProduct: "新建产品",
     parentSku: "Parent SKU",
@@ -284,9 +296,11 @@ const PRODUCT_FORM_LABELS = {
     unit: "单位",
     unitConversionHint: "保存时自动转换",
     variableProduct: "Variable Product",
+    variantAttributesRequired: "每个变体至少需要一个属性。",
+    variantDisplay: "变体名称",
+    variantNameEmpty: "点击添加属性生成变体名称",
     variantRequired: "Variable product 至少需要一个变体。",
     variants: "变体",
-    variantSkuPreview: "Variant SKU 预览",
     weight: "重量",
     weightInvalid: "重量必须为空或正数。",
     weightValue: "重量值",
@@ -295,8 +309,10 @@ const PRODUCT_FORM_LABELS = {
   en: {
     brand: "Brand",
     category: "Category",
+    addAttribute: "Add Attribute",
     addVariant: "Add Variant",
-    attributesJson: "Attributes JSON",
+    attributeType: "Attribute Type",
+    attributeValue: "Attribute Value",
     color: "Color",
     create: "Create",
     createProduct: "Create Product",
@@ -314,8 +330,6 @@ const PRODUCT_FORM_LABELS = {
     length: "Length",
     market: "Target Market",
     marketInvalid: "Choose a valid target market.",
-    marketSearch: "Market Search",
-    marketSearchPlaceholder: "Search country or region",
     name: "Product Name",
     newProduct: "New Product",
     parentSku: "Parent SKU",
@@ -334,9 +348,11 @@ const PRODUCT_FORM_LABELS = {
     unit: "Unit",
     unitConversionHint: "Auto-converted on save",
     variableProduct: "Variable Product",
+    variantAttributesRequired: "Each variant needs at least one attribute.",
+    variantDisplay: "Variant Name",
+    variantNameEmpty: "Add attributes to build the variant name",
     variantRequired: "Variable product requires at least one variant.",
     variants: "Variants",
-    variantSkuPreview: "Variant SKU Preview",
     weight: "Weight",
     weightInvalid: "Weight must be empty or a positive number.",
     weightValue: "Weight Value",
@@ -361,12 +377,8 @@ const initialValues: ProductFormValues = {
   target_market: "US",
   variants: [
     {
-      attributes_text: "",
-      color: "",
-      function: "",
       price_override: "",
-      quantity: "",
-      size: "",
+      attributes: [],
     },
   ],
   weight_input: {
@@ -562,33 +574,6 @@ function normalizePriceInput(
   };
 }
 
-function stableJson(value: unknown): string {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value);
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => stableJson(item)).join(",")}]`;
-  }
-
-  const record = value as Record<string, unknown>;
-  return `{${Object.keys(record)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`)
-    .join(",")}}`;
-}
-
-function variantHash(seed: Record<string, unknown>) {
-  const canonical = stableJson(seed);
-  let value = 0x811c9dc5;
-
-  for (let index = 0; index < canonical.length; index += 1) {
-    value ^= canonical.charCodeAt(index);
-    value = Math.imul(value, 0x01000193) >>> 0;
-  }
-
-  return value.toString(16).toUpperCase().padStart(8, "0");
-}
-
 function normalizeSku(value: string) {
   return value.trim().replace(/[^A-Za-z0-9_-]+/g, "-").replace(/^[-_]+|[-_]+$/g, "").toUpperCase();
 }
@@ -611,40 +596,17 @@ function parseOptionalPrice(value: string) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
 }
 
-function parseVariantAttributes(value: string) {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return {};
+function attributePlaceholder(type: ProductVariantAttributeType) {
+  if (type === "color") {
+    return "yellow / 黄色";
   }
-  const parsed = JSON.parse(trimmed) as unknown;
-  return parsed && typeof parsed === "object" && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : {};
-}
-
-function variantSeed(variant: ProductVariantFormInput, index: number) {
-  let attributes: Record<string, unknown> = {};
-  try {
-    attributes = parseVariantAttributes(variant.attributes_text);
-  } catch {
-    attributes = {};
+  if (type === "size") {
+    return "S";
   }
-
-  return {
-    attributes,
-    color: optionalText(variant.color),
-    function: optionalText(variant.function),
-    index,
-    size: optionalText(variant.size),
-  };
-}
-
-function variantSkuPreview(parentSku: string, variant: ProductVariantFormInput, index: number) {
-  const normalizedParentSku = normalizeSku(parentSku);
-  if (!normalizedParentSku) {
-    return "";
+  if (type === "function") {
+    return "standard";
   }
-  return `${normalizedParentSku}-${variantHash(variantSeed(variant, index))}`;
+  return "12";
 }
 
 function buildVariantPayloads(
@@ -655,14 +617,24 @@ function buildVariantPayloads(
     return [];
   }
 
-  return variants.map((variant) => ({
-    attributes: parseVariantAttributes(variant.attributes_text),
-    color: optionalText(variant.color),
-    function: optionalText(variant.function),
-    price_override: parseOptionalPrice(variant.price_override),
-    quantity: parseOptionalInteger(variant.quantity),
-    size: optionalText(variant.size),
-  }));
+  return variants.map((variant) => {
+    const attributes = normalizeVariantAttributes(variant.attributes);
+    const firstValueFor = (type: ProductVariantAttributeType) =>
+      attributes.find((attribute) => attribute.type === type)?.value ?? "";
+
+    return {
+      attributes: {
+        attribute_schema: "attribute_builder_v1",
+        display_name: formatVariantAttributes(attributes),
+        variant_attributes: attributes,
+      },
+      color: optionalText(firstValueFor("color")),
+      function: optionalText(firstValueFor("function")),
+      price_override: parseOptionalPrice(variant.price_override),
+      quantity: parseOptionalInteger(firstValueFor("quantity")),
+      size: optionalText(firstValueFor("size")),
+    };
+  });
 }
 
 function buildMultilingualFields(
@@ -764,29 +736,12 @@ export function ProductForm({
 }: ProductFormProps) {
   const labels = PRODUCT_FORM_LABELS[ACTIVE_FORM_LOCALE];
   const [values, setValues] = useState<ProductFormValues>(initialValues);
-  const [marketSearch, setMarketSearch] = useState("");
+  const submitLockRef = useRef(false);
+  const [isLocallySubmitting, setIsLocallySubmitting] = useState(false);
   const [validationError, setValidationError] = useState("");
 
   const selectedMarket = targetMarketForCode(values.target_market) ?? TARGET_MARKETS[0];
-  const visibleTargetMarkets = useMemo(() => {
-    const search = marketSearch.trim().toLowerCase();
-    const filtered =
-      search.length === 0
-        ? TARGET_MARKETS
-        : TARGET_MARKETS.filter((market) => {
-            return (
-              market.code.toLowerCase().includes(search) ||
-              market.label.toLowerCase().includes(search) ||
-              market.zhLabel.toLowerCase().includes(search)
-            );
-          });
-
-    if (filtered.some((market) => market.code === selectedMarket.code)) {
-      return filtered;
-    }
-
-    return [selectedMarket, ...filtered];
-  }, [marketSearch, selectedMarket]);
+  const submitLocked = isSubmitting || isLocallySubmitting;
 
   function clearFormErrors() {
     setValidationError("");
@@ -811,7 +766,6 @@ export function ProductForm({
       price_currency: nextMarket.currency,
       target_market: nextMarket.code,
     }));
-    setMarketSearch("");
     clearFormErrors();
   }
 
@@ -843,15 +797,79 @@ export function ProductForm({
     clearFormErrors();
   }
 
-  function updateVariantValue(
-    index: number,
-    key: keyof ProductVariantFormInput,
+  function updateVariantPrice(index: number, value: string) {
+    setValues((current) => ({
+      ...current,
+      variants: current.variants.map((variant, variantIndex) =>
+        variantIndex === index ? { ...variant, price_override: value } : variant,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function updateVariantAttribute(
+    variantIndex: number,
+    attributeIndex: number,
+    key: keyof ProductVariantAttributeInput,
     value: string,
   ) {
     setValues((current) => ({
       ...current,
-      variants: current.variants.map((variant, variantIndex) =>
-        variantIndex === index ? { ...variant, [key]: value } : variant,
+      variants: current.variants.map((variant, currentVariantIndex) =>
+        currentVariantIndex === variantIndex
+          ? {
+              ...variant,
+              attributes: variant.attributes.map((attribute, currentAttributeIndex) =>
+                currentAttributeIndex === attributeIndex
+                  ? key === "type"
+                    ? {
+                        ...attribute,
+                        type: value as ProductVariantAttributeType,
+                      }
+                    : { ...attribute, value }
+                  : attribute,
+              ),
+            }
+          : variant,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function addVariantAttribute(variantIndex: number) {
+    setValues((current) => ({
+      ...current,
+      variants: current.variants.map((variant, currentVariantIndex) =>
+        currentVariantIndex === variantIndex
+          ? {
+              ...variant,
+              attributes: [
+                ...variant.attributes,
+                {
+                  type: "size",
+                  value: "",
+                },
+              ],
+            }
+          : variant,
+      ),
+    }));
+    clearFormErrors();
+  }
+
+  function removeVariantAttribute(variantIndex: number, attributeIndex: number) {
+    setValues((current) => ({
+      ...current,
+      variants: current.variants.map((variant, currentVariantIndex) =>
+        currentVariantIndex === variantIndex
+          ? {
+              ...variant,
+              attributes: variant.attributes.filter(
+                (_, currentAttributeIndex) =>
+                  currentAttributeIndex !== attributeIndex,
+              ),
+            }
+          : variant,
       ),
     }));
     clearFormErrors();
@@ -864,12 +882,8 @@ export function ProductForm({
       variants: [
         ...current.variants,
         {
-          attributes_text: "",
-          color: "",
-          function: "",
           price_override: "",
-          quantity: "",
-          size: "",
+          attributes: [],
         },
       ],
     }));
@@ -886,6 +900,9 @@ export function ProductForm({
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (submitLockRef.current || isSubmitting) {
+      return;
+    }
 
     const parentSku = normalizeSku(values.parent_sku);
     const rawInputText = values.raw_input_text.trim();
@@ -901,6 +918,15 @@ export function ProductForm({
     }
     if (values.product_type === "variable_product" && values.variants.length === 0) {
       setValidationError(labels.variantRequired);
+      return;
+    }
+    if (
+      values.product_type === "variable_product" &&
+      values.variants.some(
+        (variant) => normalizeVariantAttributes(variant.attributes).length === 0,
+      )
+    ) {
+      setValidationError(labels.variantAttributesRequired);
       return;
     }
 
@@ -931,16 +957,10 @@ export function ProductForm({
       return;
     }
 
-    let variants: ProductVariantInput[] = [];
-    try {
-      variants =
-        values.product_type === "variable_product"
-          ? buildVariantPayloads(parentSku, values.variants)
-          : [];
-    } catch {
-      setValidationError(labels.attributesJson);
-      return;
-    }
+    const variants =
+      values.product_type === "variable_product"
+        ? buildVariantPayloads(parentSku, values.variants)
+        : [];
 
     const multilingualFields = buildMultilingualFields(values, market);
     const attributes = buildAttributes({
@@ -956,11 +976,12 @@ export function ProductForm({
       attribute_value_json: {
         parent_sku: parentSku,
         product_type: values.product_type,
-        variant_sku_rule: "variant_sku = parent_sku + '-' + variant_hash",
+        variant_identity: "backend_generated_internal_id",
         variants:
           values.product_type === "variable_product"
-            ? values.variants.map((variant, index) => ({
-                preview_variant_sku: variantSkuPreview(parentSku, variant, index),
+            ? values.variants.map((variant) => ({
+                attributes: normalizeVariantAttributes(variant.attributes),
+                display_name: formatVariantAttributes(variant.attributes),
               }))
             : [],
       },
@@ -986,14 +1007,17 @@ export function ProductForm({
       },
       variants:
         values.product_type === "variable_product"
-          ? values.variants.map((variant, index) => ({
-              ...variant,
-              preview_variant_sku: variantSkuPreview(parentSku, variant, index),
+          ? values.variants.map((variant) => ({
+              attributes: normalizeVariantAttributes(variant.attributes),
+              display_name: formatVariantAttributes(variant.attributes),
+              price_override: variant.price_override,
             }))
           : [],
       weight_input: weight.value,
     };
 
+    submitLockRef.current = true;
+    setIsLocallySubmitting(true);
     try {
       await onCreate({
         attributes,
@@ -1019,9 +1043,11 @@ export function ProductForm({
         weight_json: weight.value,
       });
       setValues(initialValues);
-      setMarketSearch("");
     } catch {
       // The parent renders the API error; keep the entered values for retry.
+    } finally {
+      submitLockRef.current = false;
+      setIsLocallySubmitting(false);
     }
   }
 
@@ -1038,18 +1064,6 @@ export function ProductForm({
           <span className={styles.eyebrow}>{labels.create}</span>
           <h3>{labels.newProduct}</h3>
         </div>
-        <button
-          className="primary-button"
-          disabled={isSubmitting}
-          type="submit"
-        >
-          {isSubmitting ? (
-            <LoaderCircle aria-hidden="true" className="spin" size={17} />
-          ) : (
-            <Plus aria-hidden="true" size={17} />
-          )}
-          {isSubmitting ? labels.creating : labels.createProduct}
-        </button>
       </div>
 
       <section className={styles.formSection} aria-labelledby="k-product-info">
@@ -1169,25 +1183,15 @@ export function ProductForm({
 
         <div className={styles.formGrid}>
           <label className={styles.field}>
-            <span>{labels.marketSearch}</span>
-            <input
-              autoComplete="off"
-              onChange={(event) => setMarketSearch(event.target.value)}
-              placeholder={labels.marketSearchPlaceholder}
-              value={marketSearch}
-            />
-          </label>
-
-          <label className={styles.field}>
             <span>{labels.market}</span>
             <select
               onChange={(event) => updateMarket(event.target.value)}
               required
               value={values.target_market}
             >
-              {visibleTargetMarkets.map((market) => (
+              {TARGET_MARKETS.map((market) => (
                 <option key={market.code} value={market.code}>
-                  {market.label}
+                  {market.label} ({market.code})
                 </option>
               ))}
             </select>
@@ -1309,13 +1313,13 @@ export function ProductForm({
 
           <div className={styles.variantEditor}>
             {values.variants.map((variant, index) => {
-              const preview = variantSkuPreview(values.parent_sku, variant, index);
+              const displayName = formatVariantAttributes(variant.attributes);
 
               return (
                 <section className={styles.variantRow} key={index}>
                   <div className={styles.variantPreview}>
-                    <strong>{labels.variantSkuPreview}</strong>
-                    <span>{preview || `${labels.parentSku} + variant_hash`}</span>
+                    <strong>{labels.variantDisplay}</strong>
+                    <span>{displayName || labels.variantNameEmpty}</span>
                     <button
                       className="secondary-button"
                       disabled={values.variants.length <= 1}
@@ -1326,70 +1330,84 @@ export function ProductForm({
                     </button>
                   </div>
 
+                  <div className={styles.variantAttributeBuilder}>
+                    {variant.attributes.length === 0 ? (
+                      <p className={styles.variantEmpty}>
+                        {labels.variantNameEmpty}
+                      </p>
+                    ) : null}
+
+                    {variant.attributes.map((attribute, attributeIndex) => (
+                      <div
+                        className={styles.variantAttributeRow}
+                        key={`${index}-${attributeIndex}`}
+                      >
+                        <label className={styles.field}>
+                          <span>{labels.attributeType}</span>
+                          <select
+                            onChange={(event) =>
+                              updateVariantAttribute(
+                                index,
+                                attributeIndex,
+                                "type",
+                                event.target.value,
+                              )
+                            }
+                            value={attribute.type}
+                          >
+                            {VARIANT_ATTRIBUTE_TYPES.map((type) => (
+                              <option key={type} value={type}>
+                                {type}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <label className={styles.field}>
+                          <span>{labels.attributeValue}</span>
+                          <input
+                            onChange={(event) =>
+                              updateVariantAttribute(
+                                index,
+                                attributeIndex,
+                                "value",
+                                event.target.value,
+                              )
+                            }
+                            placeholder={attributePlaceholder(attribute.type)}
+                            value={attribute.value}
+                          />
+                        </label>
+                        <button
+                          className="secondary-button"
+                          onClick={() =>
+                            removeVariantAttribute(index, attributeIndex)
+                          }
+                          type="button"
+                        >
+                          {labels.removeVariant}
+                        </button>
+                      </div>
+                    ))}
+
+                    <button
+                      className="secondary-button"
+                      onClick={() => addVariantAttribute(index)}
+                      type="button"
+                    >
+                      <Plus aria-hidden="true" size={15} />
+                      {labels.addAttribute}
+                    </button>
+                  </div>
+
                   <div className={styles.variantGrid}>
-                    <label className={styles.field}>
-                      <span>{labels.color}</span>
-                      <input
-                        onChange={(event) =>
-                          updateVariantValue(index, "color", event.target.value)
-                        }
-                        value={variant.color}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>{labels.size}</span>
-                      <input
-                        onChange={(event) =>
-                          updateVariantValue(index, "size", event.target.value)
-                        }
-                        value={variant.size}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>{labels.function}</span>
-                      <input
-                        onChange={(event) =>
-                          updateVariantValue(index, "function", event.target.value)
-                        }
-                        value={variant.function}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>{labels.quantity}</span>
-                      <input
-                        inputMode="numeric"
-                        onChange={(event) =>
-                          updateVariantValue(index, "quantity", event.target.value)
-                        }
-                        value={variant.quantity}
-                      />
-                    </label>
                     <label className={styles.field}>
                       <span>{labels.priceOverride}</span>
                       <input
                         inputMode="decimal"
                         onChange={(event) =>
-                          updateVariantValue(
-                            index,
-                            "price_override",
-                            event.target.value,
-                          )
+                          updateVariantPrice(index, event.target.value)
                         }
                         value={variant.price_override}
-                      />
-                    </label>
-                    <label className={styles.field}>
-                      <span>{labels.attributesJson}</span>
-                      <input
-                        onChange={(event) =>
-                          updateVariantValue(
-                            index,
-                            "attributes_text",
-                            event.target.value,
-                          )
-                        }
-                        placeholder='{"material":"steel"}'
-                        value={variant.attributes_text}
                       />
                     </label>
                   </div>
@@ -1414,6 +1432,21 @@ export function ProductForm({
       <p className={styles.formMessage} role={formError ? "alert" : undefined}>
         {formError}
       </p>
+
+      <div className={styles.formFooter}>
+        <button
+          className={`primary-button ${styles.formSubmitButton}`}
+          disabled={submitLocked}
+          type="submit"
+        >
+          {submitLocked ? (
+            <LoaderCircle aria-hidden="true" className="spin" size={17} />
+          ) : (
+            <Plus aria-hidden="true" size={17} />
+          )}
+          {submitLocked ? labels.creating : labels.createProduct}
+        </button>
+      </div>
     </form>
   );
 }

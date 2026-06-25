@@ -195,10 +195,12 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["admin.users", "账号与组织"],
   ["admin.organizations", "账号与组织"],
   ["admin.permissions", "账号与组织"],
+  ["k.product_knowledge", "业务处理"],
   ["business.approvals", "业务处理"],
   ["business.reviews", "业务处理"],
   ["core.dashboard", "系统管理"],
   ["admin.modules", "系统管理"],
+  ["admin.key_management", "系统管理"],
   ["admin.settings", "系统管理"],
   ["system.errors", "系统管理"],
   ["system.memory_events", "系统管理"],
@@ -210,10 +212,12 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["admin.users", "用户管理"],
   ["admin.organizations", "组织管理"],
   ["admin.permissions", "权限管理"],
+  ["k.product_knowledge", "产品知识库"],
   ["business.approvals", "审批"],
   ["business.reviews", "审批审计"],
   ["core.dashboard", "首页"],
-  ["admin.modules", "功能区"],
+  ["admin.modules", "模块控制"],
+  ["admin.key_management", "API Key 管理"],
   ["admin.settings", "设置"],
   ["system.errors", "异常记录"],
   ["system.memory_events", "运行记录"],
@@ -225,14 +229,16 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["admin.users", 10],
   ["admin.organizations", 20],
   ["admin.permissions", 30],
+  ["k.product_knowledge", 10],
   ["business.approvals", 10],
   ["business.reviews", 20],
   ["core.dashboard", 10],
   ["admin.modules", 20],
-  ["admin.settings", 30],
-  ["system.errors", 40],
-  ["system.memory_events", 50],
-  ["system.operation_logs", 60],
+  ["admin.key_management", 30],
+  ["admin.settings", 40],
+  ["system.errors", 50],
+  ["system.memory_events", 60],
+  ["system.operation_logs", 70],
   ["admin.agents", 10],
 ]);
 
@@ -244,7 +250,6 @@ const K_PRODUCT_KNOWLEDGE_MODULE_KEY = "k.product_knowledge";
 
 export const PRODUCT_HIDDEN_MODULE_KEYS = new Set([
   "admin.agents",
-  "admin.permissions",
   "admin.settings",
   INTERNAL_EXERCISE_MODULE_KEY,
   "integration.n8n_test_bridge",
@@ -278,7 +283,7 @@ function isOwnerFullAccess(
 function isSuperAdminVisibleAdminModule(role: string, moduleKey: string) {
   return (
     isSuperAdminRole(role) &&
-    (moduleKey === "admin.users" || moduleKey === "admin.permissions")
+    !PRODUCT_HIDDEN_MODULE_KEYS.has(moduleKey)
   );
 }
 
@@ -1262,7 +1267,18 @@ export function buildFrontendCapabilityGraph({
         record: routeByModuleKey.get(manifest.module_key) ?? recordFromManifest(manifest),
       });
     }
-  } else {
+  }
+
+  for (const record of navigationModuleRecords) {
+    const existing = sourceMap.get(record.module_key);
+    sourceMap.set(record.module_key, {
+      manifest: existing?.manifest ?? registryByModule.get(record.module_key) ?? null,
+      moduleKey: record.module_key,
+      record,
+    });
+  }
+
+  if (sourceMap.size === 0) {
     for (const record of navigationModuleRecords) {
       sourceMap.set(record.module_key, {
         manifest: registryByModule.get(record.module_key) ?? null,
@@ -1426,7 +1442,7 @@ export function buildFrontendCapabilityGraph({
         });
       }
 
-      if (!owner && record.owner_only) {
+      if (!owner && !isSuperAdminRole(normalizedRole) && record.owner_only) {
         return {
           ...item,
           can_enter: false,

@@ -116,13 +116,16 @@ export type ProductVariantInput = {
   attributes?: Record<string, unknown>;
 };
 
+export type ProductVariantAttributeType = "size" | "color" | "function" | "quantity";
+
+export type ProductVariantAttributeInput = {
+  type: ProductVariantAttributeType;
+  value: string;
+};
+
 export type ProductVariantFormInput = {
-  color: string;
-  size: string;
-  function: string;
-  quantity: string;
+  attributes: ProductVariantAttributeInput[];
   price_override: string;
-  attributes_text: string;
 };
 
 export type ProductKnowledgeVariant = {

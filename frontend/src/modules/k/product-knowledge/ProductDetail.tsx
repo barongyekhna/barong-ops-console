@@ -2,6 +2,7 @@
 
 import {
   CheckCircle2,
+  ChevronUp,
   Download,
   FileText,
   ImagePlus,
@@ -16,6 +17,11 @@ import {
 import { useEffect, useMemo, useState } from "react";
 
 import styles from "./ProductKnowledge.module.css";
+import {
+  displayProductKey,
+  formatVariantDisplayName,
+  mediaVariantDisplayName,
+} from "./display";
 import type {
   KMediaAsset,
   KRiskReviewDecision,
@@ -27,20 +33,39 @@ import type {
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 
 const TARGET_ORGANIZATION = "涌龙麟（深圳）国际贸易有限公司";
-const WORKFLOW_STEPS = [
-  "product_ingestion",
-  "deepseek_enrichment",
-  "serp_keyword_fetch",
-  "ai_filter_chatgpt",
-  "ai_filter_claude_opus",
-  "risk_term_manual_review",
-  "keyword_optimization_ai",
-  "unit_conversion_normalization",
-  "image_binding",
-  "export_p_series",
-  "export_gmc",
-  "export_seo",
-];
+const WORKFLOW_STAGES = [
+  {
+    key: "product",
+    label: "产品 / Product",
+    steps: ["product_ingestion", "deepseek_enrichment"],
+  },
+  {
+    key: "serp",
+    label: "关键词 / SERP",
+    steps: ["serp_keyword_fetch"],
+  },
+  {
+    key: "ai",
+    label: "AI 筛选 / AI",
+    steps: ["ai_filter_chatgpt", "ai_filter_claude_opus", "keyword_optimization_ai"],
+  },
+  {
+    key: "risk",
+    label: "风险 / Risk",
+    steps: ["risk_term_manual_review"],
+  },
+  {
+    key: "export",
+    label: "导出 / Export",
+    steps: [
+      "unit_conversion_normalization",
+      "image_binding",
+      "export_p_series",
+      "export_gmc",
+      "export_seo",
+    ],
+  },
+] as const;
 const WORKFLOW_STEP_ALIASES: Record<string, string[]> = {
   export_p_series: ["export_p_series", "export_p_gmc_seo"],
   image_binding: ["image_binding", "image_handling"],
@@ -57,6 +82,7 @@ type ProductDetailProps = {
   onBindImage?: (assetId: string, variantSku: string) => void;
   onBindISystemImage?: (imageAssetId: string, variantSku: string) => void;
   onCreateMedia?: (url: string, variantSku: string) => void;
+  onCollapse?: () => void;
   onExportWorkflow?: () => void;
   onGenerateSellingPoints?: () => void;
   onPauseWorkflow?: () => void;
@@ -77,12 +103,12 @@ type ProductDetailProps = {
 };
 
 function displayValue(value: string | null | undefined) {
-  return value && value.trim().length > 0 ? value : "Not set";
+  return value && value.trim().length > 0 ? value : "未设置 / Not set";
 }
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
-    return "Not set";
+    return "未设置 / Not set";
   }
 
   const date = new Date(value);
@@ -106,6 +132,84 @@ function workflowStepStatus(workflow: KWorkflowExecution | null, step: string) {
     .find((item) => aliases.has(item.step));
 
   return latest?.status ?? (aliases.has(workflow.current_step) ? workflow.status : "pending");
+}
+
+function isCompleteStatus(status: string) {
+  return ["completed", "succeeded", "ready_for_export", "exported"].includes(
+    status,
+  );
+}
+
+function isActiveStatus(status: string) {
+  return ["created", "queued", "running", "in_progress"].includes(status);
+}
+
+function workflowStageStatus(
+  workflow: KWorkflowExecution | null,
+  stage: (typeof WORKFLOW_STAGES)[number],
+) {
+  if (!workflow) {
+    return "pending";
+  }
+
+  const statuses = stage.steps.map((step) => workflowStepStatus(workflow, step));
+  if (statuses.some((status) => status === "failed")) {
+    return "failed";
+  }
+  if (statuses.some((status) => status === "blocked")) {
+    return "blocked";
+  }
+  if (statuses.every((status) => isCompleteStatus(status))) {
+    return "completed";
+  }
+  if (
+    statuses.some((status) => isActiveStatus(status)) ||
+    stage.steps.some((step) =>
+      new Set(WORKFLOW_STEP_ALIASES[step] ?? [step]).has(workflow.current_step),
+    )
+  ) {
+    return "running";
+  }
+  if (statuses.some((status) => isCompleteStatus(status))) {
+    return "running";
+  }
+  return "pending";
+}
+
+function workflowStatusLabel(status: string) {
+  if (status === "completed" || status === "succeeded" || status === "exported") {
+    return "已完成 / Done";
+  }
+  if (status === "running" || status === "created" || status === "in_progress") {
+    return "进行中 / Active";
+  }
+  if (status === "failed") {
+    return "失败 / Failed";
+  }
+  if (status === "blocked") {
+    return "阻塞 / Blocked";
+  }
+  return "等待 / Pending";
+}
+
+function workflowProgressPercent(workflow: KWorkflowExecution | null) {
+  if (!workflow) {
+    return 0;
+  }
+  if (workflow.status === "exported") {
+    return 100;
+  }
+
+  const stageStatuses = WORKFLOW_STAGES.map((stage) =>
+    workflowStageStatus(workflow, stage),
+  );
+  const completedCount = stageStatuses.filter((status) => status === "completed")
+    .length;
+  const activeCount = stageStatuses.some((status) => status === "running") ? 0.5 : 0;
+  return Math.min(
+    100,
+    Math.max(8, Math.round(((completedCount + activeCount) / WORKFLOW_STAGES.length) * 100)),
+  );
 }
 
 function normalizeRiskKeywords(workflow: KWorkflowExecution | null) {
@@ -133,6 +237,7 @@ export function ProductDetail({
   onBindImage,
   onBindISystemImage,
   onCreateMedia,
+  onCollapse,
   onExportWorkflow,
   onGenerateSellingPoints,
   onPauseWorkflow,
@@ -166,6 +271,10 @@ export function ProductDetail({
         (variant) => variant.variant_sku === selectedVariantSku,
       ) ?? null,
     [product?.variants, selectedVariantSku],
+  );
+  const workflowProgress = useMemo(
+    () => workflowProgressPercent(workflow),
+    [workflow],
   );
 
   useEffect(() => {
@@ -255,39 +364,49 @@ export function ProductDetail({
     <aside className={styles.detail} aria-label="Product detail">
       <div className={styles.detailHeading}>
         <div>
-          <span className={styles.eyebrow}>Detail</span>
+          <span className={styles.eyebrow}>详情 / Detail</span>
           <h3>{displayValue(product.product_name_en)}</h3>
         </div>
-        <span className={styles.statusBadge}>{product.review_status}</span>
+        <div className={styles.detailActions}>
+          <span className={styles.statusBadge}>{product.review_status}</span>
+          <button
+            className="secondary-button"
+            onClick={onCollapse}
+            type="button"
+          >
+            <ChevronUp aria-hidden="true" size={16} />
+            收起 / Collapse
+          </button>
+        </div>
       </div>
 
       <dl className={styles.detailGrid}>
         <div>
-          <dt>Organization</dt>
+          <dt>组织 / Organization</dt>
           <dd>{product.organization_name || TARGET_ORGANIZATION}</dd>
         </div>
         <div>
-          <dt>Product key</dt>
-          <dd>{product.product_key}</dd>
+          <dt>产品编号 / Product ID</dt>
+          <dd>{displayProductKey(product.product_key)}</dd>
         </div>
         <div>
-          <dt>SKU</dt>
-          <dd>{displayValue(product.sku)}</dd>
+          <dt>父级 SKU / Parent SKU</dt>
+          <dd>{displayValue(product.parent_sku ?? product.sku)}</dd>
         </div>
         <div>
-          <dt>Brand</dt>
+          <dt>品牌 / Brand</dt>
           <dd>{displayValue(product.brand_name)}</dd>
         </div>
         <div>
-          <dt>Type</dt>
+          <dt>类型 / Type</dt>
           <dd>{displayValue(product.product_type)}</dd>
         </div>
         <div>
-          <dt>Workspace</dt>
-          <dd>{product.workspace_key}</dd>
+          <dt>变体 / Variants</dt>
+          <dd>{product.variant_count ?? product.variants?.length ?? 0}</dd>
         </div>
         <div>
-          <dt>Updated</dt>
+          <dt>更新 / Updated</dt>
           <dd>{formatDate(product.updated_at)}</dd>
         </div>
       </dl>
@@ -295,8 +414,8 @@ export function ProductDetail({
       <section className={styles.workflowSection} aria-labelledby="k-workflow-title">
         <div className={styles.sellingPointsHeading}>
           <div>
-            <span className={styles.eyebrow}>K Workflow</span>
-            <h4 id="k-workflow-title">Product Knowledge Pipeline</h4>
+            <span className={styles.eyebrow}>K</span>
+            <h4 id="k-workflow-title">产品流程 / Workflow</h4>
           </div>
           <button
             className="secondary-button"
@@ -305,7 +424,7 @@ export function ProductDetail({
             type="button"
           >
             <RotateCcw aria-hidden="true" size={16} />
-            Refresh
+            刷新 / Refresh
           </button>
         </div>
 
@@ -315,18 +434,42 @@ export function ProductDetail({
 
         <dl className={styles.workflowMetrics}>
           <div>
-            <dt>Status</dt>
+            <dt>状态 / Status</dt>
             <dd>{workflow?.status ?? "not_started"}</dd>
           </div>
           <div>
-            <dt>Current step</dt>
-            <dd>{workflow?.current_step ?? "product_ingestion"}</dd>
+            <dt>进度 / Progress</dt>
+            <dd>{workflowProgress}%</dd>
           </div>
         </dl>
 
+        <div
+          aria-label="Workflow progress"
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={workflowProgress}
+          className={styles.workflowProgress}
+          role="progressbar"
+        >
+          <span style={{ width: `${workflowProgress}%` }} />
+        </div>
+
+        <ol className={styles.workflowStages}>
+          {WORKFLOW_STAGES.map((stage) => {
+            const status = workflowStageStatus(workflow, stage);
+
+            return (
+              <li data-status={status} key={stage.key}>
+                <span>{stage.label}</span>
+                <strong>{workflowStatusLabel(status)}</strong>
+              </li>
+            );
+          })}
+        </ol>
+
         <div className={styles.workflowStartGrid}>
           <label className={styles.field}>
-            <span>Target market</span>
+            <span>目标市场 / Target Market</span>
             <select
               onChange={(event) => setTargetMarket(event.target.value)}
               value={targetMarket}
@@ -343,10 +486,10 @@ export function ProductDetail({
             </select>
           </label>
           <label className={styles.field}>
-            <span>SERP query</span>
+            <span>关键词查询 / SERP Query</span>
             <input
               onChange={(event) => setSerpQuery(event.target.value)}
-              placeholder={product.product_name_en || product.product_key}
+              placeholder={product.product_name_en || displayProductKey(product.product_key)}
               value={serpQuery}
             />
           </label>
@@ -361,7 +504,7 @@ export function ProductDetail({
             ) : (
               <Play aria-hidden="true" size={16} />
             )}
-            Start
+            Start Keyword Research
           </button>
         </div>
 
@@ -373,7 +516,7 @@ export function ProductDetail({
             type="button"
           >
             <RotateCcw aria-hidden="true" size={16} />
-            Pause
+            暂停 / Pause
           </button>
           <button
             className="secondary-button"
@@ -382,7 +525,7 @@ export function ProductDetail({
             type="button"
           >
             <Play aria-hidden="true" size={16} />
-            Resume
+            继续 / Resume
           </button>
           <button
             className="secondary-button"
@@ -391,7 +534,7 @@ export function ProductDetail({
             type="button"
           >
             <RotateCcw aria-hidden="true" size={16} />
-            Retry
+            重试 / Retry
           </button>
           <button
             className="secondary-button"
@@ -400,25 +543,16 @@ export function ProductDetail({
             type="button"
           >
             <RotateCcw aria-hidden="true" size={16} />
-            Rollback
+            回退 / Rollback
           </button>
         </div>
-
-        <ol className={styles.workflowSteps}>
-          {WORKFLOW_STEPS.map((step) => (
-            <li key={step}>
-              <span>{step}</span>
-              <strong>{workflowStepStatus(workflow, step)}</strong>
-            </li>
-          ))}
-        </ol>
       </section>
 
       <section className={styles.workflowSection} aria-labelledby="k-risk-review">
         <div className={styles.sellingPointsHeading}>
           <div>
-            <span className={styles.eyebrow}>Manual Gate</span>
-            <h4 id="k-risk-review">Risk Keyword Review</h4>
+            <span className={styles.eyebrow}>人工审核 / Manual Gate</span>
+            <h4 id="k-risk-review">风险词审核 / Risk Review</h4>
           </div>
           <button
             className="secondary-button"
@@ -427,7 +561,7 @@ export function ProductDetail({
             type="button"
           >
             <ShieldCheck aria-hidden="true" size={16} />
-            Submit Review
+            提交审核 / Submit
           </button>
         </div>
 
@@ -437,8 +571,7 @@ export function ProductDetail({
 
         {riskKeywords.length === 0 ? (
           <p className={styles.sellingPointsEmpty}>
-            No risk keywords returned yet. Manual confirmation is still required after
-            the dual AI filter completes.
+            暂无风险词。双 AI 筛选完成后仍需人工确认。
           </p>
         ) : (
           <ul className={styles.riskDecisionList}>
@@ -461,7 +594,7 @@ export function ProductDetail({
                     type="button"
                   >
                     <CheckCircle2 aria-hidden="true" size={15} />
-                    Approve
+                    通过 / Approve
                   </button>
                   <button
                     aria-pressed={riskDecisions[item.term] === "reject"}
@@ -475,7 +608,7 @@ export function ProductDetail({
                     type="button"
                   >
                     <XCircle aria-hidden="true" size={15} />
-                    Reject
+                    拒绝 / Reject
                   </button>
                 </div>
               </li>
@@ -487,20 +620,20 @@ export function ProductDetail({
       <section className={styles.workflowSection} aria-labelledby="k-image-system">
         <div className={styles.sellingPointsHeading}>
           <div>
-            <span className={styles.eyebrow}>Image Handling</span>
-            <h4 id="k-image-system">Variant Images</h4>
+            <span className={styles.eyebrow}>图片 / Images</span>
+            <h4 id="k-image-system">变体图片 / Variant Images</h4>
           </div>
         </div>
 
         <label className={styles.field}>
-          <span>Variant SKU</span>
+          <span>变体 / Variant</span>
           <select
             onChange={(event) => setSelectedVariantSku(event.target.value)}
             value={selectedVariantSku}
           >
             {(product.variants ?? []).map((variant) => (
               <option key={variant.variant_sku} value={variant.variant_sku}>
-                {variant.variant_sku}
+                {formatVariantDisplayName(variant)}
               </option>
             ))}
           </select>
@@ -508,14 +641,14 @@ export function ProductDetail({
 
         {selectedVariant ? (
           <div className={styles.variantImageFolder}>
-            <strong>Variant image folder</strong>
-            <span>{selectedVariant.image_folder}</span>
+            <strong>图片绑定目标 / Image Target</strong>
+            <span>{formatVariantDisplayName(selectedVariant)}</span>
           </div>
         ) : null}
 
         <div className={styles.mediaCreateRow}>
           <label className={styles.field}>
-            <span>Manual image URL</span>
+            <span>图片 URL / Manual Image URL</span>
             <input
               onChange={(event) => setMediaUrl(event.target.value)}
               placeholder="https://example.com/image.jpg"
@@ -529,13 +662,13 @@ export function ProductDetail({
             type="button"
           >
             <ImagePlus aria-hidden="true" size={16} />
-            Upload
+            上传 / Upload
           </button>
         </div>
 
         <div className={styles.mediaCreateRow}>
           <label className={styles.field}>
-            <span>I-system image_asset_id</span>
+            <span>I-system 图片 ID / image_asset_id</span>
             <input
               onChange={(event) => setISystemImageAssetId(event.target.value)}
               placeholder="img_asset_..."
@@ -551,7 +684,7 @@ export function ProductDetail({
             type="button"
           >
             <Send aria-hidden="true" size={16} />
-            Bind
+            绑定 / Bind
           </button>
         </div>
 
@@ -561,7 +694,7 @@ export function ProductDetail({
               <div>
                 <strong>{asset.object_key || asset.id}</strong>
                 <span>
-                  {asset.variant_sku || "no variant"} /{" "}
+                  {mediaVariantDisplayName(product.variants, asset.variant_sku)} /{" "}
                   {asset.source || "manual_upload_image"} / {asset.status}
                 </span>
               </div>
@@ -592,7 +725,7 @@ export function ProductDetail({
                   type="button"
                 >
                   <Send aria-hidden="true" size={15} />
-                  Bind
+                  绑定 / Bind
                 </button>
               </div>
             </li>
@@ -603,7 +736,7 @@ export function ProductDetail({
       <section className={styles.workflowSection} aria-labelledby="k-export-gate">
         <div className={styles.sellingPointsHeading}>
           <div>
-            <span className={styles.eyebrow}>Export Gate</span>
+            <span className={styles.eyebrow}>导出 / Export</span>
             <h4 id="k-export-gate">P / GMC / SEO</h4>
           </div>
           <button
@@ -613,20 +746,19 @@ export function ProductDetail({
             type="button"
           >
             <Send aria-hidden="true" size={16} />
-            Export
+            导出 / Export
           </button>
         </div>
 
         {!canExport ? (
           <p className={styles.sellingPointsEmpty}>
-            Export unlocks only after dual AI filters, manual risk approval,
-            finalized keywords, and manual or I-system image binding.
+            双 AI 筛选、风险审核、关键词确认和图片绑定完成后可导出。
           </p>
         ) : null}
 
         {exportResult?.report.export_payloads ? (
           <div className={styles.exportSummary}>
-            <strong>Generated payloads</strong>
+            <strong>已生成载荷 / Generated Payloads</strong>
             <span>{Object.keys(exportResult.report.export_payloads).join(", ")}</span>
           </div>
         ) : null}
@@ -638,8 +770,8 @@ export function ProductDetail({
       >
         <div className={styles.sellingPointsHeading}>
           <div>
-            <span className={styles.eyebrow}>K14 Selling Points</span>
-            <h4 id="k7-selling-points">Generated Selling Points</h4>
+            <span className={styles.eyebrow}>卖点 / Selling Points</span>
+            <h4 id="k7-selling-points">生成卖点 / Generated</h4>
           </div>
           <button
             className="secondary-button"
@@ -652,7 +784,7 @@ export function ProductDetail({
             ) : (
               <Sparkles aria-hidden="true" size={16} />
             )}
-            Generate
+            生成 / Generate
           </button>
         </div>
 
@@ -664,7 +796,7 @@ export function ProductDetail({
           <SellingPointsResult sellingPoints={sellingPoints} />
         ) : (
           <p className={styles.sellingPointsEmpty}>
-            Selling points are available as an auxiliary K14 output.
+            点击生成后显示产品卖点。
           </p>
         )}
       </section>
@@ -681,11 +813,11 @@ function SellingPointsResult({
     <div className={styles.sellingPointsResult}>
       <dl className={styles.sellingPointsMetrics}>
         <div>
-          <dt>Confidence</dt>
+          <dt>置信度 / Confidence</dt>
           <dd>{Math.round(sellingPoints.confidence_score * 100)}%</dd>
         </div>
         <div>
-          <dt>Source</dt>
+          <dt>来源 / Source</dt>
           <dd>{sellingPoints.source}</dd>
         </div>
       </dl>
@@ -700,8 +832,8 @@ function SellingPointsResult({
         ))}
       </ul>
 
-      <TagGroup label="SEO Keywords" values={sellingPoints.seo_keywords} />
-      <TagGroup label="Market Tags" values={sellingPoints.market_tags} />
+      <TagGroup label="SEO 关键词 / SEO Keywords" values={sellingPoints.seo_keywords} />
+      <TagGroup label="市场标签 / Market Tags" values={sellingPoints.market_tags} />
     </div>
   );
 }

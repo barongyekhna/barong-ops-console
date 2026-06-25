@@ -710,7 +710,7 @@ def test_planned_adapter_pending_and_unavailable_modules_are_not_executable(
     assert items["integration.n8n_test_bridge"]["executable"] is False
 
 
-def test_role_defaults_and_super_admin_do_not_grant_module_access(
+def test_role_defaults_do_not_grant_viewer_access_and_super_admin_inherits_modules(
     auth_client: TestClient,
 ) -> None:
     seed_permission_registry()
@@ -751,9 +751,17 @@ def test_role_defaults_and_super_admin_do_not_grant_module_access(
     viewer_items = access_items_by_key(viewer_response.json())
     super_admin_items = access_items_by_key(super_admin_response.json())
     assert viewer_items["business.reviews"]["access_state"] == "locked"
-    assert super_admin_items["admin.users"]["access_state"] == "hidden"
-    assert super_admin_items["admin.permissions"]["access_state"] == "hidden"
-    assert super_admin_items["admin.modules"]["access_state"] == "hidden"
+    for module_key in (
+        "admin.users",
+        "admin.permissions",
+        "admin.modules",
+        "admin.key_management",
+        "k.product_knowledge",
+    ):
+        assert super_admin_items[module_key]["visible"] is True
+        assert super_admin_items[module_key]["hidden"] is False
+        assert super_admin_items[module_key]["access_state"] == "available"
+        assert super_admin_items[module_key]["missing_permissions"] == []
 
 
 def test_c07b_regressions_users_register_assignments_and_permissions_me(

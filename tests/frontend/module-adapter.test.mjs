@@ -743,14 +743,18 @@ test("Users remains visible for authenticated list access", () => {
   );
 });
 
-test("Permissions management entry remains owner-only and hidden when denied", () => {
+test("Permissions management entry is visible for owner and super admin roles", () => {
   const permissionManagement = navigationModuleRecords.find(
     (entry) => entry.module_key === "admin.permissions",
   );
-  assert.equal(permissionManagement.owner_only, true);
+  assert.equal(permissionManagement.owner_only, undefined);
   assert.equal(canShowPermissionManagementEntry(ownerPermissions), true);
   assert.equal(
-    canShowPermissionManagementEntry(permissionsReadPermissions),
+    canShowPermissionManagementEntry(permissionsReadPermissions, "super_admin"),
+    true,
+  );
+  assert.equal(
+    canShowPermissionManagementEntry(permissionsReadPermissions, "viewer"),
     false,
   );
   assert.equal(
@@ -760,6 +764,6 @@ test("Permissions management entry remains owner-only and hidden when denied", (
       [],
       { moduleAccessUnknown: true },
     ).isVisible,
-    false,
+    true,
   );
 });

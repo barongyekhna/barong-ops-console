@@ -1,0 +1,116 @@
+{
+  "generated_at": "2026-06-25T08:09:43Z",
+  "objective": "K-SERIES PRODUCT UI FINAL PATCH + PRODUCTION DEPLOYMENT",
+  "ui_changes_summary": {
+    "top_create_button_removed": true,
+    "bottom_create_button_added": true,
+    "bottom_button_behavior": "Sticky form footer with one primary submit action at the bottom of ProductForm.",
+    "single_primary_submit_action": true,
+    "double_submit_protection_retained": true,
+    "loading_lock_retained": true,
+    "request_conflict_mapping_retained": true,
+    "market_search_input_removed": true,
+    "target_market_dropdown_only": true,
+    "free_text_market_input_disabled": true
+  },
+  "build_status": {
+    "frontend_build": "passed",
+    "command": "npm run build",
+    "workdir": "frontend",
+    "products_route_present": true,
+    "docker_frontend_build": "passed",
+    "docker_backend_build": "passed"
+  },
+  "typecheck_status": {
+    "frontend_typecheck": "passed",
+    "command": "npm run typecheck",
+    "workdir": "frontend",
+    "docker_frontend_typecheck": "passed"
+  },
+  "test_status": {
+    "frontend_request_dedup_tests": "passed",
+    "frontend_request_dedup_tests_count": 9,
+    "backend_product_model_upgrade_tests": "passed",
+    "backend_product_model_upgrade_tests_count": 5,
+    "diff_check": "passed"
+  },
+  "runtime_check": {
+    "standalone_server": "passed",
+    "products_page": {
+      "url": "http://127.0.0.1:3219/products",
+      "status": 200
+    },
+    "api_proxy_health": {
+      "url": "http://127.0.0.1:3219/api/backend/health",
+      "status": 200
+    }
+  },
+  "deployment_status": {
+    "docker_compose_file": "docker-compose.production.yml",
+    "down": "success",
+    "up_build_detached": "success",
+    "containers": {
+      "console_backend": "up",
+      "console_frontend": "up",
+      "console_postgres": "up_healthy"
+    }
+  },
+  "production_health_check": {
+    "backend_health": {
+      "url": "http://127.0.0.1:8000/health",
+      "status": 200,
+      "response": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "frontend_products_page": {
+      "url": "http://127.0.0.1:3000/products",
+      "status": 200
+    },
+    "frontend_api_proxy_health": {
+      "url": "http://127.0.0.1:3000/api/backend/health",
+      "status": 200,
+      "response": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    }
+  },
+  "product_creation_success_status": {
+    "login_status": 200,
+    "create_status": 201,
+    "create_success": true,
+    "duplicate_submit_status": 201,
+    "duplicate_submit_returned_same_product": true,
+    "no_request_conflict_regression": true,
+    "product_key_present": true,
+    "product_key_sample": "8ee1bfd5-b9ac-4887-9dc8-50d1fd4f7f4a",
+    "parent_sku_sample": "UI-FINAL-UI-FINAL-20260625080922-78A6AA71"
+  },
+  "variant_system_status": {
+    "variant_system_unaffected": true,
+    "created_variant_count": 2,
+    "variant_skus_present": true,
+    "variant_skus_unique": true
+  },
+  "k_workflow_status": {
+    "workflow_logic_changed": false,
+    "workflow_route_checked": "GET /api/backend/k/products/{product_id}/workflow/latest",
+    "workflow_latest_status": 404,
+    "workflow_route_accessible": true,
+    "note": "404 Not found is expected for a newly created product with no workflow execution; the route is reachable and did not return a server error."
+  },
+  "constraints": {
+    "backend_schema_changed": false,
+    "backend_model_structure_changed": false,
+    "k_workflow_logic_changed": false,
+    "ai_pipeline_changed": false,
+    "variant_system_deleted": false
+  },
+  "implementation_note": "Production verification exposed a remaining product creation failure when attributes were included. A minimal backend service transaction flush ordering fix was retained so product rows and variants are flushed before child attribute rows. No backend schema, backend model structure, K workflow logic, or AI pipeline was changed."
+}
