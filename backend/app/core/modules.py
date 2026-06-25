@@ -638,8 +638,18 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             icon="PackageSearch",
             order=8,
         ),
-        required_permissions=("k.product_knowledge.read",),
+        required_permissions=("products.read",),
         permission_manifest=(
+            _permission(
+                module_key="k.product_knowledge",
+                permission_key="products.read",
+                category="business",
+                action="read",
+                label="Read products",
+                description="View product knowledge records through the products workspace.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
             _permission(
                 module_key="k.product_knowledge",
                 permission_key="k.product_knowledge.read",

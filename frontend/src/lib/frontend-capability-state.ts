@@ -240,6 +240,7 @@ const INTERNAL_EXERCISE_MODULE_KEY = [
   "experimental",
   ["foun", "dation_", "de", "mo"].join(""),
 ].join(".");
+const K_PRODUCT_KNOWLEDGE_MODULE_KEY = "k.product_knowledge";
 
 export const PRODUCT_HIDDEN_MODULE_KEYS = new Set([
   "admin.agents",
@@ -617,6 +618,10 @@ function hasUnavailableProvider(accessItems: readonly ExecutionProviderAccessSta
   );
 }
 
+function usesActionScopedExecutionGate(moduleKey: string | undefined) {
+  return moduleKey === K_PRODUCT_KNOWLEDGE_MODULE_KEY;
+}
+
 function requiresExecutionSurface({
   adapter,
   manifest,
@@ -628,6 +633,10 @@ function requiresExecutionSurface({
   providerAccess: readonly ExecutionProviderAccessState[];
   providerContracts: readonly ExecutionProviderContract[];
 }) {
+  if (usesActionScopedExecutionGate(manifest?.module_key ?? adapter?.module_key)) {
+    return false;
+  }
+
   return Boolean(
     manifest?.execution_provider_required ||
       adapter?.requires_execution_provider ||

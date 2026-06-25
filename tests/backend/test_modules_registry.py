@@ -570,6 +570,14 @@ def test_capability_bootstrap_exposes_k_module_and_module_control_state(
     assert "k.product_knowledge" in {
         item["module_key"] for item in payload["modules_me"]["data"]["items"]
     }
+    k_access = next(
+        item
+        for item in payload["modules_me"]["data"]["items"]
+        if item["module_key"] == "k.product_knowledge"
+    )
+    assert k_access["access_state"] == "available"
+    assert k_access["unavailable"] is False
+    assert k_access["required_permissions"] == ["products.read"]
     control_center = payload["module_control_center"]["data"]
     assert any(
         module["module_id"] == "k.product_knowledge"
@@ -606,6 +614,31 @@ def test_non_executable_statuses_never_return_executable_access() -> None:
         assert access.unavailable is True
         assert access.executable is False
         assert access.access_state == expected_state
+
+
+def test_k_product_knowledge_access_uses_products_read_and_stays_available() -> None:
+    manifest = next(
+        manifest
+        for manifest in list_module_manifests()
+        if manifest.module_key == "k.product_knowledge"
+    )
+    access = build_module_access_state(
+        manifest,
+        owner_permission_info("products.read"),
+    )
+
+    assert manifest.required_permissions == ["products.read"]
+    assert "products.read" in {
+        entry.permission_key for entry in manifest.permission_manifest
+    }
+    assert "k.product_knowledge.read" in {
+        entry.permission_key for entry in manifest.permission_manifest
+    }
+    assert access.visible is True
+    assert access.locked is False
+    assert access.unavailable is False
+    assert access.access_state == "available"
+    assert access.missing_permissions == []
 
 
 def test_owner_and_non_owner_module_access_states(

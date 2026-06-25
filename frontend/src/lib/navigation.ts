@@ -88,7 +88,7 @@ export const navigationGroups: NavigationGroup[] = [
         icon: PackageSearch,
         label: "产品知识库",
         module_key: "k.product_knowledge",
-        required_permission: "k.product_knowledge.read",
+        required_permission: "products.read",
         route_namespace: "/products",
         status: "active",
       },

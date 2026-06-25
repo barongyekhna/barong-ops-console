@@ -9,6 +9,7 @@ DEFAULT_SCOPE_MODE = "adapter_pending"
 DEFAULT_CANONICAL_LANGUAGE = "en"
 TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 
+PERMISSION_PRODUCTS_READ = "products.read"
 PERMISSION_READ = "k.product_knowledge.read"
 PERMISSION_CREATE = "k.product_knowledge.create"
 PERMISSION_UPDATE = "k.product_knowledge.update"
@@ -21,6 +22,7 @@ PERMISSION_EXPORT = "k.product_knowledge.export"
 
 PERMISSION_KEYS = frozenset(
     {
+        PERMISSION_PRODUCTS_READ,
         PERMISSION_READ,
         PERMISSION_CREATE,
         PERMISSION_UPDATE,

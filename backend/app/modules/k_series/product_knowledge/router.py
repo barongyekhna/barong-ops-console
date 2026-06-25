@@ -31,6 +31,7 @@ from .constants import (
     PERMISSION_ATTRIBUTES_MANAGE,
     PERMISSION_CREATE,
     PERMISSION_KEYWORDS_MANAGE,
+    PERMISSION_PRODUCTS_READ,
     PERMISSION_READ,
     PERMISSION_RISK_TERMS_MANAGE,
     PERMISSION_UPDATE,
@@ -289,7 +290,12 @@ def _require_k_permission(permission_key: str):
         user: User = Depends(get_current_user),
     ) -> User:
         permissions = resolve_current_user_permission_info(db, user, request=request)
-        if permissions.is_owner_full_access or permission_key in permissions.permission_keys:
+        allowed_permission_keys = {permission_key}
+        if permission_key == PERMISSION_READ:
+            allowed_permission_keys.add(PERMISSION_PRODUCTS_READ)
+        if permissions.is_owner_full_access or allowed_permission_keys.intersection(
+            permissions.permission_keys
+        ):
             return user
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,

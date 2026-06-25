@@ -232,7 +232,7 @@ const registryItems = [
       "n8n",
     ],
     module_key: "k.product_knowledge",
-    required_permissions: ["k.product_knowledge.read"],
+    required_permissions: ["products.read"],
     route_namespace: "/products",
     status: "active",
   }),
@@ -953,6 +953,23 @@ test("wildcard permission does not override module access safety states", () => 
   assert.equal(backendLockedApprovals.canEnter, false);
 });
 
+test("K product knowledge page uses action-scoped execution gate in capability graph", () => {
+  const capabilitySource = readFileSync(
+    "frontend/src/lib/frontend-capability-state.ts",
+    "utf8",
+  );
+
+  assert.match(
+    capabilitySource,
+    /K_PRODUCT_KNOWLEDGE_MODULE_KEY = "k\.product_knowledge"/,
+  );
+  assert.match(capabilitySource, /function usesActionScopedExecutionGate/);
+  assert.match(
+    capabilitySource,
+    /usesActionScopedExecutionGate\(manifest\?\.module_key \?\? adapter\?\.module_key\)/,
+  );
+});
+
 test("sidebar navigation exposes the full productized capability structure", () => {
   const moduleKeys = navigationItems.map((entry) => entry.module_key);
 
@@ -980,7 +997,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
   const productKnowledge = item("k.product_knowledge");
   assert.equal(productKnowledge.label, "产品知识库");
   assert.equal(productKnowledge.href, "/products");
-  assert.equal(productKnowledge.required_permission, "k.product_knowledge.read");
+  assert.equal(productKnowledge.required_permission, "products.read");
   assert.equal(productKnowledge.denied_behavior, "show_locked");
   assert.equal(productKnowledge.category, "business");
   assert.equal(moduleKeys.some((key) => key.startsWith("k01")), false);

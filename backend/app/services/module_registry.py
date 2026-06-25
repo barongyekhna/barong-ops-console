@@ -453,24 +453,6 @@ def build_module_access_state(
             route_namespace=manifest.route_namespace,
         )
 
-    if manifest.external_dependencies:
-        return ModuleAccessRead(
-            module_key=manifest.module_key,
-            visible=True,
-            locked=False,
-            hidden=False,
-            unavailable=True,
-            executable=False,
-            access_state="unavailable",
-            denied_behavior=manifest.denied_behavior,
-            reason="External dependency is declared but not connected in C07B.",
-            required_permissions=manifest.required_permissions,
-            missing_permissions=[],
-            status=manifest.status,
-            category=manifest.category,
-            route_namespace=manifest.route_namespace,
-        )
-
     return ModuleAccessRead(
         module_key=manifest.module_key,
         visible=True,

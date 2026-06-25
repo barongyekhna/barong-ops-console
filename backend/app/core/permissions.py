@@ -135,6 +135,16 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        "permission_key": "products.read",
+        "module_key": "k.product_knowledge",
+        "category": "business",
+        "action": "read",
+        "label": "Read products",
+        "description": "View product knowledge records through the products workspace.",
+        "risk_level": RISK_LEVEL_LOW,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "k.product_knowledge.read",
         "module_key": "k.product_knowledge",
         "category": "business",
