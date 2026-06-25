@@ -1,0 +1,239 @@
+{
+  "report_name": "BARONG OPS CONSOLE FULL PRODUCTION DEPLOYMENT (C + K SYSTEM)",
+  "generated_at_utc": "2026-06-25T13:11:46Z",
+  "deployment_status": {
+    "status": "completed_with_warnings",
+    "production_compose_file": "docker-compose.production.yml",
+    "deployment_command": "docker-compose -f docker-compose.production.yml up -d --build",
+    "rollback_ready": true,
+    "rollback_backup_path": "/opt/barong-backup-20260625_125235",
+    "code_modified_during_deploy": false,
+    "database_schema_changed_during_deploy": false,
+    "rollback_performed": false,
+    "warnings": [
+      "Direct K provider execution endpoints returned sanitized 5xx responses during verification: /api/app/k/serp/search=502, /api/app/k/products/{id}/enrich/deepseek=500.",
+      "Full K workflow gate correctly blocked execution with API_KEY_BINDING_MISSING because the active owner organization lacks an active claude_opus binding."
+    ]
+  },
+  "build_confirmation": {
+    "frontend_build": {
+      "status": "success",
+      "command": "npm --prefix frontend run build",
+      "next_version": "16.2.7",
+      "routes_generated": 23
+    },
+    "backend_import_check": {
+      "status": "success",
+      "command": "docker-compose -f docker-compose.production.yml exec -T console_backend python -c \"import backend.app.main; print('backend import ok')\""
+    },
+    "docker_image_build": {
+      "backend": "success",
+      "frontend": "success",
+      "frontend_embedded_checks": [
+        "npm test",
+        "npm run verify",
+        "npm run typecheck",
+        "npm run build"
+      ]
+    }
+  },
+  "backup": {
+    "status": "success",
+    "path": "/opt/barong-backup-20260625_125235",
+    "size": "612M",
+    "included": [
+      "backend",
+      "frontend",
+      ".env.production",
+      "docker-compose.production.yml",
+      "database_schema.sql",
+      "database_full.dump",
+      "migration_state.txt",
+      "alembic_version.txt",
+      "docker_compose_ps_before.txt",
+      "git_revision.txt",
+      "git_status_short.txt"
+    ],
+    "migration_state": "k_sku_variant_001 (head)"
+  },
+  "service_health": {
+    "compose_services": {
+      "console_postgres": "Up (healthy)",
+      "console_backend": "Up",
+      "console_frontend": "Up"
+    },
+    "database_activity_final": {
+      "active": 1,
+      "idle": 4
+    },
+    "checks": [
+      {
+        "target": "backend /health",
+        "url": "http://127.0.0.1:8000/health",
+        "http_code": 200
+      },
+      {
+        "target": "frontend /",
+        "url": "http://127.0.0.1:3000/",
+        "http_code": 200
+      },
+      {
+        "target": "frontend /module-control",
+        "url": "http://127.0.0.1:3000/module-control",
+        "http_code": 200
+      },
+      {
+        "target": "frontend /permissions",
+        "url": "http://127.0.0.1:3000/permissions",
+        "http_code": 200
+      },
+      {
+        "target": "frontend /api-key-management",
+        "url": "http://127.0.0.1:3000/api-key-management",
+        "http_code": 200
+      },
+      {
+        "target": "frontend /products",
+        "url": "http://127.0.0.1:3000/products",
+        "http_code": 200
+      },
+      {
+        "target": "backend /k/products",
+        "url": "http://127.0.0.1:8000/k/products",
+        "http_code": 200,
+        "auth": "owner x-session-token"
+      },
+      {
+        "target": "frontend /k/products",
+        "url": "http://127.0.0.1:3000/k/products",
+        "http_code": 404,
+        "note": "No frontend /k/products page is registered; K product UI is mounted at /products and K API is /k/products."
+      }
+    ]
+  },
+  "module_registry_status": {
+    "status": "stable",
+    "static_manifest_count": 18,
+    "runtime_registry_count": 19,
+    "k_product_knowledge": {
+      "present": true,
+      "module_key": "k.product_knowledge",
+      "status": "active",
+      "lifecycle": "production_released",
+      "route_namespace": "/products",
+      "api_namespace": "/k",
+      "navigation": {
+        "group": "Registry",
+        "label": "产品知识库",
+        "icon": "PackageSearch",
+        "order": 8,
+        "default_visible": true,
+        "owner_only": false
+      }
+    },
+    "module_control_center": {
+      "http_code": 200,
+      "contains_k_product_knowledge": true
+    }
+  },
+  "rbac_status": {
+    "owner_full_access": {
+      "status": "pass",
+      "verification": "API /api/app/permissions/me",
+      "role": "owner",
+      "is_owner": true,
+      "is_owner_full_access": true,
+      "permission_keys": [
+        "*"
+      ]
+    },
+    "super_admin_org_access": {
+      "status": "pass_db_verified",
+      "verification": "Read-only DB role/org/membership check plus backend role helper",
+      "role_helper_is_super_admin": true,
+      "organization_status": "active",
+      "active_memberships": 1,
+      "note": "No super_admin plaintext credential was used or changed during deployment."
+    },
+    "k_module_visible": {
+      "status": "pass",
+      "source": "module registry API",
+      "visible": true
+    },
+    "sidebar_complete": {
+      "status": "pass",
+      "visible_navigation_count": 13,
+      "k_navigation_present": true
+    }
+  },
+  "k_workflow_status": {
+    "product_create": {
+      "status": "pass",
+      "http_code": 201,
+      "product_id": "9592330e-78ca-4b25-99a2-e5786d788966",
+      "product_key": "a6b8f363-fab4-44c6-9821-e1625ac55064",
+      "parent_sku": "PROD-VERIFY-20260625130528"
+    },
+    "variant_system": {
+      "status": "pass",
+      "variant_count": 2,
+      "variant_skus_auto_generated": true
+    },
+    "delete_system": {
+      "status": "pass",
+      "delete_http_code": 200,
+      "after_delete_http_code": 404,
+      "deleted_counts": {
+        "ai_events": 0,
+        "workflow_traces": 1,
+        "media_references": 0,
+        "review_items": 0,
+        "versions": 0,
+        "translations": 0,
+        "attributes": 1,
+        "keywords": 1,
+        "risk_terms": 1,
+        "research_runs": 0,
+        "variants": 2,
+        "products": 1
+      }
+    },
+    "serp_workflow_accessible": {
+      "status": "pass_with_provider_warning",
+      "workflow_start_http_code": 503,
+      "workflow_latest_http_code": 200,
+      "workflow_error_code": "API_KEY_BINDING_MISSING",
+      "state_machine_entered": "PRODUCT_CREATED",
+      "organization_gate": "allowed",
+      "direct_serp_search_http_code": 502
+    },
+    "ai_pipeline_gated": {
+      "status": "pass",
+      "gate_code": "API_KEY_BINDING_MISSING",
+      "reason": "Active owner organization has active serp/chatgpt/deepseek bindings but lacks active claude_opus binding; claude_opus active binding exists under a different organization.",
+      "direct_deepseek_enrich_http_code": 500,
+      "direct_deepseek_warning": "Direct provider execution reached runtime and returned sanitized 500 after provider/DB timeout; no code or schema change was made."
+    }
+  },
+  "api_status": {
+    "authenticated_owner_api": {
+      "/api/app/permissions/me": 200,
+      "/api/control-plane/modules/registry": 200,
+      "/api/control-plane/module-control/center": 200,
+      "/api/app/k/products": 200,
+      "/api/app/organizations": 200,
+      "/api/app/k/products/{id}": 200,
+      "/api/app/k/products/{id}/workflow/start": 503,
+      "/api/app/k/products/{id}/workflow/latest": 200,
+      "/api/app/k/serp/search": 502,
+      "/api/app/k/products/{id}/enrich/deepseek": 500,
+      "DELETE /api/app/k/products/{id}": 200
+    },
+    "unauthenticated_api": {
+      "/api/app/k/products": 401
+    },
+    "public_health": {
+      "/health": 200
+    }
+  }
+}
