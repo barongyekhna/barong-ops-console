@@ -994,7 +994,118 @@ def _safe_filename(value: str | None) -> str:
 
 
 def _media_storage_root() -> Path:
-    return Path(os.getenv("K_PRODUCT_MEDIA_STORAGE_DIR", "/tmp/barong-k-media"))
+    return Path(os.getenv("K_PRODUCT_MEDIA_STORAGE_DIR", "/var/lib/barong/k-media"))
+
+
+SUPPORTED_IMAGE_MIME_TYPES = {
+    "image/gif",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+}
+
+RESERVED_MEDIA_METADATA_KEYS = {
+    "content_sha256",
+    "direct_binary_upload",
+    "storage_path",
+    "storage_provider",
+    "storage_relative_path",
+}
+
+
+def _detect_image_mime(contents: bytes) -> str | None:
+    if contents.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if contents.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    if contents.startswith((b"GIF87a", b"GIF89a")):
+        return "image/gif"
+    if (
+        len(contents) >= 12
+        and contents[0:4] == b"RIFF"
+        and contents[8:12] == b"WEBP"
+    ):
+        return "image/webp"
+    return None
+
+
+def _validate_uploaded_image(contents: bytes, declared_mime: str | None) -> str:
+    detected_mime = _detect_image_mime(contents)
+    if detected_mime is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded file is not a supported image.",
+        )
+    normalized_declared = (declared_mime or "").split(";", 1)[0].strip().lower()
+    if normalized_declared and normalized_declared not in {
+        detected_mime,
+        "application/octet-stream",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded image MIME type does not match the file contents.",
+        )
+    return detected_mime
+
+
+def _safe_media_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    return {
+        key: value
+        for key, value in metadata.items()
+        if key not in RESERVED_MEDIA_METADATA_KEYS
+    }
+
+
+def _path_within_root(path: Path, root: Path) -> bool:
+    try:
+        path.relative_to(root)
+    except ValueError:
+        return False
+    return True
+
+
+def _media_asset_local_path(row: KProductKnowledgeMediaAsset) -> Path | None:
+    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    root = _media_storage_root().resolve(strict=False)
+    candidates: list[Path] = []
+    storage_path_value = metadata.get("storage_path")
+    if (
+        row.storage_provider == "local_filesystem"
+        or metadata.get("storage_provider") == "local_filesystem"
+    ) and storage_path_value:
+        candidates.append(Path(str(storage_path_value)))
+    if row.object_key:
+        candidates.append(root / row.object_key)
+
+    for candidate in candidates:
+        path = candidate if candidate.is_absolute() else root / candidate
+        resolved = path.resolve(strict=False)
+        if _path_within_root(resolved, root):
+            return resolved
+    return None
+
+
+def _media_asset_requires_local_file(row: KProductKnowledgeMediaAsset) -> bool:
+    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    return (
+        row.storage_provider == "local_filesystem"
+        or metadata.get("storage_provider") == "local_filesystem"
+        or metadata.get("direct_binary_upload") is True
+    )
+
+
+def _media_asset_file_info(row: KProductKnowledgeMediaAsset) -> dict[str, Any]:
+    path = _media_asset_local_path(row)
+    if path is None:
+        return {"file_available": False, "file_size": None}
+    try:
+        stat = path.stat()
+    except OSError:
+        return {"file_available": False, "file_size": None}
+    return {
+        "file_available": path.is_file(),
+        "file_size": stat.st_size if path.is_file() else None,
+    }
 
 
 def _product_full_ai_payload(
@@ -1364,20 +1475,34 @@ def _active_media_snapshot(
             )
         )
     )
-    items = [
-        {
-            "asset_role": row.asset_role,
-            "asset_type": row.asset_type,
-            "id": str(row.id),
-            "object_key": row.object_key,
-            "review_status": row.review_status,
-            "source": row.source,
-            "status": row.status,
-            "variant_sku": row.variant_sku,
-        }
-        for row in rows
-    ]
-    payload = {"count": len(items), "items": items}
+    items = []
+    usable_count = 0
+    for row in rows:
+        file_info = _media_asset_file_info(row)
+        requires_local_file = _media_asset_requires_local_file(row)
+        file_available = (
+            file_info["file_available"]
+            if requires_local_file
+            else bool(row.file_url_placeholder or row.object_key)
+        )
+        if file_available:
+            usable_count += 1
+        items.append(
+            {
+                "asset_role": row.asset_role,
+                "asset_type": row.asset_type,
+                "file_available": file_available,
+                "file_size": file_info["file_size"] or row.file_size,
+                "id": str(row.id),
+                "object_key": row.object_key,
+                "review_status": row.review_status,
+                "source": row.source,
+                "status": row.status,
+                "storage_provider": row.storage_provider,
+                "variant_sku": row.variant_sku,
+            }
+        )
+    payload = {"active_count": len(items), "count": usable_count, "items": items}
     return {**payload, "digest": _stable_payload_digest(payload)}
 
 
@@ -3377,7 +3502,7 @@ def create_media_asset(
         mime_type=payload.mime_type,
         source=IMAGE_SOURCE_MANUAL,
         metadata_json={
-            **payload.metadata,
+            **_safe_media_metadata(payload.metadata),
             "filename": filename,
             "product_folder": f"images/{product.product_key}",
             "source_type": IMAGE_SOURCE_MANUAL,
@@ -3425,10 +3550,12 @@ def upload_product_media_asset(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Uploaded image file is empty.",
         )
+    mime_type = _validate_uploaded_image(contents, file.content_type)
     object_key = f"images/{product.product_key}/{variant.variant_sku}/{uuid4()}-{filename}"
     storage_path = _media_storage_root() / object_key
     storage_path.parent.mkdir(parents=True, exist_ok=True)
     storage_path.write_bytes(contents)
+    content_sha256 = hashlib.sha256(contents).hexdigest()
     row = KProductKnowledgeMediaAsset(
         id=uuid4(),
         product_id=product.id,
@@ -3438,14 +3565,17 @@ def upload_product_media_asset(
         asset_role=asset_role or "main",
         status="available",
         review_status="not_applicable",
+        storage_provider="local_filesystem",
         object_key=object_key,
         file_url_placeholder=None,
         file_size=len(contents),
-        mime_type=file.content_type or "application/octet-stream",
+        mime_type=mime_type,
         source=IMAGE_SOURCE_MANUAL,
         metadata_json={
+            "content_sha256": content_sha256,
             "filename": filename,
             "storage_provider": "local_filesystem",
+            "storage_relative_path": object_key,
             "storage_path": str(storage_path),
             "direct_binary_upload": True,
             "product_folder": f"images/{product.product_key}",
@@ -3564,13 +3694,8 @@ def download_media_asset_file(
         _raise_k_error(exc)
 
     metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
-    storage_path_value = metadata.get("storage_path")
-    storage_path = (
-        Path(str(storage_path_value))
-        if storage_path_value
-        else _media_storage_root() / (row.object_key or "")
-    )
-    if not storage_path.is_file():
+    storage_path = _media_asset_local_path(row)
+    if storage_path is None or not storage_path.is_file():
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Media file was not found.",
@@ -3578,6 +3703,7 @@ def download_media_asset_file(
     filename = str(metadata.get("filename") or storage_path.name)
     return FileResponse(
         path=storage_path,
+        content_disposition_type="inline",
         filename=filename,
         media_type=row.mime_type or "application/octet-stream",
     )

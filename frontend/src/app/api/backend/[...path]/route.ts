@@ -891,7 +891,7 @@ async function proxyRequest(
     const targetUrl = new URL(backendApiPath, getApiBaseUrl());
     targetUrl.search = request.nextUrl.search;
     const headers = new Headers({
-      Accept: "application/json",
+      Accept: request.headers.get("accept") || "application/json",
     });
     const contentType = request.headers.get("content-type");
     const idempotencyKey = request.headers.get("idempotency-key");
@@ -906,9 +906,12 @@ async function proxyRequest(
     }
 
     const requestBody =
-      request.method === "GET" ? undefined : await request.text();
+      request.method === "GET" ? undefined : await request.arrayBuffer();
     const backendResponse = await fetch(targetUrl, {
-      body: requestBody || undefined,
+      body:
+        requestBody && requestBody.byteLength > 0
+          ? requestBody
+          : undefined,
       cache: "no-store",
       headers,
       method: request.method,
@@ -921,6 +924,19 @@ async function proxyRequest(
 
     if (backendContentType) {
       responseHeaders.set("Content-Type", backendContentType);
+    }
+    for (const headerName of [
+      "accept-ranges",
+      "cache-control",
+      "content-disposition",
+      "content-length",
+      "etag",
+      "last-modified",
+    ]) {
+      const headerValue = backendResponse.headers.get(headerName);
+      if (headerValue) {
+        responseHeaders.set(headerName, headerValue);
+      }
     }
     if (authenticate) {
       responseHeaders.set("WWW-Authenticate", authenticate);

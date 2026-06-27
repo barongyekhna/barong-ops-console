@@ -55,6 +55,9 @@ services:
       DB_POOL_RECYCLE_SECONDS: "600"
       DB_STATEMENT_TIMEOUT_MS: "8000"
       DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      K_PRODUCT_MEDIA_STORAGE_DIR: "/var/lib/barong/k-media"
+    volumes:
+      - console_k_media_data:/var/lib/barong/k-media
     depends_on:
       console_postgres:
         condition: service_healthy
@@ -104,3 +107,5 @@ networks:
 volumes:
   console_postgres_data:
     name: console_postgres_data
+  console_k_media_data:
+    name: console_k_media_data

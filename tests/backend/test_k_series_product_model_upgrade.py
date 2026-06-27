@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from base64 import b64decode
+from io import BytesIO
 from types import SimpleNamespace
 from uuid import UUID, uuid4
 
 import pytest
-from fastapi import HTTPException
+from fastapi import HTTPException, UploadFile
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import sessionmaker
+from starlette.datastructures import Headers
 
 from backend.app.db.base import Base
 from backend.app.modules.k_series.product_knowledge.errors import KConflictError
@@ -35,12 +38,14 @@ from backend.app.modules.k_series.product_knowledge.router import (
     _claim_product_create_idempotency,
     _complete_product_create_idempotency,
     _discard_product_create_idempotency,
+    download_media_asset_file,
     _gate_error,
     _product_readiness,
     _require_k_permission,
     _selling_points_snapshot,
     _store_image_review_snapshot,
     _store_keyword_review_snapshot,
+    upload_product_media_asset,
     _workflow_error,
 )
 from backend.app.modules.k_series.product_knowledge.scope_shim import KScopeContext
@@ -69,6 +74,11 @@ def _scope() -> KScopeContext:
         business_context="independent_store",
         scope_mode="production",
     )
+
+
+PNG_1X1 = b64decode(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII="
+)
 
 
 def test_create_rejects_manual_product_key() -> None:
@@ -123,6 +133,70 @@ def test_variable_product_creates_parent_sku_and_variant_skus() -> None:
     assert len(variants) == 2
     assert all(item.variant_sku.startswith("PUMP-FAMILY-") for item in variants)
     assert all(item.image_folder.startswith(f"images/{product.product_key}/") for item in variants)
+
+
+def test_media_upload_persists_real_image_bytes_and_downloads_inline(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    db = _session()
+    product = create_product(
+        db,
+        payload=ProductKnowledgeCreate(
+            parent_sku="media family",
+            product_name_en="Media family",
+            raw_input_text="Media family description",
+            target_market="US",
+        ),
+        scope_context=_scope(),
+    )
+    variant = db.scalar(
+        select(KProductKnowledgeVariant).where(
+            KProductKnowledgeVariant.product_id == product.id
+        )
+    )
+    assert variant is not None
+    monkeypatch.setenv("K_PRODUCT_MEDIA_STORAGE_DIR", str(tmp_path))
+
+    upload = UploadFile(
+        BytesIO(PNG_1X1),
+        filename="preview.png",
+        headers=Headers({"content-type": "image/png"}),
+    )
+    request = SimpleNamespace(state=SimpleNamespace(org_id="org_test"))
+    user = SimpleNamespace(id=uuid4())
+
+    uploaded = upload_product_media_asset(
+        product_id=product.id,
+        request=request,
+        variant_sku=variant.variant_sku,
+        asset_role="main",
+        file=upload,
+        db=db,
+        user=user,
+    )
+
+    row = db.get(KProductKnowledgeMediaAsset, UUID(uploaded.id))
+    assert row is not None
+    assert row.storage_provider == "local_filesystem"
+    assert row.mime_type == "image/png"
+    assert row.file_size == len(PNG_1X1)
+    assert row.metadata_json["direct_binary_upload"] is True
+    stored_path = tmp_path / row.object_key
+    assert stored_path.read_bytes() == PNG_1X1
+
+    response = download_media_asset_file(
+        asset_id=row.id,
+        request=request,
+        db=db,
+        user=user,
+    )
+
+    assert response.media_type == "image/png"
+    assert response.headers["content-disposition"].startswith("inline;")
+    assert "preview.png" in response.headers["content-disposition"]
+    assert response.path == stored_path
+    assert stored_path.read_bytes() == PNG_1X1
 
 
 def test_create_validates_sku_uniqueness_before_insert() -> None:

@@ -51,6 +51,9 @@ services:
       LOGIN_USER_RATE_LIMIT_ATTEMPTS: ${LOGIN_USER_RATE_LIMIT_ATTEMPTS:-10}
       LOGIN_ENDPOINT_RATE_LIMIT_ATTEMPTS: ${LOGIN_ENDPOINT_RATE_LIMIT_ATTEMPTS:-200}
       LOGIN_IP_RATE_LIMIT_WINDOW_SECONDS: ${LOGIN_IP_RATE_LIMIT_WINDOW_SECONDS:-900}
+      K_PRODUCT_MEDIA_STORAGE_DIR: /var/lib/barong/k-media
+    volumes:
+      - k_media_data:/var/lib/barong/k-media
     ports:
       - "127.0.0.1:8000:8000"
 
@@ -66,3 +69,6 @@ services:
       NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
     ports:
       - "127.0.0.1:3000:3000"
+
+volumes:
+  k_media_data:

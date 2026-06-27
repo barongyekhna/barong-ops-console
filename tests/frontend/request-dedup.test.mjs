@@ -233,6 +233,19 @@ test("product creation uses idempotency and dropdown-only market selection", () 
   assert.match(productListSource, /PRODUCT_CREATE_FAILURE_MESSAGE/);
 });
 
+test("backend proxy preserves multipart image uploads and binary download headers", () => {
+  const proxySource = readFileSync(
+    "frontend/src/app/api/backend/[...path]/route.ts",
+    "utf8",
+  );
+
+  assert.match(proxySource, /await request\.arrayBuffer\(\)/);
+  assert.doesNotMatch(proxySource, /await request\.text\(\)/);
+  assert.match(proxySource, /request\.headers\.get\("accept"\)/);
+  assert.match(proxySource, /"content-disposition"/);
+  assert.match(proxySource, /"content-length"/);
+});
+
 test("product management uses full-list route, safe delete, and clean K labels", () => {
   const productPageSource = readFileSync(
     "frontend/src/app/(console)/products/page.tsx",

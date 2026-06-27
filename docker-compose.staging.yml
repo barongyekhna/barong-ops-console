@@ -47,6 +47,9 @@ services:
       POSTGRES_DB: ""
       POSTGRES_PASSWORD: ""
       POSTGRES_USER: ""
+      K_PRODUCT_MEDIA_STORAGE_DIR: "/var/lib/barong/k-media"
+    volumes:
+      - console_staging_k_media_data:/var/lib/barong/k-media
     depends_on:
       console_staging_postgres:
         condition: service_healthy
@@ -96,3 +99,5 @@ networks:
 volumes:
   console_staging_postgres_data:
     name: console_staging_postgres_data
+  console_staging_k_media_data:
+    name: console_staging_k_media_data
