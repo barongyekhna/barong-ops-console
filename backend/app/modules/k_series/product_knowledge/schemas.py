@@ -131,6 +131,7 @@ class ProductKnowledgeVariantItem(BaseModel):
 class ProductKnowledgeCreate(BaseModel):
     product_key: str | None = Field(default=None, max_length=128)
     raw_input_text: str = Field(min_length=1)
+    main_keyword: str | None = Field(default=None, max_length=512)
     target_market: str = Field(default="US", min_length=1, max_length=50)
     target_locale: str | None = Field(default=None, max_length=16)
     parent_sku: str | None = Field(default=None, max_length=128)
@@ -168,6 +169,8 @@ class ProductKnowledgeCreate(BaseModel):
     def normalize_required_strings(self) -> "ProductKnowledgeCreate":
         if self.product_key is not None and self.product_key.strip():
             raise ValueError("product_key is auto-generated and cannot be provided.")
+        if self.main_keyword is not None:
+            self.main_keyword = self.main_keyword.strip() or None
         self.target_market = self.target_market.strip().upper()
         if self.target_locale is not None:
             self.target_locale = self.target_locale.strip().lower() or None
@@ -199,6 +202,7 @@ class ProductKnowledgeUpdate(BaseModel):
     canonical_language: str | None = Field(default=None, min_length=1, max_length=16)
     raw_input_text: str | None = None
     raw_input_language: str | None = Field(default=None, max_length=16)
+    main_keyword: str | None = Field(default=None, max_length=512)
     product_name_en: str | None = Field(default=None, max_length=512)
     brand_name: str | None = Field(default=None, max_length=255)
     manufacturer: str | None = Field(default=None, max_length=255)
@@ -217,6 +221,8 @@ class ProductKnowledgeUpdate(BaseModel):
     def normalize_languages(self) -> "ProductKnowledgeUpdate":
         if self.raw_input_language is not None:
             self.raw_input_language = self.raw_input_language.strip().lower()
+        if self.main_keyword is not None:
+            self.main_keyword = self.main_keyword.strip() or None
         if self.canonical_language is not None:
             self.canonical_language = self.canonical_language.strip().lower()
         if self.parent_sku is not None:
@@ -258,6 +264,8 @@ class ProductKnowledgeRead(BaseModel):
     canonical_language: str
     raw_input_text: str | None
     raw_input_language: str | None
+    main_keyword: str | None = None
+    primary_keyword: str | None = None
     product_name_en: str | None
     brand_name: str | None
     manufacturer: str | None
@@ -296,6 +304,8 @@ class ProductKnowledgeListItem(BaseModel):
     canonical_language: str
     parent_sku: str | None = None
     target_market: str | None = None
+    main_keyword: str | None = None
+    primary_keyword: str | None = None
     variant_count: int | None = None
     variants: list[ProductKnowledgeVariantRead] = Field(default_factory=list)
     workspace_key: str
@@ -400,6 +410,7 @@ class ProductKnowledgeRiskTermListResponse(BaseModel):
 class ProductKnowledgeWorkflowStartRequest(BaseModel):
     target_market: str = Field(default="US", min_length=1, max_length=50)
     target_region: str | None = Field(default=None, max_length=100)
+    main_keyword: str | None = Field(default=None, max_length=512)
     serp_query: str | None = Field(default=None, max_length=512)
     seed_keywords: list[str] = Field(default_factory=list, max_length=50)
     competitors: list[str] = Field(default_factory=list, max_length=50)
@@ -409,6 +420,8 @@ class ProductKnowledgeWorkflowStartRequest(BaseModel):
         self.target_market = self.target_market.strip().upper()
         if self.target_region is not None:
             self.target_region = self.target_region.strip() or None
+        if self.main_keyword is not None:
+            self.main_keyword = self.main_keyword.strip() or None
         if self.serp_query is not None:
             self.serp_query = self.serp_query.strip() or None
         self.seed_keywords = [_clean_text(item) for item in self.seed_keywords]

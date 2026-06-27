@@ -67,7 +67,7 @@ type ModuleOption = {
 const MODULE_LABELS: Record<string, string> = {
   Agents: "自动化助手",
   "Approval Audit": "审批审计",
-  Dashboard: "首页",
+  Dashboard: "控制台",
   Errors: "异常记录",
   "Foundation Demo": "内部演示",
   "Memory Events": "运行记录",
@@ -85,7 +85,7 @@ const MODULE_LABELS: Record<string, string> = {
   "admin.users": "用户管理",
   "business.approvals": "审批",
   "business.reviews": "审批审计",
-  "core.dashboard": "首页",
+  "core.dashboard": "控制台",
   "system.errors": "异常记录",
   "system.memory_events": "运行记录",
   "system.operation_logs": "操作记录",

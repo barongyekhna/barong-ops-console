@@ -4,98 +4,123 @@ import {
   CheckCircle2,
   ChevronUp,
   Download,
+  ExternalLink,
   FileText,
   ImagePlus,
   LoaderCircle,
   Play,
+  Plus,
   RotateCcw,
+  Save,
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   XCircle,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 
+import type { ProductSellingPoints, BulletPoint } from "@/modules/k14/selling-points/types";
+import {
+  createKeyword,
+  deleteKeyword,
+  getKeywordsByProduct,
+} from "@/modules/k19/keywords/api";
+import type { KeywordEntry } from "@/modules/k19/keywords/types";
+
+import { mediaAssetFileUrl } from "./api";
 import styles from "./ProductKnowledge.module.css";
 import {
   displayProductKey,
   formatVariantDisplayName,
+  formatVariantOptionLabel,
   mediaVariantDisplayName,
+  variantAttributesFromJson,
 } from "./display";
 import type {
   KMediaAsset,
   KRiskReviewDecision,
   KWorkflowExecution,
-  KWorkflowExportResponse,
   KWorkflowStartPayload,
   ProductKnowledgeListItem,
 } from "./types";
-import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 
 const TARGET_ORGANIZATION = "涌龙麟（深圳）国际贸易有限公司";
-const WORKFLOW_STAGES = [
+const KEYWORD_RESEARCH_NOT_STARTED_MESSAGE =
+  "关键词调研尚未开始，请先启动关键词调研。";
+const KEYWORD_STEPS = [
   {
-    key: "product",
-    label: "产品 / Product",
-    steps: ["product_ingestion", "deepseek_enrichment"],
+    key: "serp_keyword_fetch",
+    label: "SERP",
   },
   {
-    key: "serp",
-    label: "关键词 / SERP",
-    steps: ["serp_keyword_fetch"],
+    key: "ai_filter_chatgpt",
+    label: "ChatGPT",
   },
   {
-    key: "ai",
-    label: "AI 筛选 / AI",
-    steps: ["ai_filter_chatgpt", "ai_filter_claude_opus", "keyword_optimization_ai"],
-  },
-  {
-    key: "risk",
-    label: "风险 / Risk",
-    steps: ["risk_term_manual_review"],
-  },
-  {
-    key: "export",
-    label: "导出 / Export",
-    steps: [
-      "unit_conversion_normalization",
-      "image_binding",
-      "export_p_series",
-      "export_gmc",
-      "export_seo",
-    ],
+    key: "ai_filter_claude_opus",
+    label: "Claude",
   },
 ] as const;
 const WORKFLOW_STEP_ALIASES: Record<string, string[]> = {
-  export_p_series: ["export_p_series", "export_p_gmc_seo"],
-  image_binding: ["image_binding", "image_handling"],
+  ai_filter_claude_opus: ["ai_filter_claude_opus", "keyword_optimization_ai"],
   risk_term_manual_review: ["risk_term_manual_review", "risk_term_review_manual"],
 };
+const WORKFLOW_STEP_ORDER = [
+  "serp_keyword_fetch",
+  "ai_filter_chatgpt",
+  "ai_filter_claude_opus",
+  "risk_term_manual_review",
+] as const;
+const WORKFLOW_STEP_INDEX = new Map<string, number>(
+  WORKFLOW_STEP_ORDER.flatMap((step, index) =>
+    (WORKFLOW_STEP_ALIASES[step] ?? [step]).map(
+      (alias): [string, number] => [alias, index],
+    ),
+  ),
+);
 
 type RiskDecisionValue = "approve" | "reject";
+type KeywordReviewItem = {
+  id?: string;
+  keyword: string;
+  source: "saved" | "ai" | "manual";
+  detail: string;
+};
+type PendingMediaUpload = {
+  id: string;
+  fileName: string;
+  variantSku: string;
+};
 
 type ProductDetailProps = {
-  exportResult?: KWorkflowExportResponse | null;
   isGeneratingSellingPoints?: boolean;
+  isSavingProductInfo?: boolean;
   isWorkflowBusy?: boolean;
   mediaAssets?: KMediaAsset[];
+  onApproveSellingPoints?: (sellingPoints: ProductSellingPoints) => Promise<void> | void;
   onBindImage?: (assetId: string, variantSku: string) => void;
   onBindISystemImage?: (imageAssetId: string, variantSku: string) => void;
-  onCreateMedia?: (url: string, variantSku: string) => void;
+  onCreateMedia?: (
+    file: File,
+    variantSku: string,
+  ) => Promise<KMediaAsset | void> | KMediaAsset | void;
   onCollapse?: () => void;
-  onExportWorkflow?: () => void;
+  onDeleteMedia?: (assetId: string) => Promise<void> | void;
   onGenerateSellingPoints?: () => void;
-  onPauseWorkflow?: () => void;
   onRefreshWorkflow?: () => void;
-  onResumeWorkflow?: () => void;
-  onRetryWorkflow?: (step: string) => void;
-  onRollbackWorkflow?: (step: string) => void;
+  onRetryWorkflowStep?: (
+    step: string,
+    payload: KWorkflowStartPayload,
+  ) => void;
+  onSaveProductInfo?: () => Promise<void> | void;
   onStartWorkflow?: (payload: KWorkflowStartPayload) => void;
   onSubmitRiskReview?: (
     decisions: KRiskReviewDecision[],
     confirmNoRiskTerms: boolean,
-  ) => void;
+  ) => Promise<void> | void;
   product: ProductKnowledgeListItem | null;
+  productInfoSaveError?: string;
   sellingPoints?: ProductSellingPoints | null;
   sellingPointsError?: string;
   workflow?: KWorkflowExecution | null;
@@ -103,12 +128,12 @@ type ProductDetailProps = {
 };
 
 function displayValue(value: string | null | undefined) {
-  return value && value.trim().length > 0 ? value : "未设置 / Not set";
+  return value && value.trim().length > 0 ? value : "未设置";
 }
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
-    return "未设置 / Not set";
+    return "未设置";
   }
 
   const date = new Date(value);
@@ -116,22 +141,84 @@ function formatDate(value: string | null | undefined) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);
 }
 
-function workflowStepStatus(workflow: KWorkflowExecution | null, step: string) {
-  if (!workflow) {
-    return "pending";
-  }
-  const aliases = new Set(WORKFLOW_STEP_ALIASES[step] ?? [step]);
-  const latest = [...workflow.trace_json]
-    .reverse()
-    .find((item) => aliases.has(item.step));
+function displayReviewStatus(status: string) {
+  const labels: Record<string, string> = {
+    ai_structured: "AI 已结构化",
+    approved: "已通过",
+    archived: "已归档",
+    blocked: "已阻塞",
+    draft: "草稿",
+    needs_review: "待审核",
+    reviewed: "已审核",
+  };
 
-  return latest?.status ?? (aliases.has(workflow.current_step) ? workflow.status : "pending");
+  return labels[status] ?? "待处理";
+}
+
+function displayWorkflowRuntimeStatus(status: string | null | undefined) {
+  if (!status) {
+    return "未启动";
+  }
+
+  const labels: Record<string, string> = {
+    blocked: "已阻塞",
+    created: "已创建",
+    exported: "已完成",
+    failed: "失败",
+    in_progress: "进行中",
+    queued: "排队中",
+    ready_for_export: "已完成",
+    running: "运行中",
+    succeeded: "已完成",
+  };
+
+  return labels[status] ?? "待处理";
+}
+
+function displayMediaSource(source: string | null) {
+  const labels: Record<string, string> = {
+    i_system_asset: "I系统图片",
+    manual_upload_image: "手动图片",
+  };
+
+  return labels[source ?? ""] ?? "手动图片";
+}
+
+function displayMediaStatus(status: string) {
+  const labels: Record<string, string> = {
+    active: "可用",
+    available: "可用",
+    bound: "已绑定",
+    created: "已创建",
+    pending: "待处理",
+    rejected: "已拒绝",
+    uploaded: "已上传",
+  };
+
+  return labels[status] ?? "待处理";
+}
+
+function displayProductType(type: string | null | undefined) {
+  const labels: Record<string, string> = {
+    simple_product: "单产品",
+    variable_product: "多变体产品",
+  };
+
+  return type ? labels[type] ?? type : "未设置";
+}
+
+function workflowAliasesForStep(step: string) {
+  return new Set(WORKFLOW_STEP_ALIASES[step] ?? [step]);
+}
+
+function workflowStepIndex(step: string) {
+  return WORKFLOW_STEP_INDEX.get(step) ?? Number.POSITIVE_INFINITY;
 }
 
 function isCompleteStatus(status: string) {
@@ -144,72 +231,141 @@ function isActiveStatus(status: string) {
   return ["created", "queued", "running", "in_progress"].includes(status);
 }
 
-function workflowStageStatus(
-  workflow: KWorkflowExecution | null,
-  stage: (typeof WORKFLOW_STAGES)[number],
-) {
+function workflowStepStatus(workflow: KWorkflowExecution | null, step: string): string {
   if (!workflow) {
     return "pending";
   }
 
-  const statuses = stage.steps.map((step) => workflowStepStatus(workflow, step));
-  if (statuses.some((status) => status === "failed")) {
-    return "failed";
+  const aliases = workflowAliasesForStep(step);
+  const latest = [...workflow.trace_json]
+    .reverse()
+    .find((item) => aliases.has(item.step));
+  const latestStatus = latest?.status;
+  const stepIndex = workflowStepIndex(step);
+  const currentIndex = workflowStepIndex(workflow.current_step);
+
+  if (latestStatus === "failed" || latestStatus === "blocked") {
+    return latestStatus;
   }
-  if (statuses.some((status) => status === "blocked")) {
-    return "blocked";
+  if (aliases.has(workflow.current_step)) {
+    return latestStatus ?? workflow.status;
   }
-  if (statuses.every((status) => isCompleteStatus(status))) {
-    return "completed";
+  if (stepIndex < currentIndex) {
+    return latestStatus && isCompleteStatus(latestStatus)
+      ? latestStatus
+      : "completed";
   }
   if (
-    statuses.some((status) => isActiveStatus(status)) ||
-    stage.steps.some((step) =>
-      new Set(WORKFLOW_STEP_ALIASES[step] ?? [step]).has(workflow.current_step),
-    )
+    workflow.status === "succeeded" ||
+    workflow.status === "ready_for_export" ||
+    workflow.status === "exported"
   ) {
-    return "running";
+    return latestStatus ?? "completed";
   }
-  if (statuses.some((status) => isCompleteStatus(status))) {
-    return "running";
-  }
-  return "pending";
+  return latestStatus ?? "pending";
 }
 
 function workflowStatusLabel(status: string) {
-  if (status === "completed" || status === "succeeded" || status === "exported") {
-    return "已完成 / Done";
+  if (isCompleteStatus(status)) {
+    return "已完成";
   }
-  if (status === "running" || status === "created" || status === "in_progress") {
-    return "进行中 / Active";
+  if (isActiveStatus(status)) {
+    return "进行中";
   }
   if (status === "failed") {
-    return "失败 / Failed";
+    return "失败";
   }
   if (status === "blocked") {
-    return "阻塞 / Blocked";
+    return "阻塞";
   }
-  return "等待 / Pending";
+  return "等待";
 }
 
-function workflowProgressPercent(workflow: KWorkflowExecution | null) {
+function isRetryableStepStatus(status: string) {
+  return status === "failed" || status === "blocked";
+}
+
+function keywordProgressPercent(
+  workflow: KWorkflowExecution | null,
+  keywordReviewSubmitted: boolean,
+) {
+  if (keywordReviewSubmitted || workflow?.risk_approval_log_json) {
+    return 100;
+  }
   if (!workflow) {
     return 0;
   }
-  if (workflow.status === "exported") {
+
+  const statuses = KEYWORD_STEPS.map((step) =>
+    workflowStepStatus(workflow, step.key),
+  );
+  const completed = statuses.filter(isCompleteStatus).length;
+  const active = statuses.some(isActiveStatus) ? 0.5 : 0;
+  const base = Math.round(((completed + active) / (KEYWORD_STEPS.length + 1)) * 100);
+  return Math.min(92, Math.max(12, base));
+}
+
+function sellingPointsProgressPercent(
+  sellingPoints: ProductSellingPoints | null,
+  isGenerating: boolean,
+  approved: boolean,
+) {
+  if (approved) {
     return 100;
   }
+  if (sellingPoints) {
+    return 72;
+  }
+  if (isGenerating) {
+    return 36;
+  }
+  return 0;
+}
 
-  const stageStatuses = WORKFLOW_STAGES.map((stage) =>
-    workflowStageStatus(workflow, stage),
-  );
-  const completedCount = stageStatuses.filter((status) => status === "completed")
-    .length;
-  const activeCount = stageStatuses.some((status) => status === "running") ? 0.5 : 0;
-  return Math.min(
-    100,
-    Math.max(8, Math.round(((completedCount + activeCount) / WORKFLOW_STAGES.length) * 100)),
-  );
+function normalizeKeywordKey(value: string) {
+  return value.trim().toLocaleLowerCase();
+}
+
+function dedupeKeywords(values: string[]) {
+  const seen = new Set<string>();
+  const output: string[] = [];
+
+  for (const value of values) {
+    const keyword = value.trim();
+    const key = normalizeKeywordKey(keyword);
+    if (!keyword || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    output.push(keyword);
+  }
+
+  return output;
+}
+
+function stringListFromUnknown(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  return value
+    .map((item) => {
+      if (typeof item === "string") {
+        return item;
+      }
+      if (item && typeof item === "object") {
+        const record = item as Record<string, unknown>;
+        return String(
+          record.keyword ??
+            record.term ??
+            record.text ??
+            record.query ??
+            "",
+        );
+      }
+      return "";
+    })
+    .filter((item) => item.trim().length > 0);
 }
 
 function normalizeRiskKeywords(workflow: KWorkflowExecution | null) {
@@ -229,25 +385,61 @@ function normalizeRiskKeywords(workflow: KWorkflowExecution | null) {
     .filter((item) => item.term.trim().length > 0);
 }
 
+function generatedNonRiskKeywords(workflow: KWorkflowExecution | null) {
+  const claude = workflow?.claude_filter_result_json;
+  const finalSet = workflow?.final_keyword_set_json;
+
+  return dedupeKeywords([
+    ...stringListFromUnknown(claude?.final_keywords),
+    ...stringListFromUnknown(claude?.high_value_keywords),
+    ...stringListFromUnknown(claude?.low_value_keywords),
+    ...stringListFromUnknown(finalSet?.primary_keywords),
+    ...stringListFromUnknown(finalSet?.secondary_keywords),
+    ...stringListFromUnknown(finalSet?.longtail_keywords),
+  ]);
+}
+
+function splitListText(value: string) {
+  return value
+    .split(/[\n,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function joinListText(values: string[] | undefined) {
+  return (values ?? []).join("\n");
+}
+
+function buildISystemHref(product: ProductKnowledgeListItem, variantSku: string) {
+  const params = new URLSearchParams({
+    module: "i.image_system",
+    product_key: displayProductKey(product.product_key),
+  });
+  if (variantSku) {
+    params.set("variant_sku", variantSku);
+  }
+  return `/modules?${params.toString()}`;
+}
+
 export function ProductDetail({
-  exportResult = null,
   isGeneratingSellingPoints = false,
+  isSavingProductInfo = false,
   isWorkflowBusy = false,
   mediaAssets = [],
+  onApproveSellingPoints,
   onBindImage,
   onBindISystemImage,
   onCreateMedia,
   onCollapse,
-  onExportWorkflow,
+  onDeleteMedia,
   onGenerateSellingPoints,
-  onPauseWorkflow,
   onRefreshWorkflow,
-  onResumeWorkflow,
-  onRetryWorkflow,
-  onRollbackWorkflow,
+  onRetryWorkflowStep,
+  onSaveProductInfo,
   onStartWorkflow,
   onSubmitRiskReview,
   product,
+  productInfoSaveError = "",
   sellingPoints = null,
   sellingPointsError = "",
   workflow = null,
@@ -255,16 +447,54 @@ export function ProductDetail({
 }: ProductDetailProps) {
   const [targetMarket, setTargetMarket] = useState("US");
   const [serpQuery, setSerpQuery] = useState("");
-  const [mediaUrl, setMediaUrl] = useState("");
+  const [selectedMediaFiles, setSelectedMediaFiles] = useState<File[]>([]);
+  const [isDraggingMedia, setIsDraggingMedia] = useState(false);
+  const [mediaError, setMediaError] = useState("");
+  const [isUploadingMedia, setIsUploadingMedia] = useState(false);
+  const [pendingMediaUploads, setPendingMediaUploads] = useState<PendingMediaUpload[]>(
+    [],
+  );
+  const [deletingMediaIds, setDeletingMediaIds] = useState<string[]>([]);
   const [selectedVariantSku, setSelectedVariantSku] = useState("");
   const [iSystemImageAssetId, setISystemImageAssetId] = useState("");
+  const [imageSectionSubmitted, setImageSectionSubmitted] = useState(false);
+  const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const [riskDecisions, setRiskDecisions] = useState<Record<string, RiskDecisionValue>>(
     {},
   );
-  const [riskDecisionError, setRiskDecisionError] = useState("");
+  const [keywordEntries, setKeywordEntries] = useState<KeywordEntry[]>([]);
+  const [manualKeywords, setManualKeywords] = useState<string[]>([]);
+  const [manualKeywordInput, setManualKeywordInput] = useState("");
+  const [removedGeneratedKeywords, setRemovedGeneratedKeywords] = useState<string[]>(
+    [],
+  );
+  const [keywordReviewError, setKeywordReviewError] = useState("");
+  const [isLoadingKeywords, setIsLoadingKeywords] = useState(false);
+  const [isSavingKeywordReview, setIsSavingKeywordReview] = useState(false);
+  const [pendingKeywordRemovalKeys, setPendingKeywordRemovalKeys] = useState<string[]>(
+    [],
+  );
+  const [optimisticRemovedKeywordKeys, setOptimisticRemovedKeywordKeys] = useState<
+    string[]
+  >([]);
+  const [keywordReviewSubmitted, setKeywordReviewSubmitted] = useState(false);
+  const [sellingBullets, setSellingBullets] = useState<BulletPoint[]>([]);
+  const [seoKeywordsText, setSeoKeywordsText] = useState("");
+  const [marketTagsText, setMarketTagsText] = useState("");
+  const [marketingCopy, setMarketingCopy] = useState("");
+  const [translatedVersion, setTranslatedVersion] = useState("");
+  const [chineseTranslation, setChineseTranslation] = useState("");
+  const [targetLanguage, setTargetLanguage] = useState("");
+  const [sellingPointReviewError, setSellingPointReviewError] = useState("");
+  const [isSavingSellingPoints, setIsSavingSellingPoints] = useState(false);
+  const [sellingPointsApproved, setSellingPointsApproved] = useState(false);
 
   const riskKeywords = useMemo(() => normalizeRiskKeywords(workflow), [workflow]);
-  const canExport = workflow?.status === "ready_for_export" || workflow?.status === "exported";
+  const activeMediaAssets = useMemo(
+    () => mediaAssets.filter((asset) => asset.status !== "removed"),
+    [mediaAssets],
+  );
+  const activeVariantCount = product?.variants?.length ?? 0;
   const selectedVariant = useMemo(
     () =>
       (product?.variants ?? []).find(
@@ -272,150 +502,558 @@ export function ProductDetail({
       ) ?? null,
     [product?.variants, selectedVariantSku],
   );
-  const workflowProgress = useMemo(
-    () => workflowProgressPercent(workflow),
-    [workflow],
+  const selectedMediaLabel =
+    selectedMediaFiles.length === 0
+      ? "拖拽或选择本地图片"
+      : selectedMediaFiles.length === 1
+        ? selectedMediaFiles[0].name
+        : `已选择 ${selectedMediaFiles.length} 张图片`;
+  const variantSplitWarning = Boolean(
+    product?.product_type === "variable_product" && activeVariantCount <= 1,
   );
+  const keywordProgress = useMemo(
+    () => keywordProgressPercent(workflow, keywordReviewSubmitted),
+    [keywordReviewSubmitted, workflow],
+  );
+  const sellingPointsProgress = useMemo(
+    () =>
+      sellingPointsProgressPercent(
+        sellingPoints,
+        isGeneratingSellingPoints,
+        sellingPointsApproved,
+      ),
+    [isGeneratingSellingPoints, sellingPoints, sellingPointsApproved],
+  );
+  const riskKeywordKeys = useMemo(
+    () => new Set(riskKeywords.map((item) => normalizeKeywordKey(item.term))),
+    [riskKeywords],
+  );
+  const activeKeywordEntries = useMemo(
+    () =>
+      keywordEntries.filter(
+        (entry) => entry.status !== "archived",
+      ),
+    [keywordEntries],
+  );
+  const nonRiskKeywords = useMemo<KeywordReviewItem[]>(() => {
+    const savedKeys = new Set<string>();
+    const removedKeys = new Set([
+      ...removedGeneratedKeywords,
+      ...optimisticRemovedKeywordKeys,
+    ]);
+    const savedItems = activeKeywordEntries
+      .filter((entry) => !riskKeywordKeys.has(normalizeKeywordKey(entry.keyword)))
+      .map((entry) => {
+        savedKeys.add(normalizeKeywordKey(entry.keyword));
+        return {
+          detail: entry.source === "manual" ? "人工保存" : "已保存",
+          id: entry.id,
+          keyword: entry.keyword,
+          source: "saved" as const,
+        };
+      });
+    const aiItems = generatedNonRiskKeywords(workflow)
+      .filter((keyword) => {
+        const key = normalizeKeywordKey(keyword);
+        return !savedKeys.has(key) && !riskKeywordKeys.has(key) && !removedKeys.has(key);
+      })
+      .map((keyword) => ({
+        detail: "Claude 终筛",
+        keyword,
+        source: "ai" as const,
+      }));
+    const manualItems = manualKeywords
+      .filter((keyword) => {
+        const key = normalizeKeywordKey(keyword);
+        return !savedKeys.has(key) && !riskKeywordKeys.has(key) && !removedKeys.has(key);
+      })
+      .map((keyword) => ({
+        detail: "人工新增",
+        keyword,
+        source: "manual" as const,
+      }));
+
+    return [...savedItems, ...aiItems, ...manualItems];
+  }, [
+    activeKeywordEntries,
+    manualKeywords,
+    removedGeneratedKeywords,
+    optimisticRemovedKeywordKeys,
+    riskKeywordKeys,
+    workflow,
+  ]);
+  const keywordsComplete =
+    keywordReviewSubmitted || Boolean(workflow?.risk_approval_log_json);
+  const imagesComplete = imageSectionSubmitted && activeMediaAssets.length >= 5;
+  const sellingPointsComplete = sellingPointsApproved;
+  const pSeriesReady = keywordsComplete && imagesComplete && sellingPointsComplete;
+  const isWorkflowLive =
+    workflow?.status === "created" ||
+    workflow?.status === "queued" ||
+    workflow?.status === "running" ||
+    workflow?.status === "in_progress";
+
+  const loadKeywordEntries = useCallback(async () => {
+    if (!product) {
+      setKeywordEntries([]);
+      return;
+    }
+
+    setIsLoadingKeywords(true);
+    try {
+      const response = await getKeywordsByProduct(product.id);
+      setKeywordEntries(response.keyword_entries);
+    } catch (error) {
+      setKeywordReviewError(
+        error instanceof Error ? error.message : "关键词列表加载失败。",
+      );
+    } finally {
+      setIsLoadingKeywords(false);
+    }
+  }, [product]);
+
+  useEffect(() => {
+    void loadKeywordEntries();
+  }, [loadKeywordEntries]);
 
   useEffect(() => {
     setRiskDecisions({});
-    setRiskDecisionError("");
-  }, [workflow?.id]);
+    setKeywordReviewError("");
+    setKeywordReviewSubmitted(Boolean(workflow?.risk_approval_log_json));
+  }, [workflow?.id, workflow?.risk_approval_log_json]);
 
   useEffect(() => {
     const firstVariantSku = product?.variants?.[0]?.variant_sku ?? "";
     setSelectedVariantSku(firstVariantSku);
-  }, [product?.id, product?.variants]);
+    setTargetMarket(product?.target_market ?? "US");
+    setSelectedMediaFiles([]);
+    setMediaError("");
+    setPendingMediaUploads([]);
+    setDeletingMediaIds([]);
+    setImageSectionSubmitted(false);
+    setManualKeywords([]);
+    setManualKeywordInput("");
+    setRemovedGeneratedKeywords([]);
+    setOptimisticRemovedKeywordKeys([]);
+    setPendingKeywordRemovalKeys([]);
+  }, [product?.id, product?.target_market, product?.variants]);
+
+  useEffect(() => {
+    if (!sellingPoints) {
+      setSellingBullets([]);
+      setSeoKeywordsText("");
+      setMarketTagsText("");
+      setMarketingCopy("");
+      setTranslatedVersion("");
+      setChineseTranslation("");
+      setTargetLanguage("");
+      setSellingPointsApproved(false);
+      return;
+    }
+
+    setSellingBullets(sellingPoints.bullets);
+    setSeoKeywordsText(joinListText(sellingPoints.seo_keywords));
+    setMarketTagsText(joinListText(sellingPoints.market_tags));
+    setMarketingCopy(sellingPoints.marketing_copy ?? "");
+    setTranslatedVersion(sellingPoints.translated_version ?? "");
+    setChineseTranslation(sellingPoints.chinese_translation ?? "");
+    setTargetLanguage(sellingPoints.target_language ?? sellingPoints.language ?? "");
+    setSellingPointsApproved(sellingPoints.source === "manual_review");
+  }, [sellingPoints]);
+
+  useEffect(() => {
+    if (!isWorkflowLive || !onRefreshWorkflow) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      onRefreshWorkflow();
+    }, 5000);
+
+    return () => window.clearInterval(timer);
+  }, [isWorkflowLive, onRefreshWorkflow]);
+
+  useEffect(() => {
+    if (activeMediaAssets.length >= 5) {
+      setImageSectionSubmitted(true);
+    }
+  }, [activeMediaAssets.length]);
 
   if (!product) {
     return (
-      <aside className={styles.detail} aria-label="Product detail">
+      <aside className={styles.detail} aria-label="产品详情">
         <div className={styles.emptyDetailIcon}>
           <FileText aria-hidden="true" size={22} />
         </div>
         <div>
-          <h3>No Product Selected</h3>
-          <p>Choose a product from the list to inspect its console state.</p>
+          <h3>未选择产品</h3>
+          <p>从列表选择产品后查看详情。</p>
         </div>
       </aside>
     );
   }
+  const currentProduct = product;
+
+  function buildWorkflowPayload(): KWorkflowStartPayload {
+    const mainKeyword =
+      currentProduct.main_keyword ?? currentProduct.primary_keyword ?? "";
+    return {
+      main_keyword: mainKeyword,
+      seed_keywords: [],
+      serp_query: serpQuery.trim() || mainKeyword || null,
+      target_market: targetMarket,
+    };
+  }
 
   function submitWorkflowStart() {
-    onStartWorkflow?.({
-      seed_keywords: [],
-      serp_query: serpQuery.trim() || null,
-      target_market: targetMarket,
-    });
+    onStartWorkflow?.(buildWorkflowPayload());
   }
 
-  function submitRiskReview() {
-    if (riskKeywords.length === 0) {
-      onSubmitRiskReview?.([], true);
+  function retryWorkflowStep(step: string) {
+    onRetryWorkflowStep?.(step, buildWorkflowPayload());
+  }
+
+  function setUploadFiles(files: File[]) {
+    if (files.length === 0) {
       return;
     }
-
-    const missing = riskKeywords.filter((item) => !riskDecisions[item.term]);
-    if (missing.length > 0) {
-      setRiskDecisionError("Every risk keyword needs a manual approve or reject decision.");
-      return;
-    }
-
-    setRiskDecisionError("");
-    onSubmitRiskReview?.(
-      riskKeywords.map((item) => {
-        const decision = riskDecisions[item.term] as RiskDecisionValue;
-
-        return {
-          decision,
-          reason: decision === "reject" ? "Rejected in manual review" : null,
-          term: item.term,
-        };
-      }),
-      false,
+    const invalidFile = files.find(
+      (file) => file.type && !file.type.startsWith("image/"),
     );
+    if (invalidFile) {
+      setMediaError("只能上传图片文件。");
+      return;
+    }
+    setMediaError("");
+    setSelectedMediaFiles(files);
   }
 
-  function createMedia() {
-    const value = mediaUrl.trim();
-    if (!value) {
+  function handleMediaDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault();
+    setIsDraggingMedia(false);
+    setUploadFiles(Array.from(event.dataTransfer.files));
+  }
+
+  async function createMedia() {
+    if (selectedMediaFiles.length === 0) {
+      setMediaError("请选择本地图片文件。");
       return;
     }
     if (!selectedVariantSku) {
+      setMediaError("请选择图片绑定变体。");
       return;
     }
-    onCreateMedia?.(value, selectedVariantSku);
-    setMediaUrl("");
+    const uploadBatch = selectedMediaFiles.map((file, index) => ({
+      file,
+      id: `${Date.now()}-${index}-${file.name}`,
+    }));
+    setPendingMediaUploads((current) => [
+      ...uploadBatch.map((item) => ({
+        fileName: item.file.name,
+        id: item.id,
+        variantSku: selectedVariantSku,
+      })),
+      ...current,
+    ]);
+    setIsUploadingMedia(true);
+    setMediaError("");
+    try {
+      for (const item of uploadBatch) {
+        await onCreateMedia?.(item.file, selectedVariantSku);
+        setPendingMediaUploads((current) =>
+          current.filter((pending) => pending.id !== item.id),
+        );
+      }
+      setSelectedMediaFiles([]);
+      if (mediaInputRef.current) {
+        mediaInputRef.current.value = "";
+      }
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "图片上传失败。");
+    } finally {
+      setPendingMediaUploads((current) =>
+        current.filter((pending) =>
+          uploadBatch.every((item) => item.id !== pending.id),
+        ),
+      );
+      setIsUploadingMedia(false);
+    }
+  }
+
+  async function deleteMedia(assetId: string) {
+    setDeletingMediaIds((current) =>
+      current.includes(assetId) ? current : [...current, assetId],
+    );
+    setMediaError("");
+    try {
+      await onDeleteMedia?.(assetId);
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "图片删除失败。");
+    } finally {
+      setDeletingMediaIds((current) =>
+        current.filter((currentId) => currentId !== assetId),
+      );
+    }
   }
 
   function bindISystemImage() {
     const value = iSystemImageAssetId.trim();
-    if (!value) {
-      return;
-    }
-    if (!selectedVariantSku) {
+    if (!value || !selectedVariantSku) {
       return;
     }
     onBindISystemImage?.(value, selectedVariantSku);
     setISystemImageAssetId("");
   }
 
+  function addManualKeyword() {
+    const keyword = manualKeywordInput.trim();
+    if (!keyword) {
+      return;
+    }
+    const existing = new Set(nonRiskKeywords.map((item) => normalizeKeywordKey(item.keyword)));
+    if (existing.has(normalizeKeywordKey(keyword))) {
+      setKeywordReviewError("这个关键词已在非风险关键词列表中。");
+      return;
+    }
+    setManualKeywords((current) => [...current, keyword]);
+    setManualKeywordInput("");
+    setKeywordReviewError("");
+  }
+
+  async function removeKeyword(item: KeywordReviewItem) {
+    const key = normalizeKeywordKey(item.keyword);
+    if (pendingKeywordRemovalKeys.includes(key)) {
+      return;
+    }
+    setOptimisticRemovedKeywordKeys((current) =>
+      current.includes(key) ? current : [...current, key],
+    );
+    setPendingKeywordRemovalKeys((current) =>
+      current.includes(key) ? current : [...current, key],
+    );
+    setKeywordReviewError("");
+    if (item.source === "saved" && item.id) {
+      try {
+        await deleteKeyword(item.id);
+        await loadKeywordEntries();
+      } catch (error) {
+        setOptimisticRemovedKeywordKeys((current) =>
+          current.filter((currentKey) => currentKey !== key),
+        );
+        setKeywordReviewError(
+          error instanceof Error ? error.message : "关键词移除失败。",
+        );
+      } finally {
+        setPendingKeywordRemovalKeys((current) =>
+          current.filter((currentKey) => currentKey !== key),
+        );
+      }
+      return;
+    }
+    if (item.source === "manual") {
+      setManualKeywords((current) =>
+        current.filter((keyword) => normalizeKeywordKey(keyword) !== key),
+      );
+      setPendingKeywordRemovalKeys((current) =>
+        current.filter((currentKey) => currentKey !== key),
+      );
+      return;
+    }
+    setRemovedGeneratedKeywords((current) =>
+      current.includes(key) ? current : [...current, key],
+    );
+    setPendingKeywordRemovalKeys((current) =>
+      current.filter((currentKey) => currentKey !== key),
+    );
+  }
+
+  async function submitKeywordReview() {
+    if (!workflow) {
+      setKeywordReviewError(KEYWORD_RESEARCH_NOT_STARTED_MESSAGE);
+      return;
+    }
+    if (!workflow.claude_filter_result_json) {
+      setKeywordReviewError("请等待 Claude 终筛完成后再提交关键词审核。");
+      return;
+    }
+
+    const missingRiskDecisions = riskKeywords.filter(
+      (item) => !riskDecisions[item.term],
+    );
+    if (missingRiskDecisions.length > 0) {
+      setKeywordReviewError("每个风险词都需要人工选择通过或拒绝。");
+      return;
+    }
+    if (nonRiskKeywords.length === 0) {
+      setKeywordReviewError("请至少保留一个非风险关键词。");
+      return;
+    }
+
+    setIsSavingKeywordReview(true);
+    setKeywordReviewError("");
+    try {
+      await onSubmitRiskReview?.(
+        riskKeywords.map((item) => {
+          const decision = riskDecisions[item.term] as RiskDecisionValue;
+
+          return {
+            decision,
+            reason: decision === "reject" ? "Rejected in manual review" : null,
+            term: item.term,
+          };
+        }),
+        riskKeywords.length === 0,
+      );
+
+      const savedKeys = new Set(
+        activeKeywordEntries.map((entry) => normalizeKeywordKey(entry.keyword)),
+      );
+      const newKeywords = nonRiskKeywords.filter(
+        (item) => !item.id && !savedKeys.has(normalizeKeywordKey(item.keyword)),
+      );
+      await Promise.all(
+        newKeywords.map((item) =>
+          createKeyword({
+            keyword: item.keyword,
+            product_id: currentProduct.id,
+            source: item.source === "manual" ? "manual" : "K18",
+            status: "active",
+          }),
+        ),
+      );
+      await loadKeywordEntries();
+      setManualKeywords([]);
+      setKeywordReviewSubmitted(true);
+    } catch (error) {
+      setKeywordReviewError(
+        error instanceof Error ? error.message : "关键词审核保存失败。",
+      );
+    } finally {
+      setIsSavingKeywordReview(false);
+    }
+  }
+
+  function updateBullet(index: number, patch: Partial<BulletPoint>) {
+    setSellingBullets((current) =>
+      current.map((bullet, bulletIndex) =>
+        bulletIndex === index ? { ...bullet, ...patch } : bullet,
+      ),
+    );
+  }
+
+  async function submitSellingPointsReview() {
+    if (!sellingPoints || sellingBullets.length === 0) {
+      setSellingPointReviewError("请先生成卖点，再进行人工审核。");
+      return;
+    }
+    const cleanedBullets = sellingBullets
+      .map((bullet) => ({
+        ...bullet,
+        category: bullet.category.trim() || "conversion",
+        importance_score: Number.isFinite(Number(bullet.importance_score))
+          ? Number(bullet.importance_score)
+          : 1,
+        text: bullet.text.trim(),
+      }))
+      .filter((bullet) => bullet.text.length > 0);
+    if (cleanedBullets.length === 0) {
+      setSellingPointReviewError("请至少保留一条卖点。");
+      return;
+    }
+
+    setIsSavingSellingPoints(true);
+    setSellingPointReviewError("");
+    try {
+      await onApproveSellingPoints?.({
+        ...sellingPoints,
+        bullets: cleanedBullets,
+        confidence_score: sellingPoints.confidence_score ?? 1,
+        chinese_translation: chineseTranslation.trim() || null,
+        language: sellingPoints.language ?? (targetLanguage || "en"),
+        market_tags: splitListText(marketTagsText),
+        marketing_copy: marketingCopy.trim() || null,
+        product_id: sellingPoints.product_id ?? currentProduct.id,
+        raw_input: sellingPoints.raw_input ?? "",
+        seo_bullets: sellingPoints.seo_bullets ?? [],
+        seo_keywords: splitListText(seoKeywordsText),
+        source: "manual_review",
+        target_language: targetLanguage.trim() || sellingPoints.target_language,
+        title:
+          sellingPoints.title ??
+          currentProduct.product_name_en ??
+          displayProductKey(currentProduct.product_key),
+        translated_version: translatedVersion.trim() || null,
+      });
+      setSellingPointsApproved(true);
+    } catch (error) {
+      setSellingPointReviewError(
+        error instanceof Error ? error.message : "卖点审核保存失败。",
+      );
+    } finally {
+      setIsSavingSellingPoints(false);
+    }
+  }
+
+  const iSystemHref = buildISystemHref(currentProduct, selectedVariantSku);
+
   return (
-    <aside className={styles.detail} aria-label="Product detail">
+    <aside className={styles.detail} aria-label="产品详情">
       <div className={styles.detailHeading}>
         <div>
-          <span className={styles.eyebrow}>详情 / Detail</span>
+          <span className={styles.eyebrow}>详情</span>
           <h3>{displayValue(product.product_name_en)}</h3>
         </div>
         <div className={styles.detailActions}>
-          <span className={styles.statusBadge}>{product.review_status}</span>
+          <span className={styles.statusBadge}>
+            {displayReviewStatus(product.review_status)}
+          </span>
           <button
             className="secondary-button"
             onClick={onCollapse}
             type="button"
           >
             <ChevronUp aria-hidden="true" size={16} />
-            收起 / Collapse
+            收起
           </button>
         </div>
       </div>
 
       <dl className={styles.detailGrid}>
         <div>
-          <dt>组织 / Organization</dt>
+          <dt>组织</dt>
           <dd>{product.organization_name || TARGET_ORGANIZATION}</dd>
         </div>
         <div>
-          <dt>产品编号 / Product ID</dt>
+          <dt>产品编号</dt>
           <dd>{displayProductKey(product.product_key)}</dd>
         </div>
         <div>
-          <dt>父级 SKU / Parent SKU</dt>
+          <dt>父级 SKU</dt>
           <dd>{displayValue(product.parent_sku ?? product.sku)}</dd>
         </div>
         <div>
-          <dt>品牌 / Brand</dt>
+          <dt>品牌</dt>
           <dd>{displayValue(product.brand_name)}</dd>
         </div>
         <div>
-          <dt>类型 / Type</dt>
-          <dd>{displayValue(product.product_type)}</dd>
+          <dt>类型</dt>
+          <dd>{displayProductType(product.product_type)}</dd>
         </div>
         <div>
-          <dt>变体 / Variants</dt>
+          <dt>变体</dt>
           <dd>{product.variant_count ?? product.variants?.length ?? 0}</dd>
         </div>
         <div>
-          <dt>更新 / Updated</dt>
+          <dt>更新</dt>
           <dd>{formatDate(product.updated_at)}</dd>
         </div>
       </dl>
 
-      <section className={styles.workflowSection} aria-labelledby="k-workflow-title">
+      <section className={styles.workflowSection} aria-labelledby="k-keywords">
         <div className={styles.sellingPointsHeading}>
           <div>
-            <span className={styles.eyebrow}>K</span>
-            <h4 id="k-workflow-title">产品流程 / Workflow</h4>
+            <span className={styles.eyebrow}>关键词</span>
+            <h4 id="k-keywords">关键词审核</h4>
           </div>
           <button
             className="secondary-button"
@@ -424,7 +1062,7 @@ export function ProductDetail({
             type="button"
           >
             <RotateCcw aria-hidden="true" size={16} />
-            刷新 / Refresh
+            刷新
           </button>
         </div>
 
@@ -432,61 +1070,80 @@ export function ProductDetail({
           <p className={styles.sellingPointsError}>{workflowError}</p>
         ) : null}
 
-        <dl className={styles.workflowMetrics}>
+        <div className={styles.workflowMetrics}>
           <div>
-            <dt>状态 / Status</dt>
-            <dd>{workflow?.status ?? "not_started"}</dd>
+            <dt>状态</dt>
+            <dd>{displayWorkflowRuntimeStatus(workflow?.status)}</dd>
           </div>
           <div>
-            <dt>进度 / Progress</dt>
-            <dd>{workflowProgress}%</dd>
+            <dt>进度</dt>
+            <dd>{keywordProgress}%</dd>
           </div>
-        </dl>
+        </div>
 
         <div
-          aria-label="Workflow progress"
+          aria-label="关键词进度"
           aria-valuemax={100}
           aria-valuemin={0}
-          aria-valuenow={workflowProgress}
+          aria-valuenow={keywordProgress}
           className={styles.workflowProgress}
           role="progressbar"
         >
-          <span style={{ width: `${workflowProgress}%` }} />
+          <span style={{ width: `${keywordProgress}%` }} />
         </div>
 
         <ol className={styles.workflowStages}>
-          {WORKFLOW_STAGES.map((stage) => {
-            const status = workflowStageStatus(workflow, stage);
+          {KEYWORD_STEPS.map((step) => {
+            const status = workflowStepStatus(workflow, step.key);
+            const canRetry = isRetryableStepStatus(status);
 
             return (
-              <li data-status={status} key={stage.key}>
-                <span>{stage.label}</span>
-                <strong>{workflowStatusLabel(status)}</strong>
+              <li data-status={status} key={step.key}>
+                <div>
+                  <span>{step.label}</span>
+                  <strong>{workflowStatusLabel(status)}</strong>
+                </div>
+                <button
+                  className="secondary-button"
+                  disabled={!canRetry || isWorkflowBusy}
+                  onClick={() => retryWorkflowStep(step.key)}
+                  type="button"
+                >
+                  {isWorkflowBusy && canRetry ? (
+                    <LoaderCircle aria-hidden="true" className="spin" size={14} />
+                  ) : (
+                    <RotateCcw aria-hidden="true" size={14} />
+                  )}
+                  重试
+                </button>
               </li>
             );
           })}
         </ol>
+        <p className={styles.keywordAiNotice}>
+          AI 调用可能失败，请点击对应步骤重试。
+        </p>
 
         <div className={styles.workflowStartGrid}>
           <label className={styles.field}>
-            <span>目标市场 / Target Market</span>
+            <span>目标市场</span>
             <select
               onChange={(event) => setTargetMarket(event.target.value)}
               value={targetMarket}
             >
-              <option value="US">US</option>
-              <option value="UK">UK</option>
-              <option value="EU">EU</option>
-              <option value="CN">CN</option>
-              <option value="JP">JP</option>
-              <option value="KR">KR</option>
-              <option value="RU">RU</option>
-              <option value="GCC">Middle East</option>
-              <option value="LATAM">LATAM</option>
+              <option value="US">美国</option>
+              <option value="UK">英国</option>
+              <option value="EU">欧盟</option>
+              <option value="CN">中国</option>
+              <option value="JP">日本</option>
+              <option value="KR">韩国</option>
+              <option value="RU">俄罗斯</option>
+              <option value="GCC">中东</option>
+              <option value="LATAM">拉美</option>
             </select>
           </label>
           <label className={styles.field}>
-            <span>关键词查询 / SERP Query</span>
+            <span>关键词查询</span>
             <input
               onChange={(event) => setSerpQuery(event.target.value)}
               placeholder={product.product_name_en || displayProductKey(product.product_key)}
@@ -504,171 +1161,265 @@ export function ProductDetail({
             ) : (
               <Play aria-hidden="true" size={16} />
             )}
-            Start Keyword Research
+            启动关键词调研
           </button>
         </div>
 
-        <div className={styles.workflowStartGrid}>
-          <button
-            className="secondary-button"
-            disabled={!workflow || isWorkflowBusy || workflow.status === "exported"}
-            onClick={onPauseWorkflow}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" size={16} />
-            暂停 / Pause
-          </button>
-          <button
-            className="secondary-button"
-            disabled={!workflow || isWorkflowBusy || workflow.status === "exported"}
-            onClick={onResumeWorkflow}
-            type="button"
-          >
-            <Play aria-hidden="true" size={16} />
-            继续 / Resume
-          </button>
-          <button
-            className="secondary-button"
-            disabled={!workflow || isWorkflowBusy || workflow.status === "exported"}
-            onClick={() => workflow && onRetryWorkflow?.(workflow.current_step)}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" size={16} />
-            重试 / Retry
-          </button>
-          <button
-            className="secondary-button"
-            disabled={!workflow || isWorkflowBusy || workflow.status === "exported"}
-            onClick={() => workflow && onRollbackWorkflow?.(workflow.current_step)}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" size={16} />
-            回退 / Rollback
-          </button>
-        </div>
-      </section>
-
-      <section className={styles.workflowSection} aria-labelledby="k-risk-review">
-        <div className={styles.sellingPointsHeading}>
-          <div>
-            <span className={styles.eyebrow}>人工审核 / Manual Gate</span>
-            <h4 id="k-risk-review">风险词审核 / Risk Review</h4>
-          </div>
-          <button
-            className="secondary-button"
-            disabled={!workflow || isWorkflowBusy}
-            onClick={submitRiskReview}
-            type="button"
-          >
-            <ShieldCheck aria-hidden="true" size={16} />
-            提交审核 / Submit
-          </button>
-        </div>
-
-        {riskDecisionError ? (
-          <p className={styles.sellingPointsError}>{riskDecisionError}</p>
+        {keywordReviewError ? (
+          <p className={styles.sellingPointsError}>{keywordReviewError}</p>
         ) : null}
 
-        {riskKeywords.length === 0 ? (
-          <p className={styles.sellingPointsEmpty}>
-            暂无风险词。双 AI 筛选完成后仍需人工确认。
-          </p>
-        ) : (
-          <ul className={styles.riskDecisionList}>
-            {riskKeywords.map((item) => (
-              <li key={item.term}>
-                <div>
-                  <strong>{item.term}</strong>
-                  {item.reason ? <span>{item.reason}</span> : null}
-                </div>
-                <div>
-                  <button
-                    aria-pressed={riskDecisions[item.term] === "approve"}
-                    className="secondary-button"
-                    onClick={() =>
-                      setRiskDecisions((current) => ({
-                        ...current,
-                        [item.term]: "approve",
-                      }))
-                    }
-                    type="button"
-                  >
-                    <CheckCircle2 aria-hidden="true" size={15} />
-                    通过 / Approve
-                  </button>
-                  <button
-                    aria-pressed={riskDecisions[item.term] === "reject"}
-                    className="secondary-button"
-                    onClick={() =>
-                      setRiskDecisions((current) => ({
-                        ...current,
-                        [item.term]: "reject",
-                      }))
-                    }
-                    type="button"
-                  >
-                    <XCircle aria-hidden="true" size={15} />
-                    拒绝 / Reject
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className={styles.keywordReviewGrid}>
+          <div className={styles.keywordColumn}>
+            <div className={styles.columnHeading}>
+              <strong>非风险关键词</strong>
+              <span>{nonRiskKeywords.length} 个</span>
+            </div>
+            <div className={styles.manualAddRow}>
+              <input
+                onChange={(event) => setManualKeywordInput(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    addManualKeyword();
+                  }
+                }}
+                placeholder="人工添加非风险关键词"
+                value={manualKeywordInput}
+              />
+              <button
+                className="secondary-button"
+                onClick={addManualKeyword}
+                type="button"
+              >
+                <Plus aria-hidden="true" size={15} />
+                添加
+              </button>
+            </div>
+            {isLoadingKeywords ? (
+              <p className={styles.sellingPointsEmpty}>正在加载关键词。</p>
+            ) : null}
+            {nonRiskKeywords.length === 0 && !isLoadingKeywords ? (
+              <p className={styles.sellingPointsEmpty}>
+                Claude 终筛后会在这里显示优质关键词。
+              </p>
+            ) : (
+              <ul className={styles.keywordList}>
+                {nonRiskKeywords.map((item) => (
+                  <li key={`${item.source}-${item.id ?? item.keyword}`}>
+                    <div>
+                      <strong>{item.keyword}</strong>
+                      <span>{item.detail}</span>
+                    </div>
+                    <button
+                      className="secondary-button"
+                      onClick={() => void removeKeyword(item)}
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" size={15} />
+                      移除
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className={styles.keywordColumn}>
+            <div className={styles.columnHeading}>
+              <strong>风险词</strong>
+              <span>{riskKeywords.length} 个</span>
+            </div>
+            {riskKeywords.length === 0 ? (
+              <p className={styles.sellingPointsEmpty}>
+                暂无风险词。Claude 终筛完成后仍需提交关键词审核。
+              </p>
+            ) : (
+              <ul className={styles.riskDecisionList}>
+                {riskKeywords.map((item) => (
+                  <li key={item.term}>
+                    <div>
+                      <strong>{item.term}</strong>
+                      {item.reason ? <span>{item.reason}</span> : null}
+                    </div>
+                    <div>
+                      <button
+                        aria-pressed={riskDecisions[item.term] === "approve"}
+                        className="secondary-button"
+                        onClick={() =>
+                          setRiskDecisions((current) => ({
+                            ...current,
+                            [item.term]: "approve",
+                          }))
+                        }
+                        type="button"
+                      >
+                        <CheckCircle2 aria-hidden="true" size={15} />
+                        通过
+                      </button>
+                      <button
+                        aria-pressed={riskDecisions[item.term] === "reject"}
+                        className="secondary-button"
+                        onClick={() =>
+                          setRiskDecisions((current) => ({
+                            ...current,
+                            [item.term]: "reject",
+                          }))
+                        }
+                        type="button"
+                      >
+                        <XCircle aria-hidden="true" size={15} />
+                        拒绝
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+
+        <div className={styles.sectionFooter}>
+          <span data-complete={keywordsComplete}>
+            {keywordsComplete ? "关键词已保存" : "关键词待审核"}
+          </span>
+          <button
+            className="primary-button"
+            disabled={isSavingKeywordReview || isWorkflowBusy}
+            onClick={() => void submitKeywordReview()}
+            type="button"
+          >
+            {isSavingKeywordReview ? (
+              <LoaderCircle aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <ShieldCheck aria-hidden="true" size={16} />
+            )}
+            提交关键词
+          </button>
+        </div>
       </section>
 
       <section className={styles.workflowSection} aria-labelledby="k-image-system">
         <div className={styles.sellingPointsHeading}>
           <div>
-            <span className={styles.eyebrow}>图片 / Images</span>
-            <h4 id="k-image-system">变体图片 / Variant Images</h4>
+            <span className={styles.eyebrow}>图片</span>
+            <h4 id="k-image-system">图片管理</h4>
+          </div>
+          <a className="secondary-button" href={iSystemHref}>
+            <ExternalLink aria-hidden="true" size={16} />
+            I系列
+          </a>
+        </div>
+
+        <div className={styles.workflowMetrics}>
+          <div>
+            <dt>图片数</dt>
+            <dd>{activeMediaAssets.length} / 5</dd>
+          </div>
+          <div>
+            <dt>状态</dt>
+            <dd>{imagesComplete ? "已保存" : "待保存"}</dd>
           </div>
         </div>
 
         <label className={styles.field}>
-          <span>变体 / Variant</span>
+          <span>变体</span>
           <select
             onChange={(event) => setSelectedVariantSku(event.target.value)}
             value={selectedVariantSku}
           >
-            {(product.variants ?? []).map((variant) => (
+            {(product.variants ?? []).map((variant, index) => (
               <option key={variant.variant_sku} value={variant.variant_sku}>
-                {formatVariantDisplayName(variant)}
+                {formatVariantOptionLabel(variant, index)}
               </option>
             ))}
           </select>
         </label>
 
+        {variantSplitWarning ? (
+          <p className={styles.sellingPointsEmpty}>
+            当前后端只有 1 条变体记录。如果这其实是多个变体，请创建产品时用“添加变体”分别录入，每条变体会成为独立图片绑定目标。
+          </p>
+        ) : null}
+
         {selectedVariant ? (
           <div className={styles.variantImageFolder}>
-            <strong>图片绑定目标 / Image Target</strong>
-            <span>{formatVariantDisplayName(selectedVariant)}</span>
+            <strong>图片绑定目标</strong>
+            <span>
+              {formatVariantDisplayName(selectedVariant)} / {selectedVariant.variant_sku}
+              {" / "}
+              属性 {variantAttributesFromJson(selectedVariant.attributes_json).length} 项
+            </span>
           </div>
         ) : null}
 
         <div className={styles.mediaCreateRow}>
-          <label className={styles.field}>
-            <span>图片 URL / Manual Image URL</span>
+          <div
+            className={`${styles.mediaDropzone} ${
+              isDraggingMedia ? styles.mediaDropzoneActive : ""
+            }`}
+            onClick={() => mediaInputRef.current?.click()}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              setIsDraggingMedia(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setIsDraggingMedia(false);
+            }}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={handleMediaDrop}
+            role="button"
+            tabIndex={0}
+          >
             <input
-              onChange={(event) => setMediaUrl(event.target.value)}
-              placeholder="https://example.com/image.jpg"
-              value={mediaUrl}
+              accept="image/*"
+              hidden
+              multiple
+              onChange={(event) =>
+                setUploadFiles(Array.from(event.target.files ?? []))
+              }
+              ref={mediaInputRef}
+              type="file"
             />
-          </label>
+            <ImagePlus aria-hidden="true" size={18} />
+            <div>
+              <strong>{selectedMediaLabel}</strong>
+              <span>支持一次选择多张图片，上传后绑定当前 product / variant</span>
+            </div>
+          </div>
           <button
             className="secondary-button"
-            disabled={isWorkflowBusy || !mediaUrl.trim() || !selectedVariantSku}
-            onClick={createMedia}
+            disabled={
+              isUploadingMedia ||
+              !selectedVariantSku
+            }
+            onClick={() =>
+              selectedMediaFiles.length === 0
+                ? mediaInputRef.current?.click()
+                : void createMedia()
+            }
             type="button"
           >
-            <ImagePlus aria-hidden="true" size={16} />
-            上传 / Upload
+            {isUploadingMedia ? (
+              <LoaderCircle aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <ImagePlus aria-hidden="true" size={16} />
+            )}
+            {selectedMediaFiles.length === 0
+              ? "选择图片"
+              : selectedMediaFiles.length > 1
+              ? `上传 ${selectedMediaFiles.length} 张`
+              : "上传"}
           </button>
         </div>
+        {mediaError ? (
+          <p className={styles.sellingPointsError}>{mediaError}</p>
+        ) : null}
 
         <div className={styles.mediaCreateRow}>
           <label className={styles.field}>
-            <span>I-system 图片 ID / image_asset_id</span>
+            <span>I系统图片ID</span>
             <input
               onChange={(event) => setISystemImageAssetId(event.target.value)}
               placeholder="img_asset_..."
@@ -684,32 +1435,58 @@ export function ProductDetail({
             type="button"
           >
             <Send aria-hidden="true" size={16} />
-            绑定 / Bind
+            绑定
           </button>
         </div>
 
         <ul className={styles.mediaList}>
-          {mediaAssets.map((asset) => (
-            <li key={asset.id}>
+          {pendingMediaUploads.map((item) => (
+            <li key={item.id}>
               <div>
-                <strong>{asset.object_key || asset.id}</strong>
+                <strong>{item.fileName}</strong>
                 <span>
-                  {mediaVariantDisplayName(product.variants, asset.variant_sku)} /{" "}
-                  {asset.source || "manual_upload_image"} / {asset.status}
+                  {mediaVariantDisplayName(product.variants, item.variantSku)} / 正在上传
                 </span>
               </div>
               <div>
-                {asset.file_url_placeholder ? (
-                  <a
-                    className="secondary-button"
-                    href={asset.file_url_placeholder}
-                    rel="noreferrer"
-                    target="_blank"
-                  >
-                    <Download aria-hidden="true" size={15} />
-                    Download
-                  </a>
-                ) : null}
+                <button className="secondary-button" disabled type="button">
+                  <LoaderCircle aria-hidden="true" className="spin" size={15} />
+                  上传中
+                </button>
+              </div>
+            </li>
+          ))}
+          {activeMediaAssets.map((asset) => (
+            <li key={asset.id}>
+              <div className={styles.mediaPreview}>
+                {asset.source === "i_system_asset" ? (
+                  <ImagePlus aria-hidden="true" size={18} />
+                ) : (
+                  <img
+                    alt=""
+                    loading="lazy"
+                    src={asset.file_url_placeholder || mediaAssetFileUrl(asset.id)}
+                  />
+                )}
+              </div>
+              <div className={styles.mediaMeta}>
+                <strong>{asset.object_key || asset.id}</strong>
+                <span>
+                  {mediaVariantDisplayName(product.variants, asset.variant_sku)} /{" "}
+                  {displayMediaSource(asset.source)} / {displayMediaStatus(asset.status)}
+                </span>
+              </div>
+              <div>
+                <a
+                  className="secondary-button"
+                  download
+                  href={asset.file_url_placeholder || mediaAssetFileUrl(asset.id)}
+                  rel="noreferrer"
+                  target={asset.file_url_placeholder ? "_blank" : undefined}
+                >
+                  <Download aria-hidden="true" size={15} />
+                  下载
+                </a>
                 <button
                   className="secondary-button"
                   disabled={
@@ -725,53 +1502,55 @@ export function ProductDetail({
                   type="button"
                 >
                   <Send aria-hidden="true" size={15} />
-                  绑定 / Bind
+                  绑定
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={deletingMediaIds.includes(asset.id)}
+                  onClick={() => void deleteMedia(asset.id)}
+                  type="button"
+                >
+                  {deletingMediaIds.includes(asset.id) ? (
+                    <LoaderCircle aria-hidden="true" className="spin" size={15} />
+                  ) : (
+                    <Trash2 aria-hidden="true" size={15} />
+                  )}
+                  删除
                 </button>
               </div>
             </li>
           ))}
         </ul>
-      </section>
-
-      <section className={styles.workflowSection} aria-labelledby="k-export-gate">
-        <div className={styles.sellingPointsHeading}>
-          <div>
-            <span className={styles.eyebrow}>导出 / Export</span>
-            <h4 id="k-export-gate">P / GMC / SEO</h4>
-          </div>
-          <button
-            className="primary-button"
-            disabled={!canExport || isWorkflowBusy}
-            onClick={onExportWorkflow}
-            type="button"
-          >
-            <Send aria-hidden="true" size={16} />
-            导出 / Export
-          </button>
-        </div>
-
-        {!canExport ? (
+        {activeMediaAssets.length === 0 && pendingMediaUploads.length === 0 ? (
           <p className={styles.sellingPointsEmpty}>
-            双 AI 筛选、风险审核、关键词确认和图片绑定完成后可导出。
+            暂无已上传图片。请至少上传 5 张后提交图片。
           </p>
         ) : null}
 
-        {exportResult?.report.export_payloads ? (
-          <div className={styles.exportSummary}>
-            <strong>已生成载荷 / Generated Payloads</strong>
-            <span>{Object.keys(exportResult.report.export_payloads).join(", ")}</span>
-          </div>
-        ) : null}
+        <div className={styles.sectionFooter}>
+          <span data-complete={imagesComplete}>
+            {imagesComplete ? "图片已保存" : "图片不少于 5 张后可保存"}
+          </span>
+          <button
+            className="primary-button"
+            disabled={activeMediaAssets.length < 5}
+            onClick={() => setImageSectionSubmitted(true)}
+            type="button"
+          >
+            <CheckCircle2 aria-hidden="true" size={16} />
+            提交图片
+          </button>
+        </div>
       </section>
 
       <section
-        aria-labelledby="k7-selling-points"
+        aria-labelledby="k-selling-points"
         className={styles.sellingPointsSection}
       >
         <div className={styles.sellingPointsHeading}>
           <div>
-            <span className={styles.eyebrow}>卖点 / Selling Points</span>
-            <h4 id="k7-selling-points">生成卖点 / Generated</h4>
+            <span className={styles.eyebrow}>卖点</span>
+            <h4 id="k-selling-points">卖点整理</h4>
           </div>
           <button
             className="secondary-button"
@@ -784,73 +1563,188 @@ export function ProductDetail({
             ) : (
               <Sparkles aria-hidden="true" size={16} />
             )}
-            生成 / Generate
+            生成
           </button>
+        </div>
+
+        <div className={styles.workflowMetrics}>
+          <div>
+            <dt>进度</dt>
+            <dd>{sellingPointsProgress}%</dd>
+          </div>
+          <div>
+            <dt>状态</dt>
+            <dd>{sellingPointsComplete ? "已保存" : "待审核"}</dd>
+          </div>
+        </div>
+        <div
+          aria-label="卖点进度"
+          aria-valuemax={100}
+          aria-valuemin={0}
+          aria-valuenow={sellingPointsProgress}
+          className={styles.workflowProgress}
+          role="progressbar"
+        >
+          <span style={{ width: `${sellingPointsProgress}%` }} />
         </div>
 
         {sellingPointsError ? (
           <p className={styles.sellingPointsError}>{sellingPointsError}</p>
         ) : null}
+        {sellingPointReviewError ? (
+          <p className={styles.sellingPointsError}>{sellingPointReviewError}</p>
+        ) : null}
 
         {sellingPoints ? (
-          <SellingPointsResult sellingPoints={sellingPoints} />
+          <div className={styles.sellingPointsResult}>
+            <div className={styles.sellingPointEditorGrid}>
+              <label className={styles.field}>
+                <span>目标语言</span>
+                <input
+                  onChange={(event) => setTargetLanguage(event.target.value)}
+                  value={targetLanguage}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>SEO关键词</span>
+                <textarea
+                  onChange={(event) => setSeoKeywordsText(event.target.value)}
+                  rows={3}
+                  value={seoKeywordsText}
+                />
+              </label>
+              <label className={styles.field}>
+                <span>市场标签</span>
+                <textarea
+                  onChange={(event) => setMarketTagsText(event.target.value)}
+                  rows={3}
+                  value={marketTagsText}
+                />
+              </label>
+            </div>
+
+            <ul className={styles.sellingPointBullets}>
+              {sellingBullets.map((bullet, index) => (
+                <li key={`${index}-${bullet.category}`}>
+                  <input
+                    aria-label="卖点类别"
+                    onChange={(event) =>
+                      updateBullet(index, { category: event.target.value })
+                    }
+                    value={bullet.category}
+                  />
+                  <textarea
+                    aria-label="卖点文案"
+                    onChange={(event) =>
+                      updateBullet(index, { text: event.target.value })
+                    }
+                    rows={3}
+                    value={bullet.text}
+                  />
+                  <input
+                    aria-label="重要度"
+                    min={0}
+                    onChange={(event) =>
+                      updateBullet(index, {
+                        importance_score: Number(event.target.value),
+                      })
+                    }
+                    step={0.1}
+                    type="number"
+                    value={bullet.importance_score}
+                  />
+                </li>
+              ))}
+            </ul>
+
+            <label className={styles.field}>
+              <span>转化文案</span>
+              <textarea
+                onChange={(event) => setMarketingCopy(event.target.value)}
+                rows={4}
+                value={marketingCopy}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>目标市场译文</span>
+              <textarea
+                onChange={(event) => setTranslatedVersion(event.target.value)}
+                rows={4}
+                value={translatedVersion}
+              />
+            </label>
+            <label className={styles.field}>
+              <span>中文翻译</span>
+              <textarea
+                onChange={(event) => setChineseTranslation(event.target.value)}
+                rows={5}
+                value={chineseTranslation}
+              />
+            </label>
+          </div>
         ) : (
           <p className={styles.sellingPointsEmpty}>
-            点击生成后显示产品卖点。
+            点击生成后显示 DeepSeek 整理的卖点，人工确认后保存。
           </p>
         )}
+
+        <div className={styles.sectionFooter}>
+          <span data-complete={sellingPointsComplete}>
+            {sellingPointsComplete ? "卖点已保存" : "卖点待审核"}
+          </span>
+          <button
+            className="primary-button"
+            disabled={!sellingPoints || isSavingSellingPoints}
+            onClick={() => void submitSellingPointsReview()}
+            type="button"
+          >
+            {isSavingSellingPoints ? (
+              <LoaderCircle aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <CheckCircle2 aria-hidden="true" size={16} />
+            )}
+            提交卖点
+          </button>
+        </div>
+      </section>
+
+      <section className={styles.workflowSection} aria-labelledby="k-p-readiness">
+        <div className={styles.sellingPointsHeading}>
+          <div>
+            <span className={styles.eyebrow}>P系列</span>
+            <h4 id="k-p-readiness">准备状态</h4>
+          </div>
+          <span className={styles.statusBadge}>
+            {pSeriesReady ? "已就绪" : "未就绪"}
+          </span>
+        </div>
+        <div className={styles.readinessGrid}>
+          <span data-complete={keywordsComplete}>关键词</span>
+          <span data-complete={imagesComplete}>图片</span>
+          <span data-complete={sellingPointsComplete}>卖点</span>
+        </div>
+        {productInfoSaveError ? (
+          <p className={styles.sellingPointsError}>{productInfoSaveError}</p>
+        ) : null}
+        <div className={styles.sectionFooter}>
+          <span data-complete={pSeriesReady}>
+            {pSeriesReady ? "三大板块已完成" : "完成关键词、图片和卖点后可保存"}
+          </span>
+          <button
+            className="primary-button"
+            disabled={!pSeriesReady || isSavingProductInfo}
+            onClick={() => void onSaveProductInfo?.()}
+            type="button"
+          >
+            {isSavingProductInfo ? (
+              <LoaderCircle aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <Save aria-hidden="true" size={16} />
+            )}
+            保存商品信息
+          </button>
+        </div>
       </section>
     </aside>
-  );
-}
-
-function SellingPointsResult({
-  sellingPoints,
-}: {
-  sellingPoints: ProductSellingPoints;
-}) {
-  return (
-    <div className={styles.sellingPointsResult}>
-      <dl className={styles.sellingPointsMetrics}>
-        <div>
-          <dt>置信度 / Confidence</dt>
-          <dd>{Math.round(sellingPoints.confidence_score * 100)}%</dd>
-        </div>
-        <div>
-          <dt>来源 / Source</dt>
-          <dd>{sellingPoints.source}</dd>
-        </div>
-      </dl>
-
-      <ul className={styles.sellingPointBullets}>
-        {sellingPoints.bullets.map((bullet, index) => (
-          <li key={`${bullet.category}-${index}-${bullet.text}`}>
-            <span>{bullet.category}</span>
-            <strong>{bullet.text}</strong>
-            <em>{bullet.importance_score}</em>
-          </li>
-        ))}
-      </ul>
-
-      <TagGroup label="SEO 关键词 / SEO Keywords" values={sellingPoints.seo_keywords} />
-      <TagGroup label="市场标签 / Market Tags" values={sellingPoints.market_tags} />
-    </div>
-  );
-}
-
-function TagGroup({ label, values }: { label: string; values: string[] }) {
-  if (values.length === 0) {
-    return null;
-  }
-
-  return (
-    <div className={styles.sellingPointTagGroup}>
-      <span>{label}</span>
-      <div>
-        {values.map((value) => (
-          <strong key={value}>{value}</strong>
-        ))}
-      </div>
-    </div>
   );
 }

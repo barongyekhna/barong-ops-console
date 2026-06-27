@@ -31,7 +31,7 @@ from .provider_config_service import (
 )
 
 AIProvider = Literal["serp", "chatgpt", "claude", "deepseek"]
-AITaskType = Literal["search", "chat", "generate"]
+AITaskType = Literal["search", "chat", "generate", "selling_points"]
 
 MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
     "serp": {
@@ -42,11 +42,12 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         "default": "deepseek-v4-pro",
         "chat": "deepseek-v4-pro",
         "generate": "deepseek-v4-pro",
+        "selling_points": "deepseek-v4-pro",
     },
     "chatgpt": {
-        "default": "gpt-5.5-xhigh",
-        "chat": "gpt-5.5-xhigh",
-        "generate": "gpt-5.5-xhigh",
+        "default": "gpt-5.5",
+        "chat": "gpt-5.5",
+        "generate": "gpt-5.5",
     },
     "claude": {
         "default": "claude-opus-4-8-thinking",
@@ -59,6 +60,8 @@ DEFAULT_FALLBACK_PROVIDERS = {
     "deepseek": "chatgpt",
     "claude": "chatgpt",
 }
+DEFAULT_PROVIDER_TIMEOUT_SECONDS = 90.0
+DEFAULT_PROVIDER_MAX_ATTEMPTS = 1
 
 
 class AIProviderExecutionError(RuntimeError):
@@ -181,12 +184,57 @@ class SerperAdapter(BaseProviderAdapter):
         "search": "/search",
     }
 
+    def build_request(
+        self,
+        *,
+        task_type: str,
+        payload: dict[str, Any],
+        model: str | None,
+    ) -> ProviderRequest:
+        request = super().build_request(
+            task_type=task_type,
+            payload=payload,
+            model=model,
+        )
+        headers = dict(request.headers)
+        headers["X-API-KEY"] = self.api_key.removeprefix("Bearer ").strip()
+        headers.pop("Authorization", None)
+        return ProviderRequest(
+            url=request.url,
+            headers=headers,
+            body=self.request_builder(
+                task_type=task_type,
+                payload=payload,
+                model=model,
+            ),
+        )
+
+    def request_builder(
+        self,
+        *,
+        task_type: str,
+        payload: dict[str, Any],
+        model: str | None,
+    ) -> dict[str, Any]:
+        del task_type, model
+        query = payload.get("query") or payload.get("main_keyword")
+        market = str(payload.get("target_market") or payload.get("market") or "US").strip()
+        body: dict[str, Any] = {
+            "q": str(query or "").strip(),
+            "gl": market.lower()[:2] or "us",
+            "num": 10,
+        }
+        if payload.get("target_language"):
+            body["hl"] = str(payload["target_language"]).split("-")[0].lower()
+        return body
+
 
 class OpenAIAdapter(BaseProviderAdapter):
     endpoint_map = {
         "default": "/v1/chat/completions",
         "chat": "/v1/chat/completions",
         "generate": "/v1/chat/completions",
+        "selling_points": "/v1/chat/completions",
     }
 
 
@@ -228,7 +276,7 @@ def _messages_from_payload(payload: dict[str, Any]) -> list[dict[str, str]]:
                 }
             )
         return normalized
-    prompt = payload.get("prompt") or payload.get("query") or payload.get("task")
+    prompt = payload.get("prompt") or payload.get("query")
     if not isinstance(prompt, str):
         prompt = json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True)
     return [{"role": "user", "content": prompt}]
@@ -238,10 +286,24 @@ def _parse_json_text(value: str) -> dict[str, Any] | None:
     stripped = value.strip()
     if not stripped:
         return None
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
     try:
         parsed = json.loads(stripped)
     except json.JSONDecodeError:
-        return None
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            parsed = json.loads(stripped[start : end + 1])
+        except json.JSONDecodeError:
+            return None
     return parsed if isinstance(parsed, dict) else None
 
 
@@ -293,8 +355,8 @@ class AIExecutionRouter:
         self,
         db: Session,
         *,
-        timeout_seconds: float = 30.0,
-        max_attempts: int = 2,
+        timeout_seconds: float = DEFAULT_PROVIDER_TIMEOUT_SECONDS,
+        max_attempts: int = DEFAULT_PROVIDER_MAX_ATTEMPTS,
     ) -> None:
         self.db = db
         self.timeout_seconds = timeout_seconds
@@ -385,6 +447,9 @@ class AIExecutionRouter:
             payload=payload,
             model=model,
         )
+        base_url = config.base_url
+        endpoint_called = adapter.endpoint_for(task_type)
+        self._release_db_transaction()
         last_error: AIProviderExecutionError | None = None
         for attempt in range(1, self.max_attempts + 1):
             started = perf_counter()
@@ -401,12 +466,13 @@ class AIExecutionRouter:
                     org_id=org_record.org_id,
                     status="success",
                     latency_ms=latency_ms,
-                    base_url=config.base_url,
-                    endpoint_called=adapter.endpoint_for(task_type),
+                    base_url=base_url,
+                    endpoint_called=endpoint_called,
                     key_alias=key.key_alias,
                     model=model,
                     attempt=attempt,
                 )
+                self._release_db_transaction()
                 return parsed
             except HTTPError as exc:
                 last_error = AIProviderExecutionError(
@@ -445,13 +511,14 @@ class AIExecutionRouter:
                 org_id=org_record.org_id,
                 status="failed",
                 latency_ms=latency_ms,
-                base_url=config.base_url,
-                endpoint_called=adapter.endpoint_for(task_type),
+                base_url=base_url,
+                endpoint_called=endpoint_called,
                 key_alias=key.key_alias,
                 model=model,
                 attempt=attempt,
                 error=last_error.structured_error() if last_error else None,
             )
+            self._release_db_transaction()
 
         resolved_fallback = fallback_provider or DEFAULT_FALLBACK_PROVIDERS.get(provider)
         if fallback_allowed and resolved_fallback:
@@ -478,6 +545,15 @@ class AIExecutionRouter:
             provider=provider,
             task_type=task_type,
         )
+
+    def _release_db_transaction(self) -> None:
+        if not self.db.in_transaction():
+            return
+        try:
+            self.db.commit()
+        except Exception:
+            self.db.rollback()
+            raise
 
     def _resolve_org(self, org: str) -> OrganizationRecord:
         candidate = org.strip()

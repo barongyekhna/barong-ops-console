@@ -5,7 +5,7 @@ import { Archive, Edit3, Loader2, RefreshCw, Search } from "lucide-react";
 import { KeywordEditor } from "./KeywordEditor";
 import styles from "./KeywordPanel.module.css";
 import type { KeywordEntry, UpdateKeywordPayload } from "./types";
-import { sourceLabels } from "./types";
+import { keywordStatusLabels, sourceLabels } from "./types";
 
 type KeywordTableProps = {
   editingId: string | null;
@@ -43,12 +43,12 @@ export function KeywordTable({
     <div className={styles.tableSection}>
       <div className={styles.tableToolbar}>
         <label className={styles.filterField}>
-          <span>Product filter</span>
+          <span>产品筛选</span>
           <div>
             <Search aria-hidden="true" size={15} />
             <input
               onChange={(event) => onProductIdChange(event.target.value)}
-              placeholder="product id"
+              placeholder="产品ID"
               type="text"
               value={productId}
             />
@@ -56,11 +56,11 @@ export function KeywordTable({
         </label>
 
         <button
-          aria-label="Refresh keywords"
+          aria-label="刷新关键词"
           className={styles.iconButtonSecondary}
           disabled={isLoading || !productId.trim()}
           onClick={() => void onRefresh()}
-          title="Refresh keywords"
+          title="刷新关键词"
           type="button"
         >
           {isLoading ? (
@@ -75,19 +75,19 @@ export function KeywordTable({
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Keyword</th>
-              <th>Status</th>
-              <th>Source</th>
-              <th>Product id</th>
-              <th>Updated</th>
-              <th aria-label="Actions" />
+              <th>关键词</th>
+              <th>状态</th>
+              <th>来源</th>
+              <th>产品ID</th>
+              <th>更新时间</th>
+              <th aria-label="操作" />
             </tr>
           </thead>
           <tbody>
             {entries.length === 0 ? (
               <tr>
                 <td className={styles.emptyCell} colSpan={6}>
-                  {isLoading ? "Loading keywords." : "No keywords for this product."}
+                  {isLoading ? "正在加载关键词。" : "该产品暂无关键词。"}
                 </td>
               </tr>
             ) : (
@@ -107,7 +107,7 @@ export function KeywordTable({
                   </td>
                   <td>
                     <span className={`${styles.statusBadge} ${styles[entry.status]}`}>
-                      {entry.status}
+                      {keywordStatusLabels[entry.status]}
                     </span>
                   </td>
                   <td>
@@ -120,21 +120,21 @@ export function KeywordTable({
                   <td>
                     <div className={styles.rowActions}>
                       <button
-                        aria-label={`Edit ${entry.keyword}`}
+                        aria-label={`编辑 ${entry.keyword}`}
                         className={styles.iconButton}
                         disabled={editingId !== null || entry.status === "archived"}
                         onClick={() => onEdit(entry.id)}
-                        title="Edit keyword"
+                        title="编辑关键词"
                         type="button"
                       >
                         <Edit3 aria-hidden="true" size={15} />
                       </button>
                       <button
-                        aria-label={`Archive ${entry.keyword}`}
+                        aria-label={`归档 ${entry.keyword}`}
                         className={styles.iconButtonSecondary}
                         disabled={entry.status === "archived" || isDeletingId === entry.id}
                         onClick={() => void onArchive(entry.id)}
-                        title="Archive keyword"
+                        title="归档关键词"
                         type="button"
                       >
                         {isDeletingId === entry.id ? (

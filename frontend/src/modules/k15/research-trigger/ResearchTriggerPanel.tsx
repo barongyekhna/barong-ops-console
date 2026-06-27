@@ -26,7 +26,7 @@ export function ResearchTriggerPanel() {
     const normalizedProductId = productId.trim();
 
     if (!normalizedProductId) {
-      setError("Product id is required to start keyword research.");
+      setError("启动关键词调研前需要填写产品ID。");
       return;
     }
 
@@ -44,7 +44,7 @@ export function ResearchTriggerPanel() {
       setError(
         caught instanceof Error
           ? caught.message
-          : "Keyword research could not be started.",
+          : "关键词调研无法启动。",
       );
     }
   }
@@ -53,21 +53,20 @@ export function ResearchTriggerPanel() {
     <section className={styles.panel} aria-labelledby="research-trigger">
       <div className={styles.heading}>
         <div>
-          <span className="section-index">Research</span>
-          <h3 id="research-trigger">Keyword Research Trigger</h3>
+          <span className="section-index">调研</span>
+          <h3 id="research-trigger">关键词调研触发</h3>
           <p>
-            Start a keyword research run for a product record and track the
-            latest run state.
+            为产品记录启动关键词调研，并跟踪最新运行状态。
           </p>
         </div>
       </div>
 
       <div className={styles.form}>
         <label className={styles.field}>
-          <span>Product id</span>
+          <span>产品ID</span>
           <input
             onChange={(event) => setProductId(event.target.value)}
-            placeholder="product uuid or product key"
+            placeholder="产品 UUID 或产品键"
             type="text"
             value={productId}
           />
@@ -84,14 +83,14 @@ export function ResearchTriggerPanel() {
           ) : (
             <Search aria-hidden="true" size={16} />
           )}
-          Start Keyword Research
+          启动关键词调研
         </button>
       </div>
 
-      <ol className={styles.statusRail} aria-label="Keyword research state flow">
+      <ol className={styles.statusRail} aria-label="关键词调研状态流">
         {statusFlow.map((status) => (
           <li className={getStatusClass(status, uiState)} key={status}>
-            {status}
+            {researchStatusLabel(status)}
           </li>
         ))}
       </ol>
@@ -109,15 +108,15 @@ function ResearchRunSummary({ researchRun }: { researchRun: ResearchRun }) {
   return (
     <dl className={styles.resultGrid}>
       <div>
-        <dt>Run id</dt>
+        <dt>运行ID</dt>
         <dd>{researchRun.id}</dd>
       </div>
       <div>
-        <dt>Status</dt>
-        <dd>{researchRun.status}</dd>
+        <dt>状态</dt>
+        <dd>{researchStatusLabel(researchRun.status)}</dd>
       </div>
       <div>
-        <dt>Timestamp</dt>
+        <dt>时间</dt>
         <dd>{formatTimestamp(researchRun.updated_at)}</dd>
       </div>
     </dl>
@@ -144,18 +143,29 @@ function getStatusClass(
 
 function statusMessageFor(status: ResearchTriggerUiState) {
   if (status === "pending") {
-    return "Keyword research start request is pending.";
+    return "关键词调研启动请求等待中。";
   }
 
   if (status === "running") {
-    return "Keyword research run is being created.";
+    return "关键词调研运行正在创建。";
   }
 
   if (status === "completed") {
-    return "Keyword research run has completed.";
+    return "关键词调研已完成。";
   }
 
-  return "Idle. No keyword research run has been started.";
+  return "空闲。尚未启动关键词调研。";
+}
+
+function researchStatusLabel(status: string) {
+  const labels: Record<string, string> = {
+    completed: "已完成",
+    idle: "空闲",
+    pending: "等待中",
+    running: "运行中",
+  };
+
+  return labels[status] ?? "待处理";
 }
 
 function formatTimestamp(value: string) {
@@ -165,7 +175,7 @@ function formatTimestamp(value: string) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);

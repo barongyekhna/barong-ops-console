@@ -3,10 +3,10 @@ import type { FrontendPermissions } from "./permissions";
 export const HIGH_RISK_CONFIRMATION_TEXT =
   "CONFIRM_HIGH_RISK_PERMISSION";
 export const OWNER_FULL_ACCESS_NOTICE =
-  "Owner has full workspace access and does not need separate assignments.";
+  "owner拥有全部工作台权限，不需要单独授权。";
 export const ROLE_DEFAULT_PERMISSIONS_NOTICE =
-  "Manage explicit permission assignments for this user.";
-export const EMPTY_ASSIGNMENTS_NOTICE = "No explicit assignments yet.";
+  "管理该用户的显式权限分配。";
+export const EMPTY_ASSIGNMENTS_NOTICE = "暂无显式权限分配。";
 
 const GLOBAL_PERMISSION_WILDCARD = "*";
 const REMOVED_PERMISSION_MODULES = new Set([
@@ -465,8 +465,13 @@ export function filterPermissionRegistryForRole(
     (permission) => !isRemovedPermission(permission),
   );
   const normalized = normalizeRole(role);
-  if (normalized === "owner" || normalized === "super_admin") {
+  if (normalized === "owner") {
     return activeRegistry;
+  }
+  if (normalized === "super_admin") {
+    return activeRegistry.filter(
+      (permission) => getPermissionUiCategory(permission) === "feature",
+    );
   }
   return [];
 }
@@ -677,12 +682,12 @@ export function validatePermissionGrantInput(
 ): ValidationResult<PermissionAssignmentCreateInput> {
   const permissionKey = input.permission_key.trim();
   if (!permissionKey) {
-    return { ok: false, message: "Choose a permission before granting access." };
+    return { ok: false, message: "请先选择要授予的权限。" };
   }
   if (isWildcardPermissionKey(permissionKey)) {
     return {
       ok: false,
-      message: "Wildcard grants are not available here.",
+      message: "这里不能授予通配权限。",
     };
   }
 
@@ -691,7 +696,7 @@ export function validatePermissionGrantInput(
   if (highRisk && !reason) {
     return {
       ok: false,
-      message: "High-risk permissions require a reason.",
+      message: "高风险权限必须填写原因。",
     };
   }
   if (
@@ -701,8 +706,7 @@ export function validatePermissionGrantInput(
   ) {
     return {
       ok: false,
-      message:
-        "High-risk permissions require confirmation text.",
+      message: "高风险权限必须填写确认文本。",
     };
   }
 
@@ -759,7 +763,7 @@ export function validatePermissionUpdateInput(
   if (highRisk && !reason) {
     return {
       ok: false,
-      message: "High-risk permission updates require a reason.",
+      message: "更新高风险权限必须填写原因。",
     };
   }
 
@@ -774,8 +778,7 @@ export function validatePermissionUpdateInput(
   ) {
     return {
       ok: false,
-      message:
-        "High-risk permission changes require confirmation text.",
+      message: "变更高风险权限必须填写确认文本。",
     };
   }
 
@@ -814,7 +817,7 @@ export function validatePermissionRevokeInput(
   if (detectHighRiskPermission(assignment) && !reason) {
     return {
       ok: false,
-      message: "Revoking a high-risk permission requires a reason.",
+      message: "撤销高风险权限必须填写原因。",
     };
   }
 
@@ -863,7 +866,7 @@ function safeApiDetail(message: string) {
 
 export function formatPermissionAssignmentsApiError(
   error: unknown,
-  fallback = "The action could not be completed. Check access, duplicate assignments, or high-risk confirmation.",
+  fallback = "操作未完成，请检查权限、重复授权或高风险确认。",
 ) {
   if (!isApiErrorLike(error)) {
     return fallback;
@@ -873,16 +876,16 @@ export function formatPermissionAssignmentsApiError(
   const lowerDetail = detail.toLowerCase();
 
   if (error.status === 401) {
-    return "Sign in again before managing permissions.";
+    return "请重新登录后再管理权限。";
   }
   if (error.status === 403) {
-    return "Only an owner can manage permissions.";
+    return "只有owner可以管理权限分配。";
   }
   if (error.status === 404) {
-    return "The user or assignment was not found. Refresh and try again.";
+    return "未找到用户或权限分配，请刷新后重试。";
   }
   if (error.status === 409) {
-    return "This assignment already exists or conflicts with current access.";
+    return "该权限分配已存在或与当前访问范围冲突。";
   }
   if (
     error.status === 400 &&
@@ -890,19 +893,19 @@ export function formatPermissionAssignmentsApiError(
       lowerDetail.includes("confirmation") ||
       lowerDetail.includes("reason"))
   ) {
-    return "High-risk permissions require a reason and confirmation text.";
+    return "高风险权限必须填写原因和确认文本。";
   }
   if (error.status === 400) {
     return detail || fallback;
   }
   if (error.status === 422) {
-    return "The request is incomplete or invalid. Check permission, scope, expires_at, and reason.";
+    return "请求不完整或格式不正确，请检查权限、范围、过期时间和原因。";
   }
   if (error.status === 503) {
-    return "The backend API is unavailable.";
+    return "后端服务暂时不可用。";
   }
   if (error.status >= 500) {
-    return "The backend returned an internal error. Try again later.";
+    return "后端返回内部错误，请稍后重试。";
   }
 
   return detail || fallback;

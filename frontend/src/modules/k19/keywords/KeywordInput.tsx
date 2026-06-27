@@ -9,7 +9,12 @@ import type {
   KeywordSource,
   KeywordStatus,
 } from "./types";
-import { keywordSources, keywordStatuses, sourceLabels } from "./types";
+import {
+  keywordSources,
+  keywordStatuses,
+  keywordStatusLabels,
+  sourceLabels,
+} from "./types";
 
 type KeywordInputProps = {
   isSaving: boolean;
@@ -48,27 +53,27 @@ export function KeywordInput({
   return (
     <form className={styles.inputBar} onSubmit={(event) => void handleSubmit(event)}>
       <label className={styles.field}>
-        <span>Keyword</span>
+        <span>关键词</span>
         <input
           onChange={(event) => setKeyword(event.target.value)}
-          placeholder="keyword"
+          placeholder="关键词"
           type="text"
           value={keyword}
         />
       </label>
 
       <label className={styles.field}>
-        <span>Product id</span>
+        <span>产品ID</span>
         <input
           onChange={(event) => setEntryProductId(event.target.value)}
-          placeholder="product id"
+          placeholder="产品ID"
           type="text"
           value={entryProductId}
         />
       </label>
 
       <label className={styles.field}>
-        <span>Source</span>
+        <span>来源</span>
         <select
           onChange={(event) => setSource(event.target.value as KeywordSource)}
           value={source}
@@ -82,14 +87,14 @@ export function KeywordInput({
       </label>
 
       <label className={styles.field}>
-        <span>Status</span>
+        <span>状态</span>
         <select
           onChange={(event) => setStatus(event.target.value as KeywordStatus)}
           value={status}
         >
           {keywordStatuses.map((keywordStatus) => (
             <option key={keywordStatus} value={keywordStatus}>
-              {keywordStatus}
+              {keywordStatusLabels[keywordStatus]}
             </option>
           ))}
         </select>
@@ -105,7 +110,7 @@ export function KeywordInput({
         ) : (
           <Plus aria-hidden="true" size={16} />
         )}
-        Add
+        添加
       </button>
     </form>
   );

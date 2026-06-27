@@ -58,12 +58,12 @@ const SCOPE_OPTIONS = [
 ] as const;
 
 const SCOPE_LABELS: Record<(typeof SCOPE_OPTIONS)[number], string> = {
-  company: "Company",
-  department: "Department",
-  factory: "Factory",
-  global: "Workspace",
-  module: "Area",
-  organization: "Organization",
+  company: "公司",
+  department: "部门",
+  factory: "工厂",
+  global: "工作台",
+  module: "模块",
+  organization: "组织",
 };
 
 type GrantFormState = {
@@ -100,7 +100,7 @@ const DEFAULT_GRANT_FORM: GrantFormState = {
 
 function formatDate(value: string | null | undefined) {
   if (!value) {
-    return "Not recorded";
+    return "暂无记录";
   }
 
   const date = new Date(value);
@@ -144,12 +144,12 @@ function formatPermissionLabel(permission: PermissionRegistryItem) {
 
 function assignmentRiskLabel(assignment: PermissionAssignment) {
   if (assignment.high_risk || detectHighRiskPermission(assignment)) {
-    return "High risk";
+    return "高风险";
   }
 
   return assignment.risk_level
     ? assignment.risk_level.toUpperCase()
-    : "Normal";
+    : "常规";
 }
 
 function scopeLabel(scope: string) {
@@ -332,7 +332,7 @@ export function UserPermissionsPanel({
         );
       }
 
-      setActionNotice("Permission granted.");
+      setActionNotice("权限已授予。");
       setGrantForm((current) => ({
         ...DEFAULT_GRANT_FORM,
         permission_key: current.permission_key,
@@ -369,7 +369,7 @@ export function UserPermissionsPanel({
         assignment.id,
         validation.payload,
       );
-      setActionNotice("Permission updated.");
+      setActionNotice("权限已更新。");
       setEditingAssignmentId(null);
       setEditForm(null);
       await refreshAfterMutation("update");
@@ -395,7 +395,7 @@ export function UserPermissionsPanel({
 
     if (
       !window.confirm(
-        `Revoke ${getPermissionDisplayName(assignment)}? This will remove the explicit assignment.`,
+        `确认撤销 ${getPermissionDisplayName(assignment)}？这会移除该显式权限分配。`,
       )
     ) {
       return;
@@ -408,7 +408,7 @@ export function UserPermissionsPanel({
         assignment.id,
         validation.payload,
       );
-      setActionNotice("Permission revoked.");
+      setActionNotice("权限已撤销。");
       setRevokeReasons((current) => ({
         ...current,
         [assignment.id]: "",
@@ -429,11 +429,11 @@ export function UserPermissionsPanel({
   }
 
   return (
-    <section className="permissions-panel" aria-label="User permissions">
+    <section className="permissions-panel" aria-label="用户权限">
       <div className="users-panel-heading">
         <div>
-          <span className="eyebrow">Permissions</span>
-          <h3>User permissions</h3>
+          <span className="eyebrow">权限</span>
+          <h3>用户权限</h3>
           <p>{ROLE_DEFAULT_PERMISSIONS_NOTICE}</p>
         </div>
         <button
@@ -443,7 +443,7 @@ export function UserPermissionsPanel({
           type="button"
         >
           <RotateCcw aria-hidden="true" size={17} />
-          Refresh permissions
+          刷新权限
         </button>
       </div>
 
@@ -471,7 +471,7 @@ export function UserPermissionsPanel({
       {isAssignmentsLoading ? (
         <div className="list-state permissions-empty">
           <LoaderCircle className="spin" aria-hidden="true" size={22} />
-          Loading permission assignments
+          正在加载权限分配
         </div>
       ) : null}
 
@@ -482,7 +482,7 @@ export function UserPermissionsPanel({
             <h4>{OWNER_FULL_ACCESS_NOTICE}</h4>
             <p>
               {assignmentResponse?.owner_full_access_note ??
-                "Owner access comes from the role and is not shown as a standard assignment."}
+                "owner权限来自角色，不作为普通权限分配显示。"}
             </p>
           </div>
         </div>
@@ -492,13 +492,12 @@ export function UserPermissionsPanel({
         <>
           <section
             className="permissions-grant-section"
-            aria-label="Grant permission"
+            aria-label="授予权限"
           >
             <div className="permissions-section-heading">
-              <h4>Grant permission</h4>
+              <h4>授予权限</h4>
               <p>
-                Choose one permission at a time. Wildcard and bulk grants are
-                not available here.
+                每次选择一个权限。这里不支持通配权限或批量授权。
               </p>
             </div>
 
@@ -511,7 +510,7 @@ export function UserPermissionsPanel({
 
             <form className="permissions-grant-form" onSubmit={handleGrant}>
               <label className="field-group permissions-search-field">
-                <span>Search permissions</span>
+                <span>搜索权限</span>
                 <span className="input-shell">
                   <Search aria-hidden="true" size={16} />
                   <input
@@ -519,7 +518,7 @@ export function UserPermissionsPanel({
                     onChange={(event) =>
                       setSearchQuery(event.target.value)
                     }
-                    placeholder="name, area, category"
+                    placeholder="名称、模块、分类"
                     type="search"
                     value={searchQuery}
                   />
@@ -527,7 +526,7 @@ export function UserPermissionsPanel({
               </label>
 
               <label className="field-group">
-                <span>Permission</span>
+                <span>权限</span>
                 <select
                   className="select-shell"
                   disabled={
@@ -554,13 +553,13 @@ export function UserPermissionsPanel({
                 </select>
                 <span className="users-field-note">
                   {isRegistryLoading
-                    ? "Loading permissions."
-                    : `${filteredGrantPermissions.length} grantable permissions shown.`}
+                    ? "正在加载权限。"
+                    : `当前显示 ${filteredGrantPermissions.length} 个可授予权限。`}
                 </span>
               </label>
 
               <label className="field-group">
-                <span>Scope type</span>
+                <span>范围类型</span>
                 <select
                   className="select-shell"
                   disabled={isBusy}
@@ -585,7 +584,7 @@ export function UserPermissionsPanel({
               </label>
 
               <label className="field-group">
-                <span>Scope ID</span>
+                <span>范围ID</span>
                 <span className="input-shell">
                   <input
                     disabled={isBusy || grantForm.scope_type === "global"}
@@ -607,7 +606,7 @@ export function UserPermissionsPanel({
               </label>
 
               <label className="field-group">
-                <span>Expires at</span>
+                <span>过期时间</span>
                 <span className="input-shell">
                   <input
                     disabled={isBusy}
@@ -624,7 +623,7 @@ export function UserPermissionsPanel({
               </label>
 
               <label className="field-group permissions-enabled-field">
-                <span>Enabled</span>
+                <span>启用</span>
                 <span className="permissions-checkbox-line">
                   <input
                     checked={grantForm.enabled}
@@ -637,12 +636,12 @@ export function UserPermissionsPanel({
                     }
                     type="checkbox"
                   />
-                  Enabled immediately
+                  立即启用
                 </span>
               </label>
 
               <label className="field-group permissions-reason-field">
-                <span>Reason</span>
+                <span>原因</span>
                 <span className="textarea-shell">
                   <textarea
                     disabled={isBusy}
@@ -653,7 +652,7 @@ export function UserPermissionsPanel({
                         reason: event.target.value,
                       }))
                     }
-                    placeholder="Why this explicit assignment is needed"
+                    placeholder="说明为什么需要该显式权限"
                     value={grantForm.reason}
                   />
                 </span>
@@ -664,9 +663,7 @@ export function UserPermissionsPanel({
                   <AlertTriangle aria-hidden="true" size={18} />
                   <div>
                     <strong>
-                      This permission affects administration, security,
-                      releases, or user access. Confirm the reason before
-                      granting it.
+                      该权限会影响管理、安全、发布或用户访问。授予前必须确认原因。
                     </strong>
                     <label className="permissions-checkbox-line">
                       <input
@@ -680,7 +677,7 @@ export function UserPermissionsPanel({
                         }
                         type="checkbox"
                       />
-                      Confirm high-risk grant
+                      确认授予高风险权限
                     </label>
                     <label className="field-group">
                       <span>
@@ -718,20 +715,19 @@ export function UserPermissionsPanel({
                 ) : (
                   <ShieldCheck aria-hidden="true" size={17} />
                 )}
-                Grant permission
+                授予权限
               </button>
             </form>
           </section>
 
           <section
             className="permissions-assignment-section"
-            aria-label="Explicit assignments"
+            aria-label="显式权限分配"
           >
             <div className="permissions-section-heading">
-              <h4>Explicit assignments</h4>
+              <h4>显式权限分配</h4>
               <p>
-                Owner full access is not listed here. Role default
-                permissions still do not auto-apply.
+                owner完整权限不会在这里列出。角色默认权限不会自动套用。
               </p>
             </div>
 
@@ -749,11 +745,11 @@ export function UserPermissionsPanel({
                 <table className="permissions-table">
                   <thead>
                     <tr>
-                      <th scope="col">Permission</th>
-                      <th scope="col">Scope</th>
-                      <th scope="col">Status</th>
-                      <th scope="col">Audit</th>
-                      <th scope="col">Actions</th>
+                      <th scope="col">权限</th>
+                      <th scope="col">范围</th>
+                      <th scope="col">状态</th>
+                      <th scope="col">审计</th>
+                      <th scope="col">操作</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -782,7 +778,7 @@ export function UserPermissionsPanel({
                               <span>
                                 {assignment.permission_name ??
                                   assignment.description ??
-                                  "No description"}
+                                  "暂无说明"}
                               </span>
                               <span
                                 className={
@@ -806,7 +802,7 @@ export function UserPermissionsPanel({
                                     : "users-status-disabled"
                                 }`}
                               >
-                                {assignment.enabled ? "Enabled" : "Disabled"}
+                                {assignment.enabled ? "已启用" : "已停用"}
                               </span>
                               <span
                                 className={`permissions-effective ${
@@ -816,20 +812,19 @@ export function UserPermissionsPanel({
                                 }`}
                               >
                                 {assignment.effective
-                                  ? "Effective"
-                                  : "Not effective"}
+                                  ? "已生效"
+                                  : "未生效"}
                               </span>
-                              <span>Expires: {formatDate(assignment.expires_at)}</span>
+                              <span>过期时间：{formatDate(assignment.expires_at)}</span>
                             </td>
                             <td>
                               <span>
-                                Granted by:{" "}
-                                {assignment.granted_by_user_id ?? "Unknown"}
+                                授权人：{assignment.granted_by_user_id ?? "未知"}
                               </span>
-                              <span>Created: {formatDate(assignment.created_at)}</span>
-                              <span>Updated: {formatDate(assignment.updated_at)}</span>
+                              <span>创建时间：{formatDate(assignment.created_at)}</span>
+                              <span>更新时间：{formatDate(assignment.updated_at)}</span>
                               {assignment.reason ? (
-                                <span>Reason: {assignment.reason}</span>
+                                <span>原因：{assignment.reason}</span>
                               ) : null}
                             </td>
                             <td>
@@ -842,7 +837,7 @@ export function UserPermissionsPanel({
                                     type="button"
                                   >
                                     <Save aria-hidden="true" size={17} />
-                                    Update
+                                    更新
                                   </button>
                                   <button
                                     className="danger-button"
@@ -860,14 +855,14 @@ export function UserPermissionsPanel({
                                     ) : (
                                       <Trash2 aria-hidden="true" size={17} />
                                     )}
-                                    Revoke
+                                    撤销
                                   </button>
                                 </div>
                                 <label className="field-group permissions-revoke-field">
                                   <span>
                                     {assignmentHighRisk
-                                      ? "Revoke reason required"
-                                      : "Revoke reason"}
+                                      ? "必须填写撤销原因"
+                                      : "撤销原因"}
                                   </span>
                                   <span className="input-shell">
                                     <input
@@ -879,7 +874,7 @@ export function UserPermissionsPanel({
                                           [assignment.id]: event.target.value,
                                         }))
                                       }
-                                      placeholder="Reason for revoke"
+                                      placeholder="填写撤销原因"
                                       type="text"
                                       value={revokeReason}
                                     />
@@ -899,15 +894,14 @@ export function UserPermissionsPanel({
                                   }
                                 >
                                   <div className="permissions-section-heading">
-                                    <h4>Update assignment</h4>
+                                    <h4>更新权限分配</h4>
                                     <p>
-                                      Permission cannot be edited here. Revoke
-                                      and grant again to change it.
+                                      权限项不能直接修改；如需更换权限，请先撤销再重新授予。
                                     </p>
                                   </div>
 
                                   <label className="field-group permissions-enabled-field">
-                                    <span>Enabled</span>
+                                    <span>启用</span>
                                     <span className="permissions-checkbox-line">
                                       <input
                                         checked={editForm.enabled}
@@ -925,12 +919,12 @@ export function UserPermissionsPanel({
                                         }
                                         type="checkbox"
                                       />
-                                      Assignment enabled
+                                      权限分配已启用
                                     </span>
                                   </label>
 
                                   <label className="field-group">
-                                    <span>Scope type</span>
+                                    <span>范围类型</span>
                                     <select
                                       className="select-shell"
                                       disabled={isBusy}
@@ -961,7 +955,7 @@ export function UserPermissionsPanel({
                                   </label>
 
                                   <label className="field-group">
-                                    <span>Scope ID</span>
+                                    <span>范围ID</span>
                                     <span className="input-shell">
                                       <input
                                         disabled={
@@ -990,7 +984,7 @@ export function UserPermissionsPanel({
                                   </label>
 
                                   <label className="field-group">
-                                    <span>Expires at</span>
+                                    <span>过期时间</span>
                                     <span className="input-shell">
                                       <input
                                         disabled={isBusy}
@@ -1012,7 +1006,7 @@ export function UserPermissionsPanel({
                                   </label>
 
                                   <label className="field-group permissions-reason-field">
-                                    <span>Reason</span>
+                                    <span>原因</span>
                                     <span className="textarea-shell">
                                       <textarea
                                         disabled={isBusy}
@@ -1041,8 +1035,7 @@ export function UserPermissionsPanel({
                                       />
                                       <div>
                                         <strong>
-                                          High-risk permission changes require
-                                          confirmation.
+                                          高风险权限变更需要确认。
                                         </strong>
                                         <label className="permissions-checkbox-line">
                                           <input
@@ -1063,7 +1056,7 @@ export function UserPermissionsPanel({
                                             }
                                             type="checkbox"
                                           />
-                                          Confirm high-risk update
+                                          确认更新高风险权限
                                         </label>
                                         <label className="field-group">
                                           <span>
@@ -1110,7 +1103,7 @@ export function UserPermissionsPanel({
                                       ) : (
                                         <Save aria-hidden="true" size={17} />
                                       )}
-                                      Save assignment
+                                      保存分配
                                     </button>
                                     <button
                                       className="secondary-button"
@@ -1121,7 +1114,7 @@ export function UserPermissionsPanel({
                                       }}
                                       type="button"
                                     >
-                                      Cancel
+                                      取消
                                     </button>
                                   </div>
                                 </form>

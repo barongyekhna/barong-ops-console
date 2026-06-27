@@ -43,6 +43,11 @@ from .schemas import (
     ProductKnowledgeWorkflowReport,
     ProductKnowledgeWorkflowStartRequest,
 )
+from .prompt_skills import (
+    chatgpt_keyword_filter_instruction,
+    claude_keyword_review_instruction,
+    keyword_research_skill_context,
+)
 from .scope_shim import KScopeContext, apply_scope_filters
 
 logger = logging.getLogger(__name__)
@@ -57,7 +62,7 @@ WORKFLOW_STEPS = (
     "serp_keyword_fetch",
     "ai_filter_chatgpt",
     "ai_filter_claude_opus",
-    "risk_term_review_manual",
+    "risk_term_manual_review",
     "keyword_optimization_ai",
     "unit_conversion_normalization",
     "image_handling",
@@ -78,6 +83,7 @@ CLOSED_LOOP_WORKFLOW_STEPS_V2 = (
     "ai_filter_claude_opus",
     "risk_term_manual_review",
     "keyword_optimization_ai",
+    "selling_points_generation",
     "unit_conversion_normalization",
     "image_binding",
     "export_p_series",
@@ -124,6 +130,7 @@ class KWorkflowStateMachineV2:
         "RISK_PENDING_REVIEW",
         "RISK_APPROVED",
         "KEYWORD_OPTIMIZED",
+        "SELLING_POINTS_GENERATED",
         "UNIT_NORMALIZED",
         "IMAGE_BOUND",
         "EXPORT_READY",
@@ -139,6 +146,7 @@ class KWorkflowStateMachineV2:
         "risk_term_manual_review": "RISK_PENDING_REVIEW",
         "risk_term_review_manual": "RISK_PENDING_REVIEW",
         "keyword_optimization_ai": "KEYWORD_OPTIMIZED",
+        "selling_points_generation": "SELLING_POINTS_GENERATED",
         "unit_conversion_normalization": "UNIT_NORMALIZED",
         "image_binding": "IMAGE_BOUND",
         "image_handling": "IMAGE_BOUND",
@@ -215,7 +223,10 @@ class KWorkflowExecutionError(RuntimeError):
     ) -> None:
         self.code = code
         self.status_code = status_code
+        reason = _workflow_error_reason(code)
         self.error_report = error_report or {
+            "status": "failed",
+            "reason": reason,
             "code": code,
             "message": message,
             "must_stop": True,
@@ -226,6 +237,18 @@ class KWorkflowExecutionError(RuntimeError):
 
 class KWorkflowProviderError(KWorkflowExecutionError):
     pass
+
+
+def _workflow_error_reason(code: str | None) -> str:
+    if code in {"API_KEY_BINDING_MISSING", "API_KEY_INJECTION_FAILED"}:
+        return "missing_key"
+    if code in {"ORG_CONTEXT_REQUIRED", "PRODUCT_CONTEXT_INCOMPLETE"}:
+        return "missing_context"
+    if code in {"MODULE_DISABLED", "MODULE_NOT_REGISTERED"}:
+        return "module_unavailable"
+    if code and code.startswith("SERP_"):
+        return "provider_error"
+    return "execution_error"
 
 
 ProviderClient = Callable[[ModuleExecutionKey, dict[str, Any]], dict[str, Any]]
@@ -337,7 +360,7 @@ class KProductKnowledgeWorkflowEngine:
     ) -> KProductKnowledgeWorkflowExecution:
         product = self._require_product(product_id, scope_context)
         execution = self._require_execution(product, payload.execution_id)
-        if execution.current_step != "risk_term_review_manual":
+        if execution.current_step not in {"risk_term_manual_review", "risk_term_review_manual"}:
             error_report = self._error_report(
                 execution,
                 code="RISK_REVIEW_NOT_CURRENT_STEP",
@@ -374,7 +397,7 @@ class KProductKnowledgeWorkflowEngine:
                     execution,
                     code="RISK_REVIEW_INCOMPLETE",
                     message="Every risk keyword must be manually approved or rejected.",
-                    step="risk_term_review_manual",
+                    step="risk_term_manual_review",
                     details={"missing_terms": missing},
                 )
                 execution.error_report_json = error_report
@@ -393,7 +416,7 @@ class KProductKnowledgeWorkflowEngine:
                     "Manual confirmation is required even when Claude "
                     "returns no risk keywords."
                 ),
-                step="risk_term_review_manual",
+                step="risk_term_manual_review",
             )
             execution.error_report_json = error_report
             self.db.add(execution)
@@ -423,37 +446,25 @@ class KProductKnowledgeWorkflowEngine:
                 }
             )
 
-        approved = not rejected_terms
+        if rejected_terms:
+            self._remove_rejected_terms_from_keyword_flow(
+                product=product,
+                execution=execution,
+                rejected_terms=rejected_terms,
+            )
         execution.risk_approval_log_json = {
-            "approved": approved,
+            "approved": True,
             "reviewed_at": reviewed_at,
             "reviewed_by_user_id": str(user.id),
             "decisions": decisions,
+            "rejected_terms": rejected_terms,
+            "removed_terms": rejected_terms,
             "confirm_no_risk_terms": payload.confirm_no_risk_terms,
         }
-        if not approved:
-            execution.status = "blocked"
-            execution.error_report_json = self._error_report(
-                execution,
-                code="RISK_TERM_REJECTED",
-                message="One or more risk keywords were rejected by manual review.",
-                step="risk_term_review_manual",
-                details={"rejected_terms": rejected_terms},
-            )
-            self._append_trace(
-                execution,
-                "risk_term_review_manual",
-                "blocked",
-                output_summary=execution.risk_approval_log_json,
-                error=execution.error_report_json,
-            )
-            self.db.add(execution)
-            self.db.flush()
-            return execution
 
         self._append_trace(
             execution,
-            "risk_term_review_manual",
+            "risk_term_manual_review",
             "completed",
             output_summary=execution.risk_approval_log_json,
         )
@@ -712,15 +723,36 @@ class KProductKnowledgeWorkflowEngine:
             )
         except AIProviderExecutionError as exc:
             provider_error = exc
+            provider_report = {
+                "status": "failed",
+                "reason": "provider_error",
+                **exc.structured_error(),
+                "must_stop": True,
+                "timestamp": _now_iso(),
+            }
             raise KWorkflowProviderError(
                 exc.code,
                 str(exc),
                 status_code=exc.status_code,
-                error_report=exc.structured_error(),
+                error_report=provider_report,
             ) from exc
         except Exception as exc:
             provider_error = exc
-            raise
+            raise KWorkflowProviderError(
+                "PROVIDER_EXECUTION_FAILED",
+                "Provider execution failed.",
+                status_code=502,
+                error_report={
+                    "status": "failed",
+                    "reason": "provider_error",
+                    "code": "PROVIDER_EXECUTION_FAILED",
+                    "message": "Provider execution failed.",
+                    "provider": provider,
+                    "org_id": gate_context.org_id,
+                    "must_stop": True,
+                    "timestamp": _now_iso(),
+                },
+            ) from exc
         finally:
             self._dispose_provider_session(
                 provider_db,
@@ -826,6 +858,7 @@ class KProductKnowledgeWorkflowEngine:
             "running",
             input_summary={
                 "target_market": payload.target_market,
+                "main_keyword": payload.main_keyword or product.primary_keyword,
                 "seed_keywords": payload.seed_keywords,
             },
         )
@@ -836,12 +869,47 @@ class KProductKnowledgeWorkflowEngine:
             reason="provider_call_started",
         )
         key = gate_context.key_for_step("serp_keyword_fetch")
+        explicit_query = (payload.main_keyword or product.primary_keyword or "").strip()
         query = (
-            payload.serp_query
+            explicit_query
             or product.product_name_en
-            or product.primary_keyword
+            or product.sku
+            or product.parent_sku
             or product.product_key
-        )
+            or ""
+        ).strip()
+        if not query:
+            self._fail_execution(
+                execution,
+                code="MAIN_KEYWORD_REQUIRED",
+                message="SERP keyword fetch requires product main_keyword.",
+                step="serp_keyword_fetch",
+                status_code=400,
+                details={"product_id": str(product.id), "product_key": product.product_key},
+            )
+        if payload.main_keyword and product.primary_keyword != query:
+            product.primary_keyword = query
+        product_context = {
+            "product_id": str(product.id),
+            "product_key": product.product_key,
+            "target_market": payload.target_market,
+            "org_id": gate_context.org_id,
+            "main_keyword": query,
+        }
+        missing_context = [
+            field
+            for field, value in product_context.items()
+            if not str(value or "").strip()
+        ]
+        if missing_context:
+            self._fail_execution(
+                execution,
+                code="PRODUCT_CONTEXT_INCOMPLETE",
+                message="SERP execution requires product_id, product_key, target_market, main_keyword, and org_id.",
+                step="serp_keyword_fetch",
+                status_code=400,
+                details={"missing": missing_context, "product_context": product_context},
+            )
         provider_output = self._execute_provider(
             provider="serp",
             task_type="search",
@@ -850,13 +918,18 @@ class KProductKnowledgeWorkflowEngine:
             payload={
                 "module_id": MODULE_KEY,
                 "task": "serp_keyword_fetch",
-                "product_id": str(product.id),
-                "product_key": product.product_key,
+                "product_context": product_context,
+                "product_id": product_context["product_id"],
+                "product_key": product_context["product_key"],
+                "org_id": product_context["org_id"],
+                "main_keyword": query,
                 "query": query,
-                "target_market": payload.target_market,
+                "requested_query": payload.serp_query,
+                "target_market": product_context["target_market"],
                 "target_region": payload.target_region,
                 "seed_keywords": payload.seed_keywords,
                 "competitors": payload.competitors,
+                "keyword_research_skill": keyword_research_skill_context(),
             },
         )
         keywords = _safe_string_list(
@@ -866,6 +939,7 @@ class KProductKnowledgeWorkflowEngine:
         )
         organic_results = _organic_results(
             provider_output.get("organic_results")
+            or provider_output.get("organic")
             or provider_output.get("results")
             or provider_output.get("items")
         )
@@ -962,6 +1036,7 @@ class KProductKnowledgeWorkflowEngine:
             "product": _product_snapshot(product),
             "serp_keywords": serp_result["keywords"],
             "competitors": serp_result["competitors"],
+            "keyword_research_skill": keyword_research_skill_context(),
             "required_output": [
                 "cleaned_keywords",
                 "filtered_keywords",
@@ -969,6 +1044,10 @@ class KProductKnowledgeWorkflowEngine:
                 "rationale",
             ],
         }
+        ai_input["messages"] = _strict_json_messages(
+            instruction=chatgpt_keyword_filter_instruction(),
+            payload=ai_input,
+        )
         provider_output = self._execute_provider(
             provider="chatgpt",
             task_type="chat",
@@ -1037,6 +1116,8 @@ class KProductKnowledgeWorkflowEngine:
             "task": "ai_filter_claude_opus",
             "product": _product_snapshot(product),
             "chatgpt_filter_result": chatgpt_result,
+            "keyword_research_skill": keyword_research_skill_context(),
+            "max_tokens": 1024,
             "required_output": [
                 "final_keywords",
                 "high_value_keywords",
@@ -1044,6 +1125,10 @@ class KProductKnowledgeWorkflowEngine:
                 "risk_keywords",
             ],
         }
+        ai_input["messages"] = _strict_json_messages(
+            instruction=claude_keyword_review_instruction(),
+            payload=ai_input,
+        )
         provider_output = self._execute_provider(
             provider="claude",
             task_type="chat",
@@ -1099,7 +1184,7 @@ class KProductKnowledgeWorkflowEngine:
             execution,
             code="RISK_REVIEW_REQUIRED",
             message="Manual risk keyword review is required before continuing.",
-            step="risk_term_review_manual",
+            step="risk_term_manual_review",
             details={
                 "risk_keywords": claude_result["risk_keywords"],
                 "auto_approval_allowed": False,
@@ -1107,7 +1192,7 @@ class KProductKnowledgeWorkflowEngine:
         )
         self._append_trace(
             execution,
-            "risk_term_review_manual",
+            "risk_term_manual_review",
             "blocked",
             output_summary={
                 "manual_review_required": True,
@@ -1115,6 +1200,7 @@ class KProductKnowledgeWorkflowEngine:
             },
             error=execution.error_report_json,
         )
+        execution.current_step = "risk_term_review_manual"
         self.db.add_all([product, execution])
         self.db.flush()
 
@@ -1192,7 +1278,6 @@ class KProductKnowledgeWorkflowEngine:
             "source": "claude_opus_filtered_keywords",
         }
         execution.final_keyword_set_json = keyword_set
-        product.primary_keyword = primary[0] if primary else None
         product.secondary_keywords_json = secondary
         product.long_tail_keywords_json = longtail
         self._upsert_keywords(
@@ -1480,6 +1565,8 @@ class KProductKnowledgeWorkflowEngine:
             blockers.append("risk review not approved")
         if not execution.final_keyword_set_json:
             blockers.append("keywords not finalized")
+        if not self._selling_points_generated(product):
+            blockers.append("DeepSeek selling points not generated")
         if not self._image_is_bound(product, execution):
             blockers.append("manual or I-system image not bound")
         if execution.status not in {"ready_for_export", "exported"}:
@@ -1491,6 +1578,14 @@ class KProductKnowledgeWorkflowEngine:
         execution: KProductKnowledgeWorkflowExecution,
     ) -> bool:
         return bool((execution.risk_approval_log_json or {}).get("approved") is True)
+
+    def _selling_points_generated(self, product: KProductKnowledgeProduct) -> bool:
+        ai_warnings = product.ai_warnings_json or {}
+        deepseek_output = product.deepseek_structured_output_json or {}
+        return bool(
+            ai_warnings.get("selling_points")
+            or deepseek_output.get("selling_points_generation")
+        )
 
     def _i_system_asset_reference(
         self,
@@ -1630,6 +1725,32 @@ class KProductKnowledgeWorkflowEngine:
         row.confirmed_at = _now()
         row.updated_by_user_id = _user_uuid(user)
 
+    def _remove_rejected_terms_from_keyword_flow(
+        self,
+        *,
+        product: KProductKnowledgeProduct,
+        execution: KProductKnowledgeWorkflowExecution,
+        rejected_terms: list[str],
+    ) -> None:
+        rejected_keys = {_normalize_key(term) for term in rejected_terms if term.strip()}
+        if not rejected_keys:
+            return
+        claude = dict(execution.claude_filter_result_json or {})
+        for key in ("final_keywords", "high_value_keywords", "low_value_keywords"):
+            claude[key] = [
+                keyword
+                for keyword in _safe_string_list(claude.get(key))
+                if _normalize_key(keyword) not in rejected_keys
+            ]
+        risk_keywords = [
+            item
+            for item in _normalize_risk_keywords(claude.get("risk_keywords"))
+            if _normalize_key(item["term"]) not in rejected_keys
+        ]
+        claude["risk_keywords"] = risk_keywords
+        execution.claude_filter_result_json = claude
+        product.risk_keywords_json = risk_keywords
+
     def _upsert_keywords(
         self,
         product: KProductKnowledgeProduct,
@@ -1699,7 +1820,12 @@ class KProductKnowledgeWorkflowEngine:
                 event_type=event_type,
                 provider=provider_key.name,
                 provider_model=provider_key.key_alias,
-                prompt_version="k-workflow-v1",
+                prompt_version=str(
+                    (ai_input.get("keyword_research_skill") or {}).get(
+                        "version",
+                        "k-workflow-v1",
+                    )
+                ),
                 input_hash=_hash_json(ai_input),
                 output_summary_json={key: _summary_count(value) for key, value in result.items()},
                 output_payload_json=result,
@@ -2140,6 +2266,8 @@ class KProductKnowledgeWorkflowEngine:
         raw_error: Exception | None = None,
     ) -> dict[str, Any]:
         report: dict[str, Any] = {
+            "status": "failed",
+            "reason": _workflow_error_reason(code),
             "code": code,
             "message": message,
             "blocking_step": step,
@@ -2252,10 +2380,87 @@ def _product_snapshot(product: KProductKnowledgeProduct) -> dict[str, Any]:
     }
 
 
+def _json_object_from_text(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    if not stripped:
+        return None
+    if stripped.startswith("```"):
+        lines = stripped.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        stripped = "\n".join(lines).strip()
+    try:
+        parsed = json.loads(stripped)
+    except json.JSONDecodeError:
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start < 0 or end <= start:
+            return None
+        try:
+            parsed = json.loads(stripped[start : end + 1])
+        except json.JSONDecodeError:
+            return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _merge_provider_output(provider_output: dict[str, Any]) -> dict[str, Any]:
+    merged = dict(provider_output)
+    for key in ("result", "output", "data", "response"):
+        nested = merged.get(key)
+        if isinstance(nested, dict):
+            merged = {**merged, **nested}
+    parsed_content = _json_object_from_text(merged.get("content"))
+    if parsed_content:
+        merged = {**merged, **parsed_content}
+    return merged
+
+
 def _safe_string_list(value: Any) -> list[str]:
+    if isinstance(value, str):
+        return _dedupe_strings(
+            [
+                item.strip(" -:;,.\"'")
+                for item in re.split(r"[\n,，;；|]+", value)
+                if item.strip(" -:;,.\"'")
+            ]
+        )
     if not isinstance(value, list):
         return []
-    return _dedupe_strings([str(item).strip() for item in value if str(item).strip()])
+    output: list[str] = []
+    for item in value:
+        if isinstance(item, str):
+            keyword = item.strip()
+        elif isinstance(item, dict):
+            keyword = str(
+                item.get("keyword")
+                or item.get("term")
+                or item.get("text")
+                or item.get("query")
+                or item.get("phrase")
+                or item.get("value")
+                or item.get("name")
+                or ""
+            ).strip()
+        else:
+            keyword = str(item).strip()
+        if keyword:
+            output.append(keyword)
+    return _dedupe_strings(output)
+
+
+def _string_list_from_aliases(
+    provider_output: dict[str, Any],
+    aliases: tuple[str, ...],
+) -> list[str]:
+    for alias in aliases:
+        values = _safe_string_list(provider_output.get(alias))
+        if values:
+            return values
+    return []
 
 
 def _dedupe_strings(values: list[str]) -> list[str]:
@@ -2316,10 +2521,79 @@ def _keyword_phrases(value: str) -> list[str]:
     return phrases
 
 
+def _strict_json_messages(
+    *,
+    instruction: str,
+    payload: dict[str, Any],
+) -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": instruction},
+        {
+            "role": "user",
+            "content": json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True),
+        },
+    ]
+
+
+def _keywords_from_provider_content(value: Any) -> list[str]:
+    if not isinstance(value, str):
+        return []
+    quoted = re.findall(r'"([^"]{2,100})"', value)
+    if quoted:
+        return _dedupe_strings(
+            [item.strip(" -:;,.") for item in quoted if 1 <= len(item.split()) <= 8]
+        )[:20]
+    candidates: list[str] = []
+    for raw_line in value.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        line = re.sub(r"^[-*\d.)\s]+", "", line).strip()
+        if ":" in line:
+            label, rest = line.split(":", 1)
+            if any(token in label.lower() for token in ("keyword", "final", "high", "low")):
+                line = rest.strip()
+        for part in re.split(r"[,;|]", line):
+            candidate = part.strip(" -:;,.\"'")
+            if not candidate or len(candidate) > 100:
+                continue
+            if not re.search(r"[A-Za-z]", candidate):
+                continue
+            if len(candidate.split()) > 8:
+                continue
+            candidates.append(candidate)
+    return _dedupe_strings(candidates)[:20]
+
+
 def _normalize_chatgpt_result(provider_output: dict[str, Any]) -> dict[str, Any]:
-    filtered = _safe_string_list(provider_output.get("filtered_keywords"))
-    cleaned = _safe_string_list(provider_output.get("cleaned_keywords")) or filtered
-    rejected = _safe_string_list(provider_output.get("rejected_keywords"))
+    provider_output = _merge_provider_output(provider_output)
+    content_keywords = _keywords_from_provider_content(provider_output.get("content"))
+    filtered = (
+        _string_list_from_aliases(
+            provider_output,
+            (
+                "filtered_keywords",
+                "approved_keywords",
+                "selected_keywords",
+                "recommended_keywords",
+                "buyer_intent_keywords",
+            ),
+        )
+        or content_keywords
+    )
+    cleaned = (
+        _string_list_from_aliases(
+            provider_output,
+            ("cleaned_keywords", "keywords", "keyword_candidates"),
+        )
+        or filtered
+    )
+    rejected = (
+        _string_list_from_aliases(
+            provider_output,
+            ("rejected_keywords", "removed_keywords", "negative_keywords"),
+        )
+    )
     rationale = provider_output.get("rationale") or provider_output.get("reasoning") or ""
     return {
         "cleaned_keywords": cleaned,
@@ -2330,16 +2604,75 @@ def _normalize_chatgpt_result(provider_output: dict[str, Any]) -> dict[str, Any]
 
 
 def _normalize_claude_result(provider_output: dict[str, Any]) -> dict[str, Any]:
-    high_value = _safe_string_list(provider_output.get("high_value_keywords"))
-    low_value = _safe_string_list(provider_output.get("low_value_keywords"))
-    final = _safe_string_list(provider_output.get("final_keywords")) or _dedupe_strings(
-        [*high_value, *low_value]
+    provider_output = _merge_provider_output(provider_output)
+    content_keywords = _keywords_from_provider_content(provider_output.get("content"))
+    high_value = (
+        _string_list_from_aliases(
+            provider_output,
+            (
+                "high_value_keywords",
+                "high_intent_keywords",
+                "priority_keywords",
+                "approved_keywords",
+                "safe_keywords",
+                "recommended_keywords",
+                "buyer_intent_keywords",
+                "commercial_keywords",
+                "conversion_keywords",
+            ),
+        )
     )
+    low_value = (
+        _string_list_from_aliases(
+            provider_output,
+            (
+                "low_value_keywords",
+                "secondary_keywords",
+                "supporting_keywords",
+                "longtail_keywords",
+                "long_tail_keywords",
+                "informational_keywords",
+            ),
+        )
+    )
+    final = (
+        _string_list_from_aliases(
+            provider_output,
+            (
+                "final_keywords",
+                "keywords",
+                "selected_keywords",
+                "approved_keywords",
+                "recommended_keywords",
+                "safe_keywords",
+                "non_risk_keywords",
+                "nonrisk_keywords",
+                "viable_keywords",
+                "optimized_keywords",
+                "target_keywords",
+                "buyer_intent_keywords",
+                "high_conversion_keywords",
+            ),
+        )
+        or _dedupe_strings([*high_value, *low_value])
+        or content_keywords
+    )
+    risk_keywords = _normalize_risk_keywords(
+        provider_output.get("risk_keywords")
+        or provider_output.get("risky_keywords")
+        or provider_output.get("restricted_keywords")
+        or provider_output.get("unsafe_keywords")
+        or provider_output.get("trademark_keywords")
+    )
+    risk_keys = {_normalize_key(item["term"]) for item in risk_keywords}
+    final = [keyword for keyword in final if _normalize_key(keyword) not in risk_keys]
+    if not high_value and final:
+        high_value = final[: min(5, len(final))]
     return {
         "final_keywords": final,
         "high_value_keywords": high_value,
         "low_value_keywords": low_value,
-        "risk_keywords": _normalize_risk_keywords(provider_output.get("risk_keywords")),
+        "risk_keywords": risk_keywords,
     }
 
 
@@ -3077,6 +3410,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             details={
                 "risk_approved": self._risk_review_is_approved(execution),
                 "keywords_finalized": bool(execution.final_keyword_set_json),
+                "selling_points_generated": self._selling_points_generated(product),
                 "image_bound": self._image_is_bound(product, execution),
             },
         )
@@ -3337,12 +3671,11 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             execution.risk_approval_log_json = None
         if order <= _closed_loop_step_order("keyword_optimization_ai"):
             execution.final_keyword_set_json = None
-            product.primary_keyword = None
             product.secondary_keywords_json = None
             product.long_tail_keywords_json = None
         if order <= _closed_loop_step_order("unit_conversion_normalization"):
             execution.unit_conversion_json = None
-        if order <= _closed_loop_step_order("image_binding"):
+        if step == "image_binding":
             execution.image_binding_json = None
             product.selected_image_path = None
             product.image_asset_status = None

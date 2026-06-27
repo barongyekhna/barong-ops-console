@@ -1,11 +1,13 @@
 import logging
+from contextlib import nullcontext
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...core.roles import list_standard_role_metadata, normalize_role
-from ...core.roles import is_owner_role
 from ...db.session import get_db
+from ...models.organization import OrganizationRecord
 from ...models.user import User
 from ...schemas.common import ListResponse
 from ...schemas.user import (
@@ -17,6 +19,7 @@ from ...schemas.user import (
     is_user_manager_role,
     user_management_role_metadata,
 )
+from ...services.data_isolation import without_org_data_isolation
 from ...services.user_management_service import (
     DuplicateUsernameError,
     ManagedUserNotFoundError,
@@ -59,7 +62,7 @@ def _scoped_organization_id(
     actor: User,
     requested_org_id: str | None,
 ) -> str | None:
-    if is_owner_role(actor.role):
+    if is_user_manager_role(actor.role):
         return requested_org_id
     actor_org_id = _actor_org_id(actor)
     if actor_org_id is None:
@@ -76,7 +79,7 @@ def _scoped_organization_id(
 
 
 def _ensure_user_visible(actor: User, target: User) -> None:
-    if is_owner_role(actor.role):
+    if is_user_manager_role(actor.role):
         return
     actor_org_id = _actor_org_id(actor)
     if actor_org_id is None or target.organization_id != actor_org_id:
@@ -123,6 +126,44 @@ def _raise_user_management_error(exc: Exception) -> None:
     raise exc
 
 
+def _organization_name_map(
+    db: Session,
+    users: list[User],
+) -> dict[str, str]:
+    org_ids = sorted(
+        {
+            organization_id
+            for user in users
+            for organization_id in [(user.organization_id or "").strip()]
+            if organization_id
+        }
+    )
+    if not org_ids:
+        return {}
+    with without_org_data_isolation():
+        rows = list(
+            db.scalars(
+                select(OrganizationRecord).where(
+                    OrganizationRecord.org_id.in_(org_ids)
+                )
+            )
+        )
+    return {row.org_id: row.org_name for row in rows}
+
+
+def _user_response(
+    user: User,
+    organization_names: dict[str, str],
+) -> UserResponse:
+    response = UserResponse.model_validate(user)
+    if response.organization_id:
+        response.organization = organization_names.get(
+            response.organization_id,
+            response.organization_id,
+        )
+    return response
+
+
 def require_user_manager(user: User = Depends(get_current_user)) -> User:
     if not is_user_manager_role(user.role):
         raise HTTPException(
@@ -158,15 +199,25 @@ def users(
     )
 
     try:
-        result = list_users(
-            db,
-            limit=limit,
-            offset=offset,
-            organization_id=effective_org,
-            role=requested_role,
+        read_context = (
+            without_org_data_isolation()
+            if is_user_manager_role(actor.role)
+            else nullcontext()
         )
+        with read_context:
+            result = list_users(
+                db,
+                limit=limit,
+                offset=offset,
+                organization_id=effective_org,
+                role=requested_role,
+            )
+        organization_names = _organization_name_map(db, result.items)
         response = ListResponse(
-            items=[UserResponse.model_validate(item) for item in result.items],
+            items=[
+                _user_response(item, organization_names)
+                for item in result.items
+            ],
             count=result.count,
             limit=limit,
             offset=offset,
@@ -218,7 +269,7 @@ def user_create(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return UserResponse.model_validate(user)
+    return _user_response(user, _organization_name_map(db, [user]))
 
 
 @router.get("/roles", response_model=UserRolesResponse)
@@ -244,11 +295,15 @@ def user_detail(
     actor: User = Depends(get_current_user),
 ) -> UserResponse:
     try:
-        user = get_managed_user(db, user_id)
+        if is_user_manager_role(actor.role):
+            with without_org_data_isolation():
+                user = get_managed_user(db, user_id)
+        else:
+            user = get_managed_user(db, user_id)
     except Exception as exc:
         _raise_user_management_error(exc)
     _ensure_user_visible(actor, user)
-    return UserResponse.model_validate(user)
+    return _user_response(user, _organization_name_map(db, [user]))
 
 
 @router.patch("/{user_id}", response_model=UserResponse)
@@ -269,7 +324,7 @@ def user_update(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return UserResponse.model_validate(user)
+    return _user_response(user, _organization_name_map(db, [user]))
 
 
 @router.post("/{user_id}/reset-password", response_model=UserResponse)
@@ -290,7 +345,7 @@ def user_reset_password(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return UserResponse.model_validate(user)
+    return _user_response(user, _organization_name_map(db, [user]))
 
 
 @router.post("/{user_id}/disable", response_model=UserResponse)
@@ -309,7 +364,7 @@ def user_disable(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return UserResponse.model_validate(user)
+    return _user_response(user, _organization_name_map(db, [user]))
 
 
 @router.post("/{user_id}/enable", response_model=UserResponse)
@@ -328,4 +383,4 @@ def user_enable(
         )
     except Exception as exc:
         _raise_user_management_error(exc)
-    return UserResponse.model_validate(user)
+    return _user_response(user, _organization_name_map(db, [user]))

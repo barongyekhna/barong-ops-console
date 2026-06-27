@@ -1,14 +1,12 @@
 import type { Metadata } from "next";
 
-import { ProductList } from "@/modules/k/product-knowledge/ProductList";
-import { ResearchTriggerPanel } from "@/modules/k15/research-trigger/ResearchTriggerPanel";
-import { SERPTriggerPanel } from "@/modules/k16/serp-trigger/SERPTriggerPanel";
-import { KeywordPanel } from "@/modules/k19/keywords";
-import { RiskPanel } from "@/modules/k20/risk";
+import { ProductListFull } from "@/modules/k/product-knowledge/ProductList";
 
 export const metadata: Metadata = {
   title: "产品知识库",
 };
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export default function ProductsPage() {
   return (
@@ -17,20 +15,11 @@ export default function ProductsPage() {
         <span className="section-index">K</span>
         <h1>产品知识库</h1>
         <p>
-          Product records, keyword research, SERP enrichment, risk filtering,
-          and downstream pipeline handoff.
+          创建产品后在列表内展开详情，分别完成关键词、图片和卖点审核。
         </p>
       </section>
 
-      <ProductList />
-
-      <div className="page-grid page-grid-two">
-        <ResearchTriggerPanel />
-        <SERPTriggerPanel />
-      </div>
-
-      <KeywordPanel />
-      <RiskPanel />
+      <ProductListFull />
     </div>
   );
 }

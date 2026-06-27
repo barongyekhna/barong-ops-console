@@ -1,0 +1,216 @@
+{
+  "report": "production_release_stable_v1_1",
+  "generated_at_utc": "2026-06-25T18:32:41Z",
+  "deployment_status": {
+    "status": "success",
+    "environment": "production",
+    "compose_file": "docker-compose.production.yml",
+    "env_file": ".env.production",
+    "commands_executed": [
+      "docker-compose -f docker-compose.production.yml --env-file .env.production down",
+      "docker-compose -f docker-compose.production.yml --env-file .env.production up -d --build"
+    ],
+    "containers": {
+      "console_backend": {
+        "status": "up",
+        "port": "127.0.0.1:8000->8000/tcp"
+      },
+      "console_frontend": {
+        "status": "up",
+        "port": "127.0.0.1:3000->3000/tcp"
+      },
+      "console_postgres": {
+        "status": "up_healthy",
+        "port": "5432/tcp"
+      }
+    },
+    "build": {
+      "backend": "success",
+      "frontend": "success",
+      "docker_build_cache_used": true
+    }
+  },
+  "stable_version_confirmation": {
+    "required_tag": "K-SERIES-STABLE-V1.1",
+    "tag_exists": true,
+    "head_matches_tag": true,
+    "git_head": "882960b989dbbb0c47196e0ee8c5fdf941b64f4d",
+    "git_status_before_report": "clean",
+    "workflow_start_201_stable": true,
+    "db_rollback_issue_resolved": true,
+    "ai_provider_isolation_active": true
+  },
+  "rollback_safety_confirmation": {
+    "rollback_safe_tag_confirmed": true,
+    "backup_created": true,
+    "backup_path": "/opt/barong-backup-stable-20260625_182200",
+    "backup_contents": [
+      "backend.tar.gz",
+      "frontend.tar.gz",
+      "database.dump",
+      "k_workflow_state.json",
+      "git_head.txt",
+      "git_tag.txt",
+      "SHA256SUMS"
+    ],
+    "backup_git_tag": "K-SERIES-STABLE-V1.1",
+    "backup_git_head": "882960b989dbbb0c47196e0ee8c5fdf941b64f4d",
+    "rollback_performed": false,
+    "rollback_during_deployment": false
+  },
+  "prohibited_change_guard": {
+    "code_modified": false,
+    "workflow_logic_modified": false,
+    "ai_pipeline_modified": false,
+    "schema_changes": false,
+    "rollback_executed": false
+  },
+  "api_health": {
+    "/health": {
+      "status": 200,
+      "ok": true,
+      "elapsed_seconds": 0.585
+    },
+    "/api/app/k/products": {
+      "method": "GET",
+      "status": 200,
+      "ok": true,
+      "elapsed_seconds": 1.403
+    },
+    "/api/app/k/products/{id}/workflow/start": {
+      "method": "POST",
+      "status": 201,
+      "ok": true,
+      "elapsed_seconds": 25.094
+    },
+    "/api/app/permissions/me": {
+      "method": "GET",
+      "status": 200,
+      "ok": true,
+      "elapsed_seconds": 0.313
+    },
+    "/api/control-plane/capability/bootstrap": {
+      "method": "GET",
+      "status": 200,
+      "ok": true,
+      "elapsed_seconds": 3.699
+    },
+    "/api/backend/capability/bootstrap": {
+      "method": "GET",
+      "status": 200,
+      "ok": true,
+      "elapsed_seconds": 1.503,
+      "note": "frontend proxy path for /capability/bootstrap"
+    }
+  },
+  "workflow_stability_status": {
+    "status": "stable",
+    "product_create_status": 201,
+    "workflow_start_status": 201,
+    "workflow_latest_after_start_status": 200,
+    "db_rollback_failure_reproduced": false,
+    "pending_rollback_error_seen_in_logs": false,
+    "backend_log_signal": "K workflow provider step isolated",
+    "provider_failure_handling": {
+      "failed_step": "serp_keyword_fetch",
+      "provider_error_code": "AI_PROVIDER_HTTP_ERROR",
+      "provider_http_status": 403,
+      "workflow_http_status": 201,
+      "persisted_workflow_status": "blocked",
+      "persisted_current_step": "serp_keyword_fetch",
+      "latest_endpoint_readable_after_failure": true,
+      "retry_available": true,
+      "crashed": false
+    }
+  },
+  "ai_isolation_status": {
+    "status": "active",
+    "runtime_provider_failure_isolated": true,
+    "serp_failure_isolated_no_crash": true,
+    "ai_pipeline_does_not_block_workflow_start": true,
+    "deployed_backend_registry_validation": {
+      "valid": true,
+      "binding_count": 0,
+      "active_binding_count": 0,
+      "route_count": 0,
+      "one_to_one_binding_enforced": true,
+      "no_automatic_model_selection": true,
+      "no_fallback_routing": true,
+      "no_implicit_execution_routing": true,
+      "no_runtime_execution": true,
+      "no_model_invocation": true,
+      "no_external_api_call": true,
+      "no_production_change": true
+    },
+    "execution_provider_registry": {
+      "status": 200,
+      "count": 12,
+      "owner_full_access": true
+    },
+    "control_plane_ai_execution_binding_api": {
+      "status": 403,
+      "note": "API surface denied current owner session for C14X; container-level registry validation was used as the production isolation source of truth."
+    }
+  },
+  "k_system_production_readiness": {
+    "status": "ready",
+    "product_create_works": true,
+    "variant_system_stable": true,
+    "variant_count_verified": 2,
+    "delete_system_stable": true,
+    "temporary_smoke_product_deleted": true,
+    "serp_failure_isolated_no_crash": true,
+    "ai_pipeline_does_not_block_workflow": true,
+    "export_system_ready": true,
+    "export_endpoint_status": 409,
+    "export_gate_enforced": true,
+    "export_gate_note": "Export endpoint responded with expected conflict while the smoke workflow was blocked at SERP; endpoint and gate are available and did not crash."
+  },
+  "rbac_validation": {
+    "status": "partial_runtime_verified",
+    "owner_full_access": {
+      "verified": true,
+      "login_status": 200,
+      "permissions_me_status": 200,
+      "permission_keys": [
+        "*"
+      ],
+      "is_owner": true
+    },
+    "super_admin_org_access": {
+      "runtime_login_verified": false,
+      "read_only_db_verified": true,
+      "active_super_admin_with_org": 1,
+      "note": "No super_admin password was available or reset; production data was not modified."
+    },
+    "employee_scoped_access": {
+      "runtime_login_verified": false,
+      "read_only_contract_verified": true,
+      "active_employee_like_users": 0,
+      "note": "Production DB has no active admin/operator/reviewer/viewer employee-like account. No temporary user was created."
+    },
+    "sidebar_correct": {
+      "owner_runtime_verified": true,
+      "capability_bootstrap_status": 200,
+      "modules_me_ok": true,
+      "module_adapters_me_ok": true,
+      "module_control_center_ok": true,
+      "non_owner_runtime_verified": false,
+      "note": "Sidebar capability bootstrap is healthy for owner; non-owner sidebar runtime could not be exercised without a non-owner password/account."
+    },
+    "role_inventory": {
+      "active_owner_users": 1,
+      "active_super_admin_users": 1,
+      "active_employee_like_users": 0,
+      "permission_assignment_count": 1
+    }
+  },
+  "production_readiness": {
+    "deployment_ready": true,
+    "k_system_ready": true,
+    "api_health_ready": true,
+    "rollback_safe": true,
+    "rbac_runtime_gap": "employee and super_admin login smoke not executed because no non-owner credentials were available and no production user was created or reset",
+    "overall_status": "production_deployed_with_rbac_non_owner_runtime_gap"
+  }
+}

@@ -17,6 +17,7 @@ import {
   isApiAbortError,
 } from "@/lib/api";
 import type { ProductCapabilityItem } from "@/lib/frontend-capability-state";
+import { getModuleDisplayName } from "@/lib/i18n";
 
 type HealthResponse = {
   status?: string | null;
@@ -84,7 +85,7 @@ const EMPTY_DASHBOARD_STATE: DashboardState = {
   usersError: "",
 };
 
-function textValue(value: unknown, fallback = "No data") {
+function textValue(value: unknown, fallback = "暂无数据") {
   const text = typeof value === "string" ? value.trim() : "";
   return text.length > 0 ? text : fallback;
 }
@@ -110,17 +111,17 @@ function batchData<T>(entry: BatchEntry<T> | null | undefined): T | null {
 }
 
 function batchError(entry: BatchEntry<unknown> | null | undefined) {
-  return entry?.ok === true ? "" : "Data temporarily unavailable.";
+  return entry?.ok === true ? "" : "数据暂时不可用。";
 }
 
 function formatDate(value: unknown) {
   if (typeof value !== "string" || value.trim().length === 0) {
-    return "No timestamp";
+    return "暂无时间";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "No timestamp";
+    return "暂无时间";
   }
 
   return new Intl.DateTimeFormat("zh-CN", {
@@ -157,21 +158,29 @@ function moduleStatus(item: ProductCapabilityItem): ModuleCardStatus {
 
 function moduleDescription(status: ModuleCardStatus) {
   if (status === "active") {
-    return "Ready for workspace operations.";
+    return "可进入工作台操作。";
   }
   if (status === "error") {
-    return "Needs attention before it can run.";
+    return "运行前需要处理异常。";
   }
-  return "Available after configuration or access is granted.";
+  return "完成配置或授权后可用。";
 }
 
 function moduleActionLabel(status: ModuleCardStatus) {
-  return status === "active" ? "Open module" : "Unavailable";
+  return status === "active" ? "打开模块" : "暂不可用";
 }
 
 function moduleBadge(item: ProductCapabilityItem) {
   if (item.badge) {
-    return item.badge.replaceAll("_", " ");
+    const badgeLabels: Record<string, string> = {
+      adapter_pending: "配置中",
+      backend_unavailable: "后端不可用",
+      locked: "受限",
+      mock: "预览",
+      no_execution: "待配置",
+      read_only: "部分可用",
+    };
+    return badgeLabels[item.badge] ?? "状态待确认";
   }
   return item.nav_group;
 }
@@ -191,10 +200,10 @@ function buildActivityFeed({
     return {
       badge: failed ? "error" : "execution",
       detail: failed
-        ? "Execution completed with an issue."
-        : "Execution completed successfully.",
+        ? "执行完成但存在异常。"
+        : "执行已成功完成。",
       meta: formatDate(log.created_at),
-      title: "Execution log",
+      title: "执行记录",
       tone: failed ? "error" : "active",
     };
   });
@@ -203,9 +212,9 @@ function buildActivityFeed({
     const status = moduleStatus(item);
     return {
       badge: status,
-      detail: `${item.label} is ${status}.`,
+      detail: `${getModuleDisplayName(item.module_key, item.label)}状态：${moduleDescription(status)}`,
       meta: item.nav_group,
-      title: "Module activity",
+      title: "模块动态",
       tone: status,
     };
   });
@@ -217,10 +226,10 @@ function buildActivityFeed({
   const apiItem: ActivityFeedItem = {
     badge: "key_••••",
     detail: apiLog
-      ? "Masked API key usage was recorded."
-      : "No recent API key usage was recorded.",
-    meta: apiLog ? formatDate(apiLog.created_at) : "masked",
-    title: "API key usage",
+      ? "已记录脱敏API密钥使用。"
+      : "暂无近期API密钥使用记录。",
+    meta: apiLog ? formatDate(apiLog.created_at) : "已脱敏",
+    title: "API密钥使用",
     tone: apiLog ? "active" : "disabled",
   };
 
@@ -232,9 +241,9 @@ function buildActivityFeed({
   return [
     {
       badge: "ready",
-      detail: "Workspace modules are ready for review.",
-      meta: "system",
-      title: "Module activity",
+      detail: "工作台模块可供查看。",
+      meta: "系统",
+      title: "模块动态",
       tone: "active",
     },
     apiItem,
@@ -319,9 +328,9 @@ export function OperationsDashboard() {
       }),
       () => ({
         health: null,
-        healthError: "Data temporarily unavailable.",
+        healthError: "数据暂时不可用。",
         users: null,
-        usersError: "Data temporarily unavailable.",
+        usersError: "数据暂时不可用。",
       }),
     );
 
@@ -341,8 +350,8 @@ export function OperationsDashboard() {
       }),
       () => ({
         approvals: null,
-        approvalsError: "Data temporarily unavailable.",
-        logsError: "Data temporarily unavailable.",
+        approvalsError: "数据暂时不可用。",
+        logsError: "数据暂时不可用。",
         operationLogs: null,
       }),
     );
@@ -380,7 +389,7 @@ export function OperationsDashboard() {
       actionLabel: moduleActionLabel(status),
       badge: moduleBadge(item),
       description: moduleDescription(status),
-      name: item.label,
+      name: getModuleDisplayName(item.module_key, item.label),
       status,
     };
   });
@@ -391,37 +400,37 @@ export function OperationsDashboard() {
 
   return (
     <div className="dashboard-page">
-      <section className="metrics-row" aria-label="Dashboard metrics">
+      <section className="metrics-row" aria-label="控制台指标">
         <MetricCard
-          detail={`${capabilityState.sidebarItems.length} visible modules`}
-          label="Active Modules"
+          detail={`${capabilityState.sidebarItems.length} 个可见模块`}
+          label="可用模块"
           value={activeModules}
         />
         <MetricCard
-          detail={state.logsError ? "Data sync pending" : "Recent executions"}
-          label="Executions"
+          detail={state.logsError ? "数据等待同步" : "近期执行记录"}
+          label="执行记录"
           value={executionCount}
         />
         <MetricCard
-          detail={`${failedLogs} issues in latest logs`}
-          label="Success Rate"
+          detail={`最近记录中 ${failedLogs} 条异常`}
+          label="成功率"
           value={`${successRate}%`}
         />
         <MetricCard
-          detail={state.approvalsError ? "Review sync pending" : "Awaiting action"}
-          label="Pending Reviews"
+          detail={state.approvalsError ? "审核数据等待同步" : "等待处理"}
+          label="待处理审核"
           value={pendingApprovals}
         />
       </section>
 
-      <section className="dashboard-main-grid" aria-label="Workspace overview">
+      <section className="dashboard-main-grid" aria-label="工作台概览">
         <div className="modules-section">
           <div className="dashboard-section-heading">
             <div>
-              <span className="eyebrow">Modules</span>
-              <h2>Module grid</h2>
+              <span className="eyebrow">模块</span>
+              <h2>模块总览</h2>
             </div>
-            <span>{isLoading ? "Syncing" : "Ready"}</span>
+            <span>{isLoading ? "同步中" : "就绪"}</span>
           </div>
 
           {isLoading && moduleCards.length === 0 ? (

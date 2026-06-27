@@ -637,6 +637,23 @@ function isAllowedKPath(method: string, path: string[]) {
 
   if (
     path.length === 3 &&
+    path[1] === "media" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "DELETE";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "media" &&
+    isUuidPathSegment(path[2]) &&
+    ["download", "file"].includes(path[3])
+  ) {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 3 &&
     path[1] === "keyword-research" &&
     path[2] === "start"
   ) {
@@ -662,8 +679,28 @@ function isAllowedKPath(method: string, path: string[]) {
   if (
     path.length === 5 &&
     path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "selling-points" &&
+    ["generate", "approve"].includes(path[4])
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
     path[3] === "enrich" &&
     path[4] === "deepseek"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "media" &&
+    path[4] === "upload"
   ) {
     return method === "POST";
   }

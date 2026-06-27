@@ -1,0 +1,309 @@
+{
+  "api_key_system_status": {
+    "bindings_api_status": 200,
+    "bindings_count": 4,
+    "k_gate_results": {
+      "active_org_with_all_required_keys": "org_4b828c8fdf7342cc85ddc15e7796698c",
+      "cases": [
+        {
+          "allowed": true,
+          "case": "serp_gate_active_key",
+          "code": null,
+          "control_module_id": "k.product_knowledge",
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "resolved_steps": [
+            "serp_keyword_fetch"
+          ]
+        },
+        {
+          "allowed": true,
+          "case": "closed_loop_ai_gate_active_keys",
+          "code": null,
+          "control_module_id": "k.product_knowledge",
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "resolved_steps": [
+            "ai_filter_chatgpt",
+            "ai_filter_claude_opus",
+            "deepseek_enrichment",
+            "serp_keyword_fetch"
+          ]
+        },
+        {
+          "allowed": false,
+          "case": "serp_gate_missing_key",
+          "code": "API_KEY_BINDING_MISSING",
+          "module_id": "k.product_knowledge",
+          "org_id": "org_d7497212d213498cbf0513d75e486c20",
+          "status_code": 403
+        }
+      ],
+      "org_without_active_serp_key": "org_d7497212d213498cbf0513d75e486c20"
+    },
+    "keys_api_status": 200,
+    "keys_count": 4,
+    "page_status": 200,
+    "status": "confirmed"
+  },
+  "constraints_observed": {
+    "code_changes": false,
+    "logic_changes": false,
+    "production_backup_created": true,
+    "rollback_executed": false,
+    "schema_changes": false,
+    "secrets_redacted": true
+  },
+  "database_state": {
+    "backup_schema_snapshot": "/opt/barong-backup-final-20260626_083735/database_schema_snapshot.sql",
+    "organizations": [
+      {
+        "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+        "org_name": "涌龙麟（深圳）国际贸易有限公司",
+        "owner_user_id": "1",
+        "status": "active"
+      },
+      {
+        "org_id": "org_d7497212d213498cbf0513d75e486c20",
+        "org_name": "涌龙麟（吉林）电子产品制造有限公司",
+        "owner_user_id": "1",
+        "status": "active"
+      }
+    ],
+    "role_counts": {
+      "owner": 1,
+      "super_admin": 1
+    },
+    "schema_modified_by_deployment": false
+  },
+  "deployment_status": {
+    "backup_dir": "/opt/barong-backup-final-20260626_083735",
+    "build_verification": {
+      "backend_image_built": true,
+      "frontend_image_built": true,
+      "frontend_tests_passed_during_docker_build": true,
+      "frontend_typecheck_passed_during_docker_build": true,
+      "frontend_verify_passed_during_docker_build": true,
+      "next_build_passed": true
+    },
+    "compose_file": "docker-compose.production.yml",
+    "docker_compose_ps": [
+      "Name                               Command                  State                Ports          ",
+      "----------------------------------------------------------------------------------------------------------------",
+      "barong-ops-console_console_backend_1    sh -c gunicorn backend.app ...   Up             127.0.0.1:8000->8000/tcp",
+      "barong-ops-console_console_frontend_1   docker-entrypoint.sh node  ...   Up             127.0.0.1:3000->3000/tcp",
+      "barong-ops-console_console_postgres_1   docker-entrypoint.sh postgres    Up (healthy)   5432/tcp"
+    ],
+    "git_head": "882960b989dbbb0c47196e0ee8c5fdf941b64f4d",
+    "git_status_short_at_report_time": [
+      "M backend/app/api/routes/permissions.py",
+      " M backend/app/api/routes/users.py",
+      " M frontend/src/app/globals.css",
+      " M frontend/src/components/capability-sidebar-engine.tsx",
+      " M frontend/src/components/dashboard-ui.tsx",
+      " M frontend/src/components/module-registry-product-view.tsx",
+      " M frontend/src/components/operations-dashboard.tsx",
+      " M frontend/src/components/review-audit-view.tsx",
+      " M frontend/src/components/saas-shell.tsx",
+      " M frontend/src/components/user-management-panel.tsx",
+      " M frontend/src/components/user-permissions-panel.tsx",
+      " M frontend/src/lib/frontend-capability-state.ts",
+      " M frontend/src/lib/module-adapter.ts",
+      " M frontend/src/lib/navigation.ts",
+      " M frontend/src/lib/permission-management.ts",
+      " M frontend/src/modules/k/product-knowledge/ProductDetail.tsx",
+      " M frontend/src/modules/k/product-knowledge/ProductForm.tsx",
+      " M frontend/src/modules/k/product-knowledge/ProductList.tsx",
+      " M frontend/src/modules/k/product-knowledge/api.ts",
+      " M frontend/src/modules/k15/research-trigger/ResearchTriggerPanel.tsx",
+      " M frontend/src/modules/k16/serp-trigger/SERPTriggerPanel.tsx",
+      " M frontend/src/modules/k19/keywords/KeywordEditor.tsx",
+      " M frontend/src/modules/k19/keywords/KeywordInput.tsx",
+      " M frontend/src/modules/k19/keywords/KeywordPanel.tsx",
+      " M frontend/src/modules/k19/keywords/KeywordTable.tsx",
+      " M frontend/src/modules/k19/keywords/types.ts",
+      " M frontend/src/modules/k20/risk/RiskBadge.tsx",
+      " M frontend/src/modules/k20/risk/RiskEditor.tsx",
+      " M frontend/src/modules/k20/risk/RiskPanel.tsx",
+      " M frontend/src/modules/k20/risk/RiskTable.tsx",
+      " M frontend/src/modules/k20/risk/types.ts",
+      " M tests/backend/test_user_management_api.py",
+      " M tests/frontend/module-isolation.test.mjs",
+      " M tests/frontend/permission-management.test.mjs",
+      " M tests/frontend/request-dedup.test.mjs",
+      "?? frontend/src/lib/i18n.ts",
+      "?? production_release_stable_v1_1.json"
+    ],
+    "status": "deployed_with_warnings"
+  },
+  "generated_at": "2026-06-26T08:58:11.571926Z",
+  "k_system_status": {
+    "ai_pipeline_gate": {
+      "active_keys_allow_closed_loop_gate": true,
+      "http_provider_probe_status": null,
+      "note": "External AI provider execution was not used as deployment acceptance; direct gate check confirms required keys resolve.",
+      "resolved_steps": [
+        "ai_filter_chatgpt",
+        "ai_filter_claude_opus",
+        "deepseek_enrichment",
+        "serp_keyword_fetch"
+      ]
+    },
+    "delete_system_works": true,
+    "export_system_stable": true,
+    "product_creation_works": true,
+    "serp_gate": {
+      "active_key_allows_gate": true,
+      "http_provider_probe_status": 502,
+      "missing_key_blocked": true,
+      "note": "HTTP SERP probe reached provider path because active key exists; it returned 502 provider/output error, not missing-key gate denial."
+    },
+    "status": "core_crud_passed_gate_passed_provider_warning",
+    "temporary_product_cleanup_confirmed": true,
+    "variant_system_works": true
+  },
+  "rbac_correctness": {
+    "employee_scoped_modules_only": {
+      "active_employee_like_user_count": 0,
+      "employee_like_roles_checked": [
+        "employee",
+        "operator",
+        "reviewer",
+        "viewer"
+      ],
+      "enabled_user_permission_assignments_count": 0,
+      "note": "No production employee/viewer/operator/reviewer account exists after prior cleanup, so no new production user was created for validation.",
+      "scoped_permission_model_active": true,
+      "status": "not_live_login_verified_no_active_employee_principal"
+    },
+    "organization_tree_correct": true,
+    "owner_full_system_access": true,
+    "owner_users_active": 1,
+    "sidebar_root_level_modules_visible": true,
+    "super_admin_org_scoped_full_access": {
+      "active_memberships_for_super_admin": [
+        {
+          "membership_id": "mem_7986ce48aa6ebf5d40e702d260625b25",
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "role": "admin",
+          "status": "active",
+          "user_id": "2"
+        }
+      ],
+      "active_super_admin_count": 1,
+      "engine_rules": {
+        "owner_only_control_plane_still_requires_owner_where_enforced": true,
+        "super_admin_inherits_all_enabled_permissions_within_org_scope": true,
+        "super_admin_inherits_all_module_actions_within_active_org_scope": true
+      },
+      "status": "confirmed_by_rbac_engine_and_db_scope",
+      "super_admin_users": [
+        {
+          "id": 2,
+          "is_active": true,
+          "must_change_password": false,
+          "organization_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "role": "super_admin",
+          "username": "王创鑫"
+        }
+      ]
+    }
+  },
+  "report": "production_release_final_v1",
+  "rollback_readiness": {
+    "backup_dir": "/opt/barong-backup-final-20260626_083735",
+    "contains_backend": true,
+    "contains_compose_and_env": true,
+    "contains_database_schema_snapshot": true,
+    "contains_frontend": true,
+    "contains_module_registry": true,
+    "contains_permission_state": true
+  },
+  "sidebar_architecture_status": {
+    "api_key_and_module_control_fixed": true,
+    "c_system_sidebar_restored": true,
+    "organization_tree_runtime": {
+      "organization_count": 2,
+      "organizations": [
+        {
+          "module_count": 19,
+          "org_id": "org_d7497212d213498cbf0513d75e486c20",
+          "org_name": "涌龙麟（吉林）电子产品制造有限公司",
+          "sample_modules": [
+            "core.dashboard",
+            "experimental.foundation_demo",
+            "integration.n8n_test_bridge",
+            "integration.n8n_webhook_test_bridge",
+            "admin.users"
+          ]
+        },
+        {
+          "module_count": 19,
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "org_name": "涌龙麟（深圳）国际贸易有限公司",
+          "sample_modules": [
+            "core.dashboard",
+            "experimental.foundation_demo",
+            "integration.n8n_test_bridge",
+            "integration.n8n_webhook_test_bridge",
+            "admin.users"
+          ]
+        }
+      ],
+      "organizations_have_modules": true
+    },
+    "source_checks": {
+      "capability_sidebar_engine": {
+        "<span className=\"navigation-label\">C系统</span>": true,
+        "<span className=\"navigation-label\">组织</span>": true,
+        "C_SYSTEM_MODULE_ORDER": true,
+        "module_key: \"admin.key_management\"": true,
+        "module_key: \"admin.modules\"": true,
+        "organization.modules.filter(isOrganizationLayerModule)": true
+      },
+      "i18n": {
+        "\"API Key Management\": \"API密钥管理\"": true,
+        "\"Module Control\": \"模块控制\"": true,
+        "\"admin.key_management\": \"API密钥管理\"": true,
+        "\"admin.modules\": \"模块控制\"": true,
+        "\"k.product_knowledge\": \"K系列产品知识库\"": true
+      },
+      "navigation": {
+        "href: \"/api-key-management\"": true,
+        "href: \"/module-control\"": true,
+        "module_key: \"admin.key_management\"": true,
+        "module_key: \"admin.modules\"": true,
+        "owner_only: true": true
+      }
+    },
+    "status": "confirmed",
+    "ui_i18n_effective": true
+  },
+  "system_health": {
+    "all_required_healthy": true,
+    "frontend_proxy": {
+      "/api/backend/k/products": 200,
+      "/api/backend/modules/me": 200,
+      "/api/backend/permissions/me": 200
+    },
+    "post_provider_probe_recheck": {
+      "/api-key-management": 200,
+      "/api/app/permissions/me": 200,
+      "/api/control-plane/modules/me": 200,
+      "/health": 200,
+      "/k/products": 200,
+      "login": 200
+    },
+    "required_endpoints": {
+      "/api-key-management": 200,
+      "/api/control-plane/modules": 200,
+      "/health": 200,
+      "/k/products": 200,
+      "/modules/me": 200,
+      "/permissions/me": 200
+    }
+  },
+  "warnings": [
+    "No active employee/viewer/operator/reviewer production account exists, so employee scoped-module behavior was not live-login verified and no new user was created.",
+    "SERP HTTP provider probe returned 502 after passing key gate; direct gate validation confirms missing-key blocking and active-key resolution.",
+    "AI HTTP provider probe timed out/client-aborted; post-check health remained 200. External provider execution is not certified by this deployment run."
+  ]
+}

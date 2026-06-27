@@ -1,13 +1,18 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from collections import Counter
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..core.roles import is_owner_role, is_super_admin_role
 from ..models.module_control import ModuleControlStateRecord
+from ..models.org_membership import OrgMembershipRecord
 from ..models.organization import OrganizationRecord
+from ..models.permission import PermissionRegistry
+from ..models.user import User
+from ..repositories.permissions import list_enabled_user_assignments
 from ..schemas.module import ModuleManifestV1
 from ..schemas.module_control import (
     ModuleControlCenterResponse,
@@ -223,6 +228,138 @@ def build_module_control_center(db: Session) -> ModuleControlCenterResponse:
         manifests=manifests,
         state_lookup=lookup,
     )
+
+
+def _module_sort_key(module: ModuleControlStateRead) -> tuple[str, str, str]:
+    return (
+        module.category.casefold(),
+        module.display_name.casefold(),
+        module.module_id.casefold(),
+    )
+
+
+def _org_sort_key(group: ModuleControlOrgGroup) -> tuple[str, str]:
+    return (group.org_name.casefold(), group.org_id.casefold())
+
+
+def _sorted_modules(
+    modules: list[ModuleControlStateRead],
+) -> list[ModuleControlStateRead]:
+    return sorted(modules, key=_module_sort_key)
+
+
+def _sorted_groups(
+    groups: list[ModuleControlOrgGroup],
+) -> list[ModuleControlOrgGroup]:
+    return sorted(
+        [
+            group.model_copy(update={"modules": _sorted_modules(group.modules)})
+            for group in groups
+        ],
+        key=_org_sort_key,
+    )
+
+
+def _recount_response(
+    response: ModuleControlCenterResponse,
+    groups: list[ModuleControlOrgGroup],
+) -> ModuleControlCenterResponse:
+    sorted_groups = _sorted_groups(groups)
+    return response.model_copy(
+        deep=True,
+        update={
+            "organizations": sorted_groups,
+            "organization_count": len(sorted_groups),
+            "module_count": sum(len(group.modules) for group in sorted_groups),
+        },
+    )
+
+
+def _active_user_org_ids(db: Session, user: User) -> set[str]:
+    org_ids: set[str] = set()
+    if user.organization_id:
+        organization = db.get(OrganizationRecord, user.organization_id)
+        if organization is not None and organization.status != "deleted":
+            org_ids.add(organization.org_id)
+
+    memberships = db.scalars(
+        select(OrgMembershipRecord).where(
+            OrgMembershipRecord.user_id == str(user.id),
+            OrgMembershipRecord.status == "active",
+        )
+    )
+    membership_org_ids = [membership.org_id for membership in memberships]
+    if membership_org_ids:
+        active_org_ids = db.scalars(
+            select(OrganizationRecord.org_id).where(
+                OrganizationRecord.org_id.in_(membership_org_ids),
+                OrganizationRecord.status != "deleted",
+            )
+        )
+        org_ids.update(active_org_ids)
+    return org_ids
+
+
+def _assigned_module_ids_for_user(db: Session, user: User) -> set[str]:
+    assignments = list_enabled_user_assignments(
+        db,
+        user.id,
+        now=datetime.now(UTC),
+    )
+    if not assignments:
+        return set()
+
+    permission_keys = sorted({assignment.permission_key for assignment in assignments})
+    permission_modules = db.scalars(
+        select(PermissionRegistry.module_key).where(
+            PermissionRegistry.permission_key.in_(permission_keys),
+            PermissionRegistry.is_enabled.is_(True),
+        )
+    )
+    assigned_module_ids = {module_key for module_key in permission_modules if module_key}
+    assigned_module_ids.update(
+        assignment.scope_key
+        for assignment in assignments
+        if assignment.scope_type == "module" and assignment.scope_key != "*"
+    )
+    return assigned_module_ids
+
+
+def filter_module_control_center_for_user(
+    db: Session,
+    *,
+    user: User,
+    response: ModuleControlCenterResponse,
+) -> ModuleControlCenterResponse:
+    if is_owner_role(user.role):
+        return _recount_response(response, list(response.organizations))
+
+    org_ids = _active_user_org_ids(db, user)
+    if not org_ids:
+        return _recount_response(response, [])
+
+    scoped_groups = [
+        group
+        for group in response.organizations
+        if group.org_id in org_ids
+    ]
+    if is_super_admin_role(user.role):
+        return _recount_response(response, scoped_groups)
+
+    assigned_module_ids = _assigned_module_ids_for_user(db, user)
+    filtered_groups = [
+        group.model_copy(
+            update={
+                "modules": [
+                    module
+                    for module in group.modules
+                    if module.module_id in assigned_module_ids
+                ]
+            }
+        )
+        for group in scoped_groups
+    ]
+    return _recount_response(response, filtered_groups)
 
 
 def get_module_control_state(

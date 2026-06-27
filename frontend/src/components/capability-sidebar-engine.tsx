@@ -2,34 +2,52 @@
 
 import { Building2, ChevronDown, ChevronRight, LockKeyhole } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useAuth } from "@/components/auth-provider";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
-import type { ProductCapabilityBadge } from "@/lib/frontend-capability-state";
+import type {
+  ProductCapabilityBadge,
+  ProductCapabilityItem,
+} from "@/lib/frontend-capability-state";
+import { getModuleDisplayName } from "@/lib/i18n";
+import type {
+  ModuleControlOrgGroup,
+  ModuleControlState,
+} from "@/lib/module-control-api";
+import type { ModuleAccessState } from "@/lib/module-registry";
+import { isOwnerRole, isSuperAdminRole, normalizeRole } from "@/lib/roles";
 
-const TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司";
-const OWNER_ORG_MODULE_ORDER = [
+const C_SYSTEM_MODULE_ORDER = [
   {
-    label: "Product Knowledge (K)",
-    module_key: "k.product_knowledge",
-  },
-  {
-    label: "Module Control",
+    label: "模块控制",
     module_key: "admin.modules",
   },
   {
-    label: "API Key Management",
+    label: "API密钥管理",
     module_key: "admin.key_management",
   },
   {
-    label: "Users",
+    label: "权限管理",
+    module_key: "admin.permissions",
+  },
+  {
+    label: "用户管理",
     module_key: "admin.users",
   },
   {
-    label: "Permissions",
-    module_key: "admin.permissions",
+    label: "控制台",
+    module_key: "core.dashboard",
   },
-];
+] as const;
+
+const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set(
+  C_SYSTEM_MODULE_ORDER.map((item) => item.module_key),
+);
+
+const ORGANIZATION_MODULE_PREFIXES = ["k.", "p.", "seo.", "gmc."] as const;
+const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
+const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
 
 const CAPABILITY_BADGE_LABELS: Record<
   Exclude<ProductCapabilityBadge, null>,
@@ -43,6 +61,250 @@ const CAPABILITY_BADGE_LABELS: Record<
   read_only: "部分可用",
 };
 
+function isOrganizationLayerModule(module: ModuleControlState) {
+  const moduleId = module.module_id.trim().toLowerCase();
+  if (!moduleId || C_SYSTEM_MODULE_KEYS.has(moduleId)) {
+    return false;
+  }
+  if (
+    ORGANIZATION_MODULE_PREFIXES.some((prefix) => moduleId.startsWith(prefix))
+  ) {
+    return true;
+  }
+  return (
+    moduleId.includes(".seo") ||
+    moduleId.includes("_seo") ||
+    moduleId.includes(".gmc") ||
+    moduleId.includes("_gmc") ||
+    moduleId.includes("merchant") ||
+    moduleId.includes("product")
+  );
+}
+
+function organizationKey(organization: ModuleControlOrgGroup) {
+  return organization.org_id || organization.org_name;
+}
+
+function capabilityForModule(
+  byModuleKey: Map<string, ProductCapabilityItem>,
+  moduleKey: string,
+) {
+  return byModuleKey.get(moduleKey) ?? null;
+}
+
+function clearLegacySidebarOrgSnapshots() {
+  if (typeof window === "undefined") {
+    return;
+  }
+  try {
+    for (let index = window.sessionStorage.length - 1; index >= 0; index -= 1) {
+      const key = window.sessionStorage.key(index);
+      if (key?.startsWith(SIDEBAR_ORG_SNAPSHOT_PREFIX)) {
+        window.sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Sidebar state must come from backend bootstrap; stale local snapshots are ignored.
+  }
+}
+
+function moduleAccessAllows(
+  moduleAccessByKey: Map<string, ModuleAccessState>,
+  moduleKey: string,
+) {
+  const access = moduleAccessByKey.get(moduleKey);
+  return Boolean(access?.visible && !access.hidden);
+}
+
+function isRestrictedProductModule(moduleId: string) {
+  const normalized = moduleId.trim().toLowerCase();
+  return (
+    normalized.startsWith("k.") ||
+    normalized.startsWith("p.") ||
+    normalized === "business.products" ||
+    normalized.includes("product")
+  );
+}
+
+function isProductKnowledgeOrg(organization: ModuleControlOrgGroup) {
+  return organization.org_name.trim() === PRODUCT_KNOWLEDGE_ORG_NAME;
+}
+
+function sortModules(modules: ModuleControlState[]) {
+  return [...modules].sort((left, right) => {
+    const categoryDelta = left.category.localeCompare(right.category);
+    if (categoryDelta !== 0) {
+      return categoryDelta;
+    }
+    const labelDelta = left.display_name.localeCompare(right.display_name);
+    if (labelDelta !== 0) {
+      return labelDelta;
+    }
+    return left.module_id.localeCompare(right.module_id);
+  });
+}
+
+function sortOrganizations(organizations: ModuleControlOrgGroup[]) {
+  return [...organizations].sort((left, right) => {
+    const labelDelta = left.org_name.localeCompare(right.org_name);
+    if (labelDelta !== 0) {
+      return labelDelta;
+    }
+    return left.org_id.localeCompare(right.org_id);
+  });
+}
+
+function scopedOrganizationGroups({
+  byModuleKey,
+  isOwner,
+  moduleAccessByKey,
+  moduleAccessReady,
+  moduleControlReady,
+  organizations,
+  role,
+  userOrgId,
+}: {
+  byModuleKey: Map<string, ProductCapabilityItem>;
+  isOwner: boolean;
+  moduleAccessByKey: Map<string, ModuleAccessState>;
+  moduleAccessReady: boolean;
+  moduleControlReady: boolean;
+  organizations: ModuleControlOrgGroup[];
+  role: string;
+  userOrgId: string | null | undefined;
+}) {
+  if (!moduleControlReady || !moduleAccessReady) {
+    return [];
+  }
+
+  const owner = isOwner || isOwnerRole(role);
+  const superAdmin = isSuperAdminRole(role);
+
+  return sortOrganizations(
+    organizations
+      .filter((organization) => owner || organization.org_id === userOrgId)
+      .map((organization) => ({
+        ...organization,
+        modules: sortModules(
+          organization.modules.filter((module) => {
+            if (!isOrganizationLayerModule(module)) {
+              return false;
+            }
+            if (
+              isRestrictedProductModule(module.module_id) &&
+              !isProductKnowledgeOrg(organization)
+            ) {
+              return false;
+            }
+            if (!moduleAccessAllows(moduleAccessByKey, module.module_id)) {
+              return false;
+            }
+            if (owner || superAdmin) {
+              return true;
+            }
+            const item = capabilityForModule(byModuleKey, module.module_id);
+            return Boolean(
+              item?.can_enter &&
+                item.sidebar_state !== "hidden" &&
+                item.state !== "hidden",
+            );
+          }),
+        ),
+      })),
+  );
+}
+
+function SidebarLink({
+  item,
+  label,
+  onNavigate,
+  pathname,
+  tree,
+}: {
+  item: ProductCapabilityItem;
+  label?: string;
+  onNavigate: () => void;
+  pathname: string;
+  tree?: boolean;
+}) {
+  const Icon = item.icon;
+  const active = pathname === item.href;
+  const locked =
+    item.sidebar_state === "forbidden" ||
+    item.state === "hidden" ||
+    item.can_enter === false;
+  const unavailable = item.sidebar_state === "partial";
+  const badge = locked ? null : item.badge;
+  const displayLabel = label ?? getModuleDisplayName(item.module_key, item.label);
+
+  return (
+    <Link
+      aria-current={active ? "page" : undefined}
+      aria-label={
+        badge
+          ? `${displayLabel} ${CAPABILITY_BADGE_LABELS[badge]}`
+          : displayLabel
+      }
+      className={`navigation-link ${tree ? "navigation-tree-link" : ""} ${
+        active ? "active" : ""
+      } ${locked ? "locked" : ""} ${unavailable ? "unavailable" : ""}`}
+      href={item.href}
+      onClick={onNavigate}
+      title={locked || unavailable ? item.reason : displayLabel}
+    >
+      <Icon aria-hidden="true" size={18} />
+      <span>{displayLabel}</span>
+      {locked ? (
+        <LockKeyhole
+          aria-hidden="true"
+          className="navigation-lock"
+          size={14}
+        />
+      ) : null}
+      {!locked && badge ? (
+        <span className={`navigation-status-badge ${badge}`}>
+          {CAPABILITY_BADGE_LABELS[badge]}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
+function OrganizationModuleRow({
+  module,
+  item,
+  onNavigate,
+  pathname,
+}: {
+  module: ModuleControlState;
+  item: ProductCapabilityItem | null;
+  onNavigate: () => void;
+  pathname: string;
+}) {
+  const label = getModuleDisplayName(
+    module.module_id,
+    item?.label ?? module.display_name,
+  );
+  if (item?.route_bound) {
+    return (
+      <SidebarLink
+        item={item}
+        label={label}
+        onNavigate={onNavigate}
+        pathname={pathname}
+        tree
+      />
+    );
+  }
+
+  return (
+    <div className="navigation-link navigation-tree-link unavailable" title={label}>
+      <Building2 aria-hidden="true" size={18} />
+      <span>{label}</span>
+    </div>
+  );
+}
+
 export function CapabilitySidebarEngine({
   onNavigate,
   pathname,
@@ -50,49 +312,94 @@ export function CapabilitySidebarEngine({
   pathname: string;
   onNavigate: () => void;
 }) {
+  const { isOwner, user } = useAuth();
   const {
-    groups,
+    byModuleKey,
     isLoading,
+    moduleAccessResult,
     moduleControlResult,
-    permissionSnapshot,
-    sidebarItems,
     uiState,
   } = useFrontendCapabilityState();
+  const role = normalizeRole(user?.role);
   const [expandedOrgIds, setExpandedOrgIds] = useState<Set<string>>(
-    () => new Set([TARGET_ORGANIZATION_NAME]),
+    () => new Set(),
   );
-  const isOwner = permissionSnapshot.is_owner_full_access === true;
-  const ownerOrganization = useMemo(() => {
-    const organizations = moduleControlResult?.data.organizations ?? [];
-    return (
-      organizations.find(
-        (organization) => organization.org_name === TARGET_ORGANIZATION_NAME,
-      ) ??
-      organizations[0] ??
-      null
-    );
-  }, [moduleControlResult]);
-  const ownerTreeItems = useMemo(() => {
-    if (!ownerOrganization) {
-      return [];
+  const knownOrgIdsRef = useRef<Set<string>>(new Set());
+  const moduleAccessByKey = useMemo(
+    () =>
+      new Map(
+        (moduleAccessResult?.data.items ?? []).map((item) => [
+          item.module_key,
+          item,
+        ]),
+      ),
+    [moduleAccessResult?.data.items],
+  );
+  const runtimeOrganizations = useMemo(
+    () =>
+      scopedOrganizationGroups({
+        byModuleKey,
+        isOwner,
+        moduleAccessByKey,
+        moduleAccessReady: moduleAccessResult?.ok === true,
+        moduleControlReady: moduleControlResult?.ok === true,
+        organizations: moduleControlResult?.data.organizations ?? [],
+        role,
+        userOrgId: user?.organization_id,
+      }),
+    [
+      byModuleKey,
+      isOwner,
+      moduleAccessByKey,
+      moduleAccessResult?.ok,
+      moduleControlResult?.data.organizations,
+      moduleControlResult?.ok,
+      role,
+      user?.organization_id,
+    ],
+  );
+  const organizations = runtimeOrganizations;
+
+  useEffect(() => {
+    clearLegacySidebarOrgSnapshots();
+  }, []);
+
+  useEffect(() => {
+    if (organizations.length === 0) {
+      return;
     }
-    const organizationModuleIds = new Set(
-      ownerOrganization.modules.map((module) => module.module_id),
-    );
-    const itemByKey = new Map(
-      sidebarItems.map((item) => [item.module_key, item]),
-    );
-    return OWNER_ORG_MODULE_ORDER
-      .filter((entry) => organizationModuleIds.has(entry.module_key))
-      .map((entry) => {
-        const item = itemByKey.get(entry.module_key);
-        return item ? { ...item, label: entry.label } : null;
-      })
-      .filter((item): item is NonNullable<typeof item> => item !== null);
-  }, [ownerOrganization, sidebarItems]);
-  const orgTreeKey = ownerOrganization?.org_name ?? TARGET_ORGANIZATION_NAME;
-  const orgExpanded = expandedOrgIds.has(orgTreeKey);
-  const visibleSidebarCount = isOwner ? ownerTreeItems.length : sidebarItems.length;
+    setExpandedOrgIds((current) => {
+      let changed = false;
+      const next = new Set(current);
+      for (const organization of organizations) {
+        const key = organizationKey(organization);
+        if (!knownOrgIdsRef.current.has(key)) {
+          knownOrgIdsRef.current.add(key);
+          next.add(key);
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [organizations]);
+
+  const cSystemItems = useMemo(
+    () =>
+      C_SYSTEM_MODULE_ORDER.flatMap((entry) => {
+        if (!moduleAccessAllows(moduleAccessByKey, entry.module_key)) {
+          return [];
+        }
+        const item = capabilityForModule(byModuleKey, entry.module_key);
+        return item ? [{ item, label: entry.label as string }] : [];
+      }),
+    [byModuleKey, moduleAccessByKey],
+  );
+  const organizationGroups = organizations;
+  const organizationModuleCount = organizationGroups.reduce(
+    (count, organization) => count + organization.modules.length,
+    0,
+  );
+  const visibleSidebarCount = cSystemItems.length + organizationModuleCount;
   const footerLabel = isLoading
     ? "正在加载工作台"
     : uiState === "fallback"
@@ -104,116 +411,85 @@ export function CapabilitySidebarEngine({
   return (
     <>
       <nav aria-label="工作台导航" className="sidebar-navigation">
-        {isOwner ? (
-          <div className="navigation-group">
-            <span className="navigation-label">Organizations</span>
-            {ownerOrganization ? (
-              <>
-                <button
-                  aria-expanded={orgExpanded}
-                  className="navigation-tree-toggle"
-                  onClick={() => {
-                    setExpandedOrgIds((current) => {
-                      const next = new Set(current);
-                      if (next.has(orgTreeKey)) {
-                        next.delete(orgTreeKey);
-                      } else {
-                        next.add(orgTreeKey);
-                      }
-                      return next;
-                    });
-                  }}
-                  type="button"
-                >
-                  {orgExpanded ? (
-                    <ChevronDown aria-hidden="true" size={15} />
-                  ) : (
-                    <ChevronRight aria-hidden="true" size={15} />
-                  )}
-                  <Building2 aria-hidden="true" size={17} />
-                  <span>{ownerOrganization.org_name}</span>
-                </button>
-                {orgExpanded ? (
-                  <div className="navigation-tree-items">
-                    {ownerTreeItems.map((item) => {
-                      const Icon = item.icon;
-                      const active = pathname === item.href;
+        <div className="navigation-group">
+          <span className="navigation-label">C系统</span>
+          {cSystemItems.map(({ item, label }) => (
+            <SidebarLink
+              item={item}
+              key={item.module_key}
+              label={label}
+              onNavigate={onNavigate}
+              pathname={pathname}
+            />
+          ))}
+        </div>
 
-                      return (
-                        <Link
-                          aria-current={active ? "page" : undefined}
-                          aria-label={item.label}
-                          className={`navigation-link navigation-tree-link ${
-                            active ? "active" : ""
-                          }`}
-                          href={item.href}
-                          key={`${ownerOrganization.org_id}:${item.module_key}`}
-                          onClick={onNavigate}
-                          title={item.label}
-                        >
-                          <Icon aria-hidden="true" size={18} />
-                          <span>{item.label}</span>
-                        </Link>
-                      );
-                    })}
-                  </div>
-                ) : null}
-              </>
-            ) : null}
-          </div>
-        ) : (
-          groups.map((group) => (
-          <div className="navigation-group" key={group.label}>
-            {group.label === "Modules" ? null : (
-              <span className="navigation-label">{group.label}</span>
-            )}
-            {group.items.map((item) => {
-              const Icon = item.icon;
-              const active = pathname === item.href;
-              const locked = item.sidebar_state === "forbidden";
-              const unavailable = item.sidebar_state === "partial";
-              const badge = item.badge;
+        <div className="navigation-divider" role="separator" />
+
+        <div className="navigation-group">
+          <span className="navigation-label">组织</span>
+          {organizationGroups.length === 0 ? (
+            <div className="navigation-tree-empty" role="status">
+              暂无组织
+            </div>
+          ) : (
+            organizationGroups.map((organization) => {
+              const key = organizationKey(organization);
+              const expanded = expandedOrgIds.has(key);
 
               return (
-                <Link
-                  aria-current={active ? "page" : undefined}
-                  aria-label={
-                    badge
-                      ? `${item.label} ${CAPABILITY_BADGE_LABELS[badge]}`
-                      : item.label
-                  }
-                  className={`navigation-link ${active ? "active" : ""} ${
-                    locked ? "locked" : ""
-                  } ${unavailable ? "unavailable" : ""}`}
-                  href={item.href}
-                  key={item.module_key}
-                  onClick={onNavigate}
-                  title={
-                    locked || unavailable
-                      ? item.reason
-                      : item.label
-                  }
-                >
-                  <Icon aria-hidden="true" size={18} />
-                  <span>{item.label}</span>
-                  {locked ? (
-                    <LockKeyhole
-                      aria-hidden="true"
-                      className="navigation-lock"
-                      size={14}
-                    />
+                <div className="navigation-tree-node" key={key}>
+                  <button
+                    aria-expanded={expanded}
+                    className="navigation-tree-toggle"
+                    onClick={() => {
+                      setExpandedOrgIds((current) => {
+                        const next = new Set(current);
+                        if (next.has(key)) {
+                          next.delete(key);
+                        } else {
+                          next.add(key);
+                        }
+                        return next;
+                      });
+                    }}
+                    type="button"
+                  >
+                    {expanded ? (
+                      <ChevronDown aria-hidden="true" size={15} />
+                    ) : (
+                      <ChevronRight aria-hidden="true" size={15} />
+                    )}
+                    <Building2 aria-hidden="true" size={17} />
+                    <span>{organization.org_name || "未命名组织"}</span>
+                  </button>
+                  {expanded ? (
+                    <div className="navigation-tree-items">
+                      {organization.modules.length === 0 ? (
+                        <div className="navigation-tree-empty" role="status">
+                          暂无模块
+                        </div>
+                      ) : (
+                        organization.modules.map((module) => (
+                          <OrganizationModuleRow
+                            item={capabilityForModule(
+                              byModuleKey,
+                              module.module_id,
+                            )}
+                            key={`${key}:${module.module_id}`}
+                            module={module}
+                            onNavigate={onNavigate}
+                            pathname={pathname}
+                          />
+                        ))
+                      )}
+                    </div>
                   ) : null}
-                  {!locked && badge ? (
-                    <span className={`navigation-status-badge ${badge}`}>
-                      {CAPABILITY_BADGE_LABELS[badge]}
-                    </span>
-                  ) : null}
-                </Link>
+                </div>
               );
-            })}
-          </div>
-          ))
-        )}
+            })
+          )}
+        </div>
       </nav>
 
       <div className="sidebar-footer">

@@ -1,0 +1,109 @@
+{
+  "generated_at": "2026-06-26T13:58:40Z",
+  "old_frontend_detected": "YES",
+  "old_frontend_evidence": {
+    "frontend_created_at_before_rebuild": "2026-06-26T11:23:00Z",
+    "backend_created_at": "2026-06-26T12:36:21Z",
+    "frontend_was_older_than_backend": true
+  },
+  "frontend_rebuilt": "YES",
+  "frontend_rebuild": {
+    "commands": [
+      "docker-compose -f docker-compose.production.yml build console_frontend",
+      "docker rm -f barong-ops-console_console_frontend_1",
+      "docker-compose -f docker-compose.production.yml up -d --no-deps console_frontend"
+    ],
+    "final_frontend_image": "sha256:d5cd85e1dfbba1515053fad0fc9e0ae866bf2c5bc66fa328881521bca01afd33",
+    "final_frontend_created_at": "2026-06-26T13:54:58Z",
+    "backend_container_unchanged": true,
+    "postgres_untouched": true
+  },
+  "keyword_button_route_fixed": "YES",
+  "keyword_button_route_details": {
+    "product_detail_start_button_endpoint": "/api/backend/k/products/{product_id}/workflow/start",
+    "k15_research_button_endpoint": "/api/backend/k/keyword-research/start",
+    "k16_serp_button_endpoint": "/api/backend/k/serp/search",
+    "initial_start_calls_retry": false,
+    "retry_guard_without_serp_result": "关键词调研尚未开始，请先启动关键词调研。"
+  },
+  "wrong_retry_path_removed": "YES",
+  "wrong_retry_path_details": {
+    "frontend_retry_guard_added": true,
+    "downstream_retry_without_serp_is_blocked_before_api_call": true,
+    "raw_serp_retry_error_hidden_from_user": true
+  },
+  "k_config_unavailable_false_positive_fixed": "YES",
+  "k_config_fix_details": {
+    "removed_old_503_to_config_unavailable_mapping": true,
+    "frontend_does_not_use_local_key_cache_for_k_readiness": true,
+    "frontend_uses_backend_runtime_errors": true,
+    "api_key_runtime_error_message": "API Key 未生效，请检查密钥管理中的 SERP / ChatGPT / Claude / DeepSeek 绑定。",
+    "workflow_start_503_message": "关键词调研启动暂未完成，请刷新流程状态后重试。"
+  },
+  "production_browser_route_health": {
+    "backend_health": {
+      "url": "http://127.0.0.1:8000/health",
+      "status": 200,
+      "body": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "frontend_products": {
+      "url": "http://127.0.0.1:3000/products",
+      "status": 200,
+      "title": "产品知识库 | Barong Operations"
+    },
+    "old_error_text_present_in_page_or_bundle": false,
+    "checked_absent_text": [
+      "K 模块服务配置暂不可用",
+      "SERP result is required before retrying downstream steps"
+    ]
+  },
+  "production_keyword_start_validation": {
+    "method": "HTTP/API via production frontend proxy because authenticated browser click automation was not used",
+    "created_validation_product": true,
+    "created_product_id": "3e19f05d-a9f6-47a6-9a45-dcad0399c6ec",
+    "created_product_key": "abb2dd89-916d-4e87-a72b-e3074fc34cd3",
+    "source_record_id": "K-FRONTEND-SYNC-1782482247993",
+    "endpoint_called": "/api/backend/k/products/3e19f05d-a9f6-47a6-9a45-dcad0399c6ec/workflow/start",
+    "wrong_retry_endpoint_called": false,
+    "workflow_id": "03e1bfb4-76d1-4cd0-93ea-f0985cedf74c",
+    "workflow_status": "blocked",
+    "current_step": "risk_term_manual_review",
+    "serp_step": {
+      "status": "completed",
+      "keyword_count": 25,
+      "provider": "Serp爬虫系统"
+    },
+    "chatgpt_step": {
+      "status": "completed",
+      "cleaned_keywords": 5,
+      "filtered_keywords": 8,
+      "provider": "K系列ChatGpt 关键词初筛"
+    },
+    "claude_step": {
+      "status": "completed",
+      "final_keywords": 5,
+      "high_value_keywords": 3,
+      "provider": "K系列Opus 关键词终筛"
+    }
+  },
+  "e2e_report_confirmation": {
+    "source": "/opt/barong-ops-console/k_full_pipeline_e2e_validation_report.json",
+    "final_status": "passed",
+    "serp_keyword_count": 25,
+    "chatgpt_status": "completed",
+    "claude_status": "completed",
+    "deepseek_status": "completed",
+    "image_upload": "passed",
+    "export_pipeline": "passed"
+  },
+  "observations": [
+    "A pre-existing visible product be5dfa01-b211-4708-8ddf-f53771c4f574 still has an old partial workflow state; rerunning start on that existing product returned backend 503 with generic detail. A fresh production-proxy initial workflow start succeeded and reached risk_term_manual_review after SERP, ChatGPT, and Claude completed.",
+    "No AI provider key, database schema, workflow engine rewrite, database reset, or product deletion was performed."
+  ],
+  "final_status": "passed"
+}

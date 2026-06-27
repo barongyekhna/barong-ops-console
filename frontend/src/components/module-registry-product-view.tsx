@@ -60,6 +60,7 @@ import {
   listOrganizations,
   type OrganizationOption,
 } from "@/lib/users-api";
+import { getModuleDisplayName } from "@/lib/i18n";
 
 const MODULE_PAGE_LIMIT = 10;
 const KEY_BINDING_ALIAS_OPTIONS = [
@@ -385,8 +386,10 @@ function moduleRegistryBindingOptions(
   registryItems: readonly ModuleManifest[],
 ): BindingModuleOption[] {
   return registryItems.map((item) => ({
-    display_name:
+    display_name: getModuleDisplayName(
+      item.module_key,
       item.display_name || item.navigation.label || item.module_key,
+    ),
     module_id: item.module_key,
     source: "module_registry",
   }));
@@ -403,7 +406,7 @@ function mergeBindingModuleOptions({
 
   for (const module of controlModules) {
     options.set(module.module_id, {
-      display_name: module.display_name,
+      display_name: getModuleDisplayName(module.module_id, module.display_name),
       module_id: module.module_id,
       source: "module_control_center",
     });
@@ -705,7 +708,10 @@ function OwnerModuleControlCenter() {
     const names = new Map<string, string>();
     for (const group of controlCenter?.organizations ?? []) {
       for (const module of group.modules) {
-        names.set(module.module_id, module.display_name);
+        names.set(
+          module.module_id,
+          getModuleDisplayName(module.module_id, module.display_name),
+        );
       }
     }
     for (const module of registryModuleOptions) {
@@ -1047,7 +1053,12 @@ function OwnerModuleControlCenter() {
                     <article className="module-control-card" key={module.module_id}>
                       <div className="module-control-card-top">
                         <div>
-                          <strong>{module.display_name}</strong>
+                          <strong>
+                            {getModuleDisplayName(
+                              module.module_id,
+                              module.display_name,
+                            )}
+                          </strong>
                           <span>{moduleDescription(module.module_id)}</span>
                         </div>
                         <span
@@ -1330,7 +1341,7 @@ function OwnerModuleControlCenter() {
               >
                 {selectedBindingModules.map((module) => (
                   <option key={module.module_id} value={module.module_id}>
-                    {module.display_name}
+                    {getModuleDisplayName(module.module_id, module.display_name)}
                   </option>
                 ))}
               </select>

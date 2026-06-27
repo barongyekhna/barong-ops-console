@@ -1,0 +1,257 @@
+{
+  "generated_at": "2026-06-26T12:37:15.897Z",
+  "deployment_status": {
+    "backend_health": 200,
+    "chatgpt_model": "gpt-5.5",
+    "chatgpt_model_probe": "200"
+  },
+  "each_step_execution_result": [
+    {
+      "name": "health",
+      "status": "passed",
+      "detail": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      },
+      "at": "2026-06-26T12:37:16.502Z"
+    },
+    {
+      "name": "login_owner_session",
+      "status": "passed",
+      "detail": {
+        "user": {
+          "id": 1,
+          "username": "barongyekhna",
+          "role": "owner",
+          "organization_id": null,
+          "must_change_password": "[redacted]",
+          "is_active": true,
+          "last_login_at": "2026-06-26T12:32:38.588659Z"
+        }
+      },
+      "at": "2026-06-26T12:37:17.084Z"
+    },
+    {
+      "name": "auth_context",
+      "status": "passed",
+      "detail": {
+        "user_id": 1,
+        "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+        "role": "owner",
+        "module_scope": [],
+        "context_available": true,
+        "resolution_source": "fallback_owner_org"
+      },
+      "at": "2026-06-26T12:37:17.987Z"
+    },
+    {
+      "name": "create_product",
+      "status": "passed",
+      "detail": {
+        "id": "0450f4a3-6b38-4b89-9f41-6da5b817b2e9",
+        "product_key": "414eddf6-435a-4987-9d11-62f6072c4b46",
+        "main_keyword": "stainless steel centrifugal pump",
+        "variants": 2
+      },
+      "at": "2026-06-26T12:37:18.592Z"
+    },
+    {
+      "name": "workflow_start_serp_chatgpt_claude",
+      "status": "passed",
+      "detail": {
+        "workflow_id": "b8e84737-82a6-4510-9c73-6435d4c7bf52",
+        "status": "blocked",
+        "current_step": "risk_term_manual_review",
+        "final_keyword_count": 0
+      },
+      "at": "2026-06-26T12:40:21.279Z"
+    },
+    {
+      "name": "risk_term_manual_review",
+      "status": "passed",
+      "detail": {
+        "decisions": 5,
+        "status": "blocked",
+        "current_step": "image_binding"
+      },
+      "at": "2026-06-26T12:40:22.177Z"
+    },
+    {
+      "name": "deepseek_selling_points_generation",
+      "status": "passed",
+      "detail": {
+        "status": "completed",
+        "stored_event_id": "3f66822d-c456-4a5e-9c69-96790c95de9f",
+        "bullet_count": 6,
+        "target_language": "en"
+      },
+      "at": "2026-06-26T12:40:56.180Z"
+    },
+    {
+      "name": "binary_image_upload",
+      "status": "passed",
+      "detail": {
+        "asset_id": "b44a96ce-e882-4211-8168-2429ba176504",
+        "product_id": "414eddf6-435a-4987-9d11-62f6072c4b46",
+        "variant_sku": "E2E-PUMP-MQUX1LIB-79EB9E66",
+        "object_key": "images/414eddf6-435a-4987-9d11-62f6072c4b46/E2E-PUMP-MQUX1LIB-79EB9E66/8444d3f8-c73e-430a-8f7c-6208af538ec8-e2e-mqux1lib.png",
+        "mime_type": "image/png",
+        "direct_binary_upload": true
+      },
+      "at": "2026-06-26T12:40:56.683Z"
+    },
+    {
+      "name": "image_binding",
+      "status": "passed",
+      "detail": {
+        "status": "ready_for_export",
+        "current_step": "export_p_series",
+        "image_binding_json": {
+          "status": "bound",
+          "source_type": "manual_upload_image",
+          "asset_id": "b44a96ce-e882-4211-8168-2429ba176504",
+          "i_system_image_asset_id": null,
+          "variant_sku": "E2E-PUMP-MQUX1LIB-79EB9E66",
+          "object_key": "images/414eddf6-435a-4987-9d11-62f6072c4b46/E2E-PUMP-MQUX1LIB-79EB9E66/8444d3f8-c73e-430a-8f7c-6208af538ec8-e2e-mqux1lib.png",
+          "file_url_placeholder": null,
+          "bound_at": "2026-06-26T12:40:56.990618+00:00"
+        }
+      },
+      "at": "2026-06-26T12:40:57.389Z"
+    },
+    {
+      "name": "export_pipeline",
+      "status": "passed",
+      "detail": {
+        "status": "exported",
+        "current_step": "export_seo",
+        "report_status": "exported"
+      },
+      "at": "2026-06-26T12:40:58.501Z"
+    },
+    {
+      "name": "database_reload_consistency",
+      "status": "passed",
+      "detail": {
+        "product": {
+          "id": "0450f4a3-6b38-4b89-9f41-6da5b817b2e9",
+          "main_keyword": "stainless steel centrifugal pump",
+          "target_market": "US",
+          "variants": 2
+        },
+        "keywords_count": 29,
+        "risk_terms_count": 5,
+        "media_count": 1,
+        "workflow_status": "exported",
+        "workflow_current_step": "export_seo"
+      },
+      "at": "2026-06-26T12:40:59.282Z"
+    }
+  ],
+  "api_call_logs": {
+    "serp": {
+      "status": "completed",
+      "trace": {
+        "step": "serp_keyword_fetch",
+        "status": "completed",
+        "timestamp": "2026-06-26T12:37:50.999904+00:00",
+        "input_summary": {},
+        "output_summary": {
+          "keyword_count": 25,
+          "competitor_count": 2,
+          "provider": "Serp爬虫系统"
+        },
+        "error": null
+      }
+    },
+    "chatgpt": {
+      "status": "completed",
+      "trace": {
+        "step": "ai_filter_chatgpt",
+        "status": "completed",
+        "timestamp": "2026-06-26T12:39:57.365112+00:00",
+        "input_summary": {},
+        "output_summary": {
+          "cleaned_keywords": 4,
+          "filtered_keywords": 7,
+          "rejected_keywords": 18,
+          "provider": "K系列ChatGpt 关键词初筛"
+        },
+        "error": null
+      },
+      "output_count": 4
+    },
+    "claude": {
+      "status": "completed",
+      "trace": {
+        "step": "ai_filter_claude_opus",
+        "status": "completed",
+        "timestamp": "2026-06-26T12:40:21.083452+00:00",
+        "input_summary": {},
+        "output_summary": {
+          "final_keywords": 4,
+          "high_value_keywords": 3,
+          "low_value_keywords": 1,
+          "risk_keywords": 5,
+          "provider": "K系列Opus 关键词终筛"
+        },
+        "error": null
+      },
+      "output_count": 4
+    },
+    "deepseek": {
+      "status": "completed",
+      "stored_event_id": "3f66822d-c456-4a5e-9c69-96790c95de9f",
+      "bullet_count": 6,
+      "target_language": "en"
+    }
+  },
+  "database_write_confirmation": {
+    "product": {
+      "id": "0450f4a3-6b38-4b89-9f41-6da5b817b2e9",
+      "product_key": "414eddf6-435a-4987-9d11-62f6072c4b46",
+      "main_keyword": "stainless steel centrifugal pump",
+      "variants": 2
+    },
+    "risk_terms_before_review": 5,
+    "selling_points": {
+      "product_id": "0450f4a3-6b38-4b89-9f41-6da5b817b2e9",
+      "stored_event_id": "3f66822d-c456-4a5e-9c69-96790c95de9f"
+    },
+    "reloaded": {
+      "product": {
+        "id": "0450f4a3-6b38-4b89-9f41-6da5b817b2e9",
+        "main_keyword": "stainless steel centrifugal pump",
+        "target_market": "US",
+        "variants": 2
+      },
+      "keywords_count": 29,
+      "risk_terms_count": 5,
+      "media_count": 1,
+      "workflow_status": "exported",
+      "workflow_current_step": "export_seo"
+    }
+  },
+  "image_upload_confirmation": {
+    "asset_id": "b44a96ce-e882-4211-8168-2429ba176504",
+    "product_id": "414eddf6-435a-4987-9d11-62f6072c4b46",
+    "variant_sku": "E2E-PUMP-MQUX1LIB-79EB9E66",
+    "object_key": "images/414eddf6-435a-4987-9d11-62f6072c4b46/E2E-PUMP-MQUX1LIB-79EB9E66/8444d3f8-c73e-430a-8f7c-6208af538ec8-e2e-mqux1lib.png",
+    "mime_type": "image/png",
+    "direct_binary_upload": true
+  },
+  "failure_points": [],
+  "success_criteria": {
+    "serp_real_keywords_returned": true,
+    "chatgpt_real_execution": true,
+    "claude_real_execution": true,
+    "deepseek_selling_points_available": true,
+    "risk_terms_reviewable": true,
+    "drag_drop_binary_upload_supported": true,
+    "all_data_stored_and_reloaded": true,
+    "workflow_no_pending_deadlock": true
+  },
+  "final_status": "passed"
+}

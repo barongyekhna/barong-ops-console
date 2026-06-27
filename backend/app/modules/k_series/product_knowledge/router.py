@@ -3,6 +3,9 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import os
+import re
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from threading import Lock
@@ -10,7 +13,19 @@ from time import monotonic
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, status
+from fastapi import (
+    APIRouter,
+    Body,
+    Depends,
+    File,
+    Form,
+    HTTPException,
+    Query,
+    Request,
+    UploadFile,
+    status,
+)
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
@@ -18,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from ....api.deps import get_current_user
 from ....core.roles import is_super_admin_role
-from ....db.session import get_db
+from ....db.session import SessionLocal, get_db
 from ....models.user import User
 from ....services.api_key_orchestration import ApiKeyIsolationError
 from ....services.ai_provider_router import AIExecutionRouter, AIProviderExecutionError
@@ -106,6 +121,12 @@ from .workflow_engine import (
     IMAGE_SOURCE_MANUAL,
     KWorkflowOrchestratorV2,
     KWorkflowExecutionError,
+    _user_uuid,
+)
+from .prompt_skills import (
+    SELLING_POINTS_SKILL_VERSION,
+    selling_points_instruction,
+    selling_points_skill_context,
 )
 
 router = APIRouter(prefix="/k", tags=["k-product-knowledge"])
@@ -237,6 +258,7 @@ class SERPSearchRequest(BaseModel):
     product_id: str = Field(min_length=1)
     market: str = Field(min_length=1, max_length=50)
     query: str = Field(min_length=1)
+    main_keyword: str | None = Field(default=None, max_length=512)
 
 
 class SERPResultResponse(BaseModel):
@@ -272,11 +294,29 @@ class SellingPointsResponse(BaseModel):
     market_tags: list[str] = Field(default_factory=list)
     confidence_score: float = Field(ge=0.0, le=1.0)
     source: str
+    marketing_copy: str | None = None
+    translated_version: str | None = None
+    chinese_translation: str | None = None
+    target_language: str | None = None
+    product_id: str | None = None
+    stored_event_id: str | None = None
 
 
 class GenerateSellingPointsRequest(BaseModel):
     product: dict[str, Any] = Field(default_factory=dict)
     mode: str | None = None
+
+
+class ApproveSellingPointsRequest(BaseModel):
+    bullets: list[SellingPointBullet] = Field(min_length=1)
+    seo_keywords: list[str] = Field(default_factory=list)
+    market_tags: list[str] = Field(default_factory=list)
+    confidence_score: float = Field(default=1.0, ge=0.0, le=1.0)
+    source: str | None = Field(default="manual_review", max_length=100)
+    marketing_copy: str | None = None
+    translated_version: str | None = None
+    chinese_translation: str | None = None
+    target_language: str | None = Field(default=None, max_length=32)
 
 
 class ProductDeleteRequest(BaseModel):
@@ -490,6 +530,7 @@ def _product_read(
     variants = _product_variants(db, product)
     return ProductKnowledgeRead.model_validate(product).model_copy(
         update={
+            "main_keyword": product.primary_keyword,
             "variant_count": len(variants),
             "variants": [
                 ProductKnowledgeVariantRead.model_validate(variant)
@@ -506,6 +547,7 @@ def _product_list_item(
     variants = _product_variants(db, product)
     return ProductKnowledgeListItem.model_validate(product).model_copy(
         update={
+            "main_keyword": product.primary_keyword,
             "variant_count": len(variants),
             "variants": [
                 ProductKnowledgeVariantRead.model_validate(variant)
@@ -539,6 +581,7 @@ def _count_products(
             | KProductKnowledgeProduct.sku.ilike(term)
             | KProductKnowledgeProduct.parent_sku.ilike(term)
             | KProductKnowledgeProduct.source_record_id.ilike(term)
+            | KProductKnowledgeProduct.primary_keyword.ilike(term)
             | KProductKnowledgeProduct.product_name_en.ilike(term)
             | KProductKnowledgeProduct.brand_name.ilike(term)
         )
@@ -756,9 +799,48 @@ def _execution_configuration_message() -> str:
     )
 
 
+def _execution_error_reason(code: str | None) -> str:
+    if code == API_KEY_BINDING_MISSING_CODE:
+        return "missing_key"
+    if code == API_KEY_INJECTION_FAILED_CODE:
+        return "key_resolution_failed"
+    if code == ORG_CONTEXT_REQUIRED_CODE:
+        return "missing_context"
+    if code == MODULE_DISABLED_CODE:
+        return "module_disabled"
+    if code == MODULE_NOT_REGISTERED_CODE:
+        return "module_not_registered"
+    return "execution_error"
+
+
+def _structured_execution_error_detail(
+    *,
+    reason: str,
+    message: str,
+    code: str | None = None,
+    module_id: str | None = None,
+    org_id: str | None = None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    detail: dict[str, Any] = {
+        "status": "failed",
+        "reason": reason,
+        "message": message,
+    }
+    if code is not None:
+        detail["code"] = code
+    if module_id is not None:
+        detail["module_id"] = module_id
+    if org_id is not None:
+        detail["org_id"] = org_id
+    if extra:
+        detail.update(extra)
+    return detail
+
+
 def _gate_error(exc: ModuleExecutionGateError) -> HTTPException:
     is_configuration_error = _is_execution_configuration_error(exc.code)
-    status_code = (
+    status_code = status.HTTP_400_BAD_REQUEST if exc.code == ORG_CONTEXT_REQUIRED_CODE else (
         status.HTTP_503_SERVICE_UNAVAILABLE
         if is_configuration_error
         else exc.status_code
@@ -770,12 +852,13 @@ def _gate_error(exc: ModuleExecutionGateError) -> HTTPException:
     )
     return HTTPException(
         status_code=status_code,
-        detail={
-            "code": exc.code,
-            "message": message,
-            "module_id": exc.module_id,
-            "org_id": exc.org_id,
-        },
+        detail=_structured_execution_error_detail(
+            reason=_execution_error_reason(exc.code),
+            code=exc.code,
+            message=message,
+            module_id=exc.module_id,
+            org_id=exc.org_id,
+        ),
     )
 
 
@@ -783,9 +866,15 @@ def _workflow_error(exc: KWorkflowExecutionError) -> HTTPException:
     code = exc.error_report.get("code") if isinstance(exc.error_report, dict) else None
     if _is_execution_configuration_error(code if isinstance(code, str) else None):
         detail = dict(exc.error_report)
+        detail.setdefault("status", "failed")
+        detail.setdefault("reason", _execution_error_reason(code if isinstance(code, str) else None))
         detail["message"] = _execution_configuration_message()
         return HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            status_code=(
+                status.HTTP_400_BAD_REQUEST
+                if code == ORG_CONTEXT_REQUIRED_CODE
+                else status.HTTP_503_SERVICE_UNAVAILABLE
+            ),
             detail=detail,
         )
     return HTTPException(status_code=exc.status_code, detail=exc.error_report)
@@ -818,8 +907,10 @@ def _execute_provider_json(
     task_type: str,
     payload: dict[str, Any],
 ) -> dict[str, Any]:
+    del db
+    provider_db = SessionLocal()
     try:
-        return AIExecutionRouter(db).execute(
+        return AIExecutionRouter(provider_db).execute(
             provider=provider,
             task_type=task_type,  # type: ignore[arg-type]
             payload=payload,
@@ -828,16 +919,335 @@ def _execute_provider_json(
             execution_context=context,
         )
     except AIProviderExecutionError as exc:
+        provider_detail = exc.structured_error()
+        extra = provider_detail if isinstance(provider_detail, dict) else None
         raise HTTPException(
             status_code=exc.status_code,
-            detail=exc.structured_error(),
+            detail=_structured_execution_error_detail(
+                reason="provider_error",
+                code=exc.code,
+                message=str(exc),
+                module_id=MODULE_KEY,
+                org_id=context.org_id,
+                extra={"provider_error": extra} if extra else None,
+            ),
         ) from exc
+    except Exception as exc:
+        logger.exception("K provider execution failed provider=%s", provider)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_structured_execution_error_detail(
+                reason="provider_error",
+                code="PROVIDER_EXECUTION_FAILED",
+                message="Provider execution failed.",
+                module_id=MODULE_KEY,
+                org_id=context.org_id,
+                extra={"provider": provider},
+            ),
+        ) from exc
+    finally:
+        provider_db.close()
 
 
 def _safe_string_list(value: Any) -> list[str]:
     if not isinstance(value, list):
         return []
     return [str(item) for item in value if str(item).strip()]
+
+
+def _strict_json_messages(
+    *,
+    instruction: str,
+    payload: dict[str, Any],
+) -> list[dict[str, str]]:
+    return [
+        {"role": "system", "content": instruction},
+        {
+            "role": "user",
+            "content": json.dumps(payload, ensure_ascii=False, default=str, sort_keys=True),
+        },
+    ]
+
+
+def _safe_filename(value: str | None) -> str:
+    cleaned = re.sub(r"[^A-Za-z0-9._-]+", "-", (value or "image").strip())
+    cleaned = cleaned.strip(".-_")
+    return cleaned[:180] or "image"
+
+
+def _media_storage_root() -> Path:
+    return Path(os.getenv("K_PRODUCT_MEDIA_STORAGE_DIR", "/tmp/barong-k-media"))
+
+
+def _product_full_ai_payload(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> dict[str, Any]:
+    variants = [
+        ProductKnowledgeVariantRead.model_validate(variant).model_dump(mode="json")
+        for variant in _product_variants(db, product)
+    ]
+    attributes = [
+        {
+            "attribute_key": row.attribute_key,
+            "attribute_value_text": row.attribute_value_text,
+            "attribute_value_json": row.attribute_value_json,
+            "attribute_unit": row.attribute_unit,
+            "attribute_group": row.attribute_group,
+            "source": row.source,
+        }
+        for row in db.scalars(
+            select(KProductKnowledgeAttribute)
+            .where(KProductKnowledgeAttribute.product_id == product.id)
+            .order_by(KProductKnowledgeAttribute.created_at.asc())
+        )
+    ]
+    keywords = [
+        {
+            "keyword": row.keyword_text,
+            "keyword_type": row.keyword_type,
+            "status": row.status,
+            "market": row.market,
+            "source": row.source,
+        }
+        for row in db.scalars(
+            select(KProductKnowledgeKeyword)
+            .where(KProductKnowledgeKeyword.product_id == product.id)
+            .order_by(KProductKnowledgeKeyword.created_at.asc())
+        )
+    ]
+    risk_terms = [
+        {
+            "term": row.term_en,
+            "status": row.status,
+            "risk_type": row.risk_type,
+            "risk_reason": row.risk_reason,
+        }
+        for row in db.scalars(
+            select(KProductKnowledgeRiskTerm)
+            .where(KProductKnowledgeRiskTerm.product_id == product.id)
+            .order_by(KProductKnowledgeRiskTerm.created_at.asc())
+        )
+    ]
+    return {
+        "product_id": str(product.id),
+        "product_key": product.product_key,
+        "sku": product.sku,
+        "parent_sku": product.parent_sku,
+        "name": product.product_name_en,
+        "title": product.product_name_en,
+        "brand_name": product.brand_name,
+        "manufacturer": product.manufacturer,
+        "product_type": product.product_type,
+        "market": product.target_market,
+        "target_market": product.target_market,
+        "target_language": product.canonical_language,
+        "main_keyword": product.primary_keyword,
+        "description": product.long_description_en or product.short_description_en,
+        "short_description": product.short_description_en,
+        "long_description": product.long_description_en,
+        "attributes": attributes,
+        "variants": variants,
+        "keywords": keywords,
+        "risk_terms": risk_terms,
+        "dimensions": product.dimensions_json,
+        "weight": product.weight_json,
+        "price": {
+            "regular_price": str(product.regular_price)
+            if product.regular_price is not None
+            else None,
+            "currency": product.price_currency,
+        },
+    }
+
+
+def _normalize_selling_points_response(
+    provider_output: dict[str, Any],
+    *,
+    product: KProductKnowledgeProduct | None = None,
+    source: str,
+    stored_event_id: UUID | None = None,
+) -> SellingPointsResponse:
+    def _first_present_from(record: dict[str, Any], *keys: str) -> Any:
+        for key in keys:
+            value = record.get(key)
+            if value:
+                return value
+        return None
+
+    def _first_present(*keys: str) -> Any:
+        return _first_present_from(provider_output, *keys)
+
+    raw_bullets = _first_present(
+        "bullets",
+        "selling_points",
+        "high_conversion_selling_points",
+        "structured_bullet_points",
+        "bullet_points",
+        "conversion_selling_points",
+        "conversion_bullets",
+        "value_propositions",
+        "卖点",
+        "转化卖点",
+    ) or []
+    if isinstance(raw_bullets, dict):
+        raw_bullets = _first_present_from(
+            raw_bullets,
+            "items",
+            "bullets",
+            "points",
+            "selling_points",
+            "structured_bullet_points",
+        ) or list(raw_bullets.values())
+    bullets: list[SellingPointBullet] = []
+    if isinstance(raw_bullets, list):
+        for index, raw in enumerate(raw_bullets, start=1):
+            if isinstance(raw, dict):
+                text = str(
+                    raw.get("text")
+                    or raw.get("copy")
+                    or raw.get("point")
+                    or raw.get("headline")
+                    or raw.get("benefit")
+                    or raw.get("value_proposition")
+                    or raw.get("卖点")
+                    or raw.get("文案")
+                    or ""
+                ).strip()
+                category = str(
+                    raw.get("category")
+                    or raw.get("type")
+                    or raw.get("theme")
+                    or raw.get("类别")
+                    or "conversion"
+                ).strip()
+                score_raw = (
+                    raw.get("importance_score")
+                    or raw.get("score")
+                    or raw.get("priority")
+                    or raw.get("权重")
+                    or 1
+                )
+            else:
+                text = str(raw).strip()
+                category = "conversion"
+                score_raw = index
+            if not text:
+                continue
+            try:
+                score = float(score_raw)
+            except (TypeError, ValueError):
+                score = float(index)
+            bullets.append(
+                SellingPointBullet(
+                    category=category or "conversion",
+                    text=text,
+                    importance_score=score,
+                )
+            )
+    if not bullets and isinstance(provider_output.get("content"), str):
+        bullets.append(
+            SellingPointBullet(
+                category="marketing",
+                text=str(provider_output["content"]).strip(),
+                importance_score=1,
+            )
+        )
+    if not bullets:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_structured_execution_error_detail(
+                reason="provider_error",
+                code="SELLING_POINTS_EMPTY",
+                message="DeepSeek selling points response did not include usable bullet points.",
+                module_id=MODULE_KEY,
+            ),
+        )
+
+    confidence_raw = provider_output.get("confidence_score") or provider_output.get("confidence") or 0.8
+    try:
+        confidence = max(0.0, min(1.0, float(confidence_raw)))
+    except (TypeError, ValueError):
+        confidence = 0.8
+    return SellingPointsResponse(
+        bullets=bullets,
+        seo_keywords=_safe_string_list(
+            _first_present("seo_keywords", "keywords", "search_keywords", "关键词")
+        ),
+        market_tags=_safe_string_list(
+            _first_present("market_tags", "tags", "audience_tags", "市场标签")
+        ),
+        confidence_score=confidence,
+        source=source,
+        marketing_copy=(
+            _first_present("marketing_copy", "copy", "conversion_copy", "营销文案")
+            if isinstance(
+                _first_present("marketing_copy", "copy", "conversion_copy", "营销文案"),
+                str,
+            )
+            else None
+        ),
+        translated_version=(
+            _first_present("translated_version", "localized_copy", "translation")
+            if isinstance(
+                _first_present("translated_version", "localized_copy", "translation"),
+                str,
+            )
+            else None
+        ),
+        chinese_translation=(
+            _first_present(
+                "chinese_translation",
+                "zh_translation",
+                "translated_version_zh",
+                "chinese_version",
+                "中文翻译",
+                "中文版本",
+            )
+            if isinstance(
+                _first_present(
+                    "chinese_translation",
+                    "zh_translation",
+                    "translated_version_zh",
+                    "chinese_version",
+                    "中文翻译",
+                    "中文版本",
+                ),
+                str,
+            )
+            else None
+        ),
+        target_language=(
+            str(provider_output.get("target_language"))
+            if provider_output.get("target_language")
+            else product.canonical_language if product else None
+        ),
+        product_id=str(product.id) if product else None,
+        stored_event_id=str(stored_event_id) if stored_event_id else None,
+    )
+
+
+def _media_asset_read(
+    row: KProductKnowledgeMediaAsset,
+    *,
+    product_ref: str | None = None,
+) -> MediaAssetRead:
+    return MediaAssetRead(
+        id=str(row.id),
+        product_id=product_ref or str(row.product_id),
+        variant_sku=row.variant_sku,
+        asset_type=row.asset_type,
+        asset_role=row.asset_role,
+        status=row.status,
+        review_status=row.review_status,
+        object_key=row.object_key,
+        file_url_placeholder=row.file_url_placeholder,
+        mime_type=row.mime_type,
+        source=row.source,
+        metadata=row.metadata_json,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
+    )
 
 
 def _organic_results(value: Any) -> list[SERPItem]:
@@ -984,6 +1394,7 @@ def product_knowledge_detail(
         )
     except KProductKnowledgeError as exc:
         _raise_k_error(exc)
+        raise
     return _product_read(db, product)
 
 
@@ -1779,39 +2190,104 @@ def k16_serp_search(
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_KEYWORDS_MANAGE)),
 ) -> SERPResultResponse:
+    try:
+        product = _product_by_ref(
+            db,
+            product_ref=payload.product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_structured_execution_error_detail(
+                reason="missing_context",
+                code="PRODUCT_CONTEXT_MISSING",
+                message=str(exc),
+                module_id=MODULE_KEY,
+            ),
+        ) from exc
+
     context = _execution_context(
         db,
         request=request,
         user=user,
         key_requirements={"serp": "serp"},
     )
+    key = context.key_for_step("serp")
+    main_keyword = (payload.main_keyword or product.primary_keyword or "").strip()
+    if not context.org_id or not product.product_key or not payload.market or not main_keyword:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_structured_execution_error_detail(
+                reason="missing_context",
+                code="PRODUCT_CONTEXT_INCOMPLETE",
+                message="SERP execution requires product_id, product_key, target_market, main_keyword, and org_id.",
+                module_id=MODULE_KEY,
+                org_id=context.org_id,
+                extra={
+                    "missing": [
+                        field
+                        for field, present in {
+                            "product_id": bool(product.id),
+                            "product_key": bool(product.product_key),
+                            "target_market": bool(payload.market),
+                            "main_keyword": bool(main_keyword),
+                            "org_id": bool(context.org_id),
+                        }.items()
+                        if not present
+                    ],
+                },
+            ),
+        )
+    product_context = {
+        "org_id": context.org_id,
+        "product_id": str(product.id),
+        "product_key": product.product_key,
+        "target_market": payload.market,
+        "main_keyword": main_keyword,
+    }
     provider_output = _execute_provider_json(
         db,
         context=context,
         provider="serp",
         task_type="search",
         payload={
-            "product_id": payload.product_id,
+            "product_context": product_context,
+            "product_id": product_context["product_id"],
+            "product_key": product_context["product_key"],
+            "org_id": product_context["org_id"],
             "market": payload.market,
-            "query": payload.query,
+            "main_keyword": main_keyword,
+            "query": main_keyword,
+            "requested_query": payload.query,
+            "target_market": payload.market,
             "module_id": MODULE_KEY,
         },
     )
     organic_results = _organic_results(
         provider_output.get("organic_results")
+        or provider_output.get("organic")
         or provider_output.get("results")
         or provider_output.get("items")
     )
     if not organic_results:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="SERP provider response did not include organic results.",
+            detail=_structured_execution_error_detail(
+                reason="provider_error",
+                code="SERP_ORGANIC_RESULTS_MISSING",
+                message="SERP provider response did not include organic results.",
+                module_id=MODULE_KEY,
+                org_id=context.org_id,
+            ),
         )
+    product = db.merge(product)
+    db.flush()
+    db.refresh(product)
     product = _product_by_ref(
         db,
-        product_ref=payload.product_id,
+        product_ref=str(product.id),
         scope_context=_scope_context(request),
-        create_shell=True,
     )
     keywords = _safe_string_list(provider_output.get("keywords"))
     competitors = _safe_string_list(
@@ -1837,7 +2313,7 @@ def k16_serp_search(
         id=str(run.id),
         product_id=_product_public_ref(product),
         market=payload.market,
-        query=payload.query,
+        query=main_keyword,
         organic_results=organic_results,
         competitor_links=competitors,
         keywords=keywords,
@@ -1860,6 +2336,7 @@ def deepseek_enrich_product(
         user=user,
         key_requirements={"deepseek": "deepseek"},
     )
+    key = context.key_for_step("deepseek")
     product = _product_by_ref(
         db,
         product_ref=product_id,
@@ -1913,6 +2390,7 @@ def translate_product(
         user=user,
         key_requirements={"ai_provider": "ai_provider"},
     )
+    key = context.key_for_step("ai_provider")
     product = _product_by_ref(
         db,
         product_ref=product_id,
@@ -1967,6 +2445,7 @@ def risk_filter_product(
         user=user,
         key_requirements={"ai_provider": "ai_provider"},
     )
+    key = context.key_for_step("ai_provider")
     product = _product_by_ref(
         db,
         product_ref=product_id,
@@ -2034,34 +2513,298 @@ def generate_selling_points(
         db,
         request=request,
         user=user,
-        key_requirements={"ai_provider": "ai_provider"},
+        key_requirements={"deepseek": "deepseek"},
+    )
+    key = context.key_for_step("deepseek")
+    db.rollback()
+    ai_payload = {
+        "product": payload.product,
+        "module_id": MODULE_KEY,
+        "task": "selling_points",
+        "selling_points_skill": selling_points_skill_context(),
+        "required_output": [
+            "high_conversion_selling_points",
+            "structured_bullet_points",
+            "marketing_optimized_copy",
+            "translated_version",
+            "chinese_translation",
+        ],
+    }
+    ai_payload["messages"] = _strict_json_messages(
+        instruction=selling_points_instruction(),
+        payload=ai_payload,
     )
     provider_output = _execute_provider_json(
         db,
         context=context,
-        provider="chatgpt",
-        task_type="generate",
-        payload={
-            "product": payload.product,
-            "module_id": MODULE_KEY,
-            "task": "selling_points",
-        },
+        provider="deepseek",
+        task_type="selling_points",
+        payload=ai_payload,
     )
     try:
-        return SellingPointsResponse.model_validate(
-            {
-                "bullets": provider_output.get("bullets"),
-                "seo_keywords": provider_output.get("seo_keywords", []),
-                "market_tags": provider_output.get("market_tags", []),
-                "confidence_score": provider_output.get("confidence_score", 0),
-                "source": "chatgpt",
-            }
+        return _normalize_selling_points_response(
+            provider_output,
+            source=key.name,
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="AI provider response did not match selling-points schema.",
+            detail=_structured_execution_error_detail(
+                reason="provider_error",
+                code="AI_RESPONSE_SCHEMA_MISMATCH",
+                message="AI provider response did not match selling-points schema.",
+                module_id=MODULE_KEY,
+                org_id=context.org_id,
+                extra={"provider": key.name},
+            ),
         ) from exc
+
+
+@router.post(
+    "/products/{product_id}/selling-points/generate",
+    response_model=SellingPointsResponse,
+)
+def generate_product_selling_points(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> SellingPointsResponse:
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    if not (product.primary_keyword or "").strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_structured_execution_error_detail(
+                reason="missing_context",
+                code="MAIN_KEYWORD_REQUIRED",
+                message="Selling points generation requires product main_keyword.",
+                module_id=MODULE_KEY,
+            ),
+        )
+    context = _execution_context(
+        db,
+        request=request,
+        user=user,
+        key_requirements={"deepseek": "deepseek"},
+    )
+    key = context.key_for_step("deepseek")
+    product_payload = _product_full_ai_payload(db, product)
+    scope_context = _scope_context(request)
+    source_name = key.name
+    db.rollback()
+    ai_payload = {
+        "product": product_payload,
+        "module_id": MODULE_KEY,
+        "task": "selling_points",
+        "provider": "deepseek",
+        "task_type": "selling_points",
+        "selling_points_skill": selling_points_skill_context(),
+        "required_output": [
+            "high_conversion_selling_points",
+            "structured_bullet_points",
+            "marketing_optimized_copy",
+            "translated_version",
+            "chinese_translation",
+        ],
+    }
+    ai_payload["messages"] = _strict_json_messages(
+        instruction=selling_points_instruction(),
+        payload=ai_payload,
+    )
+    provider_output = _execute_provider_json(
+        db,
+        context=context,
+        provider="deepseek",
+        task_type="selling_points",
+        payload=ai_payload,
+    )
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=scope_context,
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    try:
+        response = _normalize_selling_points_response(
+            provider_output,
+            product=product,
+            source=source_name,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=_structured_execution_error_detail(
+                reason="provider_error",
+                code="AI_RESPONSE_SCHEMA_MISMATCH",
+                message="AI provider response did not match selling-points schema.",
+                module_id=MODULE_KEY,
+                org_id=context.org_id,
+                extra={"provider": source_name},
+            ),
+        ) from exc
+    output_payload = response.model_dump(mode="json")
+    event = KProductKnowledgeAIEvent(
+        id=uuid4(),
+        product_id=product.id,
+        event_type="selling_points_generation",
+        provider=source_name,
+        provider_model="deepseek-v4-pro",
+        prompt_version=SELLING_POINTS_SKILL_VERSION,
+        input_hash=_source_text_hash(json.dumps(product_payload, sort_keys=True, default=str)),
+        output_summary_json={
+            "bullet_count": len(response.bullets),
+            "target_language": response.target_language,
+            "target_market": product.target_market,
+        },
+        output_payload_json=output_payload,
+        status="succeeded",
+        created_by_user_id=_user_uuid(user),
+        updated_by_user_id=_user_uuid(user),
+    )
+    product.deepseek_structured_output_json = {
+        **(product.deepseek_structured_output_json or {}),
+        "selling_points_generation": provider_output,
+    }
+    product.ai_warnings_json = {
+        **(product.ai_warnings_json or {}),
+        "selling_points": output_payload,
+    }
+    latest_execution = KWorkflowOrchestratorV2(db).latest_execution_for_product(
+        product_id=product.id,
+        scope_context=_scope_context(request),
+    )
+    if latest_execution is not None:
+        latest_execution.trace_json = [
+            *(latest_execution.trace_json or []),
+            {
+                "step": "selling_points_generation",
+                "status": "completed",
+                "timestamp": _now().isoformat(),
+                "output_summary": {
+                    "bullet_count": len(response.bullets),
+                    "provider": source_name,
+                },
+            },
+        ]
+        latest_execution.execution_gate_logs_json = [
+            *(latest_execution.execution_gate_logs_json or []),
+            {
+                "gate": "workflow_state_machine_v2",
+                "status": "allowed",
+                "details": {
+                    "event": "selling_points_generated",
+                    "state": "SELLING_POINTS_GENERATED",
+                    "step": "selling_points_generation",
+                    "closed_loop": True,
+                },
+                "timestamp": _now().isoformat(),
+            },
+        ]
+        db.add(latest_execution)
+    db.add_all([product, event])
+    db.commit()
+    db.refresh(event)
+    return response.model_copy(update={"stored_event_id": str(event.id)})
+
+
+@router.post(
+    "/products/{product_id}/selling-points/approve",
+    response_model=SellingPointsResponse,
+)
+def approve_product_selling_points(
+    product_id: UUID,
+    payload: ApproveSellingPointsRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> SellingPointsResponse:
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+
+    source = (payload.source or "manual_review").strip() or "manual_review"
+    target_language = (
+        payload.target_language.strip()
+        if payload.target_language and payload.target_language.strip()
+        else product.canonical_language
+    )
+    output_payload = {
+        "bullets": [bullet.model_dump(mode="json") for bullet in payload.bullets],
+        "seo_keywords": _safe_string_list(payload.seo_keywords),
+        "market_tags": _safe_string_list(payload.market_tags),
+        "confidence_score": payload.confidence_score,
+        "source": source,
+        "marketing_copy": payload.marketing_copy,
+        "translated_version": payload.translated_version,
+        "chinese_translation": payload.chinese_translation,
+        "target_language": target_language,
+        "product_id": str(product.id),
+        "review_status": "approved",
+        "approved_at": _now().isoformat(),
+    }
+    response = SellingPointsResponse(
+        bullets=payload.bullets,
+        seo_keywords=output_payload["seo_keywords"],
+        market_tags=output_payload["market_tags"],
+        confidence_score=payload.confidence_score,
+        source=source,
+        marketing_copy=payload.marketing_copy,
+        translated_version=payload.translated_version,
+        chinese_translation=payload.chinese_translation,
+        target_language=target_language,
+        product_id=str(product.id),
+    )
+    event = KProductKnowledgeAIEvent(
+        id=uuid4(),
+        product_id=product.id,
+        event_type="selling_points_manual_review",
+        provider=source,
+        provider_model=None,
+        prompt_version="k-selling-points-manual-review-v1",
+        input_hash=_source_text_hash(
+            json.dumps(output_payload, sort_keys=True, default=str)
+        ),
+        output_summary_json={
+            "bullet_count": len(payload.bullets),
+            "target_language": target_language,
+            "review_status": "approved",
+        },
+        output_payload_json=output_payload,
+        status="succeeded",
+        created_by_user_id=_user_uuid(user),
+        updated_by_user_id=_user_uuid(user),
+    )
+    product.ai_warnings_json = {
+        **(product.ai_warnings_json or {}),
+        "selling_points": output_payload,
+        "selling_points_review": {
+            "status": "approved",
+            "event_id": str(event.id),
+            "approved_at": output_payload["approved_at"],
+        },
+    }
+    db.add_all([product, event])
+    db.commit()
+    db.refresh(event)
+    return response.model_copy(update={"stored_event_id": str(event.id)})
 
 
 @router.get("/media", response_model=MediaAssetListResponse)
@@ -2074,6 +2817,8 @@ def list_media_assets(
     del user
     query = select(KProductKnowledgeMediaAsset).order_by(
         KProductKnowledgeMediaAsset.updated_at.desc()
+    ).where(
+        KProductKnowledgeMediaAsset.status != "removed"
     )
     if product_id:
         product = _product_by_ref(
@@ -2084,22 +2829,7 @@ def list_media_assets(
         query = query.where(KProductKnowledgeMediaAsset.product_id == product.id)
     rows = list(db.scalars(query))
     items = [
-        MediaAssetRead(
-            id=str(row.id),
-            product_id=str(row.product_id),
-            variant_sku=row.variant_sku,
-            asset_type=row.asset_type,
-            asset_role=row.asset_role,
-            status=row.status,
-            review_status=row.review_status,
-            object_key=row.object_key,
-            file_url_placeholder=row.file_url_placeholder,
-            mime_type=row.mime_type,
-            source=row.source,
-            metadata=row.metadata_json,
-            created_at=row.created_at,
-            updated_at=row.updated_at,
-        )
+        _media_asset_read(row)
         for row in rows
     ]
     return MediaAssetListResponse(items=items, count=len(items))
@@ -2163,22 +2893,76 @@ def create_media_asset(
     db.add(row)
     db.flush()
     db.refresh(row)
-    return MediaAssetRead(
-        id=str(row.id),
-        product_id=_product_public_ref(product),
-        variant_sku=row.variant_sku,
-        asset_type=row.asset_type,
-        asset_role=row.asset_role,
-        status=row.status,
-        review_status=row.review_status,
-        object_key=row.object_key,
-        file_url_placeholder=row.file_url_placeholder,
-        mime_type=row.mime_type,
-        source=row.source,
-        metadata=row.metadata_json,
-        created_at=row.created_at,
-        updated_at=row.updated_at,
+    db.commit()
+    db.refresh(row)
+    return _media_asset_read(row, product_ref=_product_public_ref(product))
+
+
+@router.post(
+    "/products/{product_id}/media/upload",
+    response_model=MediaAssetRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def upload_product_media_asset(
+    product_id: UUID,
+    request: Request,
+    variant_sku: str = Form(...),
+    asset_role: str = Form(default="main"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> MediaAssetRead:
+    del user
+    product = get_product(
+        db,
+        product_id=product_id,
+        scope_context=_scope_context(request),
     )
+    variant = _variant_by_sku(db, product=product, variant_sku=variant_sku)
+    filename = _safe_filename(file.filename)
+    contents = file.file.read()
+    if not contents:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Uploaded image file is empty.",
+        )
+    object_key = f"images/{product.product_key}/{variant.variant_sku}/{uuid4()}-{filename}"
+    storage_path = _media_storage_root() / object_key
+    storage_path.parent.mkdir(parents=True, exist_ok=True)
+    storage_path.write_bytes(contents)
+    row = KProductKnowledgeMediaAsset(
+        id=uuid4(),
+        product_id=product.id,
+        variant_id=variant.id,
+        variant_sku=variant.variant_sku,
+        asset_type="image",
+        asset_role=asset_role or "main",
+        status="available",
+        review_status="not_applicable",
+        object_key=object_key,
+        file_url_placeholder=None,
+        file_size=len(contents),
+        mime_type=file.content_type or "application/octet-stream",
+        source=IMAGE_SOURCE_MANUAL,
+        metadata_json={
+            "filename": filename,
+            "storage_provider": "local_filesystem",
+            "storage_path": str(storage_path),
+            "direct_binary_upload": True,
+            "product_folder": f"images/{product.product_key}",
+            "source_type": IMAGE_SOURCE_MANUAL,
+            "product_key": product.product_key,
+            "variant_folder": f"images/{product.product_key}/{variant.variant_sku}",
+            "variant_sku": variant.variant_sku,
+            "sku": product.sku,
+            "k_image_ai_generation_allowed": False,
+            "k_image_review_allowed": False,
+        },
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _media_asset_read(row, product_ref=_product_public_ref(product))
 
 
 @router.post(
@@ -2206,19 +2990,101 @@ def bind_product_image(
     return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
 
 
+@router.delete("/media/{asset_id}", response_model=MediaAssetRead)
+def delete_media_asset(
+    asset_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> MediaAssetRead:
+    row = db.get(KProductKnowledgeMediaAsset, asset_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Media asset was not found.")
+    try:
+        product = get_product(
+            db,
+            product_id=row.product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+
+    row.status = "removed"
+    row.review_status = "removed"
+    row.updated_by_user_id = _user_uuid(user)
+    row.metadata_json = {
+        **(row.metadata_json or {}),
+        "removed_at": _now().isoformat(),
+        "removed_by_user_id": str(_user_uuid(user)) if _user_uuid(user) else None,
+    }
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return _media_asset_read(row, product_ref=_product_public_ref(product))
+
+
+@router.get("/media/{asset_id}/file")
+def download_media_asset_file(
+    asset_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> FileResponse:
+    del user
+    row = db.get(KProductKnowledgeMediaAsset, asset_id)
+    if row is None or row.status == "removed":
+        raise HTTPException(status_code=404, detail="Media asset was not found.")
+    try:
+        get_product(
+            db,
+            product_id=row.product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+
+    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    storage_path_value = metadata.get("storage_path")
+    storage_path = (
+        Path(str(storage_path_value))
+        if storage_path_value
+        else _media_storage_root() / (row.object_key or "")
+    )
+    if not storage_path.is_file():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Media file was not found.",
+        )
+    filename = str(metadata.get("filename") or storage_path.name)
+    return FileResponse(
+        path=storage_path,
+        filename=filename,
+        media_type=row.mime_type or "application/octet-stream",
+    )
+
+
 @router.get(
     "/media/{asset_id}/download",
     response_model=ProductKnowledgeMediaDownloadResponse,
 )
 def download_media_asset(
     asset_id: UUID,
+    request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_READ)),
 ) -> ProductKnowledgeMediaDownloadResponse:
     del user
     row = db.get(KProductKnowledgeMediaAsset, asset_id)
-    if row is None:
+    if row is None or row.status == "removed":
         raise HTTPException(status_code=404, detail="Media asset was not found.")
+    try:
+        get_product(
+            db,
+            product_id=row.product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
     filename = None
     if isinstance(row.metadata_json, dict):
         filename = row.metadata_json.get("filename")

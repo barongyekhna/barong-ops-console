@@ -44,6 +44,7 @@ import {
 } from "@/lib/navigation";
 import type { FrontendPermissions } from "@/lib/permissions";
 import { isOwnerRole, isSuperAdminRole, normalizeRole } from "@/lib/roles";
+import { getModuleDisplayName } from "@/lib/i18n";
 
 export type ProductCapabilityStateName =
   | "allowed"
@@ -215,9 +216,9 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["k.product_knowledge", "产品知识库"],
   ["business.approvals", "审批"],
   ["business.reviews", "审批审计"],
-  ["core.dashboard", "首页"],
+  ["core.dashboard", "控制台"],
   ["admin.modules", "模块控制"],
-  ["admin.key_management", "API Key 管理"],
+  ["admin.key_management", "API密钥管理"],
   ["admin.settings", "设置"],
   ["system.errors", "异常记录"],
   ["system.memory_events", "运行记录"],
@@ -547,7 +548,10 @@ function routeLabel(record: ModuleAwareNavigationRecord, manifest: ModuleManifes
   if (productLabel) {
     return productLabel;
   }
-  return manifest?.navigation.label || manifest?.display_name || record.label;
+  return getModuleDisplayName(
+    record.module_key,
+    manifest?.navigation.label || manifest?.display_name || record.label,
+  );
 }
 
 function routeGroup(record: ModuleAwareNavigationRecord, manifest: ModuleManifest | null) {

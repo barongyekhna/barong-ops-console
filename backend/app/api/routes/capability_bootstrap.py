@@ -23,10 +23,12 @@ from ...schemas.module_adapter import (
     ModuleAdapterRegistryResponse,
 )
 from ...services.live_gating_controller import PLATFORM_ORG_ID, LiveGatingController
+from ...services.data_isolation import without_org_data_isolation
 from ...services.module_adapter_registry import (
     list_adapter_contracts,
     list_adapters_for_user,
 )
+from ...services.module_control_center import filter_module_control_center_for_user
 from ...services.module_control_cache_service import (
     get_module_control_center_cached,
     refresh_module_control_center_cache_sync,
@@ -179,9 +181,17 @@ def capability_bootstrap(
         return LiveGatingController(db).list_policies(org_id=PLATFORM_ORG_ID)
 
     def module_control_center() -> ModuleControlCenterResponse:
-        if force_refresh:
-            return refresh_module_control_center_cache_sync()
-        return get_module_control_center_cached(db=db)
+        with without_org_data_isolation():
+            response = (
+                refresh_module_control_center_cache_sync()
+                if force_refresh
+                else get_module_control_center_cached(db=db)
+            )
+            return filter_module_control_center_for_user(
+                db,
+                user=user,
+                response=response,
+            )
 
     return {
         "modules_registry": _target_entry(

@@ -4,6 +4,7 @@ import { AlertCircle, AlertTriangle, ShieldAlert, ShieldCheck } from "lucide-rea
 
 import styles from "./RiskPanel.module.css";
 import type { RiskLevel } from "./types";
+import { riskLevelLabels } from "./types";
 
 type RiskBadgeProps = {
   level: RiskLevel;
@@ -15,7 +16,7 @@ export function RiskBadge({ level }: RiskBadgeProps) {
   return (
     <span className={`${styles.riskBadge} ${styles[level]}`}>
       <Icon aria-hidden="true" size={14} />
-      {level}
+      {riskLevelLabels[level]}
     </span>
   );
 }

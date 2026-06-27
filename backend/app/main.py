@@ -114,11 +114,12 @@ from .services.login_side_effects import (
     stop_login_side_effect_worker,
 )
 from .services.module_control_cache_service import (
-    get_module_control_center_cached_json,
+    get_module_control_center_cached,
     refresh_module_control_center_cache_async,
     start_module_control_cache_worker,
     stop_module_control_cache_worker,
 )
+from .services.module_control_center import filter_module_control_center_for_user
 from .services.module_registry import list_module_manifests_with_dynamic
 from .services.permission_service import resolve_current_user_permission_info
 from .services.permission_decision_engine import PermissionDecisionEngine
@@ -266,6 +267,19 @@ def _production_error_detail(request: Request, status_code: int) -> str:
     if status_code >= 500:
         return "Internal server error."
     return "Request failed."
+
+
+def _structured_failure_detail_for_production(
+    request: Request,
+    detail: object,
+) -> object | None:
+    if not request.url.path.startswith(f"{APPLICATION_API_PREFIX}/k/"):
+        return None
+    if not isinstance(detail, dict):
+        return None
+    if detail.get("status") != "failed" or not isinstance(detail.get("reason"), str):
+        return None
+    return detail
 
 
 app = FastAPI(
@@ -496,8 +510,16 @@ def _load_hot_read_payload(
         return response.model_dump_json()
 
     def load_module_control_center() -> object:
+        user = _identity_to_user(identity)
         with managed_read_session() as db:
-            return get_module_control_center_cached_json(db=db)
+            with without_org_data_isolation():
+                response = get_module_control_center_cached(db=db)
+                scoped_response = filter_module_control_center_for_user(
+                    db,
+                    user=user,
+                    response=response,
+                )
+            return scoped_response.model_dump_json()
 
     if path == "/api/app/organizations":
         return _cached_hot_read_payload(key, load_organizations)
@@ -513,11 +535,12 @@ async def sanitized_http_exception_handler(
     request: Request,
     exc: StarletteHTTPException,
 ):
-    detail = (
-        _production_error_detail(request, exc.status_code)
-        if _production_like()
-        else exc.detail
-    )
+    if _production_like():
+        detail = _structured_failure_detail_for_production(request, exc.detail)
+        if detail is None:
+            detail = _production_error_detail(request, exc.status_code)
+    else:
+        detail = exc.detail
     return _json_security_response(
         status_code=exc.status_code,
         detail=detail,

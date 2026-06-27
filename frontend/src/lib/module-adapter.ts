@@ -1013,8 +1013,8 @@ export function getAdapterSurfaceState(
       available: false,
       declared,
       disabled: true,
-      label: "Adapter access unknown",
-      reason: "Adapter metadata or access state is unavailable.",
+      label: "适配器状态未知",
+      reason: "适配器元数据或访问状态暂不可用。",
       state: "unknown",
       surface,
     };
@@ -1025,8 +1025,8 @@ export function getAdapterSurfaceState(
       available: false,
       declared: false,
       disabled: true,
-      label: "Not declared",
-      reason: "This surface is not declared by the adapter contract.",
+      label: "未声明",
+      reason: "该界面未在适配器契约中声明。",
       state: "unavailable",
       surface,
     };
@@ -1037,8 +1037,8 @@ export function getAdapterSurfaceState(
       available: false,
       declared,
       disabled: true,
-      label: "Hidden",
-      reason: "Adapter metadata is hidden by C07 module access.",
+      label: "已隐藏",
+      reason: "适配器元数据已被模块访问规则隐藏。",
       state: "hidden",
       surface,
     };
@@ -1049,8 +1049,8 @@ export function getAdapterSurfaceState(
       available: false,
       declared,
       disabled: true,
-      label: "Locked",
-      reason: "Current user lacks the adapter permissions for this surface.",
+      label: "受限",
+      reason: "当前用户缺少该界面的适配器权限。",
       state: "locked",
       surface,
     };
@@ -1061,10 +1061,10 @@ export function getAdapterSurfaceState(
       available: false,
       declared,
       disabled: true,
-      label: "Unavailable",
+      label: "暂不可用",
       reason:
         accessState.reason ||
-        "This adapter is pending, disabled, or unavailable.",
+        "该适配器正在等待配置、已禁用或暂不可用。",
       state: "unavailable",
       surface,
     };
@@ -1081,12 +1081,12 @@ export function getAdapterSurfaceState(
       disabled: true,
       label:
         surface === "action_panel"
-          ? "Execution Provider not connected"
-          : "Disabled",
+          ? "执行提供方未连接"
+          : "已禁用",
       reason:
         surface === "action_panel"
-          ? "Action surfaces remain disabled until C09 Execution Provider is connected."
-          : "This adapter surface is declared but disabled.",
+          ? "C09 执行提供方连接前，操作界面保持禁用。"
+          : "该适配器界面已声明但处于禁用状态。",
       state: "disabled",
       surface,
     };
@@ -1096,8 +1096,8 @@ export function getAdapterSurfaceState(
     available: true,
     declared,
     disabled: false,
-    label: "Available",
-    reason: "Adapter contract metadata is available for this surface.",
+    label: "可用",
+    reason: "该界面的适配器契约元数据可用。",
     state: "available",
     surface,
   };

@@ -35,6 +35,7 @@ def create_db_user(
     role: str = "viewer",
     is_active: bool = True,
     organization_id: str | None = None,
+    job_title: str | None = None,
 ) -> int:
     with SessionLocal() as db:
         user = User(
@@ -43,6 +44,7 @@ def create_db_user(
             role=role,
             is_active=is_active,
             organization_id=organization_id,
+            job_title=job_title,
         )
         db.add(user)
         db.commit()
@@ -432,18 +434,21 @@ def test_user_list_organization_filter_respects_owner_and_super_admin_scope(
         password=super_admin_password,
         role=ROLE_SUPER_ADMIN,
         organization_id=org_a,
+        job_title="Org A Admin",
     )
     create_db_user(
         username="filter_org_a_viewer",
         password="example-only-org-a-viewer-password",
         role=ROLE_VIEWER,
         organization_id=org_a,
+        job_title="Org A Viewer",
     )
-    create_db_user(
+    org_b_viewer_id = create_db_user(
         username="filter_org_b_viewer",
         password="example-only-org-b-viewer-password",
         role=ROLE_VIEWER,
         organization_id=org_b,
+        job_title="Org B Viewer",
     )
 
     owner_filtered = owner_client.get(f"/api/app/users?organization_id={org_b}")
@@ -466,20 +471,39 @@ def test_user_list_organization_filter_respects_owner_and_super_admin_scope(
         f"/api/app/users?organization_id={org_b}",
         headers=super_admin_headers,
     )
+    super_admin_cross_org_detail = auth_client.get(
+        f"/api/app/users/{org_b_viewer_id}",
+        headers=super_admin_headers,
+    )
 
     assert owner_filtered.status_code == 200
     assert {item["username"] for item in owner_filtered.json()["items"]} == {
         "filter_org_b_viewer",
     }
     assert super_admin_list.status_code == 200
-    assert {
-        item["organization_id"] for item in super_admin_list.json()["items"]
-    } == {org_a}
-    assert "filter_org_b_viewer" not in {
-        item["username"] for item in super_admin_list.json()["items"]
+    listed_by_username = {
+        item["username"]: item for item in super_admin_list.json()["items"]
     }
+    assert {
+        "filter_super_admin",
+        "filter_org_a_viewer",
+        "filter_org_b_viewer",
+    }.issubset(listed_by_username)
+    assert listed_by_username["filter_super_admin"]["organization_id"] == org_a
+    assert listed_by_username["filter_super_admin"]["organization"] == org_a
+    assert listed_by_username["filter_super_admin"]["role"] == ROLE_SUPER_ADMIN
+    assert listed_by_username["filter_super_admin"]["job_title"] == "Org A Admin"
+    assert listed_by_username["filter_org_b_viewer"]["organization_id"] == org_b
+    assert listed_by_username["filter_org_b_viewer"]["organization"] == org_b
+    assert listed_by_username["filter_org_b_viewer"]["role"] == ROLE_VIEWER
+    assert listed_by_username["filter_org_b_viewer"]["job_title"] == "Org B Viewer"
     assert super_admin_cross_org.status_code == 200
-    assert super_admin_cross_org.json()["items"] == []
+    assert {item["username"] for item in super_admin_cross_org.json()["items"]} == {
+        "filter_org_b_viewer",
+    }
+    assert super_admin_cross_org_detail.status_code == 200
+    assert super_admin_cross_org_detail.json()["organization_id"] == org_b
+    assert super_admin_cross_org_detail.json()["organization"] == org_b
 
 
 def test_user_detail_not_found_returns_404(owner_client: TestClient) -> None:

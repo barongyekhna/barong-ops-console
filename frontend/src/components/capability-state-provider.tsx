@@ -1,6 +1,5 @@
 "use client";
 
-import { usePathname } from "next/navigation";
 import {
   createContext,
   useCallback,
@@ -351,7 +350,6 @@ export function CapabilityStateProvider({
 }: {
   children: ReactNode;
 }) {
-  const pathname = usePathname();
   const { isOwner, status, user } = useAuth();
   const role = user?.role ?? "";
   const mountedRef = useRef(false);
@@ -496,7 +494,7 @@ export function CapabilityStateProvider({
 
   useEffect(() => {
     mountedRef.current = true;
-    void loadCapabilityState();
+    void loadCapabilityState({ force: true });
 
     return () => {
       abortCapabilityBootstrap(
@@ -509,7 +507,6 @@ export function CapabilityStateProvider({
     authKey,
     loadCapabilityState,
     loadRetryNonce,
-    pathname,
   ]);
 
   const refresh = useCallback(async () => {

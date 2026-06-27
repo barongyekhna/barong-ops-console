@@ -275,21 +275,33 @@ test("product management uses full-list route, safe delete, and clean K labels",
     "utf8",
   );
 
-  assert.match(productPageSource, /<ProductList \/>/);
+  assert.match(productPageSource, /<ProductListFull \/>/);
+  assert.doesNotMatch(
+    productPageSource,
+    /ResearchTriggerPanel|SERPTriggerPanel|KeywordPanel|RiskPanel|<ProductList \/>/,
+  );
   assert.match(fullProductPageSource, /ProductListFull/);
   assert.match(productListSource, /window\.open\(\s*"\/products\/full"/);
-  assert.match(productListSource, /Open Product List/);
+  assert.match(productListSource, /打开产品列表/);
   assert.match(productListSource, /PRODUCT_LIST_PAGE_SIZE\s*=\s*25/);
   assert.match(productListSource, /openProductId/);
   assert.doesNotMatch(productListSource, /selectedProductId/);
   assert.match(productListSource, /deleteProduct/);
-  assert.match(productListSource, /Confirm Delete/);
+  assert.match(productListSource, /确认删除/);
   assert.match(productListSource, /deleteConfirmation\.trim\(\) === deleteConfirmationKey/);
   assert.match(productListSource, /displayProductKey/);
   assert.match(productDetailSource, /onCollapse/);
-  assert.match(productDetailSource, /Start Keyword Research/);
-  assert.match(productDetailSource, /WORKFLOW_STAGES/);
-  assert.match(productDetailSource, /workflowProgress/);
+  assert.match(productDetailSource, /启动关键词调研/);
+  assert.match(productDetailSource, /KEYWORD_STEPS/);
+  assert.match(productDetailSource, /keywordProgress/);
+  assert.match(productDetailSource, /非风险关键词/);
+  assert.match(productDetailSource, /人工添加非风险关键词/);
+  assert.match(productDetailSource, /onApproveSellingPoints/);
+  assert.match(productDetailSource, /onDeleteMedia/);
+  assert.match(productDetailSource, /提交图片/);
+  assert.match(productDetailSource, /提交卖点/);
+  assert.match(productDetailSource, /P系列/);
+  assert.doesNotMatch(productDetailSource, /onExportWorkflow|exportResult|导出/);
   assert.match(productDetailSource, /formatVariantDisplayName/);
   assert.match(productFormSource, /variantAttributeBuilder/);
   assert.match(productFormSource, /addVariantAttribute/);

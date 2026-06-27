@@ -77,10 +77,10 @@ export function TopHeader({
           <Logo decorative />
         </span>
         <div className="topbar-heading-copy">
-          <span className="eyebrow">Workspace</span>
+          <span className="eyebrow">工作台</span>
           <div className="topbar-title-row">
             <h1>{title}</h1>
-            <span className="release-badge" title={`Release status: ${RELEASE_STATUS}`}>
+            <span className="release-badge" title={`发布状态: ${RELEASE_STATUS}`}>
               {RELEASE_VERSION}
             </span>
           </div>
@@ -90,12 +90,12 @@ export function TopHeader({
       <div className="topbar-tools">
         <label className="topbar-search">
           <Search aria-hidden="true" size={16} />
-          <input aria-label="搜索工作台" placeholder="Search modules" type="search" />
+          <input aria-label="搜索工作台" placeholder="搜索模块" type="search" />
         </label>
 
         <button className="secondary-button topbar-action" onClick={onRefresh} type="button">
           <RefreshCcw aria-hidden="true" size={16} />
-          Refresh
+          刷新
         </button>
 
         <div className="account-area">

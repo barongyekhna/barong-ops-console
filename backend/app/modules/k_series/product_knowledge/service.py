@@ -125,6 +125,7 @@ def list_products(
                 KProductKnowledgeProduct.sku.ilike(term),
                 KProductKnowledgeProduct.parent_sku.ilike(term),
                 KProductKnowledgeProduct.source_record_id.ilike(term),
+                KProductKnowledgeProduct.primary_keyword.ilike(term),
                 KProductKnowledgeProduct.product_name_en.ilike(term),
                 KProductKnowledgeProduct.brand_name.ilike(term),
             )
@@ -158,6 +159,7 @@ def create_product(
             {
                 "canonical_language": target_locale,
                 "parent_sku": parent_sku,
+                "primary_keyword": payload.main_keyword,
                 "product_key": product_key,
                 "product_type": product_type,
                 "raw_input_language": target_locale,
@@ -246,6 +248,9 @@ def update_product(
     product = _require_scoped_product(db, product_id, scope_context)
     if product.product_status == "archived":
         raise KInvalidStateError("Archived K products cannot be updated.")
+
+    if payload.main_keyword is not None:
+        product.primary_keyword = payload.main_keyword
 
     # No-op patches are accepted as idempotent in this skeleton.
     for field_name, value in _selected_model_dump(

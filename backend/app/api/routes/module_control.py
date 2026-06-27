@@ -10,11 +10,12 @@ from ...schemas.module_control import (
 )
 from ...services.module_control_center import (
     ModuleControlError,
+    filter_module_control_center_for_user,
     update_module_control_state,
 )
 from ...services.module_control_cache_service import (
     apply_module_control_state_to_cache,
-    get_module_control_center_cached_json,
+    get_module_control_center_cached,
     refresh_module_control_center_cache_async,
     refresh_module_control_center_cache_sync,
 )
@@ -39,14 +40,19 @@ def module_control_center(
     db: Session = Depends(get_db),
     user: User = Depends(require_lightweight_control_plane_admin),
 ) -> Response:
-    del user
-    if _is_force_refresh_request(request):
-        return Response(
-            content=refresh_module_control_center_cache_sync().model_dump_json(),
-            media_type="application/json",
+    with without_org_data_isolation():
+        response = (
+            refresh_module_control_center_cache_sync()
+            if _is_force_refresh_request(request)
+            else get_module_control_center_cached(db=db)
+        )
+        scoped_response = filter_module_control_center_for_user(
+            db,
+            user=user,
+            response=response,
         )
     return Response(
-        content=get_module_control_center_cached_json(db=db),
+        content=scoped_response.model_dump_json(),
         media_type="application/json",
     )
 

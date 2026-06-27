@@ -12,6 +12,8 @@ export type ProductKnowledgeListItem = {
   product_key: string;
   sku: string | null;
   parent_sku?: string | null;
+  main_keyword?: string | null;
+  primary_keyword?: string | null;
   target_market?: string | null;
   product_name_en: string | null;
   brand_name: string | null;
@@ -49,6 +51,7 @@ export type ProductKnowledgeListResponse = {
 
 export type ProductKnowledgeCreatePayload = {
   raw_input_text: string;
+  main_keyword: string;
   target_market: string;
   target_market_label?: string;
   target_locale?: string;
@@ -74,6 +77,10 @@ export type ProductKnowledgeCreatePayload = {
   variants?: ProductVariantInput[];
   attributes?: ProductKnowledgeAttributeInput[];
 };
+
+export type ProductKnowledgeUpdatePayload = Partial<{
+  review_status: ProductReviewStatus;
+}>;
 
 export type ProductCreateFormPayload = Omit<
   ProductKnowledgeCreatePayload,
@@ -148,6 +155,7 @@ export type ProductKnowledgeVariant = {
 
 export type ProductFormValues = {
   product_name_en: string;
+  main_keyword: string;
   parent_sku: string;
   brand_name: string;
   product_type: "simple_product" | "variable_product";
@@ -217,6 +225,7 @@ export type KWorkflowExecution = {
 export type KWorkflowStartPayload = {
   target_market: string;
   target_region?: string | null;
+  main_keyword?: string | null;
   serp_query?: string | null;
   seed_keywords?: string[];
   competitors?: string[];

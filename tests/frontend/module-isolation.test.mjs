@@ -437,6 +437,31 @@ test("frontend capability graph contains owner bypass for locked and hidden stat
   );
 });
 
+test("sidebar keeps C system modules at root and organizations as secondary layer", () => {
+  const sidebarSource = readFileSync(
+    "frontend/src/components/capability-sidebar-engine.tsx",
+    "utf8",
+  );
+
+  assert.match(sidebarSource, /const C_SYSTEM_MODULE_ORDER = \[/);
+  assert.match(
+    sidebarSource,
+    /admin\.modules[\s\S]*admin\.key_management[\s\S]*admin\.permissions[\s\S]*admin\.users[\s\S]*core\.dashboard/,
+  );
+  assert.match(sidebarSource, /const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set/);
+  assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
+  assert.match(sidebarSource, /<span className="navigation-label">C系统<\/span>/);
+  assert.match(sidebarSource, /className="navigation-divider"/);
+  assert.match(sidebarSource, /<span className="navigation-label">组织<\/span>/);
+  assert.match(sidebarSource, /暂无组织/);
+  assert.match(sidebarSource, /暂无模块/);
+  assert.match(sidebarSource, /runtimeOrganizations = useMemo/);
+  assert.match(sidebarSource, /const organizations = runtimeOrganizations/);
+  assert.doesNotMatch(sidebarSource, /TARGET_ORGANIZATION_NAME/);
+  assert.doesNotMatch(sidebarSource, /OWNER_ORG_MODULE_ORDER/);
+  assert.doesNotMatch(sidebarSource, /<span className="navigation-label">Organizations<\/span>/);
+});
+
 test("productized routes are visible while diagnostics stay out of navigation", () => {
   const unavailableApprovals = getNavigationStateForModule(
     ownerPermissions,

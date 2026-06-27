@@ -307,6 +307,13 @@ def test_k_workflow_blocks_until_manual_risk_and_image_gates_pass():
     )
     assert ready.status == "ready_for_export"
 
+    product.ai_warnings_json = {
+        **(product.ai_warnings_json or {}),
+        "selling_points": {"review_status": "approved"},
+    }
+    db.add(product)
+    db.commit()
+
     exported, report = engine.export_payloads(
         product_id=product.id,
         payload=ProductKnowledgeWorkflowExportRequest(execution_id=execution.id),

@@ -28,7 +28,7 @@ export function KeywordPanel() {
   const [isCreating, setIsCreating] = useState(false);
   const [isSavingEditor, setIsSavingEditor] = useState(false);
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
-  const [message, setMessage] = useState("Ready.");
+  const [message, setMessage] = useState("就绪。");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -40,7 +40,7 @@ export function KeywordPanel() {
 
     if (!normalizedProductId) {
       setEntries([]);
-      setError("Product id is required.");
+      setError("必须填写产品ID。");
       setMessage("");
       return;
     }
@@ -51,11 +51,11 @@ export function KeywordPanel() {
     try {
       const response = await getKeywordsByProduct(normalizedProductId);
       setEntries(response.keyword_entries);
-      setMessage(`${response.keyword_entries.length} keyword entries loaded.`);
+      setMessage(`已加载 ${response.keyword_entries.length} 条关键词。`);
     } catch (caught) {
       setEntries([]);
       setError(
-        caught instanceof Error ? caught.message : "Keywords could not be loaded.",
+        caught instanceof Error ? caught.message : "关键词加载失败。",
       );
       setMessage("");
     } finally {
@@ -73,11 +73,11 @@ export function KeywordPanel() {
       setEntries((currentEntries) =>
         upsertEntry(currentEntries, response.keyword_entry),
       );
-      setMessage("Keyword created.");
+      setMessage("关键词已创建。");
       return true;
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Keyword could not be created.",
+        caught instanceof Error ? caught.message : "关键词创建失败。",
       );
       setMessage("");
       return false;
@@ -99,10 +99,10 @@ export function KeywordPanel() {
         upsertEntry(currentEntries, response.keyword_entry),
       );
       setEditingId(null);
-      setMessage("Keyword updated.");
+      setMessage("关键词已更新。");
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Keyword could not be updated.",
+        caught instanceof Error ? caught.message : "关键词更新失败。",
       );
       setMessage("");
     } finally {
@@ -119,10 +119,10 @@ export function KeywordPanel() {
       setEntries((currentEntries) =>
         upsertEntry(currentEntries, response.keyword_entry),
       );
-      setMessage("Keyword archived.");
+      setMessage("关键词已归档。");
     } catch (caught) {
       setError(
-        caught instanceof Error ? caught.message : "Keyword could not be archived.",
+        caught instanceof Error ? caught.message : "关键词归档失败。",
       );
       setMessage("");
     } finally {
@@ -137,12 +137,12 @@ export function KeywordPanel() {
           <Database aria-hidden="true" size={20} />
           <div>
             <span className="section-index">K19</span>
-            <h3 id="k19-keyword-panel">Keyword Control</h3>
+            <h3 id="k19-keyword-panel">关键词控制</h3>
           </div>
         </div>
         <div className={styles.summary}>
           <strong>{entries.length}</strong>
-          <span>entries</span>
+          <span>条记录</span>
         </div>
       </div>
 
@@ -171,7 +171,7 @@ export function KeywordPanel() {
         {isLoading ? (
           <>
             <Loader2 aria-hidden="true" className="spin" size={14} />
-            Loading keywords.
+            正在加载关键词。
           </>
         ) : (
           error || message

@@ -112,7 +112,9 @@ function readAttributePair(value: unknown): ProductVariantAttributeInput | null 
   };
 }
 
-function attributesFromJson(value: unknown): ProductVariantAttributeInput[] {
+export function variantAttributesFromJson(
+  value: unknown,
+): ProductVariantAttributeInput[] {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return [];
   }
@@ -147,7 +149,7 @@ export function formatVariantDisplayName(
     | "variant_sku"
   >,
 ) {
-  const attributes = attributesFromJson(variant.attributes_json);
+  const attributes = variantAttributesFromJson(variant.attributes_json);
   const fallbackAttributes: ProductVariantAttributeInput[] = [
     variant.color ? { type: "color", value: variant.color } : null,
     variant.size ? { type: "size", value: variant.size } : null,
@@ -161,6 +163,21 @@ export function formatVariantDisplayName(
     formatVariantAttributes(attributes.length > 0 ? attributes : fallbackAttributes) ||
     "默认变体 / Default"
   );
+}
+
+export function formatVariantOptionLabel(
+  variant: Pick<
+    ProductKnowledgeVariant,
+    | "attributes_json"
+    | "color"
+    | "function"
+    | "quantity"
+    | "size"
+    | "variant_sku"
+  >,
+  index: number,
+) {
+  return `变体 ${index + 1}: ${formatVariantDisplayName(variant)} (${variant.variant_sku})`;
 }
 
 export function mediaVariantDisplayName(

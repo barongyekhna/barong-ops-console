@@ -950,6 +950,11 @@ export function UserManagementPanel() {
                   const targetOrganization = target.organization_id
                     ? organizationById.get(target.organization_id)
                     : null;
+                  const organizationName =
+                    targetOrganization?.org_name ??
+                    target.organization ??
+                    target.organization_id ??
+                    "";
                   const showOrgFields = !isOwnerRole(target.role);
 
                   return (
@@ -984,8 +989,7 @@ export function UserManagementPanel() {
                       <td>{showOrgFields ? target.job_title ?? "" : ""}</td>
                       <td>
                         {showOrgFields
-                          ? targetOrganization?.org_name ??
-                            (target.organization_id ? "未匹配组织" : "")
+                          ? organizationName
                           : ""}
                       </td>
                       <td>
@@ -1164,7 +1168,9 @@ export function UserManagementPanel() {
                   <dd>
                     {expandedUser.organization_id
                       ? organizationById.get(expandedUser.organization_id)
-                          ?.org_name ?? "未匹配组织"
+                          ?.org_name ??
+                        expandedUser.organization ??
+                        expandedUser.organization_id
                       : "未设置"}
                   </dd>
                 </div>

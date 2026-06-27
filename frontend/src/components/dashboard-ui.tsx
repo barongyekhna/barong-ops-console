@@ -30,9 +30,9 @@ type ActivityFeedProps = {
 };
 
 const STATUS_LABELS: Record<ModuleCardStatus, string> = {
-  active: "active",
-  disabled: "disabled",
-  error: "error",
+  active: "可用",
+  disabled: "未启用",
+  error: "异常",
 };
 
 export function MetricCard({ detail, label, value }: MetricCardProps) {
@@ -85,8 +85,8 @@ export function ActivityFeed({ items }: ActivityFeedProps) {
   return (
     <article className="activity-feed">
       <div className="activity-feed-heading">
-        <h2>Activity feed</h2>
-        <span>Live workspace updates</span>
+        <h2>活动记录</h2>
+        <span>工作台实时更新</span>
       </div>
       <ol>
         {items.map((item, index) => (

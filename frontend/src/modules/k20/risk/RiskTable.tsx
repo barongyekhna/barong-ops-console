@@ -17,7 +17,14 @@ import type {
   RiskTerm,
   UpdateRiskPayload,
 } from "./types";
-import { riskCategories, riskLevels, sourceLabels } from "./types";
+import {
+  riskCategories,
+  riskCategoryLabels,
+  riskLevels,
+  riskLevelLabels,
+  riskStatusLabels,
+  sourceLabels,
+} from "./types";
 
 type RiskFilterValue<T extends string> = T | "all";
 
@@ -63,24 +70,24 @@ export function RiskTable({
       <div className={styles.tableToolbar}>
         <div className={styles.filterGroup}>
           <label className={styles.filterField}>
-            <span>Severity</span>
+            <span>风险等级</span>
             <select
               onChange={(event) =>
                 onLevelFilterChange(event.target.value as RiskFilterValue<RiskLevel>)
               }
               value={levelFilter}
             >
-              <option value="all">all</option>
+              <option value="all">全部</option>
               {riskLevels.map((riskLevel) => (
                 <option key={riskLevel} value={riskLevel}>
-                  {riskLevel}
+                  {riskLevelLabels[riskLevel]}
                 </option>
               ))}
             </select>
           </label>
 
           <label className={styles.filterField}>
-            <span>Category</span>
+            <span>分类</span>
             <select
               onChange={(event) =>
                 onCategoryFilterChange(
@@ -89,10 +96,10 @@ export function RiskTable({
               }
               value={categoryFilter}
             >
-              <option value="all">all</option>
+              <option value="all">全部</option>
               {riskCategories.map((riskCategory) => (
                 <option key={riskCategory} value={riskCategory}>
-                  {riskCategory}
+                  {riskCategoryLabels[riskCategory]}
                 </option>
               ))}
             </select>
@@ -100,11 +107,11 @@ export function RiskTable({
         </div>
 
         <button
-          aria-label="Refresh risks"
+          aria-label="刷新风险词"
           className={styles.iconButtonSecondary}
           disabled={isLoading}
           onClick={() => void onRefresh()}
-          title="Refresh risks"
+          title="刷新风险词"
           type="button"
         >
           {isLoading ? (
@@ -119,21 +126,21 @@ export function RiskTable({
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Term</th>
-              <th>Risk level</th>
-              <th>Category</th>
-              <th>Source</th>
-              <th>Status</th>
-              <th>Product id</th>
-              <th>Updated</th>
-              <th aria-label="Actions" />
+              <th>风险词</th>
+              <th>风险等级</th>
+              <th>分类</th>
+              <th>来源</th>
+              <th>状态</th>
+              <th>产品ID</th>
+              <th>更新时间</th>
+              <th aria-label="操作" />
             </tr>
           </thead>
           <tbody>
             {entries.length === 0 ? (
               <tr>
                 <td className={styles.emptyCell} colSpan={8}>
-                  {isLoading ? "Loading risks." : "No risk terms."}
+                  {isLoading ? "正在加载风险词。" : "暂无风险词。"}
                 </td>
               </tr>
             ) : (
@@ -156,7 +163,9 @@ export function RiskTable({
                     <RiskBadge level={entry.risk_level} />
                   </td>
                   <td>
-                    <span className={styles.categoryBadge}>{entry.category}</span>
+                    <span className={styles.categoryBadge}>
+                      {riskCategoryLabels[entry.category]}
+                    </span>
                   </td>
                   <td>
                     <span className={`${styles.sourceBadge} ${sourceClass(entry.source)}`}>
@@ -165,7 +174,7 @@ export function RiskTable({
                   </td>
                   <td>
                     <span className={`${styles.statusBadge} ${styles[entry.status]}`}>
-                      {entry.status}
+                      {riskStatusLabels[entry.status]}
                     </span>
                   </td>
                   <td className={styles.monoCell}>{entry.product_id}</td>
@@ -173,23 +182,23 @@ export function RiskTable({
                   <td>
                     <div className={styles.rowActions}>
                       <button
-                        aria-label={`Edit ${entry.term}`}
+                        aria-label={`编辑 ${entry.term}`}
                         className={styles.iconButton}
                         disabled={editingId !== null || entry.status === "ignored"}
                         onClick={() => onEdit(entry.id)}
-                        title="Edit risk"
+                        title="编辑风险词"
                         type="button"
                       >
                         <Edit3 aria-hidden="true" size={15} />
                       </button>
                       <button
-                        aria-label={`Resolve ${entry.term}`}
+                        aria-label={`处理 ${entry.term}`}
                         className={styles.iconButton}
                         disabled={
                           entry.status === "resolved" || isResolvingId === entry.id
                         }
                         onClick={() => void onResolve(entry.id)}
-                        title="Resolve risk"
+                        title="处理风险词"
                         type="button"
                       >
                         {isResolvingId === entry.id ? (
@@ -199,11 +208,11 @@ export function RiskTable({
                         )}
                       </button>
                       <button
-                        aria-label={`Ignore ${entry.term}`}
+                        aria-label={`忽略 ${entry.term}`}
                         className={styles.iconButtonSecondary}
                         disabled={entry.status === "ignored" || isIgnoringId === entry.id}
                         onClick={() => void onIgnore(entry.id)}
-                        title="Ignore risk"
+                        title="忽略风险词"
                         type="button"
                       >
                         {isIgnoringId === entry.id ? (
@@ -244,7 +253,7 @@ function formatTimestamp(value: string) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("zh-CN", {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(date);

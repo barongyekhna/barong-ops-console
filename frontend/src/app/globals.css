@@ -709,6 +709,12 @@ textarea:focus-visible {
   margin-top: 20px;
 }
 
+.navigation-divider {
+  height: 1px;
+  margin: 18px 10px;
+  background: #2b302e;
+}
+
 .navigation-label {
   display: block;
   margin: 0 10px 7px;
@@ -809,8 +815,20 @@ textarea:focus-visible {
   padding-left: 18px;
 }
 
+.navigation-tree-node + .navigation-tree-node {
+  margin-top: 4px;
+}
+
 .navigation-tree-link {
   min-height: 36px;
+}
+
+.navigation-tree-empty {
+  margin: 7px 10px;
+  color: #7c8782;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
 }
 
 .navigation-lock {

@@ -4,6 +4,7 @@ import {
   clearFrontendRequestCache,
   requestWithFrontendCache,
 } from "@/lib/request-cache";
+import { translateKBackendError } from "@/lib/i18n";
 
 export const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 
@@ -349,8 +350,10 @@ export async function apiRequest<T>(
 
           if (!response.ok) {
             let message = fallbackErrorMessageForStatus(response.status);
+            let errorDetail: unknown = null;
             try {
               const payload = (await response.json()) as { detail?: unknown };
+              errorDetail = payload.detail ?? null;
               if (typeof payload.detail === "string") {
                 message = payload.detail;
               } else if (
@@ -367,6 +370,15 @@ export async function apiRequest<T>(
             }
             if (isTechnicalErrorMessage(message)) {
               message = fallbackErrorMessageForStatus(response.status);
+            }
+            if (path.startsWith("/k/")) {
+              message = translateKBackendError({
+                detail: errorDetail,
+                fallback: fallbackErrorMessageForStatus(response.status),
+                message,
+                path,
+                status: response.status,
+              });
             }
             throw new ApiError(message, response.status);
           }

@@ -224,6 +224,13 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
     assert ready.current_step == "export_p_series"
     assert KWorkflowStateMachineV2.current_state(ready, product) == "EXPORT_READY"
 
+    product.ai_warnings_json = {
+        **(product.ai_warnings_json or {}),
+        "selling_points": {"review_status": "approved"},
+    }
+    db.add(product)
+    db.commit()
+
     exported, report = engine.export_payloads(
         product_id=product.id,
         payload=ProductKnowledgeWorkflowExportRequest(execution_id=execution.id),

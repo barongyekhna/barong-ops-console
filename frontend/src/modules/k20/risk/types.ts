@@ -73,15 +73,29 @@ export const riskSources: RiskSource[] = ["K13", "K17", "K18", "manual"];
 export const riskStatuses: RiskStatus[] = ["active", "resolved", "ignored"];
 
 export const sourceLabels: Record<RiskSource, string> = {
-  K13: "AI detected",
-  K17: "pre-filter",
-  K18: "validated",
-  manual: "manual override",
+  K13: "AI识别",
+  K17: "预过滤",
+  K18: "已验证",
+  manual: "人工处理",
 };
 
 export const riskLevelLabels: Record<RiskLevel, string> = {
-  low: "low",
-  medium: "medium",
-  high: "high",
-  critical: "critical",
+  low: "低",
+  medium: "中",
+  high: "高",
+  critical: "严重",
+};
+
+export const riskCategoryLabels: Record<RiskCategory, string> = {
+  compliance: "合规",
+  legal: "法律",
+  marketing: "营销",
+  platform: "平台政策",
+  safety: "安全",
+};
+
+export const riskStatusLabels: Record<RiskStatus, string> = {
+  active: "启用",
+  ignored: "已忽略",
+  resolved: "已处理",
 };

@@ -7,10 +7,12 @@ import {
   LoaderCircle,
   PackageOpen,
   RotateCcw,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
 import {
+  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -18,17 +20,17 @@ import {
   type MouseEvent,
 } from "react";
 
-import { generateSellingPoints } from "@/modules/k14/selling-points/api";
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 
 import {
+  approveProductSellingPoints,
   bindProductImage,
   controlWorkflow,
-  createMediaAsset,
   createProduct,
   deleteProduct,
+  deleteMediaAsset,
   enrichProductWithDeepSeek,
-  exportWorkflow,
+  generateProductSellingPoints,
   getLatestWorkflow,
   getMediaAssets,
   getProducts,
@@ -36,6 +38,8 @@ import {
   ProductKnowledgeApiError,
   reviewWorkflowRiskTerms,
   startWorkflow,
+  updateProduct,
+  uploadProductMediaAsset,
 } from "./api";
 import { ProductDetail } from "./ProductDetail";
 import { ProductForm } from "./ProductForm";
@@ -46,13 +50,13 @@ import type {
   KMediaAsset,
   KRiskReviewDecision,
   KWorkflowExecution,
-  KWorkflowExportResponse,
   KWorkflowStartPayload,
   ProductKnowledgeListItem,
   ProductKnowledgeListResponse,
 } from "./types";
 
 const PRODUCT_LIST_PAGE_SIZE = 25;
+const PRODUCT_LIST_FETCH_LIMIT = 100;
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -60,11 +64,25 @@ function formatDate(value: string) {
     return value;
   }
 
-  return new Intl.DateTimeFormat("en", {
+  return new Intl.DateTimeFormat("zh-CN", {
     month: "short",
     day: "numeric",
     year: "numeric",
   }).format(date);
+}
+
+function displayReviewStatus(status: string) {
+  const labels: Record<string, string> = {
+    approved: "已通过",
+    archived: "已归档",
+    draft: "草稿",
+    pending: "待审核",
+    pending_review: "待审核",
+    rejected: "已拒绝",
+    review: "审核中",
+  };
+
+  return labels[status] ?? "待处理";
 }
 
 function formatError(error: unknown, fallback: string) {
@@ -79,9 +97,6 @@ function formatError(error: unknown, fallback: string) {
       : null;
 
   if (status !== null) {
-    if (status === 503) {
-      return "K 模块服务配置暂不可用，请检查 API key 绑定或稍后重试。";
-    }
     if (status === 403) {
       return "当前账号暂未开通该操作权限。";
     }
@@ -139,8 +154,8 @@ export function ProductList() {
     <section className={styles.listPanel} aria-labelledby="product-list-entry">
       <div className={styles.panelHeading}>
         <div>
-          <span className={styles.eyebrow}>Products</span>
-          <h3 id="product-list-entry">Product List</h3>
+          <span className={styles.eyebrow}>产品</span>
+          <h3 id="product-list-entry">产品列表</h3>
         </div>
         <button
           className="primary-button"
@@ -148,7 +163,7 @@ export function ProductList() {
           type="button"
         >
           <ExternalLink aria-hidden="true" size={16} />
-          Open Product List
+          打开产品列表
         </button>
       </div>
     </section>
@@ -159,6 +174,8 @@ export function ProductListFull() {
   const [products, setProducts] = useState<ProductKnowledgeListItem[]>([]);
   const [openProductId, setOpenProductId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchInput, setSearchInput] = useState("");
+  const [activeSearch, setActiveSearch] = useState("");
   const [sellingPointsByProductId, setSellingPointsByProductId] = useState<
     Record<string, ProductSellingPoints>
   >({});
@@ -168,20 +185,19 @@ export function ProductListFull() {
   const [mediaByProductId, setMediaByProductId] = useState<
     Record<string, KMediaAsset[]>
   >({});
-  const [exportByProductId, setExportByProductId] = useState<
-    Record<string, KWorkflowExportResponse>
-  >({});
   const [deleteCandidate, setDeleteCandidate] =
     useState<ProductKnowledgeListItem | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deleteError, setDeleteError] = useState("");
   const [loadError, setLoadError] = useState("");
   const [createError, setCreateError] = useState("");
+  const [productSaveError, setProductSaveError] = useState("");
   const [sellingPointsError, setSellingPointsError] = useState("");
   const [workflowError, setWorkflowError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [savingProductId, setSavingProductId] = useState<string | null>(null);
   const [generatingProductId, setGeneratingProductId] = useState<string | null>(
     null,
   );
@@ -216,12 +232,38 @@ export function ProductListFull() {
     !isDeleting;
 
   const loadProducts = useCallback(
-    async (preferredOpenId?: string) => {
+    async (preferredOpenId?: string, query?: string) => {
       setIsLoading(true);
       setLoadError("");
 
       try {
-        const response = await getProducts();
+        const trimmedQuery = query?.trim() ?? "";
+        const firstPage = await getProducts({
+          limit: PRODUCT_LIST_FETCH_LIMIT,
+          offset: 0,
+          q: trimmedQuery || undefined,
+        });
+        const allItems = [...firstPage.items];
+        for (
+          let offset = firstPage.items.length;
+          offset < firstPage.count;
+          offset += PRODUCT_LIST_FETCH_LIMIT
+        ) {
+          const nextPage = await getProducts({
+            limit: PRODUCT_LIST_FETCH_LIMIT,
+            offset,
+            q: trimmedQuery || undefined,
+          });
+          allItems.push(...nextPage.items);
+          if (nextPage.items.length === 0) {
+            break;
+          }
+        }
+        const response = {
+          ...firstPage,
+          count: Math.max(firstPage.count, allItems.length),
+          items: allItems,
+        };
         const preferredIndex = preferredOpenId
           ? response.items.findIndex((item) => item.id === preferredOpenId)
           : -1;
@@ -243,7 +285,7 @@ export function ProductListFull() {
         setProducts([]);
         setOpenProductId(null);
         setLoadError(
-          formatError(error, "The Product Knowledge API is unavailable."),
+          formatError(error, "产品知识库接口暂不可用。"),
         );
       } finally {
         setIsLoading(false);
@@ -253,8 +295,8 @@ export function ProductListFull() {
   );
 
   useEffect(() => {
-    void loadProducts();
-  }, [loadProducts]);
+    void loadProducts(undefined, activeSearch);
+  }, [activeSearch, loadProducts]);
 
   const loadWorkflowRuntime = useCallback(async (productId: string) => {
     setWorkflowError("");
@@ -274,7 +316,7 @@ export function ProductListFull() {
       }));
     } catch (error) {
       setWorkflowError(
-        formatError(error, "Workflow runtime state could not be loaded."),
+        formatError(error, "流程运行状态加载失败。"),
       );
     }
   }, []);
@@ -301,12 +343,12 @@ export function ProductListFull() {
         } catch (error) {
           deepSeekError = formatError(
             error,
-            "Product was created, but DeepSeek conversion could not be completed.",
+            "产品已创建，但 DeepSeek 转换未完成。",
           );
         }
       }
 
-      await loadProducts(createdProduct.id);
+      await loadProducts(createdProduct.id, activeSearch);
       if (deepSeekError) {
         setCreateError(deepSeekError);
       }
@@ -320,6 +362,7 @@ export function ProductListFull() {
 
   function toggleProduct(productId: string) {
     setOpenProductId((currentId) => (currentId === productId ? null : productId));
+    setProductSaveError("");
     setSellingPointsError("");
     setWorkflowError("");
   }
@@ -358,9 +401,9 @@ export function ProductListFull() {
       }
       setDeleteCandidate(null);
       setDeleteConfirmation("");
-      await loadProducts();
+      await loadProducts(undefined, activeSearch);
     } catch (error) {
-      setDeleteError(formatError(error, "Product could not be deleted."));
+      setDeleteError(formatError(error, "产品删除失败。"));
     } finally {
       setIsDeleting(false);
     }
@@ -369,6 +412,24 @@ export function ProductListFull() {
   function goToPage(page: number) {
     setOpenProductId(null);
     setCurrentPage(Math.min(Math.max(page, 1), pageCount));
+  }
+
+  function submitSearch() {
+    const query = searchInput.trim();
+    setCurrentPage(1);
+    setOpenProductId(null);
+    if (query === activeSearch) {
+      void loadProducts(undefined, query);
+      return;
+    }
+    setActiveSearch(query);
+  }
+
+  function clearSearch() {
+    setSearchInput("");
+    setCurrentPage(1);
+    setOpenProductId(null);
+    setActiveSearch("");
   }
 
   async function handleGenerateSellingPoints() {
@@ -380,17 +441,42 @@ export function ProductListFull() {
     setSellingPointsError("");
 
     try {
-      const sellingPoints = await generateSellingPoints(
-        toSellingPointsProductPayload(openProduct),
-      );
+      const sellingPoints = await generateProductSellingPoints(openProduct.id);
       setSellingPointsByProductId((current) => ({
         ...current,
         [openProduct.id]: sellingPoints,
       }));
     } catch (error) {
       setSellingPointsError(
-        formatError(error, "Selling points could not be generated."),
+        formatError(error, "卖点生成失败。"),
       );
+    } finally {
+      setGeneratingProductId(null);
+    }
+  }
+
+  async function handleApproveSellingPoints(sellingPoints: ProductSellingPoints) {
+    if (!openProduct) {
+      return;
+    }
+
+    setGeneratingProductId(openProduct.id);
+    setSellingPointsError("");
+
+    try {
+      const approved = await approveProductSellingPoints(
+        openProduct.id,
+        sellingPoints,
+      );
+      setSellingPointsByProductId((current) => ({
+        ...current,
+        [openProduct.id]: approved,
+      }));
+    } catch (error) {
+      setSellingPointsError(
+        formatError(error, "卖点审核保存失败。"),
+      );
+      throw error;
     } finally {
       setGeneratingProductId(null);
     }
@@ -406,7 +492,7 @@ export function ProductListFull() {
     try {
       await callback();
     } catch (error) {
-      setWorkflowError(formatError(error, "Workflow action failed."));
+      setWorkflowError(formatError(error, "流程操作失败。"));
     } finally {
       setWorkflowBusyAction(null);
     }
@@ -423,6 +509,29 @@ export function ProductListFull() {
         ...current,
         [openProduct.id]: workflow,
       }));
+    });
+  }
+
+  async function handleRetryWorkflowStep(
+    step: string,
+    payload: KWorkflowStartPayload,
+  ) {
+    if (!openProduct) {
+      return;
+    }
+    const workflow = workflowByProductId[openProduct.id] ?? null;
+
+    await runWorkflowAction(`retry-${step}`, async () => {
+      const updated = await controlWorkflow(openProduct.id, "retry", {
+        execution_id: workflow?.id ?? null,
+        step,
+        workflow_payload: payload,
+      });
+      setWorkflowByProductId((current) => ({
+        ...current,
+        [openProduct.id]: updated,
+      }));
+      await loadWorkflowRuntime(openProduct.id);
     });
   }
 
@@ -449,25 +558,87 @@ export function ProductListFull() {
     });
   }
 
-  async function handleCreateMedia(url: string, variantSku: string) {
+  async function handleSaveProductInfo() {
     if (!openProduct) {
       return;
     }
 
-    await runWorkflowAction("media-create", async () => {
-      await createMediaAsset({
-        asset_role: "main",
-        asset_type: "image",
-        file_url_placeholder: url,
-        filename: url.split("/").pop() || `${variantSku}.jpg`,
-        metadata: { upload_mode: "url_placeholder" },
-        mime_type: "image/jpeg",
-        product_id: openProduct.id,
-        source: "manual_upload_image",
-        variant_sku: variantSku,
+    setSavingProductId(openProduct.id);
+    setProductSaveError("");
+    try {
+      const updated = await updateProduct(openProduct.id, {
+        review_status: "approved",
       });
-      await loadWorkflowRuntime(openProduct.id);
-    });
+      setProducts((current) =>
+        current.map((product) =>
+          product.id === openProduct.id
+            ? {
+                ...product,
+                ...updated,
+              }
+            : product,
+        ),
+      );
+    } catch (error) {
+      setProductSaveError(formatError(error, "商品信息保存失败。"));
+      throw error;
+    } finally {
+      setSavingProductId(null);
+    }
+  }
+
+  async function handleCreateMedia(
+    file: File,
+    variantSku: string,
+  ): Promise<KMediaAsset | void> {
+    if (!openProduct) {
+      return;
+    }
+
+    const productId = openProduct.id;
+    setWorkflowError("");
+    try {
+      const asset = await uploadProductMediaAsset(productId, file, variantSku);
+      setMediaByProductId((current) => {
+        const existing = current[productId] ?? [];
+
+        return {
+          ...current,
+          [productId]: [
+            asset,
+            ...existing.filter((item) => item.id !== asset.id),
+          ],
+        };
+      });
+      void loadWorkflowRuntime(productId);
+      return asset;
+    } catch (error) {
+      setWorkflowError(formatError(error, "图片上传失败。"));
+      throw error;
+    }
+  }
+
+  async function handleDeleteMedia(assetId: string) {
+    if (!openProduct) {
+      return;
+    }
+
+    const productId = openProduct.id;
+    setWorkflowError("");
+    setMediaByProductId((current) => ({
+      ...current,
+      [productId]: (current[productId] ?? []).filter(
+        (asset) => asset.id !== assetId,
+      ),
+    }));
+    try {
+      await deleteMediaAsset(assetId);
+      void loadWorkflowRuntime(productId);
+    } catch (error) {
+      setWorkflowError(formatError(error, "图片删除失败。"));
+      void loadWorkflowRuntime(productId);
+      throw error;
+    }
   }
 
   async function handleBindImage(assetId: string, variantSku: string) {
@@ -508,56 +679,8 @@ export function ProductListFull() {
     });
   }
 
-  async function handleExportWorkflow() {
-    if (!openProduct) {
-      return;
-    }
-    const workflow = workflowByProductId[openProduct.id] ?? null;
-
-    await runWorkflowAction("export", async () => {
-      const exported = await exportWorkflow(openProduct.id, workflow?.id);
-      setWorkflowByProductId((current) => ({
-        ...current,
-        [openProduct.id]: exported.execution,
-      }));
-      setExportByProductId((current) => ({
-        ...current,
-        [openProduct.id]: exported,
-      }));
-    });
-  }
-
-  async function handleWorkflowControl(
-    action: "pause" | "resume" | "retry" | "rollback",
-    step?: string,
-  ) {
-    if (!openProduct) {
-      return;
-    }
-    const workflow = workflowByProductId[openProduct.id] ?? null;
-
-    await runWorkflowAction(action, async () => {
-      const updated = await controlWorkflow(openProduct.id, action, {
-        execution_id: workflow?.id ?? null,
-        step: step ?? workflow?.current_step ?? null,
-        workflow_payload:
-          action === "retry"
-            ? {
-                target_market: workflow?.target_market ?? "US",
-                target_region: workflow?.target_region ?? null,
-              }
-            : null,
-      });
-      setWorkflowByProductId((current) => ({
-        ...current,
-        [openProduct.id]: updated,
-      }));
-      await loadWorkflowRuntime(openProduct.id);
-    });
-  }
-
   return (
-    <section className={styles.workspace} aria-label="Product Knowledge">
+    <section className={styles.workspace} aria-label="产品知识库">
       <ProductForm
         error={createError}
         isSubmitting={isCreating}
@@ -569,13 +692,13 @@ export function ProductListFull() {
         <section className={styles.listPanel} aria-labelledby="products-full-title">
           <div className={styles.panelHeading}>
             <div>
-              <span className={styles.eyebrow}>Products</span>
-              <h3 id="products-full-title">Product List</h3>
+              <span className={styles.eyebrow}>产品</span>
+              <h3 id="products-full-title">产品列表</h3>
             </div>
             <button
               className="secondary-button"
               disabled={isLoading}
-              onClick={() => void loadProducts()}
+              onClick={() => void loadProducts(undefined, activeSearch)}
               type="button"
             >
               {isLoading ? (
@@ -583,14 +706,51 @@ export function ProductListFull() {
               ) : (
                 <RotateCcw aria-hidden="true" size={16} />
               )}
-              Refresh
+              刷新
             </button>
           </div>
+
+          <form
+            className={styles.searchBar}
+            onSubmit={(event) => {
+              event.preventDefault();
+              submitSearch();
+            }}
+          >
+            <label className={styles.field}>
+              <span>搜索</span>
+              <input
+                onChange={(event) => setSearchInput(event.target.value)}
+                placeholder="输入 SKU / Product Key 精确搜索，或输入关键词模糊搜索"
+                type="search"
+                value={searchInput}
+              />
+            </label>
+            <button className="secondary-button" disabled={isLoading} type="submit">
+              <Search aria-hidden="true" size={16} />
+              搜索
+            </button>
+            <button
+              className="secondary-button"
+              disabled={isLoading || (!activeSearch && !searchInput)}
+              onClick={clearSearch}
+              type="button"
+            >
+              <X aria-hidden="true" size={16} />
+              清空
+            </button>
+          </form>
+
+          {activeSearch ? (
+            <p className={styles.searchHint}>
+              当前搜索：{activeSearch}
+            </p>
+          ) : null}
 
           {products.length > 0 ? (
             <div className={styles.listMeta}>
               <span>
-                Showing {pageStart}-{pageEnd} of {products.length}
+                显示 {pageStart}-{pageEnd} / 共 {products.length} 条
               </span>
               <div className={styles.pagination}>
                 <button
@@ -599,7 +759,7 @@ export function ProductListFull() {
                   onClick={() => goToPage(currentPage - 1)}
                   type="button"
                 >
-                  Previous
+                  上一页
                 </button>
                 <strong>
                   {currentPage} / {pageCount}
@@ -610,16 +770,16 @@ export function ProductListFull() {
                   onClick={() => goToPage(currentPage + 1)}
                   type="button"
                 >
-                  Next
+                  下一页
                 </button>
               </div>
             </div>
           ) : null}
 
           {isLoading ? (
-            <div className={styles.state} aria-label="Loading products">
+            <div className={styles.state} aria-label="正在加载产品">
               <LoaderCircle aria-hidden="true" className="spin" size={22} />
-              <span>Loading products</span>
+              <span>正在加载产品</span>
             </div>
           ) : null}
 
@@ -627,7 +787,7 @@ export function ProductListFull() {
             <div className={styles.errorState} role="alert">
               <AlertTriangle aria-hidden="true" size={20} />
               <div>
-                <strong>Product API request failed</strong>
+                <strong>产品接口请求失败</strong>
                 <span>{loadError}</span>
               </div>
             </div>
@@ -636,7 +796,7 @@ export function ProductListFull() {
           {!isLoading && !loadError && products.length === 0 ? (
             <div className={styles.state}>
               <PackageOpen aria-hidden="true" size={22} />
-              <span>No products created yet.</span>
+              <span>暂无产品。</span>
             </div>
           ) : null}
 
@@ -645,12 +805,12 @@ export function ProductListFull() {
               <table className={styles.table}>
                 <thead>
                   <tr>
-                    <th scope="col">Product</th>
-                    <th scope="col">Internal</th>
-                    <th scope="col">Brand</th>
-                    <th scope="col">Review</th>
-                    <th scope="col">Updated</th>
-                    <th scope="col">Actions</th>
+                    <th scope="col">产品</th>
+                    <th scope="col">内部编号</th>
+                    <th scope="col">品牌</th>
+                    <th scope="col">审核</th>
+                    <th scope="col">更新时间</th>
+                    <th scope="col">操作</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -658,52 +818,116 @@ export function ProductListFull() {
                     const isOpen = product.id === openProductId;
 
                     return (
-                      <tr
-                        aria-selected={isOpen}
-                        className={isOpen ? styles.selectedRow : undefined}
-                        key={product.id}
-                        onClick={() => toggleProduct(product.id)}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            toggleProduct(product.id);
-                          }
-                        }}
-                        role="button"
-                        tabIndex={0}
-                      >
-                        <td>
-                          <strong>
-                            {product.product_name_en ||
-                              displayProductKey(product.product_key)}
-                          </strong>
-                          <span>{displayProductKey(product.product_key)}</span>
-                        </td>
-                        <td>{product.parent_sku || product.sku || "Not set"}</td>
-                        <td>{product.brand_name || "Not set"}</td>
-                        <td>
-                          <span className={styles.statusBadge}>
-                            {product.review_status}
-                          </span>
-                        </td>
-                        <td>{formatDate(product.updated_at)}</td>
-                        <td>
-                          <div className={styles.rowActions}>
-                            <button className="secondary-button" type="button">
-                              <ChevronDown aria-hidden="true" size={15} />
-                              {isOpen ? "Close" : "Detail"}
-                            </button>
-                            <button
-                              className={`secondary-button ${styles.dangerButton}`}
-                              onClick={(event) => requestDelete(product, event)}
-                              type="button"
-                            >
-                              <Trash2 aria-hidden="true" size={15} />
-                              Delete
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
+                      <Fragment key={product.id}>
+                        <tr
+                          aria-selected={isOpen}
+                          className={isOpen ? styles.selectedRow : undefined}
+                          onClick={() => toggleProduct(product.id)}
+                          onKeyDown={(event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              toggleProduct(product.id);
+                            }
+                          }}
+                          role="button"
+                          tabIndex={0}
+                        >
+                          <td>
+                            <strong>
+                              {product.product_name_en ||
+                                displayProductKey(product.product_key)}
+                            </strong>
+                            <span>{displayProductKey(product.product_key)}</span>
+                          </td>
+                          <td>{product.parent_sku || product.sku || "未设置"}</td>
+                          <td>{product.brand_name || "未设置"}</td>
+                          <td>
+                            <span className={styles.statusBadge}>
+                              {displayReviewStatus(product.review_status)}
+                            </span>
+                          </td>
+                          <td>{formatDate(product.updated_at)}</td>
+                          <td>
+                            <div className={styles.rowActions}>
+                              <button className="secondary-button" type="button">
+                                <ChevronDown aria-hidden="true" size={15} />
+                                {isOpen ? "收起" : "详情"}
+                              </button>
+                              <button
+                                className={`secondary-button ${styles.dangerButton}`}
+                                onClick={(event) => requestDelete(product, event)}
+                                type="button"
+                              >
+                                <Trash2 aria-hidden="true" size={15} />
+                                删除
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {isOpen ? (
+                          <tr className={styles.detailRow}>
+                            <td colSpan={6}>
+                              <ProductDetail
+                                isGeneratingSellingPoints={
+                                  generatingProductId === product.id
+                                }
+                                isSavingProductInfo={savingProductId === product.id}
+                                isWorkflowBusy={workflowBusyAction !== null}
+                                mediaAssets={mediaByProductId[product.id] ?? []}
+                                onApproveSellingPoints={(sellingPoints) =>
+                                  handleApproveSellingPoints(sellingPoints)
+                                }
+                                onBindImage={(assetId, variantSku) =>
+                                  void handleBindImage(assetId, variantSku)
+                                }
+                                onBindISystemImage={(imageAssetId, variantSku) =>
+                                  void handleBindISystemImage(
+                                    imageAssetId,
+                                    variantSku,
+                                  )
+                                }
+                                onCollapse={() => setOpenProductId(null)}
+                                onCreateMedia={(file, variantSku) =>
+                                  handleCreateMedia(file, variantSku)
+                                }
+                                onDeleteMedia={(assetId) =>
+                                  handleDeleteMedia(assetId)
+                                }
+                                onGenerateSellingPoints={handleGenerateSellingPoints}
+                                onRefreshWorkflow={() =>
+                                  void loadWorkflowRuntime(product.id)
+                                }
+                                onRetryWorkflowStep={(step, payload) =>
+                                  void handleRetryWorkflowStep(step, payload)
+                                }
+                                onSaveProductInfo={() =>
+                                  void handleSaveProductInfo()
+                                }
+                                onStartWorkflow={(payload) =>
+                                  void handleStartWorkflow(payload)
+                                }
+                                onSubmitRiskReview={(
+                                  decisions,
+                                  confirmNoRiskTerms,
+                                ) =>
+                                  handleSubmitRiskReview(
+                                    decisions,
+                                    confirmNoRiskTerms,
+                                  )
+                                }
+                                product={product}
+                                sellingPoints={
+                                  sellingPointsByProductId[product.id] ?? null
+                                }
+                                productInfoSaveError={productSaveError}
+                                sellingPointsError={sellingPointsError}
+                                workflow={workflowByProductId[product.id] ?? null}
+                                workflowError={workflowError}
+                              />
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -711,43 +935,6 @@ export function ProductListFull() {
             </div>
           ) : null}
         </section>
-
-        <ProductDetail
-          exportResult={openProduct ? exportByProductId[openProduct.id] ?? null : null}
-          isGeneratingSellingPoints={
-            openProduct ? generatingProductId === openProduct.id : false
-          }
-          isWorkflowBusy={workflowBusyAction !== null}
-          mediaAssets={openProduct ? mediaByProductId[openProduct.id] ?? [] : []}
-          onGenerateSellingPoints={handleGenerateSellingPoints}
-          onBindImage={(assetId, variantSku) =>
-            void handleBindImage(assetId, variantSku)
-          }
-          onBindISystemImage={(imageAssetId, variantSku) =>
-            void handleBindISystemImage(imageAssetId, variantSku)
-          }
-          onCollapse={() => setOpenProductId(null)}
-          onCreateMedia={(url, variantSku) => void handleCreateMedia(url, variantSku)}
-          onExportWorkflow={() => void handleExportWorkflow()}
-          onPauseWorkflow={() => void handleWorkflowControl("pause")}
-          onRefreshWorkflow={() =>
-            openProduct ? void loadWorkflowRuntime(openProduct.id) : undefined
-          }
-          onResumeWorkflow={() => void handleWorkflowControl("resume")}
-          onRetryWorkflow={(step) => void handleWorkflowControl("retry", step)}
-          onRollbackWorkflow={(step) => void handleWorkflowControl("rollback", step)}
-          onStartWorkflow={(payload) => void handleStartWorkflow(payload)}
-          onSubmitRiskReview={(decisions, confirmNoRiskTerms) =>
-            void handleSubmitRiskReview(decisions, confirmNoRiskTerms)
-          }
-          product={openProduct}
-          sellingPoints={
-            openProduct ? sellingPointsByProductId[openProduct.id] ?? null : null
-          }
-          sellingPointsError={sellingPointsError}
-          workflow={openProduct ? workflowByProductId[openProduct.id] ?? null : null}
-          workflowError={workflowError}
-        />
       </div>
 
       {deleteCandidate ? (
@@ -765,11 +952,11 @@ export function ProductListFull() {
           >
             <div className={styles.confirmModalHeading}>
               <div>
-                <span className={styles.eyebrow}>Delete Product</span>
-                <h3 id="delete-product-title">Confirm Delete</h3>
+                <span className={styles.eyebrow}>删除产品</span>
+                <h3 id="delete-product-title">确认删除</h3>
               </div>
               <button
-                aria-label="Cancel delete"
+                aria-label="取消删除"
                 className="secondary-button"
                 disabled={isDeleting}
                 onClick={closeDeleteModal}
@@ -781,20 +968,20 @@ export function ProductListFull() {
 
             <dl className={styles.confirmMeta}>
               <div>
-                <dt>Product name</dt>
+                <dt>产品名称</dt>
                 <dd>
                   {deleteCandidate.product_name_en ||
                     displayProductKey(deleteCandidate.product_key)}
                 </dd>
               </div>
               <div>
-                <dt>Product ID</dt>
+                <dt>产品ID</dt>
                 <dd>{deleteConfirmationKey}</dd>
               </div>
             </dl>
 
             <label className={styles.field}>
-              <span>Type Product ID to confirm</span>
+              <span>输入产品ID确认删除</span>
               <input
                 autoFocus
                 onChange={(event) => setDeleteConfirmation(event.target.value)}
@@ -815,7 +1002,7 @@ export function ProductListFull() {
                 onClick={closeDeleteModal}
                 type="button"
               >
-                Cancel
+                取消
               </button>
               <button
                 className={`primary-button ${styles.confirmDeleteButton}`}
@@ -828,7 +1015,7 @@ export function ProductListFull() {
                 ) : (
                   <Trash2 aria-hidden="true" size={16} />
                 )}
-                Confirm Delete
+                确认删除
               </button>
             </div>
           </div>
@@ -836,25 +1023,4 @@ export function ProductListFull() {
       ) : null}
     </section>
   );
-}
-
-function toSellingPointsProductPayload(
-  product: ProductKnowledgeListItem,
-): Record<string, unknown> {
-  return {
-    id: product.id,
-    product_id: product.id,
-    product_key: product.product_key,
-    sku: product.sku,
-    title: product.product_name_en ?? product.product_key,
-    product_name_en: product.product_name_en,
-    product_type: product.product_type,
-    brand_name: product.brand_name,
-    raw_input: product.product_name_en ?? product.product_key,
-    raw_input_text: product.product_name_en ?? product.product_key,
-    parent_sku: product.parent_sku ?? product.sku,
-    target_market: product.target_market ?? "US",
-    market_tags: [product.target_market ?? "general"],
-    variants: product.variants ?? [],
-  };
 }

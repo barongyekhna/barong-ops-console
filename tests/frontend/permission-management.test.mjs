@@ -229,7 +229,7 @@ test("filters wildcard and disabled permissions from grant options", () => {
 });
 
 test("permission management copy stays explicit about explicit assignments", () => {
-  assert.match(ROLE_DEFAULT_PERMISSIONS_NOTICE, /explicit permission assignments/);
+  assert.match(ROLE_DEFAULT_PERMISSIONS_NOTICE, /显式权限分配/);
   assert.doesNotMatch(ROLE_DEFAULT_PERMISSIONS_NOTICE, /RBAC|role default/i);
 });
 
@@ -255,7 +255,7 @@ test("permission display names and UI groups do not expose raw keys", () => {
   assert.equal(getPermissionUiCategory(highRiskPermission), "control_plane");
 });
 
-test("permission registry filtering gives owner and super admin full active registry", () => {
+test("permission registry filtering gives owner full registry and super admin feature registry", () => {
   const removedArtifactPermission = {
     ...ordinaryPermission,
     id: "removed-artifacts",
@@ -274,7 +274,7 @@ test("permission registry filtering gives owner and super admin full active regi
     filterPermissionRegistryForRole(registry, "super_admin").map(
       (permission) => permission.permission_key,
     ),
-    ["reviews.read", "permissions.manage"],
+    ["reviews.read"],
   );
   assert.deepEqual(filterPermissionRegistryForRole(registry, "viewer"), []);
 });
@@ -307,7 +307,7 @@ test("owner target uses full access mode and empty non-owner assignment list sho
       user_id: 2,
       username: "viewer",
     }),
-    "No explicit assignments yet.",
+    "暂无显式权限分配。",
   );
 });
 
@@ -492,21 +492,21 @@ test("403, 409, and 422 errors produce safe summaries without sensitive values",
       message: "Authorization: Bearer abc.def.ghi",
       status: 403,
     }),
-    "Only an owner can manage permissions.",
+    "只有owner可以管理权限分配。",
   );
   assert.equal(
     formatPermissionAssignmentsApiError({
       message: "duplicate active assignment",
       status: 409,
     }),
-    "This assignment already exists or conflicts with current access.",
+    "该权限分配已存在或与当前访问范围冲突。",
   );
   assert.equal(
     formatPermissionAssignmentsApiError({
       message: "invalid payload",
       status: 422,
     }),
-    "The request is incomplete or invalid. Check permission, scope, expires_at, and reason.",
+    "请求不完整或格式不正确，请检查权限、范围、过期时间和原因。",
   );
   assert.doesNotMatch(
     formatPermissionAssignmentsApiError({

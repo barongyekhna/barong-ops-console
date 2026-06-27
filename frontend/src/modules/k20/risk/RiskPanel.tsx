@@ -17,9 +17,12 @@ import type {
 } from "./types";
 import {
   riskCategories,
+  riskCategoryLabels,
   riskLevels,
+  riskLevelLabels,
   riskSources,
   riskStatuses,
+  riskStatusLabels,
   sourceLabels,
 } from "./types";
 
@@ -45,7 +48,7 @@ export function RiskPanel() {
   const [isSavingEditor, setIsSavingEditor] = useState(false);
   const [isResolvingId, setIsResolvingId] = useState<string | null>(null);
   const [isIgnoringId, setIsIgnoringId] = useState<string | null>(null);
-  const [message, setMessage] = useState("Ready.");
+  const [message, setMessage] = useState("就绪。");
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -73,10 +76,10 @@ export function RiskPanel() {
     try {
       const response = await getRisks();
       setEntries(response.risk_terms);
-      setMessage(`${response.risk_terms.length} risk terms loaded.`);
+      setMessage(`已加载 ${response.risk_terms.length} 条风险词。`);
     } catch (caught) {
       setEntries([]);
-      setError(caught instanceof Error ? caught.message : "Risks could not be loaded.");
+      setError(caught instanceof Error ? caught.message : "风险词加载失败。");
       setMessage("");
     } finally {
       setIsLoading(false);
@@ -105,9 +108,9 @@ export function RiskPanel() {
       );
       setTerm("");
       setProductId(response.risk_term.product_id);
-      setMessage("Risk term created.");
+      setMessage("风险词已创建。");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Risk could not be created.");
+      setError(caught instanceof Error ? caught.message : "风险词创建失败。");
       setMessage("");
     } finally {
       setIsCreating(false);
@@ -127,9 +130,9 @@ export function RiskPanel() {
         upsertEntry(currentEntries, response.risk_term),
       );
       setEditingId(null);
-      setMessage("Risk term updated.");
+      setMessage("风险词已更新。");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Risk could not be updated.");
+      setError(caught instanceof Error ? caught.message : "风险词更新失败。");
       setMessage("");
     } finally {
       setIsSavingEditor(false);
@@ -146,9 +149,9 @@ export function RiskPanel() {
         upsertEntry(currentEntries, response.risk_term),
       );
       setEditingId(null);
-      setMessage("Risk term resolved.");
+      setMessage("风险词已处理。");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Risk could not be resolved.");
+      setError(caught instanceof Error ? caught.message : "风险词处理失败。");
       setMessage("");
     } finally {
       setIsResolvingId(null);
@@ -165,9 +168,9 @@ export function RiskPanel() {
         upsertEntry(currentEntries, response.risk_term),
       );
       setEditingId(null);
-      setMessage("Risk term ignored.");
+      setMessage("风险词已忽略。");
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Risk could not be ignored.");
+      setError(caught instanceof Error ? caught.message : "风险词忽略失败。");
       setMessage("");
     } finally {
       setIsIgnoringId(null);
@@ -181,66 +184,66 @@ export function RiskPanel() {
           <ShieldAlert aria-hidden="true" size={20} />
           <div>
             <span className="section-index">K20</span>
-            <h3 id="k20-risk-panel">Risk Governance</h3>
+            <h3 id="k20-risk-panel">风险治理</h3>
           </div>
         </div>
         <div className={styles.summary}>
           <strong>{filteredEntries.length}</strong>
-          <span>visible</span>
+          <span>条可见</span>
         </div>
       </div>
 
       <form className={styles.inputBar} onSubmit={(event) => void handleCreate(event)}>
         <label className={styles.field}>
-          <span>Term</span>
+          <span>风险词</span>
           <input
             onChange={(event) => setTerm(event.target.value)}
-            placeholder="risk term"
+            placeholder="风险词"
             type="text"
             value={term}
           />
         </label>
 
         <label className={styles.field}>
-          <span>Product id</span>
+          <span>产品ID</span>
           <input
             onChange={(event) => setProductId(event.target.value)}
-            placeholder="product id"
+            placeholder="产品ID"
             type="text"
             value={productId}
           />
         </label>
 
         <label className={styles.field}>
-          <span>Risk level</span>
+          <span>风险等级</span>
           <select
             onChange={(event) => setRiskLevel(event.target.value as RiskLevel)}
             value={riskLevel}
           >
             {riskLevels.map((nextRiskLevel) => (
               <option key={nextRiskLevel} value={nextRiskLevel}>
-                {nextRiskLevel}
+                {riskLevelLabels[nextRiskLevel]}
               </option>
             ))}
           </select>
         </label>
 
         <label className={styles.field}>
-          <span>Category</span>
+          <span>分类</span>
           <select
             onChange={(event) => setCategory(event.target.value as RiskCategory)}
             value={category}
           >
             {riskCategories.map((nextCategory) => (
               <option key={nextCategory} value={nextCategory}>
-                {nextCategory}
+                {riskCategoryLabels[nextCategory]}
               </option>
             ))}
           </select>
         </label>
 
         <label className={styles.field}>
-          <span>Source</span>
+          <span>来源</span>
           <select
             onChange={(event) => setSource(event.target.value as RiskSource)}
             value={source}
@@ -254,14 +257,14 @@ export function RiskPanel() {
         </label>
 
         <label className={styles.field}>
-          <span>Status</span>
+          <span>状态</span>
           <select
             onChange={(event) => setStatus(event.target.value as RiskStatus)}
             value={status}
           >
             {riskStatuses.map((nextStatus) => (
               <option key={nextStatus} value={nextStatus}>
-                {nextStatus}
+                {riskStatusLabels[nextStatus]}
               </option>
             ))}
           </select>
@@ -277,7 +280,7 @@ export function RiskPanel() {
           ) : (
             <Plus aria-hidden="true" size={16} />
           )}
-          Add
+          添加
         </button>
       </form>
 
@@ -304,7 +307,7 @@ export function RiskPanel() {
         {isLoading ? (
           <>
             <Loader2 aria-hidden="true" className="spin" size={14} />
-            Loading risks.
+            正在加载风险词。
           </>
         ) : (
           error || message

@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import styles from "./RiskPanel.module.css";
 import type { RiskStatus, RiskTerm, UpdateRiskPayload } from "./types";
-import { riskStatuses } from "./types";
+import { riskStatuses, riskStatusLabels } from "./types";
 
 type RiskEditorProps = {
   entry: RiskTerm;
@@ -34,14 +34,14 @@ export function RiskEditor({
   return (
     <form className={styles.editor} onSubmit={(event) => void handleSubmit(event)}>
       <label className={styles.field}>
-        <span>Status</span>
+        <span>状态</span>
         <select
           onChange={(event) => setStatus(event.target.value as RiskStatus)}
           value={status}
         >
           {riskStatuses.map((riskStatus) => (
             <option key={riskStatus} value={riskStatus}>
-              {riskStatus}
+              {riskStatusLabels[riskStatus]}
             </option>
           ))}
         </select>
@@ -49,10 +49,10 @@ export function RiskEditor({
 
       <div className={styles.editorActions}>
         <button
-          aria-label="Save risk status"
+          aria-label="保存风险状态"
           className={styles.iconButton}
           disabled={isSaving}
-          title="Save risk status"
+          title="保存风险状态"
           type="submit"
         >
           {isSaving ? (
@@ -62,31 +62,31 @@ export function RiskEditor({
           )}
         </button>
         <button
-          aria-label="Resolve risk"
+          aria-label="处理风险词"
           className={styles.iconButton}
           disabled={isSaving || entry.status === "resolved"}
           onClick={() => void onResolve(entry.id)}
-          title="Resolve risk"
+          title="处理风险词"
           type="button"
         >
           <ShieldCheck aria-hidden="true" size={16} />
         </button>
         <button
-          aria-label="Ignore risk"
+          aria-label="忽略风险词"
           className={styles.iconButtonSecondary}
           disabled={isSaving || entry.status === "ignored"}
           onClick={() => void onIgnore(entry.id)}
-          title="Ignore risk"
+          title="忽略风险词"
           type="button"
         >
           <CircleSlash aria-hidden="true" size={16} />
         </button>
         <button
-          aria-label="Cancel edit"
+          aria-label="取消编辑"
           className={styles.iconButtonSecondary}
           disabled={isSaving}
           onClick={onCancel}
-          title="Cancel edit"
+          title="取消编辑"
           type="button"
         >
           <X aria-hidden="true" size={16} />

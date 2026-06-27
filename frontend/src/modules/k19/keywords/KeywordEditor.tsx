@@ -5,7 +5,7 @@ import { useState } from "react";
 
 import styles from "./KeywordPanel.module.css";
 import type { KeywordEntry, KeywordStatus, UpdateKeywordPayload } from "./types";
-import { keywordStatuses } from "./types";
+import { keywordStatuses, keywordStatusLabels } from "./types";
 
 type KeywordEditorProps = {
   entry: KeywordEntry;
@@ -35,7 +35,7 @@ export function KeywordEditor({
   return (
     <form className={styles.editor} onSubmit={(event) => void handleSubmit(event)}>
       <label className={styles.field}>
-        <span>Keyword</span>
+        <span>关键词</span>
         <input
           onChange={(event) => setKeyword(event.target.value)}
           type="text"
@@ -44,14 +44,14 @@ export function KeywordEditor({
       </label>
 
       <label className={styles.field}>
-        <span>Status</span>
+        <span>状态</span>
         <select
           onChange={(event) => setStatus(event.target.value as KeywordStatus)}
           value={status}
         >
           {keywordStatuses.map((keywordStatus) => (
             <option key={keywordStatus} value={keywordStatus}>
-              {keywordStatus}
+              {keywordStatusLabels[keywordStatus]}
             </option>
           ))}
         </select>
@@ -59,10 +59,10 @@ export function KeywordEditor({
 
       <div className={styles.editorActions}>
         <button
-          aria-label="Save keyword"
+          aria-label="保存关键词"
           className={styles.iconButton}
           disabled={isSaving || !keyword.trim()}
-          title="Save keyword"
+          title="保存关键词"
           type="submit"
         >
           {isSaving ? (
@@ -72,11 +72,11 @@ export function KeywordEditor({
           )}
         </button>
         <button
-          aria-label="Cancel edit"
+          aria-label="取消编辑"
           className={styles.iconButtonSecondary}
           disabled={isSaving}
           onClick={onCancel}
-          title="Cancel edit"
+          title="取消编辑"
           type="button"
         >
           <X aria-hidden="true" size={16} />

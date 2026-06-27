@@ -54,9 +54,16 @@ export const keywordStatuses: KeywordStatus[] = [
 ];
 
 export const sourceLabels: Record<KeywordSource, string> = {
-  K15: "research",
+  K15: "调研",
   K16: "SERP",
   K17: "ChatGPT",
   K18: "Claude",
-  manual: "manual user",
+  manual: "人工录入",
+};
+
+export const keywordStatusLabels: Record<KeywordStatus, string> = {
+  active: "启用",
+  archived: "已归档",
+  edited: "已编辑",
+  suggested: "建议",
 };
