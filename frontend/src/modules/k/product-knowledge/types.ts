@@ -49,6 +49,24 @@ export type ProductKnowledgeListResponse = {
   offset: number;
 };
 
+export type ProductSectionState = {
+  submitted: boolean;
+  dirty: boolean;
+  status: "submitted" | "pending" | "dirty" | "blocked";
+  reason?: string | null;
+  current_digest?: string | null;
+  submitted_digest?: string | null;
+  count: number;
+  submitted_at?: string | null;
+};
+
+export type ProductReadinessState = {
+  ready: boolean;
+  keywords: ProductSectionState;
+  images: ProductSectionState;
+  selling_points: ProductSectionState;
+};
+
 export type ProductKnowledgeCreatePayload = {
   raw_input_text: string;
   main_keyword: string;

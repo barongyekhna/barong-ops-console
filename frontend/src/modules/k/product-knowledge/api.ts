@@ -4,6 +4,8 @@ import type {
   KMediaAsset,
   KMediaCreatePayload,
   KMediaListResponse,
+  ProductReadinessState,
+  ProductSectionState,
   KRiskReviewPayload,
   KWorkflowControlPayload,
   KWorkflowExecution,
@@ -287,6 +289,58 @@ export async function approveProductSellingPoints(
   return readJson<ProductSellingPoints>(response, path);
 }
 
+export async function getProductSellingPoints(
+  productId: string,
+): Promise<ProductSellingPoints | null> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/selling-points`;
+  const response = await fetch(
+    `${API_PROXY_BASE}${path}`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(),
+      method: "GET",
+    },
+  );
+
+  if (response.status === 404) {
+    return null;
+  }
+
+  return readJson<ProductSellingPoints>(response, path);
+}
+
+export async function getProductReadiness(
+  productId: string,
+): Promise<ProductReadinessState> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/readiness`;
+  const response = await fetch(
+    `${API_PROXY_BASE}${path}`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(),
+      method: "GET",
+    },
+  );
+
+  return readJson<ProductReadinessState>(response, path);
+}
+
+export async function submitProductKeywords(
+  productId: string,
+): Promise<ProductSectionState> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/keywords/submit`;
+  const response = await fetch(
+    `${API_PROXY_BASE}${path}`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+
+  return readJson<ProductSectionState>(response, path);
+}
+
 export async function getLatestWorkflow(
   productId: string,
 ): Promise<KWorkflowExecution | null> {
@@ -444,6 +498,22 @@ export async function uploadProductMediaAsset(
   );
 
   return readJson<KMediaAsset>(response, path);
+}
+
+export async function submitProductImages(
+  productId: string,
+): Promise<ProductSectionState> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/images/submit`;
+  const response = await fetch(
+    `${API_PROXY_BASE}${path}`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(true),
+      method: "POST",
+    },
+  );
+
+  return readJson<ProductSectionState>(response, path);
 }
 
 export async function bindProductImage(

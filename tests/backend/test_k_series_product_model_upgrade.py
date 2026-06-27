@@ -30,11 +30,17 @@ from backend.app.modules.k_series.product_knowledge.schemas import (
 )
 import backend.app.modules.k_series.product_knowledge.router as product_router
 from backend.app.modules.k_series.product_knowledge.router import (
+    _active_keyword_snapshot,
+    _ensure_product_ready_for_approval,
     _claim_product_create_idempotency,
     _complete_product_create_idempotency,
     _discard_product_create_idempotency,
     _gate_error,
+    _product_readiness,
     _require_k_permission,
+    _selling_points_snapshot,
+    _store_image_review_snapshot,
+    _store_keyword_review_snapshot,
     _workflow_error,
 )
 from backend.app.modules.k_series.product_knowledge.scope_shim import KScopeContext
@@ -336,6 +342,128 @@ def test_delete_product_requires_key_and_cascades_product_records() -> None:
             )
             == 0
         )
+
+
+def test_product_readiness_requires_submitted_snapshots_and_detects_keyword_drift() -> None:
+    db = _session()
+    product = create_product(
+        db,
+        payload=ProductKnowledgeCreate(
+            parent_sku="ready family",
+            product_name_en="Ready family",
+            raw_input_text="Ready family description",
+            target_market="US",
+        ),
+        scope_context=_scope(),
+    )
+    variant = db.scalar(
+        select(KProductKnowledgeVariant).where(
+            KProductKnowledgeVariant.product_id == product.id
+        )
+    )
+    assert variant is not None
+
+    keyword = KProductKnowledgeKeyword(
+        product_id=product.id,
+        keyword_text="ready keyword",
+        keyword_type="primary",
+        language_code="en",
+        source="manual",
+        status="approved",
+    )
+    db.add_all(
+        [
+            keyword,
+            KProductKnowledgeKeyword(
+                product_id=product.id,
+                keyword_text="stable keyword",
+                keyword_type="secondary",
+                language_code="en",
+                source="manual",
+                status="approved",
+            ),
+        ]
+    )
+    for index in range(5):
+        db.add(
+            KProductKnowledgeMediaAsset(
+                product_id=product.id,
+                variant_id=variant.id,
+                variant_sku=variant.variant_sku,
+                asset_type="image",
+                asset_role="main",
+                object_key=f"ready/{index}.jpg",
+                source="manual_upload_image",
+                status="available",
+                review_status="not_applicable",
+            )
+        )
+    db.flush()
+
+    selling_points_payload = {
+        "bullets": [
+            {
+                "category": "conversion",
+                "importance_score": 1,
+                "text": "Ready selling point",
+            }
+        ],
+        "seo_keywords": ["ready keyword"],
+        "market_tags": ["US"],
+        "confidence_score": 1,
+        "source": "manual_review",
+        "marketing_copy": "Ready copy",
+        "translated_version": "Ready translated copy",
+        "chinese_translation": "已确认卖点",
+        "target_language": "en",
+        "product_id": str(product.id),
+        "review_status": "approved",
+    }
+    product.ai_warnings_json = {"selling_points": selling_points_payload}
+    db.add(product)
+    db.flush()
+
+    selling_points_snapshot = _selling_points_snapshot(product)
+    product.ai_warnings_json = {
+        **product.ai_warnings_json,
+        "selling_points_review": {
+            "status": "approved",
+            "approved_at": "2026-06-27T00:00:00+00:00",
+            "selling_points_digest": selling_points_snapshot["digest"],
+            "bullet_count": selling_points_snapshot["count"],
+        },
+    }
+    db.add(product)
+    db.flush()
+    keyword_state = _store_keyword_review_snapshot(
+        db,
+        product=product,
+        user=SimpleNamespace(id=uuid4()),
+    )
+    assert keyword_state.submitted is True
+    assert keyword_state.count == 2
+    image_state = _store_image_review_snapshot(
+        db,
+        product=product,
+        user=SimpleNamespace(id=uuid4()),
+    )
+    assert image_state.submitted is True
+
+    readiness = _product_readiness(db, product)
+    assert readiness.ready is True
+    _ensure_product_ready_for_approval(db, product)
+
+    keyword.status = "removed"
+    db.add(keyword)
+    db.flush()
+
+    readiness_after_keyword_change = _product_readiness(db, product)
+    assert readiness_after_keyword_change.ready is False
+    assert readiness_after_keyword_change.keywords.dirty is True
+    with pytest.raises(HTTPException) as exc_info:
+        _ensure_product_ready_for_approval(db, product)
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail["code"] == "PRODUCT_SECTIONS_NOT_SUBMITTED"
 
 
 def test_k_permission_allows_super_admin_and_assigned_roles(monkeypatch) -> None:

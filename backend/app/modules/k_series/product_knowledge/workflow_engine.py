@@ -360,7 +360,14 @@ class KProductKnowledgeWorkflowEngine:
     ) -> KProductKnowledgeWorkflowExecution:
         product = self._require_product(product_id, scope_context)
         execution = self._require_execution(product, payload.execution_id)
-        if execution.current_step not in {"risk_term_manual_review", "risk_term_review_manual"}:
+        risk_review_already_approved = (
+            (execution.risk_approval_log_json or {}).get("approved") is True
+        )
+        if (
+            execution.current_step
+            not in {"risk_term_manual_review", "risk_term_review_manual"}
+            and not risk_review_already_approved
+        ):
             error_report = self._error_report(
                 execution,
                 code="RISK_REVIEW_NOT_CURRENT_STEP",

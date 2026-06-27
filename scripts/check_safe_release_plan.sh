@@ -188,9 +188,9 @@ require_contains "$production_backend_output" "env=production" \
     "dry-run is missing normalized production env."
 require_contains "$production_backend_output" "service=backend" \
     "dry-run is missing normalized backend target service."
-require_contains "$production_backend_output" "project name: barong-ops-console-prod" \
+require_contains "$production_backend_output" "project name: barong-ops-console" \
     "dry-run is missing production project name."
-require_contains "$production_backend_output" "project=barong-ops-console-prod" \
+require_contains "$production_backend_output" "project=barong-ops-console" \
     "dry-run is missing normalized production project."
 require_contains "$production_backend_output" "compose file: docker-compose.production.yml" \
     "dry-run is missing production compose file."
@@ -201,10 +201,10 @@ require_contains "$production_backend_output" "compose service: console_backend"
 require_contains "$production_backend_output" "compose_service=console_backend" \
     "dry-run is missing normalized production backend service."
 require_contains "$production_backend_output" \
-    "container name: barong-ops-console-prod_console_backend_1" \
+    "container name: barong-ops-console_console_backend_1" \
     "dry-run is missing production backend container."
 require_contains "$production_backend_output" \
-    "container=barong-ops-console-prod_console_backend_1" \
+    "container=barong-ops-console_console_backend_1" \
     "dry-run is missing normalized production backend container."
 require_contains "$production_backend_output" "health check URL: http://127.0.0.1:8000/health" \
     "dry-run is missing production backend health URL."
@@ -224,10 +224,10 @@ require_contains "$production_frontend_output" "compose service: console_fronten
 require_contains "$production_frontend_output" "compose_service=console_frontend" \
     "dry-run is missing normalized production frontend service."
 require_contains "$production_frontend_output" \
-    "container name: barong-ops-console-prod_console_frontend_1" \
+    "container name: barong-ops-console_console_frontend_1" \
     "dry-run is missing production frontend container."
 require_contains "$production_frontend_output" \
-    "container=barong-ops-console-prod_console_frontend_1" \
+    "container=barong-ops-console_console_frontend_1" \
     "dry-run is missing normalized production frontend container."
 require_contains "$production_frontend_output" "health check URL: https://ops.barongyekhna.com/login" \
     "dry-run is missing production frontend health URL."

@@ -102,18 +102,18 @@ case "$target_env/$target_service" in
         smoke_script="./scripts/staging_smoke_check.sh"
         ;;
     production/backend)
-        project_name="barong-ops-console-prod"
+        project_name="barong-ops-console"
         compose_file="docker-compose.production.yml"
         compose_service="console_backend"
-        container_name="barong-ops-console-prod_console_backend_1"
+        container_name="barong-ops-console_console_backend_1"
         health_url="http://127.0.0.1:8000/health"
         smoke_script="./scripts/production_smoke_check.sh"
         ;;
     production/frontend)
-        project_name="barong-ops-console-prod"
+        project_name="barong-ops-console"
         compose_file="docker-compose.production.yml"
         compose_service="console_frontend"
-        container_name="barong-ops-console-prod_console_frontend_1"
+        container_name="barong-ops-console_console_frontend_1"
         health_url="https://ops.barongyekhna.com/login"
         smoke_script="./scripts/production_smoke_check.sh"
         ;;

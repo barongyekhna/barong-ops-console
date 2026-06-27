@@ -1,0 +1,235 @@
+{
+  "generated_at": "2026-06-27T07:10:57.887Z",
+  "base_url": "http://127.0.0.1:3100",
+  "steps": [
+    {
+      "name": "login",
+      "status": "passed",
+      "detail": {
+        "role": "owner",
+        "username": "staging_owner"
+      },
+      "at": "2026-06-27T07:10:59.183Z"
+    },
+    {
+      "name": "create_product",
+      "status": "passed",
+      "detail": {
+        "id": "2f27a986-6634-4917-8719-a67e047fe67d",
+        "product_key": "0426e6d2-5f60-4891-bcc3-69ea94d49ca8",
+        "variant_count": 2
+      },
+      "at": "2026-06-27T07:11:00.690Z"
+    },
+    {
+      "name": "save_blocked_before_sections",
+      "status": "passed",
+      "detail": {
+        "status": 409,
+        "code": "PRODUCT_SECTIONS_NOT_SUBMITTED"
+      },
+      "at": "2026-06-27T07:11:02.082Z"
+    },
+    {
+      "name": "workflow_start",
+      "status": "passed",
+      "detail": {
+        "workflow_id": "4e47aa51-1064-486a-83f8-45624550d82d",
+        "status": "blocked",
+        "current_step": "product_ingestion",
+        "risk_keywords": 0
+      },
+      "at": "2026-06-27T07:11:03.497Z"
+    },
+    {
+      "name": "submit_keywords",
+      "status": "passed",
+      "detail": {
+        "mode": "manual_snapshot",
+        "workflow_status": "blocked",
+        "workflow_step": "product_ingestion",
+        "status": "submitted",
+        "keyword_count": 2
+      },
+      "at": "2026-06-27T07:11:04.585Z"
+    },
+    {
+      "name": "save_blocked_before_images_and_selling_points",
+      "status": "passed",
+      "detail": {
+        "status": 409,
+        "code": "PRODUCT_SECTIONS_NOT_SUBMITTED"
+      },
+      "at": "2026-06-27T07:11:04.987Z"
+    },
+    {
+      "name": "generate_selling_points",
+      "status": "passed",
+      "detail": {
+        "mode": "manual_fallback",
+        "reason": "API_KEY_BINDING_MISSING",
+        "bullets": 2
+      },
+      "at": "2026-06-27T07:11:05.388Z"
+    },
+    {
+      "name": "submit_selling_points",
+      "status": "passed",
+      "detail": {
+        "bullets": 2,
+        "source": "manual_review"
+      },
+      "at": "2026-06-27T07:11:05.884Z"
+    },
+    {
+      "name": "save_blocked_before_images",
+      "status": "passed",
+      "detail": {
+        "status": 409,
+        "code": "PRODUCT_SECTIONS_NOT_SUBMITTED"
+      },
+      "at": "2026-06-27T07:11:06.695Z"
+    },
+    {
+      "name": "upload_images",
+      "status": "passed",
+      "detail": {
+        "count": 5,
+        "variant_sku": "K-E2E-1782544259185-SGDHX3-F7678FAD"
+      },
+      "at": "2026-06-27T07:11:09.785Z"
+    },
+    {
+      "name": "save_blocked_after_image_upload_before_submit",
+      "status": "passed",
+      "detail": {
+        "status": 409,
+        "code": "PRODUCT_SECTIONS_NOT_SUBMITTED"
+      },
+      "at": "2026-06-27T07:11:10.198Z"
+    },
+    {
+      "name": "submit_images",
+      "status": "passed",
+      "detail": {
+        "submitted": true,
+        "count": 5
+      },
+      "at": "2026-06-27T07:11:10.681Z"
+    },
+    {
+      "name": "readiness_all_submitted",
+      "status": "passed",
+      "detail": {
+        "keywords": "submitted",
+        "images": "submitted",
+        "selling_points": "submitted"
+      },
+      "at": "2026-06-27T07:11:11.086Z"
+    },
+    {
+      "name": "save_product_info",
+      "status": "passed",
+      "detail": {
+        "review_status": "approved"
+      },
+      "at": "2026-06-27T07:11:11.584Z"
+    },
+    {
+      "name": "selling_points_reload_visible",
+      "status": "passed",
+      "detail": {
+        "bullets": 2,
+        "source": "manual_review"
+      },
+      "at": "2026-06-27T07:11:12.282Z"
+    },
+    {
+      "name": "delete_product",
+      "status": "passed",
+      "detail": {
+        "deleted_counts": {
+          "ai_events": 1,
+          "workflow_traces": 1,
+          "media_references": 5,
+          "review_items": 0,
+          "versions": 0,
+          "translations": 0,
+          "attributes": 0,
+          "keywords": 2,
+          "risk_terms": 0,
+          "research_runs": 0,
+          "variants": 2,
+          "products": 1
+        }
+      },
+      "at": "2026-06-27T07:11:12.992Z"
+    },
+    {
+      "name": "get_after_delete",
+      "status": "passed",
+      "detail": {
+        "status": 404
+      },
+      "at": "2026-06-27T07:11:13.705Z"
+    },
+    {
+      "name": "database_delete_verification",
+      "status": "passed",
+      "detail": {
+        "products": 0,
+        "variants": 0,
+        "keywords": 0,
+        "risk_terms": 0,
+        "media_assets": 0,
+        "ai_events": 0,
+        "workflow_executions": 0,
+        "research_runs": 0,
+        "attributes": 0,
+        "review_items": 0,
+        "versions": 0,
+        "translations": 0
+      },
+      "at": "2026-06-27T07:11:14.691Z"
+    }
+  ],
+  "product": {
+    "id": "2f27a986-6634-4917-8719-a67e047fe67d",
+    "product_key": "0426e6d2-5f60-4891-bcc3-69ea94d49ca8",
+    "variant_count": 2
+  },
+  "deletion": {
+    "status": "deleted",
+    "product_id": "2f27a986-6634-4917-8719-a67e047fe67d",
+    "product_key": "0426e6d2-5f60-4891-bcc3-69ea94d49ca8",
+    "deleted_counts": {
+      "ai_events": 1,
+      "workflow_traces": 1,
+      "media_references": 5,
+      "review_items": 0,
+      "versions": 0,
+      "translations": 0,
+      "attributes": 0,
+      "keywords": 2,
+      "risk_terms": 0,
+      "research_runs": 0,
+      "variants": 2,
+      "products": 1
+    }
+  },
+  "db_after_delete": {
+    "products": 0,
+    "variants": 0,
+    "keywords": 0,
+    "risk_terms": 0,
+    "media_assets": 0,
+    "ai_events": 0,
+    "workflow_executions": 0,
+    "research_runs": 0,
+    "attributes": 0,
+    "review_items": 0,
+    "versions": 0,
+    "translations": 0
+  },
+  "final_status": "passed"
+}

@@ -616,6 +616,15 @@ function isAllowedKPath(method: string, path: string[]) {
   }
 
   if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    ["readiness", "selling-points"].includes(path[3])
+  ) {
+    return method === "GET";
+  }
+
+  if (
     path.length === 2 &&
     ["keywords", "risks", "risk", "media"].includes(path[1])
   ) {
@@ -717,6 +726,16 @@ function isAllowedKPath(method: string, path: string[]) {
     path.length === 5 &&
     path[1] === "products" &&
     isUuidPathSegment(path[2]) &&
+    path[3] === "keywords" &&
+    path[4] === "submit"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
     path[3] === "workflow" &&
     [
       "latest",
@@ -737,7 +756,7 @@ function isAllowedKPath(method: string, path: string[]) {
     path[1] === "products" &&
     isUuidPathSegment(path[2]) &&
     path[3] === "images" &&
-    path[4] === "bind"
+    ["bind", "submit"].includes(path[4])
   ) {
     return method === "POST";
   }

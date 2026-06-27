@@ -3,6 +3,7 @@
 import {
   CheckCircle2,
   ChevronUp,
+  Copy,
   Download,
   ExternalLink,
   FileText,
@@ -43,6 +44,7 @@ import type {
   KWorkflowExecution,
   KWorkflowStartPayload,
   ProductKnowledgeListItem,
+  ProductReadinessState,
 } from "./types";
 
 const TARGET_ORGANIZATION = "涌龙麟（深圳）国际贸易有限公司";
@@ -115,12 +117,14 @@ type ProductDetailProps = {
   ) => void;
   onSaveProductInfo?: () => Promise<void> | void;
   onStartWorkflow?: (payload: KWorkflowStartPayload) => void;
+  onSubmitImages?: () => Promise<void> | void;
   onSubmitRiskReview?: (
     decisions: KRiskReviewDecision[],
     confirmNoRiskTerms: boolean,
   ) => Promise<void> | void;
   product: ProductKnowledgeListItem | null;
   productInfoSaveError?: string;
+  readiness?: ProductReadinessState | null;
   sellingPoints?: ProductSellingPoints | null;
   sellingPointsError?: string;
   workflow?: KWorkflowExecution | null;
@@ -437,9 +441,11 @@ export function ProductDetail({
   onRetryWorkflowStep,
   onSaveProductInfo,
   onStartWorkflow,
+  onSubmitImages,
   onSubmitRiskReview,
   product,
   productInfoSaveError = "",
+  readiness = null,
   sellingPoints = null,
   sellingPointsError = "",
   workflow = null,
@@ -458,6 +464,7 @@ export function ProductDetail({
   const [selectedVariantSku, setSelectedVariantSku] = useState("");
   const [iSystemImageAssetId, setISystemImageAssetId] = useState("");
   const [imageSectionSubmitted, setImageSectionSubmitted] = useState(false);
+  const [imageSectionTouched, setImageSectionTouched] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
   const [riskDecisions, setRiskDecisions] = useState<Record<string, RiskDecisionValue>>(
     {},
@@ -478,6 +485,7 @@ export function ProductDetail({
     string[]
   >([]);
   const [keywordReviewSubmitted, setKeywordReviewSubmitted] = useState(false);
+  const [keywordSectionTouched, setKeywordSectionTouched] = useState(false);
   const [sellingBullets, setSellingBullets] = useState<BulletPoint[]>([]);
   const [seoKeywordsText, setSeoKeywordsText] = useState("");
   const [marketTagsText, setMarketTagsText] = useState("");
@@ -488,6 +496,8 @@ export function ProductDetail({
   const [sellingPointReviewError, setSellingPointReviewError] = useState("");
   const [isSavingSellingPoints, setIsSavingSellingPoints] = useState(false);
   const [sellingPointsApproved, setSellingPointsApproved] = useState(false);
+  const [sellingPointsTouched, setSellingPointsTouched] = useState(false);
+  const [sellingPointsCopyStatus, setSellingPointsCopyStatus] = useState("");
 
   const riskKeywords = useMemo(() => normalizeRiskKeywords(workflow), [workflow]);
   const activeMediaAssets = useMemo(
@@ -582,10 +592,23 @@ export function ProductDetail({
     riskKeywordKeys,
     workflow,
   ]);
-  const keywordsComplete =
-    keywordReviewSubmitted || Boolean(workflow?.risk_approval_log_json);
-  const imagesComplete = imageSectionSubmitted && activeMediaAssets.length >= 5;
-  const sellingPointsComplete = sellingPointsApproved;
+  const keywordsDirty = Boolean(readiness?.keywords.dirty || keywordSectionTouched);
+  const imagesDirty = Boolean(readiness?.images.dirty || imageSectionTouched);
+  const sellingPointsDirty = Boolean(
+    readiness?.selling_points.dirty || sellingPointsTouched,
+  );
+  const keywordsComplete = readiness
+    ? readiness.keywords.submitted &&
+      !keywordsDirty
+    : keywordReviewSubmitted || Boolean(workflow?.risk_approval_log_json);
+  const imagesComplete = readiness
+    ? readiness.images.submitted &&
+      !imagesDirty
+    : imageSectionSubmitted && activeMediaAssets.length >= 5;
+  const sellingPointsComplete = readiness
+    ? readiness.selling_points.submitted &&
+      !sellingPointsDirty
+    : sellingPointsApproved;
   const pSeriesReady = keywordsComplete && imagesComplete && sellingPointsComplete;
   const isWorkflowLive =
     workflow?.status === "created" ||
@@ -636,7 +659,11 @@ export function ProductDetail({
     setRemovedGeneratedKeywords([]);
     setOptimisticRemovedKeywordKeys([]);
     setPendingKeywordRemovalKeys([]);
-  }, [product?.id, product?.target_market, product?.variants]);
+    setImageSectionTouched(false);
+    setKeywordSectionTouched(false);
+    setSellingPointsTouched(false);
+    setSellingPointsCopyStatus("");
+  }, [product?.id]);
 
   useEffect(() => {
     if (!sellingPoints) {
@@ -648,6 +675,8 @@ export function ProductDetail({
       setChineseTranslation("");
       setTargetLanguage("");
       setSellingPointsApproved(false);
+      setSellingPointsTouched(false);
+      setSellingPointsCopyStatus("");
       return;
     }
 
@@ -659,6 +688,8 @@ export function ProductDetail({
     setChineseTranslation(sellingPoints.chinese_translation ?? "");
     setTargetLanguage(sellingPoints.target_language ?? sellingPoints.language ?? "");
     setSellingPointsApproved(sellingPoints.source === "manual_review");
+    setSellingPointsTouched(false);
+    setSellingPointsCopyStatus("");
   }, [sellingPoints]);
 
   useEffect(() => {
@@ -672,12 +703,6 @@ export function ProductDetail({
 
     return () => window.clearInterval(timer);
   }, [isWorkflowLive, onRefreshWorkflow]);
-
-  useEffect(() => {
-    if (activeMediaAssets.length >= 5) {
-      setImageSectionSubmitted(true);
-    }
-  }, [activeMediaAssets.length]);
 
   if (!product) {
     return (
@@ -706,10 +731,14 @@ export function ProductDetail({
   }
 
   function submitWorkflowStart() {
+    setKeywordSectionTouched(true);
+    setKeywordReviewSubmitted(false);
     onStartWorkflow?.(buildWorkflowPayload());
   }
 
   function retryWorkflowStep(step: string) {
+    setKeywordSectionTouched(true);
+    setKeywordReviewSubmitted(false);
     onRetryWorkflowStep?.(step, buildWorkflowPayload());
   }
 
@@ -768,6 +797,8 @@ export function ProductDetail({
       if (mediaInputRef.current) {
         mediaInputRef.current.value = "";
       }
+      setImageSectionTouched(true);
+      setImageSectionSubmitted(false);
     } catch (error) {
       setMediaError(error instanceof Error ? error.message : "图片上传失败。");
     } finally {
@@ -787,6 +818,8 @@ export function ProductDetail({
     setMediaError("");
     try {
       await onDeleteMedia?.(assetId);
+      setImageSectionTouched(true);
+      setImageSectionSubmitted(false);
     } catch (error) {
       setMediaError(error instanceof Error ? error.message : "图片删除失败。");
     } finally {
@@ -802,7 +835,15 @@ export function ProductDetail({
       return;
     }
     onBindISystemImage?.(value, selectedVariantSku);
+    setImageSectionTouched(true);
+    setImageSectionSubmitted(false);
     setISystemImageAssetId("");
+  }
+
+  function bindUploadedImage(assetId: string, variantSku: string) {
+    setImageSectionTouched(true);
+    setImageSectionSubmitted(false);
+    onBindImage?.(assetId, variantSku);
   }
 
   function addManualKeyword() {
@@ -817,6 +858,7 @@ export function ProductDetail({
     }
     setManualKeywords((current) => [...current, keyword]);
     setManualKeywordInput("");
+    setKeywordSectionTouched(true);
     setKeywordReviewError("");
   }
 
@@ -825,13 +867,16 @@ export function ProductDetail({
     if (pendingKeywordRemovalKeys.includes(key)) {
       return;
     }
-    setOptimisticRemovedKeywordKeys((current) =>
-      current.includes(key) ? current : [...current, key],
-    );
+    if (item.source !== "saved") {
+      setOptimisticRemovedKeywordKeys((current) =>
+        current.includes(key) ? current : [...current, key],
+      );
+    }
     setPendingKeywordRemovalKeys((current) =>
       current.includes(key) ? current : [...current, key],
     );
     setKeywordReviewError("");
+    setKeywordSectionTouched(true);
     if (item.source === "saved" && item.id) {
       try {
         await deleteKeyword(item.id);
@@ -868,15 +913,6 @@ export function ProductDetail({
   }
 
   async function submitKeywordReview() {
-    if (!workflow) {
-      setKeywordReviewError(KEYWORD_RESEARCH_NOT_STARTED_MESSAGE);
-      return;
-    }
-    if (!workflow.claude_filter_result_json) {
-      setKeywordReviewError("请等待 Claude 终筛完成后再提交关键词审核。");
-      return;
-    }
-
     const missingRiskDecisions = riskKeywords.filter(
       (item) => !riskDecisions[item.term],
     );
@@ -885,26 +921,17 @@ export function ProductDetail({
       return;
     }
     if (nonRiskKeywords.length === 0) {
-      setKeywordReviewError("请至少保留一个非风险关键词。");
+      setKeywordReviewError(
+        workflow
+          ? "请至少保留一个非风险关键词。"
+          : KEYWORD_RESEARCH_NOT_STARTED_MESSAGE,
+      );
       return;
     }
 
     setIsSavingKeywordReview(true);
     setKeywordReviewError("");
     try {
-      await onSubmitRiskReview?.(
-        riskKeywords.map((item) => {
-          const decision = riskDecisions[item.term] as RiskDecisionValue;
-
-          return {
-            decision,
-            reason: decision === "reject" ? "Rejected in manual review" : null,
-            term: item.term,
-          };
-        }),
-        riskKeywords.length === 0,
-      );
-
       const savedKeys = new Set(
         activeKeywordEntries.map((entry) => normalizeKeywordKey(entry.keyword)),
       );
@@ -921,8 +948,22 @@ export function ProductDetail({
           }),
         ),
       );
+      await onSubmitRiskReview?.(
+        riskKeywords.map((item) => {
+          const decision = riskDecisions[item.term] as RiskDecisionValue;
+
+          return {
+            decision,
+            reason: decision === "reject" ? "Rejected in manual review" : null,
+            term: item.term,
+          };
+        }),
+        riskKeywords.length === 0,
+      );
+
       await loadKeywordEntries();
       setManualKeywords([]);
+      setKeywordSectionTouched(false);
       setKeywordReviewSubmitted(true);
     } catch (error) {
       setKeywordReviewError(
@@ -934,6 +975,7 @@ export function ProductDetail({
   }
 
   function updateBullet(index: number, patch: Partial<BulletPoint>) {
+    setSellingPointsTouched(true);
     setSellingBullets((current) =>
       current.map((bullet, bulletIndex) =>
         bulletIndex === index ? { ...bullet, ...patch } : bullet,
@@ -985,12 +1027,80 @@ export function ProductDetail({
         translated_version: translatedVersion.trim() || null,
       });
       setSellingPointsApproved(true);
+      setSellingPointsTouched(false);
     } catch (error) {
       setSellingPointReviewError(
         error instanceof Error ? error.message : "卖点审核保存失败。",
       );
     } finally {
       setIsSavingSellingPoints(false);
+    }
+  }
+
+  function buildSellingPointsCopyText() {
+    const lines = [
+      currentProduct.product_name_en ||
+        displayProductKey(currentProduct.product_key),
+      "",
+      "卖点",
+      ...sellingBullets.map((bullet, index) => {
+        const category = bullet.category.trim() || "conversion";
+        return `${index + 1}. [${category}] ${bullet.text.trim()}`;
+      }),
+      "",
+      "SEO关键词",
+      ...splitListText(seoKeywordsText).map((keyword) => `- ${keyword}`),
+      "",
+      "市场标签",
+      ...splitListText(marketTagsText).map((tag) => `- ${tag}`),
+      "",
+      "转化文案",
+      marketingCopy.trim(),
+      "",
+      "目标市场译文",
+      translatedVersion.trim(),
+      "",
+      "中文翻译",
+      chineseTranslation.trim(),
+    ];
+
+    return lines
+      .filter((line, index, allLines) => {
+        if (line.trim()) {
+          return true;
+        }
+        return index > 0 && index < allLines.length - 1;
+      })
+      .join("\n");
+  }
+
+  async function copySellingPoints() {
+    const text = buildSellingPointsCopyText();
+    if (!text.trim()) {
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(text);
+      setSellingPointsCopyStatus("已复制");
+    } catch {
+      setSellingPointsCopyStatus("复制失败");
+    }
+  }
+
+  async function submitImageSection() {
+    if (activeMediaAssets.length < 5) {
+      setMediaError("请至少上传 5 张图片后再提交图片。");
+      return;
+    }
+
+    setMediaError("");
+    try {
+      await onSubmitImages?.();
+      setImageSectionTouched(false);
+      setImageSectionSubmitted(true);
+    } catch (error) {
+      setMediaError(error instanceof Error ? error.message : "图片提交失败。");
     }
   }
 
@@ -1205,22 +1315,39 @@ export function ProductDetail({
               </p>
             ) : (
               <ul className={styles.keywordList}>
-                {nonRiskKeywords.map((item) => (
-                  <li key={`${item.source}-${item.id ?? item.keyword}`}>
-                    <div>
-                      <strong>{item.keyword}</strong>
-                      <span>{item.detail}</span>
-                    </div>
-                    <button
-                      className="secondary-button"
-                      onClick={() => void removeKeyword(item)}
-                      type="button"
+                {nonRiskKeywords.map((item) => {
+                  const keywordKey = normalizeKeywordKey(item.keyword);
+                  const isRemoving = pendingKeywordRemovalKeys.includes(keywordKey);
+
+                  return (
+                    <li
+                      data-removing={isRemoving}
+                      key={`${item.source}-${item.id ?? item.keyword}`}
                     >
-                      <Trash2 aria-hidden="true" size={15} />
-                      移除
-                    </button>
-                  </li>
-                ))}
+                      <div>
+                        <strong>{item.keyword}</strong>
+                        <span>{item.detail}</span>
+                      </div>
+                      <button
+                        className="secondary-button"
+                        disabled={isRemoving}
+                        onClick={() => void removeKeyword(item)}
+                        type="button"
+                      >
+                        {isRemoving ? (
+                          <LoaderCircle
+                            aria-hidden="true"
+                            className="spin"
+                            size={15}
+                          />
+                        ) : (
+                          <Trash2 aria-hidden="true" size={15} />
+                        )}
+                        移除
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
@@ -1246,12 +1373,13 @@ export function ProductDetail({
                       <button
                         aria-pressed={riskDecisions[item.term] === "approve"}
                         className="secondary-button"
-                        onClick={() =>
+                        onClick={() => {
+                          setKeywordSectionTouched(true);
                           setRiskDecisions((current) => ({
                             ...current,
                             [item.term]: "approve",
-                          }))
-                        }
+                          }));
+                        }}
                         type="button"
                       >
                         <CheckCircle2 aria-hidden="true" size={15} />
@@ -1260,12 +1388,13 @@ export function ProductDetail({
                       <button
                         aria-pressed={riskDecisions[item.term] === "reject"}
                         className="secondary-button"
-                        onClick={() =>
+                        onClick={() => {
+                          setKeywordSectionTouched(true);
                           setRiskDecisions((current) => ({
                             ...current,
                             [item.term]: "reject",
-                          }))
-                        }
+                          }));
+                        }}
                         type="button"
                       >
                         <XCircle aria-hidden="true" size={15} />
@@ -1281,7 +1410,11 @@ export function ProductDetail({
 
         <div className={styles.sectionFooter}>
           <span data-complete={keywordsComplete}>
-            {keywordsComplete ? "关键词已保存" : "关键词待审核"}
+            {keywordsComplete
+              ? "关键词已保存"
+              : keywordsDirty
+                ? "关键词已修改，待重新提交"
+                : "关键词待审核"}
           </span>
           <button
             className="primary-button"
@@ -1318,7 +1451,13 @@ export function ProductDetail({
           </div>
           <div>
             <dt>状态</dt>
-            <dd>{imagesComplete ? "已保存" : "待保存"}</dd>
+            <dd>
+              {imagesComplete
+                ? "已保存"
+                : imagesDirty
+                  ? "已修改，待重新提交"
+                  : "待保存"}
+            </dd>
           </div>
         </div>
 
@@ -1496,7 +1635,7 @@ export function ProductDetail({
                   }
                   onClick={() =>
                     asset.variant_sku
-                      ? onBindImage?.(asset.id, asset.variant_sku)
+                      ? bindUploadedImage(asset.id, asset.variant_sku)
                       : undefined
                   }
                   type="button"
@@ -1529,12 +1668,16 @@ export function ProductDetail({
 
         <div className={styles.sectionFooter}>
           <span data-complete={imagesComplete}>
-            {imagesComplete ? "图片已保存" : "图片不少于 5 张后可保存"}
+            {imagesComplete
+              ? "图片已保存"
+              : imagesDirty
+                ? "图片已修改，待重新提交"
+                : "图片不少于 5 张后可保存"}
           </span>
           <button
             className="primary-button"
-            disabled={activeMediaAssets.length < 5}
-            onClick={() => setImageSectionSubmitted(true)}
+            disabled={activeMediaAssets.length < 5 || isWorkflowBusy}
+            onClick={() => void submitImageSection()}
             type="button"
           >
             <CheckCircle2 aria-hidden="true" size={16} />
@@ -1552,19 +1695,36 @@ export function ProductDetail({
             <span className={styles.eyebrow}>卖点</span>
             <h4 id="k-selling-points">卖点整理</h4>
           </div>
-          <button
-            className="secondary-button"
-            disabled={isGeneratingSellingPoints}
-            onClick={onGenerateSellingPoints}
-            type="button"
-          >
-            {isGeneratingSellingPoints ? (
-              <LoaderCircle aria-hidden="true" className="spin" size={16} />
-            ) : (
-              <Sparkles aria-hidden="true" size={16} />
-            )}
-            生成
-          </button>
+          <div className={styles.headingActions}>
+            {sellingPoints ? (
+              <button
+                className="secondary-button"
+                onClick={() => void copySellingPoints()}
+                title="复制当前卖点"
+                type="button"
+              >
+                <Copy aria-hidden="true" size={16} />
+                {sellingPointsCopyStatus || "复制"}
+              </button>
+            ) : null}
+            <button
+              className="secondary-button"
+              disabled={isGeneratingSellingPoints}
+              onClick={() => {
+                setSellingPointsTouched(true);
+                setSellingPointsApproved(false);
+                onGenerateSellingPoints?.();
+              }}
+              type="button"
+            >
+              {isGeneratingSellingPoints ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              ) : (
+                <Sparkles aria-hidden="true" size={16} />
+              )}
+              {sellingPoints ? "重新生成" : "生成"}
+            </button>
+          </div>
         </div>
 
         <div className={styles.workflowMetrics}>
@@ -1574,7 +1734,13 @@ export function ProductDetail({
           </div>
           <div>
             <dt>状态</dt>
-            <dd>{sellingPointsComplete ? "已保存" : "待审核"}</dd>
+            <dd>
+              {sellingPointsComplete
+                ? "已保存"
+                : sellingPointsDirty
+                  ? "已修改，待重新提交"
+                  : "待审核"}
+            </dd>
           </div>
         </div>
         <div
@@ -1601,14 +1767,20 @@ export function ProductDetail({
               <label className={styles.field}>
                 <span>目标语言</span>
                 <input
-                  onChange={(event) => setTargetLanguage(event.target.value)}
+                  onChange={(event) => {
+                    setSellingPointsTouched(true);
+                    setTargetLanguage(event.target.value);
+                  }}
                   value={targetLanguage}
                 />
               </label>
               <label className={styles.field}>
                 <span>SEO关键词</span>
                 <textarea
-                  onChange={(event) => setSeoKeywordsText(event.target.value)}
+                  onChange={(event) => {
+                    setSellingPointsTouched(true);
+                    setSeoKeywordsText(event.target.value);
+                  }}
                   rows={3}
                   value={seoKeywordsText}
                 />
@@ -1616,7 +1788,10 @@ export function ProductDetail({
               <label className={styles.field}>
                 <span>市场标签</span>
                 <textarea
-                  onChange={(event) => setMarketTagsText(event.target.value)}
+                  onChange={(event) => {
+                    setSellingPointsTouched(true);
+                    setMarketTagsText(event.target.value);
+                  }}
                   rows={3}
                   value={marketTagsText}
                 />
@@ -1660,7 +1835,10 @@ export function ProductDetail({
             <label className={styles.field}>
               <span>转化文案</span>
               <textarea
-                onChange={(event) => setMarketingCopy(event.target.value)}
+                onChange={(event) => {
+                  setSellingPointsTouched(true);
+                  setMarketingCopy(event.target.value);
+                }}
                 rows={4}
                 value={marketingCopy}
               />
@@ -1668,7 +1846,10 @@ export function ProductDetail({
             <label className={styles.field}>
               <span>目标市场译文</span>
               <textarea
-                onChange={(event) => setTranslatedVersion(event.target.value)}
+                onChange={(event) => {
+                  setSellingPointsTouched(true);
+                  setTranslatedVersion(event.target.value);
+                }}
                 rows={4}
                 value={translatedVersion}
               />
@@ -1676,7 +1857,10 @@ export function ProductDetail({
             <label className={styles.field}>
               <span>中文翻译</span>
               <textarea
-                onChange={(event) => setChineseTranslation(event.target.value)}
+                onChange={(event) => {
+                  setSellingPointsTouched(true);
+                  setChineseTranslation(event.target.value);
+                }}
                 rows={5}
                 value={chineseTranslation}
               />
@@ -1690,7 +1874,11 @@ export function ProductDetail({
 
         <div className={styles.sectionFooter}>
           <span data-complete={sellingPointsComplete}>
-            {sellingPointsComplete ? "卖点已保存" : "卖点待审核"}
+            {sellingPointsComplete
+              ? "卖点已保存"
+              : sellingPointsDirty
+                ? "卖点已修改，待重新提交"
+                : "卖点待审核"}
           </span>
           <button
             className="primary-button"
@@ -1728,7 +1916,9 @@ export function ProductDetail({
         ) : null}
         <div className={styles.sectionFooter}>
           <span data-complete={pSeriesReady}>
-            {pSeriesReady ? "三大板块已完成" : "完成关键词、图片和卖点后可保存"}
+            {pSeriesReady
+              ? "三大板块已完成"
+              : "完成并提交关键词、图片和卖点后可保存"}
           </span>
           <button
             className="primary-button"

@@ -302,6 +302,24 @@ class SellingPointsResponse(BaseModel):
     stored_event_id: str | None = None
 
 
+class ProductSectionState(BaseModel):
+    submitted: bool
+    dirty: bool = False
+    status: Literal["submitted", "pending", "dirty", "blocked"] = "pending"
+    reason: str | None = None
+    current_digest: str | None = None
+    submitted_digest: str | None = None
+    count: int = 0
+    submitted_at: str | None = None
+
+
+class ProductReadinessResponse(BaseModel):
+    ready: bool
+    keywords: ProductSectionState
+    images: ProductSectionState
+    selling_points: ProductSectionState
+
+
 class GenerateSellingPointsRequest(BaseModel):
     product: dict[str, Any] = Field(default_factory=dict)
     mode: str | None = None
@@ -1280,6 +1298,377 @@ def _source_text_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+def _stable_payload_digest(value: Any) -> str:
+    return _source_text_hash(
+        json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
+    )
+
+
+def _product_ai_warnings(product: KProductKnowledgeProduct) -> dict[str, Any]:
+    return (
+        dict(product.ai_warnings_json)
+        if isinstance(product.ai_warnings_json, dict)
+        else {}
+    )
+
+
+def _active_keyword_snapshot(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> dict[str, Any]:
+    rows = list(
+        db.scalars(
+            select(KProductKnowledgeKeyword)
+            .where(
+                KProductKnowledgeKeyword.product_id == product.id,
+                ~KProductKnowledgeKeyword.status.in_(("removed", "rejected")),
+            )
+            .order_by(
+                KProductKnowledgeKeyword.keyword_text.asc(),
+                KProductKnowledgeKeyword.keyword_type.asc(),
+                KProductKnowledgeKeyword.source.asc(),
+            )
+        )
+    )
+    items = [
+        {
+            "keyword": row.keyword_text.strip().lower(),
+            "keyword_type": row.keyword_type,
+            "language_code": row.language_code,
+            "market": row.market,
+            "source": row.source,
+            "status": row.status,
+        }
+        for row in rows
+        if row.keyword_text and row.keyword_text.strip()
+    ]
+    payload = {"count": len(items), "items": items}
+    return {**payload, "digest": _stable_payload_digest(payload)}
+
+
+def _active_media_snapshot(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> dict[str, Any]:
+    rows = list(
+        db.scalars(
+            select(KProductKnowledgeMediaAsset)
+            .where(
+                KProductKnowledgeMediaAsset.product_id == product.id,
+                KProductKnowledgeMediaAsset.status != "removed",
+            )
+            .order_by(
+                KProductKnowledgeMediaAsset.variant_sku.asc(),
+                KProductKnowledgeMediaAsset.object_key.asc(),
+                KProductKnowledgeMediaAsset.id.asc(),
+            )
+        )
+    )
+    items = [
+        {
+            "asset_role": row.asset_role,
+            "asset_type": row.asset_type,
+            "id": str(row.id),
+            "object_key": row.object_key,
+            "review_status": row.review_status,
+            "source": row.source,
+            "status": row.status,
+            "variant_sku": row.variant_sku,
+        }
+        for row in rows
+    ]
+    payload = {"count": len(items), "items": items}
+    return {**payload, "digest": _stable_payload_digest(payload)}
+
+
+def _stored_selling_points_payload(
+    product: KProductKnowledgeProduct,
+) -> dict[str, Any] | None:
+    payload = _product_ai_warnings(product).get("selling_points")
+    return payload if isinstance(payload, dict) else None
+
+
+def _selling_points_snapshot(product: KProductKnowledgeProduct) -> dict[str, Any]:
+    payload = _stored_selling_points_payload(product)
+    if payload is None:
+        empty = {"count": 0, "payload": None}
+        return {**empty, "digest": _stable_payload_digest(empty)}
+    bullets = payload.get("bullets")
+    count = len(bullets) if isinstance(bullets, list) else 0
+    stable_payload = {
+        "bullets": bullets if isinstance(bullets, list) else [],
+        "chinese_translation": payload.get("chinese_translation"),
+        "confidence_score": payload.get("confidence_score"),
+        "market_tags": _safe_string_list(payload.get("market_tags")),
+        "marketing_copy": payload.get("marketing_copy"),
+        "product_id": str(product.id),
+        "seo_keywords": _safe_string_list(payload.get("seo_keywords")),
+        "source": payload.get("source"),
+        "target_language": payload.get("target_language"),
+        "translated_version": payload.get("translated_version"),
+    }
+    snapshot_payload = {"count": count, "payload": stable_payload}
+    return {
+        **snapshot_payload,
+        "digest": _stable_payload_digest(snapshot_payload),
+    }
+
+
+def _section_state_from_marker(
+    marker: Any,
+    snapshot: dict[str, Any],
+    *,
+    digest_key: str,
+    min_count: int,
+    missing_reason: str,
+    count_reason: str,
+    submitted_statuses: set[str],
+) -> ProductSectionState:
+    current_digest = str(snapshot.get("digest") or "")
+    count = int(snapshot.get("count") or 0)
+    if count < min_count:
+        return ProductSectionState(
+            submitted=False,
+            dirty=False,
+            status="blocked",
+            reason=count_reason,
+            current_digest=current_digest,
+            count=count,
+        )
+
+    if not isinstance(marker, dict):
+        return ProductSectionState(
+            submitted=False,
+            dirty=False,
+            status="pending",
+            reason=missing_reason,
+            current_digest=current_digest,
+            count=count,
+        )
+
+    submitted_digest = str(marker.get(digest_key) or marker.get("digest") or "")
+    marker_status = str(marker.get("status") or "")
+    submitted_at = (
+        str(marker.get("submitted_at") or marker.get("approved_at"))
+        if marker.get("submitted_at") or marker.get("approved_at")
+        else None
+    )
+    if marker_status not in submitted_statuses or not submitted_digest:
+        return ProductSectionState(
+            submitted=False,
+            dirty=False,
+            status="pending",
+            reason=missing_reason,
+            current_digest=current_digest,
+            submitted_digest=submitted_digest or None,
+            count=count,
+            submitted_at=submitted_at,
+        )
+    if submitted_digest != current_digest:
+        return ProductSectionState(
+            submitted=False,
+            dirty=True,
+            status="dirty",
+            reason="板块内容已修改，需要重新提交。",
+            current_digest=current_digest,
+            submitted_digest=submitted_digest,
+            count=count,
+            submitted_at=submitted_at,
+        )
+
+    return ProductSectionState(
+        submitted=True,
+        dirty=False,
+        status="submitted",
+        current_digest=current_digest,
+        submitted_digest=submitted_digest,
+        count=count,
+        submitted_at=submitted_at,
+    )
+
+
+def _product_readiness(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> ProductReadinessResponse:
+    warnings = _product_ai_warnings(product)
+    keywords = _section_state_from_marker(
+        warnings.get("keyword_review"),
+        _active_keyword_snapshot(db, product),
+        digest_key="keyword_digest",
+        min_count=1,
+        missing_reason="关键词尚未提交。",
+        count_reason="请至少保留一个非风险关键词。",
+        submitted_statuses={"submitted", "approved"},
+    )
+    images = _section_state_from_marker(
+        warnings.get("image_review"),
+        _active_media_snapshot(db, product),
+        digest_key="media_digest",
+        min_count=5,
+        missing_reason="图片尚未提交。",
+        count_reason="请至少提交 5 张图片。",
+        submitted_statuses={"submitted", "approved"},
+    )
+    selling_points = _section_state_from_marker(
+        warnings.get("selling_points_review"),
+        _selling_points_snapshot(product),
+        digest_key="selling_points_digest",
+        min_count=1,
+        missing_reason="卖点尚未提交。",
+        count_reason="请先生成并提交卖点。",
+        submitted_statuses={"submitted", "approved"},
+    )
+    return ProductReadinessResponse(
+        ready=keywords.submitted and images.submitted and selling_points.submitted,
+        keywords=keywords,
+        images=images,
+        selling_points=selling_points,
+    )
+
+
+def _store_keyword_review_snapshot(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    execution: Any | None = None,
+    user: User | None = None,
+) -> ProductSectionState:
+    snapshot = _active_keyword_snapshot(db, product)
+    if int(snapshot.get("count") or 0) < 1:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_structured_execution_error_detail(
+                reason="invalid_state",
+                code="KEYWORD_SECTION_INCOMPLETE",
+                message="At least one active non-risk keyword is required before submitting keywords.",
+                module_id=MODULE_KEY,
+            ),
+        )
+    reviewed_at = _now().isoformat()
+    marker = {
+        "status": "submitted",
+        "submitted_at": reviewed_at,
+        "keyword_digest": snapshot["digest"],
+        "keyword_count": snapshot["count"],
+        "submitted_by_user_id": (
+            str(_user_uuid(user)) if user is not None and _user_uuid(user) else None
+        ),
+    }
+    if execution is not None:
+        marker["execution_id"] = str(execution.id)
+    product.ai_warnings_json = {**_product_ai_warnings(product), "keyword_review": marker}
+    if execution is not None and isinstance(execution.risk_approval_log_json, dict):
+        execution.risk_approval_log_json = {
+            **execution.risk_approval_log_json,
+            "keyword_digest": snapshot["digest"],
+            "keyword_count": snapshot["count"],
+        }
+        db.add_all([product, execution])
+    else:
+        db.add(product)
+    db.flush()
+    return _product_readiness(db, product).keywords
+
+
+def _store_image_review_snapshot(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    user: User,
+) -> ProductSectionState:
+    snapshot = _active_media_snapshot(db, product)
+    if int(snapshot.get("count") or 0) < 5:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_structured_execution_error_detail(
+                reason="missing_context",
+                code="IMAGE_SECTION_INCOMPLETE",
+                message="At least 5 active images are required before submitting images.",
+                module_id=MODULE_KEY,
+            ),
+        )
+    submitted_at = _now().isoformat()
+    product.ai_warnings_json = {
+        **_product_ai_warnings(product),
+        "image_review": {
+            "status": "submitted",
+            "submitted_at": submitted_at,
+            "submitted_by_user_id": str(_user_uuid(user)) if _user_uuid(user) else None,
+            "media_digest": snapshot["digest"],
+            "media_count": snapshot["count"],
+        },
+    }
+    db.add(product)
+    db.flush()
+    return _product_readiness(db, product).images
+
+
+def _selling_points_response_from_payload(
+    product: KProductKnowledgeProduct,
+    payload: dict[str, Any],
+) -> SellingPointsResponse:
+    return SellingPointsResponse(
+        bullets=[
+            SellingPointBullet.model_validate(bullet)
+            for bullet in payload.get("bullets", [])
+            if isinstance(bullet, dict)
+        ],
+        seo_keywords=_safe_string_list(payload.get("seo_keywords")),
+        market_tags=_safe_string_list(payload.get("market_tags")),
+        confidence_score=float(payload.get("confidence_score") or 1),
+        source=str(payload.get("source") or "manual_review"),
+        marketing_copy=(
+            str(payload["marketing_copy"])
+            if isinstance(payload.get("marketing_copy"), str)
+            else None
+        ),
+        translated_version=(
+            str(payload["translated_version"])
+            if isinstance(payload.get("translated_version"), str)
+            else None
+        ),
+        chinese_translation=(
+            str(payload["chinese_translation"])
+            if isinstance(payload.get("chinese_translation"), str)
+            else None
+        ),
+        target_language=(
+            str(payload["target_language"])
+            if isinstance(payload.get("target_language"), str)
+            else product.canonical_language
+        ),
+        product_id=str(product.id),
+    )
+
+
+def _ensure_product_ready_for_approval(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> None:
+    readiness = _product_readiness(db, product)
+    if readiness.ready:
+        return
+    blockers = {
+        "keywords": readiness.keywords.model_dump(mode="json"),
+        "images": readiness.images.model_dump(mode="json"),
+        "selling_points": readiness.selling_points.model_dump(mode="json"),
+    }
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=_structured_execution_error_detail(
+            reason="invalid_state",
+            code="PRODUCT_SECTIONS_NOT_SUBMITTED",
+            message=(
+                "Product info can only be saved after keywords, images, and "
+                "selling points are submitted without later modifications."
+            ),
+            module_id=MODULE_KEY,
+            extra={"sections": blockers},
+        ),
+    )
+
+
 @router.get("/products", response_model=ProductKnowledgeListResponse)
 def product_knowledge_list(
     request: Request,
@@ -1398,6 +1787,28 @@ def product_knowledge_detail(
     return _product_read(db, product)
 
 
+@router.get(
+    "/products/{product_id}/readiness",
+    response_model=ProductReadinessResponse,
+)
+def product_knowledge_readiness(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> ProductReadinessResponse:
+    del user
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    return _product_readiness(db, product)
+
+
 @router.patch("/products/{product_id}", response_model=ProductKnowledgeRead)
 def product_knowledge_update(
     product_id: UUID,
@@ -1407,6 +1818,16 @@ def product_knowledge_update(
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
 ) -> ProductKnowledgeRead:
     del user
+    if payload.review_status == "approved":
+        try:
+            product = get_product(
+                db,
+                product_id=product_id,
+                scope_context=_scope_context(request),
+            )
+        except KProductKnowledgeError as exc:
+            _raise_k_error(exc)
+        _ensure_product_ready_for_approval(db, product)
     try:
         product = update_product(
             db,
@@ -1569,6 +1990,29 @@ def product_knowledge_keywords_patch(
     return ProductKnowledgeKeywordListResponse(items=items, count=len(items))
 
 
+@router.post(
+    "/products/{product_id}/keywords/submit",
+    response_model=ProductSectionState,
+)
+def product_knowledge_keywords_submit(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_KEYWORDS_MANAGE)),
+) -> ProductSectionState:
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    section_state = _store_keyword_review_snapshot(db, product=product, user=user)
+    db.commit()
+    return section_state
+
+
 @router.get(
     "/products/{product_id}/risk-terms",
     response_model=ProductKnowledgeRiskTermListResponse,
@@ -1728,6 +2172,15 @@ def product_knowledge_workflow_risk_review(
         _raise_k_error(exc)
     except KWorkflowExecutionError as exc:
         raise _workflow_error(exc) from exc
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    _store_keyword_review_snapshot(db, product=product, execution=execution)
     return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
 
 
@@ -2720,6 +3173,34 @@ def generate_product_selling_points(
     return response.model_copy(update={"stored_event_id": str(event.id)})
 
 
+@router.get(
+    "/products/{product_id}/selling-points",
+    response_model=SellingPointsResponse,
+)
+def get_product_selling_points(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> SellingPointsResponse:
+    del user
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    payload = _stored_selling_points_payload(product)
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Selling points were not found for this product.",
+        )
+    return _selling_points_response_from_payload(product, payload)
+
+
 @router.post(
     "/products/{product_id}/selling-points/approve",
     response_model=SellingPointsResponse,
@@ -2792,13 +3273,31 @@ def approve_product_selling_points(
         created_by_user_id=_user_uuid(user),
         updated_by_user_id=_user_uuid(user),
     )
+    pending_snapshot_payload = {
+        "count": len(output_payload["bullets"]),
+        "payload": {
+            "bullets": output_payload["bullets"],
+            "chinese_translation": output_payload.get("chinese_translation"),
+            "confidence_score": output_payload.get("confidence_score"),
+            "market_tags": output_payload.get("market_tags"),
+            "marketing_copy": output_payload.get("marketing_copy"),
+            "product_id": str(product.id),
+            "seo_keywords": output_payload.get("seo_keywords"),
+            "source": output_payload.get("source"),
+            "target_language": output_payload.get("target_language"),
+            "translated_version": output_payload.get("translated_version"),
+        },
+    }
+    selling_points_digest = _stable_payload_digest(pending_snapshot_payload)
     product.ai_warnings_json = {
-        **(product.ai_warnings_json or {}),
+        **_product_ai_warnings(product),
         "selling_points": output_payload,
         "selling_points_review": {
             "status": "approved",
             "event_id": str(event.id),
             "approved_at": output_payload["approved_at"],
+            "selling_points_digest": selling_points_digest,
+            "bullet_count": len(output_payload["bullets"]),
         },
     }
     db.add_all([product, event])
@@ -2963,6 +3462,27 @@ def upload_product_media_asset(
     db.commit()
     db.refresh(row)
     return _media_asset_read(row, product_ref=_product_public_ref(product))
+
+
+@router.post(
+    "/products/{product_id}/images/submit",
+    response_model=ProductSectionState,
+)
+def submit_product_images(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> ProductSectionState:
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    return _store_image_review_snapshot(db, product=product, user=user)
 
 
 @router.post(

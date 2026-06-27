@@ -33,11 +33,15 @@ import {
   generateProductSellingPoints,
   getLatestWorkflow,
   getMediaAssets,
+  getProductReadiness,
+  getProductSellingPoints,
   getProducts,
   PRODUCT_CREATE_FAILURE_MESSAGE,
   ProductKnowledgeApiError,
   reviewWorkflowRiskTerms,
+  submitProductKeywords,
   startWorkflow,
+  submitProductImages,
   updateProduct,
   uploadProductMediaAsset,
 } from "./api";
@@ -48,6 +52,7 @@ import styles from "./ProductKnowledge.module.css";
 import type {
   ProductCreateFormPayload,
   KMediaAsset,
+  ProductReadinessState,
   KRiskReviewDecision,
   KWorkflowExecution,
   KWorkflowStartPayload,
@@ -185,6 +190,9 @@ export function ProductListFull() {
   const [mediaByProductId, setMediaByProductId] = useState<
     Record<string, KMediaAsset[]>
   >({});
+  const [readinessByProductId, setReadinessByProductId] = useState<
+    Record<string, ProductReadinessState>
+  >({});
   const [deleteCandidate, setDeleteCandidate] =
     useState<ProductKnowledgeListItem | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -302,9 +310,11 @@ export function ProductListFull() {
     setWorkflowError("");
 
     try {
-      const [workflow, media] = await Promise.all([
+      const [workflow, media, readiness, sellingPoints] = await Promise.all([
         getLatestWorkflow(productId),
         getMediaAssets(productId),
+        getProductReadiness(productId),
+        getProductSellingPoints(productId),
       ]);
       setWorkflowByProductId((current) => ({
         ...current,
@@ -314,6 +324,21 @@ export function ProductListFull() {
         ...current,
         [productId]: media.items,
       }));
+      setReadinessByProductId((current) => ({
+        ...current,
+        [productId]: readiness,
+      }));
+      setSellingPointsByProductId((current) => {
+        if (!sellingPoints) {
+          const { [productId]: _removed, ...rest } = current;
+          return rest;
+        }
+
+        return {
+          ...current,
+          [productId]: sellingPoints,
+        };
+      });
     } catch (error) {
       setWorkflowError(
         formatError(error, "流程运行状态加载失败。"),
@@ -399,6 +424,22 @@ export function ProductListFull() {
       if (openProductId === deleteCandidate.id) {
         setOpenProductId(null);
       }
+      setWorkflowByProductId((current) => {
+        const { [deleteCandidate.id]: _workflow, ...rest } = current;
+        return rest;
+      });
+      setMediaByProductId((current) => {
+        const { [deleteCandidate.id]: _media, ...rest } = current;
+        return rest;
+      });
+      setReadinessByProductId((current) => {
+        const { [deleteCandidate.id]: _readiness, ...rest } = current;
+        return rest;
+      });
+      setSellingPointsByProductId((current) => {
+        const { [deleteCandidate.id]: _sellingPoints, ...rest } = current;
+        return rest;
+      });
       setDeleteCandidate(null);
       setDeleteConfirmation("");
       await loadProducts(undefined, activeSearch);
@@ -446,6 +487,7 @@ export function ProductListFull() {
         ...current,
         [openProduct.id]: sellingPoints,
       }));
+      await loadWorkflowRuntime(openProduct.id);
     } catch (error) {
       setSellingPointsError(
         formatError(error, "卖点生成失败。"),
@@ -472,6 +514,7 @@ export function ProductListFull() {
         ...current,
         [openProduct.id]: approved,
       }));
+      await loadWorkflowRuntime(openProduct.id);
     } catch (error) {
       setSellingPointsError(
         formatError(error, "卖点审核保存失败。"),
@@ -544,18 +587,35 @@ export function ProductListFull() {
     }
     const workflow = workflowByProductId[openProduct.id] ?? null;
 
-    await runWorkflowAction("risk-review", async () => {
-      const updated = await reviewWorkflowRiskTerms(openProduct.id, {
-        confirm_no_risk_terms: confirmNoRiskTerms,
-        decisions,
-        execution_id: workflow?.id ?? null,
-      });
-      setWorkflowByProductId((current) => ({
-        ...current,
-        [openProduct.id]: updated,
-      }));
+    setWorkflowBusyAction("risk-review");
+    setWorkflowError("");
+    try {
+      const canUseWorkflowReview = Boolean(
+        workflow?.id &&
+          (workflow.current_step === "risk_term_manual_review" ||
+            workflow.current_step === "risk_term_review_manual" ||
+            workflow.risk_approval_log_json?.approved === true),
+      );
+      if (canUseWorkflowReview) {
+        const updated = await reviewWorkflowRiskTerms(openProduct.id, {
+          confirm_no_risk_terms: confirmNoRiskTerms,
+          decisions,
+          execution_id: workflow?.id ?? null,
+        });
+        setWorkflowByProductId((current) => ({
+          ...current,
+          [openProduct.id]: updated,
+        }));
+      } else {
+        await submitProductKeywords(openProduct.id);
+      }
       await loadWorkflowRuntime(openProduct.id);
-    });
+    } catch (error) {
+      setWorkflowError(formatError(error, "关键词审核保存失败。"));
+      throw error;
+    } finally {
+      setWorkflowBusyAction(null);
+    }
   }
 
   async function handleSaveProductInfo() {
@@ -584,6 +644,22 @@ export function ProductListFull() {
       throw error;
     } finally {
       setSavingProductId(null);
+    }
+  }
+
+  async function handleSubmitImages(): Promise<void> {
+    if (!openProduct) {
+      return;
+    }
+
+    const productId = openProduct.id;
+    setWorkflowError("");
+    try {
+      await submitProductImages(productId);
+      await loadWorkflowRuntime(productId);
+    } catch (error) {
+      setWorkflowError(formatError(error, "图片提交失败。"));
+      throw error;
     }
   }
 
@@ -903,6 +979,7 @@ export function ProductListFull() {
                                 onSaveProductInfo={() =>
                                   void handleSaveProductInfo()
                                 }
+                                onSubmitImages={handleSubmitImages}
                                 onStartWorkflow={(payload) =>
                                   void handleStartWorkflow(payload)
                                 }
@@ -916,6 +993,9 @@ export function ProductListFull() {
                                   )
                                 }
                                 product={product}
+                                readiness={
+                                  readinessByProductId[product.id] ?? null
+                                }
                                 sellingPoints={
                                   sellingPointsByProductId[product.id] ?? null
                                 }

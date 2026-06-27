@@ -254,6 +254,10 @@ test("product management uses full-list route, safe delete, and clean K labels",
     "frontend/src/modules/k/product-knowledge/ProductDetail.tsx",
     "utf8",
   );
+  const productApiSource = readFileSync(
+    "frontend/src/modules/k/product-knowledge/api.ts",
+    "utf8",
+  );
   const proxySource = readFileSync(
     "frontend/src/app/api/backend/[...path]/route.ts",
     "utf8",
@@ -297,12 +301,22 @@ test("product management uses full-list route, safe delete, and clean K labels",
   assert.match(productDetailSource, /非风险关键词/);
   assert.match(productDetailSource, /人工添加非风险关键词/);
   assert.match(productDetailSource, /onApproveSellingPoints/);
+  assert.match(productDetailSource, /onSubmitImages/);
+  assert.match(productDetailSource, /readiness/);
   assert.match(productDetailSource, /onDeleteMedia/);
   assert.match(productDetailSource, /提交图片/);
   assert.match(productDetailSource, /提交卖点/);
+  assert.match(productDetailSource, /重新生成/);
+  assert.match(productDetailSource, /复制当前卖点/);
   assert.match(productDetailSource, /P系列/);
   assert.doesNotMatch(productDetailSource, /onExportWorkflow|exportResult|导出/);
   assert.match(productDetailSource, /formatVariantDisplayName/);
+  assert.match(productApiSource, /getProductReadiness/);
+  assert.match(productApiSource, /getProductSellingPoints/);
+  assert.match(productApiSource, /submitProductKeywords/);
+  assert.match(productApiSource, /\/keywords\/submit/);
+  assert.match(productApiSource, /submitProductImages/);
+  assert.match(productApiSource, /\/images\/submit/);
   assert.match(productFormSource, /variantAttributeBuilder/);
   assert.match(productFormSource, /addVariantAttribute/);
   assert.match(productFormSource, /attribute_schema: "attribute_builder_v1"/);

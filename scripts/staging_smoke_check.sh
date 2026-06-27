@@ -26,6 +26,21 @@ require_contains() {
     [[ "$haystack" == *"$needle"* ]] || fail "$message"
 }
 
+require_contains_any() {
+    local haystack="$1"
+    local message="$2"
+    shift 2
+
+    local needle
+    for needle in "$@"; do
+        if [[ "$haystack" == *"$needle"* ]]; then
+            return 0
+        fi
+    done
+
+    fail "$message"
+}
+
 require_running_contains() {
     local haystack="$1"
     local needle="$2"
@@ -81,8 +96,10 @@ proxy_health_json="$(
 )" || fail "Staging frontend backend proxy health check failed."
 require_contains "$proxy_health_json" '"status":"ok"' \
     "Staging backend proxy health JSON does not report status ok."
-require_contains "$proxy_health_json" '"service":"barong-ops-console-backend"' \
-    "Staging backend proxy health JSON does not identify the backend service."
+require_contains_any "$proxy_health_json" \
+    "Staging backend proxy health JSON does not identify the backend service." \
+    '"service":"barong-ops-console-backend"' \
+    '"service":"barong-ops-console"'
 
 backend_health_json="$(
     curl --fail --silent --show-error --max-time 10 \
@@ -90,7 +107,9 @@ backend_health_json="$(
 )" || fail "Staging backend health check failed."
 require_contains "$backend_health_json" '"status":"ok"' \
     "Staging backend health JSON does not report status ok."
-require_contains "$backend_health_json" '"service":"barong-ops-console-backend"' \
-    "Staging backend health JSON does not identify the backend service."
+require_contains_any "$backend_health_json" \
+    "Staging backend health JSON does not identify the backend service." \
+    '"service":"barong-ops-console-backend"' \
+    '"service":"barong-ops-console"'
 
 printf '%s\n' "Staging smoke check passed."

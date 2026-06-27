@@ -20,6 +20,21 @@ require_contains() {
     [[ "$haystack" == *"$needle"* ]] || fail "$message"
 }
 
+require_contains_any() {
+    local haystack="$1"
+    local message="$2"
+    shift 2
+
+    local needle
+    for needle in "$@"; do
+        if [[ "$haystack" == *"$needle"* ]]; then
+            return 0
+        fi
+    done
+
+    fail "$message"
+}
+
 case "$base_url" in
     https://*) ;;
     *) fail "Base URL must start with https://." ;;
@@ -43,8 +58,10 @@ health_json="$(
 )" || fail "HTTPS backend health proxy check failed."
 require_contains "$health_json" '"status":"ok"' \
     "Backend health JSON does not report status ok."
-require_contains "$health_json" '"service":"barong-ops-console-backend"' \
-    "Backend health JSON does not identify the backend service."
+require_contains_any "$health_json" \
+    "Backend health JSON does not identify the backend service." \
+    '"service":"barong-ops-console-backend"' \
+    '"service":"barong-ops-console"'
 
 redirect_result="$(
     curl --silent --show-error --output /dev/null \

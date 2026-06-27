@@ -556,6 +556,13 @@
   gap: 14px;
 }
 
+.headingActions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .sellingPointsHeading h4 {
   margin: 4px 0 0;
   font-size: 0.94rem;
@@ -885,14 +892,28 @@
 .keywordList {
   display: grid;
   gap: 8px;
+  min-height: 196px;
+  align-content: start;
   margin: 0;
+  max-height: 360px;
+  overflow-y: auto;
   padding: 0;
   list-style: none;
+  scrollbar-gutter: stable;
 }
 
 .keywordList li {
   grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
+  min-height: 58px;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    opacity 140ms ease;
+}
+
+.keywordList li[data-removing="true"] {
+  opacity: 0.62;
 }
 
 .keywordList strong {
@@ -1181,6 +1202,10 @@
   .panelHeading button,
   .sellingPointsHeading button {
     align-self: flex-start;
+  }
+
+  .headingActions {
+    justify-content: flex-start;
   }
 
   .formFooter {
