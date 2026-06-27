@@ -1,6 +1,6 @@
 {
   "report_name": "c20_final_production_lock_report",
-  "version": "C-SERIES-V1.0.0",
+  "version": "C-SERIES-V1.1.0",
   "release_type": "final_release",
   "stage": "c20-final-closure",
   "system_frozen": true,

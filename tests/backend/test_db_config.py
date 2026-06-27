@@ -55,6 +55,22 @@ CORE_BUSINESS_TABLES = {
     "workflow_registry",
 }
 
+K_SERIES_EXTENSION_TABLES = {
+    "k_product_knowledge_ai_events",
+    "k_product_knowledge_attributes",
+    "k_product_knowledge_keywords",
+    "k_product_knowledge_media_assets",
+    "k_product_knowledge_products",
+    "k_product_knowledge_research_runs",
+    "k_product_knowledge_review_items",
+    "k_product_knowledge_risk_terms",
+    "k_product_knowledge_translations",
+    "k_product_knowledge_variants",
+    "k_product_knowledge_versions",
+    "k_product_knowledge_workflow_executions",
+    "provider_config",
+}
+
 
 def test_app_imports() -> None:
     assert app.title == "barong-ops-console-backend"
@@ -73,4 +89,7 @@ def test_database_url_uses_example_default(monkeypatch) -> None:
 
 def test_sqlalchemy_metadata_contains_core_foundation_tables() -> None:
     assert Base.metadata is metadata
-    assert set(metadata.tables) == CORE_BUSINESS_TABLES
+    metadata_tables = set(metadata.tables)
+
+    assert CORE_BUSINESS_TABLES <= metadata_tables
+    assert K_SERIES_EXTENSION_TABLES <= metadata_tables

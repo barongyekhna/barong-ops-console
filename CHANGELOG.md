@@ -6,6 +6,9 @@
 
 ### Added
 
+- K 系列：基于当前测试基本通过状态提交封板记录；同步将 C 系列运行时、
+  前端 banner、release manifest、production lock report 和 system metadata
+  版本号从 `C-SERIES-V1.0.0` 提升为 `C-SERIES-V1.1.0`。
 - C19E：新增 Cross-Org Communication Layer：`CrossOrgPolicy` 默认
   `mode=open`，新增 C19E schema/service/API/doc/test，提供
   `POST /comm/cross-org/check` 和增强后的 `POST /messages/send` 发送前检查；

@@ -1,4 +1,4 @@
-export const RELEASE_VERSION = "C-SERIES-V1.0.0";
+export const RELEASE_VERSION = "C-SERIES-V1.1.0";
 export const RELEASE_TYPE = "final_release";
 export const RELEASE_STATUS = "production_frozen";
 export const RELEASE_STAGE = "c20-final-closure";

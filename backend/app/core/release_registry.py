@@ -1,6 +1,6 @@
 from typing import Final
 
-SYSTEM_RELEASE_VERSION: Final = "C-SERIES-V1.0.0"
+SYSTEM_RELEASE_VERSION: Final = "C-SERIES-V1.1.0"
 SYSTEM_RELEASE_TYPE: Final = "final_release"
 SYSTEM_RELEASE_STATUS: Final = "production_frozen"
 SYSTEM_RELEASE_STAGE: Final = "c20-final-closure"
