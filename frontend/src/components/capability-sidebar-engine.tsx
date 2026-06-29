@@ -45,7 +45,7 @@ const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set(
   C_SYSTEM_MODULE_ORDER.map((item) => item.module_key),
 );
 
-const ORGANIZATION_MODULE_PREFIXES = ["k.", "p.", "seo.", "gmc."] as const;
+const ORGANIZATION_MODULE_PREFIXES = ["k.", "i.", "p.", "seo.", "gmc."] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
 const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
 
@@ -120,6 +120,7 @@ function isRestrictedProductModule(moduleId: string) {
   const normalized = moduleId.trim().toLowerCase();
   return (
     normalized.startsWith("k.") ||
+    normalized.startsWith("i.") ||
     normalized.startsWith("p.") ||
     normalized === "business.products" ||
     normalized.includes("product")
@@ -235,14 +236,15 @@ function SidebarLink({
     item.can_enter === false;
   const unavailable = item.sidebar_state === "partial";
   const badge = locked ? null : item.badge;
+  const visibleBadge = badge === "no_execution" ? null : badge;
   const displayLabel = label ?? getModuleDisplayName(item.module_key, item.label);
 
   return (
     <Link
       aria-current={active ? "page" : undefined}
       aria-label={
-        badge
-          ? `${displayLabel} ${CAPABILITY_BADGE_LABELS[badge]}`
+        visibleBadge
+          ? `${displayLabel} ${CAPABILITY_BADGE_LABELS[visibleBadge]}`
           : displayLabel
       }
       className={`navigation-link ${tree ? "navigation-tree-link" : ""} ${
@@ -261,9 +263,9 @@ function SidebarLink({
           size={14}
         />
       ) : null}
-      {!locked && badge ? (
-        <span className={`navigation-status-badge ${badge}`}>
-          {CAPABILITY_BADGE_LABELS[badge]}
+      {!locked && visibleBadge ? (
+        <span className={`navigation-status-badge ${visibleBadge}`}>
+          {CAPABILITY_BADGE_LABELS[visibleBadge]}
         </span>
       ) : null}
     </Link>

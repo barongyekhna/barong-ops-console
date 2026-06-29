@@ -182,6 +182,7 @@ def test_media_upload_persists_real_image_bytes_and_downloads_inline(
     assert row.mime_type == "image/png"
     assert row.file_size == len(PNG_1X1)
     assert row.metadata_json["direct_binary_upload"] is True
+    assert "db_content_base64" not in row.metadata_json
     stored_path = tmp_path / row.object_key
     assert stored_path.read_bytes() == PNG_1X1
 

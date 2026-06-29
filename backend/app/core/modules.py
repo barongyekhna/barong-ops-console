@@ -896,21 +896,19 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         display_name="I Image System",
         description=(
             "Independent I-series AI image system boundary for image generation, "
-            "AI image review, quality scoring, versioning, recommendation, and "
-            "image_asset_id handoff to K-series."
+            "image editing, isolated media library storage, and API-level "
+            "product/variant handoff to K-series."
         ),
         category="business",
-        status="adapter_pending",
-        lifecycle="designed",
-        route_namespace="/images",
-        api_namespace="no_api",
-        no_api=True,
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/image-system",
+        api_namespace="/i",
         navigation=_navigation(
             group="Registry",
-            label="I 图片系统",
+            label="I系列图片系统",
             icon="Images",
             order=9,
-            default_visible=False,
         ),
         required_permissions=("i.image_system.read",),
         permission_manifest=(
@@ -924,12 +922,34 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
                 risk_level="low",
                 menu_policy="show_locked",
             ),
+            _permission(
+                module_key="i.image_system",
+                permission_key="i.image_system.execute",
+                category="business",
+                action="execute",
+                label="Generate and edit I-series images",
+                description="Run prompt enhancement, image generation, and image editing.",
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="i.image_system",
+                permission_key="i.image_system.manage",
+                category="business",
+                action="manage",
+                label="Manage I-series media library",
+                description="Save, download, and delete I-series media library images.",
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
         ),
         denied_behavior="show_locked",
-        unavailable_behavior="adapter_pending",
+        unavailable_behavior="show_unavailable",
         execution_provider_required=True,
-        module_adapter_required=True,
-        sandbox_required=True,
+        module_adapter_required=False,
+        sandbox_required=False,
         feature_flag_key="modules.i.image_system",
         data_boundary=_data_boundary(
             reads=("i_image_assets",),

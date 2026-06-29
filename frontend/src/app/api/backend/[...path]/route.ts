@@ -656,7 +656,7 @@ function isAllowedKPath(method: string, path: string[]) {
     path.length === 4 &&
     path[1] === "media" &&
     isUuidPathSegment(path[2]) &&
-    ["download", "file"].includes(path[3])
+    ["download", "file", "thumbnail", "preview"].includes(path[3])
   ) {
     return method === "GET";
   }
@@ -756,9 +756,54 @@ function isAllowedKPath(method: string, path: string[]) {
     path[1] === "products" &&
     isUuidPathSegment(path[2]) &&
     path[3] === "images" &&
-    ["bind", "submit"].includes(path[4])
+    ["bind", "submit", "import-i-output"].includes(path[4])
   ) {
     return method === "POST";
+  }
+
+  return false;
+}
+
+function isAllowedIPath(method: string, path: string[]) {
+  if (path[0] !== "i") {
+    return false;
+  }
+
+  if (
+    path.length === 3 &&
+    path[1] === "prompts" &&
+    path[2] === "transform"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 3 &&
+    path[1] === "images" &&
+    ["generate", "edit"].includes(path[2])
+  ) {
+    return method === "POST";
+  }
+
+  if (path.length === 2 && path[1] === "media-library") {
+    return method === "GET" || method === "POST";
+  }
+
+  if (
+    path.length === 3 &&
+    path[1] === "media-library" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "DELETE";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "media-library" &&
+    isUuidPathSegment(path[2]) &&
+    ["file", "thumbnail", "preview"].includes(path[3])
+  ) {
+    return method === "GET";
   }
 
   return false;
@@ -806,7 +851,8 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedOrgPath(method, path) ||
     isAllowedPermissionPath(method, path) ||
     isAllowedUsersPath(method, path) ||
-    isAllowedKPath(method, path)
+    isAllowedKPath(method, path) ||
+    isAllowedIPath(method, path)
   ) {
     return withApiLayer("app", requestedPath);
   }

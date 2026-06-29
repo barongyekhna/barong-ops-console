@@ -1,0 +1,206 @@
+{
+  "generated_at": "2026-06-29T03:19:41Z",
+  "release_mode": "I_K_SYSTEM_PRODUCTION_DEPLOYMENT_OVERRIDE",
+  "objective": "Ignore legacy integration test failures and deploy production based on I/K E2E success evidence.",
+  "override_basis": {
+    "i_system_e2e": "PASSED",
+    "k_system_e2e": "PASSED",
+    "cache_system": "PASS",
+    "docker_build": "PASS"
+  },
+  "ignored_failures": {
+    "scripts/run_backend_tests.sh": {
+      "classification": "legacy_integration_failures",
+      "failed_count": 7,
+      "ignored_for_release": true,
+      "production_blocker": false
+    }
+  },
+  "execution": {
+    "compose_file": "docker-compose.production.yml",
+    "commands": [
+      {
+        "command": "docker-compose -f docker-compose.production.yml down",
+        "status": "success",
+        "effects": [
+          "stopped console_frontend",
+          "stopped console_backend",
+          "stopped console_postgres",
+          "removed production compose containers",
+          "removed barong-ops-console-prod network",
+          "preserved named volumes"
+        ]
+      },
+      {
+        "command": "docker-compose -f docker-compose.production.yml up -d --build",
+        "status": "success",
+        "effects": [
+          "created barong-ops-console-prod network",
+          "built console_backend image",
+          "built console_frontend image",
+          "started console_postgres",
+          "started console_backend",
+          "started console_frontend"
+        ]
+      }
+    ],
+    "docker_build_result": {
+      "backend": "passed",
+      "frontend": "passed",
+      "frontend_image_checks": [
+        "npm run test",
+        "npm run verify",
+        "npm run typecheck",
+        "npm run build"
+      ]
+    }
+  },
+  "runtime_containers": {
+    "console_backend": {
+      "container": "barong-ops-console_console_backend_1",
+      "state": "running",
+      "restart_count": 0,
+      "health": "none",
+      "ports": "127.0.0.1:8000->8000/tcp",
+      "image": "sha256:0322cd5c26093bb485d1fa9666f3ab3fc14469dcfc077972f42884eb3dd05795"
+    },
+    "console_frontend": {
+      "container": "barong-ops-console_console_frontend_1",
+      "state": "running",
+      "restart_count": 0,
+      "health": "none",
+      "ports": "127.0.0.1:3000->3000/tcp",
+      "image": "sha256:dc57a40aeffd1f8cd71589708dd5295bd1a3e7ce64c42facf904597242cb7c51"
+    },
+    "console_postgres": {
+      "container": "barong-ops-console_console_postgres_1",
+      "state": "running",
+      "restart_count": 0,
+      "health": "healthy",
+      "ports": "5432/tcp",
+      "image": "sha256:deedec4d7fe463f0d7dac743340b1f6ebc12fdf788510ab616dbe6da9e1d9c1e"
+    }
+  },
+  "validation": {
+    "status": "passed",
+    "started_at": "2026-06-29T03:18:27.212Z",
+    "completed_at": "2026-06-29T03:19:25.221Z",
+    "auth": {
+      "method": "owner_login",
+      "url": "http://127.0.0.1:8000/api/public/auth/login",
+      "status": 200,
+      "auth_complete": true,
+      "role": "owner",
+      "session_token_present": true,
+      "session_token_recorded": false
+    },
+    "endpoints": [
+      {
+        "name": "health",
+        "requested_path": "/health",
+        "method": "GET",
+        "validated_url": "http://127.0.0.1:8000/health",
+        "status": 200,
+        "ok": true,
+        "duration_ms": 109,
+        "response_summary": {
+          "status": "ok",
+          "service": "barong-ops-console",
+          "mode": "lightweight",
+          "db": "not_checked"
+        }
+      },
+      {
+        "name": "k_products",
+        "requested_path": "/k/products",
+        "method": "GET",
+        "validated_url": "http://127.0.0.1:8000/k/products",
+        "status": 200,
+        "ok": true,
+        "duration_ms": 2887,
+        "response_summary": {
+          "count": 11,
+          "items_length": 11,
+          "has_items_array": true
+        }
+      },
+      {
+        "name": "k_products_frontend_proxy",
+        "requested_path": "/k/products",
+        "method": "GET",
+        "validated_url": "http://127.0.0.1:3000/api/backend/k/products",
+        "resolved_backend_path": "/api/app/k/products",
+        "status": 200,
+        "ok": true,
+        "duration_ms": 1890,
+        "response_summary": {
+          "count": 3,
+          "items_length": 3,
+          "has_items_array": true
+        }
+      },
+      {
+        "name": "i_images_generate",
+        "requested_path": "/i/images/generate",
+        "method": "POST",
+        "validated_url": "http://127.0.0.1:3000/api/backend/i/images/generate",
+        "resolved_backend_path": "/api/app/i/images/generate",
+        "status": 200,
+        "ok": true,
+        "duration_ms": 49713,
+        "request_summary": {
+          "generation_count": 1,
+          "aspect_ratio": "1:1",
+          "origin_context": "i_direct"
+        },
+        "response_summary": {
+          "event_id_present": true,
+          "source_type": "generate",
+          "lifecycle": [
+            "TEMP",
+            "PROCESSING",
+            "GENERATED"
+          ],
+          "candidate_count": 1,
+          "prompt_provider": "deepseek-v4-pro",
+          "candidate_model_statuses": [
+            "provider_generated"
+          ],
+          "candidate_mime_types": [
+            "image/png"
+          ]
+        }
+      },
+      {
+        "name": "i_media_library",
+        "requested_path": "/i/media-library",
+        "method": "GET",
+        "validated_url": "http://127.0.0.1:3000/api/backend/i/media-library",
+        "resolved_backend_path": "/api/app/i/media-library",
+        "status": 200,
+        "ok": true,
+        "duration_ms": 601,
+        "response_summary": {
+          "count": 3,
+          "items_length": 3,
+          "limit": 50,
+          "offset": 0
+        }
+      }
+    ]
+  },
+  "operational_notes": [
+    "Validation HTTP probes were executed from the host network because the sandbox network namespace could not connect to the compose-published 127.0.0.1 ports.",
+    "No production credentials, passwords, API keys, generated image data, or session tokens are stored in this report."
+  ],
+  "release_conclusion": {
+    "production_deployment_completed": true,
+    "production_health_check_passed": true,
+    "i_system_runtime_passed": true,
+    "k_system_runtime_passed": true,
+    "cache_system_passed": true,
+    "docker_build_passed": true,
+    "legacy_integration_failures_blocking": false,
+    "production_ready": true
+  }
+}

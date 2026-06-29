@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import base64
 import json
 import logging
 import os
@@ -25,11 +26,11 @@ from fastapi import (
     UploadFile,
     status,
 )
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, defer
 
 from ....api.deps import get_current_user
 from ....core.roles import is_super_admin_role
@@ -48,6 +49,13 @@ from ....services.module_execution_gate import (
     require_module_execution_ready,
 )
 from ....services.permission_service import resolve_current_user_permission_info
+from ....services.media_store import (
+    DERIVED_IMAGE_CACHE_CONTROL,
+    INLINE_IMAGE_CACHE_CONTROL,
+    ensure_image_derivative,
+    media_file_etag,
+    write_media_file,
+)
 from .constants import (
     DEFAULT_BUSINESS_CONTEXT,
     DEFAULT_SCOPE_MODE,
@@ -119,6 +127,7 @@ from .service import (
 )
 from .workflow_engine import (
     IMAGE_SOURCE_MANUAL,
+    IMAGE_SOURCE_I_SYSTEM,
     KWorkflowOrchestratorV2,
     KWorkflowExecutionError,
     _user_uuid,
@@ -370,7 +379,13 @@ class MediaAssetRead(BaseModel):
     review_status: str
     object_key: str | None
     file_url_placeholder: str | None
+    file_url: str | None
+    thumbnail_url: str | None
+    preview_url: str | None
     mime_type: str | None
+    width: int | None = None
+    height: int | None = None
+    file_size: int | None = None
     source: str | None
     metadata: dict[str, Any] | None
     created_at: datetime
@@ -380,6 +395,38 @@ class MediaAssetRead(BaseModel):
 class MediaAssetListResponse(BaseModel):
     items: list[MediaAssetRead]
     count: int
+
+
+class ISystemImageImportItem(BaseModel):
+    image_base64: str = Field(min_length=1)
+    mime_type: str = Field(default="image/png", max_length=100)
+    width: int | None = Field(default=None, ge=1, le=8192)
+    height: int | None = Field(default=None, ge=1, le=8192)
+    content_sha256: str | None = Field(default=None, max_length=64)
+    candidate_id: str | None = Field(default=None, max_length=128)
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
+
+class ISystemImageImportRequest(BaseModel):
+    variant_id: UUID
+    source_type: Literal["generate", "edit"]
+    image_prompt_enhanced: str = Field(min_length=1, max_length=12000)
+    prompt_original: str | None = Field(default=None, max_length=8000)
+    aspect_ratio: str | None = Field(default=None, max_length=16)
+    style_config: dict[str, Any] = Field(default_factory=dict)
+    event_id: UUID | None = None
+    images: list[ISystemImageImportItem] = Field(min_length=1, max_length=8)
+
+
+class ISystemImageImportResponse(BaseModel):
+    status: Literal["saved"] = "saved"
+    product_id: UUID
+    variant_id: UUID
+    variant_sku: str
+    asset_ids: list[UUID]
+    submitted: bool
+    submit_status: str
+    message: str | None = None
 
 
 def _raise_k_error(exc: KProductKnowledgeError) -> None:
@@ -722,6 +769,21 @@ def _variant_by_sku(
     return variant
 
 
+def _variant_by_id(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    variant_id: UUID,
+) -> KProductKnowledgeVariant:
+    variant = db.get(KProductKnowledgeVariant, variant_id)
+    if variant is None or variant.product_id != product.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Variant was not found for this product.",
+        )
+    return variant
+
+
 def _product_public_ref(product: KProductKnowledgeProduct) -> str:
     return product.product_key or str(product.id)
 
@@ -1006,10 +1068,13 @@ SUPPORTED_IMAGE_MIME_TYPES = {
 
 RESERVED_MEDIA_METADATA_KEYS = {
     "content_sha256",
+    "db_content_base64",
     "direct_binary_upload",
+    "preview_path",
     "storage_path",
     "storage_provider",
     "storage_relative_path",
+    "thumbnail_path",
 }
 
 
@@ -1048,12 +1113,47 @@ def _validate_uploaded_image(contents: bytes, declared_mime: str | None) -> str:
     return detected_mime
 
 
+def _decode_image_base64(value: str) -> bytes:
+    raw = value.strip()
+    if raw.startswith("data:"):
+        _, _, raw = raw.partition(",")
+    try:
+        return base64.b64decode(raw, validate=True)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Image payload is not valid base64.",
+        ) from exc
+
+
+def _db_image_bytes_from_metadata(row: KProductKnowledgeMediaAsset) -> bytes | None:
+    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    encoded = metadata.get("db_content_base64")
+    if not isinstance(encoded, str) or not encoded.strip():
+        return None
+    try:
+        return base64.b64decode(encoded, validate=True)
+    except Exception:
+        return None
+
+
 def _safe_media_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     return {
         key: value
         for key, value in metadata.items()
         if key not in RESERVED_MEDIA_METADATA_KEYS
     }
+
+
+def _public_media_metadata(metadata: Any) -> dict[str, Any] | None:
+    if not isinstance(metadata, dict):
+        return None
+    redacted = {
+        key: value
+        for key, value in metadata.items()
+        if key not in {"db_content_base64", "storage_path", "thumbnail_path", "preview_path"}
+    }
+    return redacted
 
 
 def _path_within_root(path: Path, root: Path) -> bool:
@@ -1083,6 +1183,68 @@ def _media_asset_local_path(row: KProductKnowledgeMediaAsset) -> Path | None:
         if _path_within_root(resolved, root):
             return resolved
     return None
+
+
+def _write_k_media_file(object_key: str, contents: bytes) -> Path:
+    try:
+        return write_media_file(_media_storage_root(), object_key, contents)
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=507,
+            detail="K media storage is not writable.",
+        ) from exc
+
+
+def _ensure_media_asset_file(row: KProductKnowledgeMediaAsset) -> Path:
+    path = _media_asset_local_path(row)
+    if path is not None and path.is_file():
+        return path
+    db_contents = _db_image_bytes_from_metadata(row)
+    if db_contents is not None and row.object_key:
+        path = _write_k_media_file(row.object_key, db_contents)
+        metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        row.storage_provider = "local_filesystem"
+        row.file_size = row.file_size or len(db_contents)
+        row.metadata_json = {
+            **{
+                key: value
+                for key, value in metadata.items()
+                if key != "db_content_base64"
+            },
+            "storage_provider": "local_filesystem",
+            "storage_relative_path": row.object_key,
+            "storage_path": str(path),
+        }
+        return path
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail="Media file was not found.",
+    )
+
+
+def _ensure_media_asset_derivative(
+    row: KProductKnowledgeMediaAsset,
+    *,
+    kind: str,
+    max_side: int,
+) -> Path:
+    if not row.object_key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Media file was not found.",
+        )
+    _ensure_media_asset_file(row)
+    path, object_key, _media_type = ensure_image_derivative(
+        root=_media_storage_root(),
+        object_key=row.object_key,
+        kind=kind,
+        max_side=max_side,
+    )
+    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+    key_name = f"{kind}_object_key"
+    if metadata.get(key_name) != object_key:
+        row.metadata_json = {**metadata, key_name: object_key}
+    return path
 
 
 def _media_asset_requires_local_file(row: KProductKnowledgeMediaAsset) -> bool:
@@ -1360,7 +1522,23 @@ def _media_asset_read(
     row: KProductKnowledgeMediaAsset,
     *,
     product_ref: str | None = None,
+    include_metadata: bool = False,
 ) -> MediaAssetRead:
+    file_url = (
+        row.file_url_placeholder
+        if row.file_url_placeholder and not row.object_key
+        else f"/k/media/{row.id}/file"
+    )
+    thumbnail_url = (
+        row.file_url_placeholder
+        if row.file_url_placeholder and not row.object_key
+        else f"/k/media/{row.id}/thumbnail"
+    )
+    preview_url = (
+        row.file_url_placeholder
+        if row.file_url_placeholder and not row.object_key
+        else f"/k/media/{row.id}/preview"
+    )
     return MediaAssetRead(
         id=str(row.id),
         product_id=product_ref or str(row.product_id),
@@ -1371,9 +1549,15 @@ def _media_asset_read(
         review_status=row.review_status,
         object_key=row.object_key,
         file_url_placeholder=row.file_url_placeholder,
+        file_url=file_url,
+        thumbnail_url=thumbnail_url,
+        preview_url=preview_url,
         mime_type=row.mime_type,
+        width=row.width,
+        height=row.height,
+        file_size=row.file_size,
         source=row.source,
-        metadata=row.metadata_json,
+        metadata=_public_media_metadata(row.metadata_json) if include_metadata else None,
         created_at=row.created_at,
         updated_at=row.updated_at,
     )
@@ -3435,13 +3619,16 @@ def approve_product_selling_points(
 def list_media_assets(
     request: Request,
     product_id: str | None = Query(default=None),
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_READ)),
 ) -> MediaAssetListResponse:
     del user
-    query = select(KProductKnowledgeMediaAsset).order_by(
-        KProductKnowledgeMediaAsset.updated_at.desc()
-    ).where(
+    query = select(KProductKnowledgeMediaAsset).where(
+        KProductKnowledgeMediaAsset.status != "removed"
+    )
+    count_query = select(func.count()).select_from(KProductKnowledgeMediaAsset).where(
         KProductKnowledgeMediaAsset.status != "removed"
     )
     if product_id:
@@ -3451,12 +3638,20 @@ def list_media_assets(
             scope_context=_scope_context(request),
         )
         query = query.where(KProductKnowledgeMediaAsset.product_id == product.id)
-    rows = list(db.scalars(query))
+        count_query = count_query.where(KProductKnowledgeMediaAsset.product_id == product.id)
+    rows = list(
+        db.scalars(
+            query.options(defer(KProductKnowledgeMediaAsset.metadata_json))
+            .order_by(KProductKnowledgeMediaAsset.updated_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+    )
     items = [
         _media_asset_read(row)
         for row in rows
     ]
-    return MediaAssetListResponse(items=items, count=len(items))
+    return MediaAssetListResponse(items=items, count=int(db.scalar(count_query) or 0))
 
 
 @router.post("/media", response_model=MediaAssetRead, status_code=status.HTTP_201_CREATED)
@@ -3552,10 +3747,22 @@ def upload_product_media_asset(
         )
     mime_type = _validate_uploaded_image(contents, file.content_type)
     object_key = f"images/{product.product_key}/{variant.variant_sku}/{uuid4()}-{filename}"
-    storage_path = _media_storage_root() / object_key
-    storage_path.parent.mkdir(parents=True, exist_ok=True)
-    storage_path.write_bytes(contents)
+    storage_path = _write_k_media_file(object_key, contents)
     content_sha256 = hashlib.sha256(contents).hexdigest()
+    thumbnail_path, thumbnail_object_key, _thumbnail_media_type = ensure_image_derivative(
+        root=_media_storage_root(),
+        object_key=object_key,
+        kind="thumbnail",
+        max_side=320,
+        contents=contents,
+    )
+    preview_path, preview_object_key, _preview_media_type = ensure_image_derivative(
+        root=_media_storage_root(),
+        object_key=object_key,
+        kind="preview",
+        max_side=1280,
+        contents=contents,
+    )
     row = KProductKnowledgeMediaAsset(
         id=uuid4(),
         product_id=product.id,
@@ -3586,12 +3793,179 @@ def upload_product_media_asset(
             "sku": product.sku,
             "k_image_ai_generation_allowed": False,
             "k_image_review_allowed": False,
+            "preview_object_key": preview_object_key,
+            "preview_path": str(preview_path),
+            "thumbnail_object_key": thumbnail_object_key,
+            "thumbnail_path": str(thumbnail_path),
         },
     )
     db.add(row)
     db.commit()
     db.refresh(row)
     return _media_asset_read(row, product_ref=_product_public_ref(product))
+
+
+@router.post(
+    "/products/{product_id}/images/import-i-output",
+    response_model=ISystemImageImportResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def import_i_system_images(
+    product_id: UUID,
+    payload: ISystemImageImportRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> ISystemImageImportResponse:
+    product = get_product(
+        db,
+        product_id=product_id,
+        scope_context=_scope_context(request),
+    )
+    variant = _variant_by_id(db, product=product, variant_id=payload.variant_id)
+
+    decoded_images: list[tuple[ISystemImageImportItem, bytes, str, str]] = []
+    for item in payload.images:
+        contents = _decode_image_base64(item.image_base64)
+        mime_type = _validate_uploaded_image(contents, item.mime_type)
+        content_sha256 = hashlib.sha256(contents).hexdigest()
+        if item.content_sha256 and item.content_sha256 != content_sha256:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Image content hash does not match content_sha256.",
+            )
+        decoded_images.append((item, contents, mime_type, content_sha256))
+
+    rows: list[KProductKnowledgeMediaAsset] = []
+    for index, (item, contents, mime_type, content_sha256) in enumerate(
+        decoded_images,
+        start=1,
+    ):
+        extension = "png" if mime_type == "image/png" else "img"
+        candidate_part = _safe_filename(item.candidate_id or f"i-output-{index}")
+        filename = f"{uuid4()}-{candidate_part}.{extension}"
+        object_key = (
+            f"images/{product.product_key}/{variant.variant_sku}/"
+            f"i-series/{filename}"
+        )
+        storage_path = _write_k_media_file(object_key, contents)
+        thumbnail_path, thumbnail_object_key, _thumbnail_media_type = (
+            ensure_image_derivative(
+                root=_media_storage_root(),
+                object_key=object_key,
+                kind="thumbnail",
+                max_side=320,
+                contents=contents,
+            )
+        )
+        preview_path, preview_object_key, _preview_media_type = ensure_image_derivative(
+            root=_media_storage_root(),
+            object_key=object_key,
+            kind="preview",
+            max_side=1280,
+            contents=contents,
+        )
+        row = KProductKnowledgeMediaAsset(
+            id=uuid4(),
+            product_id=product.id,
+            variant_id=variant.id,
+            variant_sku=variant.variant_sku,
+            asset_type="image",
+            asset_role="main",
+            status="available",
+            review_status="i_system_managed",
+            storage_provider="local_filesystem",
+            object_key=object_key,
+            file_url_placeholder=None,
+            file_size=len(contents),
+            mime_type=mime_type,
+            width=item.width,
+            height=item.height,
+            source=IMAGE_SOURCE_I_SYSTEM,
+            metadata_json={
+                **_safe_media_metadata(item.metadata),
+                "content_sha256": content_sha256,
+                "direct_i_handoff": True,
+                "event_id": str(payload.event_id) if payload.event_id else None,
+                "filename": filename,
+                "i_system_media_library_saved": False,
+                "image_prompt_enhanced": payload.image_prompt_enhanced,
+                "prompt_original": payload.prompt_original,
+                "source_type": IMAGE_SOURCE_I_SYSTEM,
+                "i_generation_source_type": payload.source_type,
+                "storage_provider": "local_filesystem",
+                "storage_relative_path": object_key,
+                "storage_path": str(storage_path),
+                "product_key": product.product_key,
+                "product_id": str(product.id),
+                "variant_id": str(variant.id),
+                "variant_folder": f"images/{product.product_key}/{variant.variant_sku}",
+                "variant_sku": variant.variant_sku,
+                "sku": product.sku,
+                "k_image_ai_generation_allowed": False,
+                "k_image_review_allowed": False,
+                "reference_images_stored": False,
+                "temporary_uploads_stored": False,
+                "style_config": payload.style_config,
+                "aspect_ratio": payload.aspect_ratio,
+                "preview_object_key": preview_object_key,
+                "preview_path": str(preview_path),
+                "thumbnail_object_key": thumbnail_object_key,
+                "thumbnail_path": str(thumbnail_path),
+            },
+            created_by_user_id=_user_uuid(user),
+            updated_by_user_id=_user_uuid(user),
+        )
+        db.add(row)
+        rows.append(row)
+
+    db.flush()
+    first_asset = rows[0]
+    product.selected_image_path = first_asset.object_key
+    product.image_asset_status = "bound"
+    product.media_notes_json = {
+        **(product.media_notes_json or {}),
+        "bound_asset_id": str(first_asset.id),
+        "image_source_type": IMAGE_SOURCE_I_SYSTEM,
+        "variant_id": str(variant.id),
+        "variant_sku": variant.variant_sku,
+        "bound_at": _now().isoformat(),
+        "direct_i_handoff": True,
+        "i_system_media_library_saved": False,
+        "object_key": first_asset.object_key,
+        "original_url": f"/k/media/{first_asset.id}/file",
+        "preview_url": f"/k/media/{first_asset.id}/preview",
+        "thumbnail_url": f"/k/media/{first_asset.id}/thumbnail",
+    }
+    db.add(product)
+
+    submitted = False
+    submit_status = "pending"
+    message = None
+    try:
+        section_state = _store_image_review_snapshot(db, product=product, user=user)
+        submitted = section_state.submitted
+        submit_status = section_state.status
+    except HTTPException as exc:
+        detail = exc.detail
+        if isinstance(detail, dict) and isinstance(detail.get("message"), str):
+            message = detail["message"]
+        elif isinstance(detail, str):
+            message = detail
+        else:
+            message = "Images were saved but the K image section is not complete."
+    db.commit()
+    for row in rows:
+        db.refresh(row)
+    return ISystemImageImportResponse(
+        product_id=product.id,
+        variant_id=variant.id,
+        variant_sku=variant.variant_sku,
+        asset_ids=[row.id for row in rows],
+        submitted=submitted,
+        submit_status=submit_status,
+        message=message,
+    )
 
 
 @router.post(
@@ -3662,8 +4036,13 @@ def delete_media_asset(
     row.status = "removed"
     row.review_status = "removed"
     row.updated_by_user_id = _user_uuid(user)
+    metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
     row.metadata_json = {
-        **(row.metadata_json or {}),
+        **{
+            key: value
+            for key, value in metadata.items()
+            if key != "db_content_base64"
+        },
         "removed_at": _now().isoformat(),
         "removed_by_user_id": str(_user_uuid(user)) if _user_uuid(user) else None,
     }
@@ -3679,7 +4058,7 @@ def download_media_asset_file(
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_READ)),
-) -> FileResponse:
+) -> Response:
     del user
     row = db.get(KProductKnowledgeMediaAsset, asset_id)
     if row is None or row.status == "removed":
@@ -3694,19 +4073,90 @@ def download_media_asset_file(
         _raise_k_error(exc)
 
     metadata = row.metadata_json if isinstance(row.metadata_json, dict) else {}
-    storage_path = _media_asset_local_path(row)
-    if storage_path is None or not storage_path.is_file():
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Media file was not found.",
-        )
-    filename = str(metadata.get("filename") or storage_path.name)
-    return FileResponse(
+    storage_path = _ensure_media_asset_file(row)
+    db.add(row)
+    db.commit()
+    filename = str(
+        metadata.get("filename")
+        or (storage_path.name if storage_path is not None else row.object_key)
+        or f"{row.id}.img"
+    )
+    response = FileResponse(
         path=storage_path,
         content_disposition_type="inline",
         filename=filename,
         media_type=row.mime_type or "application/octet-stream",
     )
+    response.headers["Cache-Control"] = INLINE_IMAGE_CACHE_CONTROL
+    response.headers["ETag"] = media_file_etag(storage_path)
+    response.headers["X-K-Media-Asset-Id"] = str(row.id)
+    return response
+
+
+@router.get("/media/{asset_id}/thumbnail")
+def thumbnail_media_asset_file(
+    asset_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> Response:
+    del user
+    row = db.get(KProductKnowledgeMediaAsset, asset_id)
+    if row is None or row.status == "removed":
+        raise HTTPException(status_code=404, detail="Media asset was not found.")
+    try:
+        get_product(
+            db,
+            product_id=row.product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    path = _ensure_media_asset_derivative(row, kind="thumbnail", max_side=320)
+    db.add(row)
+    db.commit()
+    response = FileResponse(
+        path=path,
+        content_disposition_type="inline",
+        filename=path.name,
+        media_type="image/webp" if path.suffix == ".webp" else row.mime_type,
+    )
+    response.headers["Cache-Control"] = DERIVED_IMAGE_CACHE_CONTROL
+    response.headers["ETag"] = media_file_etag(path)
+    return response
+
+
+@router.get("/media/{asset_id}/preview")
+def preview_media_asset_file(
+    asset_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> Response:
+    del user
+    row = db.get(KProductKnowledgeMediaAsset, asset_id)
+    if row is None or row.status == "removed":
+        raise HTTPException(status_code=404, detail="Media asset was not found.")
+    try:
+        get_product(
+            db,
+            product_id=row.product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    path = _ensure_media_asset_derivative(row, kind="preview", max_side=1280)
+    db.add(row)
+    db.commit()
+    response = FileResponse(
+        path=path,
+        content_disposition_type="inline",
+        filename=path.name,
+        media_type="image/webp" if path.suffix == ".webp" else row.mime_type,
+    )
+    response.headers["Cache-Control"] = DERIVED_IMAGE_CACHE_CONTROL
+    response.headers["ETag"] = media_file_etag(path)
+    return response
 
 
 @router.get(
@@ -3739,6 +4189,7 @@ def download_media_asset(
         product_id=row.product_id,
         object_key=row.object_key,
         download_url=row.file_url_placeholder,
+        original_url=f"/k/media/{row.id}/file" if row.object_key else row.file_url_placeholder,
         filename=filename,
         review_status=row.review_status,
         status=row.status,

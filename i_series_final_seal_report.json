@@ -1,0 +1,180 @@
+{
+  "report_name": "I-SERIES FINAL SEAL REPORT",
+  "generated_at_utc": "2026-06-28T16:59:31Z",
+  "module": "i.image_system",
+  "seal_status": "blocked",
+  "final_production_freeze": false,
+  "freeze_policy": {
+    "requested_state": "Final Production Freeze",
+    "allowed_after_freeze": [
+      "critical bug fix"
+    ],
+    "disallowed_after_freeze": [
+      "new feature",
+      "schema change",
+      "storage redesign",
+      "endpoint restructuring",
+      "K system structural modification",
+      "DeepSeek prompt engine modification",
+      "image model integration modification"
+    ],
+    "policy_result": "not_activated",
+    "reason": "Final E2E did not complete with a passing status."
+  },
+  "feature_freeze_confirmation": {
+    "scope_reviewed": true,
+    "scope_locked_for_review": [
+      "Prompt -> DeepSeek -> Image Generation",
+      "Image Editing",
+      "Media Library",
+      "K product binding",
+      "K variant binding",
+      "Download",
+      "Delete"
+    ],
+    "new_features_added_during_seal": false,
+    "k_system_modified_during_seal": false,
+    "deepseek_prompt_engine_modified_during_seal": false,
+    "image_model_integration_modified_during_seal": false,
+    "confirmation": "scope matches requested I-series freeze boundary, but freeze is not activated because E2E failed."
+  },
+  "data_model_lock": {
+    "reviewed": true,
+    "tables": [
+      "i_image_system_assets",
+      "i_image_system_generation_events"
+    ],
+    "requested_aliases": {
+      "i_media_library": "i_image_system_assets",
+      "i_generation_events": "i_image_system_generation_events",
+      "i_edit_events": "i_image_system_generation_events with source_type=edit"
+    },
+    "schema_change_during_seal": false,
+    "storage_redesign_during_seal": false,
+    "alembic_head": "media_storage_perf_001",
+    "lock_status": "reviewed_not_finalized"
+  },
+  "api_stability_lock": {
+    "reviewed": true,
+    "locked_endpoints_for_review": [
+      "POST /api/app/i/images/generate",
+      "POST /api/app/i/images/edit",
+      "POST /api/app/i/media-library",
+      "GET /api/app/i/media-library",
+      "GET /api/app/i/media-library/{asset_id}/file",
+      "GET /api/app/i/media-library/{asset_id}/thumbnail",
+      "GET /api/app/i/media-library/{asset_id}/preview",
+      "DELETE /api/app/i/media-library/{asset_id}"
+    ],
+    "endpoint_restructuring_during_seal": false,
+    "lock_status": "reviewed_not_finalized"
+  },
+  "storage_model_confirmation": {
+    "reviewed": true,
+    "model": "file_based_storage",
+    "i_media_storage_dir": "/var/lib/barong/i-media",
+    "production_volume": "console_i_media_data",
+    "content_bytes_nullable": true,
+    "thumbnail_system": "enabled",
+    "preview_system": "enabled",
+    "lazy_list_loading": true,
+    "list_query_defers_binary_content": true,
+    "generated_images_stored": true,
+    "edited_images_stored": true,
+    "temp_reference_images_stored": false,
+    "confirmation": "generated and edited outputs are persisted as media assets; edit reference images use temporary working storage and are not stored as media library assets."
+  },
+  "k_integration_status": {
+    "reviewed": true,
+    "allowed_binding": [
+      "product_id",
+      "variant_id"
+    ],
+    "direct_k_database_write_from_i_series": false,
+    "shared_storage_logic_required": false,
+    "k_system_modified_during_seal": false,
+    "save_back_path": "K import endpoint accepts I output payload with source_type generate|edit.",
+    "status": "reviewed_not_finalized"
+  },
+  "performance_model_lock": {
+    "reviewed": true,
+    "thumbnail_system_required": true,
+    "lazy_loading_required": true,
+    "file_based_storage_required": true,
+    "performance_gate_status": "failed",
+    "failed_gate": "I/K E2E timing assertions",
+    "lock_status": "blocked"
+  },
+  "e2e_test_status": {
+    "overall": "failed",
+    "database": "isolated_postgresql_container",
+    "alembic_upgrade": "passed",
+    "attempts": [
+      {
+        "attempt": 1,
+        "command": "python -m pytest -c backend/pytest.ini tests/backend/test_i_k_series_e2e_audit.py tests/backend/test_i_series_image_system.py -vv",
+        "result": "failed",
+        "passed_tests": 12,
+        "failed_tests": 1,
+        "failure": "I prompt transform took 2194.63ms, limit 1500.00ms"
+      },
+      {
+        "attempt": 2,
+        "command": "python -m pytest -c backend/pytest.ini tests/backend/test_i_k_series_e2e_audit.py tests/backend/test_i_series_image_system.py -vv",
+        "result": "failed",
+        "passed_tests": 12,
+        "failed_tests": 1,
+        "failure": "I save media library took 3006.05ms, limit 3000.00ms"
+      },
+      {
+        "attempt": 3,
+        "command": "python -m pytest -c backend/pytest.ini tests/backend/test_i_k_series_e2e_audit.py -vv",
+        "result": "failed",
+        "passed_tests": 0,
+        "failed_tests": 1,
+        "failure": "I prompt transform took 1694.10ms, limit 1500.00ms"
+      }
+    ],
+    "functional_subchecks_observed": {
+      "prompt_transform": "exercised_but_timing_gate_failed",
+      "image_generation": "passed_in_attempt_2_before_later_timing_failure",
+      "image_editing": "passed_in_attempt_2_before_later_timing_failure",
+      "media_library_save": "exercised_but_timing_gate_failed_in_attempt_2",
+      "k_binding": "not_finally_confirmed_due_to_prior_timing_failure",
+      "download_delete": "not_finally_confirmed_due_to_prior_timing_failure",
+      "temp_reference_leakage": "unit_checks_passed"
+    },
+    "unit_checks": {
+      "i_series_unit_checks": "passed",
+      "passed": 12,
+      "failed": 0
+    }
+  },
+  "production_readiness": {
+    "overall": "operational_but_not_final_sealed",
+    "production_smoke_check": "passed",
+    "production_alembic_current": "media_storage_perf_001 (head)",
+    "containers": {
+      "frontend": "running",
+      "backend": "running",
+      "postgres": "running_healthy"
+    },
+    "media_volumes": [
+      {
+        "name": "console_i_media_data",
+        "mount": "/var/lib/barong/i-media"
+      },
+      {
+        "name": "console_k_media_data",
+        "mount": "/var/lib/barong/k-media"
+      }
+    ],
+    "deployment_performed_during_seal": false
+  },
+  "final_decision": {
+    "sealed": false,
+    "blocked": true,
+    "blocking_reason": "I-series final E2E did not pass timing gates in three consecutive attempts.",
+    "next_allowed_action": "critical bug fix only, then rerun final E2E before activating Final Production Freeze."
+  }
+}

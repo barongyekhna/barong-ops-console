@@ -3,6 +3,8 @@
 import type {
   KMediaAsset,
   KMediaCreatePayload,
+  KImportISystemImagePayload,
+  KImportISystemImageResponse,
   KMediaListResponse,
   ProductReadinessState,
   ProductSectionState,
@@ -177,6 +179,19 @@ export async function getProducts(options?: {
   });
 
   return readJson<ProductKnowledgeListResponse>(response, path);
+}
+
+export async function getProduct(
+  productId: string,
+): Promise<ProductKnowledgeDetail> {
+  const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+
+  return readJson<ProductKnowledgeDetail>(response, path);
 }
 
 export async function createProduct(
@@ -476,6 +491,14 @@ export function mediaAssetFileUrl(assetId: string) {
   return `${API_PROXY_BASE}/k/media/${encodeURIComponent(assetId)}/file`;
 }
 
+export function mediaAssetThumbnailUrl(assetId: string) {
+  return `${API_PROXY_BASE}/k/media/${encodeURIComponent(assetId)}/thumbnail`;
+}
+
+export function mediaAssetPreviewUrl(assetId: string) {
+  return `${API_PROXY_BASE}/k/media/${encodeURIComponent(assetId)}/preview`;
+}
+
 export async function uploadProductMediaAsset(
   productId: string,
   file: File,
@@ -538,4 +561,19 @@ export async function bindProductImage(
   );
 
   return readJson<KWorkflowExecution>(response, path);
+}
+
+export async function importISystemImagesToProduct(
+  productId: string,
+  payload: KImportISystemImagePayload,
+): Promise<KImportISystemImageResponse> {
+  const path = `${K_PRODUCTS_PATH}/${encodeURIComponent(productId)}/images/import-i-output`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+
+  return readJson<KImportISystemImageResponse>(response, path);
 }

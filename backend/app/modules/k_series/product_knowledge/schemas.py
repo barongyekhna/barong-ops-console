@@ -546,6 +546,7 @@ class ProductKnowledgeMediaDownloadResponse(BaseModel):
     product_id: UUID
     object_key: str | None
     download_url: str | None
+    original_url: str | None = None
     filename: str | None
     review_status: str
     status: str

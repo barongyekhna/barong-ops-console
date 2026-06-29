@@ -31,6 +31,19 @@ class ModuleControlError(ValueError):
     pass
 
 
+I_IMAGE_SYSTEM_MODULE_ID = "i.image_system"
+I_IMAGE_SYSTEM_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
+
+
+def _module_allowed_for_organization(
+    organization: OrganizationRecord,
+    manifest: ModuleManifestV1,
+) -> bool:
+    if manifest.module_key != I_IMAGE_SYSTEM_MODULE_ID:
+        return True
+    return organization.org_name.strip() == I_IMAGE_SYSTEM_ORGANIZATION_NAME
+
+
 def _active_organizations(db: Session) -> list[OrganizationRecord]:
     return list(
         db.scalars(
@@ -146,6 +159,8 @@ def ensure_module_control_states(
     created = 0
     for organization in organizations:
         for manifest in manifests:
+            if not _module_allowed_for_organization(organization, manifest):
+                continue
             key = (organization.org_id, manifest.module_key)
             if key in lookup:
                 continue
@@ -177,9 +192,14 @@ def build_module_control_center_from_parts(
     for organization in organizations:
         modules: list[ModuleControlStateRead] = []
         for module_id in module_ids:
+            manifest = manifest_by_key.get(module_id)
+            if manifest is not None and not _module_allowed_for_organization(
+                organization,
+                manifest,
+            ):
+                continue
             record = state_lookup.get((organization.org_id, module_id))
             if record is None:
-                manifest = manifest_by_key.get(module_id)
                 if manifest is None:
                     continue
                 modules.append(
@@ -390,6 +410,8 @@ def update_module_control_state(
     organization = db.get(OrganizationRecord, org_id)
     if organization is None or organization.status == "deleted":
         raise ModuleControlError("organization_not_found")
+    if not _module_allowed_for_organization(organization, manifest):
+        raise ModuleControlError("module_not_available_for_organization")
 
     record = get_module_control_state(db, org_id=org_id, module_id=module_id)
     if record is None:
@@ -432,6 +454,11 @@ def record_module_runtime_error(
     manifest = get_module_manifest_for_db(db, module_id)
     if manifest is None:
         raise ModuleControlError("module_not_registered")
+    organization = db.get(OrganizationRecord, org_id)
+    if organization is None or organization.status == "deleted":
+        raise ModuleControlError("organization_not_found")
+    if not _module_allowed_for_organization(organization, manifest):
+        raise ModuleControlError("module_not_available_for_organization")
     record = get_module_control_state(db, org_id=org_id, module_id=module_id)
     if record is None:
         record = ModuleControlStateRecord(

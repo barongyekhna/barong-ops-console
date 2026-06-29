@@ -127,6 +127,6 @@ def provider_registry_mapping() -> dict[str, dict[str, str | None]]:
         "deepseek": {
             "adapter": "DeepSeekAdapter",
             "default_key_alias": "deepseek",
-            "endpoint": "/v1/chat/completions",
+            "endpoint": "/chat/completions",
         },
     }

@@ -80,8 +80,13 @@ from backend.app.modules.k_series.product_knowledge.models import (
     KProductKnowledgeReviewItem,
     KProductKnowledgeRiskTerm,
     KProductKnowledgeTranslation,
+    KProductKnowledgeVariant,
     KProductKnowledgeVersion,
     KProductKnowledgeWorkflowExecution,
+)
+from backend.app.modules.i_series.image_system.models import (
+    IImageAsset,
+    IImageGenerationEvent,
 )
 from backend.app.services.session_seen_buffer import clear_session_seen_buffer
 from backend.app.services.module_control_cache_service import (
@@ -279,6 +284,8 @@ def clear_auth_tables() -> None:
         db.execute(delete(ApprovalWorkflowRecord))
         db.execute(delete(ApprovalRequestRecord))
         db.execute(delete(SharedModuleRecord))
+        db.execute(delete(IImageAsset))
+        db.execute(delete(IImageGenerationEvent))
         db.execute(delete(KProductKnowledgeWorkflowExecution))
         db.execute(delete(KProductKnowledgeReviewItem))
         db.execute(delete(KProductKnowledgeMediaAsset))
@@ -289,6 +296,7 @@ def clear_auth_tables() -> None:
         db.execute(delete(KProductKnowledgeKeyword))
         db.execute(delete(KProductKnowledgeTranslation))
         db.execute(delete(KProductKnowledgeAttribute))
+        db.execute(delete(KProductKnowledgeVariant))
         db.execute(delete(KProductKnowledgeProduct))
         db.execute(delete(ApiKeyModuleBindingRecord))
         db.execute(delete(ApiKeyRecord))

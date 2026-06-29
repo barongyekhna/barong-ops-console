@@ -11,7 +11,7 @@ COPY backend/requirements.txt ./backend/requirements.txt
 RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app \
-    && mkdir -p /var/lib/barong/k-media \
+    && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media \
     && chown -R app:app /app /var/lib/barong
 
 COPY --chown=app:app backend ./backend

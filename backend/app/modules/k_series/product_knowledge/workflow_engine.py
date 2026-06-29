@@ -1396,6 +1396,7 @@ class KProductKnowledgeWorkflowEngine:
             asset.object_key or asset.file_url_placeholder or str(asset.id)
         )
         source_type = _image_source_type(asset)
+        metadata = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
         product.image_asset_status = "bound"
         product.media_notes_json = {
             **(product.media_notes_json or {}),
@@ -1406,6 +1407,22 @@ class KProductKnowledgeWorkflowEngine:
             "bound_at": _now_iso(),
             "k_image_ai_generation_allowed": False,
             "k_image_review_allowed": False,
+            "object_key": asset.object_key,
+            "original_url": (
+                f"/k/media/{asset.id}/file"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "preview_url": (
+                f"/k/media/{asset.id}/preview"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "thumbnail_url": (
+                f"/k/media/{asset.id}/thumbnail"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
         }
         execution.image_binding_json = {
             "status": "bound",
@@ -1415,6 +1432,26 @@ class KProductKnowledgeWorkflowEngine:
             "variant_sku": asset.variant_sku,
             "object_key": asset.object_key,
             "file_url_placeholder": asset.file_url_placeholder,
+            "original_url": (
+                f"/k/media/{asset.id}/file"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "preview_url": (
+                f"/k/media/{asset.id}/preview"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "thumbnail_url": (
+                f"/k/media/{asset.id}/thumbnail"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "content_sha256": metadata.get("content_sha256"),
+            "file_size": asset.file_size,
+            "mime_type": asset.mime_type,
+            "width": asset.width,
+            "height": asset.height,
             "bound_at": _now_iso(),
         }
         self._append_trace(
@@ -1510,7 +1547,7 @@ class KProductKnowledgeWorkflowEngine:
         execution: KProductKnowledgeWorkflowExecution,
     ) -> dict[str, Any]:
         keyword_set = execution.final_keyword_set_json or {}
-        image = execution.image_binding_json or {}
+        image = execution.image_binding_json or self._product_image_binding_fallback(product)
         normalized_units = execution.unit_conversion_json or {}
         title = product.product_name_en or product.product_key
         description = product.short_description_en or product.long_description_en or ""
@@ -1657,12 +1694,33 @@ class KProductKnowledgeWorkflowEngine:
         product: KProductKnowledgeProduct,
         execution: KProductKnowledgeWorkflowExecution,
     ) -> bool:
-        image = execution.image_binding_json or {}
+        image = execution.image_binding_json or self._product_image_binding_fallback(product)
         return (
             product.image_asset_status == "bound"
             and image.get("status") == "bound"
             and image.get("source_type") in BOUND_IMAGE_SOURCES
         )
+
+    def _product_image_binding_fallback(
+        self,
+        product: KProductKnowledgeProduct,
+    ) -> dict[str, Any]:
+        notes = product.media_notes_json if isinstance(product.media_notes_json, dict) else {}
+        source_type = str(notes.get("image_source_type") or "").strip()
+        if product.image_asset_status != "bound" or source_type not in BOUND_IMAGE_SOURCES:
+            return {}
+        return {
+            "status": "bound",
+            "source_type": source_type,
+            "asset_id": notes.get("bound_asset_id"),
+            "i_system_image_asset_id": notes.get("i_system_image_asset_id"),
+            "variant_sku": notes.get("variant_sku"),
+            "object_key": notes.get("object_key") or product.selected_image_path,
+            "original_url": notes.get("original_url"),
+            "preview_url": notes.get("preview_url"),
+            "thumbnail_url": notes.get("thumbnail_url"),
+            "bound_at": notes.get("bound_at"),
+        }
 
     def _persist_risk_keywords(
         self,
@@ -3372,6 +3430,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             asset.object_key or asset.file_url_placeholder or str(asset.id)
         )
         source_type = _image_source_type(asset)
+        metadata = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
         product.image_asset_status = "bound"
         product.media_notes_json = {
             **(product.media_notes_json or {}),
@@ -3382,6 +3441,22 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "bound_at": _now_iso(),
             "k_image_ai_generation_allowed": False,
             "k_image_review_allowed": False,
+            "object_key": asset.object_key,
+            "original_url": (
+                f"/k/media/{asset.id}/file"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "preview_url": (
+                f"/k/media/{asset.id}/preview"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "thumbnail_url": (
+                f"/k/media/{asset.id}/thumbnail"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
         }
         execution.image_binding_json = {
             "status": "bound",
@@ -3391,6 +3466,26 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "variant_sku": asset.variant_sku,
             "object_key": asset.object_key,
             "file_url_placeholder": asset.file_url_placeholder,
+            "original_url": (
+                f"/k/media/{asset.id}/file"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "preview_url": (
+                f"/k/media/{asset.id}/preview"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "thumbnail_url": (
+                f"/k/media/{asset.id}/thumbnail"
+                if asset.object_key
+                else asset.file_url_placeholder
+            ),
+            "content_sha256": metadata.get("content_sha256"),
+            "file_size": asset.file_size,
+            "mime_type": asset.mime_type,
+            "width": asset.width,
+            "height": asset.height,
             "bound_at": _now_iso(),
         }
         self._append_trace(

@@ -35,7 +35,7 @@ const MODULE_DISPLAY_LABELS: Record<string, string> = {
   "business.reviews": "审批审计",
   "core.dashboard": "控制台",
   "experimental.foundation_demo": "内部演示",
-  "i.image_system": "图片系统",
+  "i.image_system": "I系列图片系统",
   "integration.n8n_test_bridge": "外部流程测试桥",
   "integration.n8n_webhook_test_bridge": "Webhook测试桥",
   "k.product_knowledge": "K系列产品知识库",

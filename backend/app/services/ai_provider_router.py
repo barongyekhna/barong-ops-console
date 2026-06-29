@@ -247,7 +247,12 @@ class ClaudeAdapter(BaseProviderAdapter):
 
 
 class DeepSeekAdapter(OpenAIAdapter):
-    pass
+    endpoint_map = {
+        "default": "/chat/completions",
+        "chat": "/chat/completions",
+        "generate": "/chat/completions",
+        "selling_points": "/chat/completions",
+    }
 
 
 ADAPTERS = {

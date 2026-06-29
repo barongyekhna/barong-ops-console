@@ -43,6 +43,9 @@ from .api.routes.health import (
 from .modules.k_series.product_knowledge.router import (
     router as k_product_knowledge_router,
 )
+from .modules.i_series.image_system.router import (
+    router as i_image_system_router,
+)
 from .api.routes.live_gate import router as live_gate_router
 from .api.routes.memory import router as memory_router
 from .api.routes.messages import router as messages_router
@@ -918,6 +921,7 @@ app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(k_product_knowledge_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(k_product_knowledge_router)
+app.include_router(i_image_system_router, prefix=APPLICATION_API_PREFIX)
 
 app.include_router(modules_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)

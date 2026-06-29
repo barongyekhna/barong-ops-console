@@ -66,8 +66,8 @@ def test_module_control_center_auto_registers(owner_client: TestClient) -> None:
     payload = response.json()
     assert payload["cache_status"] in {"fresh", "stale"}
     assert payload["organization_count"] >= 1
-    assert payload["module_count"] >= len(MODULE_MANIFESTS_V1)
-    assert payload["auto_registered_count"] >= len(MODULE_MANIFESTS_V1)
+    assert payload["module_count"] >= len(MODULE_MANIFESTS_V1) - 1
+    assert payload["auto_registered_count"] >= len(MODULE_MANIFESTS_V1) - 1
     default_group = next(
         group
         for group in payload["organizations"]
@@ -84,6 +84,73 @@ def test_module_control_center_auto_registers(owner_client: TestClient) -> None:
     )
     assert k_module["enabled"] is True
     assert k_module["runtime_status"] == "active"
+    assert all(
+        item["module_id"] != "i.image_system"
+        for item in default_group["modules"]
+    )
+
+
+def test_module_control_scopes_i_series_to_target_organization(
+    owner_client: TestClient,
+) -> None:
+    owner_id = owner_client.get("/api/public/auth/me").json()["id"]
+    target_org_id = "org_i_series_target_111111111111111111"
+    other_org_id = "org_i_series_other_222222222222222222"
+    with SessionLocal() as db:
+        db.add_all(
+            [
+                OrganizationRecord(
+                    org_id=target_org_id,
+                    org_name=K_SERIES_ORGANIZATION_NAME,
+                    org_type="store",
+                    owner_user_id=str(owner_id),
+                    status="active",
+                    metadata_json={},
+                ),
+                OrganizationRecord(
+                    org_id=other_org_id,
+                    org_name="涌龙麟（吉林）电子产品制造有限公司",
+                    org_type="store",
+                    owner_user_id=str(owner_id),
+                    status="active",
+                    metadata_json={},
+                ),
+            ]
+        )
+        db.commit()
+
+    response = owner_client.get(
+        "/api/control-plane/module-control/center?force_refresh=1"
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    target_group = next(
+        group
+        for group in payload["organizations"]
+        if group["org_id"] == target_org_id
+    )
+    other_group = next(
+        group
+        for group in payload["organizations"]
+        if group["org_id"] == other_org_id
+    )
+
+    assert any(
+        item["module_id"] == "i.image_system"
+        for item in target_group["modules"]
+    )
+    assert all(
+        item["module_id"] != "i.image_system"
+        for item in other_group["modules"]
+    )
+
+    blocked = owner_client.patch(
+        "/api/control-plane/module-control/organizations/"
+        f"{other_org_id}/registry-entries/i.image_system",
+        json={"enabled": False},
+    )
+    assert blocked.status_code == 400
+    assert blocked.json()["detail"] == "module_not_available_for_organization"
 
 
 def test_module_control_center_uses_cached_snapshot(

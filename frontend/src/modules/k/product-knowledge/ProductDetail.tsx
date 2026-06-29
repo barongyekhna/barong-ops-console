@@ -29,7 +29,7 @@ import {
 } from "@/modules/k19/keywords/api";
 import type { KeywordEntry } from "@/modules/k19/keywords/types";
 
-import { mediaAssetFileUrl } from "./api";
+import { mediaAssetFileUrl, mediaAssetThumbnailUrl } from "./api";
 import styles from "./ProductKnowledge.module.css";
 import {
   displayProductKey,
@@ -44,6 +44,7 @@ import type {
   KWorkflowExecution,
   KWorkflowStartPayload,
   ProductKnowledgeListItem,
+  ProductKnowledgeVariant,
   ProductReadinessState,
 } from "./types";
 
@@ -414,15 +415,18 @@ function joinListText(values: string[] | undefined) {
   return (values ?? []).join("\n");
 }
 
-function buildISystemHref(product: ProductKnowledgeListItem, variantSku: string) {
+function buildISystemHref(
+  product: ProductKnowledgeListItem,
+  variant: ProductKnowledgeVariant | null,
+) {
   const params = new URLSearchParams({
-    module: "i.image_system",
-    product_key: displayProductKey(product.product_key),
+    product_id: product.id,
+    source: "k",
   });
-  if (variantSku) {
-    params.set("variant_sku", variantSku);
+  if (variant?.id) {
+    params.set("variant_id", variant.id);
   }
-  return `/modules?${params.toString()}`;
+  return `/image-system?${params.toString()}`;
 }
 
 export function ProductDetail({
@@ -462,7 +466,6 @@ export function ProductDetail({
   );
   const [deletingMediaIds, setDeletingMediaIds] = useState<string[]>([]);
   const [selectedVariantSku, setSelectedVariantSku] = useState("");
-  const [iSystemImageAssetId, setISystemImageAssetId] = useState("");
   const [imageSectionSubmitted, setImageSectionSubmitted] = useState(false);
   const [imageSectionTouched, setImageSectionTouched] = useState(false);
   const mediaInputRef = useRef<HTMLInputElement | null>(null);
@@ -829,17 +832,6 @@ export function ProductDetail({
     }
   }
 
-  function bindISystemImage() {
-    const value = iSystemImageAssetId.trim();
-    if (!value || !selectedVariantSku) {
-      return;
-    }
-    onBindISystemImage?.(value, selectedVariantSku);
-    setImageSectionTouched(true);
-    setImageSectionSubmitted(false);
-    setISystemImageAssetId("");
-  }
-
   function bindUploadedImage(assetId: string, variantSku: string) {
     setImageSectionTouched(true);
     setImageSectionSubmitted(false);
@@ -1104,7 +1096,7 @@ export function ProductDetail({
     }
   }
 
-  const iSystemHref = buildISystemHref(currentProduct, selectedVariantSku);
+  const iSystemHref = buildISystemHref(currentProduct, selectedVariant);
 
   return (
     <aside className={styles.detail} aria-label="产品详情">
@@ -1556,28 +1548,6 @@ export function ProductDetail({
           <p className={styles.sellingPointsError}>{mediaError}</p>
         ) : null}
 
-        <div className={styles.mediaCreateRow}>
-          <label className={styles.field}>
-            <span>I系统图片ID</span>
-            <input
-              onChange={(event) => setISystemImageAssetId(event.target.value)}
-              placeholder="img_asset_..."
-              value={iSystemImageAssetId}
-            />
-          </label>
-          <button
-            className="secondary-button"
-            disabled={
-              isWorkflowBusy || !iSystemImageAssetId.trim() || !selectedVariantSku
-            }
-            onClick={bindISystemImage}
-            type="button"
-          >
-            <Send aria-hidden="true" size={16} />
-            绑定
-          </button>
-        </div>
-
         <ul className={styles.mediaList}>
           {pendingMediaUploads.map((item) => (
             <li key={item.id}>
@@ -1598,15 +1568,14 @@ export function ProductDetail({
           {activeMediaAssets.map((asset) => (
             <li key={asset.id}>
               <div className={styles.mediaPreview}>
-                {asset.source === "i_system_asset" ? (
-                  <ImagePlus aria-hidden="true" size={18} />
-                ) : (
-                  <img
-                    alt=""
-                    loading="lazy"
-                    src={asset.file_url_placeholder || mediaAssetFileUrl(asset.id)}
-                  />
-                )}
+                <img
+                  alt=""
+                  decoding="async"
+                  loading="lazy"
+                  src={
+                    asset.file_url_placeholder || mediaAssetThumbnailUrl(asset.id)
+                  }
+                />
               </div>
               <div className={styles.mediaMeta}>
                 <strong>{asset.object_key || asset.id}</strong>

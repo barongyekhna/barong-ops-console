@@ -278,7 +278,13 @@ export type KMediaAsset = {
   review_status: string;
   object_key: string | null;
   file_url_placeholder: string | null;
+  file_url: string | null;
+  thumbnail_url: string | null;
+  preview_url: string | null;
   mime_type: string | null;
+  width: number | null;
+  height: number | null;
+  file_size: number | null;
   source: string | null;
   metadata: Record<string, unknown> | null;
   created_at: string;
@@ -300,6 +306,36 @@ export type KMediaCreatePayload = {
   mime_type?: string | null;
   source?: string | null;
   metadata?: Record<string, unknown>;
+};
+
+export type KImportISystemImagePayload = {
+  variant_id: string;
+  source_type: "generate" | "edit";
+  image_prompt_enhanced: string;
+  prompt_original?: string | null;
+  aspect_ratio?: string | null;
+  style_config?: Record<string, unknown>;
+  event_id?: string | null;
+  images: Array<{
+    image_base64: string;
+    mime_type: string;
+    width?: number | null;
+    height?: number | null;
+    content_sha256?: string | null;
+    candidate_id?: string | null;
+    metadata?: Record<string, unknown>;
+  }>;
+};
+
+export type KImportISystemImageResponse = {
+  status: "saved";
+  product_id: string;
+  variant_id: string;
+  variant_sku: string;
+  asset_ids: string[];
+  submitted: boolean;
+  submit_status: string;
+  message?: string | null;
 };
 
 export type KWorkflowReport = {

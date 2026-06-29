@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ChevronDown,
   ExternalLink,
+  ImagePlus,
   LoaderCircle,
   PackageOpen,
   RotateCcw,
@@ -238,6 +239,29 @@ export function ProductListFull() {
     deleteCandidate !== null &&
     deleteConfirmation.trim() === deleteConfirmationKey &&
     !isDeleting;
+
+  function openImageSystem(
+    product: ProductKnowledgeListItem,
+    event: MouseEvent<HTMLButtonElement>,
+  ) {
+    event.stopPropagation();
+    const params = new URLSearchParams({
+      product_id: product.id,
+      source: "k",
+    });
+    const firstVariant = product.variants?.[0] ?? null;
+    if (firstVariant?.id) {
+      params.set("variant_id", firstVariant.id);
+    }
+    const openedWindow = window.open(
+      `/image-system?${params.toString()}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
+    if (openedWindow) {
+      openedWindow.opener = null;
+    }
+  }
 
   const loadProducts = useCallback(
     async (preferredOpenId?: string, query?: string) => {
@@ -928,6 +952,14 @@ export function ProductListFull() {
                               <button className="secondary-button" type="button">
                                 <ChevronDown aria-hidden="true" size={15} />
                                 {isOpen ? "收起" : "详情"}
+                              </button>
+                              <button
+                                className="secondary-button"
+                                onClick={(event) => openImageSystem(product, event)}
+                                type="button"
+                              >
+                                <ImagePlus aria-hidden="true" size={15} />
+                                Create Image
                               </button>
                               <button
                                 className={`secondary-button ${styles.dangerButton}`}

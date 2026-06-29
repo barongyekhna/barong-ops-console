@@ -51,8 +51,10 @@ services:
       LOGIN_USER_RATE_LIMIT_ATTEMPTS: ${LOGIN_USER_RATE_LIMIT_ATTEMPTS:-10}
       LOGIN_ENDPOINT_RATE_LIMIT_ATTEMPTS: ${LOGIN_ENDPOINT_RATE_LIMIT_ATTEMPTS:-200}
       LOGIN_IP_RATE_LIMIT_WINDOW_SECONDS: ${LOGIN_IP_RATE_LIMIT_WINDOW_SECONDS:-900}
+      I_IMAGE_MEDIA_STORAGE_DIR: /var/lib/barong/i-media
       K_PRODUCT_MEDIA_STORAGE_DIR: /var/lib/barong/k-media
     volumes:
+      - i_media_data:/var/lib/barong/i-media
       - k_media_data:/var/lib/barong/k-media
     ports:
       - "127.0.0.1:8000:8000"
@@ -71,4 +73,5 @@ services:
       - "127.0.0.1:3000:3000"
 
 volumes:
+  i_media_data:
   k_media_data:

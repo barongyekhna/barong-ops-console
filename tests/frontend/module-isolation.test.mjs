@@ -237,6 +237,15 @@ const registryItems = [
     status: "active",
   }),
   manifest({
+    category: "business",
+    denied_behavior: "show_locked",
+    external_dependencies: ["deepseek", "ai_provider"],
+    module_key: "i.image_system",
+    required_permissions: ["i.image_system.read"],
+    route_namespace: "/image-system",
+    status: "active",
+  }),
+  manifest({
     category: "core",
     denied_behavior: "hide_when_denied",
     module_key: "core.dashboard",
@@ -310,6 +319,28 @@ test("backend proxy precisely allows C07B module registry paths", () => {
   assert.equal(isAllowedBackendProxyPath("GET", ["permissions", "me"]), true);
   assert.equal(
     isAllowedBackendProxyPath("GET", ["permissions", "registry"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("POST", ["i", "images", "generate"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("POST", ["i", "images", "edit"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["i", "media-library"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("POST", [
+      "k",
+      "products",
+      "123e4567-e89b-12d3-a456-426614174000",
+      "images",
+      "import-i-output",
+    ]),
     true,
   );
   assert.equal(
@@ -450,6 +481,8 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   );
   assert.match(sidebarSource, /const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set/);
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
+  assert.match(sidebarSource, /ORGANIZATION_MODULE_PREFIXES = \["k\.", "i\.", "p\.", "seo\.", "gmc\."\]/);
+  assert.match(sidebarSource, /normalized\.startsWith\("i\."\)/);
   assert.match(sidebarSource, /<span className="navigation-label">C系统<\/span>/);
   assert.match(sidebarSource, /className="navigation-divider"/);
   assert.match(sidebarSource, /<span className="navigation-label">组织<\/span>/);
@@ -460,6 +493,55 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.doesNotMatch(sidebarSource, /TARGET_ORGANIZATION_NAME/);
   assert.doesNotMatch(sidebarSource, /OWNER_ORG_MODULE_ORDER/);
   assert.doesNotMatch(sidebarSource, /<span className="navigation-label">Organizations<\/span>/);
+});
+
+test("sidebar suppresses no-execution badge copy", () => {
+  const sidebarSource = readFileSync(
+    "frontend/src/components/capability-sidebar-engine.tsx",
+    "utf8",
+  );
+
+  assert.match(sidebarSource, /visibleBadge = badge === "no_execution" \? null : badge/);
+  assert.match(sidebarSource, /CAPABILITY_BADGE_LABELS\[visibleBadge\]/);
+});
+
+test("I image system keeps UI copy localized and uses placeholders for style hints", () => {
+  const workspaceSource = readFileSync(
+    "frontend/src/modules/i/image-system/ImageSystemWorkspace.tsx",
+    "utf8",
+  );
+
+  assert.match(workspaceSource, /生成提示词/);
+  assert.match(workspaceSource, /编辑提示词/);
+  assert.match(workspaceSource, /已安装 \{PROMPT_SKILL_LABEL\}/);
+  assert.match(workspaceSource, /DeepSeek V4 Pro 转换成英文作图指令/);
+  assert.match(workspaceSource, /label: "风格"/);
+  assert.match(workspaceSource, /label: "光线"/);
+  assert.match(workspaceSource, /label: "构图"/);
+  assert.match(workspaceSource, /label: "背景"/);
+  assert.match(workspaceSource, /placeholder=\{field\.generatePlaceholder\}/);
+  assert.match(workspaceSource, /placeholder=\{field\.editPlaceholder\}/);
+  assert.match(workspaceSource, /function ProgressBar/);
+  assert.match(workspaceSource, /DeepSeek 正在优化英文作图指令/);
+  assert.match(workspaceSource, /gpt-image-2 正在生成图片/);
+  assert.match(workspaceSource, /上传临时参考图并调用 gpt-image-2/);
+  assert.match(workspaceSource, /function normalizeAspectRatio/);
+  assert.match(workspaceSource, /const DEFAULT_ASPECT_RATIO = "1:1"/);
+  assert.match(workspaceSource, /const DEFAULT_GENERATION_COUNT = 1/);
+  assert.match(workspaceSource, /placeholder="默认比例：1:1"/);
+  assert.match(workspaceSource, /placeholder="默认图片数量：1张"/);
+  assert.match(workspaceSource, /aria-label="放大查看图片"/);
+  assert.match(workspaceSource, /aria-label="图片放大预览"/);
+  assert.match(workspaceSource, /移除这张/);
+  assert.match(workspaceSource, /setGeneratePrompt\(""\)/);
+  assert.match(workspaceSource, /function MediaLibraryPreview/);
+  assert.match(workspaceSource, /aria-label="媒体库图片放大预览"/);
+  assert.match(workspaceSource, /aria-label="放大查看媒体库图片"/);
+  assert.match(workspaceSource, /删除这张/);
+  assert.match(workspaceSource, /setEditPrompt\(""\)/);
+  assert.match(workspaceSource, /setEditFiles\(\[\]\)/);
+  assert.doesNotMatch(workspaceSource, /<span>Prompt<\/span>/);
+  assert.doesNotMatch(workspaceSource, /<span>\{key\}<\/span>/);
 });
 
 test("productized routes are visible while diagnostics stay out of navigation", () => {
@@ -1020,6 +1102,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "admin.organizations",
     "admin.permissions",
     "k.product_knowledge",
+    "i.image_system",
     "business.approvals",
     "business.reviews",
     "core.dashboard",
@@ -1043,6 +1126,12 @@ test("sidebar navigation exposes the full productized capability structure", () 
   assert.equal(productKnowledge.required_permission, "products.read");
   assert.equal(productKnowledge.denied_behavior, "show_locked");
   assert.equal(productKnowledge.category, "business");
+  const imageSystem = item("i.image_system");
+  assert.equal(imageSystem.label, "I系列图片系统");
+  assert.equal(imageSystem.href, "/image-system");
+  assert.equal(imageSystem.required_permission, "i.image_system.read");
+  assert.equal(imageSystem.denied_behavior, "show_locked");
+  assert.equal(imageSystem.category, "business");
   const moduleControl = item("admin.modules");
   assert.equal(moduleControl.label, "模块控制");
   assert.equal(moduleControl.href, "/module-control");
