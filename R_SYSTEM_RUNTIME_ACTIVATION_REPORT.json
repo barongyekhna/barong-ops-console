@@ -1,0 +1,279 @@
+{
+  "report_name": "R_SYSTEM_RUNTIME_ACTIVATION_REPORT",
+  "generated_at": "2026-06-29T08:24:24.288744+00:00",
+  "skill_registration_status": {
+    "amazon_selection_skill": "registered",
+    "decision_engine_skill": "registered",
+    "independent_site_selection_skill": "registered",
+    "risk_filter_skill": "registered",
+    "source_validation_skill": "registered"
+  },
+  "engine_initialization_status": {
+    "engine": "R_ENGINE_V1",
+    "version": "2026-06-29.v1",
+    "initialized": true,
+    "initialized_at": "2026-06-29T08:24:24.285648+00:00",
+    "runtime_layer": "r_series/runtime",
+    "external_api_dependency": false,
+    "database_schema_change": false,
+    "k_i_p_system_modified": false
+  },
+  "data_loading_confirmation": {
+    "all_loaded": true,
+    "loaded_count": 7,
+    "required_count": 7,
+    "documents": [
+      {
+        "requested_name": "AMAZON_PRODUCT_RESEARCH_PLAYBOOK.md",
+        "loaded_name": "R_SERIES_AMAZON_PRODUCT_RESEARCH_PLAYBOOK.md",
+        "path": "R_SERIES/R_SERIES_AMAZON_PRODUCT_RESEARCH_PLAYBOOK.md",
+        "status": "loaded",
+        "sha256": "73ea2577370a4624d56c41de7369317bc87202f0c73f510bbc15cff7cf69b494",
+        "bytes": 17918,
+        "lines": 193
+      },
+      {
+        "requested_name": "INDEPENDENT_SITE_PRODUCT_RESEARCH_PLAYBOOK.md",
+        "loaded_name": "R_SERIES_INDEPENDENT_SITE_PRODUCT_RESEARCH_PLAYBOOK.md",
+        "path": "R_SERIES/R_SERIES_INDEPENDENT_SITE_PRODUCT_RESEARCH_PLAYBOOK.md",
+        "status": "loaded",
+        "sha256": "0ee5341978652cddb15edc2f2206151ff7d078b063a65e1fce7f84fdc66d2f2d",
+        "bytes": 15737,
+        "lines": 218
+      },
+      {
+        "requested_name": "AMAZON_VS_INDEPENDENT_SITE_COMPARISON.md",
+        "loaded_name": "R_SERIES_AMAZON_VS_INDEPENDENT_SITE_COMPARISON.md",
+        "path": "R_SERIES/R_SERIES_AMAZON_VS_INDEPENDENT_SITE_COMPARISON.md",
+        "status": "loaded",
+        "sha256": "6277e0e0d4ed3180f51d80d4f48b3a46d282f8b6025359271f8439c560fa3845",
+        "bytes": 7894,
+        "lines": 176
+      },
+      {
+        "requested_name": "BARONG_YEKHNA_PRODUCT_SELECTION_STRATEGY.md",
+        "loaded_name": "R_SERIES_BARONG_YEKHNA_PRODUCT_SELECTION_STRATEGY.md",
+        "path": "R_SERIES/R_SERIES_BARONG_YEKHNA_PRODUCT_SELECTION_STRATEGY.md",
+        "status": "loaded",
+        "sha256": "b3e7b164bc2d8b967afbb31f13ed62e7152ac890def38c5a9f308ad895e428ae",
+        "bytes": 9695,
+        "lines": 147
+      },
+      {
+        "requested_name": "FUTURE_SYSTEM_DESIGN_SUGGESTIONS.md",
+        "loaded_name": "R_SERIES_FUTURE_SYSTEM_DESIGN_SUGGESTIONS.md",
+        "path": "R_SERIES/R_SERIES_FUTURE_SYSTEM_DESIGN_SUGGESTIONS.md",
+        "status": "loaded",
+        "sha256": "4bba7b348fdc890935daeb5bb290c0e68aa2ed6f8bbe07094d9d56238d883319",
+        "bytes": 9780,
+        "lines": 293
+      },
+      {
+        "requested_name": "PRODUCT_SELECTION_SCORE_MODEL.json",
+        "loaded_name": "R_SERIES_PRODUCT_SELECTION_SCORE_MODEL.json",
+        "path": "R_SERIES/R_SERIES_PRODUCT_SELECTION_SCORE_MODEL.json",
+        "status": "loaded",
+        "sha256": "a03aac1771021e7ae448646f5cf2144420dc88930cd703d3f3ef363b11baeb84",
+        "bytes": 15818,
+        "lines": 411
+      },
+      {
+        "requested_name": "SOURCE_INDEX.md",
+        "loaded_name": "R_SERIES_SOURCE_INDEX.md",
+        "path": "R_SERIES/R_SERIES_SOURCE_INDEX.md",
+        "status": "loaded",
+        "sha256": "22f2eef2aa6043a82e97c86a1d761421a26fd6bfaaea03f35a18639b271e5dd6",
+        "bytes": 7527,
+        "lines": 78
+      }
+    ]
+  },
+  "test_run_result": {
+    "input": {
+      "keyword": "portable door draft stopper",
+      "category": "home improvement",
+      "price_range": "10-30",
+      "market": "Amazon + DTC"
+    },
+    "output": {
+      "decision": "TEST",
+      "channel": "Dual",
+      "amazon_score": {
+        "status": "success",
+        "output": "amazon_scorecard",
+        "scores": {
+          "demand_score": 93,
+          "competition_score": 66,
+          "profit_score": 79,
+          "differentiation_score": 85,
+          "compliance_risk_score": 93,
+          "seo_score": 79,
+          "ads_score": 72,
+          "b2b_score": 50,
+          "brandability_score": 65,
+          "automation_fit_score": 84
+        },
+        "final_score": 79.44,
+        "fba_fit_score": 88,
+        "market_fit": "Amazon",
+        "signals": {
+          "bsr_analysis": "proxy_required_no_live_bsr; demand scored from local playbook rules and keyword/category fit",
+          "demand_judgment": "stable_problem_solution_niche",
+          "profit_model": "price_band_can_absorb_small_light_fba_if_cogs_is_controlled",
+          "competition_analysis": "moderate_competition_expected_for_home_improvement_accessory",
+          "risk_filter": "low_policy_risk"
+        },
+        "weakest_dimensions": [
+          "b2b_score",
+          "brandability_score",
+          "competition_score"
+        ]
+      },
+      "site_score": {
+        "status": "success",
+        "output": "site_scorecard",
+        "scores": {
+          "demand_score": 83,
+          "competition_score": 70,
+          "profit_score": 70,
+          "differentiation_score": 81,
+          "compliance_risk_score": 91,
+          "seo_score": 88,
+          "ads_score": 75,
+          "b2b_score": 58,
+          "brandability_score": 71,
+          "automation_fit_score": 89
+        },
+        "final_score": 78.04,
+        "gmc_readiness_score": 81,
+        "content_potential_score": 89,
+        "market_fit": "DTC",
+        "signals": {
+          "seo_opportunity": "long_tail_problem_solution_content",
+          "cpc_analysis": "controlled_test_required; no live CPC used",
+          "content_potential": "installation_FAQ_comparison_visual_content",
+          "gmc_risk": "low",
+          "b2b_potential": "moderate"
+        },
+        "weakest_dimensions": [
+          "b2b_score",
+          "competition_score",
+          "profit_score"
+        ]
+      },
+      "risk": {
+        "status": "success",
+        "output": "risk_decision",
+        "risk_decision": "PASS",
+        "risk_level": "low",
+        "hard_reject": false,
+        "hard_reject_conditions": [],
+        "risk_flags": {
+          "ip_or_patent": "low",
+          "compliance": "low",
+          "fba_or_logistics": "low",
+          "ads_or_gmc_policy": "low",
+          "return_risk": "medium_low",
+          "negative_margin": "not_indicated"
+        },
+        "manual_review_required": false,
+        "notes": [
+          "Hard reject conditions are evaluated before final weighted scoring.",
+          "No live patent, compliance, FBA, or GMC API was used."
+        ]
+      },
+      "final_score": 78.74,
+      "recommended_next_step": "K",
+      "downstream_handoff": {
+        "K": {
+          "ready": true,
+          "score": 87,
+          "reason": "keyword map and intent labels are the first downstream dependency"
+        },
+        "I": {
+          "ready": true,
+          "score": 84,
+          "reason": "product value can be shown through usage, detail, comparison, and installation assets"
+        },
+        "P": {
+          "ready": true,
+          "score": 83,
+          "reason": "page structure is viable after keyword and image requirements are confirmed"
+        },
+        "GMC": {
+          "ready": true,
+          "score": 81,
+          "reason": "feed and landing-page consistency require manual confirmation before launch"
+        },
+        "SEO": {
+          "ready": true,
+          "score": 88,
+          "reason": "long-tail problem, FAQ, comparison, and installation content path exists"
+        }
+      },
+      "decision_basis": {
+        "final_score_formula": "weighted_average(demand_score, competition_score, profit_score, differentiation_score, compliance_risk_score, seo_score, ads_score, b2b_score, brandability_score, automation_fit_score)",
+        "threshold_applied": "test_after_review",
+        "market": "Both",
+        "no_external_api_dependency": true
+      },
+      "skill_trace": [
+        {
+          "skill": "source_validation_skill",
+          "status": "success",
+          "output": "validated_dataset",
+          "timestamp": "2026-06-29T08:24:24.285846+00:00"
+        },
+        {
+          "skill": "amazon_selection_skill",
+          "status": "success",
+          "output": "amazon_scorecard",
+          "timestamp": "2026-06-29T08:24:24.288596+00:00"
+        },
+        {
+          "skill": "independent_site_selection_skill",
+          "status": "success",
+          "output": "site_scorecard",
+          "timestamp": "2026-06-29T08:24:24.288652+00:00"
+        },
+        {
+          "skill": "risk_filter_skill",
+          "status": "success",
+          "output": "risk_decision",
+          "timestamp": "2026-06-29T08:24:24.288677+00:00"
+        },
+        {
+          "skill": "decision_engine_skill",
+          "status": "success",
+          "output": "final_decision",
+          "timestamp": "2026-06-29T08:24:24.288715+00:00"
+        }
+      ],
+      "validated_dataset": {
+        "status": "success",
+        "confidence": "medium",
+        "source_mode": "local_R_SERIES_documents_only",
+        "input_completeness_score": 80
+      },
+      "engine": "R_ENGINE_V1",
+      "engine_version": "2026-06-29.v1",
+      "completed_at": "2026-06-29T08:24:24.288727+00:00"
+    },
+    "validations": {
+      "skill_invocation_success": true,
+      "scoring_generation_success": true,
+      "decision_output_success": true,
+      "kip_path_recommendation_success": true
+    }
+  },
+  "system_readiness": {
+    "ready": true,
+    "status": "READY",
+    "scope_guard": {
+      "modifies_k_i_p_systems": false,
+      "adds_database_schema": false,
+      "uses_external_api": false,
+      "runtime_layer_only": true
+    }
+  }
+}
