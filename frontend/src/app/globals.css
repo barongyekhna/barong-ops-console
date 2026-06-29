@@ -5304,519 +5304,542 @@ textarea:focus-visible {
   }
 }
 
+
 /* =================================================================
-   DARK COCKPIT THEME — full dark re-skin (visual only, last layer).
-   Two-pronged: (1) redefine design tokens so token-based surfaces
-   flip automatically; (2) override the hardcoded light selectors
-   from the final "Stripe+Linear" layer. Neon indigo/cyan accents,
-   translucent panels (no heavy blur → no perf cost), soft glow.
+   DARK MODE — comprehensive, gated by the OS color scheme.
+   Light OS keeps the original (correct-contrast) light theme.
+   Dark OS gets the "cockpit" theme. Every hardcoded light surface
+   and dark text token is flipped here so contrast is guaranteed.
+   Visual only; honors prefers-reduced-motion. No heavy blur on cards.
    ================================================================= */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --color-canvas: #0b1020;
+    --color-canvas-soft: #080c17;
+    --color-surface: rgb(22 30 52 / 72%);
+    --color-surface-solid: #141b30;
+    --color-surface-muted: rgb(255 255 255 / 4%);
+    --color-elevated: #1a2340;
+    --color-line: rgb(148 163 184 / 16%);
+    --color-line-strong: rgb(148 163 184 / 30%);
+    --color-text: #e6eaf2;
+    --color-text-strong: #f8fafc;
+    --color-muted: #9aa6bd;
+    --color-subtle: #8290a8;
+    --color-primary: #818cf8;
+    --color-primary-strong: #6366f1;
+    --color-primary-soft: rgb(99 102 241 / 18%);
+    --color-success: #34d399;
+    --color-success-soft: rgb(52 211 153 / 14%);
+    --color-warning: #fbbf24;
+    --color-warning-soft: rgb(251 191 36 / 14%);
+    --color-error: #f87171;
+    --color-error-soft: rgb(248 113 113 / 14%);
+    --color-info: #818cf8;
+    --color-info-soft: rgb(129 140 248 / 16%);
+    --shadow-card: 0 20px 48px rgb(0 0 0 / 52%);
+    --shadow-subtle: 0 16px 36px rgb(0 0 0 / 42%);
+    --sidebar: #0b1120;
+    --sidebar-muted: #94a3b8;
+    --ink: #e6eaf2;
+    --muted: #9aa6bd;
+    --line: rgb(148 163 184 / 16%);
+    --surface: rgb(22 30 52 / 72%);
+    --canvas: #0b1020;
+    --signal: #818cf8;
+    --signal-dark: #6366f1;
+    --neon: #22d3ee;
+  }
 
-:root {
-  color-scheme: dark;
-  --color-canvas: #0b1020;
-  --color-canvas-soft: #080c17;
-  --color-surface: rgb(22 30 52 / 72%);
-  --color-surface-solid: #141b30;
-  --color-surface-muted: rgb(255 255 255 / 4%);
-  --color-elevated: #1a2340;
-  --color-line: rgb(148 163 184 / 16%);
-  --color-line-strong: rgb(148 163 184 / 30%);
-  --color-text: #e6eaf2;
-  --color-text-strong: #f8fafc;
-  --color-muted: #9aa6bd;
-  --color-subtle: #8290a8;
-  --color-primary: #818cf8;
-  --color-primary-strong: #6366f1;
-  --color-primary-soft: rgb(99 102 241 / 18%);
-  --color-success: #34d399;
-  --color-success-soft: rgb(52 211 153 / 14%);
-  --color-warning: #fbbf24;
-  --color-warning-soft: rgb(251 191 36 / 14%);
-  --color-error: #f87171;
-  --color-error-soft: rgb(248 113 113 / 14%);
-  --color-info: #818cf8;
-  --color-info-soft: rgb(129 140 248 / 16%);
-  --shadow-card: 0 20px 48px rgb(0 0 0 / 52%);
-  --shadow-subtle: 0 16px 36px rgb(0 0 0 / 42%);
-  --sidebar: #0b1120;
-  --sidebar-muted: #94a3b8;
-  --ink: #e6eaf2;
-  --muted: #9aa6bd;
-  --line: rgb(148 163 184 / 16%);
-  --surface: rgb(22 30 52 / 72%);
-  --canvas: #0b1020;
-  --signal: #818cf8;
-  --signal-dark: #6366f1;
-  --neon: #22d3ee;
-}
+  /* ---- Base canvas + global text ---- */
+  html,
+  body {
+    background: #0b1020;
+  }
 
-/* --- Base canvas: deep space gradient --- */
-html,
-body {
-  background: #0b1020;
-}
+  body {
+    color: #e6eaf2;
+  }
 
-body {
-  color: #e6eaf2;
-}
+  .console-layout,
+  .login-page,
+  .force-reset-page,
+  .session-screen,
+  .login-panel {
+    background:
+      radial-gradient(70% 60% at 50% -10%, #11193a 0%, transparent 60%),
+      linear-gradient(180deg, #0b1020 0%, #080c17 100%);
+  }
 
-.console-layout,
-.login-page,
-.force-reset-page,
-.session-screen,
-.login-panel {
-  background:
-    radial-gradient(70% 60% at 50% -10%, #11193a 0%, transparent 60%),
-    linear-gradient(180deg, #0b1020 0%, #080c17 100%);
-}
+  .console-layout::before,
+  .login-panel::before,
+  .session-screen::before,
+  .force-reset-page::before {
+    background:
+      radial-gradient(56% 46% at 12% -4%, rgb(99 102 241 / 22%) 0%, transparent 60%),
+      radial-gradient(50% 42% at 102% 104%, rgb(34 211 238 / 16%) 0%, transparent 58%),
+      radial-gradient(40% 38% at 86% 4%, rgb(139 92 246 / 16%) 0%, transparent 60%);
+  }
 
-/* Richer neon aurora on dark */
-.console-layout::before,
-.login-panel::before,
-.session-screen::before,
-.force-reset-page::before {
-  background:
-    radial-gradient(56% 46% at 12% -4%, rgb(99 102 241 / 22%) 0%, transparent 60%),
-    radial-gradient(50% 42% at 102% 104%, rgb(34 211 238 / 16%) 0%, transparent 58%),
-    radial-gradient(40% 38% at 86% 4%, rgb(139 92 246 / 16%) 0%, transparent 60%);
-}
+  /* Headings → light (gradient-text headings keep their fill) */
+  h1,
+  h2,
+  h3,
+  h4 {
+    color: #f1f5f9;
+  }
 
-/* --- Headings & generic text → light --- */
-h1,
-h2,
-h3,
-h4 {
-  color: #f1f5f9;
-}
+  /* ---- Main surfaces → dark glass + glow ---- */
+  .runtime-fallback-banner,
+  .list-state,
+  .record-card,
+  .empty-state,
+  .capability-empty-state,
+  .permission-denied,
+  .ops-dashboard-header,
+  .ops-metric-card,
+  .ops-panel,
+  .registry-command-bar,
+  .capability-summary-grid div,
+  .module-registry-table-scroll,
+  .review-filter-bar,
+  .approval-decision-panel,
+  .approval-section,
+  .approval-detail-top,
+  .product-panel,
+  .users-panel,
+  .users-create-panel,
+  .users-list-panel,
+  .user-detail-panel,
+  .users-role-catalog-panel,
+  .users-reset-panel,
+  .permissions-panel,
+  .session-panel,
+  .metric-card,
+  .module-card,
+  .activity-feed,
+  .modules-section,
+  .login-panel-inner,
+  .force-reset-panel,
+  .permissions-card,
+  .adapter-shell {
+    color: #e6eaf2;
+    background: rgb(21 28 49 / 72%);
+    border: 1px solid rgb(129 140 248 / 16%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 5%),
+      0 18px 44px rgb(0 0 0 / 50%),
+      0 0 28px rgb(99 102 241 / 6%);
+    backdrop-filter: none;
+  }
 
-.topbar,
-.topbar h1,
-.topbar-search input,
-.metric-card strong,
-.module-card h3,
-.activity-feed strong,
-.dashboard-section-heading h2,
-.activity-feed-heading h2,
-.login-panel-inner h2,
-.force-reset-heading h1,
-.session-panel h1,
-.secondary-button,
-.logout-button,
-.icon-button {
-  color: #e8edf7;
-}
+  .permissions-modal {
+    color: #e6eaf2;
+    background: #141b30;
+    border: 1px solid rgb(129 140 248 / 18%);
+  }
 
-.eyebrow,
-.metric-card span,
-.metric-card small,
-.module-card p,
-.dashboard-section-heading > span,
-.activity-feed-heading > span,
-.activity-feed p,
-.account-copy strong {
-  color: #9aa6bd;
-}
+  .permissions-modal-backdrop {
+    background: rgb(2 4 10 / 66%);
+  }
 
-/* --- Top bar: dark glass --- */
-.topbar {
-  background: rgb(10 14 26 / 72%);
-  border-bottom: 1px solid rgb(148 163 184 / 14%);
-  backdrop-filter: blur(16px);
-}
+  /* Neon top accent strip on key panels/cards */
+  .metric-card,
+  .module-card,
+  .ops-metric-card,
+  .ops-panel,
+  .modules-section,
+  .activity-feed,
+  .ops-dashboard-header,
+  .registry-command-bar {
+    background:
+      linear-gradient(90deg, rgb(99 102 241 / 90%), rgb(34 211 238 / 80%))
+        top left / 100% 2px no-repeat,
+      rgb(21 28 49 / 72%);
+  }
 
-.release-badge {
-  color: var(--neon);
-  border-left-color: rgb(148 163 184 / 22%);
-}
+  .record-card:hover,
+  .module-control-card:hover,
+  .review-org-card:hover,
+  .review-user-card:hover,
+  .review-action-card:hover,
+  .metric-card:hover,
+  .module-card:hover,
+  .modules-section:hover {
+    border-color: rgb(129 140 248 / 40%);
+    box-shadow:
+      inset 0 1px 0 rgb(255 255 255 / 6%),
+      0 22px 50px rgb(0 0 0 / 55%),
+      0 0 34px rgb(99 102 241 / 16%);
+    transform: translateY(-3px);
+  }
 
-.topbar-search {
-  color: #9aa6bd;
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(148 163 184 / 16%);
-  box-shadow: none;
-}
+  /* Gradient neon metric numbers */
+  .metric-card strong,
+  .ops-metric-card strong {
+    background: linear-gradient(135deg, #a5b4fc 0%, #67e8f9 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
 
-.topbar-search input {
-  color: #e8edf7;
-}
+  .activity-feed strong,
+  .review-action-card p,
+  .webhook-test-band .field-group strong {
+    color: #e8edf7;
+  }
 
-.topbar-search input::placeholder,
-.input-shell input::placeholder,
-.textarea-shell textarea::placeholder {
-  color: #6f7d96;
-}
+  /* ---- Muted / neutral inner tiles ---- */
+  .module-control-card,
+  .api-key-binding-chip,
+  .ops-record-list li,
+  .ops-trace-grid div,
+  .ops-readiness-list div,
+  .capability-requirements div,
+  .user-detail-grid div,
+  .product-action,
+  .adapter-surface-row,
+  .adapter-compact-list li,
+  .adapter-action-list li,
+  .adapter-binding-list li,
+  .permissions-user-row,
+  .approval-row,
+  .approval-detail-summary,
+  .ops-empty-state,
+  .ops-source,
+  .permissions-edit-row td {
+    color: #cdd7ea;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(148 163 184 / 14%);
+    box-shadow: none;
+  }
 
-/* --- Cards: dark translucent panels + indigo edge + soft glow --- */
-.runtime-fallback-banner,
-.list-state,
-.record-card,
-.empty-state,
-.capability-empty-state,
-.permission-denied,
-.ops-dashboard-header,
-.ops-metric-card,
-.ops-panel,
-.registry-command-bar,
-.capability-summary-grid div,
-.module-registry-table-scroll,
-.module-control-card,
-.api-key-binding-chip,
-.review-filter-bar,
-.review-org-card,
-.review-user-card,
-.review-action-card,
-.approval-decision-panel,
-.product-panel,
-.users-panel,
-.permissions-panel,
-.session-panel,
-.metric-card,
-.module-card,
-.activity-feed,
-.modules-section,
-.login-panel-inner,
-.force-reset-panel {
-  color: #e6eaf2;
-  background: rgb(21 28 49 / 72%);
-  border: 1px solid rgb(129 140 248 / 16%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 5%),
-    0 18px 44px rgb(0 0 0 / 50%),
-    0 0 28px rgb(99 102 241 / 6%);
-  backdrop-filter: none;
-}
+  .approval-detail-summary svg,
+  .permissions-owner-note svg {
+    color: #818cf8;
+  }
 
-/* Neon top accent strip on the key panels/cards */
-.metric-card,
-.module-card,
-.ops-metric-card,
-.ops-panel,
-.modules-section,
-.activity-feed,
-.ops-dashboard-header,
-.registry-command-bar {
-  background:
-    linear-gradient(90deg, rgb(99 102 241 / 90%), rgb(34 211 238 / 80%))
-      top left / 100% 2px no-repeat,
-    rgb(21 28 49 / 72%);
-}
+  .approval-row:hover {
+    border-color: rgb(129 140 248 / 36%);
+  }
 
-/* Card hover: brighten edge + lift + glow */
-.record-card:hover,
-.module-control-card:hover,
-.review-org-card:hover,
-.review-user-card:hover,
-.review-action-card:hover,
-.metric-card:hover,
-.module-card:hover,
-.modules-section:hover {
-  border-color: rgb(129 140 248 / 40%);
-  box-shadow:
-    inset 0 1px 0 rgb(255 255 255 / 6%),
-    0 22px 50px rgb(0 0 0 / 55%),
-    0 0 34px rgb(99 102 241 / 16%);
-  transform: translateY(-3px);
-}
+  .review-org-card:hover,
+  .review-user-card:hover {
+    background: rgb(255 255 255 / 6%);
+  }
 
-/* Inner tiles / muted sub-surfaces */
-.module-control-card,
-.api-key-binding-chip,
-.ops-record-list li,
-.ops-trace-grid div,
-.ops-readiness-list div,
-.capability-requirements div,
-.user-detail-grid div,
-.product-action,
-.adapter-surface-row,
-.adapter-compact-list li,
-.adapter-action-list li,
-.adapter-binding-list li,
-.permissions-card,
-.permissions-user-row {
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(148 163 184 / 14%);
-  box-shadow: none;
-}
+  .review-org-card.selected,
+  .review-user-card.selected,
+  .product-table .selected-row td {
+    background: rgb(129 140 248 / 12%);
+  }
 
-/* Metric numbers: gradient neon ink */
-.metric-card strong,
-.ops-metric-card strong {
-  background: linear-gradient(135deg, #a5b4fc 0%, #67e8f9 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-}
+  /* ---- Dashed empty states ---- */
+  .ops-empty-state,
+  .review-empty,
+  .approval-empty,
+  .permissions-empty {
+    color: #9aa6bd;
+    background: rgb(255 255 255 / 3%);
+    border: 1px dashed rgb(148 163 184 / 28%);
+  }
 
-/* --- Inputs / selects / textareas: dark --- */
-.input-shell,
-.textarea-shell,
-.select-shell,
-.compact-input-shell {
-  color: #9aa6bd;
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(148 163 184 / 18%);
-}
+  /* ---- Inputs / selects / textareas → dark, light text ---- */
+  .input-shell,
+  .textarea-shell,
+  .select-shell,
+  .compact-input-shell,
+  .topbar-search {
+    color: #9aa6bd;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(148 163 184 / 18%);
+    box-shadow: none;
+  }
 
-.input-shell input,
-.textarea-shell textarea,
-.select-shell {
-  color: #e8edf7;
-}
+  .input-shell input,
+  .textarea-shell textarea,
+  .select-shell,
+  .topbar-search input {
+    color: #e8edf7;
+  }
 
-.input-shell:focus-within,
-.textarea-shell:focus-within,
-.select-shell:focus-visible {
-  border-color: rgb(129 140 248 / 70%);
-  box-shadow: 0 0 0 4px rgb(99 102 241 / 18%);
-}
+  .input-shell input::placeholder,
+  .textarea-shell textarea::placeholder,
+  .topbar-search input::placeholder {
+    color: #6f7d96;
+  }
 
-/* --- Secondary / icon buttons: dark --- */
-.secondary-button,
-.logout-button,
-.icon-button {
-  background: rgb(255 255 255 / 5%);
-  border: 1px solid rgb(148 163 184 / 18%);
-  box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
-}
+  .input-shell:focus-within,
+  .textarea-shell:focus-within,
+  .select-shell:focus-visible {
+    border-color: rgb(129 140 248 / 70%);
+    box-shadow: 0 0 0 4px rgb(99 102 241 / 18%);
+  }
 
-.secondary-button:hover:not(:disabled),
-.logout-button:hover:not(:disabled),
-.icon-button:hover:not(:disabled) {
-  color: #ffffff;
-  background: rgb(255 255 255 / 9%);
-  border-color: rgb(129 140 248 / 40%);
-}
+  .field-group label,
+  .field-group > span:first-child,
+  .permissions-checkbox-line {
+    color: #9aa6bd;
+  }
 
-.module-card-action:disabled {
-  color: #7e8aa3;
-  background: rgb(255 255 255 / 4%);
-  border-color: rgb(148 163 184 / 16%);
-  box-shadow: none;
-}
+  /* ---- Secondary / icon / logout buttons → dark ---- */
+  .secondary-button,
+  .logout-button,
+  .icon-button {
+    color: #e8edf7;
+    background: rgb(255 255 255 / 5%);
+    border: 1px solid rgb(148 163 184 / 18%);
+    box-shadow: inset 0 1px 0 rgb(255 255 255 / 5%);
+  }
 
-/* --- Tables: dark --- */
-.module-registry-table th,
-.users-table th,
-.permissions-table th {
-  color: #9aa6bd;
-  background: rgb(255 255 255 / 4%);
-  border-bottom: 1px solid rgb(148 163 184 / 16%);
-}
+  .secondary-button:hover:not(:disabled),
+  .logout-button:hover:not(:disabled),
+  .icon-button:hover:not(:disabled) {
+    color: #ffffff;
+    background: rgb(255 255 255 / 9%);
+    border-color: rgb(129 140 248 / 40%);
+  }
 
-.module-registry-table td,
-.users-table td,
-.permissions-table td,
-.users-table,
-.permissions-table {
-  border-color: rgb(148 163 184 / 12%);
-}
+  .module-card-action:disabled {
+    color: #7e8aa3;
+    background: rgb(255 255 255 / 4%);
+    border-color: rgb(148 163 184 / 16%);
+    box-shadow: none;
+  }
 
-.module-registry-table tbody tr:hover td,
-.users-table tbody tr:hover td {
-  background: rgb(255 255 255 / 4%);
-}
+  .adapter-action-list button {
+    color: #cdd7ea;
+    background: rgb(255 255 255 / 5%);
+    border: 1px solid rgb(148 163 184 / 18%);
+  }
 
-.activity-feed li {
-  border-top-color: rgb(148 163 184 / 12%);
-}
+  /* ---- Top bar → dark glass ---- */
+  .topbar {
+    color: #e8edf7;
+    background: rgb(10 14 26 / 72%);
+    border-bottom: 1px solid rgb(148 163 184 / 14%);
+    backdrop-filter: blur(16px);
+  }
 
-.navigation-divider,
-.permissions-panel,
-.adapter-section,
-.webhook-test-band {
-  border-color: rgb(148 163 184 / 14%);
-}
+  .topbar h1,
+  .topbar-search input {
+    color: #e8edf7;
+  }
 
-/* --- Status pills / badges on dark --- */
-.status-pill {
-  color: #6ee7b7;
-  background: rgb(52 211 153 / 14%);
-  border: 1px solid rgb(52 211 153 / 26%);
-}
+  .release-badge {
+    color: var(--neon);
+    border-left-color: rgb(148 163 184 / 22%);
+  }
 
-.status-pill > span {
-  background: #34d399;
-}
+  .eyebrow,
+  .metric-card span,
+  .metric-card small,
+  .module-card p,
+  .dashboard-section-heading > span,
+  .activity-feed-heading > span,
+  .activity-feed p,
+  .account-copy strong {
+    color: #9aa6bd;
+  }
 
-.status-pill.disabled {
-  color: #9aa6bd;
-  background: rgb(255 255 255 / 5%);
-  border-color: rgb(148 163 184 / 18%);
-}
+  /* ---- Tables → dark ---- */
+  .module-registry-table th,
+  .users-table th,
+  .permissions-table th {
+    color: #9aa6bd;
+    background: rgb(255 255 255 / 4%);
+    border-bottom: 1px solid rgb(148 163 184 / 16%);
+  }
 
-.status-pill.disabled > span {
-  background: #94a3b8;
-}
+  .module-registry-table td,
+  .users-table td,
+  .permissions-table td,
+  .users-table,
+  .permissions-table {
+    border-color: rgb(148 163 184 / 12%);
+  }
 
-.status-pill.error {
-  color: #fca5a5;
-  background: rgb(248 113 113 / 14%);
-  border-color: rgb(248 113 113 / 26%);
-}
+  .module-registry-table tbody tr:hover td,
+  .users-table tbody tr:hover td {
+    background: rgb(255 255 255 / 4%);
+  }
 
-.status-pill.error > span {
-  background: #f87171;
-}
+  .activity-feed li {
+    border-top-color: rgb(148 163 184 / 12%);
+  }
 
-.subtle-badge {
-  color: #a5b4fc;
-  background: rgb(129 140 248 / 14%);
-  border: 1px solid rgb(129 140 248 / 26%);
-}
+  .navigation-divider,
+  .permissions-panel,
+  .adapter-section,
+  .webhook-test-band {
+    border-color: rgb(148 163 184 / 14%);
+  }
 
-.activity-dot {
-  background: #34d399;
-}
+  /* ---- Status: SUCCESS (green) ---- */
+  .capability-state-badge,
+  .capability-state-pill,
+  .module-control-status.active,
+  .users-status-active,
+  .permissions-effective-on,
+  .approval-status-approved,
+  .approval-status-auto_approved,
+  .review-status.approved,
+  .observability-band,
+  .product-notice,
+  .approval-notice,
+  .ops-record-list span,
+  .users-alert-success {
+    color: #6ee7b7;
+    background: rgb(52 211 153 / 14%);
+    border-color: rgb(52 211 153 / 26%);
+  }
 
-.activity-dot.disabled {
-  background: #94a3b8;
-}
+  .observability-band svg {
+    color: #34d399;
+  }
 
-.activity-dot.error {
-  background: #f87171;
-}
+  /* ---- Status: WARNING (amber) ---- */
+  .runtime-fallback-banner,
+  .ops-warning,
+  .review-warning,
+  .capability-state-pill.forbidden,
+  .capability-state-pill.hidden,
+  .capability-state-pill.no_execution,
+  .capability-state-pill.backend_unavailable,
+  .module-control-status.disabled,
+  .approval-status-pending,
+  .adapter-status-badge.adapter_pending,
+  .adapter-status-badge.disabled,
+  .adapter-status-badge.deprecated,
+  .adapter-status-badge.draft,
+  .adapter-status-badge.unknown,
+  .users-status-disabled,
+  .permissions-risk-box,
+  .permissions-effective-off,
+  .users-alert-warning,
+  .adapter-unavailable-notice {
+    color: #fcd34d;
+    background: rgb(251 191 36 / 13%);
+    border-color: rgb(251 191 36 / 26%);
+  }
 
-/* --- Skeletons on dark --- */
-.dashboard-skeleton span,
-.skeleton-card,
-.skeleton-line,
-.skeleton-chip {
-  border: 1px solid rgb(148 163 184 / 12%);
-  background: linear-gradient(
-    90deg,
-    rgb(255 255 255 / 4%),
-    rgb(129 140 248 / 12%),
-    rgb(255 255 255 / 4%)
-  );
-  background-size: 220% 100%;
-}
+  .runtime-fallback-banner strong {
+    color: #fde68a;
+  }
 
-/* --- Login right panel + identity tweaks --- */
-.login-panel-inner h2,
-.force-reset-heading h1,
-.session-panel h1 {
-  color: #f1f5f9;
-}
+  /* ---- Status: ERROR (red) ---- */
+  .danger-button:hover:not(:disabled),
+  .module-control-status.error,
+  .module-error-badge,
+  .users-alert-error,
+  .approval-status-rejected,
+  .approval-empty-error,
+  .approval-notice-error,
+  .permissions-risk-high,
+  .review-status.rejected,
+  .review-action-card .review-reason,
+  .review-timeline-item.rejected .review-timeline-marker {
+    color: #fca5a5;
+    background: rgb(248 113 113 / 13%);
+    border-color: rgb(248 113 113 / 26%);
+  }
 
-.login-intro,
-.session-panel p {
-  color: #9aa6bd;
-}
+  /* ---- Indigo / neutral chips ---- */
+  .users-role-pill,
+  .permissions-card-kicker,
+  .section-index,
+  .adapter-dependency-list span,
+  .adapter-status-badge,
+  .capability-state-pill.partial,
+  .capability-state-pill.mock,
+  .capability-state-pill.adapter_pending,
+  .subtle-badge {
+    color: #c7d2fe;
+    background: rgb(129 140 248 / 14%);
+    border-color: rgb(129 140 248 / 26%);
+  }
 
-.module-toggle span {
-  background: rgb(148 163 184 / 22%);
-  border-color: rgb(148 163 184 / 30%);
-}
+  /* ---- Icon tiles ---- */
+  .empty-state-icon,
+  .capability-empty-state-icon,
+  .review-card-icon,
+  .review-timeline-item.approved .review-timeline-marker,
+  .force-reset-icon,
+  .approval-section-feature .approval-section-icon,
+  .permission-denied-icon-muted {
+    color: #a5b4fc;
+    background: rgb(129 140 248 / 14%);
+    border: 1px solid rgb(129 140 248 / 24%);
+  }
 
-.module-toggle span::after {
-  background: #f8fafc;
-}
+  .approval-section-control_plane .approval-section-icon {
+    color: #c4b5fd;
+    background: rgb(139 92 246 / 16%);
+    border: 1px solid rgb(139 92 246 / 28%);
+  }
 
-/* --- Remaining light chips / notes / icon tiles / modals → dark --- */
-.users-role-pill,
-.permissions-card-kicker,
-.section-index,
-.adapter-dependency-list span {
-  color: #c7d2fe;
-  background: rgb(129 140 248 / 14%);
-  border: 1px solid rgb(129 140 248 / 26%);
-}
+  .permission-denied-icon,
+  .capability-empty-state-no_permission .capability-empty-state-icon,
+  .capability-empty-state-missing_feature .capability-empty-state-icon {
+    color: #fcd34d;
+    background: rgb(251 191 36 / 13%);
+    border-color: rgb(251 191 36 / 26%);
+  }
 
-.permissions-effective-on,
-.product-notice {
-  color: #6ee7b7;
-  background: rgb(52 211 153 / 14%);
-  border-color: rgb(52 211 153 / 26%);
-}
+  .capability-empty-state-no_organization .capability-empty-state-icon {
+    color: #7dd3fc;
+    background: rgb(56 189 248 / 14%);
+    border: 1px solid rgb(56 189 248 / 26%);
+  }
 
-.permissions-owner-note,
-.approval-detail-summary {
-  color: #cdd7ea;
-  background: rgb(255 255 255 / 4%);
-  border: 1px solid rgb(148 163 184 / 16%);
-}
+  .permissions-owner-note {
+    color: #cdd7ea;
+    background: rgb(255 255 255 / 4%);
+    border: 1px solid rgb(148 163 184 / 16%);
+  }
 
-.approval-detail-summary svg,
-.permissions-owner-note svg {
-  color: #818cf8;
-}
+  /* ---- Toggle ---- */
+  .module-toggle span {
+    background: rgb(148 163 184 / 22%);
+    border-color: rgb(148 163 184 / 30%);
+  }
 
-.permissions-risk-box,
-.adapter-unavailable-notice {
-  color: #fcd34d;
-  background: rgb(251 191 36 / 12%);
-  border-color: rgb(251 191 36 / 24%);
-}
+  .module-toggle span::after {
+    background: #f8fafc;
+  }
 
-.users-alert-success {
-  color: #6ee7b7;
-  background: rgb(52 211 153 / 12%);
-  border: 1px solid rgb(52 211 153 / 24%);
-}
+  .module-toggle input:checked + span {
+    box-shadow: 0 0 8px rgb(99 102 241 / 40%);
+  }
 
-.users-alert-warning {
-  color: #fcd34d;
-  background: rgb(251 191 36 / 12%);
-  border: 1px solid rgb(251 191 36 / 24%);
-}
+  /* ---- Skeletons ---- */
+  .dashboard-skeleton span,
+  .skeleton-card,
+  .skeleton-line,
+  .skeleton-chip {
+    border: 1px solid rgb(148 163 184 / 12%);
+    background: linear-gradient(
+      90deg,
+      rgb(255 255 255 / 4%),
+      rgb(129 140 248 / 12%),
+      rgb(255 255 255 / 4%)
+    );
+    background-size: 220% 100%;
+  }
 
-.users-alert-error {
-  color: #fca5a5;
-  background: rgb(248 113 113 / 12%);
-  border: 1px solid rgb(248 113 113 / 24%);
-}
+  /* ---- Login identity converged accents ---- */
+  .system-label {
+    color: #a5b4fc;
+  }
 
-.approval-section-feature .approval-section-icon,
-.review-card-icon,
-.force-reset-icon,
-.review-timeline-item.approved .review-timeline-marker {
-  color: #a5b4fc;
-  background: rgb(129 140 248 / 14%);
-  border: 1px solid rgb(129 140 248 / 24%);
-}
+  .signal-line span {
+    background: #818cf8;
+    box-shadow: 0 0 0 5px rgb(99 102 241 / 14%);
+  }
 
-.approval-section-control_plane .approval-section-icon {
-  color: #c4b5fd;
-  background: rgb(139 92 246 / 16%);
-  border: 1px solid rgb(139 92 246 / 28%);
-}
-
-.adapter-action-list button {
-  color: #cdd7ea;
-  background: rgb(255 255 255 / 5%);
-  border: 1px solid rgb(148 163 184 / 18%);
-}
-
-.approval-row {
-  color: #e6eaf2;
-  background: rgb(255 255 255 / 3%);
-  border: 1px solid rgb(148 163 184 / 14%);
-}
-
-.approval-row:hover {
-  border-color: rgb(129 140 248 / 36%);
-}
-
-.product-table .selected-row td {
-  background: rgb(129 140 248 / 12%);
-}
-
-.permissions-edit-row td {
-  background: rgb(255 255 255 / 3%);
-}
-
-.webhook-test-band .field-group strong {
-  color: #e8edf7;
-}
-
-/* Modal on dark */
-.permissions-modal {
-  color: #e6eaf2;
-  background: #141b30;
-  border: 1px solid rgb(129 140 248 / 18%);
-}
-
-.permissions-modal-backdrop {
-  background: rgb(2 4 10 / 66%);
+  .login-intro,
+  .session-panel p {
+    color: #9aa6bd;
+  }
 }
