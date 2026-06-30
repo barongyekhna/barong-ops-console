@@ -10,5 +10,4 @@ frontend/.env.*.local
 backend/__pycache__
 **/__pycache__
 *.pyc
-r_series/database/*.jsonl
 tests/**/__pycache__

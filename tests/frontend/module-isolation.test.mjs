@@ -223,15 +223,6 @@ const registryItems = [
   manifest({
     category: "business",
     denied_behavior: "show_locked",
-    external_dependencies: ["deepseek", "supplier_1688", "ai_provider"],
-    module_key: "r.commerce",
-    required_permissions: ["r.commerce.read"],
-    route_namespace: "/r-commerce",
-    status: "active",
-  }),
-  manifest({
-    category: "business",
-    denied_behavior: "show_locked",
     external_dependencies: [
       "serp",
       "chatgpt",
@@ -1135,7 +1126,6 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "admin.users",
     "admin.organizations",
     "admin.permissions",
-    "r.commerce",
     "k.product_knowledge",
     "i.image_system",
     "business.approvals",
@@ -1155,12 +1145,6 @@ test("sidebar navigation exposes the full productized capability structure", () 
   ]) {
     assert.equal(moduleKeys.includes(legacyKey), false);
   }
-  const rCommerce = item("r.commerce");
-  assert.equal(rCommerce.label, "R系列自动化选品系统");
-  assert.equal(rCommerce.href, "/r-commerce");
-  assert.equal(rCommerce.required_permission, "r.commerce.read");
-  assert.equal(rCommerce.denied_behavior, "show_locked");
-  assert.equal(rCommerce.category, "business");
   const productKnowledge = item("k.product_knowledge");
   assert.equal(productKnowledge.label, "产品知识库");
   assert.equal(productKnowledge.href, "/products");

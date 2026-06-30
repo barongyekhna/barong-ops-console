@@ -139,16 +139,8 @@ def test_module_control_scopes_i_series_to_target_organization(
         item["module_id"] == "i.image_system"
         for item in target_group["modules"]
     )
-    assert any(
-        item["module_id"] == "r.commerce"
-        for item in target_group["modules"]
-    )
     assert all(
         item["module_id"] != "i.image_system"
-        for item in other_group["modules"]
-    )
-    assert all(
-        item["module_id"] != "r.commerce"
         for item in other_group["modules"]
     )
 
@@ -159,14 +151,6 @@ def test_module_control_scopes_i_series_to_target_organization(
     )
     assert blocked.status_code == 400
     assert blocked.json()["detail"] == "module_not_available_for_organization"
-
-    blocked_r = owner_client.patch(
-        "/api/control-plane/module-control/organizations/"
-        f"{other_org_id}/registry-entries/r.commerce",
-        json={"enabled": False},
-    )
-    assert blocked_r.status_code == 400
-    assert blocked_r.json()["detail"] == "module_not_available_for_organization"
 
 
 def test_module_control_center_uses_cached_snapshot(

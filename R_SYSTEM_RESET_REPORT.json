@@ -1,0 +1,125 @@
+{
+  "report_name": "R_SYSTEM_RESET_REPORT",
+  "generated_at": "2026-06-30T15:30:00Z",
+  "scope": "safe_full_reset_r_series_only",
+  "deleted_modules": [
+    "R_SERIES/",
+    "r_series/",
+    "backend/app/modules/r_series/",
+    "frontend/src/modules/r/",
+    "frontend/src/app/(console)/r-commerce/",
+    "tests/backend/test_r_series_commerce_v3.py",
+    "scripts/r_series_final_e2e_audit.py",
+    "R and SPAPI runtime reports at repository root",
+    "R runtime pycache artifacts"
+  ],
+  "removed_runtime_registrations": [
+    "r.commerce",
+    "r.engine",
+    "r.skills",
+    "r.providers.amazon_spapi"
+  ],
+  "preserved_modules": [
+    "C series console and control plane",
+    "K series product knowledge",
+    "P series product page/products route",
+    "I series image system",
+    "T series theme/settings"
+  ],
+  "database_changes": {
+    "production": {
+      "r_tables": {
+        "r_products": "dropped_if_exists",
+        "r_logs": "dropped_if_exists",
+        "r_sessions": "dropped_if_exists",
+        "r_cache": "dropped_if_exists"
+      },
+      "r_scope_rows_deleted": {
+        "api_key_module_bindings": 2,
+        "provider_config": 2,
+        "module_control_states": 2,
+        "module_registry": 0,
+        "permission_registry": 0
+      },
+      "final_r_residue_counts": {
+        "r_tables_existing": 0,
+        "module_registry": 0,
+        "permission_registry": 0,
+        "api_key_module_bindings": 0,
+        "provider_config": 0,
+        "module_control_states": 0
+      }
+    },
+    "staging": {
+      "r_tables": {
+        "r_products": "dropped_if_exists",
+        "r_logs": "dropped_if_exists",
+        "r_sessions": "dropped_if_exists",
+        "r_cache": "dropped_if_exists"
+      },
+      "r_scope_rows_deleted": {
+        "api_key_module_bindings": 0,
+        "provider_config": 0,
+        "module_control_states": 0,
+        "module_registry": 0,
+        "permission_registry": 0
+      },
+      "final_r_residue_counts": {
+        "r_tables_existing": 0,
+        "module_registry": 0,
+        "permission_registry": 0,
+        "api_key_module_bindings": 0,
+        "provider_config": 0,
+        "module_control_states": 0
+      }
+    },
+    "non_r_recovery_action": {
+      "reason": "staging backend could not start because its alembic revision was behind the current code head",
+      "applied_existing_migrations": [
+        "i_image_system_001",
+        "media_storage_perf_001"
+      ],
+      "data_loss": false
+    }
+  },
+  "environment_changes": {
+    "removed": [
+      "docker-compose.production.yml R_SERIES_DATABASE_DIR",
+      "docker-compose.production.yml console_r_series_data volume binding",
+      "backend/Dockerfile R_SERIES and r_series COPY/runtime setup",
+      ".dockerignore r_series database ignore entry"
+    ],
+    "aws_spapi_env_bindings_found": false
+  },
+  "integrity_check_result": {
+    "code_residue_scan": "passed: no active R/SPAPI identifiers outside this report",
+    "backend_tests": "passed: .venv/bin/python -m pytest tests/backend/test_modules_registry.py tests/backend/test_module_control_api_key_orchestration.py -q",
+    "frontend_tests": "passed: node --test tests/frontend/module-isolation.test.mjs",
+    "frontend_typecheck": "passed: npm run typecheck",
+    "frontend_build": "passed: npm run build",
+    "production_runtime": {
+      "backend_health": 200,
+      "frontend_root": 200,
+      "r_route": 404,
+      "runtime_r_manifest": false,
+      "protected_routes": {
+        "products": 200,
+        "image_system": 200,
+        "module_control": 200,
+        "settings": 200
+      }
+    },
+    "staging_runtime": {
+      "backend_health": 200,
+      "frontend_root": 200,
+      "r_route": 404,
+      "runtime_r_manifest": false,
+      "protected_routes": {
+        "products": 200,
+        "image_system": 200,
+        "module_control": 200,
+        "settings": 200
+      }
+    }
+  }
+}

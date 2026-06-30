@@ -84,17 +84,6 @@ export const navigationGroups: NavigationGroup[] = [
       {
         category: "business",
         denied_behavior: "show_locked",
-        href: "/r-commerce",
-        icon: PackageSearch,
-        label: "R系列自动化选品系统",
-        module_key: "r.commerce",
-        required_permission: "r.commerce.read",
-        route_namespace: "/r-commerce",
-        status: "active",
-      },
-      {
-        category: "business",
-        denied_behavior: "show_locked",
         href: "/products",
         icon: PackageSearch,
         label: "产品知识库",

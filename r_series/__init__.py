@@ -1,2 +1,0 @@
-"""R Series runtime package."""
-

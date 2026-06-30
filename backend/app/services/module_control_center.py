@@ -33,8 +33,6 @@ class ModuleControlError(ValueError):
 
 I_IMAGE_SYSTEM_MODULE_ID = "i.image_system"
 I_IMAGE_SYSTEM_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
-R_COMMERCE_MODULE_ID = "r.commerce"
-R_COMMERCE_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 
 
 def _module_allowed_for_organization(
@@ -44,8 +42,6 @@ def _module_allowed_for_organization(
     organization_name = organization.org_name.strip()
     if manifest.module_key == I_IMAGE_SYSTEM_MODULE_ID:
         return organization_name == I_IMAGE_SYSTEM_ORGANIZATION_NAME
-    if manifest.module_key == R_COMMERCE_MODULE_ID:
-        return organization_name == R_COMMERCE_ORGANIZATION_NAME
     return True
 
 

@@ -57,11 +57,9 @@ services:
       DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
       I_IMAGE_MEDIA_STORAGE_DIR: "/var/lib/barong/i-media"
       K_PRODUCT_MEDIA_STORAGE_DIR: "/var/lib/barong/k-media"
-      R_SERIES_DATABASE_DIR: "/r_series/database"
     volumes:
       - console_i_media_data:/var/lib/barong/i-media
       - console_k_media_data:/var/lib/barong/k-media
-      - console_r_series_data:/r_series/database
     depends_on:
       console_postgres:
         condition: service_healthy
@@ -115,5 +113,3 @@ volumes:
     name: console_i_media_data
   console_k_media_data:
     name: console_k_media_data
-  console_r_series_data:
-    name: console_r_series_data
