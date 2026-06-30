@@ -11,11 +11,16 @@ COPY backend/requirements.txt ./backend/requirements.txt
 RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app \
-    && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media \
-    && chown -R app:app /app /var/lib/barong
+    && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media /r_series/database \
+    && chown -R app:app /app /var/lib/barong /r_series
 
 COPY --chown=app:app backend ./backend
+COPY --chown=app:app R_SERIES ./R_SERIES
+COPY --chown=app:app r_series/__init__.py ./r_series/__init__.py
+COPY --chown=app:app r_series/runtime ./r_series/runtime
 COPY --chown=app:app tests/backend ./tests/backend
+RUN mkdir -p /app/r_series/database \
+    && chown -R app:app /app/r_series /r_series
 
 USER app
 

@@ -1,14 +1,16 @@
 {
   "registry_name": "R_SERIES_SKILL_REGISTRY",
-  "version": "2026-06-29.v1",
+  "version": "2026-06-29.v3",
   "runtime_layer": "r_series/runtime",
-  "engine": "R_ENGINE_V1",
-  "engine_file": "r_series/runtime/R_ENGINE_V1.py",
+  "engine": "R_ENGINE_V3",
+  "engine_file": "r_series/runtime/commerce_v3.py",
   "scope_guard": {
     "modifies_k_i_p_systems": false,
     "adds_database_schema": false,
     "uses_external_api": false,
-    "runtime_layer_only": true
+    "runtime_layer_only": false,
+    "api_key_required": false,
+    "provider_mode": "mock"
   },
   "source_documents": [
     {
@@ -45,7 +47,9 @@
     "amazon_selection_skill",
     "independent_site_selection_skill",
     "risk_filter_skill",
-    "decision_engine_skill"
+    "decision_engine_skill",
+    "1688_supplier_skill",
+    "deepseek_reasoning_skill"
   ],
   "skills": {
     "amazon_selection_skill": {
@@ -126,7 +130,41 @@
         "R_SERIES_SOURCE_INDEX.md",
         "R_SERIES_PRODUCT_SELECTION_SCORE_MODEL.json"
       ]
+    },
+    "1688_supplier_skill": {
+      "status": "registered",
+      "type": "mock_provider_skill",
+      "provider": "mock_1688_supplier_provider",
+      "functions": [
+        "2-5 supplier candidate generation",
+        "supplier price range normalization",
+        "MOQ and dropshipping support flags",
+        "supply chain completeness marking"
+      ],
+      "input": "main_keyword, category, purchase_price_range",
+      "output": "supplier_list",
+      "deepseek_call": "not_applicable",
+      "source_basis": [
+        "provider_abstraction_layer",
+        "R_SERIES_PRODUCT_SELECTION_SCORE_MODEL.json"
+      ]
+    },
+    "deepseek_reasoning_skill": {
+      "status": "registered",
+      "type": "mock_provider_skill",
+      "provider": "deepseek_v4_pro",
+      "functions": [
+        "Chinese product-selection reason generation",
+        "human-readable product explanation",
+        "future V3 key-compatible provider contract"
+      ],
+      "input": "main_keyword, channel_recommendation, supplier_list, purchase_price_range, selling_price, decision_output",
+      "output": "reason",
+      "deepseek_call": "mock DeepSeek V4 Pro provider; no API key required in current production-structured mode",
+      "source_basis": [
+        "provider_abstraction_layer",
+        "R_SERIES_BARONG_YEKHNA_PRODUCT_SELECTION_STRATEGY.md"
+      ]
     }
   }
 }
-

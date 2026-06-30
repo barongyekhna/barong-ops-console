@@ -203,6 +203,7 @@ const SAFE_EXTERNAL_DEPENDENCIES = new Set([
   "chatgpt",
   "claude_opus",
   "deepseek",
+  "supplier_1688",
   "woocommerce",
   "minio",
   "filebrowser",

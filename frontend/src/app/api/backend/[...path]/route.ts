@@ -809,6 +809,23 @@ function isAllowedIPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedRPath(method: string, path: string[]) {
+  if (path[0] !== "r") {
+    return false;
+  }
+
+  if (path.length === 3 && path[1] === "commerce") {
+    if (["skills", "report"].includes(path[2])) {
+      return method === "GET";
+    }
+    if (["run", "review"].includes(path[2])) {
+      return method === "POST";
+    }
+  }
+
+  return false;
+}
+
 type BackendApiLayer = "public" | "app" | "control-plane";
 
 function apiLayerPrefix(layer: BackendApiLayer) {
@@ -852,7 +869,8 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedPermissionPath(method, path) ||
     isAllowedUsersPath(method, path) ||
     isAllowedKPath(method, path) ||
-    isAllowedIPath(method, path)
+    isAllowedIPath(method, path) ||
+    isAllowedRPath(method, path)
   ) {
     return withApiLayer("app", requestedPath);
   }

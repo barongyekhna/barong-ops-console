@@ -845,6 +845,99 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         production_release_required=True,
     ),
     _manifest(
+        module_key="r.commerce",
+        display_name="R系列自动化选品系统",
+        description=(
+            "R-series V3 commercial product selection workspace with mock "
+            "DeepSeek V4 Pro reasoning, mock 1688 supplier comparison, "
+            "manual Save/Remove review, and append-only JSONL persistence."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/r-commerce",
+        api_namespace="/r",
+        navigation=_navigation(
+            group="Registry",
+            label="R系列自动化选品系统",
+            icon="PackageSearch",
+            order=7,
+        ),
+        required_permissions=("r.commerce.read",),
+        permission_manifest=(
+            _permission(
+                module_key="r.commerce",
+                permission_key="r.commerce.read",
+                category="business",
+                action="read",
+                label="Read R-series commerce selections",
+                description="View R-series V3 product selection reports and skill metadata.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="r.commerce",
+                permission_key="r.commerce.execute",
+                category="business",
+                action="execute",
+                label="Run R-series commerce selector",
+                description=(
+                    "Run the V3 mock-provider product selection loop with a "
+                    "required task budget."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="r.commerce",
+                permission_key="r.commerce.review",
+                category="business",
+                action="review",
+                label="Review R-series selected products",
+                description="Save or remove V3 candidates after manual review.",
+                risk_level="high",
+                menu_policy="show_locked",
+                high_risk_confirmation_required=True,
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=("deepseek", "supplier_1688", "ai_provider"),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        audit_log_actions=(
+            "r.commerce.task.executed",
+            "r.commerce.product.saved",
+            "r.commerce.product.removed",
+        ),
+        data_boundary=_data_boundary(
+            reads=("r_series_documents", "r_series_v3_report"),
+            writes=("r_series_database_v3_jsonl", "r_series_v3_report"),
+            blocked_objects=(
+                "k_series_tables",
+                "i_series_tables",
+                "p_series_tables",
+                "external_provider_config",
+                "server_local_config",
+            ),
+        ),
+        release_requirements=_release_requirements(
+            staging_acceptance=True,
+            production_archive=True,
+            required_checks=(
+                "r v3 mock provider run",
+                "r v3 supplier count 2-5",
+                "r v3 append-only save",
+                "r v3 no api key dependency",
+            ),
+        ),
+        staging_acceptance_required=True,
+        production_release_required=True,
+    ),
+    _manifest(
         module_key="business.products",
         display_name="Products",
         description=(

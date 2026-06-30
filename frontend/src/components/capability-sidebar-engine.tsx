@@ -45,7 +45,7 @@ const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set(
   C_SYSTEM_MODULE_ORDER.map((item) => item.module_key),
 );
 
-const ORGANIZATION_MODULE_PREFIXES = ["k.", "i.", "p.", "seo.", "gmc."] as const;
+const ORGANIZATION_MODULE_PREFIXES = ["r.", "k.", "i.", "p.", "seo.", "gmc."] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
 const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
 
@@ -92,6 +92,14 @@ function capabilityForModule(
   return byModuleKey.get(moduleKey) ?? null;
 }
 
+function capabilitySidebarVisible(item: ProductCapabilityItem | null) {
+  return Boolean(
+    item?.route_bound &&
+      item.sidebar_state !== "hidden" &&
+      item.state !== "hidden",
+  );
+}
+
 function clearLegacySidebarOrgSnapshots() {
   if (typeof window === "undefined") {
     return;
@@ -111,9 +119,14 @@ function clearLegacySidebarOrgSnapshots() {
 function moduleAccessAllows(
   moduleAccessByKey: Map<string, ModuleAccessState>,
   moduleKey: string,
+  fallbackItem: ProductCapabilityItem | null,
 ) {
   const access = moduleAccessByKey.get(moduleKey);
-  return Boolean(access?.visible && !access.hidden);
+  if (access) {
+    return Boolean(access.visible && !access.hidden);
+  }
+
+  return capabilitySidebarVisible(fallbackItem);
 }
 
 function isRestrictedProductModule(moduleId: string) {
@@ -159,7 +172,6 @@ function scopedOrganizationGroups({
   byModuleKey,
   isOwner,
   moduleAccessByKey,
-  moduleAccessReady,
   moduleControlReady,
   organizations,
   role,
@@ -168,13 +180,12 @@ function scopedOrganizationGroups({
   byModuleKey: Map<string, ProductCapabilityItem>;
   isOwner: boolean;
   moduleAccessByKey: Map<string, ModuleAccessState>;
-  moduleAccessReady: boolean;
   moduleControlReady: boolean;
   organizations: ModuleControlOrgGroup[];
   role: string;
   userOrgId: string | null | undefined;
 }) {
-  if (!moduleControlReady || !moduleAccessReady) {
+  if (!moduleControlReady) {
     return [];
   }
 
@@ -188,6 +199,7 @@ function scopedOrganizationGroups({
         ...organization,
         modules: sortModules(
           organization.modules.filter((module) => {
+            const item = capabilityForModule(byModuleKey, module.module_id);
             if (!isOrganizationLayerModule(module)) {
               return false;
             }
@@ -197,18 +209,13 @@ function scopedOrganizationGroups({
             ) {
               return false;
             }
-            if (!moduleAccessAllows(moduleAccessByKey, module.module_id)) {
+            if (!moduleAccessAllows(moduleAccessByKey, module.module_id, item)) {
               return false;
             }
             if (owner || superAdmin) {
               return true;
             }
-            const item = capabilityForModule(byModuleKey, module.module_id);
-            return Boolean(
-              item?.can_enter &&
-                item.sidebar_state !== "hidden" &&
-                item.state !== "hidden",
-            );
+            return capabilitySidebarVisible(item);
           }),
         ),
       })),
@@ -343,7 +350,6 @@ export function CapabilitySidebarEngine({
         byModuleKey,
         isOwner,
         moduleAccessByKey,
-        moduleAccessReady: moduleAccessResult?.ok === true,
         moduleControlReady: moduleControlResult?.ok === true,
         organizations: moduleControlResult?.data.organizations ?? [],
         role,
@@ -353,7 +359,6 @@ export function CapabilitySidebarEngine({
       byModuleKey,
       isOwner,
       moduleAccessByKey,
-      moduleAccessResult?.ok,
       moduleControlResult?.data.organizations,
       moduleControlResult?.ok,
       role,
@@ -388,10 +393,10 @@ export function CapabilitySidebarEngine({
   const cSystemItems = useMemo(
     () =>
       C_SYSTEM_MODULE_ORDER.flatMap((entry) => {
-        if (!moduleAccessAllows(moduleAccessByKey, entry.module_key)) {
+        const item = capabilityForModule(byModuleKey, entry.module_key);
+        if (!moduleAccessAllows(moduleAccessByKey, entry.module_key, item)) {
           return [];
         }
-        const item = capabilityForModule(byModuleKey, entry.module_key);
         return item ? [{ item, label: entry.label as string }] : [];
       }),
     [byModuleKey, moduleAccessByKey],

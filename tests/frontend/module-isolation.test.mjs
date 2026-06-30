@@ -223,6 +223,15 @@ const registryItems = [
   manifest({
     category: "business",
     denied_behavior: "show_locked",
+    external_dependencies: ["deepseek", "supplier_1688", "ai_provider"],
+    module_key: "r.commerce",
+    required_permissions: ["r.commerce.read"],
+    route_namespace: "/r-commerce",
+    status: "active",
+  }),
+  manifest({
+    category: "business",
+    denied_behavior: "show_locked",
     external_dependencies: [
       "serp",
       "chatgpt",
@@ -332,6 +341,26 @@ test("backend proxy precisely allows C07B module registry paths", () => {
   assert.equal(
     isAllowedBackendProxyPath("GET", ["i", "media-library"]),
     true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["r", "commerce", "skills"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["r", "commerce", "report"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("POST", ["r", "commerce", "run"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("POST", ["r", "commerce", "review"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("DELETE", ["r", "commerce", "review"]),
+    false,
   );
   assert.equal(
     isAllowedBackendProxyPath("POST", [
@@ -481,8 +510,13 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   );
   assert.match(sidebarSource, /const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set/);
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
-  assert.match(sidebarSource, /ORGANIZATION_MODULE_PREFIXES = \["k\.", "i\.", "p\.", "seo\.", "gmc\."\]/);
+  assert.match(sidebarSource, /ORGANIZATION_MODULE_PREFIXES = \["r\.", "k\.", "i\.", "p\.", "seo\.", "gmc\."\]/);
   assert.match(sidebarSource, /normalized\.startsWith\("i\."\)/);
+  assert.match(sidebarSource, /function capabilitySidebarVisible/);
+  assert.match(sidebarSource, /return capabilitySidebarVisible\(fallbackItem\);/);
+  assert.match(sidebarSource, /return capabilitySidebarVisible\(item\);/);
+  assert.doesNotMatch(sidebarSource, /moduleAccessReady/);
+  assert.doesNotMatch(sidebarSource, /item\?\.can_enter\s*&&/);
   assert.match(sidebarSource, /<span className="navigation-label">C系统<\/span>/);
   assert.match(sidebarSource, /className="navigation-divider"/);
   assert.match(sidebarSource, /<span className="navigation-label">组织<\/span>/);
@@ -1101,6 +1135,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "admin.users",
     "admin.organizations",
     "admin.permissions",
+    "r.commerce",
     "k.product_knowledge",
     "i.image_system",
     "business.approvals",
@@ -1120,6 +1155,12 @@ test("sidebar navigation exposes the full productized capability structure", () 
   ]) {
     assert.equal(moduleKeys.includes(legacyKey), false);
   }
+  const rCommerce = item("r.commerce");
+  assert.equal(rCommerce.label, "R系列自动化选品系统");
+  assert.equal(rCommerce.href, "/r-commerce");
+  assert.equal(rCommerce.required_permission, "r.commerce.read");
+  assert.equal(rCommerce.denied_behavior, "show_locked");
+  assert.equal(rCommerce.category, "business");
   const productKnowledge = item("k.product_knowledge");
   assert.equal(productKnowledge.label, "产品知识库");
   assert.equal(productKnowledge.href, "/products");

@@ -1,0 +1,111 @@
+{
+  "generated_at": "2026-06-29T15:40:52Z",
+  "release_name": "R-SERIES FINAL PRODUCTION RELEASE",
+  "production_domain": "https://ops.barongyekhna.com",
+  "module_id": "r.commerce",
+  "module_label": "R系列自动化选品系统",
+  "final_status": "passed",
+  "scope_guard": {
+    "k_system_logic_modified": false,
+    "i_system_logic_modified": false,
+    "p_system_logic_modified": false,
+    "database_schema_modified": false,
+    "existing_modules_removed": false
+  },
+  "build_and_deploy": {
+    "frontend_build": "passed",
+    "backend_image_built": true,
+    "frontend_image_built": true,
+    "backend_restarted": true,
+    "frontend_recreated": true,
+    "nginx_reload_required": false
+  },
+  "runtime_integrity": {
+    "engine": "R_ENGINE_V3",
+    "r_series_documents_packaged": true,
+    "skills_present": true,
+    "skills": [
+      "amazon_selection_skill",
+      "independent_site_selection_skill",
+      "risk_filter_skill",
+      "decision_engine_skill",
+      "source_validation_skill",
+      "1688_supplier_skill",
+      "deepseek_reasoning_skill"
+    ]
+  },
+  "ui_mount": {
+    "route": "/r-commerce",
+    "route_status": 200,
+    "sidebar_visible": true,
+    "sidebar_href": "/r-commerce",
+    "click_navigation_works": true,
+    "workspace_loaded": true,
+    "deepseek_ui_text_present_after_run": true,
+    "k_sidebar_present": true,
+    "i_sidebar_present": true,
+    "no_crash_on_load": true
+  },
+  "storage": {
+    "database_path": "/r_series/database/r_products_v3.jsonl",
+    "review_log_path": "/r_series/database/r_review_logs_v3.jsonl",
+    "docker_volume": "console_r_series_data",
+    "append_only": true,
+    "concurrent_write_lock": true,
+    "high_concurrency_write_supported": true,
+    "restart_recovery_verified": true,
+    "saved_rows_after_release_verification": 1,
+    "review_log_rows_after_release_verification": 2
+  },
+  "supplier_module": {
+    "status": "passed",
+    "selected_products": 2,
+    "supplier_counts": [3, 5],
+    "supplier_fields_ok": true,
+    "required_fields": [
+      "supplier_name",
+      "product_link",
+      "preview_image",
+      "price_range",
+      "MOQ",
+      "dropshipping_support",
+      "sample_availability"
+    ]
+  },
+  "budget_control": {
+    "status": "passed",
+    "cost_model": "1 USD = 1000 crawls",
+    "task_budget_usd": 0.01,
+    "crawl_budget": 10,
+    "crawl_count": 2,
+    "remaining_crawls": 8,
+    "stop_reason": "target_count_reached",
+    "auto_stop_mechanism": true
+  },
+  "manual_review": {
+    "save_status": "saved",
+    "save_http_status": 200,
+    "remove_status": "removed",
+    "remove_http_status": 200,
+    "save_wrote_r_db": true,
+    "remove_discarded_candidate": true
+  },
+  "deepseek_reasoning": {
+    "provider_abstraction_ready": true,
+    "deepseek_v4_supported": true,
+    "mock_fallback_enabled": true,
+    "reason_source": "deepseek_v4_pro",
+    "ui_copy": "由 DeepSeek V4 Pro 生成选品分析总结"
+  },
+  "production_checks": {
+    "domain_r_commerce_status": 200,
+    "api_proxy_health_status": 200,
+    "backend_health_status": 200,
+    "container_backend_up": true,
+    "container_frontend_up": true,
+    "container_postgres_healthy": true
+  },
+  "non_blocking_warnings": [
+    "Playwright observed a React production hydration warning (#418), but R route, sidebar, run, supplier rendering, Save, Remove, and persistence all completed successfully."
+  ]
+}
