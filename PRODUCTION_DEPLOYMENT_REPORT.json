@@ -1,0 +1,193 @@
+{
+  "commit_hash": "fc0dbd49b6490dcca77b6e1720378d0daf14afa3",
+  "deployment_status": "SUCCESS",
+  "deployed_at_utc": "2026-07-01T15:41:45Z",
+  "build_status": {
+    "backend_image": "barong-ops-console_console_backend:latest",
+    "backend_image_id": "0a994bb3a4189bfc8da803cbe667a503f9c2f6af063769b0686d317890982156",
+    "frontend_rebuilt": false,
+    "result": "SUCCESS"
+  },
+  "container_restart_status": {
+    "result": "SUCCESS_WITH_RECOVERY",
+    "method": "docker-compose.production.yml",
+    "database_volumes_removed": false,
+    "database_rollback_executed": false,
+    "notes": [
+      "docker-compose down stopped and removed console_postgres but could not remove the network because stale unlabeled backend/frontend endpoints were attached.",
+      "console_postgres was recreated against the existing console_postgres_data volume.",
+      "stale unlabeled console_backend container was stopped and removed only after inspection.",
+      "console_backend was recreated from the freshly built backend image with --no-build.",
+      "console_frontend was left running from the existing image and was not rebuilt."
+    ],
+    "containers": {
+      "console_backend": {
+        "name": "barong-ops-console_console_backend_1",
+        "status": "Up",
+        "image": "barong-ops-console_console_backend",
+        "published_port": "127.0.0.1:8000->8000/tcp"
+      },
+      "console_postgres": {
+        "name": "barong-ops-console_console_postgres_1",
+        "status": "Up (healthy)",
+        "image": "postgres:17.5-alpine",
+        "volume": "console_postgres_data"
+      },
+      "console_frontend": {
+        "name": "barong-ops-console_console_frontend_1",
+        "status": "Up",
+        "image": "barong-ops-console_console_frontend:latest",
+        "rebuilt": false
+      }
+    }
+  },
+  "health_check_status": {
+    "result": "PASS_WITH_PUBLIC_ROUTE_WARNING",
+    "local_backend_health": {
+      "url": "http://127.0.0.1:8000/health",
+      "http_status": 200,
+      "response": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "external_backend_health_alias": {
+      "url": "https://ops.barongyekhna.com/api/backend/health",
+      "http_status": 200,
+      "response": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "requested_external_health_path": {
+      "url": "https://ops.barongyekhna.com/health",
+      "http_status": 404,
+      "result": "FAILED_ROUTE_NOT_EXPOSED"
+    }
+  },
+  "module_registry_status": {
+    "result": "PASS_WITH_PUBLIC_ROUTE_WARNING",
+    "runtime_registry_loaded": true,
+    "runtime_module_count": 21,
+    "requested_external_module_path": {
+      "url": "https://ops.barongyekhna.com/api/modules",
+      "http_status": 404,
+      "result": "FAILED_ROUTE_NOT_DEFINED"
+    },
+    "local_authenticated_route_requires_session": {
+      "url": "http://127.0.0.1:8000/api/control-plane/modules/registry",
+      "http_status_without_session": 401
+    },
+    "external_control_plane_route_without_session": {
+      "url": "https://ops.barongyekhna.com/api/control-plane/modules/registry",
+      "http_status_without_session": 404
+    },
+    "loaded_required_modules": {
+      "k.product_knowledge": {
+        "status": "active",
+        "api_namespace": "/k"
+      },
+      "i.image_system": {
+        "status": "active",
+        "api_namespace": "/i"
+      },
+      "r.warehouse": {
+        "status": "active",
+        "display_name": "R-W 产品数据仓库",
+        "route_namespace": "/r-w",
+        "api_namespace": "/rw"
+      },
+      "r.analysis": {
+        "status": "active",
+        "display_name": "R-A 产品分析中心",
+        "route_namespace": "/r-a",
+        "api_namespace": "no_api"
+      }
+    }
+  },
+  "api_key_registry_status": {
+    "result": "PASS",
+    "keepa_present": true,
+    "keepa_enabled": true,
+    "keepa_scope": [
+      "R-W"
+    ],
+    "keepa_module_ids": [
+      "r.warehouse"
+    ]
+  },
+  "ai_provider_routing_status": {
+    "result": "PASS",
+    "provider_count": 12,
+    "has_live_ready_provider": true,
+    "registered_providers": [
+      "k.product_knowledge.prompt.provider",
+      "k.product_knowledge.serp.provider",
+      "k.product_knowledge.ai_enrich.provider",
+      "k.product_knowledge.risk_filter.provider",
+      "core.no_op_provider",
+      "core.mock_provider",
+      "core.contract_only_provider",
+      "future.local_backend_provider",
+      "future.queue_provider",
+      "future.webhook_provider",
+      "future.scheduled_provider",
+      "future.live_provider"
+    ]
+  },
+  "system_convergence_status": {
+    "api_key_registry_keepa_enabled": true,
+    "ai_provider_router_v1_registered": true,
+    "module_control_stabilized_runtime_loaded": true,
+    "r_w_registered": true,
+    "r_a_registered": true,
+    "performance_gate_adaptive_model_present": true,
+    "org_binding": {
+      "expected": "涌龙麟（深圳）国际贸易有限公司",
+      "present": true,
+      "matches": [
+        {
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "org_name": "涌龙麟（深圳）国际贸易有限公司",
+          "status": "active"
+        }
+      ]
+    }
+  },
+  "system_stability_status": {
+    "result": "PASS",
+    "migration_safety": {
+      "expected_head": "media_storage_perf_001",
+      "current_revision": "media_storage_perf_001",
+      "dirty": false,
+      "head_mismatch": false,
+      "production_blocked": false
+    },
+    "no_migration_errors": true,
+    "no_missing_imports": true,
+    "no_runtime_crash": true,
+    "no_backend_500_errors_observed": true,
+    "postgres_existing_data_directory_reused": true
+  },
+  "issues": [
+    {
+      "severity": "warning",
+      "code": "PUBLIC_HEALTH_ROOT_PATH_404",
+      "detail": "The requested external path https://ops.barongyekhna.com/health returned HTTP 404. Backend health is healthy locally and through https://ops.barongyekhna.com/api/backend/health."
+    },
+    {
+      "severity": "warning",
+      "code": "PUBLIC_MODULES_PATH_404",
+      "detail": "The requested external path https://ops.barongyekhna.com/api/modules returned HTTP 404. The backend module registry is mounted at /api/control-plane/modules/registry and requires an authenticated control-plane session; runtime registry load was verified directly."
+    },
+    {
+      "severity": "warning",
+      "code": "COMPOSE_UNLABELED_STALE_CONTAINERS",
+      "detail": "Existing backend/frontend containers had no Compose labels, so docker-compose down could not remove the production network and docker-compose up initially hit a backend name conflict. The stale backend container was replaced; frontend was not rebuilt."
+    }
+  ]
+}
