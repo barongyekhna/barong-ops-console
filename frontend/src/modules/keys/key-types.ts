@@ -76,7 +76,7 @@ const LOOKUP_KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     type: "n8n",
     label: "n8n Webhook",
     description: "n8n webhook execution key",
-    defaultUrl: "https://n8n.example.com",
+    defaultUrl: "",
     defaultAlias: "n8n",
   },
 ];

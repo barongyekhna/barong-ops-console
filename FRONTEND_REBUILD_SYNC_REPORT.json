@@ -1,0 +1,138 @@
+{
+  "frontend_rebuild_status": {
+    "status": "SUCCESS",
+    "rebuilt_at_utc": "2026-07-01T16:28:57Z",
+    "compose_file": "docker-compose.production.yml",
+    "service": "console_frontend",
+    "container_name": "barong-ops-console_console_frontend_1",
+    "container_status": "Up",
+    "published_port": "127.0.0.1:3000->3000/tcp",
+    "build_mode": "docker-compose build --no-cache console_frontend",
+    "build_cache_prune": {
+      "executed": true,
+      "reclaimed_space": "0B"
+    },
+    "verification_gates": {
+      "frontend_tests": "PASS",
+      "frontend_foundation_verify": "PASS",
+      "typecheck": "PASS",
+      "next_build": "PASS",
+      "static_pages_generated": 21
+    },
+    "frontend_only_patch": {
+      "file": "frontend/src/modules/keys/key-types.ts",
+      "reason": "Removed prohibited placeholder n8n HTTP URL so the existing frontend verification gate can pass without exposing a live external endpoint.",
+      "backend_modified": false,
+      "database_modified": false,
+      "persistent_volumes_removed": false
+    }
+  },
+  "module_sync_status": {
+    "status": "OK",
+    "backend_runtime_module_count": 21,
+    "local_registry_endpoint": {
+      "url": "http://127.0.0.1:8000/api/control-plane/modules/registry",
+      "http_status_without_session": 401,
+      "note": "Endpoint requires an authenticated control-plane session; read-only backend runtime verification confirmed registry contents."
+    },
+    "required_modules": {
+      "r.warehouse": {
+        "visible": true,
+        "display_name": "R-W 产品数据仓库",
+        "status": "active",
+        "route_namespace": "/r-w",
+        "api_namespace": "/rw"
+      },
+      "r.analysis": {
+        "visible": true,
+        "display_name": "R-A 产品分析中心",
+        "status": "active",
+        "route_namespace": "/r-a",
+        "api_namespace": "no_api"
+      }
+    },
+    "all_backend_runtime_modules_loaded": true
+  },
+  "sidebar_render_status": {
+    "status": "OK",
+    "frontend_routes_serving": {
+      "/modules": 200,
+      "/api-key-management": 200,
+      "/r-w/dashboard": 200,
+      "/r-a/dashboard": 200
+    },
+    "sidebar_sources_synced": {
+      "navigation_defines_r_warehouse": true,
+      "navigation_defines_r_analysis": true,
+      "capability_sidebar_engine_handles_r_modules": true,
+      "frontend_capability_state_maps_r_modules": true
+    },
+    "rendered_content_checks": {
+      "r_w_dashboard_contains_label": true,
+      "r_w_dashboard_contains_keepa_text": true,
+      "r_a_dashboard_contains_label": true
+    }
+  },
+  "keepa_ui_visible": {
+    "status": "YES",
+    "frontend_key_type_option": {
+      "type": "keepa",
+      "label": "Keepa API",
+      "default_alias": "keepa",
+      "default_url": "https://api.keepa.com"
+    },
+    "deployed_bundle_contains_keepa_label": true,
+    "r_w_route_contains_keepa_text": true
+  },
+  "api_registry_sync_status": {
+    "status": "OK",
+    "api_key_registry_includes_keepa": true,
+    "keepa_enabled": true,
+    "keepa_scope": [
+      "R-W"
+    ],
+    "keepa_module_ids": [
+      "r.warehouse"
+    ],
+    "org_binding": {
+      "present": true,
+      "expected": "涌龙麟（深圳）国际贸易有限公司",
+      "matches": [
+        {
+          "org_id": "org_4b828c8fdf7342cc85ddc15e7796698c",
+          "org_name": "涌龙麟（深圳）国际贸易有限公司",
+          "status": "active"
+        }
+      ]
+    }
+  },
+  "runtime_safety": {
+    "backend_modified": false,
+    "database_modified": false,
+    "r_system_reinitialized": false,
+    "persistent_volumes_removed": false,
+    "c_k_p_i_systems_modified": false,
+    "frontend_logs_clean": true,
+    "backend_container_left_running": true,
+    "postgres_container_left_running_healthy": true
+  },
+  "browser_refresh_instruction": {
+    "required": true,
+    "instructions": [
+      "Press Ctrl + Shift + R in the browser.",
+      "Alternatively open the site in Incognito mode."
+    ]
+  },
+  "issues": [
+    {
+      "severity": "info",
+      "code": "AUTH_REQUIRED_FOR_MODULE_REGISTRY_ENDPOINT",
+      "detail": "Direct curl to /api/control-plane/modules/registry returned 401 without a session. This is expected for the protected control-plane registry endpoint; runtime registry contents were verified read-only inside the backend container."
+    },
+    {
+      "severity": "info",
+      "code": "IMAGE_METADATA_CHECK_SKIPPED",
+      "detail": "Optional docker image inspect metadata check was not included because the command was rejected. Container startup and frontend HTTP checks succeeded."
+    }
+  ]
+}
