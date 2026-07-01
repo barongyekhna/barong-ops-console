@@ -89,6 +89,11 @@ def module_control_update(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Module not registered.",
             ) from exc
+        if code == "module_not_available_for_organization":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=code,
+            ) from exc
         raise
     apply_module_control_state_to_cache(item)
     refresh_module_control_center_cache_async(force=True)

@@ -45,9 +45,9 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         "selling_points": "deepseek-v4-pro",
     },
     "chatgpt": {
-        "default": "gpt-5.5",
-        "chat": "gpt-5.5",
-        "generate": "gpt-5.5",
+        "default": "gpt-5.5-xhigh",
+        "chat": "gpt-5.5-xhigh",
+        "generate": "gpt-5.5-xhigh",
     },
     "claude": {
         "default": "claude-opus-4-8-thinking",
@@ -216,10 +216,13 @@ class SerperAdapter(BaseProviderAdapter):
         payload: dict[str, Any],
         model: str | None,
     ) -> dict[str, Any]:
-        del task_type, model
         query = payload.get("query") or payload.get("main_keyword")
         market = str(payload.get("target_market") or payload.get("market") or "US").strip()
         body: dict[str, Any] = {
+            **payload,
+            "model": model,
+            "messages": _messages_from_payload(payload),
+            "task_type": task_type,
             "q": str(query or "").strip(),
             "gl": market.lower()[:2] or "us",
             "num": 10,
@@ -248,10 +251,10 @@ class ClaudeAdapter(BaseProviderAdapter):
 
 class DeepSeekAdapter(OpenAIAdapter):
     endpoint_map = {
-        "default": "/chat/completions",
-        "chat": "/chat/completions",
-        "generate": "/chat/completions",
-        "selling_points": "/chat/completions",
+        "default": "/v1/chat/completions",
+        "chat": "/v1/chat/completions",
+        "generate": "/v1/chat/completions",
+        "selling_points": "/v1/chat/completions",
     }
 
 

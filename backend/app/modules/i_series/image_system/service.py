@@ -1459,6 +1459,8 @@ class IImageSystemService:
                 .offset(offset)
             )
         )
+        if offset == 0 and len(rows) < limit:
+            return rows, len(rows)
         return rows, int(self.db.scalar(count_query) or 0)
 
     def require_asset(

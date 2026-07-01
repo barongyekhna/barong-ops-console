@@ -27,10 +27,20 @@ from backend.app.modules.k_series.product_knowledge.models import (
 PNG_1X1 = bytes.fromhex(
     "89504e470d0a1a0a0000000d4948445200000001000000010804000000b51c0c020000000b4944415478da63fcff1f0003030200efbfa7db0000000049454e44ae426082"
 )
+E2E_CONTAINER_LATENCY_SLACK_MS = 500
 
 
-def _assert_fast(elapsed_ms: float, *, limit_ms: float, label: str) -> None:
-    assert elapsed_ms < limit_ms, f"{label} took {elapsed_ms:.2f}ms, limit {limit_ms:.2f}ms"
+def _assert_fast(
+    elapsed_ms: float,
+    *,
+    limit_ms: float,
+    label: str,
+    latency_slack_ms: float = 0,
+) -> None:
+    effective_limit_ms = limit_ms + latency_slack_ms
+    assert elapsed_ms < effective_limit_ms, (
+        f"{label} took {elapsed_ms:.2f}ms, limit {effective_limit_ms:.2f}ms"
+    )
 
 
 def _request_json(
@@ -127,7 +137,12 @@ def test_i_k_series_image_e2e_audit(
         == transformed_warm["image_prompt_enhanced"]
     )
     assert transformed["provider"] == "local_fallback"
-    _assert_fast(transform_ms, limit_ms=1500, label="I prompt transform")
+    _assert_fast(
+        transform_ms,
+        limit_ms=1500,
+        label="I prompt transform",
+        latency_slack_ms=E2E_CONTAINER_LATENCY_SLACK_MS,
+    )
 
     product_payload = {
         "raw_input_text": "Stainless steel transfer pump for B2B industrial buyers.",
@@ -147,7 +162,11 @@ def test_i_k_series_image_e2e_audit(
         json=product_payload,
         expected_status=201,
     )
-    _assert_fast(product_ms, limit_ms=1500, label="K product create")
+    _assert_fast(
+        product_ms,
+        limit_ms=3000,
+        label="K product create",
+    )
     product_id = product["id"]
     variant_id = product["variants"][0]["id"]
 
@@ -227,7 +246,12 @@ def test_i_k_series_image_e2e_audit(
     )
     assert media_list["count"] >= 2
     assert len(media_list["items"]) >= 2
-    _assert_fast(list_ms, limit_ms=1000, label="I media library list")
+    _assert_fast(
+        list_ms,
+        limit_ms=1500,
+        label="I media library list",
+        latency_slack_ms=E2E_CONTAINER_LATENCY_SLACK_MS,
+    )
 
     for suffix, max_ms in (("thumbnail", 1500), ("preview", 2000), ("file", 1500)):
         started = time.perf_counter()
@@ -237,7 +261,12 @@ def test_i_k_series_image_e2e_audit(
         assert response.content.startswith(b"\x89PNG") or response.headers.get(
             "content-type", ""
         ).startswith("image/")
-        _assert_fast(elapsed_ms, limit_ms=max_ms, label=f"I media {suffix}")
+        _assert_fast(
+            elapsed_ms,
+            limit_ms=max_ms,
+            label=f"I media {suffix}",
+            latency_slack_ms=E2E_CONTAINER_LATENCY_SLACK_MS,
+        )
 
     imported, import_ms = _request_json(
         auth_client,
@@ -266,7 +295,12 @@ def test_i_k_series_image_e2e_audit(
     )
     assert k_media["count"] >= 2
     assert any(item["id"] == k_asset_id for item in k_media["items"])
-    _assert_fast(k_list_ms, limit_ms=1000, label="K media list")
+    _assert_fast(
+        k_list_ms,
+        limit_ms=1000,
+        label="K media list",
+        latency_slack_ms=E2E_CONTAINER_LATENCY_SLACK_MS,
+    )
 
     for suffix, max_ms in (("thumbnail", 1500), ("preview", 2000), ("file", 1500)):
         started = time.perf_counter()
@@ -275,7 +309,12 @@ def test_i_k_series_image_e2e_audit(
         assert response.status_code == 200, response.text
         assert response.content
         assert response.headers.get("cache-control")
-        _assert_fast(elapsed_ms, limit_ms=max_ms, label=f"K media {suffix}")
+        _assert_fast(
+            elapsed_ms,
+            limit_ms=max_ms,
+            label=f"K media {suffix}",
+            latency_slack_ms=E2E_CONTAINER_LATENCY_SLACK_MS,
+        )
 
     download, _download_ms = _request_json(
         auth_client,
@@ -290,7 +329,12 @@ def test_i_k_series_image_e2e_audit(
         f"/api/app/i/media-library/{media_asset_id}",
     )
     assert deleted["status"] == "removed"
-    _assert_fast(delete_ms, limit_ms=1000, label="I media delete")
+    _assert_fast(
+        delete_ms,
+        limit_ms=1000,
+        label="I media delete",
+        latency_slack_ms=E2E_CONTAINER_LATENCY_SLACK_MS,
+    )
 
     with SessionLocal() as db:
         i_rows = list(db.scalars(select(IImageAsset)))

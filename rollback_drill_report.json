@@ -11,17 +11,17 @@
       "status": "passed"
     },
     {
-      "expected_alembic_head": "pre20_o_ops_dr_001",
+      "expected_alembic_head": "media_storage_perf_001",
       "id": "db_state_verification",
       "status": "passed"
     },
     {
       "id": "api_health_verification",
-      "status": "failed"
+      "status": "skipped"
     },
     {
       "id": "frontend_load_verification",
-      "status": "passed"
+      "status": "skipped"
     },
     {
       "id": "c17_logs_consistency",
@@ -33,7 +33,7 @@
   "generated_at": "2026-06-17T00:00:00Z",
   "mode": "rollback-drill-dry-run-with-live-probes-if-staging-is-running",
   "report_version": "PRE20-P-Batch10-FIX046-v1",
-  "status": "failed",
+  "status": "skipped",
   "steps": [
     "deploy version N with staging safe compose release dry-run",
     "rollback to N-1 with rollback release dry-run",

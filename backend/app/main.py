@@ -120,6 +120,7 @@ from .services.login_side_effects import (
 from .services.module_control_cache_service import (
     get_module_control_center_cached,
     refresh_module_control_center_cache_async,
+    refresh_module_control_center_cache_sync,
     start_module_control_cache_worker,
     stop_module_control_cache_worker,
 )
@@ -517,7 +518,15 @@ def _load_hot_read_payload(
         user = _identity_to_user(identity)
         with managed_read_session() as db:
             with without_org_data_isolation():
-                response = get_module_control_center_cached(db=db)
+                force_refresh = any(
+                    key in {"force_refresh", "_force_refresh"} and value == "1"
+                    for key, value in query_params
+                )
+                response = (
+                    refresh_module_control_center_cache_sync()
+                    if force_refresh
+                    else get_module_control_center_cached(db=db)
+                )
                 scoped_response = filter_module_control_center_for_user(
                     db,
                     user=user,

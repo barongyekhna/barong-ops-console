@@ -19,6 +19,7 @@ PROVIDER_ALIASES = {
     "claude_opus": "claude",
     "anthropic": "claude",
     "deepseek": "deepseek",
+    "keepa": "keepa",
 }
 
 PROVIDER_KEY_ALIASES = {
@@ -26,6 +27,7 @@ PROVIDER_KEY_ALIASES = {
     "chatgpt": "chatgpt",
     "claude": "claude_opus",
     "deepseek": "deepseek",
+    "keepa": "keepa",
 }
 
 
@@ -128,5 +130,10 @@ def provider_registry_mapping() -> dict[str, dict[str, str | None]]:
             "adapter": "DeepSeekAdapter",
             "default_key_alias": "deepseek",
             "endpoint": "/chat/completions",
+        },
+        "keepa": {
+            "adapter": "KeepaAdapter",
+            "default_key_alias": "keepa",
+            "endpoint": "/token",
         },
     }

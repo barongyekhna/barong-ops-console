@@ -22,12 +22,18 @@ from backend.app.services.api_key_orchestration import (
     reevaluate_k_series_api_keys,
     resolve_module_api_key_for_injection,
 )
+from backend.app.services.rw_keepa_ingestion import (
+    resolve_keepa_context_for_asin_ingestion,
+)
 from backend.app.services import module_control_cache_service
+from tests.fixtures.organization_fixtures import (
+    DEFAULT_TEST_ORG_DB_ID,
+)
 
 pytestmark = pytest.mark.integration
 
 TEST_PASSWORD = "example-only-module-control-password"
-DEFAULT_ORG_ID = "org_11111111111111111111111111111111"
+DEFAULT_ORG_ID = DEFAULT_TEST_ORG_DB_ID
 SECOND_ORG_ID = "org_22222222222222222222222222222222"
 
 
@@ -52,16 +58,22 @@ def login(client: TestClient, *, username: str) -> None:
     assert response.status_code == 200, response.text
 
 
-def test_module_control_center_requires_owner(auth_client: TestClient) -> None:
+def test_module_control_center_scopes_non_owner_view(auth_client: TestClient) -> None:
     create_user(username="module_control_viewer", role="viewer")
     login(auth_client, username="module_control_viewer")
 
     viewer_response = auth_client.get("/api/control-plane/module-control/center")
-    assert viewer_response.status_code == 403
+    assert viewer_response.status_code == 200
+    payload = viewer_response.json()
+    assert payload["organization_count"] == 0
+    assert payload["module_count"] == 0
+    assert payload["organizations"] == []
 
 
 def test_module_control_center_auto_registers(owner_client: TestClient) -> None:
-    response = owner_client.get("/api/control-plane/module-control/center")
+    response = owner_client.get(
+        "/api/control-plane/module-control/center?force_refresh=1"
+    )
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["cache_status"] in {"fresh", "stale"}
@@ -84,38 +96,30 @@ def test_module_control_center_auto_registers(owner_client: TestClient) -> None:
     )
     assert k_module["enabled"] is True
     assert k_module["runtime_status"] == "active"
-    assert all(
-        item["module_id"] != "i.image_system"
-        for item in default_group["modules"]
-    )
+    module_by_id = {item["module_id"]: item for item in default_group["modules"]}
+    assert "i.image_system" in module_by_id
+    assert module_by_id["r.warehouse"]["enabled"] is True
+    assert module_by_id["r.warehouse"]["runtime_status"] == "active"
+    assert module_by_id["r.analysis"]["enabled"] is False
+    assert module_by_id["r.analysis"]["runtime_status"] == "disabled"
 
 
 def test_module_control_scopes_i_series_to_target_organization(
     owner_client: TestClient,
 ) -> None:
     owner_id = owner_client.get("/api/public/auth/me").json()["id"]
-    target_org_id = "org_i_series_target_111111111111111111"
-    other_org_id = "org_i_series_other_222222222222222222"
+    target_org_id = DEFAULT_ORG_ID
+    other_org_id = "org_44444444444444444444444444444444"
     with SessionLocal() as db:
-        db.add_all(
-            [
-                OrganizationRecord(
-                    org_id=target_org_id,
-                    org_name=K_SERIES_ORGANIZATION_NAME,
-                    org_type="store",
-                    owner_user_id=str(owner_id),
-                    status="active",
-                    metadata_json={},
-                ),
-                OrganizationRecord(
-                    org_id=other_org_id,
-                    org_name="涌龙麟（吉林）电子产品制造有限公司",
-                    org_type="store",
-                    owner_user_id=str(owner_id),
-                    status="active",
-                    metadata_json={},
-                ),
-            ]
+        db.add(
+            OrganizationRecord(
+                org_id=other_org_id,
+                org_name="涌龙麟（吉林）电子产品制造有限公司",
+                org_type="store",
+                owner_user_id=str(owner_id),
+                status="active",
+                metadata_json={},
+            )
         )
         db.commit()
 
@@ -157,7 +161,9 @@ def test_module_control_center_uses_cached_snapshot(
     owner_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    response = owner_client.get("/api/control-plane/module-control/center")
+    response = owner_client.get(
+        "/api/control-plane/module-control/center?force_refresh=1"
+    )
     assert response.status_code == 200, response.text
 
     def fail_live_rebuild(*args, **kwargs):
@@ -180,14 +186,21 @@ def test_module_control_center_uses_lightweight_middleware_boundary(
     owner_client: TestClient,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    warm_response = owner_client.get("/api/control-plane/module-control/center")
+    warm_response = owner_client.get(
+        "/api/control-plane/module-control/center?force_refresh=1"
+    )
     assert warm_response.status_code == 200, warm_response.text
 
     def fail_full_chain(*args, **kwargs):
         raise AssertionError("full middleware pipeline should not run for center")
 
     monkeypatch.setattr(app_main, "validate_session", fail_full_chain)
-    monkeypatch.setattr(org_context_middleware, "validate_session", fail_full_chain)
+    if hasattr(org_context_middleware, "validate_session"):
+        monkeypatch.setattr(
+            org_context_middleware,
+            "validate_session",
+            fail_full_chain,
+        )
     monkeypatch.setattr(org_context_middleware, "build_org_context", fail_full_chain)
     monkeypatch.setattr(
         data_isolation_middleware,
@@ -217,6 +230,7 @@ def test_module_control_cache_miss_returns_partial_without_blocking(
         "_refresh_snapshot",
         slow_refresh,
     )
+    module_control_cache_service.start_module_control_cache_worker()
 
     started = time.perf_counter()
     response = module_control_cache_service.get_module_control_center_cached(
@@ -414,23 +428,112 @@ def test_api_key_binding_enforces_org_isolation_and_backend_injection(
             )
 
 
+def test_keepa_key_type_binds_to_r_warehouse_ingestion(
+    owner_client: TestClient,
+) -> None:
+    target_org_id = DEFAULT_ORG_ID
+
+    key_types = owner_client.get(
+        "/api/control-plane/api-key-orchestration/key-types"
+    )
+    assert key_types.status_code == 200, key_types.text
+    keepa_type = next(
+        item for item in key_types.json()["items"] if item["type"] == "keepa"
+    )
+    assert keepa_type == {
+        "type": "keepa",
+        "name": "Keepa API",
+        "description": "Amazon ASIN market intelligence API",
+        "provider": "keepa",
+        "auth_type": "api_key",
+        "enabled": True,
+        "scope": ["R-W"],
+        "validation_endpoint": "https://api.keepa.com/token?key={key}",
+        "default_url": "https://api.keepa.com",
+    }
+
+    created = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{target_org_id}/keys",
+        json={
+            "name": "Keepa API",
+            "url": "https://api.keepa.com",
+            "key_value": "keepa-test-secret",
+            "key_type": "keepa",
+        },
+    )
+    assert created.status_code == 201, created.text
+    created_item = created.json()["item"]
+    assert created_item["key_type"] == "keepa"
+    assert created_item["provider"] == "keepa"
+    assert created_item["auth_type"] == "api_key"
+    assert created_item["scope"] == ["R-W"]
+    assert (
+        created_item["validation_endpoint"]
+        == "https://api.keepa.com/token?key={key}"
+    )
+
+    bound = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{target_org_id}/bindings",
+        json={
+            "module_id": "r.warehouse",
+            "key_id": created_item["key_id"],
+            "key_alias": "default",
+        },
+    )
+    assert bound.status_code == 201, bound.text
+    binding_item = bound.json()["item"]
+    assert binding_item["module_id"] == "r.warehouse"
+    assert binding_item["key_alias"] == "keepa"
+    assert binding_item["key_type"] == "keepa"
+    assert binding_item["provider"] == "keepa"
+
+    blocked_scope = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{target_org_id}/bindings",
+        json={
+            "module_id": "core.dashboard",
+            "key_id": created_item["key_id"],
+            "key_alias": "keepa",
+        },
+    )
+    assert blocked_scope.status_code == 400
+    assert blocked_scope.json()["detail"] == "api_key_scope_mismatch"
+
+    with SessionLocal() as db:
+        context = resolve_keepa_context_for_asin_ingestion(
+            db,
+            org_id=target_org_id,
+        )
+        assert context.module_id == "r.warehouse"
+        assert context.key_alias == "keepa"
+        assert context.adapter == "KeepaAdapter"
+        assert context.provider == "keepa"
+        assert context.auth_type == "api_key"
+        assert context.token_check_url.endswith("/token?key=keepa-test-secret")
+
+        provider_config = db.query(ProviderConfigRecord).filter(
+            ProviderConfigRecord.org_id == target_org_id,
+            ProviderConfigRecord.module_id == "r.warehouse",
+            ProviderConfigRecord.provider == "keepa",
+            ProviderConfigRecord.status == "active",
+        ).one()
+        assert provider_config.source_key_id == created_item["key_id"]
+        assert provider_config.metadata_json["adapter"] == "KeepaAdapter"
+
+    rw_status = owner_client.get("/api/app/rw/status")
+    assert rw_status.status_code == 200, rw_status.text
+    rw_payload = rw_status.json()
+    assert rw_payload["keepa_key_bound"] is True
+    assert rw_payload["ingestion_service_ready"] is True
+    assert rw_payload["adapter"] == "KeepaAdapter"
+
+
 def test_k_series_key_reevaluation_activates_target_org_runtime(
     owner_client: TestClient,
 ) -> None:
-    owner_id = owner_client.get("/api/public/auth/me").json()["id"]
-    target_org_id = "org_kseries_target_111111111111111111"
-    with SessionLocal() as db:
-        db.add(
-            OrganizationRecord(
-                org_id=target_org_id,
-                org_name=K_SERIES_ORGANIZATION_NAME,
-                org_type="store",
-                owner_user_id=str(owner_id),
-                status="active",
-                metadata_json={},
-            )
-        )
-        db.commit()
+    target_org_id = DEFAULT_ORG_ID
 
     for alias in K_SERIES_PROVIDER_ALIASES:
         created = owner_client.post(

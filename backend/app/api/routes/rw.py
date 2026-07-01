@@ -9,6 +9,8 @@ from ...db.session import get_db
 from ...models.org_membership import OrgMembershipRecord
 from ...models.organization import OrganizationRecord
 from ...models.user import User
+from ...services.data_isolation import without_org_data_isolation
+from ...services.rw_keepa_ingestion import keepa_ingestion_runtime_status
 from ..deps import get_current_user
 
 
@@ -72,36 +74,48 @@ RULES = [
 
 
 def _user_has_target_org_access(db: Session, user: User) -> bool:
+    return _target_org_for_user(db, user) is not None
+
+
+def _target_org_for_user(db: Session, user: User) -> OrganizationRecord | None:
     if is_owner_role(user.role):
-        return True
+        with without_org_data_isolation():
+            return db.scalar(
+                select(OrganizationRecord)
+                .where(
+                    OrganizationRecord.org_name == R_SERIES_TARGET_ORGANIZATION_NAME,
+                    OrganizationRecord.status != "deleted",
+                )
+                .order_by(OrganizationRecord.org_id)
+                .limit(1)
+            )
 
     org_ids: set[str] = set()
     if user.organization_id:
         org_ids.add(user.organization_id)
 
-    membership_org_ids = db.scalars(
-        select(OrgMembershipRecord.org_id).where(
-            OrgMembershipRecord.user_id == str(user.id),
-            OrgMembershipRecord.status == "active",
+    with without_org_data_isolation():
+        membership_org_ids = db.scalars(
+            select(OrgMembershipRecord.org_id).where(
+                OrgMembershipRecord.user_id == str(user.id),
+                OrgMembershipRecord.status == "active",
+            )
         )
-    )
-    org_ids.update(membership_org_ids)
+        org_ids.update(membership_org_ids)
 
-    if not org_ids:
-        return False
+        if not org_ids:
+            return None
 
-    return (
-        db.scalar(
-            select(OrganizationRecord.org_id)
+        return db.scalar(
+            select(OrganizationRecord)
             .where(
                 OrganizationRecord.org_id.in_(org_ids),
                 OrganizationRecord.org_name == R_SERIES_TARGET_ORGANIZATION_NAME,
                 OrganizationRecord.status != "deleted",
             )
+            .order_by(OrganizationRecord.org_id)
             .limit(1)
         )
-        is not None
-    )
 
 
 def require_r_series_org(
@@ -117,17 +131,66 @@ def require_r_series_org(
 
 
 @router.get("/status")
-def rw_status(user: User = Depends(require_r_series_org)) -> dict[str, object]:
-    del user
+def rw_status(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _target_org_for_user(db, user)
+    if target_org is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="R-series modules are bound to the target organization only.",
+        )
+    with without_org_data_isolation():
+        ingestion_status = keepa_ingestion_runtime_status(
+            db,
+            org_id=target_org.org_id,
+        )
+    keepa_bound = ingestion_status["keepa_key_bound"] is True
     return {
         "module": "R-W",
         "active": True,
-        "mode": "mock_mode",
-        "mock_mode_active": True,
-        "waiting_for_keys": True,
+        "mode": "keepa_key_bound" if keepa_bound else "mock_mode",
+        "mock_mode_active": not keepa_bound,
+        "waiting_for_keys": not keepa_bound,
         "real_keepa_api_used": False,
+        "keepa_key_bound": keepa_bound,
+        "ingestion_service_ready": ingestion_status["ingestion_service_ready"],
+        "adapter": ingestion_status["adapter"],
         "organization": R_SERIES_TARGET_ORGANIZATION_NAME,
-        "endpoints": ["/api/rw/products", "/api/rw/status", "/api/rw/rules"],
+        "pipeline": ingestion_status.get(
+            "pipeline",
+            "Keepa API -> ingestion service -> product DB",
+        ),
+        "endpoints": [
+            "/api/rw/products",
+            "/api/rw/status",
+            "/api/rw/rules",
+            "/api/rw/ingestion/status",
+        ],
+    }
+
+
+@router.get("/ingestion/status")
+def rw_ingestion_status(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _target_org_for_user(db, user)
+    if target_org is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="R-series modules are bound to the target organization only.",
+        )
+    with without_org_data_isolation():
+        ingestion_status = keepa_ingestion_runtime_status(
+            db,
+            org_id=target_org.org_id,
+        )
+    return {
+        "module": "R-W",
+        "organization": R_SERIES_TARGET_ORGANIZATION_NAME,
+        **ingestion_status,
     }
 
 
@@ -151,4 +214,3 @@ def rw_rules(user: User = Depends(require_r_series_org)) -> dict[str, object]:
         "enabled": True,
         "mode": "mock_mode",
     }
-

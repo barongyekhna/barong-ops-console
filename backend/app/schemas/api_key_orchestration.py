@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from enum import Enum
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -9,6 +10,17 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 ApiKeyStatus = Literal["active", "disabled", "deleted"]
 ApiKeyBindingStatus = Literal["active", "disabled"]
+
+
+class KeyType(str, Enum):
+    CUSTOM = "custom"
+    SERP = "serp"
+    OPENAI = "openai"
+    CHATGPT = "chatgpt"
+    CLAUDE_OPUS = "claude_opus"
+    DEEPSEEK = "deepseek"
+    N8N = "n8n"
+    KEEPA = "keepa"
 
 
 def _validate_provider_url(value: str) -> str:
@@ -43,6 +55,7 @@ class ApiKeyCreateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     url: str = Field(min_length=1, max_length=500)
     key_value: SecretStr = Field(min_length=1, max_length=4096)
+    key_type: KeyType = KeyType.CUSTOM
 
     @field_validator("name")
     @classmethod
@@ -60,6 +73,7 @@ class ApiKeyUpdateRequest(BaseModel):
     url: str | None = Field(default=None, min_length=1, max_length=500)
     key_value: SecretStr | None = Field(default=None, min_length=1, max_length=4096)
     status: ApiKeyStatus | None = None
+    key_type: KeyType | None = None
 
     @field_validator("name")
     @classmethod
@@ -79,6 +93,11 @@ class ApiKeyRead(BaseModel):
     org_id: str = Field(min_length=1, max_length=40)
     name: str = Field(min_length=1, max_length=120)
     url: str = Field(min_length=1, max_length=500)
+    key_type: KeyType = KeyType.CUSTOM
+    provider: str = Field(default="custom", min_length=1, max_length=80)
+    auth_type: str = Field(default="api_key", min_length=1, max_length=80)
+    scope: list[str] = Field(default_factory=list)
+    validation_endpoint: str | None = Field(default=None, max_length=500)
     key_hash_prefix: str = Field(min_length=1, max_length=16)
     status: ApiKeyStatus
     runtime_state: Literal["enabled", "disabled"] = "disabled"
@@ -127,6 +146,8 @@ class ApiKeyBindingRead(BaseModel):
     key_alias: str = Field(min_length=1, max_length=80)
     key_name: str = Field(min_length=1, max_length=120)
     key_url: str = Field(min_length=1, max_length=500)
+    key_type: KeyType = KeyType.CUSTOM
+    provider: str = Field(default="custom", min_length=1, max_length=80)
     status: ApiKeyBindingStatus
     created_at: datetime
     updated_at: datetime
@@ -144,3 +165,20 @@ class ApiKeyBindingCreateResponse(BaseModel):
 class ApiKeyBindingDeleteResponse(BaseModel):
     binding_id: str
     status: Literal["disabled"] = "disabled"
+
+
+class ApiKeyTypeRead(BaseModel):
+    type: KeyType
+    name: str
+    description: str
+    provider: str
+    auth_type: str
+    enabled: bool
+    scope: list[str]
+    validation_endpoint: str | None = None
+    default_url: str | None = None
+
+
+class ApiKeyTypeListResponse(BaseModel):
+    items: list[ApiKeyTypeRead]
+    count: int = Field(ge=0)

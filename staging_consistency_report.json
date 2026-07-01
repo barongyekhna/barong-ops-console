@@ -43,20 +43,20 @@
   "env_lock_validation": {
     "checks": [
       {
-        "actual": "37bcc8f5c1c22f123abb4c9ba43e23a7e4d52b3cd5564b6ce05e88b5ee8b12ba",
-        "expected": "37bcc8f5c1c22f123abb4c9ba43e23a7e4d52b3cd5564b6ce05e88b5ee8b12ba",
+        "actual": "971553fa16a2e1300a81310081502358728f6c791f6e04132b79d23bbfe7fe55",
+        "expected": "971553fa16a2e1300a81310081502358728f6c791f6e04132b79d23bbfe7fe55",
         "id": "canonical_env_sha256",
         "status": "passed"
       },
       {
-        "actual": "200d56cd0d59a1bf9994fccd0cdc7efc5ed0988b68a219dca6174ceab570b5d2",
-        "expected": "200d56cd0d59a1bf9994fccd0cdc7efc5ed0988b68a219dca6174ceab570b5d2",
+        "actual": "8015f436b57cb7c0ceaa9bbe18fd546ffbf763f102bb8a4d29064a849f41951f",
+        "expected": "8015f436b57cb7c0ceaa9bbe18fd546ffbf763f102bb8a4d29064a849f41951f",
         "id": "compose_file_sha256",
         "status": "passed"
       },
       {
-        "actual": "dad31b10db2b11bd521a9574917e7a5fc8d88987a2fa5d54bd1a97fbcb1d6719",
-        "expected": "dad31b10db2b11bd521a9574917e7a5fc8d88987a2fa5d54bd1a97fbcb1d6719",
+        "actual": "f800b0950f2750eb6d0fa33acb7611b753a7afc530c74621e297544adb77f0be",
+        "expected": "f800b0950f2750eb6d0fa33acb7611b753a7afc530c74621e297544adb77f0be",
         "id": "compose_config_sha256",
         "status": "passed"
       },
@@ -112,20 +112,20 @@
   "migration_validation": {
     "checks": [
       {
-        "actual": "pre20_o_ops_dr_001",
-        "expected": "pre20_o_ops_dr_001",
+        "actual": "media_storage_perf_001",
+        "expected": "media_storage_perf_001",
         "id": "alembic_head_locked",
         "status": "passed"
       },
       {
-        "actual": "b3af56a058d11764d636601605c38d7a13c616f4e8dc079ba0a12cd48d70158b",
-        "expected": "b3af56a058d11764d636601605c38d7a13c616f4e8dc079ba0a12cd48d70158b",
+        "actual": "be7f3d6797d2a35a8ee9e37bab976153a4b4363344d718b4df3af55a50e59570",
+        "expected": "be7f3d6797d2a35a8ee9e37bab976153a4b4363344d718b4df3af55a50e59570",
         "id": "migration_hash",
         "status": "passed"
       },
       {
-        "actual": "da929c060552390cdae21b019a6509054e82fb0b03c6570816b7bd1f6c1cddae",
-        "expected": "da929c060552390cdae21b019a6509054e82fb0b03c6570816b7bd1f6c1cddae",
+        "actual": "a3dfabc1c2162de414b5458cfb5af817e958490ebbaff06932317412b4aba8c6",
+        "expected": "a3dfabc1c2162de414b5458cfb5af817e958490ebbaff06932317412b4aba8c6",
         "id": "migration_order_checksum",
         "status": "passed"
       },

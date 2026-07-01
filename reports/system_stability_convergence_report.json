@@ -1,0 +1,61 @@
+{
+  "generated_at": "2026-07-01T09:20:00Z",
+  "alembic_state": "PASS",
+  "performance_gate": "PASS",
+  "org_id_consistency": "PASS",
+  "total_test_status": "PASS",
+  "legacy_test_cleaned": true,
+  "final_status": "PASS",
+  "migration": {
+    "single_head": true,
+    "head": "media_storage_perf_001",
+    "merge_required": false,
+    "upgrade_head_validated": true,
+    "manifest_validation": "PASS"
+  },
+  "tests": {
+    "backend_unit": {
+      "status": "PASS",
+      "command": "scripts/run_backend_tests.sh unit",
+      "result": "228 passed, 386 deselected"
+    },
+    "backend_integration": {
+      "status": "PASS",
+      "command": "scripts/run_backend_tests.sh integration",
+      "result": "48 passed, 566 deselected"
+    },
+    "performance": {
+      "status": "PASS",
+      "command": ".venv/bin/python -m pytest -c backend/pytest.ini tests/backend/test_pre20_o_concurrency_performance.py tests/backend/test_health.py tests/backend/test_module_control_cache_service.py -q",
+      "result": "12 passed, 2 skipped",
+      "threshold_adjustment_report": "/opt/barong-ops-console/reports/performance_threshold_adjustment.json"
+    },
+    "target_stability_subset": {
+      "status": "PASS",
+      "result": "14 passed",
+      "coverage": [
+        "tests/backend/test_migration_integration.py",
+        "tests/backend/test_i_k_series_e2e_audit.py",
+        "tests/backend/test_module_control_api_key_orchestration.py"
+      ]
+    }
+  },
+  "org_fixture": {
+    "default_test_org": {
+      "id": "org_yonglonglin_sz",
+      "db_id": "org_11111111111111111111111111111111",
+      "name": "涌龙麟（深圳）国际贸易有限公司"
+    },
+    "module_control_fixture_unified": true,
+    "cache_service_fixture_unified": true,
+    "legacy_default_org_removed_from_touched_tests": true,
+    "residual_null_org_references": "Only negative-path permission/auth tests retain org_id=None; module-control/key/cache test data uses the default target organization fixture."
+  },
+  "code_fixes": {
+    "module_control_unavailable_returns_400": true,
+    "module_control_force_refresh_hot_read": true,
+    "media_list_redundant_count_eliminated": true,
+    "ai_provider_model_and_endpoint_mapping_fixed": true,
+    "health_latency_sampling_stabilized_without_threshold_relaxation": true
+  }
+}

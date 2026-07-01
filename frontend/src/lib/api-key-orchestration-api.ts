@@ -1,6 +1,7 @@
 "use client";
 
 import { apiRequest } from "@/lib/api";
+import type { ApiKeyType } from "@/modules/keys/key-types";
 
 const API_KEY_ORCHESTRATION_TIMEOUT_MS = 15_000;
 
@@ -12,6 +13,11 @@ export type ApiKeyRecord = {
   org_id: string;
   name: string;
   url: string;
+  key_type: ApiKeyType;
+  provider: string;
+  auth_type: string;
+  scope: string[];
+  validation_endpoint: string | null;
   key_hash_prefix: string;
   status: ApiKeyStatus;
   runtime_state: ApiKeyRuntimeState;
@@ -29,6 +35,8 @@ export type ApiKeyBindingRecord = {
   key_alias: string;
   key_name: string;
   key_url: string;
+  key_type: ApiKeyType;
+  provider: string;
   status: "active" | "disabled";
   created_at: string;
   updated_at: string;
@@ -56,6 +64,7 @@ export function createApiKey(payload: {
   name: string;
   url: string;
   key_value: string;
+  key_type: ApiKeyType;
 }) {
   const { org_id: orgId, ...body } = payload;
   return apiRequest<{ item: ApiKeyRecord }>(
@@ -74,6 +83,7 @@ export function updateApiKey(
     name?: string;
     url?: string;
     key_value?: string;
+    key_type?: ApiKeyType;
     status?: ApiKeyStatus;
   },
 ) {

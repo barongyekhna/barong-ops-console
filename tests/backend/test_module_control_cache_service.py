@@ -11,11 +11,15 @@ from backend.app.schemas.module_control import (
     ModuleControlStateRead,
 )
 from backend.app.services import module_control_cache_service as cache
+from tests.fixtures.organization_fixtures import (
+    DEFAULT_TEST_ORG_DB_ID,
+    TARGET_TEST_ORG_NAME,
+)
 
 
 def _module_state(*, enabled: bool = True) -> ModuleControlStateRead:
     return ModuleControlStateRead(
-        org_id="org_11111111111111111111111111111111",
+        org_id=DEFAULT_TEST_ORG_DB_ID,
         module_id="core.dashboard",
         display_name="Dashboard",
         category="core",
@@ -39,6 +43,7 @@ def test_module_control_cache_miss_returns_partial_without_blocking(
         raise RuntimeError("slow backend aggregation")
 
     monkeypatch.setattr(cache, "_refresh_snapshot", slow_refresh)
+    cache.start_module_control_cache_worker()
 
     started = time.perf_counter()
     response = cache.get_module_control_center_cached(max_wait_seconds=0.001)
@@ -58,8 +63,8 @@ def test_module_control_cache_applies_state_update_to_snapshot() -> None:
     response = ModuleControlCenterResponse(
         organizations=[
             ModuleControlOrgGroup(
-                org_id="org_11111111111111111111111111111111",
-                org_name="Default Test Org",
+                org_id=DEFAULT_TEST_ORG_DB_ID,
+                org_name=TARGET_TEST_ORG_NAME,
                 modules=[_module_state(enabled=True)],
             )
         ],

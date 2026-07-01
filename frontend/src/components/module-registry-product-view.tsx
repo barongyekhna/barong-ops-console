@@ -61,6 +61,12 @@ import {
   type OrganizationOption,
 } from "@/lib/users-api";
 import { getModuleDisplayName } from "@/lib/i18n";
+import {
+  KEY_TYPE_OPTIONS,
+  keyTypeLabel,
+  keyTypeOption,
+  type ApiKeyType,
+} from "@/modules/keys/key-types";
 
 const MODULE_PAGE_LIMIT = 10;
 const KEY_BINDING_ALIAS_OPTIONS = [
@@ -70,6 +76,7 @@ const KEY_BINDING_ALIAS_OPTIONS = [
   "deepseek",
   "claude_opus",
   "n8n",
+  "keepa",
 ];
 const K_PRODUCT_KNOWLEDGE_MODULE_ID = "k.product_knowledge";
 const MODULE_DESCRIPTIONS: Record<string, string> = {
@@ -382,6 +389,15 @@ function uniqueStrings(values: string[]) {
   return Array.from(new Set(values.filter((value) => value.trim().length > 0)));
 }
 
+function defaultKeyName(type: ApiKeyType) {
+  const option = keyTypeOption(type);
+  return option.type === "custom" ? "" : option.label;
+}
+
+function defaultAliasForKey(key: ApiKeyRecord | undefined) {
+  return keyTypeOption(key?.key_type).defaultAlias || "default";
+}
+
 function moduleRegistryBindingOptions(
   registryItems: readonly ModuleManifest[],
 ): BindingModuleOption[] {
@@ -464,6 +480,7 @@ function OwnerModuleControlCenter() {
   const [notice, setNotice] = useState("");
   const [keyForm, setKeyForm] = useState({
     key_value: "",
+    key_type: "custom" as ApiKeyType,
     name: "",
     org_id: "",
     url: "",
@@ -483,6 +500,7 @@ function OwnerModuleControlCenter() {
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     key_value: "",
+    key_type: "custom" as ApiKeyType,
     name: "",
     url: "",
   });
@@ -598,20 +616,27 @@ function OwnerModuleControlCenter() {
               : registryModuleOptions,
         });
         const orgKeys = keys.items.filter((key) => key.org_id === selectedOrg);
+        const nextKeyId =
+          current.key_id && orgKeys.some((key) => key.key_id === current.key_id)
+            ? current.key_id
+            : orgKeys[0]?.key_id || "";
+        const selectedKey = orgKeys.find((key) => key.key_id === nextKeyId);
+        const nextModuleId =
+          current.module_id &&
+          bindingModules.some(
+            (module) => module.module_id === current.module_id,
+          )
+            ? current.module_id
+            : bindingModules[0]?.module_id || "";
+        const selectedDefaultAlias = defaultAliasForKey(selectedKey);
 
         return {
-          key_alias: current.key_alias || "default",
-          key_id:
-            current.key_id && orgKeys.some((key) => key.key_id === current.key_id)
-              ? current.key_id
-              : orgKeys[0]?.key_id || "",
-          module_id:
-            current.module_id &&
-            bindingModules.some(
-              (module) => module.module_id === current.module_id,
-            )
-              ? current.module_id
-              : bindingModules[0]?.module_id || "",
+          key_alias:
+            selectedKey?.key_type === "keepa" && nextModuleId === "r.warehouse"
+              ? "keepa"
+              : current.key_alias || selectedDefaultAlias,
+          key_id: nextKeyId,
+          module_id: nextModuleId,
           org_id: selectedOrg,
         };
       });
@@ -647,7 +672,12 @@ function OwnerModuleControlCenter() {
     [registryModuleOptions, selectedOrgModules],
   );
   const bindingAliasOptions = useMemo(
-    () => uniqueStrings([...KEY_BINDING_ALIAS_OPTIONS, bindingForm.key_alias]),
+    () =>
+      uniqueStrings([
+        ...KEY_BINDING_ALIAS_OPTIONS,
+        ...KEY_TYPE_OPTIONS.map((option) => option.defaultAlias),
+        bindingForm.key_alias,
+      ]),
     [bindingForm.key_alias],
   );
 
@@ -729,16 +759,42 @@ function OwnerModuleControlCenter() {
     }));
   }
 
+  function handleKeyTypeChange(type: string) {
+    const option = keyTypeOption(type);
+    setKeyForm((current) => ({
+      ...current,
+      key_type: option.type,
+      name: current.name || defaultKeyName(option.type),
+      url: option.defaultUrl || current.url,
+    }));
+  }
+
+  function handleEditKeyTypeChange(type: string) {
+    const option = keyTypeOption(type);
+    setEditForm((current) => ({
+      ...current,
+      key_type: option.type,
+      name: current.name || defaultKeyName(option.type),
+      url: option.defaultUrl || current.url,
+    }));
+  }
+
   function handleBindingOrganizationChange(orgId: string) {
     const modules = mergeBindingModuleOptions({
       controlModules: controlGroupsByOrgId.get(orgId)?.modules ?? [],
       registryModules: registryModuleOptions,
     });
     const keys = apiKeys.filter((key) => key.org_id === orgId);
+    const firstKey = keys[0];
+    const firstModuleId = modules[0]?.module_id || "";
     setBindingForm((current) => ({
       ...current,
-      key_id: keys[0]?.key_id || "",
-      module_id: modules[0]?.module_id || "",
+      key_alias:
+        firstKey?.key_type === "keepa" && firstModuleId === "r.warehouse"
+          ? "keepa"
+          : defaultAliasForKey(firstKey),
+      key_id: firstKey?.key_id || "",
+      module_id: firstModuleId,
       org_id: orgId,
     }));
   }
@@ -792,7 +848,12 @@ function OwnerModuleControlCenter() {
     setError("");
     try {
       await createApiKey(keyForm);
-      setKeyForm((current) => ({ ...current, key_value: "", name: "", url: "" }));
+      setKeyForm((current) => ({
+        ...current,
+        key_value: "",
+        name: "",
+        url: keyTypeOption(current.key_type).defaultUrl,
+      }));
       await refresh();
       setNotice("密钥已新增。");
     } catch (createError) {
@@ -804,7 +865,12 @@ function OwnerModuleControlCenter() {
 
   function startEditKey(key: ApiKeyRecord) {
     setEditingKeyId(key.key_id);
-    setEditForm({ key_value: "", name: key.name, url: key.url });
+    setEditForm({
+      key_value: "",
+      key_type: key.key_type,
+      name: key.name,
+      url: key.url,
+    });
   }
 
   async function saveKeyEdit(keyId: string) {
@@ -813,13 +879,14 @@ function OwnerModuleControlCenter() {
     setError("");
     try {
       const payload = {
+        key_type: editForm.key_type,
         name: editForm.name,
         url: editForm.url,
         ...(editForm.key_value ? { key_value: editForm.key_value } : {}),
       };
       await updateApiKey(keyId, payload);
       setEditingKeyId(null);
-      setEditForm({ key_value: "", name: "", url: "" });
+      setEditForm({ key_value: "", key_type: "custom", name: "", url: "" });
       await refresh();
       setNotice("密钥已更新。");
     } catch (updateError) {
@@ -1126,6 +1193,22 @@ function OwnerModuleControlCenter() {
             </span>
           </label>
           <label className="field-group">
+            <span>类型</span>
+            <span className="input-shell">
+              <select
+                onChange={(event) => handleKeyTypeChange(event.target.value)}
+                required
+                value={keyForm.key_type}
+              >
+                {KEY_TYPE_OPTIONS.map((option) => (
+                  <option key={option.type} value={option.type}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </span>
+          </label>
+          <label className="field-group">
             <span>名称</span>
             <span className="input-shell">
               <input
@@ -1189,6 +1272,7 @@ function OwnerModuleControlCenter() {
             <thead>
               <tr>
                 <th>密钥</th>
+                <th>类型</th>
                 <th>服务地址</th>
                 <th>名称</th>
                 <th>已绑定模块</th>
@@ -1203,6 +1287,10 @@ function OwnerModuleControlCenter() {
                     <td>
                       <strong>已加密保存</strong>
                       <small>{keyStatusLabel(key.status)}</small>
+                    </td>
+                    <td>
+                      <strong>{keyTypeLabel(key.key_type)}</strong>
+                      <small>{key.provider}</small>
                     </td>
                     <td>
                       {isEditing ? (
@@ -1225,6 +1313,20 @@ function OwnerModuleControlCenter() {
                     <td>
                       {isEditing ? (
                         <div className="api-key-edit-stack">
+                          <span className="input-shell compact-input-shell">
+                            <select
+                              onChange={(event) =>
+                                handleEditKeyTypeChange(event.target.value)
+                              }
+                              value={editForm.key_type}
+                            >
+                              {KEY_TYPE_OPTIONS.map((option) => (
+                                <option key={option.type} value={option.type}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
+                          </span>
                           <span className="input-shell compact-input-shell">
                             <input
                               onChange={(event) =>
@@ -1330,12 +1432,21 @@ function OwnerModuleControlCenter() {
             <span className="input-shell">
               <select
                 disabled={isSaving || selectedBindingModules.length === 0}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const nextModuleId = event.target.value;
+                  const selectedKey = availableKeysForOrg.find(
+                    (key) => key.key_id === bindingForm.key_id,
+                  );
                   setBindingForm((current) => ({
                     ...current,
-                    module_id: event.target.value,
-                  }))
-                }
+                    key_alias:
+                      selectedKey?.key_type === "keepa" &&
+                      nextModuleId === "r.warehouse"
+                        ? "keepa"
+                        : current.key_alias,
+                    module_id: nextModuleId,
+                  }));
+                }}
                 required
                 value={bindingForm.module_id}
               >
@@ -1352,18 +1463,27 @@ function OwnerModuleControlCenter() {
             <span className="input-shell">
               <select
                 disabled={isSaving || availableKeysForOrg.length === 0}
-                onChange={(event) =>
+                onChange={(event) => {
+                  const nextKeyId = event.target.value;
+                  const selectedKey = availableKeysForOrg.find(
+                    (key) => key.key_id === nextKeyId,
+                  );
                   setBindingForm((current) => ({
                     ...current,
-                    key_id: event.target.value,
-                  }))
-                }
+                    key_alias:
+                      selectedKey?.key_type === "keepa" &&
+                      current.module_id === "r.warehouse"
+                        ? "keepa"
+                        : defaultAliasForKey(selectedKey),
+                    key_id: nextKeyId,
+                  }));
+                }}
                 required
                 value={bindingForm.key_id}
               >
                 {availableKeysForOrg.map((key) => (
                   <option key={key.key_id} value={key.key_id}>
-                    {key.name}
+                    {key.name} · {keyTypeLabel(key.key_type)}
                   </option>
                 ))}
               </select>

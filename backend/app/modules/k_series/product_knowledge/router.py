@@ -3651,7 +3651,12 @@ def list_media_assets(
         _media_asset_read(row)
         for row in rows
     ]
-    return MediaAssetListResponse(items=items, count=int(db.scalar(count_query) or 0))
+    count = (
+        len(rows)
+        if offset == 0 and len(rows) < limit
+        else int(db.scalar(count_query) or 0)
+    )
+    return MediaAssetListResponse(items=items, count=count)
 
 
 @router.post("/media", response_model=MediaAssetRead, status_code=status.HTTP_201_CREATED)

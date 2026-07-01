@@ -6,11 +6,21 @@ import secrets
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
+from urllib.parse import quote
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..core.config import get_settings
+from ..core.key_registry import (
+    infer_key_type_from_record,
+    key_type_allows_module,
+    key_type_definition,
+    list_key_type_definitions,
+    metadata_for_key_type,
+    normalize_key_type,
+)
 from ..models.api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
 from ..models.organization import OrganizationRecord
 from ..schemas.api_key_orchestration import (
@@ -47,6 +57,13 @@ class ApiKeyInjectionContext:
     url: str
     header_name: str
     header_value: str
+    key_type: str = "custom"
+    provider: str = "custom"
+    auth_type: str = "api_key"
+    adapter: str | None = None
+    validation_endpoint: str | None = None
+    query_param_name: str | None = None
+    query_param_value: str | None = None
 
 
 ENVELOPE_VERSION = "akv1"
@@ -55,12 +72,54 @@ MAC_BYTES = 32
 K_SERIES_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 K_SERIES_MODULE_ID = "k.product_knowledge"
 K_SERIES_PROVIDER_ALIASES = ("serp", "chatgpt", "claude_opus", "deepseek")
+R_WAREHOUSE_MODULE_ID = "r.warehouse"
+KEEPA_KEY_TYPE = "keepa"
+KEEPA_KEY_ALIAS = "keepa"
+KEEPA_VALIDATION_TIMEOUT_SECONDS = 5.0
 K_SERIES_PROVIDER_MARKERS = {
     "serp": ("serp", "serper"),
     "claude_opus": ("claude", "anthropic", "opus"),
     "deepseek": ("deepseek",),
     "chatgpt": ("chatgpt", "openai", "4sapi"),
 }
+
+
+class KeepaAdapter:
+    key_type = KEEPA_KEY_TYPE
+    adapter_name = "KeepaAdapter"
+    validation_endpoint = "https://api.keepa.com/token?key={key}"
+
+    @classmethod
+    def validation_url(cls, key_value: str) -> str:
+        return cls.validation_endpoint.replace("{key}", quote(key_value, safe=""))
+
+    @classmethod
+    def validate_key(
+        cls,
+        key_value: str,
+        *,
+        timeout_seconds: float = KEEPA_VALIDATION_TIMEOUT_SECONDS,
+    ) -> dict[str, object]:
+        if not key_value.strip():
+            return {
+                "valid": False,
+                "adapter": cls.adapter_name,
+                "reason": "empty_key",
+            }
+        try:
+            with httpx.Client(timeout=timeout_seconds, trust_env=False) as client:
+                response = client.get(cls.validation_url(key_value))
+            return {
+                "valid": response.status_code == 200,
+                "adapter": cls.adapter_name,
+                "status_code": response.status_code,
+            }
+        except httpx.HTTPError as exc:
+            return {
+                "valid": False,
+                "adapter": cls.adapter_name,
+                "reason": exc.__class__.__name__,
+            }
 
 
 def _settings_secret_material() -> str:
@@ -167,17 +226,61 @@ def _active_bindings_for_keys(
     return grouped
 
 
+def _key_type_for_record(record: ApiKeyRecord) -> str:
+    return infer_key_type_from_record(
+        name=record.name,
+        url=record.url,
+        metadata=record.metadata_json,
+    )
+
+
+def _key_type_payload(record: ApiKeyRecord) -> dict[str, object]:
+    definition = key_type_definition(_key_type_for_record(record))
+    return {
+        "key_type": definition["type"],
+        "provider": definition["provider"],
+        "auth_type": definition["auth_type"],
+        "scope": list(definition["scope"]),
+        "validation_endpoint": definition["validation_endpoint"],
+        "adapter": definition["adapter"],
+    }
+
+
+def _normalize_payload_key_type(value: object) -> str:
+    raw_value = getattr(value, "value", value)
+    try:
+        return normalize_key_type(str(raw_value) if raw_value is not None else None)
+    except ValueError as exc:
+        raise ApiKeyOrchestrationError(str(exc)) from exc
+
+
+def _metadata_with_key_type(
+    metadata: dict[str, object] | None,
+    key_type: str,
+) -> dict[str, object]:
+    return {
+        **(metadata or {}),
+        **metadata_for_key_type(key_type),
+    }
+
+
 def _read_key(
     record: ApiKeyRecord,
     bindings: list[ApiKeyModuleBindingRecord] | None = None,
 ) -> ApiKeyRead:
     metadata = record.metadata_json or {}
+    key_type_payload = _key_type_payload(record)
     runtime_state = "enabled" if metadata.get("runtime_state") == "enabled" else "disabled"
     return ApiKeyRead(
         key_id=record.key_id,
         org_id=record.org_id,
         name=record.name,
         url=record.url,
+        key_type=key_type_payload["key_type"],  # type: ignore[arg-type]
+        provider=str(key_type_payload["provider"]),
+        auth_type=str(key_type_payload["auth_type"]),
+        scope=list(key_type_payload["scope"]),  # type: ignore[arg-type]
+        validation_endpoint=key_type_payload["validation_endpoint"],  # type: ignore[arg-type]
         key_hash_prefix=record.key_hash_prefix,
         status=record.status,  # type: ignore[arg-type]
         runtime_state=runtime_state,  # type: ignore[arg-type]
@@ -194,6 +297,7 @@ def _read_binding(
     binding: ApiKeyModuleBindingRecord,
     key: ApiKeyRecord,
 ) -> ApiKeyBindingRead:
+    key_type_payload = _key_type_payload(key)
     return ApiKeyBindingRead(
         binding_id=binding.binding_id,
         org_id=binding.org_id,
@@ -202,6 +306,8 @@ def _read_binding(
         key_alias=binding.key_alias,
         key_name=key.name,
         key_url=key.url,
+        key_type=key_type_payload["key_type"],  # type: ignore[arg-type]
+        provider=str(key_type_payload["provider"]),
         status=binding.status,  # type: ignore[arg-type]
         created_at=binding.created_at,
         updated_at=binding.updated_at,
@@ -247,6 +353,7 @@ def _sync_provider_config_for_binding(
     key: ApiKeyRecord,
     source: str,
 ) -> None:
+    key_type_payload = _key_type_payload(key)
     try:
         upsert_provider_config(
             db,
@@ -258,6 +365,9 @@ def _sync_provider_config_for_binding(
             metadata={
                 "source": source,
                 "key_name": key.name,
+                "key_type": key_type_payload["key_type"],
+                "provider": key_type_payload["provider"],
+                "adapter": key_type_payload["adapter"],
             },
         )
     except ProviderConfigError:
@@ -396,6 +506,10 @@ def reevaluate_k_series_api_keys(
     }
 
 
+def list_api_key_types() -> list[dict[str, object]]:
+    return list_key_type_definitions()
+
+
 def list_api_keys(db: Session) -> list[ApiKeyRead]:
     records = list(
         db.scalars(
@@ -416,6 +530,7 @@ def create_api_key(
     actor_user_id: str,
 ) -> ApiKeyRead:
     _get_active_organization(db, org_id)
+    key_type = _normalize_payload_key_type(payload.key_type)
     key_value = payload.key_value.get_secret_value()
     fingerprint = _fingerprint(key_value)
     record = ApiKeyRecord(
@@ -429,10 +544,13 @@ def create_api_key(
         status="active",
         created_by_user_id=actor_user_id,
         updated_by_user_id=actor_user_id,
-        metadata_json={
-            "runtime_state": "enabled",
-            "storage": "backend_envelope",
-        },
+        metadata_json=_metadata_with_key_type(
+            {
+                "runtime_state": "enabled",
+                "storage": "backend_envelope",
+            },
+            key_type,
+        ),
     )
     db.add(record)
     db.flush()
@@ -458,6 +576,9 @@ def update_api_key(
         record.name = payload.name
     if payload.url is not None:
         record.url = payload.url
+    if payload.key_type is not None:
+        key_type = _normalize_payload_key_type(payload.key_type)
+        record.metadata_json = _metadata_with_key_type(record.metadata_json, key_type)
     if payload.key_value is not None:
         key_value = payload.key_value.get_secret_value()
         fingerprint = _fingerprint(key_value)
@@ -561,6 +682,15 @@ def create_api_key_binding(
         raise ApiKeyOrchestrationError("api_key_not_found")
     if key.org_id != org_id:
         raise ApiKeyIsolationError("api_key_org_mismatch")
+    key_type = _key_type_for_record(key)
+    if not key_type_allows_module(key_type, payload.module_id):
+        raise ApiKeyOrchestrationError("api_key_scope_mismatch")
+    binding_alias = payload.key_alias
+    if key_type == KEEPA_KEY_TYPE and payload.module_id == R_WAREHOUSE_MODULE_ID:
+        if binding_alias in {"default", KEEPA_KEY_ALIAS}:
+            binding_alias = KEEPA_KEY_ALIAS
+        else:
+            raise ApiKeyOrchestrationError("keepa_key_alias_required")
     _enable_key_runtime(key, actor_user_id=actor_user_id)
     db.add(key)
 
@@ -573,7 +703,7 @@ def create_api_key_binding(
     )
     if existing is not None:
         existing.status = "active"
-        existing.key_alias = payload.key_alias
+        existing.key_alias = binding_alias
         existing.updated_by_user_id = actor_user_id
         db.add(existing)
         db.flush()
@@ -591,7 +721,7 @@ def create_api_key_binding(
         org_id=org_id,
         module_id=payload.module_id,
         key_id=payload.key_id,
-        key_alias=payload.key_alias,
+        key_alias=binding_alias,
         status="active",
         created_by_user_id=actor_user_id,
         updated_by_user_id=actor_user_id,
@@ -662,6 +792,18 @@ def resolve_module_api_key_for_injection(
     key.last_used_at = datetime.now(UTC)
     db.add(key)
     db.flush()
+    key_type_payload = _key_type_payload(key)
+    key_type = str(key_type_payload["key_type"])
+    if key_type == KEEPA_KEY_TYPE:
+        header_name = "X-Keepa-Key"
+        header_value = secret_value
+        query_param_name = "key"
+        query_param_value = secret_value
+    else:
+        header_name = "Authorization"
+        header_value = f"Bearer {secret_value}"
+        query_param_name = None
+        query_param_value = None
     return ApiKeyInjectionContext(
         org_id=org_id,
         module_id=module_id,
@@ -669,6 +811,56 @@ def resolve_module_api_key_for_injection(
         key_alias=binding.key_alias,
         name=key.name,
         url=key.url,
-        header_name="Authorization",
-        header_value=f"Bearer {secret_value}",
+        header_name=header_name,
+        header_value=header_value,
+        key_type=key_type,
+        provider=str(key_type_payload["provider"]),
+        auth_type=str(key_type_payload["auth_type"]),
+        adapter=key_type_payload["adapter"],  # type: ignore[arg-type]
+        validation_endpoint=key_type_payload["validation_endpoint"],  # type: ignore[arg-type]
+        query_param_name=query_param_name,
+        query_param_value=query_param_value,
     )
+
+
+def validate_api_key_value(
+    *,
+    key_type: str,
+    key_value: str,
+) -> dict[str, object]:
+    normalized_key_type = normalize_key_type(key_type)
+    if normalized_key_type == KEEPA_KEY_TYPE:
+        return KeepaAdapter.validate_key(key_value)
+    return {
+        "valid": bool(key_value.strip()),
+        "adapter": key_type_definition(normalized_key_type).get("adapter"),
+        "reason": "local_non_empty_check",
+    }
+
+
+def validate_stored_api_key(
+    db: Session,
+    *,
+    key_id: str,
+    actor_user_id: str,
+) -> dict[str, object]:
+    key = get_api_key_record(db, key_id)
+    if key is None or key.status == "deleted":
+        raise ApiKeyOrchestrationError("api_key_not_found")
+    key_type = _key_type_for_record(key)
+    key_value = _decrypt_key_value(key.encrypted_key_value)
+    result = validate_api_key_value(key_type=key_type, key_value=key_value)
+    key.metadata_json = {
+        **(key.metadata_json or {}),
+        "validation_state": "valid" if result.get("valid") is True else "invalid",
+        "validation_adapter": result.get("adapter"),
+        "validation_checked_at": datetime.now(UTC).isoformat(),
+    }
+    key.updated_by_user_id = actor_user_id
+    db.add(key)
+    db.flush()
+    return {
+        "key_id": key.key_id,
+        "key_type": key_type,
+        **result,
+    }

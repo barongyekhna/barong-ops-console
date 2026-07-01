@@ -12,6 +12,8 @@ from ...schemas.api_key_orchestration import (
     ApiKeyCreateResponse,
     ApiKeyDeleteResponse,
     ApiKeyListResponse,
+    ApiKeyTypeListResponse,
+    ApiKeyTypeRead,
     ApiKeyUpdateRequest,
     ApiKeyUpdateResponse,
 )
@@ -22,9 +24,11 @@ from ...services.api_key_orchestration import (
     create_api_key_binding,
     delete_api_key,
     delete_api_key_binding,
+    list_api_key_types,
     list_api_key_bindings,
     list_api_keys,
     update_api_key,
+    validate_stored_api_key,
 )
 from ...services.data_isolation import without_org_data_isolation
 from ..deps import require_owner
@@ -74,6 +78,19 @@ def api_key_list(
     return ApiKeyListResponse(items=items, count=len(items))
 
 
+@router.get("/key-types", response_model=ApiKeyTypeListResponse)
+def api_key_type_list(
+    user: User = Depends(require_owner),
+) -> ApiKeyTypeListResponse:
+    del user
+    items = [
+        ApiKeyTypeRead.model_validate(item)
+        for item in list_api_key_types()
+        if item.get("enabled") is True
+    ]
+    return ApiKeyTypeListResponse(items=items, count=len(items))
+
+
 @router.post(
     "/organizations/{org_id}/keys",
     response_model=ApiKeyCreateResponse,
@@ -116,6 +133,23 @@ def api_key_update(
     except ApiKeyOrchestrationError as exc:
         _raise_api_key_error(exc)
     return ApiKeyUpdateResponse(item=item)
+
+
+@router.post("/keys/{key_id}/validate")
+def api_key_validate(
+    key_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_owner),
+) -> dict[str, object]:
+    try:
+        with without_org_data_isolation():
+            return validate_stored_api_key(
+                db,
+                key_id=key_id,
+                actor_user_id=str(user.id),
+            )
+    except ApiKeyOrchestrationError as exc:
+        _raise_api_key_error(exc)
 
 
 @router.delete("/keys/{key_id}", response_model=ApiKeyDeleteResponse)

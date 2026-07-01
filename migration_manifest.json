@@ -1,12 +1,12 @@
 {
-  "alembic_head": "ai_provider_layer_001",
+  "alembic_head": "media_storage_perf_001",
   "environment": "staging",
-  "expected_alembic_head": "ai_provider_layer_001",
+  "expected_alembic_head": "media_storage_perf_001",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 23,
-  "migration_hash": "f567b2751a1116ecb05ec651a5c3b86deac926286f483f3faa03718b6ea1287a",
+  "migration_count": 26,
+  "migration_hash": "be7f3d6797d2a35a8ee9e37bab976153a4b4363344d718b4df3af55a50e59570",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -30,9 +30,12 @@
     "module_api_key_orch_001",
     "k_product_knowledge_001",
     "k_workflow_gate_002",
-    "ai_provider_layer_001"
+    "ai_provider_layer_001",
+    "k_sku_variant_001",
+    "i_image_system_001",
+    "media_storage_perf_001"
   ],
-  "migration_order_checksum": "6685f3248ab8ce968e282722ed908bebedd0c58a19b2c536a8280d435cd9428d",
+  "migration_order_checksum": "a3dfabc1c2162de414b5458cfb5af817e958490ebbaff06932317412b4aba8c6",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -194,6 +197,27 @@
       "down_revision": "k_workflow_gate_002",
       "path": "backend/alembic/versions/20260624_03_ai_provider_abstraction_layer.py",
       "version": "ai_provider_layer_001"
+    },
+    {
+      "applied_at": "2026-06-25T00:00:00Z",
+      "checksum": "0a8b024e15bc93f07b1e5c6a9d58ce5f603bb3b648bd844cd26b52c18354ec87",
+      "down_revision": "ai_provider_layer_001",
+      "path": "backend/alembic/versions/20260625_01_k_series_sku_variant_upgrade.py",
+      "version": "k_sku_variant_001"
+    },
+    {
+      "applied_at": "2026-06-27T00:00:00Z",
+      "checksum": "5d5f57e90f96b324abb1b4d3bcffc7c0fa4eacbcb9d3fe6456a8f3d401c111d0",
+      "down_revision": "k_sku_variant_001",
+      "path": "backend/alembic/versions/20260627_01_i_series_image_system.py",
+      "version": "i_image_system_001"
+    },
+    {
+      "applied_at": "2026-06-28T00:00:00Z",
+      "checksum": "8e4e218742b42e271d3b0c6196538d96997323c3628b54985a63104d616bdc34",
+      "down_revision": "i_image_system_001",
+      "path": "backend/alembic/versions/20260628_01_media_storage_performance.py",
+      "version": "media_storage_perf_001"
     }
   ]
 }

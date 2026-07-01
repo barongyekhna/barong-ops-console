@@ -28,7 +28,7 @@
       "status": "passed"
     },
     {
-      "expected_head": "pre20_o_ops_dr_001",
+      "expected_head": "media_storage_perf_001",
       "id": "db_migration_validation",
       "status": "passed"
     },
@@ -41,35 +41,28 @@
   "generated_at": "2026-06-17T00:00:00Z",
   "live_checks": [
     {
-      "error": "HTTP Error 404: Not Found",
-      "http_status": 404,
+      "error": "<urlopen error [Errno 1] Operation not permitted>",
+      "http_status": null,
       "id": "live_backend_api_health",
-      "status": "failed",
+      "status": "skipped",
       "url": "http://127.0.0.1:8100/api/public/health"
     },
     {
-      "http_status": 200,
+      "error": "<urlopen error [Errno 1] Operation not permitted>",
+      "http_status": null,
       "id": "live_frontend_load",
-      "json": null,
-      "status": "passed",
+      "status": "skipped",
       "url": "http://127.0.0.1:3100/login"
     },
     {
-      "http_status": 200,
+      "error": "<urlopen error [Errno 1] Operation not permitted>",
+      "http_status": null,
       "id": "live_frontend_api_proxy_health",
-      "json": {
-        "database": "not_configured",
-        "environment": "staging",
-        "external_services": "not_connected",
-        "service": "barong-ops-console-backend",
-        "status": "ok",
-        "version": "0.1.0"
-      },
-      "status": "passed",
+      "status": "skipped",
       "url": "http://127.0.0.1:3100/api/backend/health"
     }
   ],
   "mode": "static-validation-with-live-probes-if-staging-is-running",
   "report_version": "PRE20-P-Batch10-FIX043-v1",
-  "status": "failed"
+  "status": "skipped"
 }

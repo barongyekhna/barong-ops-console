@@ -1,11 +1,13 @@
 import pytest
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import inspect, text
 
 from backend.app.db.session import engine
 
 pytestmark = pytest.mark.integration
 
-ALEMBIC_HEAD = "k_sku_variant_001"
+ALEMBIC_CONFIG = "backend/alembic.ini"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",
@@ -51,6 +53,11 @@ REQUIRED_ALEMBIC_TABLES = {
 
 
 def test_alembic_upgrade_head_created_required_schema() -> None:
+    script = ScriptDirectory.from_config(Config(ALEMBIC_CONFIG))
+    heads = tuple(script.get_heads())
+    assert len(heads) == 1
+    alembic_head = heads[0]
+
     inspector = inspect(engine)
     table_names = set(inspector.get_table_names())
 
@@ -62,4 +69,4 @@ def test_alembic_upgrade_head_created_required_schema() -> None:
             text("select version_num from alembic_version")
         ).scalar_one()
 
-    assert current_revision == ALEMBIC_HEAD
+    assert current_revision == alembic_head

@@ -1,0 +1,17 @@
+{
+  "backend_registry_updated": true,
+  "schema_updated": true,
+  "frontend_dropdown_updated": true,
+  "db_migration_required": false,
+  "db_migration_done": true,
+  "keepa_key_bindable": true,
+  "rw_module_can_use_keepa": true,
+  "validation": {
+    "backend_compileall": true,
+    "frontend_typecheck": true,
+    "frontend_production_build": true,
+    "target_integration_test": "tests/backend/test_module_control_api_key_orchestration.py::test_keepa_key_type_binds_to_r_warehouse_ingestion",
+    "target_integration_passed": true
+  },
+  "final_status": "PASS"
+}

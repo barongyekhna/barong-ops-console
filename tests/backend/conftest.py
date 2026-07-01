@@ -92,6 +92,11 @@ from backend.app.services.session_seen_buffer import clear_session_seen_buffer
 from backend.app.services.module_control_cache_service import (
     reset_module_control_center_cache_for_tests,
 )
+from tests.fixtures.organization_fixtures import (
+    DEFAULT_TEST_ORG_DB_ID,
+    DEFAULT_TEST_ORG_MEMBERSHIP_ID,
+    TARGET_TEST_ORG_NAME,
+)
 
 
 UNIT_TEST_FILE_NAMES = frozenset(
@@ -373,8 +378,8 @@ def owner_client(auth_client: TestClient) -> TestClient:
         db.add(user)
         db.flush()
         organization = OrganizationRecord(
-            org_id="org_11111111111111111111111111111111",
-            org_name="Default Test Org",
+            org_id=DEFAULT_TEST_ORG_DB_ID,
+            org_name=TARGET_TEST_ORG_NAME,
             org_type="store",
             owner_user_id=str(user.id),
             status="active",
@@ -384,9 +389,9 @@ def owner_client(auth_client: TestClient) -> TestClient:
         db.flush()
         db.add(
             OrgMembershipRecord(
-                membership_id="mem_11111111111111111111111111111111",
+                membership_id=DEFAULT_TEST_ORG_MEMBERSHIP_ID,
                 user_id=str(user.id),
-                org_id="org_11111111111111111111111111111111",
+                org_id=DEFAULT_TEST_ORG_DB_ID,
                 role="owner",
                 status="active",
             )

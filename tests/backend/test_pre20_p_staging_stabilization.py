@@ -38,7 +38,7 @@ def test_fix042_migration_manifest_locks_head_order_and_hashes() -> None:
     validation = staging.validate_migration_manifest(manifest)
 
     assert validation["status"] == "passed"
-    assert manifest["alembic_head"] == "ai_provider_layer_001"
+    assert manifest["alembic_head"] == "media_storage_perf_001"
     assert manifest["head_locked"] is True
     assert manifest["migration_order"] == [
         "f07_core_001",
@@ -64,6 +64,9 @@ def test_fix042_migration_manifest_locks_head_order_and_hashes() -> None:
         "k_product_knowledge_001",
         "k_workflow_gate_002",
         "ai_provider_layer_001",
+        "k_sku_variant_001",
+        "i_image_system_001",
+        "media_storage_perf_001",
     ]
     assert all(
         entry["version"] and entry["checksum"] and entry["applied_at"]
