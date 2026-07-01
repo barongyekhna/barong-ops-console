@@ -15,6 +15,32 @@ import { navigationModuleRecords } from "@/lib/navigation";
 import { getModuleRouteDecision } from "@/lib/module-registry";
 import { isOwnerRole, isSuperAdminRole } from "@/lib/roles";
 
+const R_SERIES_TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司";
+const R_WAREHOUSE_MODULE_KEY = "r.warehouse";
+const R_WAREHOUSE_ROUTE_PREFIX = "/r-w";
+const R_SERIES_ROUTE_PREFIXES = [R_WAREHOUSE_ROUTE_PREFIX, "/r-a"] as const;
+const R_ANALYSIS_ROUTE_PREFIX = "/r-a";
+
+function isRSeriesPath(pathname: string) {
+  return R_SERIES_ROUTE_PREFIXES.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+}
+
+function isRAnalysisPath(pathname: string) {
+  return (
+    pathname === R_ANALYSIS_ROUTE_PREFIX ||
+    pathname.startsWith(`${R_ANALYSIS_ROUTE_PREFIX}/`)
+  );
+}
+
+function isRWarehousePath(pathname: string) {
+  return (
+    pathname === R_WAREHOUSE_ROUTE_PREFIX ||
+    pathname.startsWith(`${R_WAREHOUSE_ROUTE_PREFIX}/`)
+  );
+}
+
 export function PermissionRouteGuard({
   children,
 }: {
@@ -25,6 +51,7 @@ export function PermissionRouteGuard({
   const {
     getCapabilityForPath,
     isLoading: capabilityStateLoading,
+    moduleControlResult,
   } =
     useFrontendCapabilityState();
   const { items, moduleAccessUnknown } = useModuleAccess();
@@ -45,6 +72,20 @@ export function PermissionRouteGuard({
     isOwner;
   const isApiKeyManagementRoute =
     pathname === "/api-key-management" && isAuthenticated && isOwner;
+  const rSeriesOrganization = moduleControlResult?.data.organizations.find(
+    (organization) =>
+      organization.org_name.trim() === R_SERIES_TARGET_ORGANIZATION_NAME,
+  );
+  const hasRSeriesOrganizationBinding = Boolean(rSeriesOrganization);
+  const rWarehouseActive = Boolean(
+    rSeriesOrganization?.modules.some(
+      (module) =>
+        module.module_id.trim().toLowerCase() === R_WAREHOUSE_MODULE_KEY &&
+        module.enabled === true &&
+        module.status === "active" &&
+        module.runtime_status === "active",
+    ),
+  );
 
   if (
     isUserManagerRoute ||
@@ -52,6 +93,38 @@ export function PermissionRouteGuard({
     isPermissionCenterRoute ||
     isModuleControlRoute ||
     isApiKeyManagementRoute
+  ) {
+    return children;
+  }
+
+  if (
+    isAuthenticated &&
+    isRSeriesPath(pathname) &&
+    !capabilityStateLoading &&
+    moduleControlResult?.ok === true &&
+    !hasRSeriesOrganizationBinding
+  ) {
+    return (
+      <NoPermissionNotice
+        description="R 系列模块仅绑定到涌龙麟（深圳）国际贸易有限公司。"
+        title="R 系列模块不可见"
+      />
+    );
+  }
+
+  if (
+    isAuthenticated &&
+    isRWarehousePath(pathname) &&
+    hasRSeriesOrganizationBinding &&
+    rWarehouseActive
+  ) {
+    return children;
+  }
+
+  if (
+    isAuthenticated &&
+    isRAnalysisPath(pathname) &&
+    hasRSeriesOrganizationBinding
   ) {
     return children;
   }

@@ -1,0 +1,36 @@
+{
+  "sidebar_status": "passed",
+  "organization_binding_status": "passed",
+  "route_status": {
+    "/r-w/dashboard": true,
+    "/r-w/products": true,
+    "/r-w/rules": true,
+    "/r-a/dashboard": true,
+    "/r-a/analysis": true
+  },
+  "frontend_deployment_status": "deployed_to_production",
+  "production_target": "https://ops.barongyekhna.com",
+  "r_w_visible": true,
+  "r_a_visible": true,
+  "r_a_disabled": true,
+  "r_w_status": {
+    "active": true,
+    "mode": "mock_mode",
+    "waiting_for_keys": true
+  },
+  "r_a_status": {
+    "inactive": true,
+    "locked_until_rw_ready": true
+  },
+  "api_connection_status": {
+    "/api/rw/products": true,
+    "/api/rw/status": true,
+    "/api/rw/rules": true
+  },
+  "mock_data_loaded": true,
+  "real_keepa_api_used": false,
+  "r_a_runtime_started": false,
+  "production_smoke_check": "passed",
+  "ui_e2e_status": "passed",
+  "deployment_method": "safe_compose_release production/frontend"
+}

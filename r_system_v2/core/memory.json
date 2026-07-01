@@ -1,0 +1,127 @@
+{
+  "system_type": "R_SYSTEM_V2",
+  "memory_layer_version": "v2.memory_only.2026-06-30",
+  "system_status": "memory_only",
+  "runtime_initialized": false,
+  "source_docs_dir": "../docs",
+  "design_documents": [
+    "ARCHITECTURE.md",
+    "SKILL.md",
+    "shared.md",
+    "amazon.md",
+    "dtc.md",
+    "dtc_data.md",
+    "README.md",
+    "product-selection.zip"
+  ],
+  "modules": [
+    {
+      "id": "R-W",
+      "name": "warehouse",
+      "description": "Design memory for the warehouse layer that stores product features and state, without creating databases or workers.",
+      "runtime_enabled": false
+    },
+    {
+      "id": "R-A",
+      "name": "analysis",
+      "description": "Design memory for the analysis layer covering rule filters and the DeepSeek -> GPT -> Opus funnel, without invoking AI calls.",
+      "runtime_enabled": false
+    }
+  ],
+  "rules": {
+    "amazon_rules": {
+      "source": "amazon.md",
+      "track": "amazon",
+      "summary": [
+        "Amazon demand is existing search demand.",
+        "Prefer stable 12-month demand, attackable competition, healthy price floor, and FBA-safe economics.",
+        "Reject capital-heavy, restricted, viral-unproven, price-war, brand-locked, and review-wall products."
+      ]
+    },
+    "dtc_rules": {
+      "source": "dtc.md",
+      "track": "dtc",
+      "summary": [
+        "DTC has two subroutes with different economics: paid ads and SEO.",
+        "DTC ad products need high gross margin, a 3-second hook, and sustained ad validation.",
+        "DTC SEO products need searchable buyer-intent problems, weak SERPs, evergreen demand, and can accept lower gross margin."
+      ]
+    },
+    "shared_rules": {
+      "source": "shared.md",
+      "track": "shared",
+      "summary": [
+        "Use the small-seller threshold matrix: avoid pure red oceans, capital barriers, and brand-locked categories.",
+        "Prefer skill/execution barriers that can be won through differentiation, listing, bundle, content, or creative work.",
+        "Apply universal red lines before scoring: battery, liquid, fragile-heavy, IP risk, forced certification, high MOQ, strong seasonality, and unproven viral demand."
+      ]
+    }
+  },
+  "data_sources": [
+    "keepa",
+    "serper",
+    "meta_ad_library",
+    "google_trends"
+  ],
+  "data_source_notes": {
+    "keepa": {
+      "purpose": "Amazon discovery, enrichment, BSR, price history, review, and feature extraction design memory.",
+      "activation": "design_only"
+    },
+    "serper": {
+      "purpose": "Manual-trigger Google SERP enrichment for existing warehouse products and Keepa x Serper SEO crossing.",
+      "activation": "manual_only_design_memory"
+    },
+    "meta_ad_library": {
+      "purpose": "DTC ad-route validation using active ads and ad duration.",
+      "activation": "design_only"
+    },
+    "google_trends": {
+      "purpose": "Trend direction and viral-trap checks.",
+      "activation": "design_only"
+    }
+  },
+  "ai_pipeline": [
+    "deepseek",
+    "gpt",
+    "opus"
+  ],
+  "ai_pipeline_details": [
+    {
+      "id": "deepseek",
+      "layer": 1,
+      "role": "Quantitative filter on structured data.",
+      "runtime_enabled": false
+    },
+    {
+      "id": "gpt",
+      "layer": 2,
+      "role": "Context validation using listing, review, ad, and SERP evidence.",
+      "runtime_enabled": false
+    },
+    {
+      "id": "opus",
+      "layer": 3,
+      "role": "Final small-seller decision, routing, P&L, risk, and action plan.",
+      "runtime_enabled": false
+    }
+  ],
+  "runtime_policy": {
+    "load_docs_only": true,
+    "execute_business_logic": false,
+    "start_workers": false,
+    "start_schedulers": false,
+    "create_database": false,
+    "call_external_apis": false,
+    "invoke_ai_pipeline": false
+  },
+  "strict_prohibitions": [
+    "do_not_create_database",
+    "do_not_start_keepa",
+    "do_not_start_ai_pipeline",
+    "do_not_start_r_w",
+    "do_not_start_r_a",
+    "do_not_modify_existing_barong_ops_console_logic",
+    "do_not_create_scheduler_or_worker"
+  ]
+}

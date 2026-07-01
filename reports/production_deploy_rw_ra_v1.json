@@ -1,0 +1,10 @@
+{
+  "backend_updated": true,
+  "bootstrap_correct": true,
+  "deployment_success": true,
+  "final_status": "PASS",
+  "frontend_updated": true,
+  "ra_accessible": true,
+  "rw_accessible": true,
+  "sidebar_visible": true
+}

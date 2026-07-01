@@ -39,6 +39,8 @@ const MODULE_DISPLAY_LABELS: Record<string, string> = {
   "integration.n8n_test_bridge": "外部流程测试桥",
   "integration.n8n_webhook_test_bridge": "Webhook测试桥",
   "k.product_knowledge": "K系列产品知识库",
+  "r.analysis": "R-A 产品分析中心",
+  "r.warehouse": "R-W 产品数据仓库",
   "system.errors": "异常记录",
   "system.memory_events": "运行记录",
   "system.operation_logs": "操作记录",

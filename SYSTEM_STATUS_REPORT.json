@@ -1,0 +1,16 @@
+{
+  "deployment_ready": true,
+  "e2e_passed": true,
+  "mock_mode_active": true,
+  "next_step": "await_key_binding",
+  "r_a_triggered": false,
+  "real_keepa_api_used": false,
+  "reports": {
+    "e2e_audit": "/opt/barong-ops-console/R_W_E2E_AUDIT_REPORT.json",
+    "mock_e2e": "/opt/barong-ops-console/R_W_MOCK_E2E_REPORT.json"
+  },
+  "rw_initialized": true,
+  "scope": "R-W only",
+  "storage_schema_ready": true,
+  "target": "https://ops.barongyekhna.com"
+}

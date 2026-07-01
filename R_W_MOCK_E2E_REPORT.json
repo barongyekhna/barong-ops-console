@@ -1,0 +1,43 @@
+{
+  "ingested_asins": [
+    "B033B3F98C"
+  ],
+  "ingestion_status": "OK",
+  "mock_data_generated": true,
+  "mock_storage_path": "/tmp/rw_mock_storage/R_W_MOCK_STORAGE.json",
+  "pipeline_integrity": "OK",
+  "pipeline_latency": 80.546,
+  "pipeline_latency_ms": 80.546,
+  "rule_engine_result": {
+    "asin": "B033B3F98C",
+    "checks": {
+      "brand_dominance_filter": true,
+      "competition_filter": true,
+      "margin_check": true,
+      "price_band_filter": true,
+      "price_trend_filter": true
+    },
+    "decision": "rule_passed",
+    "evaluated_at": "2026-07-01T02:05:29.579187+00:00",
+    "reasons": []
+  },
+  "scheduler": {
+    "errors": [],
+    "failed": 0,
+    "processed": 1,
+    "queued_before": 1,
+    "rate_limit_per_min": 20,
+    "retries": 0,
+    "success": true,
+    "token_budget": 1
+  },
+  "state_transitions": [
+    "discovered",
+    "enriched",
+    "rule_passed"
+  ],
+  "status": "success",
+  "storage_write_status": "OK",
+  "success": true,
+  "test_input": "portable door draft stopper"
+}

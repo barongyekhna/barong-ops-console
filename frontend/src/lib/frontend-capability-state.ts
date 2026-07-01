@@ -199,6 +199,8 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["admin.organizations", "账号与组织"],
   ["admin.permissions", "账号与组织"],
   ["k.product_knowledge", "业务处理"],
+  ["r.analysis", "业务处理"],
+  ["r.warehouse", "业务处理"],
   ["business.approvals", "业务处理"],
   ["business.reviews", "业务处理"],
   ["core.dashboard", "系统管理"],
@@ -216,6 +218,8 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["admin.organizations", "组织管理"],
   ["admin.permissions", "权限管理"],
   ["k.product_knowledge", "产品知识库"],
+  ["r.analysis", "R-A 产品分析中心"],
+  ["r.warehouse", "R-W 产品数据仓库"],
   ["business.approvals", "审批"],
   ["business.reviews", "审批审计"],
   ["core.dashboard", "控制台"],
@@ -233,6 +237,8 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["admin.organizations", 20],
   ["admin.permissions", 30],
   ["k.product_knowledge", 10],
+  ["r.warehouse", 12],
+  ["r.analysis", 13],
   ["business.approvals", 10],
   ["business.reviews", 20],
   ["core.dashboard", 10],
@@ -250,6 +256,7 @@ const INTERNAL_EXERCISE_MODULE_KEY = [
   ["foun", "dation_", "de", "mo"].join(""),
 ].join(".");
 const K_PRODUCT_KNOWLEDGE_MODULE_KEY = "k.product_knowledge";
+const R_ANALYSIS_MODULE_KEY = "r.analysis";
 const OWNER_ONLY_ADMIN_MODULE_KEYS = new Set([
   "admin.modules",
   "admin.key_management",
@@ -997,15 +1004,20 @@ function apiBindingForModule({
 
 function canEnterCapability({
   executionRequired,
+  moduleKey,
   navigationState,
   routeBound,
   state,
 }: {
   executionRequired: boolean;
+  moduleKey: string;
   navigationState: ModuleNavigationState;
   routeBound: boolean;
   state: ProductCapabilityStateName;
 }) {
+  if (moduleKey === R_ANALYSIS_MODULE_KEY) {
+    return routeBound && state !== "hidden" && state !== "forbidden";
+  }
   if (!routeBound || !navigationState.canEnter) {
     return false;
   }
@@ -1384,6 +1396,7 @@ export function buildFrontendCapabilityGraph({
         blocked_reason: sourceState.reason,
         can_enter: canEnterCapability({
           executionRequired,
+          moduleKey,
           navigationState,
           routeBound,
           state,

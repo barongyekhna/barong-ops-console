@@ -964,6 +964,101 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         production_release_required=True,
     ),
     _manifest(
+        module_key="r.warehouse",
+        display_name="R-W 产品数据仓库",
+        description=(
+            "R-series Warehouse product data store with mock Keepa enrichment, "
+            "normalized products, and mandatory rule filtering while API keys "
+            "are pending."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/r-w",
+        api_namespace="/rw",
+        navigation=_navigation(
+            group="Registry",
+            label="R-W 产品数据仓库",
+            icon="Database",
+            order=11,
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.r.warehouse",
+        audit_log_actions=(
+            "r.warehouse.products.read",
+            "r.warehouse.status.read",
+            "r.warehouse.rules.read",
+        ),
+        data_boundary=_data_boundary(
+            reads=("products_rw", "enrich_queue", "rule_results"),
+            writes=(),
+            blocked_objects=(
+                "real_keepa_api",
+                "r_analysis_runtime",
+                "external_provider_config",
+                "cross_module_writes",
+            ),
+        ),
+        release_requirements=_release_requirements(
+            staging_acceptance=True,
+            production_archive=True,
+            required_checks=(
+                "rw mock e2e report",
+                "rw frontend route audit",
+                "mock mode active",
+            ),
+        ),
+        staging_acceptance_required=True,
+        production_release_required=True,
+        docs_path="r_system_v2/docs/ARCHITECTURE.md",
+    ),
+    _manifest(
+        module_key="r.analysis",
+        display_name="R-A 产品分析中心",
+        description=(
+            "R-series Analysis placeholder. Runtime remains inactive until the "
+            "Warehouse module is ready for real key-bound data."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/r-a",
+        api_namespace="no_api",
+        no_api=True,
+        navigation=_navigation(
+            group="Registry",
+            label="R-A 产品分析中心",
+            icon="ClipboardCheck",
+            order=12,
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.r.analysis",
+        data_boundary=_data_boundary(
+            reads=("products_rw",),
+            writes=(),
+            blocked_objects=(
+                "r_analysis_runtime",
+                "ai_provider",
+                "external_provider_config",
+                "cross_module_writes",
+            ),
+        ),
+        release_requirements=_release_requirements(
+            required_checks=("placeholder route present", "r-a runtime inactive"),
+        ),
+        docs_path="r_system_v2/docs/ARCHITECTURE.md",
+    ),
+    _manifest(
         module_key="business.approvals",
         display_name="Approvals",
         description="Approval request list and decision surface.",

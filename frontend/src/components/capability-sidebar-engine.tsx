@@ -48,6 +48,9 @@ const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set(
 const ORGANIZATION_MODULE_PREFIXES = ["r.", "k.", "i.", "p.", "seo.", "gmc."] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
 const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
+const R_SERIES_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
+const R_WAREHOUSE_MODULE_KEY = "r.warehouse";
+const R_ANALYSIS_MODULE_KEY = "r.analysis";
 
 const CAPABILITY_BADGE_LABELS: Record<
   Exclude<ProductCapabilityBadge, null>,
@@ -132,6 +135,7 @@ function moduleAccessAllows(
 function isRestrictedProductModule(moduleId: string) {
   const normalized = moduleId.trim().toLowerCase();
   return (
+    normalized.startsWith("r.") ||
     normalized.startsWith("k.") ||
     normalized.startsWith("i.") ||
     normalized.startsWith("p.") ||
@@ -142,6 +146,99 @@ function isRestrictedProductModule(moduleId: string) {
 
 function isProductKnowledgeOrg(organization: ModuleControlOrgGroup) {
   return organization.org_name.trim() === PRODUCT_KNOWLEDGE_ORG_NAME;
+}
+
+function isRSeriesModule(moduleId: string) {
+  return moduleId.trim().toLowerCase().startsWith("r.");
+}
+
+function isRWarehouseModule(moduleId: string) {
+  return moduleId.trim().toLowerCase() === R_WAREHOUSE_MODULE_KEY;
+}
+
+function isRAnalysisModule(moduleId: string) {
+  return moduleId.trim().toLowerCase() === R_ANALYSIS_MODULE_KEY;
+}
+
+function isRSeriesOrg(organization: ModuleControlOrgGroup) {
+  return organization.org_name.trim() === R_SERIES_ORG_NAME;
+}
+
+function isActiveModuleControlState(module: ModuleControlState) {
+  return (
+    module.enabled === true &&
+    module.status === "active" &&
+    module.runtime_status === "active"
+  );
+}
+
+function rSeriesSidebarAllows({
+  item,
+  module,
+  moduleAccessByKey,
+  organization,
+}: {
+  item: ProductCapabilityItem | null;
+  module: ModuleControlState;
+  moduleAccessByKey: Map<string, ModuleAccessState>;
+  organization: ModuleControlOrgGroup;
+}) {
+  if (!isRSeriesModule(module.module_id)) {
+    return null;
+  }
+  if (!isRSeriesOrg(organization)) {
+    return false;
+  }
+  if (!item?.route_bound) {
+    return false;
+  }
+  if (isRWarehouseModule(module.module_id)) {
+    return isActiveModuleControlState(module);
+  }
+  if (isRAnalysisModule(module.module_id)) {
+    return true;
+  }
+  return moduleAccessAllows(moduleAccessByKey, module.module_id, item);
+}
+
+function sidebarItemForOrganizationModule({
+  item,
+  module,
+}: {
+  item: ProductCapabilityItem | null;
+  module: ModuleControlState;
+}) {
+  if (!item) {
+    return null;
+  }
+
+  if (isRWarehouseModule(module.module_id) && isActiveModuleControlState(module)) {
+    return {
+      ...item,
+      badge: null,
+      can_enter: true,
+      reason: "R-W 已为当前组织启用。",
+      required_module_state: "R-W module-control 状态为 active。",
+      sidebar_state: "allowed" as const,
+      state: "allowed" as const,
+      unlock_condition: "打开 R-W 产品数据仓库。",
+    };
+  }
+
+  if (isRAnalysisModule(module.module_id)) {
+    return {
+      ...item,
+      can_enter: true,
+      reason: "R-A 占位页可查看，运行能力等待 R-W 就绪。",
+      required_module_state: "R-A 当前为占位模块。",
+      sidebar_state:
+        item.sidebar_state === "hidden" ? "partial" as const : item.sidebar_state,
+      state: item.state === "hidden" ? "partial" as const : item.state,
+      unlock_condition: "打开 R-A 产品分析中心占位页。",
+    };
+  }
+
+  return item;
 }
 
 function sortModules(modules: ModuleControlState[]) {
@@ -202,6 +299,15 @@ function scopedOrganizationGroups({
             const item = capabilityForModule(byModuleKey, module.module_id);
             if (!isOrganizationLayerModule(module)) {
               return false;
+            }
+            const rSeriesAllowed = rSeriesSidebarAllows({
+              item,
+              module,
+              moduleAccessByKey,
+              organization,
+            });
+            if (rSeriesAllowed !== null) {
+              return rSeriesAllowed;
             }
             if (
               isRestrictedProductModule(module.module_id) &&
@@ -290,14 +396,15 @@ function OrganizationModuleRow({
   onNavigate: () => void;
   pathname: string;
 }) {
+  const displayItem = sidebarItemForOrganizationModule({ item, module });
   const label = getModuleDisplayName(
     module.module_id,
-    item?.label ?? module.display_name,
+    displayItem?.label ?? module.display_name,
   );
-  if (item?.route_bound) {
+  if (displayItem?.route_bound) {
     return (
       <SidebarLink
-        item={item}
+        item={displayItem}
         label={label}
         onNavigate={onNavigate}
         pathname={pathname}

@@ -31,8 +31,17 @@ class ModuleControlError(ValueError):
     pass
 
 
+TARGET_PRODUCT_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 I_IMAGE_SYSTEM_MODULE_ID = "i.image_system"
-I_IMAGE_SYSTEM_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
+I_IMAGE_SYSTEM_ORGANIZATION_NAME = TARGET_PRODUCT_ORGANIZATION_NAME
+R_WAREHOUSE_MODULE_ID = "r.warehouse"
+R_ANALYSIS_MODULE_ID = "r.analysis"
+R_SERIES_MODULE_IDS = frozenset({R_WAREHOUSE_MODULE_ID, R_ANALYSIS_MODULE_ID})
+R_SERIES_ORGANIZATION_NAME = TARGET_PRODUCT_ORGANIZATION_NAME
+
+
+def _is_r_series_module(module_id: str) -> bool:
+    return module_id in R_SERIES_MODULE_IDS
 
 
 def _module_allowed_for_organization(
@@ -42,6 +51,8 @@ def _module_allowed_for_organization(
     organization_name = organization.org_name.strip()
     if manifest.module_key == I_IMAGE_SYSTEM_MODULE_ID:
         return organization_name == I_IMAGE_SYSTEM_ORGANIZATION_NAME
+    if _is_r_series_module(manifest.module_key):
+        return organization_name == R_SERIES_ORGANIZATION_NAME
     return True
 
 
@@ -106,6 +117,12 @@ def _runtime_status_for_enabled(enabled: bool) -> str:
     return "active" if enabled else "disabled"
 
 
+def _default_enabled_for_manifest(manifest: ModuleManifestV1) -> bool:
+    if manifest.module_key == R_ANALYSIS_MODULE_ID:
+        return False
+    return manifest.status != "disabled"
+
+
 def _read_from_record(
     record: ModuleControlStateRecord,
     *,
@@ -130,13 +147,14 @@ def _read_default_state(
     manifest: ModuleManifestV1,
 ) -> ModuleControlStateRead:
     timestamp = organization.updated_at or datetime.now(UTC)
+    enabled = _default_enabled_for_manifest(manifest)
     return ModuleControlStateRead(
         org_id=organization.org_id,
         module_id=manifest.module_key,
         display_name=manifest.display_name,
         category=manifest.category,
-        enabled=True,
-        runtime_status="active",
+        enabled=enabled,
+        runtime_status=_runtime_status_for_enabled(enabled),
         runtime_error_code=None,
         runtime_error_message=None,
         last_error_at=None,
@@ -165,12 +183,17 @@ def ensure_module_control_states(
             key = (organization.org_id, manifest.module_key)
             if key in lookup:
                 continue
+            enabled = _default_enabled_for_manifest(manifest)
             record = ModuleControlStateRecord(
                 org_id=organization.org_id,
                 module_id=manifest.module_key,
-                enabled=True,
-                runtime_status="active",
-                metadata_json={"source": "auto_registered_from_manifest"},
+                enabled=enabled,
+                runtime_status=_runtime_status_for_enabled(enabled),
+                metadata_json={
+                    "locked_until_rw_ready": manifest.module_key
+                    == R_ANALYSIS_MODULE_ID,
+                    "source": "auto_registered_from_manifest",
+                },
             )
             db.add(record)
             lookup[key] = record
@@ -375,6 +398,10 @@ def filter_module_control_center_for_user(
                     module
                     for module in group.modules
                     if module.module_id in assigned_module_ids
+                    or (
+                        _is_r_series_module(module.module_id)
+                        and group.org_name.strip() == R_SERIES_ORGANIZATION_NAME
+                    )
                 ]
             }
         )

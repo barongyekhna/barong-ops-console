@@ -8,6 +8,9 @@ from sqlalchemy.orm import Session
 
 from ..core.modules import MODULE_MANIFESTS_V1
 from ..core.permissions import ALLOWED_SCOPE_TYPES, validate_permission_key
+from ..core.roles import is_owner_role
+from ..models.org_membership import OrgMembershipRecord
+from ..models.organization import OrganizationRecord
 from ..models.registry import ModuleRegistry
 from ..models.user import User
 from ..schemas.module import (
@@ -58,6 +61,8 @@ DYNAMIC_STATUS_TO_MODULE_STATUS = {
     "draft_demo": "planned",
     "inactive_demo": "disabled",
 }
+R_SERIES_TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
+R_SERIES_MODULE_KEYS = frozenset({"r.warehouse", "r.analysis"})
 
 
 def _manifest_from_raw(
@@ -346,6 +351,53 @@ def get_module_manifest_for_db(
     return dynamic_module_manifest_from_record(record)
 
 
+def _user_has_r_series_org_access(db: Session, user: User) -> bool:
+    if is_owner_role(user.role):
+        return True
+
+    org_ids: set[str] = set()
+    if user.organization_id:
+        org_ids.add(user.organization_id)
+
+    membership_org_ids = db.scalars(
+        select(OrgMembershipRecord.org_id).where(
+            OrgMembershipRecord.user_id == str(user.id),
+            OrgMembershipRecord.status == "active",
+        )
+    )
+    org_ids.update(membership_org_ids)
+
+    if not org_ids:
+        return False
+
+    return (
+        db.scalar(
+            select(OrganizationRecord.org_id)
+            .where(
+                OrganizationRecord.org_id.in_(org_ids),
+                OrganizationRecord.org_name == R_SERIES_TARGET_ORGANIZATION_NAME,
+                OrganizationRecord.status != "deleted",
+            )
+            .limit(1)
+        )
+        is not None
+    )
+
+
+def _filter_r_series_manifests_for_user(
+    db: Session,
+    user: User,
+    manifests: list[ModuleManifestV1],
+) -> list[ModuleManifestV1]:
+    if _user_has_r_series_org_access(db, user):
+        return manifests
+    return [
+        manifest
+        for manifest in manifests
+        if manifest.module_key not in R_SERIES_MODULE_KEYS
+    ]
+
+
 def _missing_permissions(
     manifest: ModuleManifestV1,
     current_user_permissions: CurrentUserPermissionInfo,
@@ -482,9 +534,14 @@ def list_modules_for_user(
         user,
         request=request,
     )
+    manifests = _filter_r_series_manifests_for_user(
+        db,
+        user,
+        list_module_manifests_with_dynamic(db),
+    )
     items = [
         build_module_access_state(manifest, current_user_permissions)
-        for manifest in list_module_manifests_with_dynamic(db)
+        for manifest in manifests
     ]
     emit_event(
         event_type="category_tree.read",

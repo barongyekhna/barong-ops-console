@@ -1,0 +1,99 @@
+{
+  "data_state_transitions_valid": true,
+  "import_errors": [],
+  "missing_paths": [],
+  "no_broken_import": true,
+  "no_missing_module": true,
+  "no_runtime_error": true,
+  "pipeline_flow_integrity": true,
+  "runtime_details": {
+    "result": {
+      "asin": "B033B3F98C",
+      "ingestion": {
+        "asin": "B033B3F98C",
+        "created_at": "2026-07-01T02:05:29.884416+00:00",
+        "marketplace": "US",
+        "source_query": "portable door draft stopper",
+        "state": "discovered"
+      },
+      "keepa_data": {
+        "asin": "B033B3F98C",
+        "brand": "DraftGuard",
+        "brand_share": 0.32,
+        "bsr": 8421,
+        "category": "Home & Kitchen",
+        "fetched_at": "2026-07-01T02:05:29.884549+00:00",
+        "landed_cost": 12.5,
+        "marketplace": "US",
+        "mock_generated": true,
+        "price": 34.99,
+        "price_trend": "stable",
+        "rating": 4.4,
+        "reviews": 214,
+        "seller_count": 7,
+        "title": "Portable Door Draft Stopper"
+      },
+      "latency_ms": 0.146,
+      "product": {
+        "asin": "B033B3F98C",
+        "brand": "DraftGuard",
+        "brand_share": 0.32,
+        "bsr": 8421,
+        "category": "Home & Kitchen",
+        "created_at": "2026-07-01T02:05:29.884579+00:00",
+        "est_net_margin": 0.4928,
+        "features": {
+          "demand_bucket": "high",
+          "estimated_fees": 5.25,
+          "mock_feature_source": "keepa_mock_v1"
+        },
+        "landed_cost": 12.5,
+        "marketplace": "US",
+        "price": 34.99,
+        "price_trend": "stable",
+        "rating": 4.4,
+        "reviews": 214,
+        "rule_reject_reason": null,
+        "seller_count": 7,
+        "source_query": "portable door draft stopper",
+        "state": "rule_passed",
+        "title": "Portable Door Draft Stopper",
+        "updated_at": "2026-07-01T02:05:29.884610+00:00"
+      },
+      "rule_evaluation": {
+        "asin": "B033B3F98C",
+        "checks": {
+          "brand_dominance_filter": true,
+          "competition_filter": true,
+          "margin_check": true,
+          "price_band_filter": true,
+          "price_trend_filter": true
+        },
+        "decision": "rule_passed",
+        "evaluated_at": "2026-07-01T02:05:29.884600+00:00",
+        "reasons": []
+      },
+      "success": true,
+      "transitions": [
+        "discovered",
+        "enriched",
+        "rule_passed"
+      ]
+    },
+    "runtime_error": null,
+    "scheduler": {
+      "errors": [],
+      "failed": 0,
+      "processed": 1,
+      "queued_before": 1,
+      "rate_limit_per_min": 20,
+      "retries": 0,
+      "success": true,
+      "token_budget": 1
+    },
+    "storage_valid": true,
+    "transition_valid": true
+  },
+  "status": "success",
+  "success": true
+}
