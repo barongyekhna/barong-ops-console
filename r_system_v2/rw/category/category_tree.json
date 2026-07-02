@@ -1,0 +1,82 @@
+{
+  "generated_from": "amazon.md",
+  "redline_terms": [
+    "锂电",
+    "restricted",
+    "IP",
+    "易碎",
+    "尺码服装",
+    "强制认证"
+  ],
+  "root": {
+    "children": [
+      {
+        "children": [
+          {
+            "children": [],
+            "id": "home-draft-proofing",
+            "name": "Draft proofing",
+            "selected": true
+          },
+          {
+            "children": [],
+            "id": "home-storage-organization",
+            "name": "Storage & organization",
+            "selected": true
+          },
+          {
+            "children": [],
+            "id": "home-small-tools",
+            "name": "Small home tools",
+            "selected": true
+          }
+        ],
+        "id": "home-kitchen",
+        "name": "Home & Kitchen",
+        "selected": true
+      },
+      {
+        "children": [
+          {
+            "children": [],
+            "id": "garden-lightweight-tools",
+            "name": "Lightweight garden tools",
+            "selected": true
+          },
+          {
+            "children": [],
+            "id": "garden-seasonless-accessories",
+            "name": "Seasonless garden accessories",
+            "selected": true
+          }
+        ],
+        "id": "patio-lawn-garden",
+        "name": "Patio, Lawn & Garden",
+        "selected": true
+      },
+      {
+        "children": [
+          {
+            "children": [],
+            "id": "office-organization",
+            "name": "Organization",
+            "selected": true
+          },
+          {
+            "children": [],
+            "id": "office-ergonomic-accessories",
+            "name": "Ergonomic accessories",
+            "selected": true
+          }
+        ],
+        "id": "office-products",
+        "name": "Office Products",
+        "selected": true
+      }
+    ],
+    "id": "amazon-fba",
+    "name": "Amazon FBA",
+    "selected": true
+  },
+  "source": "/opt/barong-ops-console/r_system_v2/docs/amazon.md"
+}

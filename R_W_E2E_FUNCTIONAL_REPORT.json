@@ -1,0 +1,54 @@
+{
+  "blockers": [],
+  "checks": {
+    "category_tree_selection_logic": "PASS",
+    "deepseek_time_window_enforcement": "PASS",
+    "keepa_ingestion_by_category": "PASS",
+    "permission_control": "PASS",
+    "popup_system_behavior": "PASS",
+    "ui_skill_label_display": "PASS"
+  },
+  "generated_at": "2026-07-02T03:09:20.994526+00:00",
+  "selected_categories_before": [
+    "amazon-fba",
+    "garden-lightweight-tools",
+    "garden-seasonless-accessories",
+    "home-draft-proofing",
+    "home-kitchen",
+    "home-small-tools",
+    "home-storage-organization",
+    "office-ergonomic-accessories",
+    "office-organization",
+    "office-products",
+    "patio-lawn-garden"
+  ],
+  "status": "PASS",
+  "time_window_active_sample": {
+    "active": true,
+    "config": {
+      "enabled": true,
+      "end_time": "23:59",
+      "start_time": "00:00",
+      "timezone": "Asia/Shanghai"
+    },
+    "force_terminate": false,
+    "message": "DeepSeek 初筛正在运行",
+    "now_beijing": "2026-07-02T11:09:20.992830+08:00",
+    "should_start": true,
+    "should_stop": false
+  },
+  "time_window_inactive_sample": {
+    "active": false,
+    "config": {
+      "enabled": true,
+      "end_time": "00:01",
+      "start_time": "00:00",
+      "timezone": "Asia/Shanghai"
+    },
+    "force_terminate": false,
+    "message": "当前不在运行时间窗口",
+    "now_beijing": "2026-07-02T11:09:20.993154+08:00",
+    "should_start": false,
+    "should_stop": false
+  }
+}

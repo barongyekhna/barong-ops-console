@@ -16,6 +16,8 @@ class ProductState(str, Enum):
     DISCOVERED = "discovered"
     ENRICHED = "enriched"
     RULE_PASSED = "rule_passed"
+    AI1_PASSED = "ai1_passed"
+    AI1_REJECTED = "ai1_rejected"
     REJECTED = "rejected"
 
 
@@ -29,6 +31,7 @@ class IngestionRecord:
     asin: str
     source_query: str
     marketplace: str = "US"
+    category_id: str | None = None
     state: ProductState = ProductState.DISCOVERED
     created_at: str = field(default_factory=utc_now_iso)
 
@@ -77,6 +80,9 @@ class NormalizedProduct:
     brand_share: float
     price_trend: str
     rating: float | None
+    category_id: str | None = None
+    category_path: list[str] = field(default_factory=list)
+    skill_score: int | None = None
     state: ProductState = ProductState.ENRICHED
     rule_reject_reason: str | None = None
     features: dict[str, Any] = field(default_factory=dict)
@@ -87,7 +93,9 @@ class NormalizedProduct:
         allowed = {
             ProductState.DISCOVERED: {ProductState.ENRICHED},
             ProductState.ENRICHED: {ProductState.RULE_PASSED, ProductState.REJECTED},
-            ProductState.RULE_PASSED: set(),
+            ProductState.RULE_PASSED: {ProductState.AI1_PASSED, ProductState.AI1_REJECTED},
+            ProductState.AI1_PASSED: set(),
+            ProductState.AI1_REJECTED: set(),
             ProductState.REJECTED: set(),
         }
         if target not in allowed[self.state]:
@@ -120,18 +128,47 @@ class RuleEvaluation:
 
 
 @dataclass(frozen=True)
+class DeepSeekScreening:
+    asin: str
+    score: int
+    verdict: str
+    competition_attackability: int
+    demand_quality: int
+    top_reason: str
+    channel_guess: str
+    strict_json: dict[str, Any]
+    skill_loaded: bool
+    quant_filter_enabled: bool
+    rule_based_scoring_active: bool
+    output_schema_strict_json: bool
+    evaluated_at: str = field(default_factory=utc_now_iso)
+
+    @property
+    def passed(self) -> bool:
+        return self.score >= 60 or self.verdict == "hold"
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
 class PipelineResult:
     asin: str
     ingestion: IngestionRecord
     keepa_data: KeepaProductData
     product: NormalizedProduct
     rule_evaluation: RuleEvaluation
+    deepseek_screening: DeepSeekScreening | None
     transitions: list[str]
     latency_ms: float
 
     @property
     def success(self) -> bool:
-        return self.product.state in {ProductState.RULE_PASSED, ProductState.REJECTED}
+        return self.product.state in {
+            ProductState.AI1_PASSED,
+            ProductState.AI1_REJECTED,
+            ProductState.REJECTED,
+        }
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -140,8 +177,10 @@ class PipelineResult:
             "keepa_data": self.keepa_data.to_dict(),
             "product": self.product.to_dict(),
             "rule_evaluation": self.rule_evaluation.to_dict(),
+            "deepseek_screening": (
+                self.deepseek_screening.to_dict() if self.deepseek_screening else None
+            ),
             "transitions": self.transitions,
             "latency_ms": self.latency_ms,
             "success": self.success,
         }
-

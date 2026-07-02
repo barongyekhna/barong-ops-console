@@ -1,0 +1,77 @@
+{
+  "amazon_rules_loaded": true,
+  "canonical_skill_path": "/opt/barong-ops-console/r_system_v2/docs/SKILL.md",
+  "deepseek": {
+    "pipeline_rule_passed_to_ai1": true,
+    "quant_filter_enabled": true,
+    "rule_based_scoring_active": true,
+    "strict_json_schema_enforced": true
+  },
+  "documents": {
+    "ARCHITECTURE.md": {
+      "bytes": 22085,
+      "loaded": true,
+      "path": "/opt/barong-ops-console/r_system_v2/docs/ARCHITECTURE.md",
+      "sha256": "817dab1753949a5d0c3f1731c546a314b780825f6abe12c9051ff2e3b5ea8782"
+    },
+    "SKILL.md": {
+      "bytes": 10794,
+      "loaded": true,
+      "path": "/opt/barong-ops-console/r_system_v2/docs/SKILL.md",
+      "sha256": "d5ca993c4a69c8df2039f06e2f499894a569d263498614bb04113986f5c3124a"
+    },
+    "amazon.md": {
+      "bytes": 4594,
+      "loaded": true,
+      "path": "/opt/barong-ops-console/r_system_v2/docs/amazon.md",
+      "sha256": "1e7d9248ed23ab34e9256166dc08e3394e4b147184295a43c7484d1969ba9b48"
+    },
+    "dtc.md": {
+      "bytes": 4002,
+      "loaded": true,
+      "path": "/opt/barong-ops-console/r_system_v2/docs/dtc.md",
+      "sha256": "3267a3e5acf539a429903205431174317d220d644a9cd335e8f5a1cc45662088"
+    },
+    "dtc_data.md": {
+      "bytes": 3442,
+      "loaded": true,
+      "path": "/opt/barong-ops-console/r_system_v2/docs/dtc_data.md",
+      "sha256": "bcc788576a0de9d66b3bf47c5c041fbcf1202f6257be52201ddaca276bcac09e"
+    },
+    "shared.md": {
+      "bytes": 4982,
+      "loaded": true,
+      "path": "/opt/barong-ops-console/r_system_v2/docs/shared.md",
+      "sha256": "f8c32194eb0b9e72b67c3871a1a749f4bedf9565389d2e3041a34a73120f3bba"
+    }
+  },
+  "dtc_data_rules_loaded": true,
+  "dtc_rules_loaded": true,
+  "generated_at": "2026-07-02T01:24:44.279812+00:00",
+  "keepa": {
+    "max_requests_per_min": 20,
+    "mock_mode": false,
+    "no_burst_mode": true,
+    "queue_based_ingestion_required": true,
+    "refill_aware_scheduler_required": true,
+    "use_real_keepa_api": true
+  },
+  "organization_binding": "涌龙麟（深圳）国际贸易有限公司",
+  "root_skill_path_present": false,
+  "shared_gate_matrix_loaded": true,
+  "status": "LOCKED",
+  "thresholds": {
+    "deepseek_pass_score": 60,
+    "dtc_ad_min_gross_margin": 0.6,
+    "dtc_seo_min_gross_margin": 0.4,
+    "gpt_pass_score": 65,
+    "max_seller_count": 15,
+    "max_single_brand_share": 0.5,
+    "max_top3_reviews": 500,
+    "max_weight_lb": 2.0,
+    "min_net_margin": 0.15,
+    "opus_keep_score": 75,
+    "price_max": 70,
+    "price_min": 25
+  }
+}

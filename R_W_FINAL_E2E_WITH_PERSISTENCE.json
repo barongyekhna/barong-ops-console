@@ -1,0 +1,122 @@
+{
+  "db_volume_status": "PASS",
+  "deployment_allowed": true,
+  "deployment_command": "NOT_RUN",
+  "direct_deploy_executed": false,
+  "full_pipeline_audit": {
+    "final_report": {
+      "category_tree": "PASS",
+      "deployment": "ALLOWED",
+      "deployment_command": "docker compose up -d --build",
+      "functional": "PASS",
+      "generated_at": "2026-07-02T03:09:20.996291+00:00",
+      "performance": "PASS",
+      "permission": "PASS",
+      "persistence": {
+        "category_tree_persisted": "PASS",
+        "container_restart_safe": "PASS",
+        "db_persistence_verified": "PASS",
+        "db_volume_stable": "PASS",
+        "no_data_loss_after_restart": "PASS",
+        "no_in_memory_state": "PASS",
+        "source": "/opt/barong-ops-console/R_W_FINAL_E2E_WITH_PERSISTENCE.json",
+        "status": "PASS"
+      }
+    },
+    "returncode": 0,
+    "status": "PASS",
+    "stderr": "",
+    "stdout": "R_W_FINAL_SYSTEM_STATUS:\n- functional: PASS\n- performance: PASS\n- permission: PASS\n- category_tree: PASS\n- deployment: ALLOWED"
+  },
+  "full_pipeline_status": "PASS",
+  "generated_at": "2026-07-02T03:09:21.184662+00:00",
+  "persistence": {
+    "backend_restart": {
+      "data": {
+        "service": "console_backend"
+      },
+      "detail": "backend container restart completed",
+      "status": "PASS"
+    },
+    "cleanup": {
+      "data": {
+        "asin": "RWPERSIST0"
+      },
+      "detail": "persistence probe row cleaned up",
+      "status": "PASS"
+    },
+    "connection_mode": "docker_psql",
+    "db_volume_stable": true,
+    "deployment_allowed": true,
+    "docker_volume": {
+      "data": {
+        "checks": {
+          "docker_volume_inspect": true,
+          "named_volume_declared": true,
+          "no_host_postgres_port": true,
+          "no_tmpfs_for_postgres": true,
+          "postgres_volume_mounted": true
+        },
+        "inspect": {
+          "data": {
+            "name": "console_postgres_data"
+          },
+          "detail": "docker volume exists",
+          "status": "PASS"
+        }
+      },
+      "detail": "PostgreSQL named volume is stable",
+      "status": "PASS"
+    },
+    "generated_at": "2026-07-02T03:09:19.603635+00:00",
+    "no_in_memory_state": true,
+    "persistence_verified": true,
+    "read_after_restart": {
+      "data": {
+        "asin": "RWPERSIST0"
+      },
+      "detail": "product persisted through backend restart",
+      "status": "PASS"
+    },
+    "restart_safe_confirmed": true,
+    "schema": {
+      "data": {
+        "required_columns": [
+          "asin",
+          "brand",
+          "brand_share",
+          "bsr",
+          "category",
+          "category_id",
+          "category_path",
+          "created_at",
+          "est_net_margin",
+          "features",
+          "landed_cost",
+          "marketplace",
+          "price",
+          "price_trend",
+          "rating",
+          "reviews",
+          "seller_count",
+          "skill_score",
+          "source_query",
+          "state",
+          "title",
+          "updated_at"
+        ]
+      },
+      "detail": "products_rw PostgreSQL schema verified",
+      "status": "PASS"
+    },
+    "write_read_cycle": {
+      "data": {
+        "asin": "RWPERSIST0"
+      },
+      "detail": "product insert and read-back verified",
+      "status": "PASS"
+    }
+  },
+  "persistence_read_after_restart": "PASS",
+  "persistence_write_status": "PASS"
+}

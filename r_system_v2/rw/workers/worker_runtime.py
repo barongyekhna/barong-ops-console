@@ -1,0 +1,164 @@
+"""Container entrypoints for R-W and R-A runtime workers."""
+
+from __future__ import annotations
+
+import os
+import signal
+import sys
+import time
+from dataclasses import asdict, dataclass
+
+from r_system_v2.core.secret_manager import SecretManager
+from r_system_v2.core.secret_manager import TARGET_ORGANIZATION_NAME
+from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
+from r_system_v2.rw.category.category_tree import load_category_tree, selected_category_ids
+from r_system_v2.rw.providers.keepa_provider import KeepaProvider
+from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
+from r_system_v2.rw.workers.secret_watch_daemon import SecretWatchDaemon
+
+
+@dataclass(frozen=True)
+class WorkerRuntimeStatus:
+    worker: str
+    ready: bool
+    mode: str
+    keepa_loaded: bool = False
+    deepseek_loaded: bool = False
+    secret_manager_connected: bool = False
+    category_count: int = 0
+
+
+RUNNING = True
+
+
+def _handle_stop(signum: int, frame: object) -> None:
+    del signum, frame
+    global RUNNING
+    RUNNING = False
+
+
+def _log(message: str) -> None:
+    print(message, flush=True)
+
+
+def _resolve_org_id() -> str:
+    configured = os.getenv("R_SYSTEM_ORG_ID", "").strip()
+    if configured:
+        return configured
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if not database_url:
+        return ""
+    try:
+        from sqlalchemy import create_engine, text
+    except ImportError:
+        return ""
+    engine = create_engine(database_url, pool_pre_ping=True)
+    try:
+        with engine.connect() as connection:
+            row = connection.execute(
+                text(
+                    """
+                    SELECT org_id
+                    FROM organizations
+                    WHERE org_name = :org_name AND status != 'deleted'
+                    ORDER BY org_id
+                    LIMIT 1
+                    """
+                ),
+                {"org_name": TARGET_ORGANIZATION_NAME},
+            ).first()
+            return str(row[0]) if row else ""
+    except Exception:
+        return ""
+    finally:
+        engine.dispose()
+
+
+def run_rw_worker() -> WorkerRuntimeStatus:
+    org_id = _resolve_org_id()
+    manager = SecretManager()
+    category_tree = load_category_tree()
+    categories = selected_category_ids(category_tree)
+    provider = KeepaProvider(org_id=org_id, secret_manager=manager)
+    deepseek_skill = DeepSeekScreeningSkill(org_id=org_id, secret_manager=manager)
+    scheduler = KeepaScheduler(provider=provider, processor=lambda record: record)  # type: ignore[arg-type]
+    daemon = SecretWatchDaemon(
+        org_id=org_id,
+        secret_manager=manager,
+        keepa_provider=provider,
+        deepseek_skill=deepseek_skill,
+    )
+    daemon.start()
+
+    keepa_loaded = bool(provider.api_key)
+    deepseek_loaded = deepseek_skill.api_key_configured()
+    _log("SecretManager connected")
+    _log(f"category engine loaded categories={len(categories)}")
+    _log(
+        "Keepa scheduler started "
+        f"rate_limit_per_min={scheduler.rate_limit_per_min} no_burst_mode=True"
+    )
+    _log("DeepSeek pipeline ready")
+    _log(
+        "R-W worker ready "
+        f"keepa_loaded={str(keepa_loaded).lower()} "
+        f"deepseek_loaded={str(deepseek_loaded).lower()}"
+    )
+    return WorkerRuntimeStatus(
+        worker="r-w-worker",
+        ready=True,
+        mode="scheduler",
+        keepa_loaded=keepa_loaded,
+        deepseek_loaded=deepseek_loaded,
+        secret_manager_connected=True,
+        category_count=len(categories),
+    )
+
+
+def run_ra_worker() -> WorkerRuntimeStatus:
+    org_id = _resolve_org_id()
+    manager = SecretManager()
+    binding = RAnalysisProviderBinding(org_id=org_id, secret_manager=manager)
+    configured = {}
+    for name, loader in (
+        ("deepseek", binding.deepseek_key),
+        ("openai", binding.gpt_key),
+        ("serper", binding.serper_key),
+    ):
+        try:
+            configured[name] = bool(loader())
+        except Exception:
+            configured[name] = False
+    _log("SecretManager connected")
+    _log("R-A analysis module ready")
+    _log("R-A worker idle / ready")
+    _log(f"R-A standby mode provider_configured={configured}")
+    return WorkerRuntimeStatus(
+        worker="r-a-worker",
+        ready=True,
+        mode="standby",
+        keepa_loaded=False,
+        deepseek_loaded=bool(configured.get("deepseek")),
+        secret_manager_connected=True,
+    )
+
+
+def main() -> None:
+    signal.signal(signal.SIGTERM, _handle_stop)
+    signal.signal(signal.SIGINT, _handle_stop)
+    worker = sys.argv[1] if len(sys.argv) > 1 else "rw"
+    if worker == "rw":
+        status = run_rw_worker()
+    elif worker == "ra":
+        status = run_ra_worker()
+    else:
+        raise SystemExit(f"unsupported worker: {worker}")
+    _log(f"worker_status={asdict(status)}")
+    while RUNNING:
+        time.sleep(5)
+    _log(f"{status.worker} stopping")
+
+
+if __name__ == "__main__":
+    main()

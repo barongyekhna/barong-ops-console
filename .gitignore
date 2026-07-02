@@ -17,6 +17,18 @@ secrets/
 *secret*
 *secrets*
 
+# Source files for the R System secret-management feature. These contain no
+# secret material; the broad patterns above protect runtime secret files.
+!r_system_v2/core/secret_manager.py
+!backend/app/api/routes/r_system_secrets.py
+!backend/app/models/r_system_secret.py
+!backend/alembic/versions/20260702_01_r_system_secret_manager.py
+!frontend/src/lib/r-system-secrets-api.ts
+!frontend/src/components/r-system-secret-management-panel.tsx
+!scripts/r_secret_manager_e2e.py
+!tests/backend/test_r_system_secret_manager.py
+!R_SECRET_MANAGER_E2E_REPORT.json
+
 # Python and test caches.
 .venv/
 __pycache__/

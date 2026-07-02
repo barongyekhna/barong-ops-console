@@ -1,0 +1,44 @@
+{
+  "checks": {
+    "data_delete_integrity": true,
+    "deepseek_scheduler_removed": true,
+    "k_i_key_source_locked": true,
+    "k_i_unchanged": true,
+    "keepa_continuous_mode": true,
+    "runtime_e2e": true,
+    "secret_manager_only": true,
+    "ui_display_only": true,
+    "ui_key_module_removed": true
+  },
+  "deepseek_scheduler_removed": true,
+  "e2e_status": "PASS",
+  "generated_at": "2026-07-02T04:51:23.394189+00:00",
+  "keepa_continuous_mode": true,
+  "runtime_e2e": {
+    "ai_evaluation_persisted": true,
+    "deepseek_batch_executed": true,
+    "keepa_scheduler": {
+      "errors": [],
+      "failed": 0,
+      "no_burst_mode": true,
+      "processed": 1,
+      "provider_mock_mode": true,
+      "queue_based_ingestion": true,
+      "queued_before": 1,
+      "rate_limit_per_min": 20,
+      "refill_aware": true,
+      "refill_in_sec": 0,
+      "retries": 0,
+      "success": true,
+      "token_budget": 1,
+      "tokens_left": 20
+    },
+    "pass_fail_split": true,
+    "product_persisted": true,
+    "queue_drained": true,
+    "simulation": "keepa_queue_non_stop_single_cycle",
+    "status": "PASS"
+  },
+  "secret_manager_only": true,
+  "ui_key_module_removed": true
+}

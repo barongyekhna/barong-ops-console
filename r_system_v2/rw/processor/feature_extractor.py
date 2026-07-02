@@ -5,6 +5,11 @@ from __future__ import annotations
 from r_system_v2.rw.core.models import KeepaProductData, NormalizedProduct, ProductState
 
 
+def _category_id(category: str) -> str:
+    normalized = category.strip().lower().replace("&", "and")
+    return "-".join(part for part in normalized.replace(",", " ").split() if part)
+
+
 def extract_product_features(source_query: str, keepa_data: KeepaProductData) -> NormalizedProduct:
     """Convert Keepa provider output into the normalized product schema.
 
@@ -35,11 +40,12 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
         brand_share=keepa_data.brand_share,
         price_trend=keepa_data.price_trend,
         rating=keepa_data.rating,
+        category_id=_category_id(keepa_data.category),
+        category_path=[keepa_data.category],
         state=ProductState.ENRICHED,
         features={
             "demand_bucket": demand_bucket,
             "estimated_fees": round(estimated_fees, 2),
-            "mock_feature_source": "keepa_mock_v1",
+            "feature_source": "keepa_v1",
         },
     )
-

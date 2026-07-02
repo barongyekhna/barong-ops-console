@@ -20,7 +20,11 @@ def _mock_asin_from_query(query: str) -> str:
     return f"B0{digest[:8]}"
 
 
-def build_ingestion_records(value: str | list[str], marketplace: str = "US") -> list[IngestionRecord]:
+def build_ingestion_records(
+    value: str | list[str],
+    marketplace: str = "US",
+    category_id: str | None = None,
+) -> list[IngestionRecord]:
     """Normalize ASIN or search-query input into discovered ASIN records."""
 
     if isinstance(value, str):
@@ -34,6 +38,12 @@ def build_ingestion_records(value: str | list[str], marketplace: str = "US") -> 
         if not cleaned:
             continue
         asin = cleaned.upper() if is_asin(cleaned) else _mock_asin_from_query(cleaned)
-        records.append(IngestionRecord(asin=asin, source_query=cleaned, marketplace=marketplace))
+        records.append(
+            IngestionRecord(
+                asin=asin,
+                source_query=cleaned,
+                marketplace=marketplace,
+                category_id=category_id,
+            )
+        )
     return records
-

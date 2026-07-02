@@ -1,0 +1,36 @@
+{
+  "generated_at": "2026-07-02T01:24:44.282478+00:00",
+  "matrix": [
+    {
+      "actual_access": true,
+      "expected_access": true,
+      "organization": "涌龙麟（深圳）国际贸易有限公司",
+      "result": "PASS",
+      "role": "owner",
+      "user": "USER_A"
+    },
+    {
+      "actual_access": true,
+      "expected_access": true,
+      "organization": "涌龙麟（深圳）国际贸易有限公司",
+      "result": "PASS",
+      "role": "super_admin",
+      "user": "USER_B"
+    },
+    {
+      "actual_access": false,
+      "expected_access": false,
+      "organization": "涌龙麟（深圳）国际贸易有限公司",
+      "result": "PASS",
+      "role": "normal_user",
+      "user": "USER_C"
+    }
+  ],
+  "organization": "涌龙麟（深圳）国际贸易有限公司",
+  "rules": {
+    "normal_user": "no access by default",
+    "owner": "full access",
+    "super_admin": "full module access + API usage"
+  },
+  "status": "PASS"
+}

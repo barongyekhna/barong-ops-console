@@ -1,9 +1,9 @@
-import { rwRulesPayload } from "@/lib/rw-mock-data";
-
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export function GET() {
-  return Response.json(rwRulesPayload());
+  return Response.json(
+    { detail: "R-W mock endpoint disabled; use /api/backend/rw/rules." },
+    { status: 410 },
+  );
 }
-

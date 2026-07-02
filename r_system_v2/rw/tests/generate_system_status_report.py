@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import json
+import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from r_system_v2.rw.providers.keepa_provider import KeepaProvider
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 MOCK_E2E_REPORT = REPO_ROOT / "R_W_MOCK_E2E_REPORT.json"
 AUDIT_REPORT = REPO_ROOT / "R_W_E2E_AUDIT_REPORT.json"
 SYSTEM_STATUS_REPORT = REPO_ROOT / "SYSTEM_STATUS_REPORT.json"
@@ -49,4 +53,3 @@ def run() -> dict[str, object]:
 
 if __name__ == "__main__":
     print(json.dumps(run(), indent=2, sort_keys=True))
-

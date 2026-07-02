@@ -41,6 +41,41 @@ function isRWarehousePath(pathname: string) {
   );
 }
 
+function RWarehouseNoPermissionPopup() {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      style={{
+        alignItems: "center",
+        background: "rgb(15 23 42 / 38%)",
+        display: "grid",
+        inset: 0,
+        justifyItems: "center",
+        padding: 20,
+        position: "fixed",
+        zIndex: 80,
+      }}
+    >
+      <div
+        style={{
+          background: "var(--color-surface)",
+          border: "1px solid var(--color-line)",
+          borderRadius: 8,
+          boxShadow: "0 20px 60px rgb(15 23 42 / 22%)",
+          color: "var(--color-text-strong)",
+          fontWeight: 760,
+          maxWidth: 420,
+          padding: 20,
+          width: "100%",
+        }}
+      >
+        暂无权限，请联系管理员开通权限
+      </div>
+    </div>
+  );
+}
+
 export function PermissionRouteGuard({
   children,
 }: {
@@ -71,7 +106,7 @@ export function PermissionRouteGuard({
     isAuthenticated &&
     isOwner;
   const isApiKeyManagementRoute =
-    pathname === "/api-key-management" && isAuthenticated && isOwner;
+    pathname === "/api-key-management" && isAuthenticated && isPrivilegedRole;
   const rSeriesOrganization = moduleControlResult?.data.organizations.find(
     (organization) =>
       organization.org_name.trim() === R_SERIES_TARGET_ORGANIZATION_NAME,
@@ -116,9 +151,19 @@ export function PermissionRouteGuard({
     isAuthenticated &&
     isRWarehousePath(pathname) &&
     hasRSeriesOrganizationBinding &&
-    rWarehouseActive
+    rWarehouseActive &&
+    isPrivilegedRole
   ) {
     return children;
+  }
+
+  if (
+    isAuthenticated &&
+    isRWarehousePath(pathname) &&
+    hasRSeriesOrganizationBinding &&
+    !isPrivilegedRole
+  ) {
+    return <RWarehouseNoPermissionPopup />;
   }
 
   if (

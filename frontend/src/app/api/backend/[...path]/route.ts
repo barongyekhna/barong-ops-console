@@ -834,7 +834,16 @@ function isAllowedRwPath(method: string, path: string[]) {
   return (
     method === "GET" &&
     path.length === 2 &&
-    ["products", "status", "rules"].includes(path[1])
+    ["products", "status", "rules", "category-tree", "category-rate-plan"].includes(path[1])
+  ) || (
+    method === "DELETE" &&
+    path.length === 3 &&
+    path[1] === "products"
+  ) || (
+    method === "POST" &&
+    path.length === 3 &&
+    path[1] === "category-tree" &&
+    path[2] === "select"
   );
 }
 

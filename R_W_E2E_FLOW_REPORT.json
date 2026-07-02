@@ -1,0 +1,46 @@
+{
+  "blockers": [
+    "KEEPA_API_KEY missing; real Keepa ingestion cannot run",
+    "DEEPSEEK_API_KEY missing; external DeepSeek screening cannot run",
+    "DATABASE_URL missing; production DB persistence cannot be verified",
+    "RW_E2E_TEST_ASIN missing; keyword-to-real-ASIN discovery is not implemented for production E2E"
+  ],
+  "db_write_status": "NOT_RUN",
+  "deepseek_status": {
+    "api_key_present": false,
+    "skill": {
+      "loaded": true,
+      "output_schema_strict_json": true,
+      "quant_filter_enabled": true,
+      "ready": true,
+      "required_schema_keys": [
+        "channel_guess",
+        "competition_attackability",
+        "demand_quality",
+        "score",
+        "top_reason",
+        "verdict"
+      ],
+      "rule_based_scoring_active": true,
+      "skill_path": "/opt/barong-ops-console/r_system_v2/docs/SKILL.md"
+    },
+    "status": "BLOCKED"
+  },
+  "generated_at": "2026-07-02T01:24:44.283025+00:00",
+  "ingestion_status": "BLOCKED_MISSING_KEEPA_API_KEY",
+  "keepa": {
+    "live_status_checked": false,
+    "max_requests_per_min": 20,
+    "no_burst_mode": true,
+    "queue_based_ingestion": true,
+    "refill_aware_scheduler": true,
+    "verified": false
+  },
+  "keepa_rate_limit_status": "BLOCKED",
+  "mock_mode_active": false,
+  "permission_status": "PASS",
+  "rule_engine_status": "NOT_RUN",
+  "status": "FAIL",
+  "test_input": "portable door draft stopper",
+  "use_real_keepa_api": true
+}

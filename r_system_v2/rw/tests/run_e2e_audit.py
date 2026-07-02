@@ -4,7 +4,12 @@ from __future__ import annotations
 
 import importlib
 import json
+import sys
 from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 from r_system_v2.rw.core.warehouse_engine import WarehouseEngine
 from r_system_v2.rw.providers.keepa_provider import KeepaProvider
@@ -12,7 +17,6 @@ from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
 from r_system_v2.rw.storage.repository import MockWarehouseRepository
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 R_SYSTEM_ROOT = REPO_ROOT / "r_system_v2"
 RW_ROOT = R_SYSTEM_ROOT / "rw"
 REPORT_PATH = REPO_ROOT / "R_W_E2E_AUDIT_REPORT.json"
@@ -54,21 +58,29 @@ def _validate_imports() -> tuple[bool, list[str]]:
 def _validate_runtime_flow() -> tuple[bool, dict[str, object]]:
     repository = MockWarehouseRepository()
     provider = KeepaProvider(force_mock=True)
-    engine = WarehouseEngine(provider=provider, repository=repository)
+    engine = WarehouseEngine(
+        provider=provider,
+        repository=repository,
+    )
     records = engine.ingest("portable door draft stopper")
     scheduler = KeepaScheduler(provider=provider, processor=engine.process_discovered_asin)
     scheduler.enqueue(records)
     scheduler_report = scheduler.run_once()
 
     result = scheduler.results[0] if scheduler.results else None
-    expected_terminal_states = {"rule_passed", "rejected"}
+    expected_terminal_states = {"ai1_passed", "ai1_rejected", "rejected"}
     transition_valid = bool(
         result
         and result.transitions[0] == "discovered"
         and result.transitions[1] == "enriched"
         and result.transitions[-1] in expected_terminal_states
     )
-    storage_valid = bool(repository.products and repository.rule_results and not repository.enrich_queue)
+    storage_valid = bool(
+        repository.products
+        and repository.rule_results
+        and repository.ai_evaluations
+        and not repository.enrich_queue
+    )
     runtime_ok = bool(result and result.success and scheduler_report.success and transition_valid and storage_valid)
 
     return runtime_ok, {

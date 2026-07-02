@@ -1,0 +1,25 @@
+{
+  "accounts": {
+    "normal_user": {
+      "api_access": false,
+      "module_access": false,
+      "skill_access": false
+    },
+    "owner": {
+      "api_access": true,
+      "module_access": true,
+      "skill_access": true
+    },
+    "super_admin": {
+      "api_access": true,
+      "module_access": true,
+      "skill_access": true
+    }
+  },
+  "api_blocking": "PASS",
+  "generated_at": "2026-07-02T03:09:20.995787+00:00",
+  "module_access_control": "PASS",
+  "popup_behavior": "PASS",
+  "status": "PASS",
+  "ui_restriction": "PASS"
+}

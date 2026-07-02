@@ -1,0 +1,79 @@
+{
+  "generated_at": "2026-07-02T04:55:42Z",
+  "target": "https://ops.barongyekhna.com",
+  "deployment_status": "BLOCKED_PRE_DEPLOYMENT_GATE",
+  "health_status": {
+    "status": "NOT_EXECUTED",
+    "reason": "Deployment was blocked before docker compose build/down/up; production runtime was not changed."
+  },
+  "keepa_status": {
+    "status": "CODE_GATE_PASS",
+    "mode": "continuous_24_7_queue_limited_20_per_min",
+    "production_runtime_verified": false,
+    "reason": "Architecture audit passed, but production deployment was not executed."
+  },
+  "deepseek_status": {
+    "status": "CODE_GATE_PASS",
+    "mode": "batch_processor_only",
+    "scheduler_authority": false,
+    "production_runtime_verified": false,
+    "reason": "Architecture audit passed, but production deployment was not executed."
+  },
+  "secret_manager_status": {
+    "status": "CODE_GATE_PASS",
+    "source": "api_key_orchestration",
+    "ui_key_module_removed": true,
+    "production_runtime_verified": false,
+    "reason": "Architecture audit passed, but production deployment was not executed."
+  },
+  "e2e_smoke_status": {
+    "status": "NOT_EXECUTED",
+    "reason": "Production smoke test is not allowed until the version gate passes.",
+    "latest_local_architecture_e2e": "PASS"
+  },
+  "safety_checks": {
+    "git_log_1": {
+      "status": "FAIL",
+      "actual": "d945667 (HEAD -> main) feat(r-system-v2): frontend production deployment complete with R-W/R-A sidebar integration, keepa key registry, and full module sync",
+      "required": "latest stable R-System architecture fix commit"
+    },
+    "working_tree_clean": {
+      "status": "FAIL",
+      "reason": "The stable fix exists in the working tree and is not committed."
+    },
+    "k_series_no_change": {
+      "status": "PASS",
+      "changed_files": []
+    },
+    "i_series_no_change": {
+      "status": "PASS",
+      "changed_files": []
+    },
+    "p_series_no_change": {
+      "status": "PASS",
+      "changed_files": []
+    },
+    "db_schema_stable": {
+      "status": "BLOCKED",
+      "reason": "Uncommitted migration/schema files are present; stability cannot be asserted for production deployment."
+    },
+    "no_migration_pending": {
+      "status": "BLOCKED",
+      "reason": "Deployment was stopped before DB/container checks because the version gate failed."
+    },
+    "architecture_fix_audit": {
+      "status": "PASS",
+      "report": "R_SYSTEM_ARCHITECTURE_FIX_REPORT.json"
+    },
+    "architecture_impact_audit": {
+      "status": "PASS",
+      "report": "ARCHITECTURE_IMPACT_REPORT.json"
+    }
+  },
+  "docker_actions": {
+    "build_no_cache": "NOT_EXECUTED",
+    "compose_down": "NOT_EXECUTED",
+    "compose_up": "NOT_EXECUTED"
+  },
+  "final_verdict": "BLOCKED"
+}

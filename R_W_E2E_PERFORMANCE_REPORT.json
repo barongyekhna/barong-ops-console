@@ -1,0 +1,122 @@
+{
+  "blockers": [],
+  "checks": {
+    "category_distribution_fairness": "PASS",
+    "concurrent_ingestion_safety": "PASS",
+    "db_write_performance": "PASS",
+    "keepa_20_per_min_compliance": "PASS",
+    "ten_min_window_batching": "PASS"
+  },
+  "generated_at": "2026-07-02T03:09:20.995225+00:00",
+  "rate_plan": {
+    "allocations": [
+      {
+        "category_id": "category-00",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-01",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-02",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-03",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-04",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-05",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-06",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-07",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-08",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-09",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-10",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-11",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-12",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-13",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-14",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-15",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-16",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-17",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-18",
+        "per_minute": 1,
+        "window_total": 10
+      },
+      {
+        "category_id": "category-19",
+        "per_minute": 1,
+        "window_total": 10
+      }
+    ],
+    "balanced": true,
+    "no_overuse": true,
+    "no_starvation": true,
+    "total_batch": 200,
+    "total_rate_per_min": 20,
+    "window_minutes": 10
+  },
+  "status": "PASS"
+}

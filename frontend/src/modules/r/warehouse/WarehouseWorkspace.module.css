@@ -52,6 +52,92 @@
   font-weight: 760;
 }
 
+.headerStatusGroup {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.skillHint {
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  color: var(--color-muted);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  font-size: 0.72rem;
+  font-weight: 720;
+}
+
+.popupBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgb(15 23 42 / 38%);
+}
+
+.popup {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 14px;
+  padding: 20px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  box-shadow: 0 20px 60px rgb(15 23 42 / 22%);
+}
+
+.popup strong {
+  color: var(--color-text-strong);
+  font-size: 1rem;
+}
+
+.popupButton,
+.filterButton {
+  min-height: 38px;
+  width: fit-content;
+  padding: 0 12px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  font-size: 0.76rem;
+  font-weight: 780;
+}
+
+.popupStats {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.popupStats div {
+  display: grid;
+  grid-template-columns: minmax(120px, 0.7fr) minmax(0, 1fr);
+  gap: 10px;
+}
+
+.popupStats dt {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 760;
+}
+
+.popupStats dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--color-text);
+  font-size: 0.78rem;
+  overflow-wrap: anywhere;
+}
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -103,6 +189,26 @@
 .panelHeader p {
   margin: 4px 0 0;
   color: var(--color-muted);
+  font-size: 0.78rem;
+}
+
+.filters {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.7fr) minmax(130px, 0.45fr) auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.filters input,
+.filters select {
+  min-height: 38px;
+  min-width: 0;
+  padding: 0 10px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  font: inherit;
   font-size: 0.78rem;
 }
 
@@ -210,5 +316,8 @@
   .ruleRow {
     grid-template-columns: 1fr;
   }
-}
 
+  .filters {
+    grid-template-columns: 1fr;
+  }
+}

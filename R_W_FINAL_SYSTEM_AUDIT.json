@@ -1,0 +1,19 @@
+{
+  "category_tree": "PASS",
+  "deployment": "ALLOWED",
+  "deployment_command": "docker compose up -d --build",
+  "functional": "PASS",
+  "generated_at": "2026-07-02T03:09:20.996291+00:00",
+  "performance": "PASS",
+  "permission": "PASS",
+  "persistence": {
+    "category_tree_persisted": "PASS",
+    "container_restart_safe": "PASS",
+    "db_persistence_verified": "PASS",
+    "db_volume_stable": "PASS",
+    "no_data_loss_after_restart": "PASS",
+    "no_in_memory_state": "PASS",
+    "source": "/opt/barong-ops-console/R_W_FINAL_E2E_WITH_PERSISTENCE.json",
+    "status": "PASS"
+  }
+}

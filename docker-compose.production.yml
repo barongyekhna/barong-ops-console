@@ -68,6 +68,62 @@ services:
     networks:
       - barong-ops-console-prod
 
+  r-w-worker:
+    container_name: r-w-worker
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "5"
+      DB_MAX_OVERFLOW: "10"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "8000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+    command:
+      - python
+      - -m
+      - r_system_v2.rw.workers.worker_runtime
+      - rw
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
+  r-a-worker:
+    container_name: r-a-worker
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      GUNICORN_WORKERS: ""
+      GUNICORN_TIMEOUT: ""
+      GUNICORN_GRACEFUL_TIMEOUT: ""
+      DB_POOL_SIZE: "5"
+      DB_MAX_OVERFLOW: "10"
+      DB_POOL_RECYCLE_SECONDS: "600"
+      DB_STATEMENT_TIMEOUT_MS: "8000"
+      DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+    command:
+      - python
+      - -m
+      - r_system_v2.rw.workers.worker_runtime
+      - ra
+    depends_on:
+      console_postgres:
+        condition: service_healthy
+    networks:
+      - barong-ops-console-prod
+
   console_frontend:
     build:
       context: .

@@ -9,9 +9,31 @@
   "runtime_details": {
     "result": {
       "asin": "B033B3F98C",
+      "deepseek_screening": {
+        "asin": "B033B3F98C",
+        "channel_guess": "both",
+        "competition_attackability": 80,
+        "demand_quality": 100,
+        "evaluated_at": "2026-07-02T01:24:35.892555+00:00",
+        "output_schema_strict_json": true,
+        "quant_filter_enabled": true,
+        "rule_based_scoring_active": true,
+        "score": 91,
+        "skill_loaded": true,
+        "strict_json": {
+          "channel_guess": "both",
+          "competition_attackability": 80,
+          "demand_quality": 100,
+          "score": 91,
+          "top_reason": "stable demand and attackable competition after hard-rule pass",
+          "verdict": "keep"
+        },
+        "top_reason": "stable demand and attackable competition after hard-rule pass",
+        "verdict": "keep"
+      },
       "ingestion": {
         "asin": "B033B3F98C",
-        "created_at": "2026-07-01T02:05:29.884416+00:00",
+        "created_at": "2026-07-02T01:24:35.892213+00:00",
         "marketplace": "US",
         "source_query": "portable door draft stopper",
         "state": "discovered"
@@ -22,7 +44,7 @@
         "brand_share": 0.32,
         "bsr": 8421,
         "category": "Home & Kitchen",
-        "fetched_at": "2026-07-01T02:05:29.884549+00:00",
+        "fetched_at": "2026-07-02T01:24:35.892352+00:00",
         "landed_cost": 12.5,
         "marketplace": "US",
         "mock_generated": true,
@@ -33,14 +55,14 @@
         "seller_count": 7,
         "title": "Portable Door Draft Stopper"
       },
-      "latency_ms": 0.146,
+      "latency_ms": 0.309,
       "product": {
         "asin": "B033B3F98C",
         "brand": "DraftGuard",
         "brand_share": 0.32,
         "bsr": 8421,
         "category": "Home & Kitchen",
-        "created_at": "2026-07-01T02:05:29.884579+00:00",
+        "created_at": "2026-07-02T01:24:35.892413+00:00",
         "est_net_margin": 0.4928,
         "features": {
           "demand_bucket": "high",
@@ -56,9 +78,9 @@
         "rule_reject_reason": null,
         "seller_count": 7,
         "source_query": "portable door draft stopper",
-        "state": "rule_passed",
+        "state": "ai1_passed",
         "title": "Portable Door Draft Stopper",
-        "updated_at": "2026-07-01T02:05:29.884610+00:00"
+        "updated_at": "2026-07-02T01:24:35.892572+00:00"
       },
       "rule_evaluation": {
         "asin": "B033B3F98C",
@@ -70,26 +92,33 @@
           "price_trend_filter": true
         },
         "decision": "rule_passed",
-        "evaluated_at": "2026-07-01T02:05:29.884600+00:00",
+        "evaluated_at": "2026-07-02T01:24:35.892437+00:00",
         "reasons": []
       },
       "success": true,
       "transitions": [
         "discovered",
         "enriched",
-        "rule_passed"
+        "rule_passed",
+        "ai1_passed"
       ]
     },
     "runtime_error": null,
     "scheduler": {
       "errors": [],
       "failed": 0,
+      "no_burst_mode": true,
       "processed": 1,
+      "provider_mock_mode": true,
+      "queue_based_ingestion": true,
       "queued_before": 1,
       "rate_limit_per_min": 20,
+      "refill_aware": true,
+      "refill_in_sec": 0,
       "retries": 0,
       "success": true,
-      "token_budget": 1
+      "token_budget": 1,
+      "tokens_left": 20
     },
     "storage_valid": true,
     "transition_valid": true

@@ -15,6 +15,7 @@ RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
     && chown -R app:app /app /var/lib/barong
 
 COPY --chown=app:app backend ./backend
+COPY --chown=app:app r_system_v2 ./r_system_v2
 COPY --chown=app:app tests/backend ./tests/backend
 
 USER app

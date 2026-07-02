@@ -1,0 +1,25 @@
+{
+  "data_safety": {
+    "destructive_db_command_executed": false,
+    "manual_delete_policy": "products_rw hard delete with DB cascade",
+    "source_runtime_uses_separate_secret_table": false
+  },
+  "generated_at": "2026-07-02T04:51:23.394180+00:00",
+  "i_series": {
+    "changed_files": [],
+    "key_source": "backend api_key_records + api_key_module_bindings via resolve_module_api_key_for_injection",
+    "modified_by_fix": false
+  },
+  "k_series": {
+    "changed_files": [],
+    "key_source": "backend api_key_records + api_key_module_bindings via resolve_module_api_key_for_injection",
+    "modified_by_fix": false
+  },
+  "rw_series": {
+    "deepseek_mode": "batch_processor_only",
+    "keepa_mode": "continuous_24_7_queue_limited_20_per_min",
+    "key_source": "SecretManager adapter over backend API Key Orchestration",
+    "ui_mode": "display_only"
+  },
+  "status": "PASS"
+}

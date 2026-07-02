@@ -1,0 +1,81 @@
+{
+  "api_registry_status": {
+    "module_registry_http_status": 401,
+    "r_w_status_http_status": 401,
+    "secret_manager_services_http_status": 401,
+    "status": "OK",
+    "note": "Routes are reachable and protected by authentication."
+  },
+  "backend_status": {
+    "container": "barong-ops-console_console_backend_1",
+    "health": {
+      "db": "not_checked",
+      "mode": "lightweight",
+      "service": "barong-ops-console",
+      "status": "ok"
+    },
+    "status": "OK"
+  },
+  "build_status": {
+    "backend_dependencies": "OK",
+    "docker_build_no_cache": "OK",
+    "frontend_build": "OK",
+    "frontend_dependencies": "OK",
+    "git_pull": "FAIL",
+    "git_pull_error": "origin remote is not configured"
+  },
+  "deepseek_status": {
+    "loaded_from_secret_manager": false,
+    "status": "FAIL"
+  },
+  "deployment_target": "https://ops.barongyekhna.com",
+  "frontend_status": {
+    "container": "barong-ops-console_console_frontend_1",
+    "local_http_status": 200,
+    "production_https_status": 200,
+    "status": "OK"
+  },
+  "generated_at": "2026-07-02T04:12:08Z",
+  "keepa_status": {
+    "loaded_from_secret_manager": false,
+    "mock_mode_fallback": false,
+    "status": "FAIL"
+  },
+  "overall_deployment_status": "FAILED",
+  "postgres_status": {
+    "alembic_version": "20260702_02_rw_category_time_window",
+    "container": "barong-ops-console_console_postgres_1",
+    "health": "healthy",
+    "status": "OK"
+  },
+  "r_a_status": {
+    "container": "r-a-worker",
+    "mode": "standby",
+    "ready_log_found": true,
+    "status": "OK",
+    "provider_keys_loaded": false
+  },
+  "r_w_status": {
+    "category_engine_loaded": true,
+    "container": "r-w-worker",
+    "deepseek_pipeline_ready_log_found": true,
+    "keepa_scheduler_started_log_found": true,
+    "secret_manager_connected_log_found": true,
+    "status": "OK",
+    "worker_key_state": {
+      "deepseek_loaded": false,
+      "keepa_loaded": false
+    }
+  },
+  "secret_manager_status": {
+    "production_secret_record_count": 0,
+    "status": "FAIL"
+  },
+  "worker_status": {
+    "containers": {
+      "r-a-worker": "Up",
+      "r-w-worker": "Up"
+    },
+    "status": "OK"
+  }
+}

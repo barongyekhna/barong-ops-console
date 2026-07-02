@@ -1,35 +1,49 @@
 "use client";
 
+import { apiRequest } from "@/lib/api";
 import type {
   RwProductsResponse,
   RwRulesResponse,
   RwStatus,
 } from "@/modules/r/warehouse/types";
 
-async function readJson<T>(path: string): Promise<T> {
-  const response = await fetch(path, {
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error("R-W mock data request failed.");
-  }
-
-  return (await response.json()) as T;
-}
-
 export function getRwStatus() {
-  return readJson<RwStatus>("/api/rw/status");
+  return apiRequest<RwStatus>("/rw/status", { bypassCache: true });
 }
 
 export function getRwProducts() {
-  return readJson<RwProductsResponse>("/api/rw/products");
+  return getRwProductsWithFilters({});
+}
+
+export function getRwProductsWithFilters(filters: {
+  q?: string;
+  category_id?: string;
+  sort_by?: "updated_at" | "skill_score";
+  sort_order?: "asc" | "desc";
+}) {
+  const params = new URLSearchParams();
+  if (filters.q) {
+    params.set("q", filters.q);
+  }
+  if (filters.category_id) {
+    params.set("category_id", filters.category_id);
+  }
+  if (filters.sort_by) {
+    params.set("sort_by", filters.sort_by);
+  }
+  if (filters.sort_order) {
+    params.set("sort_order", filters.sort_order);
+  }
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return apiRequest<RwProductsResponse>(`/rw/products${suffix}`, {
+    bypassCache: true,
+  });
 }
 
 export function getRwRules() {
-  return readJson<RwRulesResponse>("/api/rw/rules");
+  return apiRequest<RwRulesResponse>("/rw/rules", { bypassCache: true });
 }
 
+export function getRwCategoryTree() {
+  return apiRequest<unknown>("/rw/category-tree", { bypassCache: true });
+}
