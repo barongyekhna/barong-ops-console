@@ -56,6 +56,7 @@ class KeepaProductData:
     price_trend: str
     marketplace: str = "US"
     rating: float | None = None
+    image_url: str | None = None
     mock_generated: bool = True
     fetched_at: str = field(default_factory=utc_now_iso)
 
@@ -80,6 +81,7 @@ class NormalizedProduct:
     brand_share: float
     price_trend: str
     rating: float | None
+    image_url: str | None = None
     category_id: str | None = None
     category_path: list[str] = field(default_factory=list)
     skill_score: int | None = None

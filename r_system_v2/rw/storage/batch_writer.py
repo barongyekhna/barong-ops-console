@@ -9,6 +9,7 @@ from datetime import datetime
 from typing import Any
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
@@ -17,6 +18,17 @@ from r_system_v2.rw.core.models import PipelineResult
 
 
 metadata = sa.MetaData()
+rw_product_state = postgresql.ENUM(
+    "discovered",
+    "enriched",
+    "rule_passed",
+    "ai1_passed",
+    "ai1_rejected",
+    "rejected",
+    name="rw_product_state",
+    create_type=False,
+)
+json_payload_type = postgresql.JSONB().with_variant(sa.JSON(), "sqlite")
 
 products_rw = sa.Table(
     "products_rw",
@@ -25,6 +37,7 @@ products_rw = sa.Table(
     sa.Column("marketplace", sa.Text),
     sa.Column("source_query", sa.Text),
     sa.Column("title", sa.Text),
+    sa.Column("image_url", sa.Text),
     sa.Column("brand", sa.Text),
     sa.Column("category", sa.Text),
     sa.Column("category_id", sa.Text),
@@ -39,9 +52,9 @@ products_rw = sa.Table(
     sa.Column("price_trend", sa.Text),
     sa.Column("rating", sa.Numeric(3, 1)),
     sa.Column("skill_score", sa.Integer),
-    sa.Column("state", sa.Text),
+    sa.Column("state", rw_product_state),
     sa.Column("rule_reject_reason", sa.Text),
-    sa.Column("features", sa.JSON),
+    sa.Column("features", json_payload_type),
     sa.Column("last_keepa_pull", sa.DateTime(timezone=True)),
     sa.Column("created_at", sa.DateTime(timezone=True)),
     sa.Column("updated_at", sa.DateTime(timezone=True)),
@@ -52,8 +65,8 @@ rule_results = sa.Table(
     metadata,
     sa.Column("asin", sa.Text),
     sa.Column("decision", sa.Text),
-    sa.Column("reasons", sa.JSON),
-    sa.Column("checks", sa.JSON),
+    sa.Column("reasons", json_payload_type),
+    sa.Column("checks", json_payload_type),
     sa.Column("evaluated_at", sa.DateTime(timezone=True)),
 )
 
@@ -65,7 +78,7 @@ ai_evaluations = sa.Table(
     sa.Column("model", sa.Text),
     sa.Column("score", sa.Integer),
     sa.Column("verdict", sa.Text),
-    sa.Column("payload", sa.JSON),
+    sa.Column("payload", json_payload_type),
     sa.Column("created_at", sa.DateTime(timezone=True)),
 )
 
@@ -171,7 +184,9 @@ class SQLAlchemyBatchWriter:
     ) -> None:
         dialect_name = db.get_bind().dialect.name
         if dialect_name == "postgresql":
-            statement = pg_insert(products_rw).values(list(rows))
+            statement = pg_insert(products_rw).values(
+                [_postgres_product_row(row) for row in rows],
+            )
         elif dialect_name == "sqlite":
             statement = sqlite_insert(products_rw).values(list(rows))
         else:
@@ -190,6 +205,13 @@ class SQLAlchemyBatchWriter:
                 set_=update_columns,
             )
         )
+
+
+def _postgres_product_row(row: dict[str, Any]) -> dict[str, Any]:
+    casted = dict(row)
+    if casted.get("state") is not None:
+        casted["state"] = sa.cast(sa.literal(casted["state"]), rw_product_state)
+    return casted
 
 
 class InMemoryBatchWriter:
@@ -258,6 +280,7 @@ def _product_row(result: PipelineResult) -> dict[str, Any]:
         "marketplace": product.marketplace,
         "source_query": product.source_query,
         "title": product.title,
+        "image_url": product.image_url,
         "brand": product.brand,
         "category": product.category,
         "category_id": product.category_id,

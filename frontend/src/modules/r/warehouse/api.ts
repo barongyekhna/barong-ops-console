@@ -3,6 +3,7 @@
 import { apiRequest } from "@/lib/api";
 import type {
   RwProductsResponse,
+  RwPipelineResponse,
   RwRulesResponse,
   RwStatus,
 } from "@/modules/r/warehouse/types";
@@ -44,6 +45,12 @@ export function getRwProductsWithFilters(filters: {
 
 export function getRwRules() {
   return apiRequest<RwRulesResponse>(`${RW_API_BASE}/rules`, {
+    bypassCache: true,
+  });
+}
+
+export function getRwPipeline() {
+  return apiRequest<RwPipelineResponse>(`${RW_API_BASE}/pipeline`, {
     bypassCache: true,
   });
 }

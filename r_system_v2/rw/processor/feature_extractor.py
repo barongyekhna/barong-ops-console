@@ -40,6 +40,7 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
         brand_share=keepa_data.brand_share,
         price_trend=keepa_data.price_trend,
         rating=keepa_data.rating,
+        image_url=keepa_data.image_url,
         category_id=_category_id(keepa_data.category),
         category_path=[keepa_data.category],
         state=ProductState.ENRICHED,

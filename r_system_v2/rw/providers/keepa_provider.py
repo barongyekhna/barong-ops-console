@@ -23,6 +23,18 @@ NO_BURST_MODE = True
 QUEUE_BASED_INGESTION_REQUIRED = True
 DEFAULT_KEEPA_BASE_URL = "https://api.keepa.com"
 DEFAULT_KEEPA_DOMAIN = 1
+DEFAULT_CATEGORY_ID_MAP = {
+    "home-kitchen": 1055398,
+    "home-draft-proofing": 1055398,
+    "home-storage-organization": 1055398,
+    "home-small-tools": 1055398,
+    "patio-lawn-garden": 2972638011,
+    "garden-lightweight-tools": 2972638011,
+    "garden-seasonless-accessories": 2972638011,
+    "office-products": 1064954,
+    "office-organization": 1064954,
+    "office-ergonomic-accessories": 1064954,
+}
 
 HttpGetJSON = Callable[[str, dict[str, str | int], float], dict[str, Any]]
 
@@ -152,6 +164,66 @@ class KeepaProvider:
         )
         return _parse_product_payload(payload, asin=asin, source_query=source_query)
 
+    def discover_asins(
+        self,
+        *,
+        category_id: str,
+        limit: int = MAX_REQUESTS_PER_MINUTE,
+    ) -> list[str]:
+        """Discover ASINs for a Keepa category through Product Finder.
+
+        Category slugs from the UI can be mapped to Keepa numeric category ids
+        through ``RW_KEEPA_CATEGORY_MAP``:
+        ``{"home-kitchen": 1055398}``.
+        """
+
+        if self.mock_mode:
+            return [
+                f"B0{hashlib.sha1(f'{category_id}:{index}'.encode('utf-8')).hexdigest()[:8].upper()}"
+                for index in range(max(0, min(limit, MAX_REQUESTS_PER_MINUTE)))
+            ]
+        self._require_real_api()
+        keepa_category = _resolve_keepa_category_id(category_id)
+        if keepa_category is None:
+            raise KeepaConfigurationError(f"keepa_category_mapping_missing:{category_id}")
+        api_key = self.current_api_key()
+        selection = {
+            "categories_include": [keepa_category],
+            "current_NEW_gte": 2500,
+            "current_NEW_lte": 7000,
+            "current_SALES_gte": 1,
+            "current_SALES_lte": 50000,
+            "perPage": max(1, min(limit, MAX_REQUESTS_PER_MINUTE)),
+            "page": 0,
+            "sort": [["current_SALES", "asc"]],
+        }
+        try:
+            payload = self.http_get_json(
+                f"{self.base_url}/query",
+                {
+                    "key": api_key,
+                    "domain": self.domain,
+                    "selection": json.dumps(selection, separators=(",", ":")),
+                },
+                self.timeout_sec,
+            )
+            return _parse_discovery_payload(payload, limit=limit)
+        except Exception as query_error:
+            payload = self.http_get_json(
+                f"{self.base_url}/bestsellers",
+                {
+                    "key": api_key,
+                    "domain": self.domain,
+                    "category": keepa_category,
+                    "range": 0,
+                },
+                self.timeout_sec,
+            )
+            asins = _extract_asins(payload, limit=limit)
+            if asins:
+                return asins
+            raise KeepaResponseError(f"keepa_discovery_failed:{query_error}") from query_error
+
     async def fetch_product_async(
         self,
         asin: str,
@@ -189,6 +261,7 @@ class KeepaProvider:
                 brand_share=0.32,
                 price_trend="stable",
                 rating=4.4,
+                image_url=_fallback_image_url(asin),
                 mock_generated=True,
             )
 
@@ -213,6 +286,7 @@ class KeepaProvider:
             brand_share=brand_share,
             price_trend=trend,
             rating=round(4.0 + (seed % 8) / 10, 1),
+            image_url=_fallback_image_url(asin),
             mock_generated=True,
         )
 
@@ -268,6 +342,64 @@ def _parse_status_payload(payload: dict[str, Any]) -> KeepaStatus:
     )
 
 
+def _resolve_keepa_category_id(category_id: str) -> int | None:
+    cleaned = category_id.strip()
+    if cleaned.isdigit():
+        return int(cleaned)
+    if cleaned in DEFAULT_CATEGORY_ID_MAP:
+        return DEFAULT_CATEGORY_ID_MAP[cleaned]
+    raw_map = os.getenv("RW_KEEPA_CATEGORY_MAP", "").strip()
+    if not raw_map:
+        return None
+    try:
+        mapping = json.loads(raw_map)
+    except json.JSONDecodeError:
+        return None
+    value = mapping.get(cleaned) if isinstance(mapping, dict) else None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().isdigit():
+        return int(value.strip())
+    return None
+
+
+def _parse_discovery_payload(payload: dict[str, Any], *, limit: int) -> list[str]:
+    raw_asins = payload.get("asinList") or payload.get("asins") or payload.get("asin_list")
+    if not isinstance(raw_asins, list):
+        asins = _extract_asins(payload, limit=limit)
+        if asins:
+            return asins
+        raise KeepaResponseError("keepa_query_asin_list_missing")
+    return _extract_asins(raw_asins, limit=limit)
+
+
+def _extract_asins(value: Any, *, limit: int) -> list[str]:
+    asins: list[str] = []
+
+    def visit(item: Any) -> None:
+        if len(asins) >= limit:
+            return
+        if isinstance(item, str):
+            asin = item.strip().upper()
+            if len(asin) == 10 and asin.isalnum() and asin not in asins:
+                asins.append(asin)
+            return
+        if isinstance(item, dict):
+            for nested in item.values():
+                visit(nested)
+                if len(asins) >= limit:
+                    return
+            return
+        if isinstance(item, list):
+            for nested in item:
+                visit(nested)
+                if len(asins) >= limit:
+                    return
+
+    visit(value)
+    return asins
+
+
 def _first_product(payload: dict[str, Any]) -> dict[str, Any]:
     products = payload.get("products")
     if not isinstance(products, list) or not products:
@@ -308,6 +440,28 @@ def _category_name(product: dict[str, Any]) -> str:
     return "Unknown"
 
 
+def _image_url_from_product(product: dict[str, Any], *, asin: str | None = None) -> str | None:
+    direct = product.get("imageUrl") or product.get("image_url")
+    if isinstance(direct, str) and direct.startswith(("http://", "https://")):
+        return direct
+    images_csv = product.get("imagesCSV")
+    if not isinstance(images_csv, str) or not images_csv.strip():
+        return _fallback_image_url(str(product.get("asin") or asin or ""))
+    image_name = images_csv.split(",", 1)[0].strip()
+    if not image_name:
+        return None
+    if image_name.startswith(("http://", "https://")):
+        return image_name
+    return f"https://images-na.ssl-images-amazon.com/images/I/{image_name}"
+
+
+def _fallback_image_url(asin: str) -> str | None:
+    cleaned = asin.strip().upper()
+    if len(cleaned) != 10 or not cleaned.isalnum():
+        return None
+    return f"https://images-na.ssl-images-amazon.com/images/P/{cleaned}.01._SCLZZZZZZZ_.jpg"
+
+
 def _parse_product_payload(
     payload: dict[str, Any],
     *,
@@ -336,8 +490,10 @@ def _parse_product_payload(
     title = str(product.get("title") or source_query or asin)
     brand = str(product.get("brand") or "Unknown")
 
+    parsed_asin = str(product.get("asin") or asin)
+
     return KeepaProductData(
-        asin=str(product.get("asin") or asin),
+        asin=parsed_asin,
         price=price,
         bsr=bsr,
         reviews=reviews,
@@ -350,5 +506,6 @@ def _parse_product_payload(
         price_trend=str(product.get("priceTrend") or "unknown"),
         marketplace="US",
         rating=None,
+        image_url=_image_url_from_product(product, asin=parsed_asin),
         mock_generated=False,
     )

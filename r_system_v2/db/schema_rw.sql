@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS products_rw (
   marketplace TEXT NOT NULL DEFAULT 'US',
   source_query TEXT,
   title TEXT,
+  image_url TEXT,
   brand TEXT,
   category TEXT,
   category_id TEXT,
@@ -52,6 +53,8 @@ CREATE TABLE IF NOT EXISTS enrich_queue (
   asin TEXT NOT NULL UNIQUE,
   marketplace TEXT NOT NULL DEFAULT 'US',
   source_query TEXT,
+  category_id TEXT,
+  category_path TEXT,
   picked BOOLEAN NOT NULL DEFAULT FALSE,
   retry_count INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
@@ -86,5 +89,41 @@ CREATE INDEX IF NOT EXISTS idx_products_rw_category_id ON products_rw(category_i
 CREATE INDEX IF NOT EXISTS idx_products_rw_skill_score ON products_rw(skill_score);
 CREATE INDEX IF NOT EXISTS idx_products_rw_updated_at ON products_rw(updated_at);
 CREATE INDEX IF NOT EXISTS idx_enrich_queue_picked ON enrich_queue(picked, enqueued_at);
+CREATE INDEX IF NOT EXISTS idx_enrich_queue_category_pending ON enrich_queue(category_id, picked, enqueued_at);
 CREATE INDEX IF NOT EXISTS idx_rule_results_asin ON rule_results(asin);
 CREATE INDEX IF NOT EXISTS idx_ai_evaluations_asin ON ai_evaluations(asin);
+
+CREATE TABLE IF NOT EXISTS rw_pipeline_events (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  asin TEXT,
+  category_id TEXT,
+  event_type TEXT NOT NULL,
+  stage TEXT NOT NULL,
+  status TEXT NOT NULL,
+  score_action TEXT,
+  message TEXT,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS rw_worker_status (
+  worker_name TEXT PRIMARY KEY,
+  status TEXT NOT NULL,
+  pid INTEGER,
+  loop_interval_seconds INTEGER NOT NULL DEFAULT 60,
+  deepseek_interval_seconds INTEGER NOT NULL DEFAULT 300,
+  last_heartbeat_at TIMESTAMPTZ,
+  last_cycle_started_at TIMESTAMPTZ,
+  last_cycle_finished_at TIMESTAMPTZ,
+  last_error TEXT,
+  processed_total INTEGER NOT NULL DEFAULT 0,
+  failed_total INTEGER NOT NULL DEFAULT 0,
+  queue_pending INTEGER NOT NULL DEFAULT 0,
+  selected_categories JSONB NOT NULL DEFAULT '[]'::jsonb,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_rw_pipeline_events_created ON rw_pipeline_events(created_at);
+CREATE INDEX IF NOT EXISTS idx_rw_pipeline_events_asin ON rw_pipeline_events(asin);
+CREATE INDEX IF NOT EXISTS idx_rw_worker_status_heartbeat ON rw_worker_status(last_heartbeat_at);

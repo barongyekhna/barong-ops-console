@@ -21,6 +21,7 @@ from r_system_v2.rw.category.category_tree import (
 )
 from r_system_v2.rw.scheduler.category_rate_limiter import CategoryRateLimiter
 from r_system_v2.rw.skill_metadata import load_deepseek_skill_metadata
+from r_system_v2.rw.storage.pipeline_events import runtime_overview
 
 
 router = APIRouter(prefix="/rw", tags=["r-warehouse"])
@@ -30,37 +31,37 @@ R_SERIES_TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公�
 RULES = [
     {
         "id": "price_band_filter",
-        "label": "price band filter",
+        "label": "价格带过滤",
         "enabled": True,
-        "result": "passed",
+        "result": "已启用",
         "threshold": "25 <= price <= 70",
     },
     {
         "id": "margin_check",
-        "label": "margin check",
+        "label": "净利率检查",
         "enabled": True,
-        "result": "passed",
+        "result": "已启用",
         "threshold": "est_net_margin >= 0.15",
     },
     {
         "id": "competition_filter",
-        "label": "competition filter",
+        "label": "卖家数量过滤",
         "enabled": True,
-        "result": "passed",
+        "result": "已启用",
         "threshold": "seller_count <= 15",
     },
     {
         "id": "brand_dominance_filter",
-        "label": "brand dominance filter",
+        "label": "品牌垄断过滤",
         "enabled": True,
-        "result": "passed",
+        "result": "已启用",
         "threshold": "brand_share <= 0.50",
     },
     {
         "id": "price_trend_filter",
-        "label": "price trend filter",
+        "label": "价格趋势过滤",
         "enabled": True,
-        "result": "passed",
+        "result": "已启用",
         "threshold": "price_trend not declining",
     },
 ]
@@ -153,6 +154,16 @@ def _deepseek_batch_status(db: Session) -> dict[str, object]:
     }
 
 
+def _decision_from_state(state: str, features: object) -> str:
+    if isinstance(features, dict) and isinstance(features.get("score_action"), str):
+        return str(features["score_action"])
+    if state == "ai1_passed":
+        return "pass"
+    if state in {"ai1_rejected", "rejected"}:
+        return "reject"
+    return "pending_review"
+
+
 def require_r_series_org(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -189,6 +200,7 @@ def rw_status(
     keepa_bound = ingestion_status["keepa_key_bound"] is True
     category_tree = load_category_tree()
     selected_categories = selected_category_ids(category_tree)
+    runtime = runtime_overview(db, event_limit=10)
     return {
         "module": "R-W",
         "active": True,
@@ -238,6 +250,7 @@ def rw_status(
         ),
         "skill": load_deepseek_skill_metadata(),
         "deepseek_batch": _deepseek_batch_status(db),
+        "runtime": runtime,
         "category_tree": {
             "selected_count": len(selected_categories),
             "selected_categories": selected_categories,
@@ -247,6 +260,7 @@ def rw_status(
             "/api/rw/status",
             "/api/rw/rules",
             "/api/rw/ingestion/status",
+            "/api/rw/pipeline",
         ],
     }
 
@@ -301,8 +315,9 @@ def rw_products(
         result = db.execute(
             text(
                 f"""
-                SELECT asin, title, category, price, bsr, reviews, seller_count,
-                       state, est_net_margin, category_id, category_path, skill_score
+                SELECT asin, title, image_url, category, price, bsr, reviews, seller_count,
+                       state, est_net_margin, category_id, category_path, skill_score,
+                       features, last_keepa_pull, updated_at
                 FROM products_rw
                 {where_sql}
                 ORDER BY {order_column} {order_sql} NULLS LAST
@@ -315,6 +330,7 @@ def rw_products(
             {
                 "asin": row.asin,
                 "title": row.title,
+                "image_url": row.image_url,
                 "category": row.category,
                 "price": float(row.price) if row.price is not None else None,
                 "bsr": row.bsr,
@@ -326,6 +342,9 @@ def rw_products(
                 "category_id": row.category_id,
                 "category_path": row.category_path.split(">") if row.category_path else [],
                 "skill_score": row.skill_score,
+                "pipeline_decision": _decision_from_state(row.state, row.features),
+                "last_keepa_pull": str(row.last_keepa_pull) if row.last_keepa_pull else None,
+                "updated_at": str(row.updated_at) if row.updated_at else None,
                 "source": "products_rw",
             }
             for row in result
@@ -354,6 +373,21 @@ def rw_rules(user: User = Depends(require_r_series_org)) -> dict[str, object]:
         "items": RULES,
         "count": len(RULES),
         "enabled": True,
+        "mode": "production",
+    }
+
+
+@router.get("/pipeline")
+def rw_pipeline(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    del user
+    return {
+        "module": "R-W",
+        "organization": R_SERIES_TARGET_ORGANIZATION_NAME,
+        "refresh_seconds": 5,
+        "runtime": runtime_overview(db, event_limit=100),
         "mode": "production",
     }
 

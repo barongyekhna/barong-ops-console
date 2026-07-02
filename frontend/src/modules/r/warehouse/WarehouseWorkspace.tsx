@@ -1,15 +1,17 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Database, RefreshCw } from "lucide-react";
+import { Activity, AlertCircle, CheckCircle2, Database, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 import {
+  getRwPipeline,
   getRwProductsWithFilters,
   getRwRules,
   getRwStatus,
 } from "@/modules/r/warehouse/api";
 import type {
+  RwPipelineResponse,
   RwProduct,
   RwProductsResponse,
   RwRulesResponse,
@@ -18,12 +20,13 @@ import type {
 
 import styles from "./WarehouseWorkspace.module.css";
 
-type WarehouseView = "dashboard" | "products" | "rules";
+type WarehouseView = "dashboard" | "products" | "rules" | "pipeline" | "batch";
 
 type WarehouseState = {
   products: RwProductsResponse | null;
   rules: RwRulesResponse | null;
   status: RwStatus | null;
+  pipeline: RwPipelineResponse | null;
 };
 
 type ProductFilters = {
@@ -34,13 +37,15 @@ type ProductFilters = {
 };
 
 const tabs: Array<{ href: string; label: string; view: WarehouseView }> = [
-  { href: "/r-w/dashboard", label: "Dashboard", view: "dashboard" },
-  { href: "/r-w/products", label: "Products", view: "products" },
-  { href: "/r-w/rules", label: "Rules", view: "rules" },
+  { href: "/r-w/dashboard", label: "总览", view: "dashboard" },
+  { href: "/r-w/products", label: "产品库", view: "products" },
+  { href: "/r-w/pipeline", label: "抓取流水线", view: "pipeline" },
+  { href: "/r-w/batch-status", label: "批次状态", view: "batch" },
+  { href: "/r-w/rules", label: "规则", view: "rules" },
 ];
 
 function currency(value: number) {
-  return new Intl.NumberFormat("en-US", {
+  return new Intl.NumberFormat("zh-CN", {
     currency: "USD",
     maximumFractionDigits: 2,
     style: "currency",
@@ -51,9 +56,63 @@ function percent(value: number) {
   return `${Math.round(value * 1000) / 10}%`;
 }
 
+function stateLabel(value: string) {
+  const labels: Record<string, string> = {
+    ai1_passed: "初筛通过",
+    ai1_rejected: "初筛剔除",
+    discovered: "已发现",
+    enriched: "已富化",
+    rejected: "规则剔除",
+    rule_passed: "待初筛",
+  };
+  return labels[value] ?? value;
+}
+
+function decisionLabel(value: string) {
+  const labels: Record<string, string> = {
+    pass: "通过",
+    pending_review: "待复核",
+    reject: "剔除",
+  };
+  return labels[value] ?? value;
+}
+
+function modeLabel(value: string) {
+  const labels: Record<string, string> = {
+    production: "生产运行",
+    production_blocked: "等待密钥",
+  };
+  return labels[value] ?? value;
+}
+
+function eventLabel(value: string) {
+  const labels: Record<string, string> = {
+    deepseek_prefilter: "DeepSeek 初筛",
+    keepa_cycle: "Keepa 循环",
+    keepa_discovery: "Keepa 类目发现",
+    keepa_fetch: "Keepa 抓取",
+  };
+  return labels[value] ?? value;
+}
+
+function statusLabel(value: string) {
+  const labels: Record<string, string> = {
+    active: "运行中",
+    blocked: "阻塞",
+    failed: "失败",
+    idle: "空闲",
+    processed: "已处理",
+    queued: "已入队",
+    stored: "已入库",
+  };
+  return labels[value] ?? value;
+}
+
 function productMetrics(products: readonly RwProduct[]) {
-  const passed = products.filter((product) =>
-    ["rule_passed", "ai1_passed"].includes(product.state),
+  const passed = products.filter((product) => product.pipeline_decision === "pass").length;
+  const rejected = products.filter((product) => product.pipeline_decision === "reject").length;
+  const pending = products.filter(
+    (product) => product.pipeline_decision === "pending_review",
   ).length;
   const productsWithMargin = products.filter(
     (product): product is RwProduct & { margin: number } =>
@@ -67,6 +126,8 @@ function productMetrics(products: readonly RwProduct[]) {
   return {
     averageMargin,
     passed,
+    pending,
+    rejected,
     total: products.length,
   };
 }
@@ -91,19 +152,23 @@ function ViewTabs({ activeView }: { activeView: WarehouseView }) {
 }
 
 function ProductsTable({ products }: { products: readonly RwProduct[] }) {
+  if (products.length === 0) {
+    return <div className={styles.empty}>后端产品库暂无记录。</div>;
+  }
+
   return (
     <div className={styles.tableWrap}>
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>Product</th>
-            <th>Price</th>
+            <th>产品</th>
+            <th>价格</th>
             <th>BSR</th>
-            <th>Reviews</th>
-            <th>Sellers</th>
-            <th>Margin</th>
-            <th>Skill</th>
-            <th>State</th>
+            <th>评论</th>
+            <th>卖家</th>
+            <th>利润率</th>
+            <th>分数</th>
+            <th>状态</th>
           </tr>
         </thead>
         <tbody>
@@ -111,18 +176,32 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
             <tr key={product.asin}>
               <td>
                 <div className={styles.productCell}>
-                  <strong>{product.title}</strong>
-                  <span>{product.asin} · {product.category}</span>
+                  <div className={styles.productPreview}>
+                    {product.image_url ? (
+                      <img alt={product.title} src={product.image_url} />
+                    ) : (
+                      <span>无图</span>
+                    )}
+                  </div>
+                  <div>
+                    <strong>{product.title}</strong>
+                    <span>
+                      {product.asin} · {product.category}
+                    </span>
+                  </div>
                 </div>
               </td>
-              <td>{product.price === null ? "N/A" : currency(product.price)}</td>
-              <td>{product.bsr.toLocaleString("en-US")}</td>
-              <td>{product.reviews.toLocaleString("en-US")}</td>
+              <td>{product.price === null ? "无" : currency(product.price)}</td>
+              <td>{product.bsr.toLocaleString("zh-CN")}</td>
+              <td>{product.reviews.toLocaleString("zh-CN")}</td>
               <td>{product.seller_count}</td>
-              <td>{product.margin === null ? "N/A" : percent(product.margin)}</td>
-              <td>{product.skill_score ?? "N/A"}</td>
+              <td>{product.margin === null ? "无" : percent(product.margin)}</td>
+              <td>{product.skill_score ?? "待跑"}</td>
               <td>
-                <span className={styles.badge}>{product.rule_result}</span>
+                <span className={styles.badge}>
+                  {decisionLabel(product.pipeline_decision)}
+                </span>
+                <span className={styles.stateText}>{stateLabel(product.state)}</span>
               </td>
             </tr>
           ))}
@@ -146,61 +225,168 @@ function RulesList({ rules }: { rules: RwRulesResponse }) {
   );
 }
 
+function PipelineView({ pipeline }: { pipeline: RwPipelineResponse }) {
+  const workers = pipeline.runtime.workers;
+  const events = pipeline.runtime.events;
+  return (
+    <section className={styles.panel}>
+      <div className={styles.panelHeader}>
+        <div>
+          <h2>抓取流水线</h2>
+          <p>Keepa → 规则预筛 → DeepSeek 初筛 → 入库 → 页面刷新</p>
+        </div>
+        <span className={styles.badge}>5 秒刷新</span>
+      </div>
+      <div className={styles.workerGrid}>
+        {workers.length === 0 ? (
+          <div className={styles.empty}>尚未收到 worker 心跳。</div>
+        ) : (
+          workers.map((worker) => (
+            <div className={styles.workerRow} key={worker.worker_name}>
+              <strong>{worker.worker_name}</strong>
+              <span>{statusLabel(worker.status)}</span>
+              <span>Keepa {worker.loop_interval_seconds} 秒/轮</span>
+              <span>DeepSeek {worker.deepseek_interval_seconds} 秒/轮</span>
+              <span>队列 {worker.queue_pending}</span>
+              <span>{worker.last_heartbeat_at ?? "暂无心跳"}</span>
+            </div>
+          ))
+        )}
+      </div>
+      <div className={styles.eventList}>
+        {events.length === 0 ? (
+          <div className={styles.empty}>暂无流水线事件。</div>
+        ) : (
+          events.map((event, index) => (
+            <div className={styles.eventRow} key={`${event.created_at}-${index}`}>
+              <div>
+                <strong>{eventLabel(event.event_type)}</strong>
+                <span>{event.asin ?? event.category_id ?? "系统事件"}</span>
+              </div>
+              <span>{stateLabel(event.stage)}</span>
+              <span>
+                {event.score_action ? decisionLabel(event.score_action) : statusLabel(event.status)}
+              </span>
+              <span>{event.created_at}</span>
+            </div>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function BatchStatusView({ status }: { status: RwStatus }) {
+  const queue = status.runtime.queue;
+  return (
+    <section className={styles.panel}>
+      <div className={styles.panelHeader}>
+        <div>
+          <h2>批次状态</h2>
+          <p>DeepSeek 自动初筛和 Keepa 队列处理统计。</p>
+        </div>
+        <span className={styles.badge}>自动批处理</span>
+      </div>
+      <dl className={styles.statusGrid}>
+        <div>
+          <dt>DeepSeek 运行范围</dt>
+          <dd>{status.deepseek_batch.run_time_range}</dd>
+        </div>
+        <div>
+          <dt>DeepSeek 已处理</dt>
+          <dd>{status.deepseek_batch.total_processed}</dd>
+        </div>
+        <div>
+          <dt>DeepSeek 通过</dt>
+          <dd>{status.deepseek_batch.pass_count}</dd>
+        </div>
+        <div>
+          <dt>DeepSeek 剔除</dt>
+          <dd>{status.deepseek_batch.fail_count}</dd>
+        </div>
+        <div>
+          <dt>队列待处理</dt>
+          <dd>{queue.pending ?? 0}</dd>
+        </div>
+        <div>
+          <dt>队列处理中</dt>
+          <dd>{queue.picked ?? 0}</dd>
+        </div>
+      </dl>
+    </section>
+  );
+}
+
 export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   const [state, setState] = useState<WarehouseState>({
+    pipeline: null,
     products: null,
     rules: null,
     status: null,
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [batchPopupOpen, setBatchPopupOpen] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<string | null>(null);
   const [filters, setFilters] = useState<ProductFilters>({
-    q: "",
     category_id: "",
+    q: "",
     sort_by: "updated_at",
     sort_order: "desc",
   });
 
   useEffect(() => {
     let cancelled = false;
+    let firstLoad = true;
 
     async function load() {
-      setLoading(true);
+      if (firstLoad) {
+        setLoading(true);
+      } else {
+        setRefreshing(true);
+      }
       setError(null);
       try {
-        const [status, products, rules] = await Promise.all([
+        const [status, products, rules, pipeline] = await Promise.all([
           getRwStatus(),
           getRwProductsWithFilters({
-            q: filters.q || undefined,
             category_id: filters.category_id || undefined,
+            q: filters.q || undefined,
             sort_by: filters.sort_by,
             sort_order: filters.sort_order,
           }),
           getRwRules(),
+          getRwPipeline(),
         ]);
         if (!cancelled) {
-          setState({ products, rules, status });
+          setState({ pipeline, products, rules, status });
+          setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
         }
       } catch (loadError) {
         if (!cancelled) {
           setError(
             loadError instanceof Error && loadError.message.includes("无权")
-              ? "暂无权限，请联系管理员开通权限"
-              : "R-W data is temporarily unavailable.",
+              ? "暂无权限，请联系管理员开通权限。"
+              : "R-W 后端数据暂时不可用。",
           );
         }
       } finally {
         if (!cancelled) {
           setLoading(false);
+          setRefreshing(false);
+          firstLoad = false;
         }
       }
     }
 
     void load();
+    const timer = window.setInterval(() => {
+      void load();
+    }, 5000);
 
     return () => {
       cancelled = true;
+      window.clearInterval(timer);
     };
   }, [filters]);
 
@@ -211,16 +397,16 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     return (
       <div className={styles.message} role="status">
         <RefreshCw aria-hidden="true" className="spin" size={18} />
-        <span>Loading R-W data.</span>
+        <span>正在加载 R-W 实时数据。</span>
       </div>
     );
   }
 
-  if (error || !state.status || !state.products || !state.rules) {
+  if (error || !state.status || !state.products || !state.rules || !state.pipeline) {
     return (
       <div className={styles.message} role="alert">
         <AlertCircle aria-hidden="true" size={18} />
-        <span>{error ?? "R-W data did not load."}</span>
+        <span>{error ?? "R-W 数据未加载。"}</span>
       </div>
     );
   }
@@ -233,68 +419,35 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
           <span className={styles.skillHint}>{state.status.skill.label}</span>
           <span className={styles.statusPill}>
             <CheckCircle2 aria-hidden="true" size={16} />
-            {state.status.mode}
+            {modeLabel(state.status.mode)}
+          </span>
+          <span className={styles.livePill}>
+            <Activity aria-hidden="true" size={16} />
+            {refreshing ? "刷新中" : `已刷新 ${lastRefresh ?? ""}`}
           </span>
         </div>
       </div>
 
-      {batchPopupOpen ? (
-        <div className={styles.popupBackdrop} role="dialog" aria-modal="true">
-          <div className={styles.popup}>
-            <strong>DeepSeek batch status</strong>
-            <dl className={styles.popupStats}>
-              <div>
-                <dt>Run time range</dt>
-                <dd>{state.status.deepseek_batch.run_time_range}</dd>
-              </div>
-              <div>
-                <dt>Total processed</dt>
-                <dd>{state.status.deepseek_batch.total_processed}</dd>
-              </div>
-              <div>
-                <dt>Pass count</dt>
-                <dd>{state.status.deepseek_batch.pass_count}</dd>
-              </div>
-              <div>
-                <dt>Fail count</dt>
-                <dd>{state.status.deepseek_batch.fail_count}</dd>
-              </div>
-              <div>
-                <dt>Deleted count</dt>
-                <dd>{state.status.deepseek_batch.deleted_count}</dd>
-              </div>
-            </dl>
-            <button
-              className={styles.popupButton}
-              onClick={() => setBatchPopupOpen(false)}
-              type="button"
-            >
-              关闭
-            </button>
-          </div>
-        </div>
-      ) : null}
-
-      <section className={styles.metrics} aria-label="R-W status metrics">
+      <section className={styles.metrics} aria-label="R-W 实时指标">
         <div className={styles.metric}>
-          <span>Products</span>
+          <span>产品数</span>
           <strong>{metrics.total}</strong>
         </div>
         <div className={styles.metric}>
-          <span>Rule Passed</span>
+          <span>通过</span>
           <strong>{metrics.passed}</strong>
         </div>
         <div className={styles.metric}>
-          <span>Average Margin</span>
+          <span>待复核</span>
+          <strong>{metrics.pending}</strong>
+        </div>
+        <div className={styles.metric}>
+          <span>剔除</span>
+          <strong>{metrics.rejected}</strong>
+        </div>
+        <div className={styles.metric}>
+          <span>平均利润率</span>
           <strong>{percent(metrics.averageMargin)}</strong>
-        </div>
-        <div className={styles.metric}>
-          <span>Keepa Mode</span>
-          <strong>{state.status.keepa_mode.continuous_ingestion ? "24/7" : "paused"}</strong>
-        </div>
-        <div className={styles.metric}>
-          <span>DeepSeek Passed</span>
-          <strong>{state.status.deepseek_batch.pass_count}</strong>
         </div>
       </section>
 
@@ -302,11 +455,11 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <h2>Warehouse Pipeline</h2>
+              <h2>实时仓库总览</h2>
               <p>{state.status.organization}</p>
             </div>
-            <span className={`${styles.badge} ${styles.warningBadge}`}>
-              {state.status.waiting_for_keys ? "waiting for keys" : "production"}
+            <span className={`${styles.badge} ${state.status.waiting_for_keys ? styles.warningBadge : ""}`}>
+              {state.status.waiting_for_keys ? "等待 Keepa 密钥" : "自动运行"}
             </span>
           </div>
           <ProductsTable products={products} />
@@ -317,8 +470,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <h2>Product Warehouse</h2>
-              <p>ASIN records from the Keepa enrichment flow.</p>
+              <h2>产品数据仓库</h2>
+              <p>来自 Keepa 抓取和自动评分流水线的 ASIN 记录。</p>
             </div>
           </div>
           <div className={styles.filters}>
@@ -326,7 +479,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               onChange={(event) =>
                 setFilters((current) => ({ ...current, q: event.target.value }))
               }
-              placeholder="Search title / ASIN / category"
+              placeholder="搜索标题 / ASIN / 类目"
               value={filters.q}
             />
             <select
@@ -338,7 +491,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               }
               value={filters.category_id}
             >
-              <option value="">All categories</option>
+              <option value="">全部类目</option>
               {state.status.category_tree.selected_categories.map((category) => (
                 <option key={category} value={category}>
                   {category}
@@ -354,8 +507,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               }
               value={filters.sort_by}
             >
-              <option value="updated_at">Updated</option>
-              <option value="skill_score">Skill score</option>
+              <option value="updated_at">更新时间</option>
+              <option value="skill_score">初筛分数</option>
             </select>
             <button
               className={styles.filterButton}
@@ -367,21 +520,25 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               }
               type="button"
             >
-              {filters.sort_order === "asc" ? "ASC" : "DESC"}
+              {filters.sort_order === "asc" ? "升序" : "降序"}
             </button>
           </div>
           <ProductsTable products={products} />
         </section>
       ) : null}
 
+      {view === "pipeline" ? <PipelineView pipeline={state.pipeline} /> : null}
+
+      {view === "batch" ? <BatchStatusView status={state.status} /> : null}
+
       {view === "rules" ? (
         <section className={styles.panel}>
           <div className={styles.panelHeader}>
             <div>
-              <h2>Rule Engine</h2>
-              <p>Mandatory filters currently enforced for R-W production mode.</p>
+              <h2>规则引擎</h2>
+              <p>R-W 生产流水线当前强制执行的硬性过滤规则。</p>
             </div>
-            <span className={styles.badge}>enabled</span>
+            <span className={styles.badge}>已启用</span>
           </div>
           <RulesList rules={state.rules} />
         </section>

@@ -18,6 +18,7 @@ from r_system_v2.rw.providers.keepa_provider import KeepaProvider
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
 from r_system_v2.rw.storage.batch_writer import SQLAlchemyBatchWriter
 from r_system_v2.rw.workers.keepa_worker import KeepaWorker
+from r_system_v2.rw.workers.realtime_engine import RwRealtimeEngine
 from r_system_v2.rw.workers.secret_watch_daemon import SecretWatchDaemon
 
 
@@ -37,6 +38,7 @@ class WorkerRuntimeStatus:
 
 
 RUNNING = True
+RW_ENGINE: RwRealtimeEngine | None = None
 
 
 def _handle_stop(signum: int, frame: object) -> None:
@@ -83,6 +85,11 @@ def _resolve_org_id() -> str:
 
 
 def run_rw_worker() -> WorkerRuntimeStatus:
+    status, _engine = build_rw_worker_runtime()
+    return status
+
+
+def build_rw_worker_runtime() -> tuple[WorkerRuntimeStatus, RwRealtimeEngine]:
     org_id = _resolve_org_id()
     manager = SecretManager()
     category_tree = load_category_tree()
@@ -106,6 +113,11 @@ def run_rw_worker() -> WorkerRuntimeStatus:
         deepseek_skill=deepseek_skill,
     )
     daemon.start()
+    engine = _build_realtime_engine(
+        org_id=org_id,
+        provider=provider,
+        deepseek_skill=deepseek_skill,
+    )
 
     keepa_loaded = bool(provider.api_key)
     deepseek_loaded = deepseek_skill.api_key_configured()
@@ -127,10 +139,10 @@ def run_rw_worker() -> WorkerRuntimeStatus:
         f"keepa_loaded={str(keepa_loaded).lower()} "
         f"deepseek_loaded={str(deepseek_loaded).lower()}"
     )
-    return WorkerRuntimeStatus(
+    status = WorkerRuntimeStatus(
         worker="r-w-worker",
         ready=True,
-        mode="scheduler",
+        mode="realtime_24_7",
         keepa_loaded=keepa_loaded,
         deepseek_loaded=deepseek_loaded,
         secret_manager_connected=True,
@@ -139,6 +151,23 @@ def run_rw_worker() -> WorkerRuntimeStatus:
         buffer_queue_active=buffer_queue.stats().active,
         batch_writer_active=batch_writer is not None,
         per_request_db_update=False,
+    )
+    return status, engine
+
+
+def _build_realtime_engine(
+    *,
+    org_id: str,
+    provider: KeepaProvider,
+    deepseek_skill: DeepSeekScreeningSkill,
+) -> RwRealtimeEngine:
+    from backend.app.db.session import SessionLocal
+
+    return RwRealtimeEngine(
+        session_factory=SessionLocal,
+        provider=provider,
+        deepseek_skill=deepseek_skill,
+        org_id=org_id,
     )
 
 
@@ -183,14 +212,20 @@ def main() -> None:
     signal.signal(signal.SIGINT, _handle_stop)
     worker = sys.argv[1] if len(sys.argv) > 1 else "rw"
     if worker == "rw":
-        status = run_rw_worker()
+        status, engine = build_rw_worker_runtime()
+        global RW_ENGINE
+        RW_ENGINE = engine
     elif worker == "ra":
         status = run_ra_worker()
+        engine = None
     else:
         raise SystemExit(f"unsupported worker: {worker}")
     _log(f"worker_status={asdict(status)}")
-    while RUNNING:
-        time.sleep(5)
+    if worker == "rw" and engine is not None:
+        engine.run_forever(should_stop=lambda: not RUNNING)
+    else:
+        while RUNNING:
+            time.sleep(5)
     _log(f"{status.worker} stopping")
 
 

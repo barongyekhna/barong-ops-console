@@ -15,7 +15,7 @@ export default function RwDashboardPage() {
         <span className="section-index">R-W</span>
         <div>
           <h1>R-W 产品数据仓库</h1>
-          <p>Warehouse mock mode is active while Keepa keys remain unbound.</p>
+          <p>Keepa 常驻抓取、规则预筛、DeepSeek 初筛与实时入库状态。</p>
         </div>
       </section>
 
@@ -23,4 +23,3 @@ export default function RwDashboardPage() {
     </div>
   );
 }
-

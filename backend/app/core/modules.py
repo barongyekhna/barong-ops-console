@@ -967,9 +967,9 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         module_key="r.warehouse",
         display_name="R-W 产品数据仓库",
         description=(
-            "R-series Warehouse product data store with mock Keepa enrichment, "
-            "normalized products, and mandatory rule filtering while API keys "
-            "are pending."
+            "R-series Warehouse realtime Keepa ingestion, category scheduling, "
+            "normalized product storage, rule filtering, and DeepSeek first-pass "
+            "screening."
         ),
         category="business",
         status="active",
@@ -984,7 +984,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
         denied_behavior="show_locked",
         unavailable_behavior="show_unavailable",
-        external_dependencies=(),
+        external_dependencies=("keepa", "deepseek"),
         execution_provider_required=False,
         module_adapter_required=False,
         sandbox_required=False,
@@ -995,22 +995,17 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             "r.warehouse.rules.read",
         ),
         data_boundary=_data_boundary(
-            reads=("products_rw", "enrich_queue", "rule_results"),
-            writes=(),
-            blocked_objects=(
-                "real_keepa_api",
-                "r_analysis_runtime",
-                "external_provider_config",
-                "cross_module_writes",
-            ),
+            reads=("products_rw", "enrich_queue", "rule_results", "ai_evaluations"),
+            writes=("products_rw", "enrich_queue", "rule_results", "ai_evaluations"),
+            blocked_objects=("r_analysis_runtime", "cross_module_writes"),
         ),
         release_requirements=_release_requirements(
             staging_acceptance=True,
             production_archive=True,
             required_checks=(
-                "rw mock e2e report",
-                "rw frontend route audit",
-                "mock mode active",
+                "rw realtime worker heartbeat",
+                "rw frontend live backend audit",
+                "keepa category scheduler active",
             ),
         ),
         staging_acceptance_required=True,

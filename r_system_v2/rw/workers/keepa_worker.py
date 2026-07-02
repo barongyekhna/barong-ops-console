@@ -88,6 +88,7 @@ class KeepaWorker:
         buffer_queue: KeepaBufferQueue,
         rule_engine: RuleEngine | None = None,
         deepseek_skill: DeepSeekScreeningSkill | None = None,
+        deepseek_inline: bool = True,
         rate_limit_per_min: int = MAX_REQUESTS_PER_MINUTE,
         max_concurrency: int = MAX_REQUESTS_PER_MINUTE,
         enforce_wall_clock_rate: bool = True,
@@ -95,7 +96,14 @@ class KeepaWorker:
         self.provider = provider
         self.buffer_queue = buffer_queue
         self.rule_engine = rule_engine or RuleEngine()
-        self.deepseek_skill = deepseek_skill or DeepSeekScreeningSkill()
+        self.deepseek_inline = deepseek_inline
+        self.deepseek_skill = (
+            deepseek_skill
+            if deepseek_skill is not None
+            else DeepSeekScreeningSkill()
+            if deepseek_inline
+            else None
+        )
         self.rate_limiter = AsyncKeepaRateLimiter(
             rate_limit_per_min,
             enforce_wall_clock=enforce_wall_clock_rate,
@@ -182,15 +190,22 @@ class KeepaWorker:
         if rule_evaluation.decision is RuleDecision.RULE_PASSED:
             product.transition_to(ProductState.RULE_PASSED)
             transitions.append(product.state.value)
-            product.features["deepseek_mode"] = "batch_processor_only"
-            deepseek_screening = self.deepseek_skill.evaluate(product)
-            product.skill_score = deepseek_screening.score
-            if deepseek_screening.passed:
-                product.transition_to(ProductState.AI1_PASSED)
+            if self.deepseek_inline:
+                if self.deepseek_skill is None:
+                    raise RuntimeError("deepseek_skill_required")
+                product.features["deepseek_mode"] = "inline"
+                deepseek_screening = self.deepseek_skill.evaluate(product)
+                product.skill_score = deepseek_screening.score
+                if deepseek_screening.passed:
+                    product.transition_to(ProductState.AI1_PASSED)
+                else:
+                    product.transition_to(ProductState.AI1_REJECTED)
             else:
-                product.transition_to(ProductState.AI1_REJECTED)
+                product.features["deepseek_mode"] = "cron_pending"
+                product.features["score_action"] = "pending_review"
         else:
             product.rule_reject_reason = ",".join(rule_evaluation.reasons)
+            product.features["score_action"] = "reject"
             product.transition_to(ProductState.REJECTED)
 
         transitions.append(product.state.value)
