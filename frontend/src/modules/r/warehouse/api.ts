@@ -2,9 +2,12 @@
 
 import { apiRequest } from "@/lib/api";
 import type {
+  RwCategoryTreeResponse,
   RwProductsResponse,
   RwPipelineResponse,
   RwRulesResponse,
+  RwRuntimeSettings,
+  RwSettingsResponse,
   RwStatus,
 } from "@/modules/r/warehouse/types";
 
@@ -55,8 +58,30 @@ export function getRwPipeline() {
   });
 }
 
+export function getRwSettings() {
+  return apiRequest<RwSettingsResponse>(`${RW_API_BASE}/settings`, {
+    bypassCache: true,
+  });
+}
+
+export function updateRwSettings(settings: Partial<RwRuntimeSettings>) {
+  return apiRequest<RwSettingsResponse>(`${RW_API_BASE}/settings`, {
+    body: settings,
+    method: "POST",
+    bypassCache: true,
+  });
+}
+
 export function getRwCategoryTree() {
-  return apiRequest<unknown>(`${RW_API_BASE}/category-tree`, {
+  return apiRequest<RwCategoryTreeResponse>(`${RW_API_BASE}/category-tree`, {
+    bypassCache: true,
+  });
+}
+
+export function selectRwCategory(category_id: string, selected: boolean) {
+  return apiRequest<RwCategoryTreeResponse>(`${RW_API_BASE}/category-tree/select`, {
+    body: { category_id, selected },
+    method: "POST",
     bypassCache: true,
   });
 }

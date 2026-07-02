@@ -4,7 +4,7 @@
     "channel_guess": "both",
     "competition_attackability": 80,
     "demand_quality": 100,
-    "evaluated_at": "2026-07-02T01:24:34.981950+00:00",
+    "evaluated_at": "2026-07-02T19:04:47.482186+00:00",
     "output_schema_strict_json": true,
     "quant_filter_enabled": true,
     "rule_based_scoring_active": true,
@@ -28,8 +28,8 @@
   "mock_data_generated": true,
   "mock_storage_path": "/tmp/rw_mock_storage/R_W_MOCK_STORAGE.json",
   "pipeline_integrity": "OK",
-  "pipeline_latency": 102.297,
-  "pipeline_latency_ms": 102.297,
+  "pipeline_latency": 296.888,
+  "pipeline_latency_ms": 296.888,
   "rule_engine_result": {
     "asin": "B033B3F98C",
     "checks": {
@@ -37,10 +37,14 @@
       "competition_filter": true,
       "margin_check": true,
       "price_band_filter": true,
-      "price_trend_filter": true
+      "price_trend_filter": true,
+      "redline_filter": true,
+      "review_wall_filter": true,
+      "viral_filter": true,
+      "weight_filter": true
     },
     "decision": "rule_passed",
-    "evaluated_at": "2026-07-02T01:24:34.899416+00:00",
+    "evaluated_at": "2026-07-02T19:04:47.482060+00:00",
     "reasons": []
   },
   "scheduler": {

@@ -15,24 +15,24 @@
           {
             "children": [],
             "id": "home-draft-proofing",
-            "name": "Draft proofing",
+            "name": "门窗密封",
             "selected": true
           },
           {
             "children": [],
             "id": "home-storage-organization",
-            "name": "Storage & organization",
+            "name": "收纳整理",
             "selected": true
           },
           {
             "children": [],
             "id": "home-small-tools",
-            "name": "Small home tools",
+            "name": "小型家用工具",
             "selected": true
           }
         ],
         "id": "home-kitchen",
-        "name": "Home & Kitchen",
+        "name": "家居与厨房",
         "selected": true
       },
       {
@@ -40,18 +40,18 @@
           {
             "children": [],
             "id": "garden-lightweight-tools",
-            "name": "Lightweight garden tools",
+            "name": "轻量园艺工具",
             "selected": true
           },
           {
             "children": [],
             "id": "garden-seasonless-accessories",
-            "name": "Seasonless garden accessories",
+            "name": "四季园艺配件",
             "selected": true
           }
         ],
         "id": "patio-lawn-garden",
-        "name": "Patio, Lawn & Garden",
+        "name": "庭院草坪花园",
         "selected": true
       },
       {
@@ -59,23 +59,23 @@
           {
             "children": [],
             "id": "office-organization",
-            "name": "Organization",
+            "name": "办公收纳",
             "selected": true
           },
           {
             "children": [],
             "id": "office-ergonomic-accessories",
-            "name": "Ergonomic accessories",
+            "name": "人体工学配件",
             "selected": true
           }
         ],
         "id": "office-products",
-        "name": "Office Products",
+        "name": "办公用品",
         "selected": true
       }
     ],
     "id": "amazon-fba",
-    "name": "Amazon FBA",
+    "name": "亚马逊 FBA",
     "selected": true
   },
   "source": "/opt/barong-ops-console/r_system_v2/docs/amazon.md"

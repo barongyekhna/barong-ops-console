@@ -13,6 +13,15 @@ from r_system_v2.rw.core.models import DeepSeekScreening, NormalizedProduct
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILL_PATH = REPO_ROOT / "r_system_v2" / "docs" / "SKILL.md"
+REQUIRED_R_SERIES_DOCS = (
+    REPO_ROOT / "r_system_v2" / "docs" / "README.md",
+    REPO_ROOT / "r_system_v2" / "docs" / "ARCHITECTURE.md",
+    REPO_ROOT / "r_system_v2" / "docs" / "SKILL.md",
+    REPO_ROOT / "r_system_v2" / "docs" / "shared.md",
+    REPO_ROOT / "r_system_v2" / "docs" / "amazon.md",
+    REPO_ROOT / "r_system_v2" / "docs" / "dtc.md",
+    REPO_ROOT / "r_system_v2" / "docs" / "dtc_data.md",
+)
 DEEPSEEK_PASS_SCORE = 60
 ALLOWED_VERDICTS = {"keep", "cut", "hold"}
 ALLOWED_CHANNELS = {"amazon", "dtc_ad", "dtc_seo", "both"}
@@ -42,6 +51,8 @@ class DeepSeekSkillStatus:
     rule_based_scoring_active: bool
     output_schema_strict_json: bool
     required_schema_keys: list[str]
+    required_docs_present: bool
+    required_docs: list[str]
 
     @property
     def ready(self) -> bool:
@@ -51,6 +62,7 @@ class DeepSeekSkillStatus:
                 self.quant_filter_enabled,
                 self.rule_based_scoring_active,
                 self.output_schema_strict_json,
+                self.required_docs_present,
             ]
         )
 
@@ -62,6 +74,8 @@ class DeepSeekSkillStatus:
             "rule_based_scoring_active": self.rule_based_scoring_active,
             "output_schema_strict_json": self.output_schema_strict_json,
             "required_schema_keys": self.required_schema_keys,
+            "required_docs_present": self.required_docs_present,
+            "required_docs": self.required_docs,
             "ready": self.ready,
         }
 
@@ -194,9 +208,12 @@ class DeepSeekScreeningSkill:
                 rule_based_scoring_active=False,
                 output_schema_strict_json=False,
                 required_schema_keys=sorted(STRICT_SCHEMA_KEYS),
+                required_docs_present=False,
+                required_docs=[str(path) for path in REQUIRED_R_SERIES_DOCS],
             )
 
         text = self.skill_path.read_text(encoding="utf-8")
+        required_docs_present = all(path.exists() for path in REQUIRED_R_SERIES_DOCS)
         quant_filter_enabled = "DeepSeek" in text and "量化过滤器" in text
         rule_based_scoring_active = "只吃**结构化 Keepa 字段**" in text or "只吃结构化 Keepa 字段" in text
         output_schema_strict_json = all(key in text for key in STRICT_SCHEMA_KEYS) and "输出:" in text
@@ -207,6 +224,8 @@ class DeepSeekScreeningSkill:
             rule_based_scoring_active=rule_based_scoring_active,
             output_schema_strict_json=output_schema_strict_json,
             required_schema_keys=sorted(STRICT_SCHEMA_KEYS),
+            required_docs_present=required_docs_present,
+            required_docs=[str(path) for path in REQUIRED_R_SERIES_DOCS],
         )
 
     def _strict_json(self, payload: dict[str, Any]) -> dict[str, Any]:

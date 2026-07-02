@@ -24,6 +24,8 @@ class DeepSeekCronReport:
     rejected: int
     pending_review: int
     interval_seconds: int
+    max_runtime_seconds: int
+    stopped_by_deadline: bool
     errors: list[str]
 
     def to_dict(self) -> dict[str, object]:
@@ -34,6 +36,8 @@ class DeepSeekCronReport:
             "rejected": self.rejected,
             "pending_review": self.pending_review,
             "interval_seconds": self.interval_seconds,
+            "max_runtime_seconds": self.max_runtime_seconds,
+            "stopped_by_deadline": self.stopped_by_deadline,
             "errors": self.errors,
         }
 
@@ -47,11 +51,13 @@ class DeepSeekPreFilterCron:
         skill: DeepSeekScreeningSkill,
         interval_seconds: int = 300,
         batch_size: int = 100,
+        max_runtime_seconds: int = 240,
         scoring_engine: ScoringEngine | None = None,
     ) -> None:
         self.skill = skill
         self.interval_seconds = max(60, int(interval_seconds))
         self.batch_size = max(1, int(batch_size))
+        self.max_runtime_seconds = max(10, int(max_runtime_seconds))
         self.scoring_engine = scoring_engine or ScoringEngine()
         self._last_run_monotonic = 0.0
 
@@ -65,6 +71,8 @@ class DeepSeekPreFilterCron:
                 rejected=0,
                 pending_review=0,
                 interval_seconds=self.interval_seconds,
+                max_runtime_seconds=self.max_runtime_seconds,
+                stopped_by_deadline=False,
                 errors=[],
             )
         self._last_run_monotonic = now
@@ -74,7 +82,27 @@ class DeepSeekPreFilterCron:
         rows = self._load_pending_products(db)
         passed = rejected = pending_review = 0
         errors: list[str] = []
+        deadline = time.monotonic() + self.max_runtime_seconds
+        stopped_by_deadline = False
+        attempted = 0
         for row in rows:
+            if time.monotonic() >= deadline:
+                stopped_by_deadline = True
+                emit_pipeline_event(
+                    db,
+                    PipelineEvent(
+                        event_type="deepseek_prefilter",
+                        stage="deadline",
+                        status="stopped",
+                        message="DeepSeek 初筛到达运行时间上限，剩余产品留待下轮处理",
+                        payload={
+                            "max_runtime_seconds": self.max_runtime_seconds,
+                            "remaining_estimate": max(0, len(rows) - attempted),
+                        },
+                    ),
+                )
+                break
+            attempted += 1
             asin = str(row["asin"])
             try:
                 product = _product_from_row(row)
@@ -161,11 +189,13 @@ class DeepSeekPreFilterCron:
                 )
         return DeepSeekCronReport(
             due=True,
-            processed=len(rows) - len(errors),
+            processed=attempted - len(errors),
             passed=passed,
             rejected=rejected,
             pending_review=pending_review,
             interval_seconds=self.interval_seconds,
+            max_runtime_seconds=self.max_runtime_seconds,
+            stopped_by_deadline=stopped_by_deadline,
             errors=errors,
         )
 

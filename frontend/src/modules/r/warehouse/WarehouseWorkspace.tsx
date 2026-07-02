@@ -2,19 +2,27 @@
 
 import { Activity, AlertCircle, CheckCircle2, Database, RefreshCw } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  getRwCategoryTree,
   getRwPipeline,
   getRwProductsWithFilters,
   getRwRules,
+  getRwSettings,
   getRwStatus,
+  selectRwCategory,
+  updateRwSettings,
 } from "@/modules/r/warehouse/api";
 import type {
+  RwCategoryNode,
+  RwCategoryTreeResponse,
   RwPipelineResponse,
   RwProduct,
   RwProductsResponse,
   RwRulesResponse,
+  RwRuntimeSettings,
+  RwSettingsResponse,
   RwStatus,
 } from "@/modules/r/warehouse/types";
 
@@ -27,6 +35,17 @@ type WarehouseState = {
   rules: RwRulesResponse | null;
   status: RwStatus | null;
   pipeline: RwPipelineResponse | null;
+  settings: RwSettingsResponse | null;
+  categoryTree: RwCategoryTreeResponse | null;
+};
+
+type CompleteWarehouseState = {
+  products: RwProductsResponse;
+  rules: RwRulesResponse;
+  status: RwStatus;
+  pipeline: RwPipelineResponse;
+  settings: RwSettingsResponse | null;
+  categoryTree: RwCategoryTreeResponse | null;
 };
 
 type ProductFilters = {
@@ -36,6 +55,8 @@ type ProductFilters = {
   sort_order: "asc" | "desc";
 };
 
+type RwEndpointKey = keyof WarehouseState;
+
 const tabs: Array<{ href: string; label: string; view: WarehouseView }> = [
   { href: "/r-w/dashboard", label: "总览", view: "dashboard" },
   { href: "/r-w/products", label: "产品库", view: "products" },
@@ -43,6 +64,8 @@ const tabs: Array<{ href: string; label: string; view: WarehouseView }> = [
   { href: "/r-w/batch-status", label: "批次状态", view: "batch" },
   { href: "/r-w/rules", label: "规则", view: "rules" },
 ];
+
+const DEEPSEEK_DAILY_REPORT_KEY = "rw-deepseek-daily-report-date";
 
 function currency(value: number) {
   return new Intl.NumberFormat("zh-CN", {
@@ -63,7 +86,12 @@ function stateLabel(value: string) {
     discovered: "已发现",
     enriched: "已富化",
     rejected: "规则剔除",
+    rule_prefilter: "规则预筛",
     rule_passed: "待初筛",
+    discovery: "类目发现",
+    deadline: "到时停止",
+    backoff: "限流等待",
+    blocked: "阻塞",
   };
   return labels[value] ?? value;
 }
@@ -98,12 +126,27 @@ function eventLabel(value: string) {
 function statusLabel(value: string) {
   const labels: Record<string, string> = {
     active: "运行中",
+    backoff: "限流等待",
     blocked: "阻塞",
     failed: "失败",
     idle: "空闲",
     processed: "已处理",
     queued: "已入队",
     stored: "已入库",
+    stopped: "已停止",
+  };
+  return labels[value] ?? value;
+}
+
+function priceTrendLabel(value: string | null) {
+  if (!value) {
+    return "未知";
+  }
+  const labels: Record<string, string> = {
+    declining: "下行",
+    price_war: "价格战",
+    rising: "上行",
+    stable: "平稳",
   };
   return labels[value] ?? value;
 }
@@ -186,7 +229,10 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
                   <div>
                     <strong>{product.title}</strong>
                     <span>
-                      {product.asin} · {product.category}
+                      {product.asin} · {product.brand ?? "未知品牌"} · {product.category}
+                    </span>
+                    <span>
+                      评分 {product.rating ?? "无"} · 趋势 {priceTrendLabel(product.price_trend)}
                     </span>
                   </div>
                 </div>
@@ -220,6 +266,43 @@ function RulesList({ rules }: { rules: RwRulesResponse }) {
           <span className={styles.muted}>{rule.threshold}</span>
           <span className={styles.badge}>{rule.result}</span>
         </div>
+      ))}
+    </div>
+  );
+}
+
+function CategorySelectionList({
+  depth = 0,
+  node,
+  onSelectCategory,
+  savingCategory,
+}: {
+  depth?: number;
+  node: RwCategoryNode;
+  onSelectCategory: (categoryId: string, selected: boolean) => Promise<void>;
+  savingCategory: string | null;
+}) {
+  return (
+    <div className={styles.categoryNode}>
+      <label style={{ paddingLeft: depth * 16 }}>
+        <input
+          checked={node.selected}
+          disabled={savingCategory !== null}
+          onChange={(event) => {
+            void onSelectCategory(node.id, event.target.checked);
+          }}
+          type="checkbox"
+        />
+        <span>{node.name}</span>
+      </label>
+      {node.children.map((child) => (
+        <CategorySelectionList
+          depth={depth + 1}
+          key={child.id}
+          node={child}
+          onSelectCategory={onSelectCategory}
+          savingCategory={savingCategory}
+        />
       ))}
     </div>
   );
@@ -276,8 +359,48 @@ function PipelineView({ pipeline }: { pipeline: RwPipelineResponse }) {
   );
 }
 
-function BatchStatusView({ status }: { status: RwStatus }) {
+function BatchStatusView({
+  categoryTree,
+  onSelectCategory,
+  onSaveSettings,
+  savingCategory,
+  savingSettings,
+  settings,
+  status,
+}: {
+  categoryTree: RwCategoryTreeResponse | null;
+  onSelectCategory: (categoryId: string, selected: boolean) => Promise<void>;
+  onSaveSettings: (settings: Partial<RwRuntimeSettings>) => Promise<void>;
+  savingCategory: string | null;
+  savingSettings: boolean;
+  settings: RwSettingsResponse | null;
+  status: RwStatus;
+}) {
   const queue = status.runtime.queue;
+  const runtimeSettings = settings?.settings;
+  const [draft, setDraft] = useState<RwRuntimeSettings>({
+    deepseek_batch_size: runtimeSettings?.deepseek_batch_size ?? 100,
+    deepseek_interval_seconds:
+      runtimeSettings?.deepseek_interval_seconds ??
+      status.runtime.workers[0]?.deepseek_interval_seconds ??
+      300,
+    deepseek_max_runtime_seconds:
+      runtimeSettings?.deepseek_max_runtime_seconds ?? 240,
+    discovery_categories_per_cycle:
+      runtimeSettings?.discovery_categories_per_cycle ?? 1,
+    keepa_429_backoff_seconds:
+      runtimeSettings?.keepa_429_backoff_seconds ?? 300,
+    keepa_batch_size: runtimeSettings?.keepa_batch_size ?? 20,
+    selected_categories: runtimeSettings?.selected_categories ?? null,
+  });
+
+  useEffect(() => {
+    if (!runtimeSettings) {
+      return;
+    }
+    setDraft(runtimeSettings);
+  }, [runtimeSettings]);
+
   return (
     <section className={styles.panel}>
       <div className={styles.panelHeader}>
@@ -313,20 +436,128 @@ function BatchStatusView({ status }: { status: RwStatus }) {
           <dd>{queue.picked ?? 0}</dd>
         </div>
       </dl>
+      <form
+        className={styles.settingsGrid}
+        onSubmit={(event) => {
+          event.preventDefault();
+          const { selected_categories: _selectedCategories, ...runtimeDraft } = draft;
+          void onSaveSettings(runtimeDraft);
+        }}
+      >
+        <label>
+          <span>DeepSeek 间隔秒数</span>
+          <input
+            min={60}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                deepseek_interval_seconds: Number(event.target.value),
+              }))
+            }
+            step={60}
+            type="number"
+            value={draft.deepseek_interval_seconds}
+          />
+        </label>
+        <label>
+          <span>DeepSeek 每批数量</span>
+          <input
+            min={1}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                deepseek_batch_size: Number(event.target.value),
+              }))
+            }
+            type="number"
+            value={draft.deepseek_batch_size}
+          />
+        </label>
+        <label>
+          <span>单次最长运行秒数</span>
+          <input
+            min={10}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                deepseek_max_runtime_seconds: Number(event.target.value),
+              }))
+            }
+            step={10}
+            type="number"
+            value={draft.deepseek_max_runtime_seconds}
+          />
+        </label>
+        <label>
+          <span>Keepa 每轮产品数</span>
+          <input
+            max={20}
+            min={1}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                keepa_batch_size: Number(event.target.value),
+              }))
+            }
+            type="number"
+            value={draft.keepa_batch_size}
+          />
+        </label>
+        <label>
+          <span>429 暂停秒数</span>
+          <input
+            min={60}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                keepa_429_backoff_seconds: Number(event.target.value),
+              }))
+            }
+            step={60}
+            type="number"
+            value={draft.keepa_429_backoff_seconds}
+          />
+        </label>
+        <button className={styles.filterButton} disabled={savingSettings} type="submit">
+          {savingSettings ? "保存中" : "保存设置"}
+        </button>
+      </form>
+      <div className={styles.categorySelector}>
+        <div className={styles.selectorHeader}>
+          <strong>Keepa 抓取类目</strong>
+          <span>{status.category_tree.selected_count} 个已选</span>
+        </div>
+        {categoryTree ? (
+          <div className={styles.categoryTree}>
+            <CategorySelectionList
+              node={categoryTree.root}
+              onSelectCategory={onSelectCategory}
+              savingCategory={savingCategory}
+            />
+          </div>
+        ) : (
+          <div className={styles.empty}>类目树暂不可用。</div>
+        )}
+      </div>
     </section>
   );
 }
 
 export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   const [state, setState] = useState<WarehouseState>({
+    categoryTree: null,
     pipeline: null,
     products: null,
     rules: null,
+    settings: null,
     status: null,
   });
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [savingCategory, setSavingCategory] = useState<string | null>(null);
+  const [savingSettings, setSavingSettings] = useState(false);
+  const [showDeepseekReport, setShowDeepseekReport] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
   const [filters, setFilters] = useState<ProductFilters>({
     category_id: "",
@@ -334,6 +565,21 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     sort_by: "updated_at",
     sort_order: "desc",
   });
+  const stateRef = useRef(state);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
+
+  useEffect(() => {
+    if (!state.status || typeof window === "undefined") {
+      return;
+    }
+    const today = new Date().toISOString().slice(0, 10);
+    if (window.localStorage.getItem(DEEPSEEK_DAILY_REPORT_KEY) !== today) {
+      setShowDeepseekReport(true);
+    }
+  }, [state.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -345,22 +591,60 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       } else {
         setRefreshing(true);
       }
-      setError(null);
       try {
-        const [status, products, rules, pipeline] = await Promise.all([
-          getRwStatus(),
-          getRwProductsWithFilters({
-            category_id: filters.category_id || undefined,
-            q: filters.q || undefined,
-            sort_by: filters.sort_by,
-            sort_order: filters.sort_order,
-          }),
-          getRwRules(),
-          getRwPipeline(),
-        ]);
+        const requests: Array<[
+          RwEndpointKey,
+          Promise<WarehouseState[RwEndpointKey]>,
+        ]> = [
+          ["status", getRwStatus()],
+          [
+            "products",
+            getRwProductsWithFilters({
+              category_id: filters.category_id || undefined,
+              q: filters.q || undefined,
+              sort_by: filters.sort_by,
+              sort_order: filters.sort_order,
+            }),
+          ],
+          ["rules", getRwRules()],
+          ["pipeline", getRwPipeline()],
+          ["settings", getRwSettings()],
+          ["categoryTree", getRwCategoryTree()],
+        ];
+        const results = await Promise.allSettled(
+          requests.map(([, request]) => request),
+        );
         if (!cancelled) {
-          setState({ pipeline, products, rules, status });
+          const failed = results.filter((result) => result.status === "rejected");
+          let nextState = stateRef.current;
+          setState((current) => {
+            const updated = { ...current };
+            results.forEach((result, index) => {
+              if (result.status === "fulfilled") {
+                applyWarehouseStateValue(
+                  updated,
+                  requests[index][0],
+                  result.value,
+                );
+              }
+            });
+            nextState = updated;
+            stateRef.current = updated;
+            return updated;
+          });
           setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
+          if (failed.length === 0) {
+            setError(null);
+          } else if (hasCompleteWarehouseState(nextState)) {
+            setError("部分后端数据刷新失败，已保留上一轮可读数据。");
+          } else {
+            const loadError = failed[0].reason;
+            setError(
+              loadError instanceof Error && loadError.message.includes("无权")
+                ? "暂无权限，请联系管理员开通权限。"
+                : "R-W 后端数据暂时不可用。",
+            );
+          }
         }
       } catch (loadError) {
         if (!cancelled) {
@@ -392,6 +676,67 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
 
   const products = state.products?.items ?? [];
   const metrics = useMemo(() => productMetrics(products), [products]);
+  const readyState = hasCompleteWarehouseState(state) ? state : null;
+  const categoryLabels = useMemo(
+    () => collectCategoryLabels(readyState?.categoryTree?.root ?? null),
+    [readyState?.categoryTree?.root],
+  );
+
+  async function saveSettings(settings: Partial<RwRuntimeSettings>) {
+    setSavingSettings(true);
+    try {
+      const response = await updateRwSettings(settings);
+      setState((current) => {
+        const updated = { ...current, settings: response };
+        stateRef.current = updated;
+        return updated;
+      });
+      setError(null);
+    } catch {
+      setError("DeepSeek 定时设置保存失败，现有页面数据已保留。");
+    } finally {
+      setSavingSettings(false);
+    }
+  }
+
+  async function selectCategory(categoryId: string, selected: boolean) {
+    setSavingCategory(categoryId);
+    try {
+      const response = await selectRwCategory(categoryId, selected);
+      setState((current) => {
+        const updated: WarehouseState = {
+          ...current,
+          categoryTree: response,
+          settings: current.settings
+            ? {
+                ...current.settings,
+                settings: {
+                  ...current.settings.settings,
+                  selected_categories: response.selected_categories,
+                },
+              }
+            : current.settings,
+          status: current.status
+            ? {
+                ...current.status,
+                category_tree: {
+                  ...current.status.category_tree,
+                  selected_categories: response.selected_categories,
+                  selected_count: response.selected_categories.length,
+                },
+              }
+            : current.status,
+        };
+        stateRef.current = updated;
+        return updated;
+      });
+      setError(null);
+    } catch {
+      setError("Keepa 抓取类目保存失败，现有页面数据已保留。");
+    } finally {
+      setSavingCategory(null);
+    }
+  }
 
   if (loading) {
     return (
@@ -402,7 +747,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     );
   }
 
-  if (error || !state.status || !state.products || !state.rules || !state.pipeline) {
+  if (!readyState) {
     return (
       <div className={styles.message} role="alert">
         <AlertCircle aria-hidden="true" size={18} />
@@ -413,13 +758,61 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
 
   return (
     <div className={styles.workspace}>
+      {showDeepseekReport ? (
+        <div className={styles.popupBackdrop} role="presentation">
+          <section
+            aria-modal="true"
+            className={styles.popup}
+            role="dialog"
+          >
+            <strong>DeepSeek 今日初筛报告</strong>
+            <dl className={styles.popupStats}>
+              <div>
+                <dt>运行间隔</dt>
+                <dd>{readyState.status.deepseek_batch.run_time_range}</dd>
+              </div>
+              <div>
+                <dt>已处理</dt>
+                <dd>{readyState.status.deepseek_batch.total_processed}</dd>
+              </div>
+              <div>
+                <dt>通过</dt>
+                <dd>{readyState.status.deepseek_batch.pass_count}</dd>
+              </div>
+              <div>
+                <dt>剔除</dt>
+                <dd>{readyState.status.deepseek_batch.fail_count}</dd>
+              </div>
+            </dl>
+            <button
+              className={styles.popupButton}
+              onClick={() => {
+                window.localStorage.setItem(
+                  DEEPSEEK_DAILY_REPORT_KEY,
+                  new Date().toISOString().slice(0, 10),
+                );
+                setShowDeepseekReport(false);
+              }}
+              type="button"
+            >
+              知道了
+            </button>
+          </section>
+        </div>
+      ) : null}
+      {error ? (
+        <div className={styles.warningMessage} role="status">
+          <AlertCircle aria-hidden="true" size={16} />
+          <span>{error}</span>
+        </div>
+      ) : null}
       <div className={styles.toolbar}>
         <ViewTabs activeView={view} />
         <div className={styles.headerStatusGroup}>
-          <span className={styles.skillHint}>{state.status.skill.label}</span>
+          <span className={styles.skillHint}>{readyState.status.skill.label}</span>
           <span className={styles.statusPill}>
             <CheckCircle2 aria-hidden="true" size={16} />
-            {modeLabel(state.status.mode)}
+            {modeLabel(readyState.status.mode)}
           </span>
           <span className={styles.livePill}>
             <Activity aria-hidden="true" size={16} />
@@ -456,10 +849,10 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
           <div className={styles.panelHeader}>
             <div>
               <h2>实时仓库总览</h2>
-              <p>{state.status.organization}</p>
+              <p>{readyState.status.organization}</p>
             </div>
-            <span className={`${styles.badge} ${state.status.waiting_for_keys ? styles.warningBadge : ""}`}>
-              {state.status.waiting_for_keys ? "等待 Keepa 密钥" : "自动运行"}
+            <span className={`${styles.badge} ${readyState.status.waiting_for_keys ? styles.warningBadge : ""}`}>
+              {readyState.status.waiting_for_keys ? "等待 Keepa 密钥" : "自动运行"}
             </span>
           </div>
           <ProductsTable products={products} />
@@ -492,9 +885,9 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               value={filters.category_id}
             >
               <option value="">全部类目</option>
-              {state.status.category_tree.selected_categories.map((category) => (
+              {readyState.status.category_tree.selected_categories.map((category) => (
                 <option key={category} value={category}>
-                  {category}
+                  {categoryLabels.get(category) ?? category}
                 </option>
               ))}
             </select>
@@ -527,9 +920,19 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
         </section>
       ) : null}
 
-      {view === "pipeline" ? <PipelineView pipeline={state.pipeline} /> : null}
+      {view === "pipeline" ? <PipelineView pipeline={readyState.pipeline} /> : null}
 
-      {view === "batch" ? <BatchStatusView status={state.status} /> : null}
+      {view === "batch" ? (
+        <BatchStatusView
+          categoryTree={readyState.categoryTree}
+          onSelectCategory={selectCategory}
+          onSaveSettings={saveSettings}
+          savingCategory={savingCategory}
+          savingSettings={savingSettings}
+          settings={readyState.settings}
+          status={readyState.status}
+        />
+      ) : null}
 
       {view === "rules" ? (
         <section className={styles.panel}>
@@ -540,9 +943,45 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             </div>
             <span className={styles.badge}>已启用</span>
           </div>
-          <RulesList rules={state.rules} />
+          <RulesList rules={readyState.rules} />
         </section>
       ) : null}
     </div>
   );
+}
+
+function hasCompleteWarehouseState(value: WarehouseState): value is CompleteWarehouseState {
+  return Boolean(value.status && value.products && value.rules && value.pipeline);
+}
+
+function applyWarehouseStateValue(
+  target: WarehouseState,
+  key: RwEndpointKey,
+  value: WarehouseState[RwEndpointKey],
+) {
+  if (key === "status") {
+    target.status = value as RwStatus;
+  } else if (key === "products") {
+    target.products = value as RwProductsResponse;
+  } else if (key === "rules") {
+    target.rules = value as RwRulesResponse;
+  } else if (key === "pipeline") {
+    target.pipeline = value as RwPipelineResponse;
+  } else if (key === "categoryTree") {
+    target.categoryTree = value as RwCategoryTreeResponse;
+  } else {
+    target.settings = value as RwSettingsResponse;
+  }
+}
+
+function collectCategoryLabels(root: RwCategoryNode | null) {
+  const labels = new Map<string, string>();
+  function visit(node: RwCategoryNode) {
+    labels.set(node.id, node.name);
+    node.children.forEach(visit);
+  }
+  if (root) {
+    visit(root);
+  }
+  return labels;
 }

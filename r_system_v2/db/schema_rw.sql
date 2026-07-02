@@ -124,6 +124,12 @@ CREATE TABLE IF NOT EXISTS rw_worker_status (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS rw_runtime_settings (
+  key TEXT PRIMARY KEY,
+  value JSONB NOT NULL DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE INDEX IF NOT EXISTS idx_rw_pipeline_events_created ON rw_pipeline_events(created_at);
 CREATE INDEX IF NOT EXISTS idx_rw_pipeline_events_asin ON rw_pipeline_events(asin);
 CREATE INDEX IF NOT EXISTS idx_rw_worker_status_heartbeat ON rw_worker_status(last_heartbeat_at);

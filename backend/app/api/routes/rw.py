@@ -15,13 +15,18 @@ from ...services.data_isolation import without_org_data_isolation
 from ...services.rw_keepa_ingestion import keepa_ingestion_runtime_status
 from ..deps import get_current_user
 from r_system_v2.rw.category.category_tree import (
+    apply_selected_categories,
     load_category_tree,
-    select_category,
+    select_category_in_payload,
     selected_category_ids,
 )
 from r_system_v2.rw.scheduler.category_rate_limiter import CategoryRateLimiter
 from r_system_v2.rw.skill_metadata import load_deepseek_skill_metadata
 from r_system_v2.rw.storage.pipeline_events import runtime_overview
+from r_system_v2.rw.storage.runtime_settings import (
+    load_runtime_settings,
+    save_runtime_settings,
+)
 
 
 router = APIRouter(prefix="/rw", tags=["r-warehouse"])
@@ -34,35 +39,49 @@ RULES = [
         "label": "价格带过滤",
         "enabled": True,
         "result": "已启用",
-        "threshold": "25 <= price <= 70",
+        "threshold": "售价 25-70 美元",
     },
     {
         "id": "margin_check",
         "label": "净利率检查",
         "enabled": True,
         "result": "已启用",
-        "threshold": "est_net_margin >= 0.15",
+        "threshold": "预估净利率不低于 15%",
     },
     {
         "id": "competition_filter",
         "label": "卖家数量过滤",
         "enabled": True,
         "result": "已启用",
-        "threshold": "seller_count <= 15",
+        "threshold": "卖家数不超过 15",
     },
     {
         "id": "brand_dominance_filter",
         "label": "品牌垄断过滤",
         "enabled": True,
         "result": "已启用",
-        "threshold": "brand_share <= 0.50",
+        "threshold": "单品牌占比不超过 50%",
     },
     {
         "id": "price_trend_filter",
         "label": "价格趋势过滤",
         "enabled": True,
         "result": "已启用",
-        "threshold": "price_trend not declining",
+        "threshold": "价格趋势不得持续下行",
+    },
+    {
+        "id": "review_wall_filter",
+        "label": "评论壁垒过滤",
+        "enabled": True,
+        "result": "已启用",
+        "threshold": "可取数时前三评论数不超过 500",
+    },
+    {
+        "id": "redline_filter",
+        "label": "红线类目过滤",
+        "enabled": True,
+        "result": "已启用",
+        "threshold": "锂电/液体/强认证/IP/易碎重货直接剔除",
     },
 ]
 
@@ -117,6 +136,7 @@ def _target_org_for_user(db: Session, user: User) -> OrganizationRecord | None:
 
 
 def _deepseek_batch_status(db: Session) -> dict[str, object]:
+    settings = load_runtime_settings(db)
     try:
         row = db.execute(
             text(
@@ -142,7 +162,7 @@ def _deepseek_batch_status(db: Session) -> dict[str, object]:
     if first_run_at and last_run_at:
         run_time_range = f"{first_run_at} - {last_run_at}"
     else:
-        run_time_range = "no completed batch yet"
+        run_time_range = "暂无已完成批次"
     return {
         "mode": "batch_processor_only",
         "controls_execution": False,
@@ -151,6 +171,10 @@ def _deepseek_batch_status(db: Session) -> dict[str, object]:
         "pass_count": pass_count,
         "fail_count": fail_count,
         "deleted_count": 0,
+        "interval_seconds": settings.deepseek_interval_seconds,
+        "batch_size": settings.deepseek_batch_size,
+        "max_runtime_seconds": settings.deepseek_max_runtime_seconds,
+        "stopped_by_deadline": False,
     }
 
 
@@ -198,7 +222,11 @@ def rw_status(
             org_id=target_org.org_id,
         )
     keepa_bound = ingestion_status["keepa_key_bound"] is True
-    category_tree = load_category_tree()
+    settings = load_runtime_settings(db)
+    category_tree = apply_selected_categories(
+        load_category_tree(),
+        settings.selected_categories,
+    )
     selected_categories = selected_category_ids(category_tree)
     runtime = runtime_overview(db, event_limit=10)
     return {
@@ -315,8 +343,10 @@ def rw_products(
         result = db.execute(
             text(
                 f"""
-                SELECT asin, title, image_url, category, price, bsr, reviews, seller_count,
-                       state, est_net_margin, category_id, category_path, skill_score,
+                SELECT asin, marketplace, source_query, title, image_url, brand,
+                       category, price, bsr, reviews, seller_count, landed_cost,
+                       est_net_margin, brand_share, price_trend, rating, state,
+                       rule_reject_reason, category_id, category_path, skill_score,
                        features, last_keepa_pull, updated_at
                 FROM products_rw
                 {where_sql}
@@ -329,19 +359,28 @@ def rw_products(
         rows = [
             {
                 "asin": row.asin,
+                "marketplace": row.marketplace,
+                "source_query": row.source_query,
                 "title": row.title,
                 "image_url": row.image_url,
+                "brand": row.brand,
                 "category": row.category,
                 "price": float(row.price) if row.price is not None else None,
                 "bsr": row.bsr,
                 "reviews": row.reviews,
                 "seller_count": row.seller_count,
+                "landed_cost": float(row.landed_cost) if row.landed_cost is not None else None,
+                "brand_share": float(row.brand_share) if row.brand_share is not None else None,
+                "price_trend": row.price_trend,
+                "rating": float(row.rating) if row.rating is not None else None,
                 "state": row.state,
                 "rule_result": row.state,
+                "rule_reject_reason": row.rule_reject_reason,
                 "margin": float(row.est_net_margin) if row.est_net_margin is not None else None,
                 "category_id": row.category_id,
                 "category_path": row.category_path.split(">") if row.category_path else [],
                 "skill_score": row.skill_score,
+                "features": row.features if isinstance(row.features, dict) else {},
                 "pipeline_decision": _decision_from_state(row.state, row.features),
                 "last_keepa_pull": str(row.last_keepa_pull) if row.last_keepa_pull else None,
                 "updated_at": str(row.updated_at) if row.updated_at else None,
@@ -392,10 +431,56 @@ def rw_pipeline(
     }
 
 
-@router.get("/category-tree")
-def rw_category_tree(user: User = Depends(require_r_series_org)) -> dict[str, object]:
+@router.get("/settings")
+def rw_settings(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
     del user
-    payload = load_category_tree()
+    settings = load_runtime_settings(db)
+    return {
+        "module": "R-W",
+        "organization": R_SERIES_TARGET_ORGANIZATION_NAME,
+        "settings": settings.to_dict(),
+        "mode": "production",
+    }
+
+
+@router.post("/settings")
+def rw_update_settings(
+    payload: dict[str, object] = Body(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    del user
+    try:
+        settings = save_runtime_settings(db, payload)
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="rw_runtime_settings_unavailable",
+        ) from exc
+    return {
+        "module": "R-W",
+        "organization": R_SERIES_TARGET_ORGANIZATION_NAME,
+        "settings": settings.to_dict(),
+        "mode": "production",
+    }
+
+
+@router.get("/category-tree")
+def rw_category_tree(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    del user
+    settings = load_runtime_settings(db)
+    payload = apply_selected_categories(
+        load_category_tree(),
+        settings.selected_categories,
+    )
     payload["selected_categories"] = selected_category_ids(payload)
     return payload
 
@@ -403,6 +488,7 @@ def rw_category_tree(user: User = Depends(require_r_series_org)) -> dict[str, ob
 @router.post("/category-tree/select")
 def rw_category_select(
     payload: dict[str, object] = Body(...),
+    db: Session = Depends(get_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     del user
@@ -410,18 +496,39 @@ def rw_category_select(
     if not category_id:
         raise HTTPException(status_code=422, detail="category_id required")
     selected = bool(payload.get("selected", True))
-    result = select_category(category_id, selected)
-    result["selected_categories"] = selected_category_ids(result)
+    settings = load_runtime_settings(db)
+    current_tree = apply_selected_categories(
+        load_category_tree(),
+        settings.selected_categories,
+    )
+    result = select_category_in_payload(current_tree, category_id, selected)
+    selected_categories = selected_category_ids(result)
+    try:
+        save_runtime_settings(db, {"selected_categories": selected_categories})
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="rw_category_settings_unavailable",
+        ) from exc
+    result["selected_categories"] = selected_categories
     return result
 
 
 @router.get("/category-rate-plan")
 def rw_category_rate_plan(
     window_minutes: int = Query(default=10, ge=1, le=1440),
+    db: Session = Depends(get_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     del user
-    categories = selected_category_ids(load_category_tree())
+    settings = load_runtime_settings(db)
+    payload = apply_selected_categories(
+        load_category_tree(),
+        settings.selected_categories,
+    )
+    categories = selected_category_ids(payload)
     return CategoryRateLimiter().plan(categories, window_minutes).to_dict()
 
 

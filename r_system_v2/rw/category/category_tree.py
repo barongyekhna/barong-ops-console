@@ -45,35 +45,35 @@ class CategoryNode:
 
 DEFAULT_TREE = CategoryNode(
     id="amazon-fba",
-    name="Amazon FBA",
+    name="亚马逊 FBA",
     selected=True,
     children=[
         CategoryNode(
             id="home-kitchen",
-            name="Home & Kitchen",
+            name="家居与厨房",
             selected=True,
             children=[
-                CategoryNode(id="home-draft-proofing", name="Draft proofing", selected=True),
-                CategoryNode(id="home-storage-organization", name="Storage & organization", selected=True),
-                CategoryNode(id="home-small-tools", name="Small home tools", selected=True),
+                CategoryNode(id="home-draft-proofing", name="门窗密封", selected=True),
+                CategoryNode(id="home-storage-organization", name="收纳整理", selected=True),
+                CategoryNode(id="home-small-tools", name="小型家用工具", selected=True),
             ],
         ),
         CategoryNode(
             id="patio-lawn-garden",
-            name="Patio, Lawn & Garden",
+            name="庭院草坪花园",
             selected=True,
             children=[
-                CategoryNode(id="garden-lightweight-tools", name="Lightweight garden tools", selected=True),
-                CategoryNode(id="garden-seasonless-accessories", name="Seasonless garden accessories", selected=True),
+                CategoryNode(id="garden-lightweight-tools", name="轻量园艺工具", selected=True),
+                CategoryNode(id="garden-seasonless-accessories", name="四季园艺配件", selected=True),
             ],
         ),
         CategoryNode(
             id="office-products",
-            name="Office Products",
+            name="办公用品",
             selected=True,
             children=[
-                CategoryNode(id="office-organization", name="Organization", selected=True),
-                CategoryNode(id="office-ergonomic-accessories", name="Ergonomic accessories", selected=True),
+                CategoryNode(id="office-organization", name="办公收纳", selected=True),
+                CategoryNode(id="office-ergonomic-accessories", name="人体工学配件", selected=True),
             ],
         ),
     ],
@@ -114,12 +114,38 @@ def selected_category_ids(payload: dict[str, object] | None = None) -> list[str]
     return [node.id for node in iter_nodes(root) if node.selected]
 
 
-def select_category(category_id: str, selected: bool, path: Path = CATEGORY_TREE_PATH) -> dict[str, object]:
-    payload = load_category_tree(path)
+def apply_selected_categories(
+    payload: dict[str, object],
+    selected_categories: list[str] | None,
+) -> dict[str, object]:
+    if selected_categories is None:
+        return payload
+    selected = set(selected_categories)
+    root_payload = payload["root"]
+    root = CategoryNode.from_dict(root_payload) if isinstance(root_payload, dict) else DEFAULT_TREE
+    for node in iter_nodes(root):
+        node.selected = node.id in selected
+    updated = dict(payload)
+    updated["root"] = root.to_dict()
+    return updated
+
+
+def select_category_in_payload(
+    payload: dict[str, object],
+    category_id: str,
+    selected: bool,
+) -> dict[str, object]:
     root_payload = payload["root"]
     root = CategoryNode.from_dict(root_payload) if isinstance(root_payload, dict) else DEFAULT_TREE
     _select_node(root, category_id, selected)
-    payload["root"] = root.to_dict()
+    updated = dict(payload)
+    updated["root"] = root.to_dict()
+    return updated
+
+
+def select_category(category_id: str, selected: bool, path: Path = CATEGORY_TREE_PATH) -> dict[str, object]:
+    payload = load_category_tree(path)
+    payload = select_category_in_payload(payload, category_id, selected)
     path.write_text(
         json.dumps(payload, ensure_ascii=False, indent=2, sort_keys=True),
         encoding="utf-8",

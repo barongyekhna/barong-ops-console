@@ -11,7 +11,11 @@ from typing import Callable
 from sqlalchemy.orm import Session, sessionmaker
 
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
-from r_system_v2.rw.category.category_tree import load_category_tree, selected_category_ids
+from r_system_v2.rw.category.category_tree import (
+    apply_selected_categories,
+    load_category_tree,
+    selected_category_ids,
+)
 from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
 from r_system_v2.rw.core.models import IngestionRecord
 from r_system_v2.rw.core.pipeline_runner import PipelineRunner
@@ -29,10 +33,10 @@ from r_system_v2.rw.storage.pipeline_events import (
     delete_queue_successes,
     emit_pipeline_event,
     release_queue_failures,
-    runtime_overview,
     upsert_worker_status,
     utc_now,
 )
+from r_system_v2.rw.storage.runtime_settings import load_runtime_settings
 from r_system_v2.rw.workers.deepseek_cron import DeepSeekPreFilterCron
 
 
@@ -141,8 +145,8 @@ class RwRealtimeEngine:
 
     def run_cycle(self) -> RealtimeCycleReport:
         cycle_started_at = utc_now()
-        selected_categories = _runnable_categories(selected_category_ids(load_category_tree()))
         with self.session_factory() as db:
+            selected_categories = self._selected_categories(db)
             try:
                 report = self._run_cycle(db, selected_categories, cycle_started_at)
                 db.commit()
@@ -182,6 +186,7 @@ class RwRealtimeEngine:
         selected_categories: list[str],
         cycle_started_at: datetime,
     ) -> RealtimeCycleReport:
+        self._reload_runtime_settings(db)
         stale_released = self.scheduler.release_stale_picks(
             db,
             older_than_seconds=self.loop_interval_seconds * 3,
@@ -401,7 +406,6 @@ class RwRealtimeEngine:
         cycle_finished_at: datetime,
         last_error: str | None = None,
     ) -> None:
-        overview = runtime_overview(db, event_limit=5)
         upsert_worker_status(
             db,
             worker_name="r-w-keepa-daemon",
@@ -415,12 +419,29 @@ class RwRealtimeEngine:
             payload={
                 "pid": os.getpid(),
                 "cycle": report.to_dict(),
-                "overview": overview,
             },
             last_error=last_error or report.error,
             cycle_started_at=cycle_started_at,
             cycle_finished_at=cycle_finished_at,
         )
+
+    def _reload_runtime_settings(self, db: Session) -> None:
+        settings = load_runtime_settings(db)
+        self.deepseek_interval_seconds = settings.deepseek_interval_seconds
+        self.deepseek_cron.interval_seconds = settings.deepseek_interval_seconds
+        self.deepseek_cron.batch_size = settings.deepseek_batch_size
+        self.deepseek_cron.max_runtime_seconds = settings.deepseek_max_runtime_seconds
+        self.keepa_batch_size = min(settings.keepa_batch_size, MAX_REQUESTS_PER_MINUTE)
+        self.discovery_categories_per_cycle = settings.discovery_categories_per_cycle
+        self.keepa_429_backoff_seconds = settings.keepa_429_backoff_seconds
+
+    def _selected_categories(self, db: Session) -> list[str]:
+        settings = load_runtime_settings(db)
+        category_tree = apply_selected_categories(
+            load_category_tree(),
+            settings.selected_categories,
+        )
+        return _runnable_categories(selected_category_ids(category_tree))
 
 
 def _int_env(name: str, default: int) -> int:

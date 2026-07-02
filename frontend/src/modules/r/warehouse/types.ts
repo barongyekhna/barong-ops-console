@@ -36,6 +36,10 @@ export type RwStatus = {
     pass_count: number;
     fail_count: number;
     deleted_count: number;
+    interval_seconds?: number;
+    batch_size?: number;
+    max_runtime_seconds?: number;
+    stopped_by_deadline?: boolean;
   };
   category_tree: {
     selected_count: number;
@@ -46,19 +50,28 @@ export type RwStatus = {
 
 export type RwProduct = {
   asin: string;
+  marketplace: string;
+  source_query: string | null;
   title: string;
   image_url: string | null;
+  brand: string | null;
   category: string;
   price: number | null;
   bsr: number;
   reviews: number;
   seller_count: number;
+  landed_cost: number | null;
+  brand_share: number | null;
+  price_trend: string | null;
+  rating: number | null;
   state: string;
   rule_result: string;
+  rule_reject_reason: string | null;
   margin: number | null;
   category_id: string | null;
   category_path: string[];
   skill_score: number | null;
+  features: Record<string, unknown>;
   pipeline_decision: "pass" | "reject" | "pending_review" | string;
   last_keepa_pull: string | null;
   updated_at: string | null;
@@ -146,4 +159,36 @@ export type RwPipelineResponse = {
   refresh_seconds: number;
   runtime: RwRuntimeOverview;
   mode: "production";
+};
+
+export type RwRuntimeSettings = {
+  deepseek_interval_seconds: number;
+  deepseek_batch_size: number;
+  deepseek_max_runtime_seconds: number;
+  keepa_batch_size: number;
+  discovery_categories_per_cycle: number;
+  keepa_429_backoff_seconds: number;
+  selected_categories: string[] | null;
+};
+
+export type RwSettingsResponse = {
+  module: "R-W";
+  organization: string;
+  settings: RwRuntimeSettings;
+  mode: "production";
+};
+
+export type RwCategoryNode = {
+  id: string;
+  name: string;
+  children: RwCategoryNode[];
+  selected: boolean;
+};
+
+export type RwCategoryTreeResponse = {
+  source?: string;
+  generated_from?: string;
+  redline_terms?: string[];
+  root: RwCategoryNode;
+  selected_categories: string[];
 };

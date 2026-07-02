@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from decimal import Decimal
 import json
 from typing import Any
 
@@ -274,7 +275,10 @@ def _fetch_mappings(
     params: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     try:
-        return [dict(row) for row in db.execute(text(sql), params or {}).mappings().all()]
+        return [
+            _json_safe(dict(row))
+            for row in db.execute(text(sql), params or {}).mappings().all()
+        ]
     except SQLAlchemyError:
         db.rollback()
         return []
@@ -290,4 +294,27 @@ def _fetch_one(
     except SQLAlchemyError:
         db.rollback()
         return None
-    return dict(row) if row else None
+    return _json_safe(dict(row)) if row else None
+
+
+def _json_safe(value: Any, *, depth: int = 0, max_depth: int = 6) -> Any:
+    if depth >= max_depth:
+        return str(value)
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, dict):
+        output: dict[str, Any] = {}
+        for key, item in value.items():
+            text_key = str(key)
+            if text_key == "overview":
+                output[text_key] = "omitted"
+                continue
+            output[text_key] = _json_safe(item, depth=depth + 1, max_depth=max_depth)
+        return output
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe(item, depth=depth + 1, max_depth=max_depth) for item in value]
+    return str(value)
