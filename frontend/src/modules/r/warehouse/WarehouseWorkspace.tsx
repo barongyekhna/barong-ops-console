@@ -4,6 +4,7 @@ import { Activity, AlertCircle, CheckCircle2, Database, RefreshCw } from "lucide
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { useAuth } from "@/components/auth-provider";
 import {
   getRwCategoryTree,
   getRwPipeline,
@@ -65,7 +66,7 @@ const tabs: Array<{ href: string; label: string; view: WarehouseView }> = [
   { href: "/r-w/rules", label: "规则", view: "rules" },
 ];
 
-const DEEPSEEK_DAILY_REPORT_KEY = "rw-deepseek-daily-report-date";
+const DEEPSEEK_DAILY_REPORT_KEY_PREFIX = "rw-deepseek-daily-report-date";
 
 function currency(value: number) {
   return new Intl.NumberFormat("zh-CN", {
@@ -544,6 +545,7 @@ function BatchStatusView({
 }
 
 export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
+  const { user } = useAuth();
   const [state, setState] = useState<WarehouseState>({
     categoryTree: null,
     pipeline: null,
@@ -566,6 +568,9 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     sort_order: "desc",
   });
   const stateRef = useRef(state);
+  const deepseekDailyReportKey = `${DEEPSEEK_DAILY_REPORT_KEY_PREFIX}:${
+    user?.id ?? "anonymous"
+  }`;
 
   useEffect(() => {
     stateRef.current = state;
@@ -576,10 +581,10 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       return;
     }
     const today = new Date().toISOString().slice(0, 10);
-    if (window.localStorage.getItem(DEEPSEEK_DAILY_REPORT_KEY) !== today) {
+    if (window.localStorage.getItem(deepseekDailyReportKey) !== today) {
       setShowDeepseekReport(true);
     }
-  }, [state.status]);
+  }, [deepseekDailyReportKey, state.status]);
 
   useEffect(() => {
     let cancelled = false;
@@ -788,7 +793,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               className={styles.popupButton}
               onClick={() => {
                 window.localStorage.setItem(
-                  DEEPSEEK_DAILY_REPORT_KEY,
+                  deepseekDailyReportKey,
                   new Date().toISOString().slice(0, 10),
                 );
                 setShowDeepseekReport(false);
