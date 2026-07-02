@@ -13,8 +13,11 @@ from r_system_v2.core.secret_manager import TARGET_ORGANIZATION_NAME
 from r_system_v2.ra.providers import RAnalysisProviderBinding
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
 from r_system_v2.rw.category.category_tree import load_category_tree, selected_category_ids
+from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
 from r_system_v2.rw.providers.keepa_provider import KeepaProvider
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
+from r_system_v2.rw.storage.batch_writer import SQLAlchemyBatchWriter
+from r_system_v2.rw.workers.keepa_worker import KeepaWorker
 from r_system_v2.rw.workers.secret_watch_daemon import SecretWatchDaemon
 
 
@@ -27,6 +30,10 @@ class WorkerRuntimeStatus:
     deepseek_loaded: bool = False
     secret_manager_connected: bool = False
     category_count: int = 0
+    async_keepa_worker_ready: bool = False
+    buffer_queue_active: bool = False
+    batch_writer_active: bool = False
+    per_request_db_update: bool = False
 
 
 RUNNING = True
@@ -83,6 +90,15 @@ def run_rw_worker() -> WorkerRuntimeStatus:
     provider = KeepaProvider(org_id=org_id, secret_manager=manager)
     deepseek_skill = DeepSeekScreeningSkill(org_id=org_id, secret_manager=manager)
     scheduler = KeepaScheduler(provider=provider, processor=lambda record: record)  # type: ignore[arg-type]
+    batch_writer = _build_batch_writer()
+    buffer_queue = KeepaBufferQueue(
+        writer=batch_writer.write if batch_writer is not None else None,
+    )
+    async_worker = KeepaWorker(
+        provider=provider,
+        buffer_queue=buffer_queue,
+        deepseek_skill=deepseek_skill,
+    )
     daemon = SecretWatchDaemon(
         org_id=org_id,
         secret_manager=manager,
@@ -99,6 +115,12 @@ def run_rw_worker() -> WorkerRuntimeStatus:
         "Keepa scheduler started "
         f"rate_limit_per_min={scheduler.rate_limit_per_min} no_burst_mode=True"
     )
+    _log(
+        "Keepa async worker ready "
+        f"rate_limit_per_min={async_worker.rate_limit_per_min} "
+        f"buffer_batch_size={buffer_queue.batch_size} "
+        f"batch_writer_active={str(batch_writer is not None).lower()}"
+    )
     _log("DeepSeek pipeline ready")
     _log(
         "R-W worker ready "
@@ -113,7 +135,19 @@ def run_rw_worker() -> WorkerRuntimeStatus:
         deepseek_loaded=deepseek_loaded,
         secret_manager_connected=True,
         category_count=len(categories),
+        async_keepa_worker_ready=True,
+        buffer_queue_active=buffer_queue.stats().active,
+        batch_writer_active=batch_writer is not None,
+        per_request_db_update=False,
     )
+
+
+def _build_batch_writer() -> SQLAlchemyBatchWriter | None:
+    try:
+        from backend.app.db.session import SessionLocal
+    except Exception:
+        return None
+    return SQLAlchemyBatchWriter(SessionLocal)
 
 
 def run_ra_worker() -> WorkerRuntimeStatus:

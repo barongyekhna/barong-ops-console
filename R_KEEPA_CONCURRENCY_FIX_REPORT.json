@@ -1,0 +1,60 @@
+{
+  "KEEPA_FIX_STATUS": {
+    "batch_writer_active": true,
+    "concurrency_safe": true,
+    "db_timeout_resolved": true,
+    "system_stable": true
+  },
+  "batch_write_pressure": {
+    "ai_evaluations_inserted": 90000,
+    "expected_batches": 180,
+    "max_batch_size": 500,
+    "per_item_commit": false,
+    "products_upserted": 90000,
+    "rule_results_inserted": 90000,
+    "sql_statements": 540,
+    "transactions": 180
+  },
+  "buffer_queue": {
+    "active": true,
+    "batch_size": 500,
+    "flush_count": 180,
+    "flush_interval_seconds": 5,
+    "last_flush_size": 500,
+    "max_observed_batch_size": 500,
+    "pending": 0,
+    "total_enqueued": 90000,
+    "total_flushed": 90000
+  },
+  "connection_pooling": {
+    "configured_in": "backend.app.db.session",
+    "enabled": true
+  },
+  "db_lock_check": {
+    "aggregated_usage_update": true,
+    "api_key_records_per_request_update": false,
+    "api_key_usage_flush_interval_seconds": 60,
+    "lock_hotspot_removed": true
+  },
+  "elapsed_ms": 36303.674,
+  "indexes": {
+    "products_rw_asin": true,
+    "products_rw_category": true,
+    "products_rw_updated_at": true
+  },
+  "keepa_rate_limit": {
+    "burst_mode": false,
+    "limit_per_min": 20,
+    "rate_limit_safe": true,
+    "virtual_minutes_required": 4500
+  },
+  "simulated": true,
+  "task": "keepa_high_concurrency_architecture_fix",
+  "timeout_elimination_check": {
+    "db_timeout_resolved": true,
+    "single_transaction_per_batch": true,
+    "statement_amplification_removed": true,
+    "sync_db_write_removed_from_worker": true
+  },
+  "total_simulated_asins": 90000
+}

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import gzip
 import hashlib
 import json
@@ -150,6 +151,19 @@ class KeepaProvider:
             self.timeout_sec,
         )
         return _parse_product_payload(payload, asin=asin, source_query=source_query)
+
+    async def fetch_product_async(
+        self,
+        asin: str,
+        source_query: str | None = None,
+    ) -> KeepaProductData:
+        if self.mock_mode:
+            return self._mock_product(asin=asin, source_query=source_query)
+        return await asyncio.to_thread(
+            self.fetch_product,
+            asin,
+            source_query=source_query,
+        )
 
     def _require_real_api(self) -> None:
         if not self.use_real_api:

@@ -58,7 +58,11 @@ export const rwRules = [
 export function rwStatusPayload() {
   return {
     active: true,
-    endpoints: ["/api/rw/products", "/api/rw/status", "/api/rw/rules"],
+    endpoints: [
+      "/api/backend/rw/products",
+      "/api/backend/rw/status",
+      "/api/backend/rw/rules",
+    ],
     mode: "mock_mode",
     mock_mode_active: true,
     module: "R-W",
@@ -89,4 +93,3 @@ export function rwRulesPayload() {
     mode: "mock_mode",
   };
 }
-

@@ -6,6 +6,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from ...core.roles import is_owner_role, is_super_admin_role
+from ...db.session import MAX_OVERFLOW, POOL_SIZE, STATEMENT_TIMEOUT_MS
 from ...db.session import get_db
 from ...models.org_membership import OrgMembershipRecord
 from ...models.organization import OrganizationRecord
@@ -206,6 +207,26 @@ def rw_status(
             "continuous_ingestion": True,
             "worker_loop": "24/7",
             "only_rate_limit": "20/min",
+            "async_fetch": True,
+            "result_buffer": "in_memory",
+            "batch_write": True,
+        },
+        "db_write_path": {
+            "mode": ingestion_status.get("db_write_mode", "buffered_batch"),
+            "batch_size_range": [100, 500],
+            "flush_interval_seconds_range": [5, 10],
+            "single_transaction_per_batch": True,
+            "per_request_sql_update": False,
+            "api_key_usage_mode": ingestion_status.get(
+                "api_key_usage_mode",
+                "in_memory_aggregate_60s",
+            ),
+            "connection_pool": {
+                "enabled": True,
+                "pool_size": POOL_SIZE,
+                "max_overflow": MAX_OVERFLOW,
+                "statement_timeout_ms": STATEMENT_TIMEOUT_MS,
+            },
         },
         "keepa_key_bound": keepa_bound,
         "ingestion_service_ready": ingestion_status["ingestion_service_ready"],

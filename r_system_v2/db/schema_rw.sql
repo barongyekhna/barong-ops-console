@@ -80,9 +80,11 @@ CREATE TABLE IF NOT EXISTS ai_evaluations (
 );
 
 CREATE INDEX IF NOT EXISTS idx_products_rw_state ON products_rw(state);
+CREATE INDEX IF NOT EXISTS idx_products_rw_asin ON products_rw(asin);
 CREATE INDEX IF NOT EXISTS idx_products_rw_category ON products_rw(category);
 CREATE INDEX IF NOT EXISTS idx_products_rw_category_id ON products_rw(category_id);
 CREATE INDEX IF NOT EXISTS idx_products_rw_skill_score ON products_rw(skill_score);
+CREATE INDEX IF NOT EXISTS idx_products_rw_updated_at ON products_rw(updated_at);
 CREATE INDEX IF NOT EXISTS idx_enrich_queue_picked ON enrich_queue(picked, enqueued_at);
 CREATE INDEX IF NOT EXISTS idx_rule_results_asin ON rule_results(asin);
 CREATE INDEX IF NOT EXISTS idx_ai_evaluations_asin ON ai_evaluations(asin);

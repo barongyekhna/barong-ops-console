@@ -87,5 +87,7 @@ def keepa_ingestion_runtime_status(
         "provider": context.provider,
         "required_key_alias": context.key_alias,
         "key_id": context.key_id,
-        "pipeline": "Keepa API -> ingestion service -> product DB",
+        "pipeline": "Keepa API -> async worker -> memory buffer -> batch writer -> product DB",
+        "db_write_mode": "buffered_batch",
+        "api_key_usage_mode": "in_memory_aggregate_60s",
     }

@@ -7,8 +7,10 @@ import type {
   RwStatus,
 } from "@/modules/r/warehouse/types";
 
+const RW_API_BASE = "/api/backend/rw";
+
 export function getRwStatus() {
-  return apiRequest<RwStatus>("/rw/status", { bypassCache: true });
+  return apiRequest<RwStatus>(`${RW_API_BASE}/status`, { bypassCache: true });
 }
 
 export function getRwProducts() {
@@ -35,15 +37,19 @@ export function getRwProductsWithFilters(filters: {
     params.set("sort_order", filters.sort_order);
   }
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  return apiRequest<RwProductsResponse>(`/rw/products${suffix}`, {
+  return apiRequest<RwProductsResponse>(`${RW_API_BASE}/products${suffix}`, {
     bypassCache: true,
   });
 }
 
 export function getRwRules() {
-  return apiRequest<RwRulesResponse>("/rw/rules", { bypassCache: true });
+  return apiRequest<RwRulesResponse>(`${RW_API_BASE}/rules`, {
+    bypassCache: true,
+  });
 }
 
 export function getRwCategoryTree() {
-  return apiRequest<unknown>("/rw/category-tree", { bypassCache: true });
+  return apiRequest<unknown>(`${RW_API_BASE}/category-tree`, {
+    bypassCache: true,
+  });
 }

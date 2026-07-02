@@ -32,6 +32,7 @@ from ..schemas.api_key_orchestration import (
 )
 from .module_registry import get_module_manifest_for_db
 from .module_control_cache_service import refresh_module_control_center_cache_async
+from .api_key_usage_tracker import record_api_key_usage
 from .provider_config_service import (
     ProviderConfigError,
     provider_key_alias,
@@ -782,16 +783,8 @@ def resolve_module_api_key_for_injection(
         raise ApiKeyIsolationError("api_key_not_active")
     if key.org_id != org_id:
         raise ApiKeyIsolationError("api_key_org_mismatch")
-    _sync_provider_config_for_binding(
-        db,
-        binding=binding,
-        key=key,
-        source="api_key_resolution",
-    )
     secret_value = _decrypt_key_value(key.encrypted_key_value)
-    key.last_used_at = datetime.now(UTC)
-    db.add(key)
-    db.flush()
+    record_api_key_usage(key.key_id)
     key_type_payload = _key_type_payload(key)
     key_type = str(key_type_payload["key_type"])
     if key_type == KEEPA_KEY_TYPE:

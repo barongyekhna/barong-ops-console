@@ -52,6 +52,30 @@ type ApiRequestOptions = Omit<RequestInit, "body"> & {
   timeoutMs?: number;
 };
 
+function toBackendRequestPath(path: string) {
+  const parsedPath = new URL(path, "https://frontend.local");
+  const pathname = parsedPath.pathname;
+  const search = parsedPath.search;
+
+  if (pathname === API_PROXY_BASE) {
+    return `/${search}`;
+  }
+  if (pathname.startsWith(`${API_PROXY_BASE}/`)) {
+    return `${pathname.slice(API_PROXY_BASE.length)}${search}`;
+  }
+
+  return `${pathname}${search}`;
+}
+
+function toFrontendProxyPath(path: string) {
+  const backendPath = toBackendRequestPath(path);
+  if (backendPath === "/") {
+    return API_PROXY_BASE;
+  }
+
+  return `${API_PROXY_BASE}${backendPath}`;
+}
+
 function defaultTimeoutMsForPath(path: string, method: string) {
   if (method !== "GET") {
     return DEFAULT_API_TIMEOUT_MS;
@@ -282,7 +306,9 @@ export async function apiRequest<T>(
   } = options;
   const method = (fetchOptions.method ?? "GET").toUpperCase();
   const headers = new Headers(fetchOptions.headers);
-  const timeoutMs = normalizeTimeoutMs(timeoutMsOption, path, method);
+  const backendPath = toBackendRequestPath(path);
+  const frontendProxyPath = toFrontendProxyPath(path);
+  const timeoutMs = normalizeTimeoutMs(timeoutMsOption, backendPath, method);
   const retryLimit = normalizeRetryLimit(retryLimitOption);
   const requestStartedAt = Date.now();
   const routeAbortGeneration = activeRouteAbortGeneration;
@@ -302,7 +328,7 @@ export async function apiRequest<T>(
   }
 
   return requestWithFrontendCache<T>(
-    path,
+    backendPath,
     {
       body,
       bypassCache,
@@ -329,7 +355,7 @@ export async function apiRequest<T>(
         );
 
         try {
-          const response = await fetch(`${API_PROXY_BASE}${path}`, {
+          const response = await fetch(frontendProxyPath, {
             ...fetchOptions,
             body: body === undefined ? undefined : JSON.stringify(body),
             cache: "no-store",
@@ -342,7 +368,7 @@ export async function apiRequest<T>(
           if (
             response.status === 401 &&
             typeof window !== "undefined" &&
-            shouldDispatchUnauthorized(path)
+            shouldDispatchUnauthorized(backendPath)
           ) {
             clearFrontendRequestCache();
             window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
@@ -371,12 +397,12 @@ export async function apiRequest<T>(
             if (isTechnicalErrorMessage(message)) {
               message = fallbackErrorMessageForStatus(response.status);
             }
-            if (path.startsWith("/k/")) {
+            if (backendPath.startsWith("/k/")) {
               message = translateKBackendError({
                 detail: errorDetail,
                 fallback: fallbackErrorMessageForStatus(response.status),
                 message,
-                path,
+                path: backendPath,
                 status: response.status,
               });
             }

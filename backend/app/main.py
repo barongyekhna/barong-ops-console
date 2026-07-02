@@ -117,6 +117,10 @@ from .services.login_side_effects import (
     start_login_side_effect_worker,
     stop_login_side_effect_worker,
 )
+from .services.api_key_usage_tracker import (
+    start_api_key_usage_flush_worker,
+    stop_api_key_usage_flush_worker,
+)
 from .services.module_control_cache_service import (
     get_module_control_center_cached,
     refresh_module_control_center_cache_async,
@@ -305,6 +309,7 @@ def enforce_production_migration_safety() -> None:
 
         enforce_migration_safety(engine, app_env=settings.app_env)
     start_session_seen_flush_worker()
+    start_api_key_usage_flush_worker()
     start_login_side_effect_worker()
     start_module_control_cache_worker()
     refresh_module_control_center_cache_async(force=True)
@@ -314,6 +319,7 @@ def enforce_production_migration_safety() -> None:
 def flush_deferred_session_seen_updates() -> None:
     stop_login_side_effect_worker()
     stop_module_control_cache_worker()
+    stop_api_key_usage_flush_worker()
     stop_session_seen_flush_worker()
 
 

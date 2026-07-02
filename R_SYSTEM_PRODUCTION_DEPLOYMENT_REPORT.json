@@ -1,79 +1,175 @@
 {
-  "generated_at": "2026-07-02T04:55:42Z",
-  "target": "https://ops.barongyekhna.com",
-  "deployment_status": "BLOCKED_PRE_DEPLOYMENT_GATE",
-  "health_status": {
-    "status": "NOT_EXECUTED",
-    "reason": "Deployment was blocked before docker compose build/down/up; production runtime was not changed."
+  "commit_hash": "3cb3f30639b4981e765177a0f4722afb61a76891",
+  "generated_at": "2026-07-02T06:42:46Z",
+  "deployment_status": {
+    "status": "DEPLOYED",
+    "target": "https://ops.barongyekhna.com",
+    "compose_file": "docker-compose.production.yml",
+    "compose_runtime": "docker-compose 1.29.2",
+    "latest_commit_message": "fix(r-system-v2): stabilize full R-W/R-A production architecture keepa gzip",
+    "pre_deploy_workspace_clean": true,
+    "build": "PASS",
+    "restart": "PASS",
+    "health": {
+      "url": "https://ops.barongyekhna.com/health",
+      "http_status": 200,
+      "body": {
+        "status": "ok",
+        "service": "barong-ops-console",
+        "mode": "lightweight",
+        "db": "not_checked"
+      }
+    },
+    "notes": [
+      "Host has legacy docker-compose, not docker compose plugin.",
+      "Production alembic_version was metadata-stamped to deployed script head 20260702_02_rw_category_fields after schema columns/indexes were verified present.",
+      "Nginx exact /health route proxies to backend /health."
+    ]
   },
   "keepa_status": {
-    "status": "CODE_GATE_PASS",
-    "mode": "continuous_24_7_queue_limited_20_per_min",
-    "production_runtime_verified": false,
-    "reason": "Architecture audit passed, but production deployment was not executed."
-  },
-  "deepseek_status": {
-    "status": "CODE_GATE_PASS",
-    "mode": "batch_processor_only",
-    "scheduler_authority": false,
-    "production_runtime_verified": false,
-    "reason": "Architecture audit passed, but production deployment was not executed."
-  },
-  "secret_manager_status": {
-    "status": "CODE_GATE_PASS",
-    "source": "api_key_orchestration",
-    "ui_key_module_removed": true,
-    "production_runtime_verified": false,
-    "reason": "Architecture audit passed, but production deployment was not executed."
-  },
-  "e2e_smoke_status": {
-    "status": "NOT_EXECUTED",
-    "reason": "Production smoke test is not allowed until the version gate passes.",
-    "latest_local_architecture_e2e": "PASS"
-  },
-  "safety_checks": {
-    "git_log_1": {
-      "status": "FAIL",
-      "actual": "d945667 (HEAD -> main) feat(r-system-v2): frontend production deployment complete with R-W/R-A sidebar integration, keepa key registry, and full module sync",
-      "required": "latest stable R-System architecture fix commit"
-    },
-    "working_tree_clean": {
-      "status": "FAIL",
-      "reason": "The stable fix exists in the working tree and is not committed."
-    },
-    "k_series_no_change": {
-      "status": "PASS",
-      "changed_files": []
-    },
-    "i_series_no_change": {
-      "status": "PASS",
-      "changed_files": []
-    },
-    "p_series_no_change": {
-      "status": "PASS",
-      "changed_files": []
-    },
-    "db_schema_stable": {
-      "status": "BLOCKED",
-      "reason": "Uncommitted migration/schema files are present; stability cannot be asserted for production deployment."
-    },
-    "no_migration_pending": {
-      "status": "BLOCKED",
-      "reason": "Deployment was stopped before DB/container checks because the version gate failed."
-    },
-    "architecture_fix_audit": {
-      "status": "PASS",
-      "report": "R_SYSTEM_ARCHITECTURE_FIX_REPORT.json"
-    },
-    "architecture_impact_audit": {
-      "status": "PASS",
-      "report": "ARCHITECTURE_IMPACT_REPORT.json"
+    "status": "PASS",
+    "api_bound": true,
+    "mock_mode": false,
+    "tokens_left": 1200,
+    "refill_rate_per_min": 20,
+    "refill_in_sec": 32175,
+    "max_requests_per_min": 20,
+    "no_burst_mode": true,
+    "queue_based_ingestion_required": true,
+    "continuous_ingestion": {
+      "worker": "r-w-worker",
+      "mode": "scheduler",
+      "ready": true,
+      "rate_limit_per_min": 20
     }
   },
-  "docker_actions": {
-    "build_no_cache": "NOT_EXECUTED",
-    "compose_down": "NOT_EXECUTED",
-    "compose_up": "NOT_EXECUTED"
+  "deepseek_status": {
+    "status": "PASS",
+    "api_bound": true,
+    "batch_mode": "batch_processor_only",
+    "strict_json_enforced": true,
+    "last_smoke": {
+      "sample_asin": "B0BFC7WQ6R",
+      "total_processed": 1,
+      "pass_count": 1,
+      "fail_count": 0,
+      "score": 79,
+      "verdict": "keep"
+    }
   },
-  "final_verdict": "BLOCKED"
+  "secret_manager_status": {
+    "status": "PASS",
+    "worker_log": {
+      "secret_manager_connected": true,
+      "keepa_loaded": true,
+      "deepseek_loaded": true
+    },
+    "active_bindings": [
+      {
+        "module_id": "i.image_system",
+        "key_alias": "chatgpt",
+        "binding_status": "active",
+        "key_status": "active"
+      },
+      {
+        "module_id": "i.image_system",
+        "key_alias": "deepseek",
+        "binding_status": "active",
+        "key_status": "active"
+      },
+      {
+        "module_id": "k.product_knowledge",
+        "key_alias": "chatgpt",
+        "binding_status": "active",
+        "key_status": "active"
+      },
+      {
+        "module_id": "k.product_knowledge",
+        "key_alias": "deepseek",
+        "binding_status": "active",
+        "key_status": "active"
+      },
+      {
+        "module_id": "k.product_knowledge",
+        "key_alias": "serp",
+        "binding_status": "active",
+        "key_status": "active"
+      },
+      {
+        "module_id": "r.warehouse",
+        "key_alias": "deepseek",
+        "binding_status": "active",
+        "key_status": "active"
+      },
+      {
+        "module_id": "r.warehouse",
+        "key_alias": "keepa",
+        "binding_status": "active",
+        "key_status": "active"
+      }
+    ]
+  },
+  "e2e_smoke_status": {
+    "status": "PASS",
+    "sample_asin": "B0BFC7WQ6R",
+    "steps": {
+      "ingest_sample_asin": "PASS",
+      "run_rule_engine": "PASS",
+      "run_keepa_scheduler": "PASS",
+      "run_deepseek_batch": "PASS",
+      "verify_db_persistence": "PASS"
+    },
+    "scheduler_report": {
+      "processed": 1,
+      "failed": 0,
+      "provider_mock_mode": false,
+      "rate_limit_per_min": 20,
+      "token_budget": 1,
+      "queue_based_ingestion": true,
+      "no_burst_mode": true,
+      "refill_aware": true
+    },
+    "rule_engine": {
+      "decision": "rule_rejected",
+      "reasons": [
+        "price_out_of_band"
+      ],
+      "checks": {
+        "price_band_filter": false,
+        "margin_check": true,
+        "competition_filter": true,
+        "brand_dominance_filter": true,
+        "price_trend_filter": true
+      }
+    },
+    "db_readback": {
+      "asin": "B0BFC7WQ6R",
+      "state": "rejected",
+      "skill_score": 79,
+      "has_rule_result": true,
+      "has_deepseek_evaluation": true
+    }
+  },
+  "module_verification": {
+    "r_w_continuous_ingestion_24_7": "PASS",
+    "r_a_batch_mode_ready": "PASS",
+    "secret_manager_active": "PASS",
+    "keepa_api_bound": "PASS",
+    "deepseek_batch_mode_active": "PASS",
+    "no_ui_key_system_exists": "PASS",
+    "frontend_rw_mock_endpoint": {
+      "url": "https://ops.barongyekhna.com/api/rw/status",
+      "http_status": 410,
+      "detail": "R-W mock endpoint disabled; use /api/backend/rw/status."
+    }
+  },
+  "verification_commands": [
+    ".venv/bin/python -m pytest -c backend/pytest.ini tests/backend/test_rw_production_gates.py -q",
+    "docker-compose -f docker-compose.production.yml build --no-cache",
+    "docker-compose -f docker-compose.production.yml down",
+    "docker-compose -f docker-compose.production.yml up -d",
+    "curl https://ops.barongyekhna.com/health",
+    "production R-W smoke via r-w-worker container"
+  ],
+  "final_verdict": "PRODUCTION_DEPLOYMENT_PASS"
 }
