@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import gzip
 import hashlib
 import json
 import os
@@ -208,9 +209,16 @@ def _default_http_get_json(
     timeout_sec: float,
 ) -> dict[str, Any]:
     target = f"{url}?{urlencode(params)}"
-    request = Request(target, headers={"Accept": "application/json"})
+    request = Request(
+        target,
+        headers={"Accept": "application/json", "Accept-Encoding": "identity"},
+    )
     with urlopen(request, timeout=timeout_sec) as response:  # nosec B310 - fixed Keepa URL.
-        payload = response.read().decode("utf-8")
+        body = response.read()
+        content_encoding = response.headers.get("Content-Encoding", "").lower()
+    if "gzip" in content_encoding or body.startswith(b"\x1f\x8b"):
+        body = gzip.decompress(body)
+    payload = body.decode("utf-8")
     data = json.loads(payload)
     if not isinstance(data, dict):
         raise KeepaResponseError("keepa_response_not_json_object")

@@ -1,3 +1,5 @@
+import gzip
+
 import pytest
 
 from backend.app.api.routes.rw import _user_has_rw_role_access
@@ -11,6 +13,7 @@ from r_system_v2.rw.providers.keepa_provider import (
     USE_REAL_KEEPA_API,
     KeepaConfigurationError,
     KeepaProvider,
+    _default_http_get_json,
 )
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
 from r_system_v2.rw.storage.repository import MockWarehouseRepository
@@ -26,6 +29,37 @@ def test_keepa_provider_defaults_to_production_without_mock_fallback(monkeypatch
     assert provider.mock_mode is False
     with pytest.raises(KeepaConfigurationError, match="keepa_api_key_missing"):
         provider.status()
+
+
+def test_keepa_http_get_json_decodes_gzip_response(monkeypatch):
+    class Response:
+        headers = {"Content-Encoding": "gzip"}
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return gzip.compress(b'{"tokensLeft": 12, "refillIn": 0}')
+
+    def fake_urlopen(request, timeout):
+        assert request.headers["Accept"] == "application/json"
+        assert request.headers["Accept-encoding"] == "identity"
+        assert timeout == 3.0
+        return Response()
+
+    monkeypatch.setattr(
+        "r_system_v2.rw.providers.keepa_provider.urlopen",
+        fake_urlopen,
+    )
+
+    assert _default_http_get_json(
+        "https://api.keepa.com/token",
+        {"key": "hidden"},
+        3.0,
+    ) == {"tokensLeft": 12, "refillIn": 0}
 
 
 def test_keepa_scheduler_caps_requests_at_twenty_without_burst():
