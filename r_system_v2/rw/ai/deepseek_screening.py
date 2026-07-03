@@ -25,7 +25,7 @@ REQUIRED_R_SERIES_DOCS = (
     REPO_ROOT / "r_system_v2" / "docs" / "dtc.md",
     REPO_ROOT / "r_system_v2" / "docs" / "dtc_data.md",
 )
-DEEPSEEK_PASS_SCORE = 60
+DEEPSEEK_PASS_SCORE = 70
 ALLOWED_VERDICTS = {"keep", "cut", "hold"}
 ALLOWED_CHANNELS = {"amazon", "dtc_ad", "dtc_seo", "both"}
 STRICT_SCHEMA_KEYS = {
@@ -367,40 +367,59 @@ def _clamp_int(value: float) -> int:
 
 
 def _score_demand_quality(product: NormalizedProduct) -> int:
-    score = 45
-    if product.bsr <= 10_000:
-        score += 30
-    elif product.bsr <= 50_000:
+    score = 35
+    monthly_sales = _int_feature(product, "monthly_sales")
+    if product.bsr <= 5_000:
+        score += 28
+    elif product.bsr <= 20_000:
         score += 18
-    if product.reviews >= 50:
+    elif product.bsr <= 50_000:
         score += 8
+    if monthly_sales >= 1_000:
+        score += 16
+    elif monthly_sales >= 300:
+        score += 10
+    elif monthly_sales >= 50:
+        score += 5
+    if 20 <= product.reviews <= 300:
+        score += 8
+    elif product.reviews == 0:
+        score -= 10
     if product.price_trend in {"stable", "slightly_up", "up"}:
-        score += 12
+        score += 8
     if product.rating and product.rating >= 4.0:
         score += 5
     return _clamp_int(score)
 
 
 def _score_competition_attackability(product: NormalizedProduct) -> int:
-    score = 80
+    score = 60
     if product.seller_count > 10:
-        score -= 15
-    elif product.seller_count < 3:
-        score -= 10
+        score -= 20
+    elif product.seller_count >= 6:
+        score -= 8
+    elif 2 <= product.seller_count <= 5:
+        score += 14
+    elif product.seller_count <= 1:
+        score -= 22
     if product.reviews > 500:
-        score -= 25
+        score -= 30
     elif product.reviews > 300:
-        score -= 12
+        score -= 22
+    elif product.reviews > 150:
+        score -= 10
+    elif product.reviews < 20:
+        score -= 6
     if product.brand_share > 0.40:
-        score -= 18
-    elif product.brand_share < 0.30:
-        score += 6
+        score -= 20
+    elif product.brand_share and product.brand_share < 0.25:
+        score += 8
     return _clamp_int(score)
 
 
 def _score_margin(est_net_margin: float | None) -> int:
     if est_net_margin is None:
-        return 60
+        return 45
     if est_net_margin >= 0.30:
         return 95
     if est_net_margin >= 0.25:
@@ -411,7 +430,7 @@ def _score_margin(est_net_margin: float | None) -> int:
 
 
 def _verdict_for_score(score: int) -> str:
-    if score >= 75:
+    if score >= 82:
         return "keep"
     if score >= DEEPSEEK_PASS_SCORE:
         return "hold"
@@ -425,8 +444,33 @@ def _channel_for_product(product: NormalizedProduct) -> str:
 
 
 def _top_reason(product: NormalizedProduct, score: int) -> str:
-    if score >= 75:
-        return "stable demand and attackable competition after hard-rule pass"
+    monthly_sales = _int_feature(product, "monthly_sales")
+    margin_label = (
+        "成本缺失按保守分处理"
+        if product.est_net_margin is None
+        else f"预估净利率 {round(product.est_net_margin * 100, 1)}%"
+    )
+    if score >= 82:
+        return (
+            f"通过：BSR {product.bsr}、月销量 {monthly_sales}、卖家 {product.seller_count}、"
+            f"评论 {product.reviews}，需求和竞争同时达标，{margin_label}。"
+        )
     if score >= DEEPSEEK_PASS_SCORE:
-        return "rule-passed candidate needs downstream validation"
-    return f"weak first-pass score for {product.asin}"
+        return (
+            f"暂通过：BSR {product.bsr}、月销量 {monthly_sales}、卖家 {product.seller_count}、"
+            f"评论 {product.reviews}，满足最低初筛线，但仍需人工复核，{margin_label}。"
+        )
+    return (
+        f"剔除：BSR {product.bsr}、月销量 {monthly_sales}、卖家 {product.seller_count}、"
+        f"评论 {product.reviews} 的组合不适合中小卖家首轮切入，{margin_label}。"
+    )
+
+
+def _int_feature(product: NormalizedProduct, key: str) -> int:
+    value = product.features.get(key)
+    if isinstance(value, bool) or value is None:
+        return 0
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return 0

@@ -43,7 +43,7 @@ type WarehouseState = {
 
 type CompleteWarehouseState = {
   products: RwProductsResponse;
-  rules: RwRulesResponse;
+  rules: RwRulesResponse | null;
   status: RwStatus;
   pipeline: RwPipelineResponse;
   settings: RwSettingsResponse | null;
@@ -204,13 +204,35 @@ function fallbackImageUrl(asin: string) {
   return `https://images-na.ssl-images-amazon.com/images/P/${cleaned}.01._SCLZZZZZZZ_.jpg`;
 }
 
+function productImageCandidates(product: RwProduct) {
+  const cleaned = product.asin.trim().toUpperCase();
+  const candidates = [
+    product.image_url,
+    product.image_url?.replace(
+      "https://images-na.ssl-images-amazon.com/images/I/",
+      "https://m.media-amazon.com/images/I/",
+    ),
+    cleaned.length === 10
+      ? `https://m.media-amazon.com/images/P/${cleaned}.01._SL160_.jpg`
+      : null,
+    cleaned.length === 10
+      ? `https://images-na.ssl-images-amazon.com/images/P/${cleaned}.01._SCLZZZZZZZ_.jpg`
+      : null,
+  ];
+  return candidates.filter(
+    (candidate, index): candidate is string =>
+      Boolean(candidate) && candidates.indexOf(candidate) === index,
+  );
+}
+
 function ProductImage({ product }: { product: RwProduct }) {
-  const fallback = fallbackImageUrl(product.asin);
-  const [src, setSrc] = useState(product.image_url ?? fallback);
+  const candidates = useMemo(() => productImageCandidates(product), [product]);
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const src = candidates[candidateIndex] ?? null;
 
   useEffect(() => {
-    setSrc(product.image_url ?? fallback);
-  }, [fallback, product.image_url]);
+    setCandidateIndex(0);
+  }, [candidates]);
 
   if (!src) {
     return <span>无图</span>;
@@ -220,7 +242,7 @@ function ProductImage({ product }: { product: RwProduct }) {
       alt={product.title_zh ?? product.title}
       loading="lazy"
       onError={() => {
-        setSrc((current) => (current !== fallback ? fallback : null));
+        setCandidateIndex((current) => current + 1);
       }}
       src={src}
     />
@@ -593,9 +615,9 @@ function BatchStatusView({
       status.deepseek_batch.window_start ??
       "01:00",
     discovery_categories_per_cycle:
-      runtimeSettings?.discovery_categories_per_cycle ?? 1,
+      runtimeSettings?.discovery_categories_per_cycle ?? 20,
     keepa_429_backoff_seconds:
-      runtimeSettings?.keepa_429_backoff_seconds ?? 300,
+      runtimeSettings?.keepa_429_backoff_seconds ?? 60,
     keepa_batch_size: runtimeSettings?.keepa_batch_size ?? 20,
     selected_categories: runtimeSettings?.selected_categories ?? null,
   });
@@ -794,6 +816,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     sort_order: "desc",
   });
   const stateRef = useRef(state);
+  const filtersRef = useRef(filters);
   const deepseekDailyReportKey = `${DEEPSEEK_DAILY_REPORT_KEY_PREFIX}:${
     user?.id ?? "anonymous"
   }`;
@@ -801,6 +824,10 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  useEffect(() => {
+    filtersRef.current = filters;
+  }, [filters]);
 
   useEffect(() => {
     if (!state.status || typeof window === "undefined") {
@@ -832,11 +859,11 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
           [
             "products",
             getRwProductsWithFilters({
-              category_id: filters.category_id || undefined,
-              q: filters.q || undefined,
-              state: filters.state || undefined,
-              sort_by: filters.sort_by,
-              sort_order: filters.sort_order,
+              category_id: filtersRef.current.category_id || undefined,
+              q: filtersRef.current.q || undefined,
+              state: filtersRef.current.state || undefined,
+              sort_by: filtersRef.current.sort_by,
+              sort_order: filtersRef.current.sort_order,
             }),
           ],
           ["pipeline", getRwPipeline()],
@@ -916,7 +943,46 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [filters, view]);
+  }, [view]);
+
+  useEffect(() => {
+    if (!stateRef.current.products) {
+      return;
+    }
+    let cancelled = false;
+    setRefreshing(true);
+    getRwProductsWithFilters({
+      category_id: filters.category_id || undefined,
+      q: filters.q || undefined,
+      state: filters.state || undefined,
+      sort_by: filters.sort_by,
+      sort_order: filters.sort_order,
+    })
+      .then((response) => {
+        if (cancelled) {
+          return;
+        }
+        setState((current) => {
+          const updated = { ...current, products: response };
+          stateRef.current = updated;
+          return updated;
+        });
+        setError(null);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setError("产品列表刷新失败，已保留上一轮可读数据。");
+        }
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setRefreshing(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [filters]);
 
   const readyState = hasCompleteWarehouseState(state) ? state : null;
   const products = state.products?.items ?? [];
@@ -996,16 +1062,40 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   async function removeRejectedProducts() {
     setDeletingRejected(true);
     try {
-      await deleteRejectedRwProducts();
-      const response = await getRwProductsWithFilters({
-        category_id: filters.category_id || undefined,
-        q: filters.q || undefined,
-        state: filters.state || undefined,
-        sort_by: filters.sort_by,
-        sort_order: filters.sort_order,
-      });
+      const result = await deleteRejectedRwProducts();
       setState((current) => {
-        const updated = { ...current, products: response };
+        const remainingItems =
+          current.products?.items.filter(
+            (product) => product.pipeline_decision !== "reject",
+          ) ?? [];
+        const updated = {
+          ...current,
+          products: current.products
+            ? {
+                ...current.products,
+                count: Math.max(0, current.products.count - result.deleted),
+                items: remainingItems,
+                returned_count: remainingItems.length,
+              }
+            : current.products,
+          status: current.status
+            ? {
+                ...current.status,
+                runtime: {
+                  ...current.status.runtime,
+                  counts: {
+                    ...current.status.runtime.counts,
+                    rejected: 0,
+                    total_products: Math.max(
+                      0,
+                      (current.status.runtime.counts.total_products ?? 0) -
+                        result.deleted,
+                    ),
+                  },
+                },
+              }
+            : current.status,
+        };
         stateRef.current = updated;
         return updated;
       });
@@ -1244,7 +1334,11 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             </div>
             <span className={styles.badge}>已启用</span>
           </div>
-          <RulesList rules={readyState.rules} />
+          {readyState.rules ? (
+            <RulesList rules={readyState.rules} />
+          ) : (
+            <div className={styles.empty}>规则接口暂不可用，页面其它数据已保留。</div>
+          )}
         </section>
       ) : null}
     </div>
@@ -1252,7 +1346,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
 }
 
 function hasCompleteWarehouseState(value: WarehouseState): value is CompleteWarehouseState {
-  return Boolean(value.status && value.products && value.rules && value.pipeline);
+  return Boolean(value.status && value.products && value.pipeline);
 }
 
 function applyWarehouseStateValue(

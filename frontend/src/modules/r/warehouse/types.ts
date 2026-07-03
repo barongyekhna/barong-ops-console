@@ -209,4 +209,5 @@ export type RwCategoryTreeResponse = {
   root: RwCategoryNode;
   selected_categories: string[];
   runnable_selected_categories?: string[];
+  queue_pruned?: number;
 };

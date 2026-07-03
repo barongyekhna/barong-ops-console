@@ -26,8 +26,8 @@ class RwRuntimeSettings:
     deepseek_window_end: str = "05:00"
     deepseek_timezone: str = "Asia/Shanghai"
     keepa_batch_size: int = MAX_REQUESTS_PER_MINUTE
-    discovery_categories_per_cycle: int = 1
-    keepa_429_backoff_seconds: int = 300
+    discovery_categories_per_cycle: int = 20
+    keepa_429_backoff_seconds: int = 60
     selected_categories: list[str] | None = None
 
     def to_dict(self) -> dict[str, object]:
@@ -140,13 +140,13 @@ def normalize_runtime_settings(payload: Any) -> RwRuntimeSettings:
         ),
         discovery_categories_per_cycle=_bounded_int(
             data.get("discovery_categories_per_cycle"),
-            default=1,
+            default=20,
             minimum=1,
             maximum=20,
         ),
         keepa_429_backoff_seconds=_bounded_int(
             data.get("keepa_429_backoff_seconds"),
-            default=300,
+            default=60,
             minimum=60,
             maximum=86_400,
         ),

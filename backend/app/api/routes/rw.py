@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from fastapi import Body, APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select, text
+from sqlalchemy import bindparam, select, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -587,10 +587,10 @@ def rw_category_save(
         if str(category_id).strip()
     ]
     current_tree = apply_selected_categories(load_category_tree(), selected)
-    selected_categories = selected_category_ids(current_tree)
     runnable_categories = runnable_selected_category_ids(current_tree)
     try:
-        save_runtime_settings(db, {"selected_categories": selected_categories})
+        pruned_queue = _prune_unselected_pending_queue(db, runnable_categories)
+        save_runtime_settings(db, {"selected_categories": runnable_categories})
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -598,9 +598,33 @@ def rw_category_save(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="rw_category_settings_unavailable",
         ) from exc
-    current_tree["selected_categories"] = selected_categories
+    current_tree["selected_categories"] = runnable_categories
     current_tree["runnable_selected_categories"] = runnable_categories
+    current_tree["queue_pruned"] = pruned_queue
     return current_tree
+
+
+def _prune_unselected_pending_queue(db: Session, runnable_categories: list[str]) -> int:
+    if runnable_categories:
+        statement = text(
+            """
+            DELETE FROM enrich_queue
+            WHERE picked = false
+              AND category_id IS NOT NULL
+              AND category_id NOT IN :categories
+            """
+        ).bindparams(bindparam("categories", expanding=True))
+        result = db.execute(statement, {"categories": runnable_categories})
+    else:
+        result = db.execute(
+            text(
+                """
+                DELETE FROM enrich_queue
+                WHERE picked = false
+                """
+            )
+        )
+    return int(result.rowcount or 0)
 
 
 @router.get("/category-rate-plan")

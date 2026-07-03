@@ -99,10 +99,10 @@ class RwRealtimeEngine:
             "RW_DEEPSEEK_INTERVAL_SECONDS",
             300,
         )
-        self.keepa_429_backoff_seconds = _int_env("RW_KEEPA_429_BACKOFF_SECONDS", 300)
+        self.keepa_429_backoff_seconds = _int_env("RW_KEEPA_429_BACKOFF_SECONDS", 60)
         self.discovery_categories_per_cycle = max(
-            1,
-            _int_env("RW_KEEPA_DISCOVERY_CATEGORIES_PER_CYCLE", 1),
+            20,
+            _int_env("RW_KEEPA_DISCOVERY_CATEGORIES_PER_CYCLE", 20),
         )
         self.discovery_enabled = (
             _bool_env("RW_KEEPA_DISCOVERY_ENABLED", True)
@@ -127,7 +127,13 @@ class RwRealtimeEngine:
         )
         self.discovery_cursor = 0
         self.discovery_pages: dict[str, int] = {}
+        self.discovery_blocked_until: dict[str, datetime] = {}
+        self.discovery_error_cooldown_seconds = _int_env(
+            "RW_KEEPA_DISCOVERY_ERROR_COOLDOWN_SECONDS",
+            21_600,
+        )
         self.keepa_backoff_until: datetime | None = None
+        self.adaptive_fetch_cap = self.keepa_batch_size
         self.processed_total = 0
         self.failed_total = 0
 
@@ -291,9 +297,20 @@ class RwRealtimeEngine:
             )
             return report
 
-        requested = min(self.keepa_batch_size, int(keepa_status.tokens_left))
-        if self.discovery_enabled and requested > 0:
-            self._discover_if_needed(db, selected_categories, requested)
+        tokens_left = int(keepa_status.tokens_left)
+        requested = min(
+            self.keepa_batch_size,
+            self.adaptive_fetch_cap,
+            _safe_fetch_budget(tokens_left),
+        )
+        discovery_budget = max(0, min(self.discovery_categories_per_cycle, tokens_left - requested))
+        if self.discovery_enabled and requested > 0 and discovery_budget > 0:
+            self._discover_if_needed(
+                db,
+                selected_categories,
+                requested,
+                max_category_attempts=discovery_budget,
+            )
         records, scheduler_report = self.scheduler.claim(
             db,
             selected_categories=selected_categories,
@@ -315,6 +332,12 @@ class RwRealtimeEngine:
             if _has_keepa_429(pipeline.failed_asins):
                 self.keepa_backoff_until = utc_now() + timedelta(
                     seconds=self.keepa_429_backoff_seconds,
+                )
+                self.adaptive_fetch_cap = max(1, min(self.adaptive_fetch_cap, max(1, requested // 2)))
+            elif failed == 0 and processed > 0:
+                self.adaptive_fetch_cap = min(
+                    self.keepa_batch_size,
+                    self.adaptive_fetch_cap + 1,
                 )
             score_actions = self._score_actions_for_asins(db, [record.asin for record in records])
             for record in records:
@@ -363,6 +386,7 @@ class RwRealtimeEngine:
             scheduler=scheduler_payload,
             deepseek=deepseek,
         )
+        report.scheduler["adaptive_fetch_cap"] = self.adaptive_fetch_cap
         self._write_status(
             db,
             report=report,
@@ -376,6 +400,8 @@ class RwRealtimeEngine:
         db: Session,
         selected_categories: list[str],
         requested_tokens: int,
+        *,
+        max_category_attempts: int,
     ) -> None:
         pending = self.scheduler.pending_count(db, selected_categories)
         db.rollback()
@@ -383,15 +409,21 @@ class RwRealtimeEngine:
             return
         missing = requested_tokens - pending
         attempted = 0
+        now = utc_now()
         for offset in range(len(selected_categories)):
             if missing <= 0:
                 break
-            if attempted >= self.discovery_categories_per_cycle:
+            if attempted >= max_category_attempts:
                 break
             category_index = (self.discovery_cursor + offset) % len(selected_categories)
             category_id = selected_categories[category_index]
-            attempted += 1
             self.discovery_cursor = (category_index + 1) % len(selected_categories)
+            blocked_until = self.discovery_blocked_until.get(category_id)
+            if blocked_until and blocked_until > now:
+                continue
+            if blocked_until:
+                self.discovery_blocked_until.pop(category_id, None)
+            attempted += 1
             try:
                 page = self.discovery_pages.get(category_id, 0)
                 asins = self.provider.discover_asins(
@@ -401,6 +433,14 @@ class RwRealtimeEngine:
                 )
                 self.discovery_pages[category_id] = page + 1
             except Exception as exc:  # category mapping or API issue; keep current queue running.
+                if _has_keepa_429({"discovery": str(exc)}):
+                    self.keepa_backoff_until = utc_now() + timedelta(
+                        seconds=self.keepa_429_backoff_seconds,
+                    )
+                else:
+                    self.discovery_blocked_until[category_id] = utc_now() + timedelta(
+                        seconds=self.discovery_error_cooldown_seconds,
+                    )
                 emit_pipeline_event(
                     db,
                     PipelineEvent(
@@ -412,6 +452,8 @@ class RwRealtimeEngine:
                     ),
                 )
                 db.commit()
+                if self.keepa_backoff_until:
+                    break
                 continue
             inserted = self.scheduler.enqueue_discovered(
                 db,
@@ -468,8 +510,12 @@ class RwRealtimeEngine:
     def _reload_runtime_settings(self, db: Session) -> None:
         settings = load_runtime_settings(db)
         self.keepa_batch_size = min(settings.keepa_batch_size, MAX_REQUESTS_PER_MINUTE)
-        self.discovery_categories_per_cycle = settings.discovery_categories_per_cycle
-        self.keepa_429_backoff_seconds = settings.keepa_429_backoff_seconds
+        self.adaptive_fetch_cap = min(self.adaptive_fetch_cap, self.keepa_batch_size)
+        self.discovery_categories_per_cycle = max(
+            settings.discovery_categories_per_cycle,
+            _int_env("RW_KEEPA_MIN_DISCOVERY_CATEGORIES_PER_CYCLE", 20),
+        )
+        self.keepa_429_backoff_seconds = min(settings.keepa_429_backoff_seconds, 60)
 
     def _selected_categories(self, db: Session) -> list[str]:
         settings = load_runtime_settings(db)
@@ -525,6 +571,14 @@ def _bool_env(name: str, default: bool) -> bool:
     if not raw:
         return default
     return raw in {"1", "true", "yes", "on"}
+
+
+def _safe_fetch_budget(tokens_left: int) -> int:
+    if tokens_left <= 0:
+        return 0
+    if tokens_left <= 5:
+        return max(0, tokens_left - 1)
+    return max(0, tokens_left - 2)
 
 
 def _runnable_categories(category_ids: list[str]) -> list[str]:

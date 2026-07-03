@@ -236,13 +236,6 @@ class KeepaProvider:
                     limit=limit,
                 )
             except Exception as fallback_error:
-                asins = self._discover_bestseller_asins(
-                    api_key=api_key,
-                    keepa_category=keepa_category,
-                    limit=limit,
-                )
-                if asins:
-                    return asins
                 raise KeepaResponseError(
                     f"keepa_prefilter_discovery_failed:{query_error};"
                     f" fallback_failed:{fallback_error}"
