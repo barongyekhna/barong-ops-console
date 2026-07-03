@@ -24,6 +24,7 @@ export function getRwProducts() {
 export function getRwProductsWithFilters(filters: {
   q?: string;
   category_id?: string;
+  state?: "pass" | "reject" | "pending_review" | "";
   sort_by?: "updated_at" | "skill_score";
   sort_order?: "asc" | "desc";
 }) {
@@ -33,6 +34,9 @@ export function getRwProductsWithFilters(filters: {
   }
   if (filters.category_id) {
     params.set("category_id", filters.category_id);
+  }
+  if (filters.state) {
+    params.set("state", filters.state);
   }
   if (filters.sort_by) {
     params.set("sort_by", filters.sort_by);
@@ -84,4 +88,14 @@ export function selectRwCategory(category_id: string, selected: boolean) {
     method: "POST",
     bypassCache: true,
   });
+}
+
+export function deleteRejectedRwProducts() {
+  return apiRequest<{ deleted: number; delete_mode: string }>(
+    `${RW_API_BASE}/products-rejected`,
+    {
+      method: "DELETE",
+      bypassCache: true,
+    },
+  );
 }

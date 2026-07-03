@@ -34,6 +34,18 @@ DEFAULT_CATEGORY_ID_MAP = {
     "office-products": 1064954,
     "office-organization": 1064954,
     "office-ergonomic-accessories": 1064954,
+    "home-kitchen-root": 1055398,
+    "tools-home-improvement-root": 228013,
+    "patio-lawn-garden-root": 2972638011,
+    "office-products-root": 1064954,
+    "sports-outdoors-root": 3375251,
+    "arts-crafts-sewing-root": 2617941011,
+    "pet-supplies-root": 2619533011,
+    "toys-games-root": 165793011,
+    "beauty-personal-care-root": 3760911,
+    "health-household-root": 3760901,
+    "industrial-scientific-root": 16310091,
+    "appliances-root": 2619525011,
 }
 
 HttpGetJSON = Callable[[str, dict[str, str | int], float], dict[str, Any]]
@@ -169,6 +181,7 @@ class KeepaProvider:
         *,
         category_id: str,
         limit: int = MAX_REQUESTS_PER_MINUTE,
+        page: int = 0,
     ) -> list[str]:
         """Discover ASINs for a Keepa category through Product Finder.
 
@@ -194,7 +207,7 @@ class KeepaProvider:
             "current_SALES_gte": 1,
             "current_SALES_lte": 50000,
             "perPage": max(1, min(limit, MAX_REQUESTS_PER_MINUTE)),
-            "page": 0,
+            "page": max(0, int(page)),
             "sort": [["current_SALES", "asc"]],
         }
         try:
@@ -486,11 +499,11 @@ def _parse_product_payload(
 
     seller_count = _int_from_payload(product, "offerCount", "sellerCount", default=0)
     brand_share = float(product.get("brandShare", 0) or 0)
-    landed_cost = round(price * 0.35, 2)
     title = str(product.get("title") or source_query or asin)
     brand = str(product.get("brand") or "Unknown")
-
     parsed_asin = str(product.get("asin") or asin)
+    fulfillment_method = _fulfillment_method(product)
+    lithium_warning = _has_lithium_warning(product)
 
     return KeepaProductData(
         asin=parsed_asin,
@@ -501,11 +514,48 @@ def _parse_product_payload(
         category=_category_name(product),
         title=title,
         brand=brand,
-        landed_cost=landed_cost,
+        landed_cost=None,
         brand_share=brand_share,
         price_trend=str(product.get("priceTrend") or "unknown"),
         marketplace="US",
         rating=None,
         image_url=_image_url_from_product(product, asin=parsed_asin),
+        fulfillment_method=fulfillment_method,
+        lithium_battery_warning=lithium_warning,
+        margin_source="missing_landed_cost",
+        margin_confidence="unknown",
         mock_generated=False,
     )
+
+
+def _fulfillment_method(product: dict[str, Any]) -> str | None:
+    stats = product.get("stats")
+    if isinstance(stats, dict):
+        for key in ("buyBoxIsFBA", "isFBA", "buyBoxFBA"):
+            value = stats.get(key)
+            if isinstance(value, bool):
+                return "FBA" if value else "FBM"
+            if isinstance(value, (int, float)) and value in {0, 1}:
+                return "FBA" if int(value) == 1 else "FBM"
+    for key in ("isFBA", "buyBoxIsFBA", "fba"):
+        value = product.get(key)
+        if isinstance(value, bool):
+            return "FBA" if value else "FBM"
+        if isinstance(value, (int, float)) and value in {0, 1}:
+            return "FBA" if int(value) == 1 else "FBM"
+    return None
+
+
+def _has_lithium_warning(product: dict[str, Any]) -> bool:
+    text_parts = [
+        str(product.get("title") or ""),
+        str(product.get("brand") or ""),
+        _category_name(product),
+    ]
+    hazardous = product.get("hazardousMaterials")
+    if isinstance(hazardous, list):
+        text_parts.extend(str(item) for item in hazardous)
+    elif hazardous is not None:
+        text_parts.append(str(hazardous))
+    haystack = " ".join(text_parts).lower()
+    return any(term in haystack for term in ("lithium", "li-ion", "li ion", "battery", "batteries", "锂电", "电池"))

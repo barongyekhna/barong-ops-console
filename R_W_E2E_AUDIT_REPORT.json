@@ -6,6 +6,16 @@
   "no_missing_module": true,
   "no_runtime_error": true,
   "pipeline_flow_integrity": true,
+  "regression_details": {
+    "category_ok": true,
+    "deepseek_schedule_window_supported": true,
+    "fulfillment_marked": true,
+    "lithium_not_hard_rejected": true,
+    "margin_not_faked": true,
+    "root_id": "amazon-product-categories",
+    "selected_category_count": 9
+  },
+  "regressions_ok": true,
   "runtime_details": {
     "result": {
       "asin": "B033B3F98C",
@@ -14,7 +24,7 @@
         "channel_guess": "both",
         "competition_attackability": 80,
         "demand_quality": 100,
-        "evaluated_at": "2026-07-02T19:04:47.098334+00:00",
+        "evaluated_at": "2026-07-03T06:24:26.005926+00:00",
         "output_schema_strict_json": true,
         "quant_filter_enabled": true,
         "rule_based_scoring_active": true,
@@ -34,7 +44,7 @@
       "ingestion": {
         "asin": "B033B3F98C",
         "category_id": null,
-        "created_at": "2026-07-02T19:04:47.097985+00:00",
+        "created_at": "2026-07-03T06:24:26.005629+00:00",
         "marketplace": "US",
         "source_query": "portable door draft stopper",
         "state": "discovered"
@@ -45,9 +55,13 @@
         "brand_share": 0.32,
         "bsr": 8421,
         "category": "Home & Kitchen",
-        "fetched_at": "2026-07-02T19:04:47.098123+00:00",
+        "fetched_at": "2026-07-03T06:24:26.005743+00:00",
+        "fulfillment_method": null,
         "image_url": "https://images-na.ssl-images-amazon.com/images/P/B033B3F98C.01._SCLZZZZZZZ_.jpg",
         "landed_cost": 12.5,
+        "lithium_battery_warning": false,
+        "margin_confidence": null,
+        "margin_source": null,
         "marketplace": "US",
         "mock_generated": true,
         "price": 34.99,
@@ -57,7 +71,7 @@
         "seller_count": 7,
         "title": "Portable Door Draft Stopper"
       },
-      "latency_ms": 81.441,
+      "latency_ms": 0.297,
       "product": {
         "asin": "B033B3F98C",
         "brand": "DraftGuard",
@@ -68,16 +82,24 @@
         "category_path": [
           "Home & Kitchen"
         ],
-        "created_at": "2026-07-02T19:04:47.098166+00:00",
-        "est_net_margin": 0.4928,
+        "created_at": "2026-07-03T06:24:26.005786+00:00",
+        "est_net_margin": 0.4927,
         "features": {
           "deepseek_mode": "batch_processor_only",
           "demand_bucket": "high",
           "estimated_fees": 5.25,
-          "feature_source": "keepa_v1"
+          "feature_source": "keepa_v1",
+          "fulfillment_method": "unknown",
+          "lithium_battery_warning": false,
+          "margin_confidence": "estimated",
+          "margin_source": "estimated_from_landed_cost"
         },
+        "fulfillment_method": null,
         "image_url": "https://images-na.ssl-images-amazon.com/images/P/B033B3F98C.01._SCLZZZZZZZ_.jpg",
         "landed_cost": 12.5,
+        "lithium_battery_warning": false,
+        "margin_confidence": "estimated",
+        "margin_source": "estimated_from_landed_cost",
         "marketplace": "US",
         "price": 34.99,
         "price_trend": "stable",
@@ -89,7 +111,7 @@
         "source_query": "portable door draft stopper",
         "state": "ai1_passed",
         "title": "Portable Door Draft Stopper",
-        "updated_at": "2026-07-02T19:04:47.098351+00:00"
+        "updated_at": "2026-07-03T06:24:26.005941+00:00"
       },
       "rule_evaluation": {
         "asin": "B033B3F98C",
@@ -105,7 +127,7 @@
           "weight_filter": true
         },
         "decision": "rule_passed",
-        "evaluated_at": "2026-07-02T19:04:47.098208+00:00",
+        "evaluated_at": "2026-07-03T06:24:26.005828+00:00",
         "reasons": []
       },
       "success": true,

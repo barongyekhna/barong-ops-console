@@ -21,6 +21,10 @@ class RwRuntimeSettings:
     deepseek_interval_seconds: int = 300
     deepseek_batch_size: int = 100
     deepseek_max_runtime_seconds: int = 240
+    deepseek_schedule_enabled: bool = False
+    deepseek_window_start: str = "01:00"
+    deepseek_window_end: str = "05:00"
+    deepseek_timezone: str = "Asia/Shanghai"
     keepa_batch_size: int = MAX_REQUESTS_PER_MINUTE
     discovery_categories_per_cycle: int = 1
     keepa_429_backoff_seconds: int = 300
@@ -115,6 +119,19 @@ def normalize_runtime_settings(payload: Any) -> RwRuntimeSettings:
             minimum=10,
             maximum=3_600,
         ),
+        deepseek_schedule_enabled=_bool_value(
+            data.get("deepseek_schedule_enabled"),
+            default=False,
+        ),
+        deepseek_window_start=_time_value(
+            data.get("deepseek_window_start"),
+            default="01:00",
+        ),
+        deepseek_window_end=_time_value(
+            data.get("deepseek_window_end"),
+            default="05:00",
+        ),
+        deepseek_timezone=_timezone_value(data.get("deepseek_timezone")),
         keepa_batch_size=_bounded_int(
             data.get("keepa_batch_size"),
             default=MAX_REQUESTS_PER_MINUTE,
@@ -158,3 +175,34 @@ def _optional_string_list(value: Any) -> list[str] | None:
         if text and text not in cleaned:
             cleaned.append(text)
     return cleaned
+
+
+def _bool_value(value: Any, *, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"1", "true", "yes", "on"}:
+            return True
+        if lowered in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _time_value(value: Any, *, default: str) -> str:
+    text = str(value or "").strip()
+    if len(text) == 5 and text[2] == ":":
+        hour, minute = text.split(":", 1)
+        if hour.isdigit() and minute.isdigit():
+            parsed_hour = int(hour)
+            parsed_minute = int(minute)
+            if 0 <= parsed_hour <= 23 and 0 <= parsed_minute <= 59:
+                return f"{parsed_hour:02d}:{parsed_minute:02d}"
+    return default
+
+
+def _timezone_value(value: Any) -> str:
+    text = str(value or "").strip()
+    if text in {"Asia/Shanghai", "UTC"}:
+        return text
+    return "Asia/Shanghai"

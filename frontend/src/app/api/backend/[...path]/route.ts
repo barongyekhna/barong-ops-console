@@ -841,6 +841,10 @@ function isAllowedRwPath(method: string, path: string[]) {
     path[1] === "settings"
   ) || (
     method === "DELETE" &&
+    path.length === 2 &&
+    path[1] === "products-rejected"
+  ) || (
+    method === "DELETE" &&
     path.length === 3 &&
     path[1] === "products"
   ) || (

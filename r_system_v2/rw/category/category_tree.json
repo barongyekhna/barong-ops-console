@@ -1,7 +1,6 @@
 {
-  "generated_from": "amazon.md",
+  "generated_from": "keepa_category_api",
   "redline_terms": [
-    "锂电",
     "restricted",
     "IP",
     "易碎",
@@ -11,72 +10,81 @@
   "root": {
     "children": [
       {
-        "children": [
-          {
-            "children": [],
-            "id": "home-draft-proofing",
-            "name": "门窗密封",
-            "selected": true
-          },
-          {
-            "children": [],
-            "id": "home-storage-organization",
-            "name": "收纳整理",
-            "selected": true
-          },
-          {
-            "children": [],
-            "id": "home-small-tools",
-            "name": "小型家用工具",
-            "selected": true
-          }
-        ],
-        "id": "home-kitchen",
+        "children": [],
+        "id": "1055398",
         "name": "家居与厨房",
         "selected": true
       },
       {
-        "children": [
-          {
-            "children": [],
-            "id": "garden-lightweight-tools",
-            "name": "轻量园艺工具",
-            "selected": true
-          },
-          {
-            "children": [],
-            "id": "garden-seasonless-accessories",
-            "name": "四季园艺配件",
-            "selected": true
-          }
-        ],
-        "id": "patio-lawn-garden",
+        "children": [],
+        "id": "228013",
+        "name": "工具与家装",
+        "selected": true
+      },
+      {
+        "children": [],
+        "id": "2972638011",
         "name": "庭院草坪花园",
         "selected": true
       },
       {
-        "children": [
-          {
-            "children": [],
-            "id": "office-organization",
-            "name": "办公收纳",
-            "selected": true
-          },
-          {
-            "children": [],
-            "id": "office-ergonomic-accessories",
-            "name": "人体工学配件",
-            "selected": true
-          }
-        ],
-        "id": "office-products",
+        "children": [],
+        "id": "1064954",
         "name": "办公用品",
         "selected": true
+      },
+      {
+        "children": [],
+        "id": "3375251",
+        "name": "运动与户外",
+        "selected": true
+      },
+      {
+        "children": [],
+        "id": "2617941011",
+        "name": "手工艺与缝纫",
+        "selected": true
+      },
+      {
+        "children": [],
+        "id": "2619533011",
+        "name": "宠物用品",
+        "selected": true
+      },
+      {
+        "children": [],
+        "id": "165793011",
+        "name": "玩具与游戏",
+        "selected": true
+      },
+      {
+        "children": [],
+        "id": "3760911",
+        "name": "美妆与个人护理",
+        "selected": true
+      },
+      {
+        "children": [],
+        "id": "3760901",
+        "name": "健康与家居护理",
+        "selected": false
+      },
+      {
+        "children": [],
+        "id": "16310091",
+        "name": "工业与科学",
+        "selected": false
+      },
+      {
+        "children": [],
+        "id": "2619525011",
+        "name": "家用电器",
+        "selected": false
       }
     ],
-    "id": "amazon-fba",
-    "name": "亚马逊 FBA",
-    "selected": true
+    "id": "amazon-product-categories",
+    "name": "亚马逊产品类目",
+    "selected": false
   },
-  "source": "/opt/barong-ops-console/r_system_v2/docs/amazon.md"
+  "source": "Keepa /category API, US domain, queried 2026-07-03"
 }

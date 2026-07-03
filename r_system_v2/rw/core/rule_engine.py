@@ -19,9 +19,6 @@ class RuleConfig:
     max_weight_lb: float = 2.0
     blocked_price_trends: tuple[str, ...] = ("declining", "price_war")
     redline_terms: tuple[str, ...] = (
-        "battery",
-        "batteries",
-        "lithium",
         "liquid",
         "aerosol",
         "medical",
@@ -29,7 +26,6 @@ class RuleConfig:
         "restricted",
         "fda",
         "children safety",
-        "锂电",
         "液体",
         "医疗",
         "刀",
@@ -51,7 +47,10 @@ class RuleEngine:
         redline_category = _optional_bool_feature(product.features, "redline_category")
         checks = {
             "price_band_filter": self.config.price_min <= product.price <= self.config.price_max,
-            "margin_check": product.est_net_margin >= self.config.min_net_margin,
+            "margin_check": (
+                product.est_net_margin is None
+                or product.est_net_margin >= self.config.min_net_margin
+            ),
             "competition_filter": product.seller_count <= self.config.max_seller_count,
             "brand_dominance_filter": product.brand_share <= self.config.max_brand_share,
             "price_trend_filter": product.price_trend not in self.config.blocked_price_trends,

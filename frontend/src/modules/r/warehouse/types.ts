@@ -39,6 +39,10 @@ export type RwStatus = {
     interval_seconds?: number;
     batch_size?: number;
     max_runtime_seconds?: number;
+    schedule_enabled?: boolean;
+    window_start?: string;
+    window_end?: string;
+    timezone?: string;
     stopped_by_deadline?: boolean;
   };
   category_tree: {
@@ -61,6 +65,10 @@ export type RwProduct = {
   reviews: number;
   seller_count: number;
   landed_cost: number | null;
+  margin_source: string | null;
+  margin_confidence: string | null;
+  fulfillment_method: string | null;
+  lithium_battery_warning: boolean;
   brand_share: number | null;
   price_trend: string | null;
   rating: number | null;
@@ -95,6 +103,7 @@ export type RwProductsResponse = {
   filters?: {
     q: string | null;
     category_id: string | null;
+    state: string | null;
     sort_by: string;
     sort_order: string;
   };
@@ -165,6 +174,10 @@ export type RwRuntimeSettings = {
   deepseek_interval_seconds: number;
   deepseek_batch_size: number;
   deepseek_max_runtime_seconds: number;
+  deepseek_schedule_enabled: boolean;
+  deepseek_window_start: string;
+  deepseek_window_end: string;
+  deepseek_timezone: string;
   keepa_batch_size: number;
   discovery_categories_per_cycle: number;
   keepa_429_backoff_seconds: number;

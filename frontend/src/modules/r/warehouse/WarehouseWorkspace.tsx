@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
+  deleteRejectedRwProducts,
   getRwCategoryTree,
   getRwPipeline,
   getRwProductsWithFilters,
@@ -52,6 +53,7 @@ type CompleteWarehouseState = {
 type ProductFilters = {
   q: string;
   category_id: string;
+  state: "pass" | "reject" | "pending_review" | "";
   sort_by: "updated_at" | "skill_score";
   sort_order: "asc" | "desc";
 };
@@ -104,6 +106,13 @@ function decisionLabel(value: string) {
     reject: "剔除",
   };
   return labels[value] ?? value;
+}
+
+function fulfillmentLabel(value: string | null) {
+  if (value === "FBA" || value === "FBM") {
+    return value;
+  }
+  return "履约未知";
 }
 
 function modeLabel(value: string) {
@@ -164,7 +173,7 @@ function productMetrics(products: readonly RwProduct[]) {
   );
   const averageMargin =
     productsWithMargin.length === 0
-      ? 0
+      ? null
       : productsWithMargin.reduce((total, product) => total + product.margin, 0) /
         productsWithMargin.length;
   return {
@@ -235,6 +244,10 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
                     <span>
                       评分 {product.rating ?? "无"} · 趋势 {priceTrendLabel(product.price_trend)}
                     </span>
+                    <span>
+                      {fulfillmentLabel(product.fulfillment_method)}
+                      {product.lithium_battery_warning ? " · 锂电提示" : ""}
+                    </span>
                   </div>
                 </div>
               </td>
@@ -242,7 +255,12 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
               <td>{product.bsr.toLocaleString("zh-CN")}</td>
               <td>{product.reviews.toLocaleString("zh-CN")}</td>
               <td>{product.seller_count}</td>
-              <td>{product.margin === null ? "无" : percent(product.margin)}</td>
+              <td>
+                {product.margin === null ? "未计算" : percent(product.margin)}
+                {product.margin_confidence === "unknown" ? (
+                  <span className={styles.stateText}>缺成本</span>
+                ) : null}
+              </td>
               <td>{product.skill_score ?? "待跑"}</td>
               <td>
                 <span className={styles.badge}>
@@ -387,6 +405,22 @@ function BatchStatusView({
       300,
     deepseek_max_runtime_seconds:
       runtimeSettings?.deepseek_max_runtime_seconds ?? 240,
+    deepseek_schedule_enabled:
+      runtimeSettings?.deepseek_schedule_enabled ??
+      status.deepseek_batch.schedule_enabled ??
+      false,
+    deepseek_timezone:
+      runtimeSettings?.deepseek_timezone ??
+      status.deepseek_batch.timezone ??
+      "Asia/Shanghai",
+    deepseek_window_end:
+      runtimeSettings?.deepseek_window_end ??
+      status.deepseek_batch.window_end ??
+      "05:00",
+    deepseek_window_start:
+      runtimeSettings?.deepseek_window_start ??
+      status.deepseek_batch.window_start ??
+      "01:00",
     discovery_categories_per_cycle:
       runtimeSettings?.discovery_categories_per_cycle ?? 1,
     keepa_429_backoff_seconds:
@@ -413,8 +447,14 @@ function BatchStatusView({
       </div>
       <dl className={styles.statusGrid}>
         <div>
-          <dt>DeepSeek 运行范围</dt>
-          <dd>{status.deepseek_batch.run_time_range}</dd>
+          <dt>DeepSeek 定时窗口</dt>
+          <dd>
+            {status.deepseek_batch.schedule_enabled
+              ? `${status.deepseek_batch.window_start ?? "--:--"} - ${
+                  status.deepseek_batch.window_end ?? "--:--"
+                } ${status.deepseek_batch.timezone ?? ""}`
+              : "未启用"}
+          </dd>
         </div>
         <div>
           <dt>DeepSeek 已处理</dt>
@@ -446,7 +486,61 @@ function BatchStatusView({
         }}
       >
         <label>
-          <span>DeepSeek 间隔秒数</span>
+          <span>启用 DeepSeek 定时</span>
+          <input
+            checked={draft.deepseek_schedule_enabled}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                deepseek_schedule_enabled: event.target.checked,
+              }))
+            }
+            type="checkbox"
+          />
+        </label>
+        <label>
+          <span>开始时间</span>
+          <input
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                deepseek_window_start: event.target.value,
+              }))
+            }
+            type="time"
+            value={draft.deepseek_window_start}
+          />
+        </label>
+        <label>
+          <span>结束时间</span>
+          <input
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                deepseek_window_end: event.target.value,
+              }))
+            }
+            type="time"
+            value={draft.deepseek_window_end}
+          />
+        </label>
+        <label>
+          <span>时区</span>
+          <select
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                deepseek_timezone: event.target.value,
+              }))
+            }
+            value={draft.deepseek_timezone}
+          >
+            <option value="Asia/Shanghai">北京时间</option>
+            <option value="UTC">UTC</option>
+          </select>
+        </label>
+        <label>
+          <span>窗口内重试间隔秒数</span>
           <input
             min={60}
             onChange={(event) =>
@@ -559,11 +653,13 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   const [refreshing, setRefreshing] = useState(false);
   const [savingCategory, setSavingCategory] = useState<string | null>(null);
   const [savingSettings, setSavingSettings] = useState(false);
+  const [deletingRejected, setDeletingRejected] = useState(false);
   const [showDeepseekReport, setShowDeepseekReport] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
   const [filters, setFilters] = useState<ProductFilters>({
     category_id: "",
     q: "",
+    state: "",
     sort_by: "updated_at",
     sort_order: "desc",
   });
@@ -607,6 +703,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             getRwProductsWithFilters({
               category_id: filters.category_id || undefined,
               q: filters.q || undefined,
+              state: filters.state || undefined,
               sort_by: filters.sort_by,
               sort_order: filters.sort_order,
             }),
@@ -743,6 +840,30 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     }
   }
 
+  async function removeRejectedProducts() {
+    setDeletingRejected(true);
+    try {
+      await deleteRejectedRwProducts();
+      const response = await getRwProductsWithFilters({
+        category_id: filters.category_id || undefined,
+        q: filters.q || undefined,
+        state: filters.state || undefined,
+        sort_by: filters.sort_by,
+        sort_order: filters.sort_order,
+      });
+      setState((current) => {
+        const updated = { ...current, products: response };
+        stateRef.current = updated;
+        return updated;
+      });
+      setError(null);
+    } catch {
+      setError("移除未通过产品失败，现有页面数据已保留。");
+    } finally {
+      setDeletingRejected(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className={styles.message} role="status">
@@ -845,7 +966,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
         </div>
         <div className={styles.metric}>
           <span>平均利润率</span>
-          <strong>{percent(metrics.averageMargin)}</strong>
+          <strong>{metrics.averageMargin === null ? "未计算" : percent(metrics.averageMargin)}</strong>
         </div>
       </section>
 
@@ -908,6 +1029,28 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               <option value="updated_at">更新时间</option>
               <option value="skill_score">初筛分数</option>
             </select>
+            <button
+              className={styles.filterButton}
+              onClick={() =>
+                setFilters((current) => ({
+                  ...current,
+                  state: current.state === "pass" ? "" : "pass",
+                }))
+              }
+              type="button"
+            >
+              {filters.state === "pass" ? "查看全部产品" : "一键查看通过产品"}
+            </button>
+            <button
+              className={styles.filterButton}
+              disabled={deletingRejected}
+              onClick={() => {
+                void removeRejectedProducts();
+              }}
+              type="button"
+            >
+              {deletingRejected ? "移除中" : "一键移除未通过产品"}
+            </button>
             <button
               className={styles.filterButton}
               onClick={() =>

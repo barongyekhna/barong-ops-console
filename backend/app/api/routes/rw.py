@@ -77,11 +77,18 @@ RULES = [
         "threshold": "可取数时前三评论数不超过 500",
     },
     {
-        "id": "redline_filter",
-        "label": "红线类目过滤",
+        "id": "compliance_redline_filter",
+        "label": "合规红线过滤",
         "enabled": True,
         "result": "已启用",
-        "threshold": "锂电/液体/强认证/IP/易碎重货直接剔除",
+        "threshold": "液体/强认证/IP/易碎重货等直接剔除；锂电仅提示不硬剔除",
+    },
+    {
+        "id": "lithium_warning",
+        "label": "锂电提示",
+        "enabled": True,
+        "result": "仅提示",
+        "threshold": "标题/类目/危险品信息命中锂电或电池时标注提示",
     },
 ]
 
@@ -174,6 +181,10 @@ def _deepseek_batch_status(db: Session) -> dict[str, object]:
         "interval_seconds": settings.deepseek_interval_seconds,
         "batch_size": settings.deepseek_batch_size,
         "max_runtime_seconds": settings.deepseek_max_runtime_seconds,
+        "schedule_enabled": settings.deepseek_schedule_enabled,
+        "window_start": settings.deepseek_window_start,
+        "window_end": settings.deepseek_window_end,
+        "timezone": settings.deepseek_timezone,
         "stopped_by_deadline": False,
     }
 
@@ -320,6 +331,7 @@ def rw_ingestion_status(
 def rw_products(
     q: str | None = Query(default=None, max_length=120),
     category_id: str | None = Query(default=None, max_length=120),
+    state: str | None = Query(default=None, pattern="^(pass|reject|pending_review|ai1_passed|ai1_rejected|rejected|rule_passed)$"),
     sort_by: str = Query(default="updated_at", pattern="^(updated_at|skill_score)$"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     db: Session = Depends(get_db),
@@ -338,6 +350,16 @@ def rw_products(
     if category_id:
         filters.append("category_id = :category_id")
         params["category_id"] = category_id
+    if state:
+        if state == "pass":
+            filters.append("state = 'ai1_passed'")
+        elif state == "reject":
+            filters.append("state IN ('ai1_rejected', 'rejected')")
+        elif state == "pending_review":
+            filters.append("state NOT IN ('ai1_passed', 'ai1_rejected', 'rejected')")
+        else:
+            filters.append("state = :state")
+            params["state"] = state
     where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
     try:
         result = db.execute(
@@ -345,7 +367,9 @@ def rw_products(
                 f"""
                 SELECT asin, marketplace, source_query, title, image_url, brand,
                        category, price, bsr, reviews, seller_count, landed_cost,
-                       est_net_margin, brand_share, price_trend, rating, state,
+                       est_net_margin, margin_source, margin_confidence,
+                       fulfillment_method, lithium_battery_warning,
+                       brand_share, price_trend, rating, state,
                        rule_reject_reason, category_id, category_path, skill_score,
                        features, last_keepa_pull, updated_at
                 FROM products_rw
@@ -370,6 +394,10 @@ def rw_products(
                 "reviews": row.reviews,
                 "seller_count": row.seller_count,
                 "landed_cost": float(row.landed_cost) if row.landed_cost is not None else None,
+                "margin_source": row.margin_source,
+                "margin_confidence": row.margin_confidence,
+                "fulfillment_method": row.fulfillment_method,
+                "lithium_battery_warning": bool(row.lithium_battery_warning),
                 "brand_share": float(row.brand_share) if row.brand_share is not None else None,
                 "price_trend": row.price_trend,
                 "rating": float(row.rating) if row.rating is not None else None,
@@ -399,6 +427,7 @@ def rw_products(
         "filters": {
             "q": q,
             "category_id": category_id,
+            "state": state,
             "sort_by": sort_by,
             "sort_order": sort_order,
         },
@@ -559,4 +588,32 @@ def rw_delete_product(
         "deleted": result.rowcount > 0,
         "delete_mode": "hard_delete",
         "cascade": "rule_results_and_ai_evaluations",
+    }
+
+
+@router.delete("/products-rejected")
+def rw_delete_rejected_products(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    del user
+    try:
+        rows = db.execute(
+            text(
+                """
+                DELETE FROM products_rw
+                WHERE state IN ('ai1_rejected', 'rejected')
+                """
+            )
+        )
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="products_rw_unavailable",
+        ) from exc
+    return {
+        "deleted": int(rows.rowcount or 0),
+        "delete_mode": "hard_delete_rejected_only",
     }

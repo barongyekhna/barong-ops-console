@@ -51,12 +51,16 @@ class KeepaProductData:
     category: str
     title: str
     brand: str
-    landed_cost: float
+    landed_cost: float | None
     brand_share: float
     price_trend: str
     marketplace: str = "US"
     rating: float | None = None
     image_url: str | None = None
+    fulfillment_method: str | None = None
+    lithium_battery_warning: bool = False
+    margin_source: str | None = None
+    margin_confidence: str | None = None
     mock_generated: bool = True
     fetched_at: str = field(default_factory=utc_now_iso)
 
@@ -76,12 +80,16 @@ class NormalizedProduct:
     bsr: int
     reviews: int
     seller_count: int
-    landed_cost: float
-    est_net_margin: float
+    landed_cost: float | None
+    est_net_margin: float | None
     brand_share: float
     price_trend: str
     rating: float | None
     image_url: str | None = None
+    fulfillment_method: str | None = None
+    lithium_battery_warning: bool = False
+    margin_source: str | None = None
+    margin_confidence: str | None = None
     category_id: str | None = None
     category_path: list[str] = field(default_factory=list)
     skill_score: int | None = None

@@ -5,7 +5,9 @@ from __future__ import annotations
 import json
 import time
 from dataclasses import dataclass
+from datetime import datetime, time as wall_time, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -27,6 +29,12 @@ class DeepSeekCronReport:
     max_runtime_seconds: int
     stopped_by_deadline: bool
     errors: list[str]
+    schedule_enabled: bool = False
+    window_start: str = "01:00"
+    window_end: str = "05:00"
+    timezone: str = "Asia/Shanghai"
+    window_open: bool = False
+    next_window: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -39,6 +47,12 @@ class DeepSeekCronReport:
             "max_runtime_seconds": self.max_runtime_seconds,
             "stopped_by_deadline": self.stopped_by_deadline,
             "errors": self.errors,
+            "schedule_enabled": self.schedule_enabled,
+            "window_start": self.window_start,
+            "window_end": self.window_end,
+            "timezone": self.timezone,
+            "window_open": self.window_open,
+            "next_window": self.next_window,
         }
 
 
@@ -52,37 +66,55 @@ class DeepSeekPreFilterCron:
         interval_seconds: int = 300,
         batch_size: int = 100,
         max_runtime_seconds: int = 240,
+        schedule_enabled: bool = False,
+        window_start: str = "01:00",
+        window_end: str = "05:00",
+        timezone: str = "Asia/Shanghai",
         scoring_engine: ScoringEngine | None = None,
     ) -> None:
         self.skill = skill
         self.interval_seconds = max(60, int(interval_seconds))
         self.batch_size = max(1, int(batch_size))
         self.max_runtime_seconds = max(10, int(max_runtime_seconds))
+        self.schedule_enabled = schedule_enabled
+        self.window_start = window_start
+        self.window_end = window_end
+        self.timezone = timezone
         self.scoring_engine = scoring_engine or ScoringEngine()
         self._last_run_monotonic = 0.0
 
     def run_due(self, db: Session, *, force: bool = False) -> DeepSeekCronReport:
+        window = _window_state(
+            enabled=self.schedule_enabled,
+            start=self.window_start,
+            end=self.window_end,
+            timezone_name=self.timezone,
+        )
+        if not force and not window["open"]:
+            return self._empty_report(
+                due=False,
+                window_open=False,
+                next_window=str(window.get("next_window") or ""),
+            )
         now = time.monotonic()
         if not force and now - self._last_run_monotonic < self.interval_seconds:
-            return DeepSeekCronReport(
-                due=False,
-                processed=0,
-                passed=0,
-                rejected=0,
-                pending_review=0,
-                interval_seconds=self.interval_seconds,
-                max_runtime_seconds=self.max_runtime_seconds,
-                stopped_by_deadline=False,
-                errors=[],
-            )
+            return self._empty_report(due=False, window_open=bool(window["open"]))
         self._last_run_monotonic = now
-        return self.run_once(db)
+        return self.run_once(db, window_deadline_seconds=window.get("seconds_until_close"))
 
-    def run_once(self, db: Session) -> DeepSeekCronReport:
+    def run_once(
+        self,
+        db: Session,
+        *,
+        window_deadline_seconds: float | None = None,
+    ) -> DeepSeekCronReport:
         rows = self._load_pending_products(db)
         passed = rejected = pending_review = 0
         errors: list[str] = []
-        deadline = time.monotonic() + self.max_runtime_seconds
+        runtime_budget = self.max_runtime_seconds
+        if window_deadline_seconds is not None:
+            runtime_budget = min(runtime_budget, max(0, int(window_deadline_seconds)))
+        deadline = time.monotonic() + runtime_budget
         stopped_by_deadline = False
         attempted = 0
         for row in rows:
@@ -97,6 +129,7 @@ class DeepSeekPreFilterCron:
                         message="DeepSeek 初筛到达运行时间上限，剩余产品留待下轮处理",
                         payload={
                             "max_runtime_seconds": self.max_runtime_seconds,
+                            "window_end": self.window_end,
                             "remaining_estimate": max(0, len(rows) - attempted),
                         },
                     ),
@@ -197,6 +230,36 @@ class DeepSeekPreFilterCron:
             max_runtime_seconds=self.max_runtime_seconds,
             stopped_by_deadline=stopped_by_deadline,
             errors=errors,
+            schedule_enabled=self.schedule_enabled,
+            window_start=self.window_start,
+            window_end=self.window_end,
+            timezone=self.timezone,
+            window_open=True,
+        )
+
+    def _empty_report(
+        self,
+        *,
+        due: bool,
+        window_open: bool,
+        next_window: str | None = None,
+    ) -> DeepSeekCronReport:
+        return DeepSeekCronReport(
+            due=due,
+            processed=0,
+            passed=0,
+            rejected=0,
+            pending_review=0,
+            interval_seconds=self.interval_seconds,
+            max_runtime_seconds=self.max_runtime_seconds,
+            stopped_by_deadline=False,
+            errors=[],
+            schedule_enabled=self.schedule_enabled,
+            window_start=self.window_start,
+            window_end=self.window_end,
+            timezone=self.timezone,
+            window_open=window_open,
+            next_window=next_window,
         )
 
     def _load_pending_products(self, db: Session) -> list[dict[str, Any]]:
@@ -206,7 +269,9 @@ class DeepSeekPreFilterCron:
                 SELECT asin, marketplace, source_query, title, image_url, brand,
                        category, category_id, category_path, price, bsr, reviews,
                        seller_count, landed_cost, est_net_margin, brand_share,
-                       price_trend, rating, features
+                       price_trend, rating, fulfillment_method,
+                       lithium_battery_warning, margin_source,
+                       margin_confidence, features
                 FROM products_rw p
                 WHERE p.state = 'rule_passed'
                   AND NOT EXISTS (
@@ -243,11 +308,15 @@ def _product_from_row(row: dict[str, Any]) -> NormalizedProduct:
         bsr=int(row.get("bsr") or 0),
         reviews=int(row.get("reviews") or 0),
         seller_count=int(row.get("seller_count") or 0),
-        landed_cost=float(row.get("landed_cost") or 0),
-        est_net_margin=float(row.get("est_net_margin") or 0),
+        landed_cost=float(row["landed_cost"]) if row.get("landed_cost") is not None else None,
+        est_net_margin=float(row["est_net_margin"]) if row.get("est_net_margin") is not None else None,
         brand_share=float(row.get("brand_share") or 0),
         price_trend=str(row.get("price_trend") or "unknown"),
         rating=float(row["rating"]) if row.get("rating") is not None else None,
+        fulfillment_method=str(row["fulfillment_method"]) if row.get("fulfillment_method") else None,
+        lithium_battery_warning=bool(row.get("lithium_battery_warning")),
+        margin_source=str(row["margin_source"]) if row.get("margin_source") else None,
+        margin_confidence=str(row["margin_confidence"]) if row.get("margin_confidence") else None,
         category_id=str(row["category_id"]) if row.get("category_id") else None,
         category_path=parsed_category_path,
         state=ProductState.RULE_PASSED,
@@ -269,3 +338,46 @@ def _dict_value(value: Any) -> dict[str, Any]:
             return {}
         return dict(parsed) if isinstance(parsed, dict) else {}
     return {}
+
+
+def _window_state(
+    *,
+    enabled: bool,
+    start: str,
+    end: str,
+    timezone_name: str,
+) -> dict[str, object]:
+    if not enabled:
+        return {"open": False, "seconds_until_close": 0.0, "next_window": start}
+    try:
+        tz = ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError:
+        tz = ZoneInfo("UTC")
+    now = datetime.now(tz)
+    start_time = _parse_wall_time(start)
+    end_time = _parse_wall_time(end)
+    current = now.time().replace(second=0, microsecond=0)
+    if start_time <= end_time:
+        is_open = start_time <= current < end_time
+    else:
+        is_open = current >= start_time or current < end_time
+    if not is_open:
+        return {"open": False, "seconds_until_close": 0.0, "next_window": start}
+    close_at = now.replace(
+        hour=end_time.hour,
+        minute=end_time.minute,
+        second=0,
+        microsecond=0,
+    )
+    if close_at <= now:
+        close_at = close_at + timedelta(days=1)
+    return {
+        "open": True,
+        "seconds_until_close": max(0.0, (close_at - now).total_seconds()),
+        "next_window": None,
+    }
+
+
+def _parse_wall_time(value: str) -> wall_time:
+    hour, minute = value.split(":", 1)
+    return wall_time(hour=int(hour), minute=int(minute))

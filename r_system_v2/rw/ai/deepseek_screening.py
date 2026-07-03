@@ -286,7 +286,9 @@ def _score_competition_attackability(product: NormalizedProduct) -> int:
     return _clamp_int(score)
 
 
-def _score_margin(est_net_margin: float) -> int:
+def _score_margin(est_net_margin: float | None) -> int:
+    if est_net_margin is None:
+        return 60
     if est_net_margin >= 0.30:
         return 95
     if est_net_margin >= 0.25:

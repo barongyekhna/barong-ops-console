@@ -129,6 +129,7 @@ class RwRealtimeEngine:
             enforce_wall_clock_rate=enforce,
         )
         self.discovery_cursor = 0
+        self.discovery_pages: dict[str, int] = {}
         self.keepa_backoff_until: datetime | None = None
         self.processed_total = 0
         self.failed_total = 0
@@ -191,8 +192,7 @@ class RwRealtimeEngine:
             db,
             older_than_seconds=self.loop_interval_seconds * 3,
         )
-        if stale_released:
-            db.commit()
+        db.commit()
         if self.keepa_backoff_until and utc_now() < self.keepa_backoff_until:
             deepseek = self.deepseek_cron.run_due(db).to_dict()
             report = RealtimeCycleReport(
@@ -231,7 +231,7 @@ class RwRealtimeEngine:
             return report
         try:
             keepa_status = self.provider.status()
-        except (KeepaConfigurationError, KeepaResponseError) as exc:
+        except (KeepaConfigurationError, KeepaResponseError, TimeoutError, OSError) as exc:
             deepseek = self.deepseek_cron.run_due(db).to_dict()
             report = RealtimeCycleReport(
                 status="blocked",
@@ -252,6 +252,38 @@ class RwRealtimeEngine:
                     stage="blocked",
                     status="blocked",
                     message=str(exc),
+                    payload=report.to_dict(),
+                ),
+            )
+            self._write_status(
+                db,
+                report=report,
+                cycle_started_at=cycle_started_at,
+                cycle_finished_at=utc_now(),
+                last_error=str(exc),
+            )
+            return report
+        except Exception as exc:
+            deepseek = self.deepseek_cron.run_due(db).to_dict()
+            report = RealtimeCycleReport(
+                status="blocked",
+                selected_categories=selected_categories,
+                claimed=0,
+                processed=0,
+                failed=0,
+                queue_pending=self.scheduler.pending_count(db, selected_categories),
+                keepa_tokens_left=None,
+                scheduler={"reason": "keepa_status_unavailable"},
+                deepseek=deepseek,
+                error=str(exc),
+            )
+            emit_pipeline_event(
+                db,
+                PipelineEvent(
+                    event_type="keepa_cycle",
+                    stage="blocked",
+                    status="blocked",
+                    message="Keepa status unavailable",
                     payload=report.to_dict(),
                 ),
             )
@@ -362,10 +394,13 @@ class RwRealtimeEngine:
             attempted += 1
             self.discovery_cursor = (category_index + 1) % len(selected_categories)
             try:
+                page = self.discovery_pages.get(category_id, 0)
                 asins = self.provider.discover_asins(
                     category_id=category_id,
                     limit=min(missing, self.keepa_batch_size),
+                    page=page,
                 )
+                self.discovery_pages[category_id] = page + 1
             except Exception as exc:  # category mapping or API issue; keep current queue running.
                 emit_pipeline_event(
                     db,
@@ -384,6 +419,8 @@ class RwRealtimeEngine:
                 category_id=category_id,
                 asins=asins,
             )
+            if inserted == 0:
+                self.discovery_pages[category_id] = self.discovery_pages.get(category_id, 0) + 1
             missing -= inserted
             emit_pipeline_event(
                 db,
@@ -391,8 +428,12 @@ class RwRealtimeEngine:
                     category_id=category_id,
                     event_type="keepa_discovery",
                     stage="discovery",
-                    status="queued",
-                    payload={"discovered": len(asins), "inserted": inserted},
+                        status="queued",
+                        payload={
+                            "discovered": len(asins),
+                            "inserted": inserted,
+                            "page": self.discovery_pages.get(category_id, 0),
+                        },
                 ),
             )
             db.commit()
@@ -431,6 +472,10 @@ class RwRealtimeEngine:
         self.deepseek_cron.interval_seconds = settings.deepseek_interval_seconds
         self.deepseek_cron.batch_size = settings.deepseek_batch_size
         self.deepseek_cron.max_runtime_seconds = settings.deepseek_max_runtime_seconds
+        self.deepseek_cron.schedule_enabled = settings.deepseek_schedule_enabled
+        self.deepseek_cron.window_start = settings.deepseek_window_start
+        self.deepseek_cron.window_end = settings.deepseek_window_end
+        self.deepseek_cron.timezone = settings.deepseek_timezone
         self.keepa_batch_size = min(settings.keepa_batch_size, MAX_REQUESTS_PER_MINUTE)
         self.discovery_categories_per_cycle = settings.discovery_categories_per_cycle
         self.keepa_429_backoff_seconds = settings.keepa_429_backoff_seconds

@@ -44,38 +44,22 @@ class CategoryNode:
 
 
 DEFAULT_TREE = CategoryNode(
-    id="amazon-fba",
-    name="亚马逊 FBA",
-    selected=True,
+    id="amazon-product-categories",
+    name="亚马逊产品类目",
+    selected=False,
     children=[
-        CategoryNode(
-            id="home-kitchen",
-            name="家居与厨房",
-            selected=True,
-            children=[
-                CategoryNode(id="home-draft-proofing", name="门窗密封", selected=True),
-                CategoryNode(id="home-storage-organization", name="收纳整理", selected=True),
-                CategoryNode(id="home-small-tools", name="小型家用工具", selected=True),
-            ],
-        ),
-        CategoryNode(
-            id="patio-lawn-garden",
-            name="庭院草坪花园",
-            selected=True,
-            children=[
-                CategoryNode(id="garden-lightweight-tools", name="轻量园艺工具", selected=True),
-                CategoryNode(id="garden-seasonless-accessories", name="四季园艺配件", selected=True),
-            ],
-        ),
-        CategoryNode(
-            id="office-products",
-            name="办公用品",
-            selected=True,
-            children=[
-                CategoryNode(id="office-organization", name="办公收纳", selected=True),
-                CategoryNode(id="office-ergonomic-accessories", name="人体工学配件", selected=True),
-            ],
-        ),
+        CategoryNode(id="1055398", name="家居与厨房", selected=True),
+        CategoryNode(id="228013", name="工具与家装", selected=True),
+        CategoryNode(id="2972638011", name="庭院草坪花园", selected=True),
+        CategoryNode(id="1064954", name="办公用品", selected=True),
+        CategoryNode(id="3375251", name="运动与户外", selected=True),
+        CategoryNode(id="2617941011", name="手工艺与缝纫", selected=True),
+        CategoryNode(id="2619533011", name="宠物用品", selected=True),
+        CategoryNode(id="165793011", name="玩具与游戏", selected=True),
+        CategoryNode(id="3760911", name="美妆与个人护理", selected=True),
+        CategoryNode(id="3760901", name="健康与家居护理", selected=False),
+        CategoryNode(id="16310091", name="工业与科学", selected=False),
+        CategoryNode(id="2619525011", name="家用电器", selected=False),
     ],
 )
 
@@ -123,6 +107,9 @@ def apply_selected_categories(
     selected = set(selected_categories)
     root_payload = payload["root"]
     root = CategoryNode.from_dict(root_payload) if isinstance(root_payload, dict) else DEFAULT_TREE
+    available = {node.id for node in iter_nodes(root)}
+    if selected and selected.isdisjoint(available):
+        return payload
     for node in iter_nodes(root):
         node.selected = node.id in selected
     updated = dict(payload)
@@ -178,7 +165,7 @@ def _set_subtree(node: CategoryNode, selected: bool) -> None:
 
 
 def _extract_redline_terms(text: str) -> list[str]:
-    candidates = ["锂电", "restricted", "IP", "易碎", "尺码服装", "强制认证"]
+    candidates = ["restricted", "IP", "易碎", "尺码服装", "强制认证"]
     terms = [term for term in candidates if term in text]
     if terms:
         return terms
