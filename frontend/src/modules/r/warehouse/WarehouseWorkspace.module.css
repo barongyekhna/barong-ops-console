@@ -298,6 +298,72 @@
   font-size: 0.76rem;
 }
 
+.metaLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.asinTag {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 5px;
+  min-height: 24px;
+  padding: 0 7px;
+  color: #14532d;
+  background: #dcfce7;
+  border: 1px solid rgb(22 163 74 / 35%);
+  border-radius: 5px;
+  font: inherit;
+  font-size: 0.7rem;
+  font-weight: 860;
+  cursor: pointer;
+}
+
+.copyState {
+  color: #166534 !important;
+  font-size: 0.66rem !important;
+  font-weight: 800;
+}
+
+.salesTag {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 2px 6px;
+  color: #075985 !important;
+  background: #e0f2fe;
+  border: 1px solid rgb(2 132 199 / 22%);
+  border-radius: 5px;
+  font-size: 0.68rem !important;
+  font-weight: 820;
+  line-height: 1.2;
+}
+
+.bsrStack {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.bsrStack span {
+  display: grid;
+  gap: 2px;
+  color: var(--color-text);
+  font-size: 0.74rem;
+  font-weight: 780;
+}
+
+.bsrStack strong,
+.bsrStack em {
+  color: var(--color-muted);
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 740;
+}
+
 .badge {
   display: inline-flex;
   width: fit-content;
@@ -497,6 +563,11 @@
   color: var(--color-muted);
   font-size: 0.74rem;
   font-weight: 760;
+}
+
+.selectorActions {
+  display: flex;
+  justify-content: flex-end;
 }
 
 .categoryTree {

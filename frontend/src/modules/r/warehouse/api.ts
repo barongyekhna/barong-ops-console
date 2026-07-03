@@ -90,6 +90,14 @@ export function selectRwCategory(category_id: string, selected: boolean) {
   });
 }
 
+export function saveRwCategoryTree(selected_categories: string[]) {
+  return apiRequest<RwCategoryTreeResponse>(`${RW_API_BASE}/category-tree/save`, {
+    body: { selected_categories },
+    method: "POST",
+    bypassCache: true,
+  });
+}
+
 export function deleteRejectedRwProducts() {
   return apiRequest<{ deleted: number; delete_mode: string }>(
     `${RW_API_BASE}/products-rejected`,

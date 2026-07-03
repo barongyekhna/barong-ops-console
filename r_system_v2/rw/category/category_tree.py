@@ -12,6 +12,42 @@ from typing import Iterable
 REPO_ROOT = Path(__file__).resolve().parents[3]
 AMAZON_RULES_PATH = REPO_ROOT / "r_system_v2" / "docs" / "amazon.md"
 CATEGORY_TREE_PATH = Path(__file__).resolve().parent / "category_tree.json"
+HOLIDAY_CATEGORY_SEARCH_TERMS = {
+    "holiday-christmas": (
+        "christmas tree",
+        "christmas stockings",
+        "christmas tableware",
+        "christmas ornament",
+        "christmas decor",
+    ),
+    "holiday-halloween": (
+        "halloween decor",
+        "halloween costume accessories",
+        "halloween lights",
+        "halloween party supplies",
+    ),
+    "holiday-easter": (
+        "easter basket",
+        "easter decor",
+        "easter egg",
+        "easter party supplies",
+    ),
+    "holiday-thanksgiving": (
+        "thanksgiving decor",
+        "thanksgiving tableware",
+        "thanksgiving centerpiece",
+    ),
+    "holiday-valentines": (
+        "valentines decor",
+        "valentines gift",
+        "valentines party supplies",
+    ),
+    "holiday-new-year": (
+        "new year decor",
+        "new year party supplies",
+        "new year tableware",
+    ),
+}
 
 
 @dataclass
@@ -281,6 +317,19 @@ DEFAULT_TREE = CategoryNode(
             ],
         ),
         _node("2619525011", "家用电器", selected=False),
+        _node(
+            "holiday-products",
+            "节日产品",
+            selected=False,
+            children=[
+                _node("holiday-christmas", "圣诞节"),
+                _node("holiday-halloween", "万圣节"),
+                _node("holiday-easter", "复活节"),
+                _node("holiday-thanksgiving", "感恩节"),
+                _node("holiday-valentines", "情人节"),
+                _node("holiday-new-year", "新年"),
+            ],
+        ),
     ],
 )
 
@@ -337,6 +386,16 @@ def runnable_selected_category_ids(payload: dict[str, object] | None = None) -> 
 
     visit(root)
     return runnable
+
+
+def is_holiday_category_id(category_id: str | None) -> bool:
+    if category_id is None:
+        return False
+    return category_id.strip() in HOLIDAY_CATEGORY_SEARCH_TERMS
+
+
+def holiday_search_terms(category_id: str) -> tuple[str, ...]:
+    return HOLIDAY_CATEGORY_SEARCH_TERMS.get(category_id.strip(), ())
 
 
 def apply_selected_categories(

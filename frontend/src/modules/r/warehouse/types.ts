@@ -99,6 +99,7 @@ export type RwRule = {
 
 export type RwProductsResponse = {
   count: number;
+  returned_count?: number;
   items: RwProduct[];
   mode: "production";
   organization: string;

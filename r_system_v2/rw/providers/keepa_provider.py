@@ -13,6 +13,10 @@ from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
+from r_system_v2.rw.category.category_tree import (
+    holiday_search_terms,
+    is_holiday_category_id,
+)
 from r_system_v2.rw.core.models import KeepaProductData
 
 
@@ -170,6 +174,7 @@ class KeepaProvider:
                 "domain": self.domain,
                 "asin": asin,
                 "history": 1,
+                "rating": 1,
                 "stats": 90,
             },
             self.timeout_sec,
@@ -196,6 +201,12 @@ class KeepaProvider:
                 for index in range(max(0, min(limit, MAX_REQUESTS_PER_MINUTE)))
             ]
         self._require_real_api()
+        if is_holiday_category_id(category_id):
+            return self._discover_holiday_asins(
+                category_id=category_id,
+                limit=limit,
+                page=page,
+            )
         keepa_category = _resolve_keepa_category_id(category_id)
         if keepa_category is None:
             raise KeepaConfigurationError(f"keepa_category_mapping_missing:{category_id}")
@@ -206,36 +217,106 @@ class KeepaProvider:
             "current_NEW_lte": 7000,
             "current_SALES_gte": 1,
             "current_SALES_lte": 50000,
+            "current_COUNT_NEW_lte": 15,
+            "current_COUNT_REVIEWS_lte": 500,
             "perPage": max(1, min(limit, MAX_REQUESTS_PER_MINUTE)),
             "page": max(0, int(page)),
             "sort": [["current_SALES", "asc"]],
         }
         try:
-            payload = self.http_get_json(
-                f"{self.base_url}/query",
-                {
-                    "key": api_key,
-                    "domain": self.domain,
-                    "selection": json.dumps(selection, separators=(",", ":")),
-                },
-                self.timeout_sec,
-            )
-            return _parse_discovery_payload(payload, limit=limit)
+            return self._query_discovery(api_key=api_key, selection=selection, limit=limit)
         except Exception as query_error:
-            payload = self.http_get_json(
-                f"{self.base_url}/bestsellers",
-                {
-                    "key": api_key,
-                    "domain": self.domain,
-                    "category": keepa_category,
-                    "range": 0,
-                },
-                self.timeout_sec,
-            )
-            asins = _extract_asins(payload, limit=limit)
-            if asins:
-                return asins
-            raise KeepaResponseError(f"keepa_discovery_failed:{query_error}") from query_error
+            fallback_selection = dict(selection)
+            fallback_selection.pop("current_COUNT_NEW_lte", None)
+            fallback_selection.pop("current_COUNT_REVIEWS_lte", None)
+            try:
+                return self._query_discovery(
+                    api_key=api_key,
+                    selection=fallback_selection,
+                    limit=limit,
+                )
+            except Exception as fallback_error:
+                asins = self._discover_bestseller_asins(
+                    api_key=api_key,
+                    keepa_category=keepa_category,
+                    limit=limit,
+                )
+                if asins:
+                    return asins
+                raise KeepaResponseError(
+                    f"keepa_prefilter_discovery_failed:{query_error};"
+                    f" fallback_failed:{fallback_error}"
+                ) from fallback_error
+
+    def _query_discovery(
+        self,
+        *,
+        api_key: str,
+        selection: dict[str, Any],
+        limit: int,
+    ) -> list[str]:
+        payload = self.http_get_json(
+            f"{self.base_url}/query",
+            {
+                "key": api_key,
+                "domain": self.domain,
+                "selection": json.dumps(selection, separators=(",", ":")),
+            },
+            self.timeout_sec,
+        )
+        return _parse_discovery_payload(payload, limit=limit)
+
+    def _discover_bestseller_asins(
+        self,
+        *,
+        api_key: str,
+        keepa_category: int,
+        limit: int,
+    ) -> list[str]:
+        payload = self.http_get_json(
+            f"{self.base_url}/bestsellers",
+            {
+                "key": api_key,
+                "domain": self.domain,
+                "category": keepa_category,
+                "range": 0,
+            },
+            self.timeout_sec,
+        )
+        return _extract_asins(payload, limit=limit)
+
+    def _discover_holiday_asins(
+        self,
+        *,
+        category_id: str,
+        limit: int,
+        page: int,
+    ) -> list[str]:
+        api_key = self.current_api_key()
+        terms = holiday_search_terms(category_id)
+        if not terms:
+            raise KeepaConfigurationError(f"holiday_category_mapping_missing:{category_id}")
+        term_index = max(0, int(page)) % len(terms)
+        term_page = max(0, int(page)) // len(terms)
+        term = terms[term_index]
+        selection = {
+            "title": term,
+            "current_SALES_gte": 1,
+            "current_SALES_lte": 50000,
+            "perPage": max(1, min(limit, MAX_REQUESTS_PER_MINUTE)),
+            "page": term_page,
+            "sort": [["current_SALES", "asc"]],
+        }
+        payload = self.http_get_json(
+            f"{self.base_url}/query",
+            {
+                "key": api_key,
+                "domain": self.domain,
+                "selection": json.dumps(selection, separators=(",", ":")),
+            },
+            self.timeout_sec,
+        )
+        return _parse_discovery_payload(payload, limit=limit)
 
     async def fetch_product_async(
         self,
@@ -275,6 +356,11 @@ class KeepaProvider:
                 price_trend="stable",
                 rating=4.4,
                 image_url=_fallback_image_url(asin),
+                monthly_sales=420,
+                parent_category_rank=1_240,
+                parent_category_name="Home & Kitchen",
+                subcategory_rank=8421,
+                subcategory_name="Draft Stoppers",
                 mock_generated=True,
             )
 
@@ -300,6 +386,11 @@ class KeepaProvider:
             price_trend=trend,
             rating=round(4.0 + (seed % 8) / 10, 1),
             image_url=_fallback_image_url(asin),
+            monthly_sales=50 + seed % 600,
+            parent_category_rank=1_000 + seed % 30_000,
+            parent_category_name="Home & Kitchen",
+            subcategory_rank=bsr,
+            subcategory_name="Mock Category",
             mock_generated=True,
         )
 
@@ -431,6 +522,25 @@ def _money_from_cents(value: Any) -> float | None:
     return None
 
 
+def _price_from_product(product: dict[str, Any]) -> float | None:
+    for key in (
+        "newPrice",
+        "buyBoxPrice",
+        "buyBox",
+        "current_NEW",
+        "current_NEW_FBA",
+        "current_NEW_FBM_SHIPPING",
+    ):
+        money = _money_from_cents(product.get(key))
+        if money is not None:
+            return money
+    for index in (1, 10, 7, 18, 0):
+        money = _money_from_cents(_stats_current(product, index))
+        if money is not None:
+            return money
+    return None
+
+
 def _stats_current(product: dict[str, Any], index: int) -> Any:
     stats = product.get("stats")
     if not isinstance(stats, dict):
@@ -439,6 +549,16 @@ def _stats_current(product: dict[str, Any], index: int) -> Any:
     if not isinstance(current, list) or len(current) <= index:
         return None
     return current[index]
+
+
+def _stats_value(product: dict[str, Any], key: str, index: int) -> Any:
+    stats = product.get("stats")
+    if not isinstance(stats, dict):
+        return None
+    values = stats.get(key)
+    if not isinstance(values, list) or len(values) <= index:
+        return None
+    return values[index]
 
 
 def _category_name(product: dict[str, Any]) -> str:
@@ -451,6 +571,92 @@ def _category_name(product: dict[str, Any]) -> str:
     if root_category is not None:
         return str(root_category)
     return "Unknown"
+
+
+def _category_rank_details(product: dict[str, Any], *, default_bsr: int) -> dict[str, Any]:
+    category_tree = product.get("categoryTree")
+    parent_name: str | None = None
+    parent_id: str | None = None
+    leaf_name: str | None = None
+    leaf_id: str | None = None
+    if isinstance(category_tree, list) and category_tree:
+        first = category_tree[0]
+        last = category_tree[-1]
+        if isinstance(first, dict):
+            parent_name = str(first.get("name") or "") or None
+            parent_id = _category_id_from_node(first)
+        if isinstance(last, dict):
+            leaf_name = str(last.get("name") or "") or None
+            leaf_id = _category_id_from_node(last)
+    parent_rank = _rank_for_sales_rank_category(product, parent_id)
+    subcategory_rank = _rank_for_sales_rank_category(product, leaf_id) or default_bsr
+    return {
+        "parent_category_name": parent_name,
+        "parent_category_rank": parent_rank,
+        "subcategory_name": leaf_name or _category_name(product),
+        "subcategory_rank": subcategory_rank,
+    }
+
+
+def _category_id_from_node(node: dict[str, Any]) -> str | None:
+    for key in ("catId", "categoryId", "id"):
+        value = node.get(key)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return str(int(value))
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def _rank_for_sales_rank_category(product: dict[str, Any], category_id: str | None) -> int | None:
+    if not category_id:
+        return None
+    sales_ranks = product.get("salesRanks")
+    if not isinstance(sales_ranks, dict):
+        return None
+    raw_rank = sales_ranks.get(category_id)
+    if raw_rank is None:
+        raw_rank = sales_ranks.get(str(category_id))
+    rank = _latest_rank_value(raw_rank)
+    return rank if rank and rank > 0 else None
+
+
+def _latest_rank_value(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value) if value > 0 else None
+    if isinstance(value, list):
+        for item in reversed(value):
+            rank = _latest_rank_value(item)
+            if rank:
+                return rank
+    return None
+
+
+def _monthly_sales_from_product(product: dict[str, Any]) -> int:
+    direct = _int_from_payload(
+        product,
+        "monthlySold",
+        "monthly_sold",
+        "monthlySales",
+        "monthly_sales",
+        default=0,
+    )
+    if direct:
+        return direct
+    history = product.get("monthlySoldHistory") or product.get("monthly_sold_history")
+    if isinstance(history, list):
+        for item in reversed(history):
+            if isinstance(item, bool):
+                continue
+            if isinstance(item, (int, float)) and item > 0:
+                return int(item)
+            if isinstance(item, list):
+                nested = _latest_rank_value(item)
+                if nested:
+                    return nested
+    return 0
 
 
 def _image_url_from_product(product: dict[str, Any], *, asin: str | None = None) -> str | None:
@@ -482,12 +688,10 @@ def _parse_product_payload(
     source_query: str | None,
 ) -> KeepaProductData:
     product = _first_product(payload)
-    price = (
-        _money_from_cents(_stats_current(product, 1))
-        or _money_from_cents(_stats_current(product, 0))
-    )
-    if price is None:
-        raise KeepaResponseError("keepa_price_unavailable")
+    price = _price_from_product(product)
+    price_unavailable = price is None
+    if price_unavailable:
+        price = 0.0
 
     bsr = _int_from_payload(product, "salesRank", "bsr", default=0)
     if bsr == 0:
@@ -496,16 +700,22 @@ def _parse_product_payload(
     reviews = _int_from_payload(product, "reviewCount", "reviews", default=0)
     if reviews == 0:
         reviews = _int_from_payload({"value": _stats_current(product, 17)}, "value", default=0)
+    if reviews == 0:
+        reviews = _int_from_payload({"value": _stats_value(product, "avg90", 17)}, "value", default=0)
 
     seller_count = _int_from_payload(product, "offerCount", "sellerCount", default=0)
     if seller_count == 0:
         seller_count = _int_from_payload({"value": _stats_current(product, 11)}, "value", default=0)
+    if seller_count == 0:
+        seller_count = _int_from_payload({"value": _stats_value(product, "avg90", 11)}, "value", default=0)
     brand_share = float(product.get("brandShare", 0) or 0)
     title = str(product.get("title") or source_query or asin)
     brand = str(product.get("brand") or "Unknown")
     parsed_asin = str(product.get("asin") or asin)
     fulfillment_method = _fulfillment_method(product)
     lithium_warning = _has_lithium_warning(product)
+    category_details = _category_rank_details(product, default_bsr=bsr)
+    monthly_sales = _monthly_sales_from_product(product)
 
     return KeepaProductData(
         asin=parsed_asin,
@@ -525,7 +735,12 @@ def _parse_product_payload(
         fulfillment_method=fulfillment_method,
         lithium_battery_warning=lithium_warning,
         margin_source="missing_landed_cost",
-        margin_confidence="unknown",
+        margin_confidence="price_unavailable" if price_unavailable else "unknown",
+        monthly_sales=monthly_sales,
+        parent_category_rank=category_details["parent_category_rank"],
+        parent_category_name=category_details["parent_category_name"],
+        subcategory_rank=category_details["subcategory_rank"],
+        subcategory_name=category_details["subcategory_name"],
         mock_generated=False,
     )
 
@@ -561,6 +776,9 @@ def _rating_from_product(product: dict[str, Any]) -> float | None:
     stats_rating = _stats_current(product, 16)
     if isinstance(stats_rating, (int, float)) and stats_rating > 0:
         return round(float(stats_rating) / 10 if stats_rating > 5 else float(stats_rating), 1)
+    avg_rating = _stats_value(product, "avg90", 16)
+    if isinstance(avg_rating, (int, float)) and avg_rating > 0:
+        return round(float(avg_rating) / 10 if avg_rating > 5 else float(avg_rating), 1)
     return None
 
 

@@ -61,6 +61,11 @@ class KeepaProductData:
     lithium_battery_warning: bool = False
     margin_source: str | None = None
     margin_confidence: str | None = None
+    monthly_sales: int = 0
+    parent_category_rank: int | None = None
+    parent_category_name: str | None = None
+    subcategory_rank: int | None = None
+    subcategory_name: str | None = None
     mock_generated: bool = True
     fetched_at: str = field(default_factory=utc_now_iso)
 

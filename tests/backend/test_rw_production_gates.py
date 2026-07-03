@@ -1,10 +1,17 @@
 import gzip
+import json
 
 import pytest
 
 from backend.app.api.routes.rw import _user_has_rw_role_access
 from backend.app.models.user import User
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
+from r_system_v2.rw.category.category_tree import (
+    apply_selected_categories,
+    is_holiday_category_id,
+    load_category_tree,
+    runnable_selected_category_ids,
+)
 from r_system_v2.rw.core.rule_engine import RuleEngine
 from r_system_v2.rw.core.warehouse_engine import WarehouseEngine
 from r_system_v2.rw.providers.keepa_provider import (
@@ -106,6 +113,105 @@ def test_keepa_product_parser_uses_stats_for_reviews_sellers_and_rating():
     assert product.seller_count == 6
     assert product.rating == 4.6
     assert product.image_url == "https://images-na.ssl-images-amazon.com/images/I/test-image.jpg"
+
+
+def test_keepa_product_parser_uses_avg90_and_bsr_features_when_current_missing():
+    current = [-1] * 18
+    current[1] = 2999
+    current[3] = 4400
+    avg90 = [-1] * 18
+    avg90[11] = 8
+    avg90[16] = 45
+    avg90[17] = 222
+
+    product = _parse_product_payload(
+        {
+            "products": [
+                {
+                    "asin": "B012345678",
+                    "title": "Compact Storage Basket",
+                    "brand": "Fixture",
+                    "stats": {"current": current, "avg90": avg90},
+                    "salesRanks": {
+                        "1055398": [[1, 1200]],
+                        "13679381": [[1, 4400]],
+                    },
+                    "monthlySold": 320,
+                    "categoryTree": [
+                        {"name": "Home & Kitchen", "catId": 1055398},
+                        {"name": "Storage", "catId": 13679381},
+                    ],
+                }
+            ]
+        },
+        asin="B012345678",
+        source_query="test",
+    )
+
+    assert product.reviews == 222
+    assert product.seller_count == 8
+    assert product.rating == 4.5
+    assert product.monthly_sales == 320
+    assert product.parent_category_rank == 1200
+    assert product.subcategory_rank == 4400
+
+
+def test_keepa_discovery_pushes_hard_rules_into_product_finder_selection():
+    captured_selection: dict[str, object] = {}
+
+    def fake_http_get_json(url, params, timeout):
+        assert url.endswith("/query")
+        assert timeout == 10.0
+        captured_selection.update(json.loads(str(params["selection"])))
+        return {"asinList": ["B012345678"]}
+
+    provider = KeepaProvider(api_key="test-key", http_get_json=fake_http_get_json)
+
+    assert provider.discover_asins(category_id="1055398", limit=20) == ["B012345678"]
+    assert captured_selection["current_NEW_gte"] == 2500
+    assert captured_selection["current_NEW_lte"] == 7000
+    assert captured_selection["current_COUNT_NEW_lte"] == 15
+    assert captured_selection["current_COUNT_REVIEWS_lte"] == 500
+
+
+def test_keepa_discovery_uses_bestseller_fallback_only_after_filtered_query_fails():
+    called_urls: list[str] = []
+
+    def fake_http_get_json(url, params, timeout):
+        del params, timeout
+        called_urls.append(url)
+        if url.endswith("/query"):
+            raise RuntimeError("query failed")
+        return {"bestSellersList": ["B087654321"]}
+
+    provider = KeepaProvider(api_key="test-key", http_get_json=fake_http_get_json)
+
+    assert provider.discover_asins(category_id="1055398", limit=20) == ["B087654321"]
+    assert [url.rsplit("/", 1)[-1] for url in called_urls] == [
+        "query",
+        "query",
+        "bestsellers",
+    ]
+
+
+def test_holiday_categories_are_runnable_and_use_sales_only_discovery():
+    captured_selection: dict[str, object] = {}
+
+    def fake_http_get_json(url, params, timeout):
+        del timeout
+        assert url.endswith("/query")
+        captured_selection.update(json.loads(str(params["selection"])))
+        return {"asinList": ["B087654321"]}
+
+    payload = apply_selected_categories(load_category_tree(), ["holiday-products"])
+    runnable = runnable_selected_category_ids(payload)
+    provider = KeepaProvider(api_key="test-key", http_get_json=fake_http_get_json)
+
+    assert "holiday-christmas" in runnable
+    assert is_holiday_category_id("holiday-christmas") is True
+    assert provider.discover_asins(category_id="holiday-christmas", limit=20) == ["B087654321"]
+    assert "title" in captured_selection
+    assert "current_NEW_gte" not in captured_selection
 
 
 def test_keepa_scheduler_caps_requests_at_twenty_without_burst():

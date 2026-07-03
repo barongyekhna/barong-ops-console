@@ -57,6 +57,7 @@ class PipelineRunner:
         self.deepseek_skill = deepseek_skill
         self.deepseek_inline = deepseek_inline
         self.enforce_wall_clock_rate = enforce_wall_clock_rate
+        self.category_bestseller_cache: dict[str, dict[str, object]] = {}
 
     def run(self, records: Sequence[IngestionRecord]) -> PipelineRunReport:
         return asyncio.run(self.run_async(records))
@@ -70,6 +71,7 @@ class PipelineRunner:
             deepseek_inline=self.deepseek_inline,
             max_concurrency=MAX_REQUESTS_PER_MINUTE,
             enforce_wall_clock_rate=self.enforce_wall_clock_rate,
+            category_bestseller_cache=self.category_bestseller_cache,
         )
         worker.enqueue(list(records))
         report = await worker.run_once(max_items=len(records))

@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
 from r_system_v2.rw.category.category_tree import (
     apply_selected_categories,
+    is_holiday_category_id,
     load_category_tree,
     runnable_selected_category_ids,
 )
@@ -531,7 +532,7 @@ def _runnable_categories(category_ids: list[str]) -> list[str]:
 
     runnable: list[str] = []
     for category_id in category_ids:
-        if _resolve_keepa_category_id(category_id) is None:
+        if not is_holiday_category_id(category_id) and _resolve_keepa_category_id(category_id) is None:
             continue
         if category_id not in runnable:
             runnable.append(category_id)

@@ -1,6 +1,6 @@
 "use client";
 
-import { Activity, AlertCircle, CheckCircle2, Database, RefreshCw } from "lucide-react";
+import { Activity, AlertCircle, CheckCircle2, Copy, Database, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -13,7 +13,7 @@ import {
   getRwRules,
   getRwSettings,
   getRwStatus,
-  selectRwCategory,
+  saveRwCategoryTree,
   updateRwSettings,
 } from "@/modules/r/warehouse/api";
 import type {
@@ -227,12 +227,74 @@ function ProductImage({ product }: { product: RwProduct }) {
   );
 }
 
-function productMetrics(products: readonly RwProduct[]) {
-  const passed = products.filter((product) => product.pipeline_decision === "pass").length;
-  const rejected = products.filter((product) => product.pipeline_decision === "reject").length;
-  const pending = products.filter(
-    (product) => product.pipeline_decision === "pending_review",
-  ).length;
+function AsinTag({ asin }: { asin: string }) {
+  const [copied, setCopied] = useState(false);
+
+  async function copyAsin() {
+    try {
+      await window.navigator.clipboard.writeText(asin);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1400);
+    } catch {
+      setCopied(false);
+    }
+  }
+
+  return (
+    <button
+      className={styles.asinTag}
+      onClick={() => {
+        void copyAsin();
+      }}
+      title="复制 ASIN"
+      type="button"
+    >
+      <Copy aria-hidden="true" size={13} />
+      <span>{asin}</span>
+      {copied ? <span className={styles.copyState}>已复制</span> : null}
+    </button>
+  );
+}
+
+function BsrCell({ product }: { product: RwProduct }) {
+  const bestsellerParentRank = numberFeature(product, "bestseller_parent_rank");
+  const bestsellerParentCategory =
+    stringFeature(product, "bestseller_parent_category") ?? "大类目";
+  const subcategoryRank = numberFeature(product, "subcategory_rank") ?? product.bsr;
+  const subcategoryName = stringFeature(product, "subcategory_name") ?? product.category;
+
+  return (
+    <div className={styles.bsrStack}>
+      <span>
+        <strong>BestSeller 大类目</strong>
+        {bestsellerParentRank === null
+          ? "暂无"
+          : `#${bestsellerParentRank.toLocaleString("zh-CN")}`}
+        <em>{bestsellerParentCategory}</em>
+      </span>
+      <span>
+        <strong>产品小类目</strong>
+        #{subcategoryRank.toLocaleString("zh-CN")}
+        <em>{subcategoryName}</em>
+      </span>
+    </div>
+  );
+}
+
+function productMetrics(
+  products: readonly RwProduct[],
+  counts: RwStatus["runtime"]["counts"] | undefined,
+  productResponseCount: number | undefined,
+) {
+  const passed =
+    counts?.passed ??
+    products.filter((product) => product.pipeline_decision === "pass").length;
+  const rejected =
+    counts?.rejected ??
+    products.filter((product) => product.pipeline_decision === "reject").length;
+  const pending =
+    counts?.pending_review ??
+    products.filter((product) => product.pipeline_decision === "pending_review").length;
   const productsWithMargin = products.filter(
     (product): product is RwProduct & { margin: number } =>
       typeof product.margin === "number",
@@ -247,8 +309,27 @@ function productMetrics(products: readonly RwProduct[]) {
     passed,
     pending,
     rejected,
-    total: products.length,
+    total: counts?.total_products ?? productResponseCount ?? products.length,
   };
+}
+
+function numberFeature(product: RwProduct, key: string) {
+  const value = product.features[key];
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim() && !Number.isNaN(Number(value))) {
+    return Number(value);
+  }
+  return null;
+}
+
+function stringFeature(product: RwProduct, key: string) {
+  const value = product.features[key];
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+  return null;
 }
 
 function ViewTabs({ activeView }: { activeView: WarehouseView }) {
@@ -291,59 +372,71 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
           </tr>
         </thead>
         <tbody>
-          {products.map((product) => (
-            <tr key={product.asin}>
-              <td>
-                <div className={styles.productCell}>
-                  <div className={styles.productPreview}>
-                    <ProductImage product={product} />
+          {products.map((product) => {
+            const monthlySales = numberFeature(product, "monthly_sales");
+            return (
+              <tr key={product.asin}>
+                <td>
+                  <div className={styles.productCell}>
+                    <div className={styles.productPreview}>
+                      <ProductImage product={product} />
+                    </div>
+                    <div>
+                      <strong>{product.title_zh ?? "中文名翻译中"}</strong>
+                      <span>{product.title}</span>
+                      <span className={styles.metaLine}>
+                        <AsinTag asin={product.asin} />
+                        <span>{product.brand ?? "未知品牌"}</span>
+                        <span>{product.category}</span>
+                      </span>
+                      <span>
+                        评分 {product.rating ?? "无"} · 趋势 {priceTrendLabel(product.price_trend)}
+                      </span>
+                      <span className={styles.metaLine}>
+                        <span>{fulfillmentLabel(product.fulfillment_method)}</span>
+                        {monthlySales !== null ? (
+                          <span className={styles.salesTag}>
+                            月销量 {monthlySales.toLocaleString("zh-CN")}
+                          </span>
+                        ) : null}
+                        {product.lithium_battery_warning ? (
+                          <span className={styles.lithiumTag}>锂电提示</span>
+                        ) : null}
+                      </span>
+                    </div>
                   </div>
-                  <div>
-                    <strong>{product.title_zh ?? "中文名翻译中"}</strong>
-                    <span>{product.title}</span>
-                    <span>
-                      {product.asin} · {product.brand ?? "未知品牌"} · {product.category}
-                    </span>
-                    <span>
-                      评分 {product.rating ?? "无"} · 趋势 {priceTrendLabel(product.price_trend)}
-                    </span>
-                    <span>
-                      {fulfillmentLabel(product.fulfillment_method)}
-                      {product.lithium_battery_warning ? (
-                        <span className={styles.lithiumTag}>锂电提示</span>
-                      ) : null}
-                    </span>
-                  </div>
-                </div>
-              </td>
-              <td>{product.price === null ? "无" : currency(product.price)}</td>
-              <td>{product.bsr.toLocaleString("zh-CN")}</td>
-              <td>{product.reviews.toLocaleString("zh-CN")}</td>
-              <td>{product.seller_count}</td>
-              <td>
-                {product.margin === null ? "未计算" : percent(product.margin)}
-                {product.margin_confidence === "unknown" ? (
-                  <span className={styles.stateText}>缺成本</span>
-                ) : null}
-              </td>
-              <td>{product.skill_score ?? "待跑"}</td>
-              <td>
-                <span
-                  className={`${styles.badge} ${
-                    product.pipeline_decision === "reject" ? styles.rejectBadge : ""
-                  }`}
-                  title={
-                    product.pipeline_decision === "reject"
-                      ? rejectReasonLabel(product.rule_reject_reason, product.features)
-                      : undefined
-                  }
-                >
-                  {decisionLabel(product.pipeline_decision)}
-                </span>
-                <span className={styles.stateText}>{stateLabel(product.state)}</span>
-              </td>
-            </tr>
-          ))}
+                </td>
+                <td>{product.price === null ? "无" : currency(product.price)}</td>
+                <td>
+                  <BsrCell product={product} />
+                </td>
+                <td>{product.reviews.toLocaleString("zh-CN")}</td>
+                <td>{product.seller_count}</td>
+                <td>
+                  {product.margin === null ? "未计算" : percent(product.margin)}
+                  {product.margin_confidence === "unknown" ? (
+                    <span className={styles.stateText}>缺成本</span>
+                  ) : null}
+                </td>
+                <td>{product.skill_score ?? "待跑"}</td>
+                <td>
+                  <span
+                    className={`${styles.badge} ${
+                      product.pipeline_decision === "reject" ? styles.rejectBadge : ""
+                    }`}
+                    title={
+                      product.pipeline_decision === "reject"
+                        ? rejectReasonLabel(product.rule_reject_reason, product.features)
+                        : undefined
+                    }
+                  >
+                    {decisionLabel(product.pipeline_decision)}
+                  </span>
+                  <span className={styles.stateText}>{stateLabel(product.state)}</span>
+                </td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -367,22 +460,23 @@ function RulesList({ rules }: { rules: RwRulesResponse }) {
 function CategorySelectionList({
   depth = 0,
   node,
-  onSelectCategory,
-  savingCategory,
+  onToggleCategory,
+  saving,
 }: {
   depth?: number;
   node: RwCategoryNode;
-  onSelectCategory: (categoryId: string, selected: boolean) => Promise<void>;
-  savingCategory: string | null;
+  onToggleCategory: (categoryId: string, selected: boolean) => void;
+  saving: boolean;
 }) {
   return (
     <div className={styles.categoryNode}>
       <label style={{ paddingLeft: depth * 16 }}>
         <input
           checked={node.selected}
-          aria-busy={savingCategory === node.id}
+          aria-busy={saving}
+          disabled={saving}
           onChange={(event) => {
-            void onSelectCategory(node.id, event.target.checked);
+            onToggleCategory(node.id, event.target.checked);
           }}
           type="checkbox"
         />
@@ -393,8 +487,8 @@ function CategorySelectionList({
           depth={depth + 1}
           key={child.id}
           node={child}
-          onSelectCategory={onSelectCategory}
-          savingCategory={savingCategory}
+          onToggleCategory={onToggleCategory}
+          saving={saving}
         />
       ))}
     </div>
@@ -454,7 +548,7 @@ function PipelineView({ pipeline }: { pipeline: RwPipelineResponse }) {
 
 function BatchStatusView({
   categoryTree,
-  onSelectCategory,
+  onSaveCategories,
   onSaveSettings,
   savingCategory,
   savingSettings,
@@ -462,15 +556,18 @@ function BatchStatusView({
   status,
 }: {
   categoryTree: RwCategoryTreeResponse | null;
-  onSelectCategory: (categoryId: string, selected: boolean) => Promise<void>;
+  onSaveCategories: (selectedCategories: string[]) => Promise<void>;
   onSaveSettings: (settings: Partial<RwRuntimeSettings>) => Promise<void>;
-  savingCategory: string | null;
+  savingCategory: boolean;
   savingSettings: boolean;
   settings: RwSettingsResponse | null;
   status: RwStatus;
 }) {
   const queue = status.runtime.queue;
   const runtimeSettings = settings?.settings;
+  const [draftCategoryTree, setDraftCategoryTree] =
+    useState<RwCategoryTreeResponse | null>(categoryTree);
+  const [categoryDirty, setCategoryDirty] = useState(false);
   const [draft, setDraft] = useState<RwRuntimeSettings>({
     deepseek_batch_size: runtimeSettings?.deepseek_batch_size ?? 100,
     deepseek_interval_seconds:
@@ -509,6 +606,31 @@ function BatchStatusView({
     }
     setDraft(runtimeSettings);
   }, [runtimeSettings]);
+
+  useEffect(() => {
+    if (categoryDirty) {
+      return;
+    }
+    setDraftCategoryTree(categoryTree);
+  }, [categoryDirty, categoryTree]);
+
+  const draftSelectedCategories = draftCategoryTree
+    ? collectSelectedCategoryIds(draftCategoryTree.root)
+    : [];
+
+  function toggleDraftCategory(categoryId: string, selected: boolean) {
+    setDraftCategoryTree((current) => {
+      if (!current) {
+        return current;
+      }
+      const nextTree = updateCategoryTreeSelection(current, categoryId, selected);
+      return {
+        ...nextTree,
+        selected_categories: collectSelectedCategoryIds(nextTree.root),
+      };
+    });
+    setCategoryDirty(true);
+  }
 
   return (
     <section className={styles.panel}>
@@ -610,14 +732,32 @@ function BatchStatusView({
       <div className={styles.categorySelector}>
         <div className={styles.selectorHeader}>
           <strong>Keepa 抓取类目</strong>
-          <span>{status.category_tree.selected_count} 个已选</span>
+          <span>
+            草稿 {draftSelectedCategories.length} 个 / 已保存 {status.category_tree.selected_count} 个
+          </span>
         </div>
-        {categoryTree ? (
+        <div className={styles.selectorActions}>
+          <button
+            className={styles.filterButton}
+            disabled={!categoryDirty || savingCategory}
+            onClick={() => {
+              void onSaveCategories(draftSelectedCategories)
+                .then(() => {
+                  setCategoryDirty(false);
+                })
+                .catch(() => undefined);
+            }}
+            type="button"
+          >
+            {savingCategory ? "保存中" : categoryDirty ? "保存类目设置" : "类目已保存"}
+          </button>
+        </div>
+        {draftCategoryTree ? (
           <div className={styles.categoryTree}>
             <CategorySelectionList
-              node={categoryTree.root}
-              onSelectCategory={onSelectCategory}
-              savingCategory={savingCategory}
+              node={draftCategoryTree.root}
+              onToggleCategory={toggleDraftCategory}
+              saving={savingCategory}
             />
           </div>
         ) : (
@@ -641,7 +781,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [savingCategory, setSavingCategory] = useState<string | null>(null);
+  const [savingCategory, setSavingCategory] = useState(false);
   const [savingSettings, setSavingSettings] = useState(false);
   const [deletingRejected, setDeletingRejected] = useState(false);
   const [showDeepseekReport, setShowDeepseekReport] = useState(false);
@@ -778,9 +918,17 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     };
   }, [filters, view]);
 
-  const products = state.products?.items ?? [];
-  const metrics = useMemo(() => productMetrics(products), [products]);
   const readyState = hasCompleteWarehouseState(state) ? state : null;
+  const products = state.products?.items ?? [];
+  const metrics = useMemo(
+    () =>
+      productMetrics(
+        products,
+        readyState?.status.runtime.counts,
+        state.products?.count,
+      ),
+    [products, readyState?.status.runtime.counts, state.products?.count],
+  );
   const categoryLabels = useMemo(
     () => collectCategoryLabels(readyState?.categoryTree?.root ?? null),
     [readyState?.categoryTree?.root],
@@ -803,50 +951,10 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     }
   }
 
-  async function selectCategory(categoryId: string, selected: boolean) {
-    const previous = stateRef.current;
-    setSavingCategory(categoryId);
-    setState((current) => {
-      if (!current.categoryTree) {
-        return current;
-      }
-      const optimisticTree = updateCategoryTreeSelection(
-        current.categoryTree,
-        categoryId,
-        selected,
-      );
-      const selectedCategories = collectSelectedCategoryIds(optimisticTree.root);
-      const updated: WarehouseState = {
-        ...current,
-        categoryTree: {
-          ...optimisticTree,
-          selected_categories: selectedCategories,
-        },
-        settings: current.settings
-          ? {
-              ...current.settings,
-              settings: {
-                ...current.settings.settings,
-                selected_categories: selectedCategories,
-              },
-            }
-          : current.settings,
-        status: current.status
-          ? {
-              ...current.status,
-              category_tree: {
-                ...current.status.category_tree,
-                selected_categories: selectedCategories,
-                selected_count: selectedCategories.length,
-              },
-            }
-          : current.status,
-      };
-      stateRef.current = updated;
-      return updated;
-    });
+  async function saveCategories(selectedCategories: string[]) {
+    setSavingCategory(true);
     try {
-      const response = await selectRwCategory(categoryId, selected);
+      const response = await saveRwCategoryTree(selectedCategories);
       const runnableCategories =
         response.runnable_selected_categories ?? response.selected_categories;
       setState((current) => {
@@ -878,11 +986,10 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       });
       setError(null);
     } catch {
-      setState(previous);
-      stateRef.current = previous;
       setError("Keepa 抓取类目保存失败，现有页面数据已保留。");
+      throw new Error("rw_category_save_failed");
     } finally {
-      setSavingCategory(null);
+      setSavingCategory(false);
     }
   }
 
@@ -1119,7 +1226,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       {view === "batch" ? (
         <BatchStatusView
           categoryTree={readyState.categoryTree}
-          onSelectCategory={selectCategory}
+          onSaveCategories={saveCategories}
           onSaveSettings={saveSettings}
           savingCategory={savingCategory}
           savingSettings={savingSettings}

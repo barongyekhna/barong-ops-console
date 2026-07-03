@@ -64,5 +64,10 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
             "lithium_battery_warning": keepa_data.lithium_battery_warning,
             "margin_source": margin_source,
             "margin_confidence": margin_confidence,
+            "monthly_sales": keepa_data.monthly_sales,
+            "parent_category_name": keepa_data.parent_category_name,
+            "parent_category_rank": keepa_data.parent_category_rank,
+            "subcategory_name": keepa_data.subcategory_name or keepa_data.category,
+            "subcategory_rank": keepa_data.subcategory_rank or keepa_data.bsr,
         },
     )

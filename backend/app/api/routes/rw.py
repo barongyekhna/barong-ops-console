@@ -341,6 +341,7 @@ def rw_products(
     del user
     storage_status = "ok"
     rows: list[dict[str, object]] = []
+    total_count = 0
     order_sql = "ASC" if sort_order == "asc" else "DESC"
     order_column = "skill_score" if sort_by == "skill_score" else "updated_at"
     filters = []
@@ -366,6 +367,17 @@ def rw_products(
             params["state"] = state
     where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
     try:
+        total_row = db.execute(
+            text(
+                f"""
+                SELECT COUNT(*) AS total
+                FROM products_rw
+                {where_sql}
+                """
+            ),
+            params,
+        ).mappings().first()
+        total_count = int(total_row["total"] or 0) if total_row else 0
         result = db.execute(
             text(
                 f"""
@@ -430,7 +442,8 @@ def rw_products(
         storage_status = "products_rw_unavailable"
     return {
         "items": rows,
-        "count": len(rows),
+        "count": total_count,
+        "returned_count": len(rows),
         "mode": "production",
         "organization": R_SERIES_TARGET_ORGANIZATION_NAME,
         "storage_status": storage_status,
@@ -556,6 +569,38 @@ def rw_category_select(
     result["selected_categories"] = selected_categories
     result["runnable_selected_categories"] = runnable_categories
     return result
+
+
+@router.post("/category-tree/save")
+def rw_category_save(
+    payload: dict[str, object] = Body(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    del user
+    raw_categories = payload.get("selected_categories")
+    if not isinstance(raw_categories, list):
+        raise HTTPException(status_code=422, detail="selected_categories required")
+    selected = [
+        str(category_id).strip()
+        for category_id in raw_categories
+        if str(category_id).strip()
+    ]
+    current_tree = apply_selected_categories(load_category_tree(), selected)
+    selected_categories = selected_category_ids(current_tree)
+    runnable_categories = runnable_selected_category_ids(current_tree)
+    try:
+        save_runtime_settings(db, {"selected_categories": selected_categories})
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="rw_category_settings_unavailable",
+        ) from exc
+    current_tree["selected_categories"] = selected_categories
+    current_tree["runnable_selected_categories"] = runnable_categories
+    return current_tree
 
 
 @router.get("/category-rate-plan")

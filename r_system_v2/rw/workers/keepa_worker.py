@@ -7,6 +7,7 @@ import time
 from dataclasses import dataclass, field
 
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
+from r_system_v2.rw.category.category_tree import is_holiday_category_id
 from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
 from r_system_v2.rw.core.models import (
     DeepSeekScreening,
@@ -93,6 +94,7 @@ class KeepaWorker:
         rate_limit_per_min: int = MAX_REQUESTS_PER_MINUTE,
         max_concurrency: int = MAX_REQUESTS_PER_MINUTE,
         enforce_wall_clock_rate: bool = True,
+        category_bestseller_cache: dict[str, dict[str, object]] | None = None,
     ) -> None:
         self.provider = provider
         self.buffer_queue = buffer_queue
@@ -112,6 +114,9 @@ class KeepaWorker:
         self.rate_limit_per_min = self.rate_limiter.rate_limit_per_min
         self.max_concurrency = min(max(1, max_concurrency), self.rate_limit_per_min)
         self.queue: asyncio.Queue[IngestionRecord] = asyncio.Queue()
+        self.category_bestseller_cache = (
+            category_bestseller_cache if category_bestseller_cache is not None else {}
+        )
 
     def enqueue(self, records: list[IngestionRecord]) -> None:
         for record in records:
@@ -184,6 +189,7 @@ class KeepaWorker:
         if record.category_id:
             product.category_id = record.category_id
             product.category_path = [record.category_id, product.category]
+            self._apply_category_bestseller_rank(record.category_id, product)
         if self.deepseek_skill is not None and hasattr(self.deepseek_skill, "translate_title"):
             translation = await asyncio.to_thread(
                 self.deepseek_skill.translate_title,
@@ -199,6 +205,15 @@ class KeepaWorker:
                 else {"source": "deepseek_translation_unavailable"}
             )
         transitions.append(ProductState.ENRICHED.value)
+
+        if is_holiday_category_id(record.category_id):
+            return self._process_holiday_product(
+                record=record,
+                keepa_data=keepa_data,
+                product=product,
+                transitions=transitions,
+                started_at=start,
+            )
 
         rule_evaluation = self.rule_engine.evaluate(product)
         deepseek_screening: DeepSeekScreening | None = None
@@ -239,3 +254,99 @@ class KeepaWorker:
             transitions=transitions,
             latency_ms=round((time.perf_counter() - start) * 1000, 3),
         )
+
+    def _apply_category_bestseller_rank(self, category_id: str, product) -> None:
+        cached = self.category_bestseller_cache.get(category_id)
+        parent_rank = _positive_int_feature(product.features, "parent_category_rank")
+        parent_name = _string_feature(product.features, "parent_category_name")
+        if cached is None and parent_rank is not None:
+            cached = {
+                "rank": parent_rank,
+                "category": parent_name or product.category,
+                "asin": product.asin,
+            }
+            self.category_bestseller_cache[category_id] = cached
+        if cached is None:
+            return
+        product.features["bestseller_parent_rank"] = cached.get("rank")
+        product.features["bestseller_parent_category"] = cached.get("category")
+        product.features["category_bestseller_asin"] = cached.get("asin")
+
+    def _process_holiday_product(
+        self,
+        *,
+        record: IngestionRecord,
+        keepa_data,
+        product,
+        transitions: list[str],
+        started_at: float,
+    ) -> PipelineResult:
+        monthly_sales = _positive_int_feature(product.features, "monthly_sales") or 0
+        score = _holiday_sales_score(monthly_sales=monthly_sales, bsr=product.bsr)
+        product.features["holiday_mode"] = "sales_only"
+        product.features["hard_rule_exempt"] = True
+        product.features["deepseek_mode"] = "skipped_holiday_sales_only"
+        product.features["deepseek_score"] = score
+        product.features["deepseek_verdict"] = "keep" if score >= 75 else "hold" if score >= 60 else "cut"
+        product.features["deepseek_reason"] = "节日产品按销量模式处理，不套用普通硬门规则。"
+        product.features["holiday_sales_score"] = score
+        rule_evaluation = RuleEvaluation(
+            asin=product.asin,
+            decision=RuleDecision.RULE_PASSED,
+            reasons=[],
+            checks={"holiday_sales_only": True},
+        )
+        product.transition_to(ProductState.RULE_PASSED)
+        transitions.append(product.state.value)
+        product.skill_score = score
+        if score >= 60:
+            product.features["score_action"] = "pass"
+            product.transition_to(ProductState.AI1_PASSED)
+        else:
+            product.features["score_action"] = "reject"
+            product.transition_to(ProductState.AI1_REJECTED)
+        transitions.append(product.state.value)
+        return PipelineResult(
+            asin=record.asin,
+            ingestion=record,
+            keepa_data=keepa_data,
+            product=product,
+            rule_evaluation=rule_evaluation,
+            deepseek_screening=None,
+            transitions=transitions,
+            latency_ms=round((time.perf_counter() - started_at) * 1000, 3),
+        )
+
+
+def _positive_int_feature(features: dict[str, object], key: str) -> int | None:
+    value = features.get(key)
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
+
+
+def _string_feature(features: dict[str, object], key: str) -> str | None:
+    value = features.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def _holiday_sales_score(*, monthly_sales: int, bsr: int) -> int:
+    if monthly_sales >= 1_000:
+        return 95
+    if monthly_sales >= 500:
+        return 86
+    if monthly_sales >= 100:
+        return 76
+    if monthly_sales >= 50:
+        return 66
+    if bsr and bsr <= 10_000:
+        return 70
+    if bsr and bsr <= 50_000:
+        return 62
+    return 45
