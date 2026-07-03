@@ -14,6 +14,7 @@ from r_system_v2.rw.core.models import (
     PipelineResult,
     ProductState,
     RuleDecision,
+    utc_now_iso,
 )
 from r_system_v2.rw.core.rule_engine import RuleEngine
 from r_system_v2.rw.processor.feature_extractor import extract_product_features
@@ -183,6 +184,20 @@ class KeepaWorker:
         if record.category_id:
             product.category_id = record.category_id
             product.category_path = [record.category_id, product.category]
+        if self.deepseek_skill is not None and hasattr(self.deepseek_skill, "translate_title"):
+            translation = await asyncio.to_thread(
+                self.deepseek_skill.translate_title,
+                product.title,
+            )
+            if getattr(translation, "title_zh", None):
+                product.title_zh = translation.title_zh
+                product.title_zh_source = translation.source
+                product.title_zh_updated_at = utc_now_iso()
+            product.features["title_translation"] = (
+                translation.to_dict()
+                if hasattr(translation, "to_dict")
+                else {"source": "deepseek_translation_unavailable"}
+            )
         transitions.append(ProductState.ENRICHED.value)
 
         rule_evaluation = self.rule_engine.evaluate(product)
@@ -196,9 +211,14 @@ class KeepaWorker:
                 product.features["deepseek_mode"] = "inline"
                 deepseek_screening = self.deepseek_skill.evaluate(product)
                 product.skill_score = deepseek_screening.score
+                product.features["deepseek_score"] = deepseek_screening.score
+                product.features["deepseek_verdict"] = deepseek_screening.verdict
+                product.features["deepseek_reason"] = deepseek_screening.top_reason
                 if deepseek_screening.passed:
+                    product.features["score_action"] = "pass"
                     product.transition_to(ProductState.AI1_PASSED)
                 else:
+                    product.features["score_action"] = "reject"
                     product.transition_to(ProductState.AI1_REJECTED)
             else:
                 product.features["deepseek_mode"] = "cron_pending"

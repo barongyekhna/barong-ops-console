@@ -8,13 +8,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Callable
 
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
 from r_system_v2.rw.category.category_tree import (
     apply_selected_categories,
     load_category_tree,
-    selected_category_ids,
+    runnable_selected_category_ids,
 )
 from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
 from r_system_v2.rw.core.models import IngestionRecord
@@ -37,7 +38,6 @@ from r_system_v2.rw.storage.pipeline_events import (
     utc_now,
 )
 from r_system_v2.rw.storage.runtime_settings import load_runtime_settings
-from r_system_v2.rw.workers.deepseek_cron import DeepSeekPreFilterCron
 
 
 @dataclass(frozen=True)
@@ -114,18 +114,14 @@ class RwRealtimeEngine:
             else enforce_wall_clock_rate
         )
         self.scheduler = CategoryScheduler()
-        self.deepseek_cron = DeepSeekPreFilterCron(
-            skill=deepseek_skill,
-            interval_seconds=self.deepseek_interval_seconds,
-            batch_size=deepseek_batch_size or _int_env("RW_DEEPSEEK_BATCH_SIZE", 100),
-        )
+        del deepseek_batch_size
         writer = SQLAlchemyBatchWriter(session_factory)
         self.buffer_queue = KeepaBufferQueue(writer=writer.write)
         self.pipeline_runner = PipelineRunner(
             provider=provider,
             buffer_queue=self.buffer_queue,
             deepseek_skill=deepseek_skill,
-            deepseek_inline=False,
+            deepseek_inline=True,
             enforce_wall_clock_rate=enforce,
         )
         self.discovery_cursor = 0
@@ -163,11 +159,7 @@ class RwRealtimeEngine:
                     queue_pending=0,
                     keepa_tokens_left=None,
                     scheduler={},
-                    deepseek={
-                        "due": False,
-                        "processed": 0,
-                        "interval_seconds": self.deepseek_interval_seconds,
-                    },
+                    deepseek=self._deepseek_realtime_report(processed=0),
                     error=str(exc),
                 )
                 self.failed_total += 1
@@ -192,9 +184,10 @@ class RwRealtimeEngine:
             db,
             older_than_seconds=self.loop_interval_seconds * 3,
         )
+        processed_purged = self.scheduler.purge_processed_products(db)
         db.commit()
         if self.keepa_backoff_until and utc_now() < self.keepa_backoff_until:
-            deepseek = self.deepseek_cron.run_due(db).to_dict()
+            deepseek = self._deepseek_realtime_report(processed=0)
             report = RealtimeCycleReport(
                 status="backoff",
                 selected_categories=selected_categories,
@@ -207,6 +200,7 @@ class RwRealtimeEngine:
                     "reason": "keepa_429_backoff",
                     "backoff_until": self.keepa_backoff_until.isoformat(),
                     "stale_released": stale_released,
+                    "processed_purged": processed_purged,
                 },
                 deepseek=deepseek,
                 error="keepa_429_backoff",
@@ -232,7 +226,7 @@ class RwRealtimeEngine:
         try:
             keepa_status = self.provider.status()
         except (KeepaConfigurationError, KeepaResponseError, TimeoutError, OSError) as exc:
-            deepseek = self.deepseek_cron.run_due(db).to_dict()
+            deepseek = self._deepseek_realtime_report(processed=0)
             report = RealtimeCycleReport(
                 status="blocked",
                 selected_categories=selected_categories,
@@ -264,7 +258,7 @@ class RwRealtimeEngine:
             )
             return report
         except Exception as exc:
-            deepseek = self.deepseek_cron.run_due(db).to_dict()
+            deepseek = self._deepseek_realtime_report(processed=0)
             report = RealtimeCycleReport(
                 status="blocked",
                 selected_categories=selected_categories,
@@ -321,6 +315,7 @@ class RwRealtimeEngine:
                 self.keepa_backoff_until = utc_now() + timedelta(
                     seconds=self.keepa_429_backoff_seconds,
                 )
+            score_actions = self._score_actions_for_asins(db, [record.asin for record in records])
             for record in records:
                 status = "failed" if record.asin in pipeline.failed_asins else "stored"
                 emit_pipeline_event(
@@ -329,9 +324,11 @@ class RwRealtimeEngine:
                         asin=record.asin,
                         category_id=record.category_id,
                         event_type="keepa_fetch",
-                        stage="rule_prefilter",
+                        stage="deepseek_realtime" if status == "stored" else "rule_prefilter",
                         status=status,
-                        score_action="pending_review" if status == "stored" else "reject",
+                        score_action=score_actions.get(record.asin)
+                        if status == "stored"
+                        else "reject",
                         message=pipeline.failed_asins.get(record.asin)
                         if status == "failed"
                         else None,
@@ -348,11 +345,12 @@ class RwRealtimeEngine:
             failed = 0
         scheduler_payload = scheduler_report.to_dict()
         scheduler_payload["stale_released"] = stale_released
-        deepseek = self.deepseek_cron.run_due(db).to_dict()
-        self.processed_total += processed + int(deepseek.get("processed", 0))
-        self.failed_total += failed + len(deepseek.get("errors", []))
+        scheduler_payload["processed_purged"] = processed_purged
+        deepseek = self._deepseek_realtime_report(processed=processed)
+        self.processed_total += processed
+        self.failed_total += failed
         queue_pending = self.scheduler.pending_count(db, selected_categories)
-        status = "active" if records or deepseek.get("processed") else "idle"
+        status = "active" if records else "idle"
         report = RealtimeCycleReport(
             status=status,
             selected_categories=selected_categories,
@@ -428,12 +426,12 @@ class RwRealtimeEngine:
                     category_id=category_id,
                     event_type="keepa_discovery",
                     stage="discovery",
-                        status="queued",
-                        payload={
-                            "discovered": len(asins),
-                            "inserted": inserted,
-                            "page": self.discovery_pages.get(category_id, 0),
-                        },
+                    status="queued",
+                    payload={
+                        "discovered": len(asins),
+                        "inserted": inserted,
+                        "page": self.discovery_pages.get(category_id, 0),
+                    },
                 ),
             )
             db.commit()
@@ -468,14 +466,6 @@ class RwRealtimeEngine:
 
     def _reload_runtime_settings(self, db: Session) -> None:
         settings = load_runtime_settings(db)
-        self.deepseek_interval_seconds = settings.deepseek_interval_seconds
-        self.deepseek_cron.interval_seconds = settings.deepseek_interval_seconds
-        self.deepseek_cron.batch_size = settings.deepseek_batch_size
-        self.deepseek_cron.max_runtime_seconds = settings.deepseek_max_runtime_seconds
-        self.deepseek_cron.schedule_enabled = settings.deepseek_schedule_enabled
-        self.deepseek_cron.window_start = settings.deepseek_window_start
-        self.deepseek_cron.window_end = settings.deepseek_window_end
-        self.deepseek_cron.timezone = settings.deepseek_timezone
         self.keepa_batch_size = min(settings.keepa_batch_size, MAX_REQUESTS_PER_MINUTE)
         self.discovery_categories_per_cycle = settings.discovery_categories_per_cycle
         self.keepa_429_backoff_seconds = settings.keepa_429_backoff_seconds
@@ -486,7 +476,37 @@ class RwRealtimeEngine:
             load_category_tree(),
             settings.selected_categories,
         )
-        return _runnable_categories(selected_category_ids(category_tree))
+        return _runnable_categories(runnable_selected_category_ids(category_tree))
+
+    def _deepseek_realtime_report(self, *, processed: int) -> dict[str, object]:
+        return {
+            "mode": "realtime_inline",
+            "controls_execution": False,
+            "schedule_enabled": False,
+            "processed": processed,
+            "translation": "realtime_per_keepa_product",
+            "screening": "realtime_after_rule_pass",
+            "hard_rule_reject_skips_deepseek": True,
+        }
+
+    def _score_actions_for_asins(self, db: Session, asins: list[str]) -> dict[str, str]:
+        if not asins:
+            return {}
+        statement = text(
+            """
+            SELECT asin, state, features
+            FROM products_rw
+            WHERE asin IN :asins
+            """
+        )
+        rows = db.execute(
+            statement.bindparams(bindparam("asins", expanding=True)),
+            {"asins": asins},
+        ).mappings().all()
+        return {
+            str(row["asin"]): _score_action_from_state(str(row["state"]), row.get("features"))
+            for row in rows
+        }
 
 
 def _int_env(name: str, default: int) -> int:
@@ -520,3 +540,13 @@ def _runnable_categories(category_ids: list[str]) -> list[str]:
 
 def _has_keepa_429(errors: dict[str, str]) -> bool:
     return any("429" in message or "Too Many Requests" in message for message in errors.values())
+
+
+def _score_action_from_state(state: str, features: object) -> str:
+    if isinstance(features, dict) and isinstance(features.get("score_action"), str):
+        return str(features["score_action"])
+    if state == "ai1_passed":
+        return "pass"
+    if state in {"ai1_rejected", "rejected"}:
+        return "reject"
+    return "pending_review"

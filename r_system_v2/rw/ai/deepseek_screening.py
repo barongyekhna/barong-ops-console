@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 from r_system_v2.rw.core.models import DeepSeekScreening, NormalizedProduct
@@ -94,6 +97,20 @@ class DeepSeekBatchResult:
         }
 
 
+@dataclass(frozen=True)
+class DeepSeekTitleTranslation:
+    title_zh: str | None
+    source: str
+    error: str | None = None
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {
+            "title_zh": self.title_zh,
+            "source": self.source,
+            "error": self.error,
+        }
+
+
 class DeepSeekScreeningSkill:
     """Rule-based batch processor for the documented DeepSeek AI-1 contract."""
 
@@ -128,6 +145,72 @@ class DeepSeekScreeningSkill:
 
     def api_key_configured(self) -> bool:
         return bool(self.current_api_key())
+
+    def translate_title(self, title: str) -> DeepSeekTitleTranslation:
+        cleaned = " ".join(str(title or "").split())
+        if not cleaned:
+            return DeepSeekTitleTranslation(
+                title_zh=None,
+                source="empty_title",
+                error="empty_title",
+            )
+        api_key = self.current_api_key()
+        if not api_key:
+            return DeepSeekTitleTranslation(
+                title_zh=None,
+                source="deepseek_key_missing",
+                error="deepseek_api_key_missing",
+            )
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+        model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        timeout = _float_env("RW_DEEPSEEK_TRANSLATION_TIMEOUT_SECONDS", 8.0)
+        payload = {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是电商产品标题翻译器。只输出简体中文产品名，"
+                        "不要解释，不要加引号，不要输出品牌判断。"
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"翻译这个 Amazon 产品标题：{cleaned}",
+                },
+            ],
+        }
+        request = Request(
+            f"{base_url}/chat/completions",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=timeout) as response:  # nosec B310 - fixed DeepSeek URL.
+                data = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError) as exc:
+            return DeepSeekTitleTranslation(
+                title_zh=None,
+                source="deepseek_api_error",
+                error=str(exc)[:240],
+            )
+        translated = _extract_translation_text(data)
+        if not translated:
+            return DeepSeekTitleTranslation(
+                title_zh=None,
+                source="deepseek_empty_response",
+                error="deepseek_empty_response",
+            )
+        return DeepSeekTitleTranslation(
+            title_zh=translated,
+            source="deepseek_realtime_title_translation",
+        )
 
     def evaluate(self, product: NormalizedProduct) -> DeepSeekScreening:
         demand_quality = _score_demand_quality(product)
@@ -248,6 +331,35 @@ class DeepSeekScreeningSkill:
         if decoded != payload:
             raise DeepSeekSchemaError("deepseek_json_roundtrip_failed")
         return decoded
+
+
+def _float_env(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        return default
+
+
+def _extract_translation_text(payload: dict[str, Any]) -> str | None:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices:
+        return None
+    first = choices[0]
+    if not isinstance(first, dict):
+        return None
+    message = first.get("message")
+    if not isinstance(message, dict):
+        return None
+    content = message.get("content")
+    if not isinstance(content, str):
+        return None
+    translated = " ".join(content.replace("\n", " ").split()).strip(" '\"“”")
+    if not translated:
+        return None
+    return translated[:160]
 
 
 def _clamp_int(value: float) -> int:

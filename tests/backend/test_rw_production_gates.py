@@ -14,6 +14,7 @@ from r_system_v2.rw.providers.keepa_provider import (
     KeepaConfigurationError,
     KeepaProvider,
     _default_http_get_json,
+    _parse_product_payload,
 )
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
 from r_system_v2.rw.storage.repository import MockWarehouseRepository
@@ -60,6 +61,51 @@ def test_keepa_http_get_json_decodes_gzip_response(monkeypatch):
         {"key": "hidden"},
         3.0,
     ) == {"tokensLeft": 12, "refillIn": 0}
+
+
+def test_keepa_product_parser_uses_stats_for_reviews_sellers_and_rating():
+    product = _parse_product_payload(
+        {
+            "products": [
+                {
+                    "asin": "B012345678",
+                    "title": "Compact Storage Basket",
+                    "brand": "Fixture",
+                    "stats": {
+                        "current": [
+                            -1,
+                            3499,
+                            -1,
+                            4200,
+                            -1,
+                            -1,
+                            -1,
+                            -1,
+                            -1,
+                            -1,
+                            -1,
+                            6,
+                            -1,
+                            -1,
+                            -1,
+                            -1,
+                            46,
+                            318,
+                        ]
+                    },
+                    "imagesCSV": "test-image.jpg",
+                    "categoryTree": [{"name": "Home & Kitchen"}],
+                }
+            ]
+        },
+        asin="B012345678",
+        source_query="test",
+    )
+
+    assert product.reviews == 318
+    assert product.seller_count == 6
+    assert product.rating == 4.6
+    assert product.image_url == "https://images-na.ssl-images-amazon.com/images/I/test-image.jpg"
 
 
 def test_keepa_scheduler_caps_requests_at_twenty_without_burst():

@@ -90,6 +90,7 @@ function stateLabel(value: string) {
     enriched: "已富化",
     rejected: "规则剔除",
     rule_prefilter: "规则预筛",
+    deepseek_realtime: "实时初筛",
     rule_passed: "待初筛",
     discovery: "类目发现",
     deadline: "到时停止",
@@ -161,6 +162,71 @@ function priceTrendLabel(value: string | null) {
   return labels[value] ?? value;
 }
 
+function rejectReasonLabel(value: string | null, features: Record<string, unknown>) {
+  const reasonLabels: Record<string, string> = {
+    brand_dominance_filter: "品牌占比过高",
+    compliance_redline_filter: "命中合规红线",
+    margin_check: "缺少成本或净利率不足",
+    margin_too_low: "净利率低于规则阈值",
+    price_band_filter: "售价不在 25-70 美元区间",
+    price_out_of_band: "售价不在 25-70 美元区间",
+    price_trend_filter: "价格趋势持续下行",
+    price_trend_declining: "价格趋势持续下行",
+    review_wall_filter: "评论壁垒过高",
+    review_wall_too_high: "评论壁垒过高",
+    seller_count_filter: "卖家数量过多",
+    competition_filter: "卖家数量过多",
+    too_many_sellers: "卖家数量过多",
+    brand_dominance: "品牌垄断风险过高",
+    redline_category: "命中合规红线",
+    too_heavy: "重量超过规则阈值",
+    viral_unproven: "疑似短期爆款，缺少稳定需求证明",
+  };
+  if (value) {
+    return value
+      .split(",")
+      .map((item) => reasonLabels[item.trim()] ?? item.trim())
+      .filter(Boolean)
+      .join("；");
+  }
+  const deepseekReason = features.deepseek_reason;
+  if (typeof deepseekReason === "string" && deepseekReason.trim()) {
+    return deepseekReason;
+  }
+  return "暂无详细原因";
+}
+
+function fallbackImageUrl(asin: string) {
+  const cleaned = asin.trim().toUpperCase();
+  if (cleaned.length !== 10) {
+    return null;
+  }
+  return `https://images-na.ssl-images-amazon.com/images/P/${cleaned}.01._SCLZZZZZZZ_.jpg`;
+}
+
+function ProductImage({ product }: { product: RwProduct }) {
+  const fallback = fallbackImageUrl(product.asin);
+  const [src, setSrc] = useState(product.image_url ?? fallback);
+
+  useEffect(() => {
+    setSrc(product.image_url ?? fallback);
+  }, [fallback, product.image_url]);
+
+  if (!src) {
+    return <span>无图</span>;
+  }
+  return (
+    <img
+      alt={product.title_zh ?? product.title}
+      loading="lazy"
+      onError={() => {
+        setSrc((current) => (current !== fallback ? fallback : null));
+      }}
+      src={src}
+    />
+  );
+}
+
 function productMetrics(products: readonly RwProduct[]) {
   const passed = products.filter((product) => product.pipeline_decision === "pass").length;
   const rejected = products.filter((product) => product.pipeline_decision === "reject").length;
@@ -230,14 +296,11 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
               <td>
                 <div className={styles.productCell}>
                   <div className={styles.productPreview}>
-                    {product.image_url ? (
-                      <img alt={product.title} src={product.image_url} />
-                    ) : (
-                      <span>无图</span>
-                    )}
+                    <ProductImage product={product} />
                   </div>
                   <div>
-                    <strong>{product.title}</strong>
+                    <strong>{product.title_zh ?? "中文名翻译中"}</strong>
+                    <span>{product.title}</span>
                     <span>
                       {product.asin} · {product.brand ?? "未知品牌"} · {product.category}
                     </span>
@@ -246,7 +309,9 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
                     </span>
                     <span>
                       {fulfillmentLabel(product.fulfillment_method)}
-                      {product.lithium_battery_warning ? " · 锂电提示" : ""}
+                      {product.lithium_battery_warning ? (
+                        <span className={styles.lithiumTag}>锂电提示</span>
+                      ) : null}
                     </span>
                   </div>
                 </div>
@@ -263,7 +328,16 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
               </td>
               <td>{product.skill_score ?? "待跑"}</td>
               <td>
-                <span className={styles.badge}>
+                <span
+                  className={`${styles.badge} ${
+                    product.pipeline_decision === "reject" ? styles.rejectBadge : ""
+                  }`}
+                  title={
+                    product.pipeline_decision === "reject"
+                      ? rejectReasonLabel(product.rule_reject_reason, product.features)
+                      : undefined
+                  }
+                >
                   {decisionLabel(product.pipeline_decision)}
                 </span>
                 <span className={styles.stateText}>{stateLabel(product.state)}</span>
@@ -306,7 +380,7 @@ function CategorySelectionList({
       <label style={{ paddingLeft: depth * 16 }}>
         <input
           checked={node.selected}
-          disabled={savingCategory !== null}
+          aria-busy={savingCategory === node.id}
           onChange={(event) => {
             void onSelectCategory(node.id, event.target.checked);
           }}
@@ -348,7 +422,7 @@ function PipelineView({ pipeline }: { pipeline: RwPipelineResponse }) {
               <strong>{worker.worker_name}</strong>
               <span>{statusLabel(worker.status)}</span>
               <span>Keepa {worker.loop_interval_seconds} 秒/轮</span>
-              <span>DeepSeek {worker.deepseek_interval_seconds} 秒/轮</span>
+              <span>DeepSeek 实时/条</span>
               <span>队列 {worker.queue_pending}</span>
               <span>{worker.last_heartbeat_at ?? "暂无心跳"}</span>
             </div>
@@ -441,20 +515,14 @@ function BatchStatusView({
       <div className={styles.panelHeader}>
         <div>
           <h2>批次状态</h2>
-          <p>DeepSeek 自动初筛和 Keepa 队列处理统计。</p>
+          <p>DeepSeek 抓取后实时初筛，Keepa 队列持续按类目处理。</p>
         </div>
-        <span className={styles.badge}>自动批处理</span>
+        <span className={styles.badge}>实时初筛</span>
       </div>
       <dl className={styles.statusGrid}>
         <div>
-          <dt>DeepSeek 定时窗口</dt>
-          <dd>
-            {status.deepseek_batch.schedule_enabled
-              ? `${status.deepseek_batch.window_start ?? "--:--"} - ${
-                  status.deepseek_batch.window_end ?? "--:--"
-                } ${status.deepseek_batch.timezone ?? ""}`
-              : "未启用"}
-          </dd>
+          <dt>DeepSeek 模式</dt>
+          <dd>抓取后实时运行</dd>
         </div>
         <div>
           <dt>DeepSeek 已处理</dt>
@@ -482,107 +550,14 @@ function BatchStatusView({
         onSubmit={(event) => {
           event.preventDefault();
           const { selected_categories: _selectedCategories, ...runtimeDraft } = draft;
-          void onSaveSettings(runtimeDraft);
+          void onSaveSettings({
+            discovery_categories_per_cycle: runtimeDraft.discovery_categories_per_cycle,
+            keepa_429_backoff_seconds: runtimeDraft.keepa_429_backoff_seconds,
+            keepa_batch_size: runtimeDraft.keepa_batch_size,
+            deepseek_schedule_enabled: false,
+          });
         }}
       >
-        <label>
-          <span>启用 DeepSeek 定时</span>
-          <input
-            checked={draft.deepseek_schedule_enabled}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                deepseek_schedule_enabled: event.target.checked,
-              }))
-            }
-            type="checkbox"
-          />
-        </label>
-        <label>
-          <span>开始时间</span>
-          <input
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                deepseek_window_start: event.target.value,
-              }))
-            }
-            type="time"
-            value={draft.deepseek_window_start}
-          />
-        </label>
-        <label>
-          <span>结束时间</span>
-          <input
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                deepseek_window_end: event.target.value,
-              }))
-            }
-            type="time"
-            value={draft.deepseek_window_end}
-          />
-        </label>
-        <label>
-          <span>时区</span>
-          <select
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                deepseek_timezone: event.target.value,
-              }))
-            }
-            value={draft.deepseek_timezone}
-          >
-            <option value="Asia/Shanghai">北京时间</option>
-            <option value="UTC">UTC</option>
-          </select>
-        </label>
-        <label>
-          <span>窗口内重试间隔秒数</span>
-          <input
-            min={60}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                deepseek_interval_seconds: Number(event.target.value),
-              }))
-            }
-            step={60}
-            type="number"
-            value={draft.deepseek_interval_seconds}
-          />
-        </label>
-        <label>
-          <span>DeepSeek 每批数量</span>
-          <input
-            min={1}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                deepseek_batch_size: Number(event.target.value),
-              }))
-            }
-            type="number"
-            value={draft.deepseek_batch_size}
-          />
-        </label>
-        <label>
-          <span>单次最长运行秒数</span>
-          <input
-            min={10}
-            onChange={(event) =>
-              setDraft((current) => ({
-                ...current,
-                deepseek_max_runtime_seconds: Number(event.target.value),
-              }))
-            }
-            step={10}
-            type="number"
-            value={draft.deepseek_max_runtime_seconds}
-          />
-        </label>
         <label>
           <span>Keepa 每轮产品数</span>
           <input
@@ -596,6 +571,21 @@ function BatchStatusView({
             }
             type="number"
             value={draft.keepa_batch_size}
+          />
+        </label>
+        <label>
+          <span>每轮发现类目数</span>
+          <input
+            max={20}
+            min={1}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                discovery_categories_per_cycle: Number(event.target.value),
+              }))
+            }
+            type="number"
+            value={draft.discovery_categories_per_cycle}
           />
         </label>
         <label>
@@ -693,6 +683,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
         setRefreshing(true);
       }
       try {
+        const currentState = stateRef.current;
         const requests: Array<[
           RwEndpointKey,
           Promise<WarehouseState[RwEndpointKey]>,
@@ -708,11 +699,22 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               sort_order: filters.sort_order,
             }),
           ],
-          ["rules", getRwRules()],
           ["pipeline", getRwPipeline()],
-          ["settings", getRwSettings()],
-          ["categoryTree", getRwCategoryTree()],
         ];
+        if (firstLoad || view === "rules" || !currentState.rules) {
+          requests.push(["rules", getRwRules()]);
+        }
+        if (firstLoad || view === "batch" || !currentState.settings) {
+          requests.push(["settings", getRwSettings()]);
+        }
+        if (
+          firstLoad ||
+          view === "batch" ||
+          view === "products" ||
+          !currentState.categoryTree
+        ) {
+          requests.push(["categoryTree", getRwCategoryTree()]);
+        }
         const results = await Promise.allSettled(
           requests.map(([, request]) => request),
         );
@@ -774,7 +776,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [filters]);
+  }, [filters, view]);
 
   const products = state.products?.items ?? [];
   const metrics = useMemo(() => productMetrics(products), [products]);
@@ -795,16 +797,58 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       });
       setError(null);
     } catch {
-      setError("DeepSeek 定时设置保存失败，现有页面数据已保留。");
+      setError("R-W 运行设置保存失败，现有页面数据已保留。");
     } finally {
       setSavingSettings(false);
     }
   }
 
   async function selectCategory(categoryId: string, selected: boolean) {
+    const previous = stateRef.current;
     setSavingCategory(categoryId);
+    setState((current) => {
+      if (!current.categoryTree) {
+        return current;
+      }
+      const optimisticTree = updateCategoryTreeSelection(
+        current.categoryTree,
+        categoryId,
+        selected,
+      );
+      const selectedCategories = collectSelectedCategoryIds(optimisticTree.root);
+      const updated: WarehouseState = {
+        ...current,
+        categoryTree: {
+          ...optimisticTree,
+          selected_categories: selectedCategories,
+        },
+        settings: current.settings
+          ? {
+              ...current.settings,
+              settings: {
+                ...current.settings.settings,
+                selected_categories: selectedCategories,
+              },
+            }
+          : current.settings,
+        status: current.status
+          ? {
+              ...current.status,
+              category_tree: {
+                ...current.status.category_tree,
+                selected_categories: selectedCategories,
+                selected_count: selectedCategories.length,
+              },
+            }
+          : current.status,
+      };
+      stateRef.current = updated;
+      return updated;
+    });
     try {
       const response = await selectRwCategory(categoryId, selected);
+      const runnableCategories =
+        response.runnable_selected_categories ?? response.selected_categories;
       setState((current) => {
         const updated: WarehouseState = {
           ...current,
@@ -823,8 +867,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
                 ...current.status,
                 category_tree: {
                   ...current.status.category_tree,
-                  selected_categories: response.selected_categories,
-                  selected_count: response.selected_categories.length,
+                  selected_categories: runnableCategories,
+                  selected_count: runnableCategories.length,
                 },
               }
             : current.status,
@@ -834,6 +878,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       });
       setError(null);
     } catch {
+      setState(previous);
+      stateRef.current = previous;
       setError("Keepa 抓取类目保存失败，现有页面数据已保留。");
     } finally {
       setSavingCategory(null);
@@ -894,8 +940,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             <strong>DeepSeek 今日初筛报告</strong>
             <dl className={styles.popupStats}>
               <div>
-                <dt>运行间隔</dt>
-                <dd>{readyState.status.deepseek_batch.run_time_range}</dd>
+                <dt>运行模式</dt>
+                <dd>抓取后实时初筛</dd>
               </div>
               <div>
                 <dt>已处理</dt>
@@ -1132,4 +1178,51 @@ function collectCategoryLabels(root: RwCategoryNode | null) {
     visit(root);
   }
   return labels;
+}
+
+function collectSelectedCategoryIds(root: RwCategoryNode) {
+  const selected: string[] = [];
+  function visit(node: RwCategoryNode) {
+    if (node.selected) {
+      selected.push(node.id);
+    }
+    node.children.forEach(visit);
+  }
+  visit(root);
+  return selected;
+}
+
+function updateCategoryTreeSelection(
+  tree: RwCategoryTreeResponse,
+  categoryId: string,
+  selected: boolean,
+): RwCategoryTreeResponse {
+  return {
+    ...tree,
+    root: updateCategoryNodeSelection(tree.root, categoryId, selected),
+  };
+}
+
+function updateCategoryNodeSelection(
+  node: RwCategoryNode,
+  categoryId: string,
+  selected: boolean,
+): RwCategoryNode {
+  if (node.id === categoryId) {
+    return setCategorySubtree(node, selected);
+  }
+  return {
+    ...node,
+    children: node.children.map((child) =>
+      updateCategoryNodeSelection(child, categoryId, selected),
+    ),
+  };
+}
+
+function setCategorySubtree(node: RwCategoryNode, selected: boolean): RwCategoryNode {
+  return {
+    ...node,
+    selected,
+    children: node.children.map((child) => setCategorySubtree(child, selected)),
+  };
 }

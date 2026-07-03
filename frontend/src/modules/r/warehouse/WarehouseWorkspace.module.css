@@ -208,7 +208,7 @@
 
 .filters {
   display: grid;
-  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.7fr) minmax(130px, 0.45fr) auto;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 10px;
   align-items: center;
 }
@@ -309,6 +309,28 @@
   border-radius: 5px;
   font-size: 0.7rem;
   font-weight: 780;
+}
+
+.rejectBadge {
+  color: #991b1b;
+  background: #fee2e2;
+  border-color: rgb(220 38 38 / 28%);
+  cursor: help;
+}
+
+.lithiumTag {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  margin-left: 6px;
+  padding: 2px 6px;
+  color: #ffffff !important;
+  background: #dc2626;
+  border: 1px solid #b91c1c;
+  border-radius: 5px;
+  font-size: 0.68rem;
+  font-weight: 860;
+  line-height: 1.2;
 }
 
 .stateText {

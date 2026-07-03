@@ -462,7 +462,7 @@ def _image_url_from_product(product: dict[str, Any], *, asin: str | None = None)
         return _fallback_image_url(str(product.get("asin") or asin or ""))
     image_name = images_csv.split(",", 1)[0].strip()
     if not image_name:
-        return None
+        return _fallback_image_url(str(product.get("asin") or asin or ""))
     if image_name.startswith(("http://", "https://")):
         return image_name
     return f"https://images-na.ssl-images-amazon.com/images/I/{image_name}"
@@ -498,6 +498,8 @@ def _parse_product_payload(
         reviews = _int_from_payload({"value": _stats_current(product, 17)}, "value", default=0)
 
     seller_count = _int_from_payload(product, "offerCount", "sellerCount", default=0)
+    if seller_count == 0:
+        seller_count = _int_from_payload({"value": _stats_current(product, 11)}, "value", default=0)
     brand_share = float(product.get("brandShare", 0) or 0)
     title = str(product.get("title") or source_query or asin)
     brand = str(product.get("brand") or "Unknown")
@@ -518,7 +520,7 @@ def _parse_product_payload(
         brand_share=brand_share,
         price_trend=str(product.get("priceTrend") or "unknown"),
         marketplace="US",
-        rating=None,
+        rating=_rating_from_product(product),
         image_url=_image_url_from_product(product, asin=parsed_asin),
         fulfillment_method=fulfillment_method,
         lithium_battery_warning=lithium_warning,
@@ -543,6 +545,22 @@ def _fulfillment_method(product: dict[str, Any]) -> str | None:
             return "FBA" if value else "FBM"
         if isinstance(value, (int, float)) and value in {0, 1}:
             return "FBA" if int(value) == 1 else "FBM"
+    return None
+
+
+def _rating_from_product(product: dict[str, Any]) -> float | None:
+    raw_rating = product.get("rating") or product.get("reviewsRating")
+    if isinstance(raw_rating, str):
+        try:
+            raw_rating = float(raw_rating)
+        except ValueError:
+            raw_rating = None
+    if isinstance(raw_rating, (int, float)) and raw_rating > 0:
+        rating = float(raw_rating)
+        return round(rating / 10 if rating > 5 else rating, 1)
+    stats_rating = _stats_current(product, 16)
+    if isinstance(stats_rating, (int, float)) and stats_rating > 0:
+        return round(float(stats_rating) / 10 if stats_rating > 5 else float(stats_rating), 1)
     return None
 
 

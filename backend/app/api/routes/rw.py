@@ -17,6 +17,7 @@ from ..deps import get_current_user
 from r_system_v2.rw.category.category_tree import (
     apply_selected_categories,
     load_category_tree,
+    runnable_selected_category_ids,
     select_category_in_payload,
     selected_category_ids,
 )
@@ -171,19 +172,19 @@ def _deepseek_batch_status(db: Session) -> dict[str, object]:
     else:
         run_time_range = "暂无已完成批次"
     return {
-        "mode": "batch_processor_only",
+        "mode": "realtime_inline",
         "controls_execution": False,
         "run_time_range": run_time_range,
         "total_processed": total_processed,
         "pass_count": pass_count,
         "fail_count": fail_count,
         "deleted_count": 0,
-        "interval_seconds": settings.deepseek_interval_seconds,
-        "batch_size": settings.deepseek_batch_size,
-        "max_runtime_seconds": settings.deepseek_max_runtime_seconds,
-        "schedule_enabled": settings.deepseek_schedule_enabled,
-        "window_start": settings.deepseek_window_start,
-        "window_end": settings.deepseek_window_end,
+        "interval_seconds": 0,
+        "batch_size": 1,
+        "max_runtime_seconds": 0,
+        "schedule_enabled": False,
+        "window_start": None,
+        "window_end": None,
         "timezone": settings.deepseek_timezone,
         "stopped_by_deadline": False,
     }
@@ -238,7 +239,7 @@ def rw_status(
         load_category_tree(),
         settings.selected_categories,
     )
-    selected_categories = selected_category_ids(category_tree)
+    selected_categories = runnable_selected_category_ids(category_tree)
     runtime = runtime_overview(db, event_limit=10)
     return {
         "module": "R-W",
@@ -345,7 +346,10 @@ def rw_products(
     filters = []
     params: dict[str, object] = {}
     if q:
-        filters.append("(LOWER(title) LIKE :q OR LOWER(asin) LIKE :q OR LOWER(category) LIKE :q)")
+        filters.append(
+            "(LOWER(title) LIKE :q OR LOWER(COALESCE(title_zh, '')) LIKE :q "
+            "OR LOWER(asin) LIKE :q OR LOWER(category) LIKE :q)"
+        )
         params["q"] = f"%{q.strip().lower()}%"
     if category_id:
         filters.append("category_id = :category_id")
@@ -365,7 +369,8 @@ def rw_products(
         result = db.execute(
             text(
                 f"""
-                SELECT asin, marketplace, source_query, title, image_url, brand,
+                SELECT asin, marketplace, source_query, title, title_zh,
+                       title_zh_source, title_zh_updated_at, image_url, brand,
                        category, price, bsr, reviews, seller_count, landed_cost,
                        est_net_margin, margin_source, margin_confidence,
                        fulfillment_method, lithium_battery_warning,
@@ -386,6 +391,11 @@ def rw_products(
                 "marketplace": row.marketplace,
                 "source_query": row.source_query,
                 "title": row.title,
+                "title_zh": row.title_zh,
+                "title_zh_source": row.title_zh_source,
+                "title_zh_updated_at": str(row.title_zh_updated_at)
+                if row.title_zh_updated_at
+                else None,
                 "image_url": row.image_url,
                 "brand": row.brand,
                 "category": row.category,
@@ -511,6 +521,7 @@ def rw_category_tree(
         settings.selected_categories,
     )
     payload["selected_categories"] = selected_category_ids(payload)
+    payload["runnable_selected_categories"] = runnable_selected_category_ids(payload)
     return payload
 
 
@@ -532,6 +543,7 @@ def rw_category_select(
     )
     result = select_category_in_payload(current_tree, category_id, selected)
     selected_categories = selected_category_ids(result)
+    runnable_categories = runnable_selected_category_ids(result)
     try:
         save_runtime_settings(db, {"selected_categories": selected_categories})
         db.commit()
@@ -542,6 +554,7 @@ def rw_category_select(
             detail="rw_category_settings_unavailable",
         ) from exc
     result["selected_categories"] = selected_categories
+    result["runnable_selected_categories"] = runnable_categories
     return result
 
 
@@ -557,7 +570,7 @@ def rw_category_rate_plan(
         load_category_tree(),
         settings.selected_categories,
     )
-    categories = selected_category_ids(payload)
+    categories = runnable_selected_category_ids(payload)
     return CategoryRateLimiter().plan(categories, window_minutes).to_dict()
 
 

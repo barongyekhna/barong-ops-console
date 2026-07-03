@@ -46,6 +46,19 @@ class CategoryScheduler:
         rows = self._pending_rows(db, selected_categories, limit=10_000)
         return len(rows)
 
+    def purge_processed_products(self, db: Session) -> int:
+        result = db.execute(
+            text(
+                """
+                DELETE FROM enrich_queue
+                WHERE EXISTS (
+                  SELECT 1 FROM products_rw p WHERE p.asin = enrich_queue.asin
+                )
+                """
+            )
+        )
+        return int(result.rowcount or 0)
+
     def release_stale_picks(self, db: Session, *, older_than_seconds: int) -> int:
         if db.get_bind().dialect.name == "postgresql":
             result = db.execute(
@@ -116,6 +129,12 @@ class CategoryScheduler:
     ) -> int:
         inserted = 0
         for asin in asins:
+            processed = db.execute(
+                text("SELECT 1 FROM products_rw WHERE asin = :asin LIMIT 1"),
+                {"asin": asin},
+            ).first()
+            if processed:
+                continue
             result = db.execute(
                 text(
                     """
@@ -153,9 +172,12 @@ class CategoryScheduler:
             statement = text(
                 """
                 SELECT asin, marketplace, source_query, category_id
-                FROM enrich_queue
+                FROM enrich_queue q
                 WHERE picked = false
                   AND (category_id IN :categories OR category_id IS NULL)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM products_rw p WHERE p.asin = q.asin
+                  )
                 ORDER BY enqueued_at ASC, asin ASC
                 LIMIT :limit
                 """
@@ -165,8 +187,11 @@ class CategoryScheduler:
             statement = text(
                 """
                 SELECT asin, marketplace, source_query, category_id
-                FROM enrich_queue
+                FROM enrich_queue q
                 WHERE picked = false
+                  AND NOT EXISTS (
+                    SELECT 1 FROM products_rw p WHERE p.asin = q.asin
+                  )
                 ORDER BY enqueued_at ASC, asin ASC
                 LIMIT :limit
                 """
@@ -198,6 +223,9 @@ class CategoryScheduler:
                 seen.add(str(row["asin"]))
 
         categories = [allocation.category_id for allocation in distribution.allocations]
+        for category_id in grouped:
+            if category_id not in categories:
+                categories.append(category_id)
         if "未分类" in grouped and "未分类" not in categories:
             categories.append("未分类")
         while len(chosen) < requested_tokens and categories:

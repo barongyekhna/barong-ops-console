@@ -85,6 +85,9 @@ class NormalizedProduct:
     brand_share: float
     price_trend: str
     rating: float | None
+    title_zh: str | None = None
+    title_zh_source: str | None = None
+    title_zh_updated_at: str | None = None
     image_url: str | None = None
     fulfillment_method: str | None = None
     lithium_battery_warning: bool = False

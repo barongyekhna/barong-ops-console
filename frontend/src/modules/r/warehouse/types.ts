@@ -29,7 +29,7 @@ export type RwStatus = {
     path: string;
   };
   deepseek_batch: {
-    mode: "batch_processor_only";
+    mode: "batch_processor_only" | "realtime_inline";
     controls_execution: boolean;
     run_time_range: string;
     total_processed: number;
@@ -40,8 +40,8 @@ export type RwStatus = {
     batch_size?: number;
     max_runtime_seconds?: number;
     schedule_enabled?: boolean;
-    window_start?: string;
-    window_end?: string;
+    window_start?: string | null;
+    window_end?: string | null;
     timezone?: string;
     stopped_by_deadline?: boolean;
   };
@@ -57,6 +57,9 @@ export type RwProduct = {
   marketplace: string;
   source_query: string | null;
   title: string;
+  title_zh: string | null;
+  title_zh_source: string | null;
+  title_zh_updated_at: string | null;
   image_url: string | null;
   brand: string | null;
   category: string;
@@ -204,4 +207,5 @@ export type RwCategoryTreeResponse = {
   redline_terms?: string[];
   root: RwCategoryNode;
   selected_categories: string[];
+  runnable_selected_categories?: string[];
 };

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from sqlalchemy import create_engine, text
+from sqlalchemy.orm import sessionmaker
+
 from r_system_v2.rw.category.category_tree import (
     generate_category_tree_from_amazon_doc,
+    runnable_selected_category_ids,
     select_category,
     selected_category_ids,
 )
@@ -11,6 +15,7 @@ from r_system_v2.rw.core.warehouse_engine import WarehouseEngine
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
 from r_system_v2.rw.providers.keepa_provider import KeepaProvider
 from r_system_v2.rw.scheduler.category_rate_limiter import CategoryRateLimiter
+from r_system_v2.rw.scheduler.category_scheduler import CategoryScheduler
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
 from r_system_v2.rw.skill_metadata import load_deepseek_skill_metadata
 from r_system_v2.rw.storage.repository import MockWarehouseRepository
@@ -22,17 +27,19 @@ def test_category_tree_parent_cascades_but_child_selection_is_local(tmp_path):
     doc_path.write_text("避开: 锂电 / restricted / IP / 易碎", encoding="utf-8")
 
     generate_category_tree_from_amazon_doc(doc_path=doc_path, output_path=tree_path)
-    parent_off = select_category("home-kitchen", False, path=tree_path)
-    assert "home-kitchen" not in selected_category_ids(parent_off)
-    assert "home-draft-proofing" not in selected_category_ids(parent_off)
+    parent_off = select_category("1055398", False, path=tree_path)
+    assert "1055398" not in selected_category_ids(parent_off)
+    assert "13679381" not in selected_category_ids(parent_off)
 
-    parent_on = select_category("home-kitchen", True, path=tree_path)
-    assert "home-kitchen" in selected_category_ids(parent_on)
-    assert "home-draft-proofing" in selected_category_ids(parent_on)
+    parent_on = select_category("1055398", True, path=tree_path)
+    assert "1055398" in selected_category_ids(parent_on)
+    assert "13679381" in selected_category_ids(parent_on)
+    assert "1055398" not in runnable_selected_category_ids(parent_on)
+    assert "13679381" in runnable_selected_category_ids(parent_on)
 
-    child_off = select_category("office-organization", False, path=tree_path)
-    assert "office-products" in selected_category_ids(child_off)
-    assert "office-organization" not in selected_category_ids(child_off)
+    child_off = select_category("172574", False, path=tree_path)
+    assert "1064954" in selected_category_ids(child_off)
+    assert "172574" not in selected_category_ids(child_off)
 
 
 def test_category_rate_limiter_balances_twenty_categories_for_ten_minutes():
@@ -68,6 +75,104 @@ def test_keepa_scheduler_enqueues_records_by_category_allocation():
     assert len(scheduler.queue) == 20
     assert sum(1 for record in scheduler.queue if record.category_id == "home-kitchen") == 10
     assert sum(1 for record in scheduler.queue if record.category_id == "office-products") == 10
+
+
+def test_category_scheduler_never_claims_processed_asins():
+    engine = create_engine("sqlite:///:memory:")
+    session_factory = sessionmaker(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE products_rw (asin TEXT PRIMARY KEY)"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE enrich_queue (
+                  asin TEXT PRIMARY KEY,
+                  marketplace TEXT,
+                  source_query TEXT,
+                  category_id TEXT,
+                  category_path TEXT,
+                  picked BOOLEAN,
+                  retry_count INTEGER,
+                  last_error TEXT,
+                  enqueued_at TEXT,
+                  picked_at TEXT
+                )
+                """
+            )
+        )
+    scheduler = CategoryScheduler()
+    with session_factory() as db:
+        db.execute(text("INSERT INTO products_rw (asin) VALUES ('B0DONE0001')"))
+        inserted = scheduler.enqueue_discovered(
+            db,
+            category_id="1055398",
+            asins=["B0DONE0001", "B0NEW00001"],
+        )
+        db.execute(
+            text(
+                """
+                INSERT INTO enrich_queue (
+                  asin, marketplace, source_query, category_id,
+                  category_path, picked, retry_count, enqueued_at
+                )
+                VALUES (
+                  'B0DONE0002', 'US', 'keepa_category:1055398', '1055398',
+                  '1055398', false, 0, CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        db.execute(text("INSERT INTO products_rw (asin) VALUES ('B0DONE0002')"))
+        records, report = scheduler.claim(
+            db,
+            selected_categories=["1055398"],
+            requested_tokens=20,
+        )
+
+    assert inserted == 1
+    assert [record.asin for record in records] == ["B0NEW00001"]
+    assert report.claimed == 1
+
+
+def test_category_scheduler_fills_unused_tokens_from_other_selected_queues():
+    engine = create_engine("sqlite:///:memory:")
+    session_factory = sessionmaker(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE products_rw (asin TEXT PRIMARY KEY)"))
+        connection.execute(
+            text(
+                """
+                CREATE TABLE enrich_queue (
+                  asin TEXT PRIMARY KEY,
+                  marketplace TEXT,
+                  source_query TEXT,
+                  category_id TEXT,
+                  category_path TEXT,
+                  picked BOOLEAN,
+                  retry_count INTEGER,
+                  last_error TEXT,
+                  enqueued_at TEXT,
+                  picked_at TEXT
+                )
+                """
+            )
+        )
+    scheduler = CategoryScheduler()
+    selected_categories = [f"cat-{index:02d}" for index in range(40)]
+    with session_factory() as db:
+        scheduler.enqueue_discovered(
+            db,
+            category_id="cat-39",
+            asins=["B0FILL0001", "B0FILL0002"],
+        )
+        records, report = scheduler.claim(
+            db,
+            selected_categories=selected_categories,
+            requested_tokens=20,
+        )
+
+    assert [record.asin for record in records] == ["B0FILL0001", "B0FILL0002"]
+    assert report.claimed == 2
 
 
 def test_deepseek_batch_processor_has_no_scheduling_authority():
@@ -118,4 +223,4 @@ def test_deepseek_skill_metadata_reads_version_from_skill_doc(tmp_path):
     metadata = load_deepseek_skill_metadata(skill_path)
     assert metadata["installed"] is True
     assert metadata["version"] == "v1"
-    assert metadata["label"] == "已安装 DeepSeek 初筛 Skill v1"
+    assert metadata["label"] == "已安装 DeepSeek 初筛技能 v1"
