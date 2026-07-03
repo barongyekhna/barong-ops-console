@@ -16,10 +16,12 @@ from r_system_v2.rw.core.rule_engine import RuleEngine
 from r_system_v2.rw.core.warehouse_engine import WarehouseEngine
 from r_system_v2.rw.providers.keepa_provider import (
     MAX_REQUESTS_PER_MINUTE,
+    MIN_PRODUCT_FINDER_PER_PAGE,
     MOCK_MODE,
     USE_REAL_KEEPA_API,
     KeepaConfigurationError,
     KeepaProvider,
+    KeepaResponseError,
     _default_http_get_json,
     _parse_product_payload,
 )
@@ -156,6 +158,27 @@ def test_keepa_product_parser_uses_avg90_and_bsr_features_when_current_missing()
     assert product.subcategory_rank == 4400
 
 
+def test_keepa_product_parser_ignores_monthly_sales_history_timestamps():
+    product = _parse_product_payload(
+        {
+            "products": [
+                {
+                    "asin": "B012345678",
+                    "title": "Compact Storage Basket",
+                    "brand": "Fixture",
+                    "stats": {"current": [-1, 3499, -1, 4200]},
+                    "monthlySoldHistory": [7_900_000, 120, 7_900_120, 300],
+                    "categoryTree": [{"name": "Home & Kitchen"}],
+                }
+            ]
+        },
+        asin="B012345678",
+        source_query="test",
+    )
+
+    assert product.monthly_sales == 300
+
+
 def test_keepa_discovery_pushes_hard_rules_into_product_finder_selection():
     captured_selection: dict[str, object] = {}
 
@@ -172,25 +195,24 @@ def test_keepa_discovery_pushes_hard_rules_into_product_finder_selection():
     assert captured_selection["current_NEW_lte"] == 7000
     assert captured_selection["current_COUNT_NEW_lte"] == 15
     assert captured_selection["current_COUNT_REVIEWS_lte"] == 500
+    assert captured_selection["perPage"] == MIN_PRODUCT_FINDER_PER_PAGE
 
 
-def test_keepa_discovery_uses_bestseller_fallback_only_after_filtered_query_fails():
+def test_keepa_discovery_does_not_use_unfiltered_bestseller_fallback():
     called_urls: list[str] = []
 
     def fake_http_get_json(url, params, timeout):
         del params, timeout
         called_urls.append(url)
-        if url.endswith("/query"):
-            raise RuntimeError("query failed")
-        return {"bestSellersList": ["B087654321"]}
+        raise RuntimeError("query failed")
 
     provider = KeepaProvider(api_key="test-key", http_get_json=fake_http_get_json)
 
-    assert provider.discover_asins(category_id="1055398", limit=20) == ["B087654321"]
+    with pytest.raises(KeepaResponseError):
+        provider.discover_asins(category_id="1055398", limit=20)
     assert [url.rsplit("/", 1)[-1] for url in called_urls] == [
         "query",
         "query",
-        "bestsellers",
     ]
 
 
@@ -212,6 +234,7 @@ def test_holiday_categories_are_runnable_and_use_sales_only_discovery():
     assert provider.discover_asins(category_id="holiday-christmas", limit=20) == ["B087654321"]
     assert "title" in captured_selection
     assert "current_NEW_gte" not in captured_selection
+    assert captured_selection["perPage"] == MIN_PRODUCT_FINDER_PER_PAGE
 
 
 def test_keepa_scheduler_caps_requests_at_twenty_without_burst():

@@ -334,7 +334,7 @@ class RwRealtimeEngine:
                     seconds=self.keepa_429_backoff_seconds,
                 )
                 self.adaptive_fetch_cap = max(1, min(self.adaptive_fetch_cap, max(1, requested // 2)))
-            elif failed == 0 and processed > 0:
+            elif pipeline.failed == 0 and pipeline.processed > 0:
                 self.adaptive_fetch_cap = min(
                     self.keepa_batch_size,
                     self.adaptive_fetch_cap + 1,

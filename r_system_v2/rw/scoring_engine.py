@@ -44,7 +44,7 @@ class ScoringEngine:
     def score_deepseek(self, screening: DeepSeekScreening) -> ScoreDecision:
         if screening.verdict == "cut" or screening.score < 60:
             return ScoreDecision(
-                action="reject",
+                action="pending_review",
                 score=screening.score,
                 reason=screening.top_reason,
             )

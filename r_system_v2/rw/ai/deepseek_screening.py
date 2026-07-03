@@ -432,9 +432,7 @@ def _score_margin(est_net_margin: float | None) -> int:
 def _verdict_for_score(score: int) -> str:
     if score >= 82:
         return "keep"
-    if score >= DEEPSEEK_PASS_SCORE:
-        return "hold"
-    return "cut"
+    return "hold"
 
 
 def _channel_for_product(product: NormalizedProduct) -> str:
@@ -461,8 +459,8 @@ def _top_reason(product: NormalizedProduct, score: int) -> str:
             f"评论 {product.reviews}，满足最低初筛线，但仍需人工复核，{margin_label}。"
         )
     return (
-        f"剔除：BSR {product.bsr}、月销量 {monthly_sales}、卖家 {product.seller_count}、"
-        f"评论 {product.reviews} 的组合不适合中小卖家首轮切入，{margin_label}。"
+        f"低分待复核：BSR {product.bsr}、月销量 {monthly_sales}、卖家 {product.seller_count}、"
+        f"评论 {product.reviews} 的组合存在中小卖家切入风险，{margin_label}。"
     )
 
 

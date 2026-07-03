@@ -229,12 +229,10 @@ class KeepaWorker:
                 product.features["deepseek_score"] = deepseek_screening.score
                 product.features["deepseek_verdict"] = deepseek_screening.verdict
                 product.features["deepseek_reason"] = deepseek_screening.top_reason
-                if deepseek_screening.passed:
-                    product.features["score_action"] = "pass"
-                    product.transition_to(ProductState.AI1_PASSED)
-                else:
-                    product.features["score_action"] = "reject"
-                    product.transition_to(ProductState.AI1_REJECTED)
+                product.features["score_action"] = "pending_review"
+                product.features["score_reason"] = deepseek_screening.top_reason
+                product.features["ra_review_required"] = True
+                product.transition_to(ProductState.AI1_PASSED)
             else:
                 product.features["deepseek_mode"] = "cron_pending"
                 product.features["score_action"] = "pending_review"
@@ -287,7 +285,7 @@ class KeepaWorker:
         product.features["hard_rule_exempt"] = True
         product.features["deepseek_mode"] = "skipped_holiday_sales_only"
         product.features["deepseek_score"] = score
-        product.features["deepseek_verdict"] = "keep" if score >= 75 else "hold" if score >= 60 else "cut"
+        product.features["deepseek_verdict"] = "keep" if score >= 75 else "hold"
         product.features["deepseek_reason"] = "节日产品按销量模式处理，不套用普通硬门规则。"
         product.features["holiday_sales_score"] = score
         rule_evaluation = RuleEvaluation(
@@ -299,12 +297,10 @@ class KeepaWorker:
         product.transition_to(ProductState.RULE_PASSED)
         transitions.append(product.state.value)
         product.skill_score = score
-        if score >= 60:
-            product.features["score_action"] = "pass"
-            product.transition_to(ProductState.AI1_PASSED)
-        else:
-            product.features["score_action"] = "reject"
-            product.transition_to(ProductState.AI1_REJECTED)
+        product.features["score_action"] = "pending_review"
+        product.features["score_reason"] = product.features["deepseek_reason"]
+        product.features["ra_review_required"] = True
+        product.transition_to(ProductState.AI1_PASSED)
         transitions.append(product.state.value)
         return PipelineResult(
             asin=record.asin,

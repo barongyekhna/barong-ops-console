@@ -27,6 +27,7 @@ NO_BURST_MODE = True
 QUEUE_BASED_INGESTION_REQUIRED = True
 DEFAULT_KEEPA_BASE_URL = "https://api.keepa.com"
 DEFAULT_KEEPA_DOMAIN = 1
+MIN_PRODUCT_FINDER_PER_PAGE = 50
 DEFAULT_CATEGORY_ID_MAP = {
     "home-kitchen": 1055398,
     "home-draft-proofing": 1055398,
@@ -219,7 +220,7 @@ class KeepaProvider:
             "current_SALES_lte": 50000,
             "current_COUNT_NEW_lte": 15,
             "current_COUNT_REVIEWS_lte": 500,
-            "perPage": max(1, min(limit, MAX_REQUESTS_PER_MINUTE)),
+            "perPage": MIN_PRODUCT_FINDER_PER_PAGE,
             "page": max(0, int(page)),
             "sort": [["current_SALES", "asc"]],
         }
@@ -296,7 +297,7 @@ class KeepaProvider:
             "title": term,
             "current_SALES_gte": 1,
             "current_SALES_lte": 50000,
-            "perPage": max(1, min(limit, MAX_REQUESTS_PER_MINUTE)),
+            "perPage": MIN_PRODUCT_FINDER_PER_PAGE,
             "page": term_page,
             "sort": [["current_SALES", "asc"]],
         }
@@ -636,20 +637,41 @@ def _monthly_sales_from_product(product: dict[str, Any]) -> int:
         "monthly_sales",
         default=0,
     )
-    if direct:
+    if _plausible_monthly_sales(direct):
         return direct
     history = product.get("monthlySoldHistory") or product.get("monthly_sold_history")
     if isinstance(history, list):
         for item in reversed(history):
             if isinstance(item, bool):
                 continue
-            if isinstance(item, (int, float)) and item > 0:
+            if isinstance(item, (int, float)) and _plausible_monthly_sales(item):
                 return int(item)
             if isinstance(item, list):
-                nested = _latest_rank_value(item)
+                nested = _latest_monthly_sales_value(item)
                 if nested:
                     return nested
     return 0
+
+
+def _latest_monthly_sales_value(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return int(value) if _plausible_monthly_sales(value) else None
+    if isinstance(value, list):
+        for item in reversed(value):
+            parsed = _latest_monthly_sales_value(item)
+            if parsed:
+                return parsed
+    return None
+
+
+def _plausible_monthly_sales(value: Any) -> bool:
+    if isinstance(value, bool):
+        return False
+    if not isinstance(value, (int, float)):
+        return False
+    return 0 < int(value) <= 100_000
 
 
 def _image_url_from_product(product: dict[str, Any], *, asin: str | None = None) -> str | None:

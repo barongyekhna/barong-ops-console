@@ -141,15 +141,8 @@ class DeepSeekPreFilterCron:
                 product = _product_from_row(row)
                 screening = self.skill.evaluate(product)
                 decision = self.scoring_engine.score_deepseek(screening)
-                if decision.action == "pass":
-                    state = ProductState.AI1_PASSED.value
-                    passed += 1
-                elif decision.action == "reject":
-                    state = ProductState.AI1_REJECTED.value
-                    rejected += 1
-                else:
-                    state = ProductState.RULE_PASSED.value
-                    pending_review += 1
+                state = ProductState.AI1_PASSED.value
+                passed += 1
                 json_value = "CAST(:payload AS JSONB)" if _is_postgres(db) else ":payload"
                 db.execute(
                     text(
@@ -171,8 +164,12 @@ class DeepSeekPreFilterCron:
                     },
                 )
                 features = _dict_value(row.get("features"))
-                features["score_action"] = decision.action
-                features["score_reason"] = decision.reason
+                features["deepseek_score"] = screening.score
+                features["deepseek_verdict"] = screening.verdict
+                features["deepseek_reason"] = screening.top_reason
+                features["score_action"] = "pending_review"
+                features["score_reason"] = screening.top_reason
+                features["ra_review_required"] = True
                 features_value = (
                     "CAST(:features AS JSONB)" if _is_postgres(db) else ":features"
                 )
@@ -202,8 +199,8 @@ class DeepSeekPreFilterCron:
                         event_type="deepseek_prefilter",
                         stage=state,
                         status="processed",
-                        score_action=decision.action,
-                        message=decision.reason,
+                        score_action="pending_review",
+                        message=screening.top_reason,
                         payload=decision.to_dict(),
                     ),
                 )

@@ -71,11 +71,14 @@ class WarehouseEngine:
             product.features["deepseek_mode"] = "batch_processor_only"
             deepseek_screening = self.deepseek_skill.evaluate(product)
             product.skill_score = deepseek_screening.score
+            product.features["deepseek_score"] = deepseek_screening.score
+            product.features["deepseek_verdict"] = deepseek_screening.verdict
+            product.features["deepseek_reason"] = deepseek_screening.top_reason
+            product.features["score_action"] = "pending_review"
+            product.features["score_reason"] = deepseek_screening.top_reason
+            product.features["ra_review_required"] = True
             self.repository.save_ai_evaluation(deepseek_screening)
-            if deepseek_screening.passed:
-                product.transition_to(ProductState.AI1_PASSED)
-            else:
-                product.transition_to(ProductState.AI1_REJECTED)
+            product.transition_to(ProductState.AI1_PASSED)
         else:
             product.rule_reject_reason = ",".join(rule_evaluation.reasons)
             product.transition_to(ProductState.REJECTED)
