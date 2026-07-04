@@ -5843,3 +5843,392 @@ textarea:focus-visible {
     color: #9aa6bd;
   }
 }
+
+/* =====================================================================
+   LOGIN · 指挥中心科幻风 (command-center redesign)
+   追加层 · 全部限定 .login-page 作用域 · 末层覆盖 · 无功能代码改动
+   ===================================================================== */
+.login-page {
+  --lx-cyan: #39d4ff;
+  --lx-amber: #ffb13b;
+  --lx-green: #4dffa1;
+  --lx-red: #ff6b8a;
+  --lx-ink: #d6e8f6;
+  --lx-dim: #7d95ae;
+  --lx-line: rgb(120 200 255 / 16%);
+  --lx-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  position: relative;
+  grid-template-columns: minmax(380px, 1fr) minmax(440px, 0.9fr);
+  color: var(--lx-ink);
+  background-color: #04070e;
+  background-image:
+    radial-gradient(680px 460px at 84% -12%, rgb(255 130 45 / 12%), transparent 60%),
+    radial-gradient(820px 560px at 6% 114%, rgb(57 212 255 / 12%), transparent 60%),
+    linear-gradient(rgb(120 200 255 / 5%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(120 200 255 / 5%) 1px, transparent 1px),
+    radial-gradient(150% 130% at 50% 38%, #071018 0%, #04070e 74%);
+  background-size: 100% 100%, 100% 100%, 34px 34px, 34px 34px, 100% 100%;
+  overflow: hidden;
+}
+
+/* 漂移闪烁的星场 */
+.login-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    radial-gradient(1.4px 1.4px at 12% 18%, #fff, transparent),
+    radial-gradient(1px 1px at 24% 62%, #cfe0ff, transparent),
+    radial-gradient(1.6px 1.6px at 39% 30%, #fff, transparent),
+    radial-gradient(1px 1px at 53% 74%, #bfe6ff, transparent),
+    radial-gradient(1.3px 1.3px at 66% 22%, #fff, transparent),
+    radial-gradient(1px 1px at 78% 58%, #d8ecff, transparent),
+    radial-gradient(1.5px 1.5px at 88% 34%, #fff, transparent),
+    radial-gradient(1px 1px at 17% 84%, #cfe0ff, transparent),
+    radial-gradient(1.2px 1.2px at 45% 90%, #fff, transparent),
+    radial-gradient(1px 1px at 72% 88%, #bfe6ff, transparent),
+    radial-gradient(1.3px 1.3px at 33% 48%, #fff, transparent),
+    radial-gradient(1px 1px at 61% 46%, #d8ecff, transparent),
+    radial-gradient(1.5px 1.5px at 94% 74%, #fff, transparent),
+    radial-gradient(1px 1px at 6% 40%, #cfe0ff, transparent);
+  animation: lxTwinkle 5.5s ease-in-out infinite;
+}
+@keyframes lxTwinkle { 0%, 100% { opacity: 0.55; } 50% { opacity: 0.9; } }
+
+/* 左栏:品牌 / 标识,透明露出深空 */
+.login-page .login-identity {
+  min-height: 100vh;
+  color: var(--lx-ink);
+  background: transparent;
+  border-right: 1px solid var(--lx-line);
+  box-shadow: inset -30px 0 60px -50px rgb(57 212 255 / 50%);
+  overflow: hidden;
+}
+/* 横向扫描线 */
+.login-page .login-identity::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 2px;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.6;
+  background: linear-gradient(90deg, transparent, rgb(57 212 255 / 55%), transparent);
+  box-shadow: 0 0 14px rgb(57 212 255 / 50%);
+  animation: lxScan 7s linear infinite;
+}
+@keyframes lxScan { 0% { top: -2%; } 100% { top: 102%; } }
+/* 巨大虚化的凤凰水印(彩蛋:悬停会"点燃") */
+.login-page .login-identity::after {
+  content: "";
+  position: absolute;
+  right: -8%;
+  bottom: -6%;
+  width: min(560px, 60%);
+  height: min(560px, 60%);
+  z-index: 0;
+  pointer-events: none;
+  background: url("/assets/brand/barong-phoenix.svg") center / contain no-repeat;
+  opacity: 0.14;
+  filter: drop-shadow(0 0 30px rgb(255 140 50 / 40%));
+  transition: opacity 0.6s ease, filter 0.6s ease;
+  animation: lxFloat 8s ease-in-out infinite;
+}
+@keyframes lxFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
+.login-page .login-identity:hover::after {
+  opacity: 0.3;
+  filter: drop-shadow(0 0 46px rgb(255 120 30 / 75%)) saturate(1.2);
+}
+
+/* 品牌标记 → 透明凤凰 + 辉光 */
+.login-page .brand-logo-image { display: none; }
+.login-page .login-brand { position: relative; z-index: 2; }
+.login-page .brand-mark {
+  width: 46px;
+  height: 46px;
+  flex: none;
+  border-radius: 12px;
+  background:
+    url("/assets/brand/barong-phoenix.svg") center / 78% no-repeat,
+    rgb(255 140 40 / 8%);
+  border: 1px solid rgb(255 177 59 / 40%);
+  box-shadow: 0 0 18px rgb(255 150 50 / 35%), inset 0 0 12px rgb(255 140 40 / 20%);
+}
+.login-page .brand-mark-large { width: 54px; height: 54px; }
+.login-page .login-brand strong { color: #ffe7c6; font-size: 1.2rem; letter-spacing: 0.5px; }
+.login-page .login-brand small {
+  color: var(--lx-amber);
+  font-family: var(--lx-mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+
+/* 标题区 */
+.login-page .identity-copy { z-index: 2; }
+.login-page .system-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  color: var(--lx-cyan);
+  font-family: var(--lx-mono);
+  font-size: 0.66rem;
+  letter-spacing: 0.28em;
+  background: rgb(57 212 255 / 6%);
+  border: 1px solid rgb(57 212 255 / 35%);
+  border-radius: 20px;
+  box-shadow: 0 0 16px rgb(57 212 255 / 15%);
+}
+.login-page .system-label::before { content: "◣"; }
+.login-page .identity-copy h1 {
+  color: #eafaff;
+  font-size: clamp(2.4rem, 4.2vw, 3.6rem);
+  letter-spacing: -0.5px;
+  text-shadow: 0 0 34px rgb(57 212 255 / 28%);
+}
+.login-page .signal-line {
+  color: var(--lx-dim);
+  font-family: var(--lx-mono);
+  letter-spacing: 0.04em;
+}
+.login-page .signal-line span {
+  background: var(--lx-cyan);
+  box-shadow: 0 0 0 4px rgb(57 212 255 / 14%), 0 0 12px var(--lx-cyan);
+  animation: lxBlink 1.4s infinite;
+}
+@keyframes lxBlink { 50% { opacity: 0.3; } }
+
+/* 遥测读数(彩蛋,替换原水印槽) */
+.login-page .brand-watermark { display: none; }
+.login-page .build-label {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  height: auto;
+  opacity: 1;
+  color: var(--lx-dim);
+  font-family: var(--lx-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+}
+.login-page .build-label::before {
+  content: "";
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lx-green);
+  box-shadow: 0 0 8px var(--lx-green);
+  animation: lxBlink 1.6s infinite;
+}
+.login-page .build-label::after {
+  content: "UPLINK STABLE · NODES 7/7 · SECTOR DEEP-SPACE · BUILD v3.1.0";
+}
+
+/* 右栏:表单做成玻璃 HUD 卡 */
+.login-page .login-panel { background: transparent; }
+.login-page .login-panel-inner {
+  position: relative;
+  width: min(100%, 430px);
+  padding: 34px 32px 30px;
+  background: linear-gradient(180deg, rgb(10 18 30 / 66%), rgb(6 12 22 / 60%));
+  border: 1px solid var(--lx-line);
+  border-radius: 14px;
+  backdrop-filter: blur(14px);
+  box-shadow: 0 30px 80px -30px rgb(0 0 0 / 80%), inset 0 1px 0 rgb(255 255 255 / 5%);
+}
+/* HUD 四角括号 */
+.login-page .login-panel-inner::before,
+.login-page .login-panel-inner::after {
+  content: "";
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--lx-cyan);
+  opacity: 0.8;
+  filter: drop-shadow(0 0 5px rgb(57 212 255 / 50%));
+}
+.login-page .login-panel-inner::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+.login-page .login-panel-inner::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+
+.login-page .eyebrow {
+  display: inline-block;
+  color: var(--lx-cyan);
+  font-family: var(--lx-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+.login-page .login-panel-inner h2 {
+  color: #eafaff;
+  letter-spacing: -0.3px;
+  text-shadow: 0 0 24px rgb(57 212 255 / 20%);
+}
+.login-page .login-intro { color: var(--lx-dim); }
+.login-page .login-intro::after {
+  content: "● SECURE CHANNEL · AES-256 ENCRYPTED";
+  display: block;
+  margin-top: 10px;
+  color: var(--lx-green);
+  font-family: var(--lx-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.18em;
+  animation: lxBlink 2.6s infinite;
+}
+
+/* 表单控件 */
+.login-page .field-group label,
+.login-page .field-group > span:first-child {
+  color: var(--lx-dim);
+  font-family: var(--lx-mono);
+  font-size: 0.64rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.login-page .input-shell {
+  height: 52px;
+  color: var(--lx-dim);
+  background: rgb(6 14 24 / 70%);
+  border: 1px solid var(--lx-line);
+  border-radius: 9px;
+  box-shadow: inset 0 0 14px rgb(0 0 0 / 35%);
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+}
+.login-page .input-shell svg { color: var(--lx-cyan); opacity: 0.8; }
+.login-page .input-shell input {
+  color: #eafaff;
+  font-size: 0.95rem;
+  caret-color: var(--lx-cyan);
+}
+.login-page .input-shell input::placeholder { color: #4f6b86; }
+.login-page .input-shell:focus-within {
+  background: rgb(8 18 30 / 80%);
+  border-color: rgb(57 212 255 / 60%);
+  box-shadow: 0 0 0 3px rgb(57 212 255 / 14%), 0 0 18px rgb(57 212 255 / 20%), inset 0 0 14px rgb(0 0 0 / 30%);
+}
+.login-page .input-shell:focus-within svg { opacity: 1; filter: drop-shadow(0 0 6px var(--lx-cyan)); }
+
+.login-page .form-message {
+  color: var(--lx-red);
+  font-family: var(--lx-mono);
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+}
+
+.login-page .login-button {
+  min-height: 52px;
+  color: #03121a;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
+  border: 1px solid rgb(57 212 255 / 60%);
+  border-radius: 9px;
+  box-shadow: 0 0 0 1px rgb(57 212 255 / 20%), 0 10px 30px -8px rgb(57 212 255 / 50%), inset 0 1px 0 rgb(255 255 255 / 40%);
+  transition: transform 0.16s ease, box-shadow 0.16s ease, filter 0.16s ease, background 0.16s ease;
+}
+.login-page .login-button svg { color: #03121a; }
+.login-page .login-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+  filter: brightness(1.08);
+  background: linear-gradient(180deg, #7cebff, #2bb6e6);
+  box-shadow: 0 0 0 1px rgb(57 212 255 / 40%), 0 16px 40px -8px rgb(57 212 255 / 65%), inset 0 1px 0 rgb(255 255 255 / 50%);
+}
+.login-page .login-button:active:not(:disabled) { transform: translateY(0); }
+.login-page .login-button:disabled { filter: saturate(0.6) brightness(0.9); }
+
+/* 响应式:窄屏堆叠 */
+@media (max-width: 880px) {
+  .login-page { grid-template-columns: 1fr; }
+  .login-page .login-identity {
+    min-height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--lx-line);
+    box-shadow: none;
+  }
+  .login-page .login-identity::after { width: 300px; height: 300px; opacity: 0.1; }
+  .login-page .login-panel { min-height: auto; padding: 28px 20px 52px; }
+  .login-page .identity-copy h1 { font-size: 2.2rem; }
+}
+
+/* ---------------------------------------------------------------------
+   LOGIN · 科幻大片元素:星云 / 行星 / 掠过的飞船 (纯 CSS,无照片)
+   --------------------------------------------------------------------- */
+/* 流动星云 */
+.login-page::after {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(closest-side at 22% 30%, rgb(124 92 255 / 30%), transparent 70%),
+    radial-gradient(closest-side at 70% 64%, rgb(0 180 220 / 24%), transparent 70%),
+    radial-gradient(closest-side at 46% 82%, rgb(210 70 180 / 18%), transparent 72%),
+    radial-gradient(closest-side at 84% 22%, rgb(80 120 255 / 22%), transparent 70%);
+  background-repeat: no-repeat;
+  filter: blur(46px) saturate(1.15);
+  opacity: 0.6;
+  mix-blend-mode: screen;
+  animation: lxNebula 28s ease-in-out infinite alternate;
+}
+@keyframes lxNebula {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(26px, -20px) scale(1.08); }
+}
+
+/* 确保表单浮在场景之上 */
+.login-page .login-panel { position: relative; z-index: 1; }
+.login-page .login-panel-inner { z-index: 2; }
+
+/* 带边缘光的行星 */
+.login-page .login-panel::before {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  width: 440px;
+  height: 440px;
+  right: -150px;
+  bottom: -170px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 30% 26%, rgb(150 190 255 / 55%), transparent 24%),
+    radial-gradient(circle at 50% 50%, #26406e 0%, #14233f 52%, #060b16 100%);
+  box-shadow:
+    inset 30px -24px 70px rgb(0 0 0 / 72%),
+    inset -8px 8px 26px rgb(120 170 255 / 35%),
+    0 0 90px rgb(70 130 230 / 22%);
+  animation: lxFloat 12s ease-in-out infinite;
+}
+
+/* 掠过舷窗的飞船(内嵌 SVG) */
+.login-page .login-panel::after {
+  content: "";
+  position: absolute;
+  z-index: 0;
+  pointer-events: none;
+  width: 214px;
+  height: 94px;
+  top: 12%;
+  left: -260px;
+  background: url("/assets/brand/starship.svg") center / contain no-repeat;
+  filter: drop-shadow(-16px 0 18px rgb(57 212 255 / 45%));
+  opacity: 0;
+  animation: lxCruise 24s linear infinite;
+}
+@keyframes lxCruise {
+  0% { transform: translateX(0); opacity: 0; }
+  6% { opacity: 0.95; }
+  70% { opacity: 0.95; }
+  80% { opacity: 0; }
+  100% { transform: translateX(115vw); opacity: 0; }
+}

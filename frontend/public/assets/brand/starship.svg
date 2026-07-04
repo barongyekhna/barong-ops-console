@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 340 150">
+  <defs>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#41608a"/>
+      <stop offset="0.4" stop-color="#1e3250"/>
+      <stop offset="1" stop-color="#0a1322"/>
+    </linearGradient>
+    <linearGradient id="tower" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4a6c98"/>
+      <stop offset="1" stop-color="#132339"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a466a"/>
+      <stop offset="1" stop-color="#0b1524"/>
+    </linearGradient>
+    <radialGradient id="eng" cx="0.75" cy="0.5" r="0.6">
+      <stop offset="0" stop-color="#e6fdff"/>
+      <stop offset="0.35" stop-color="#39d4ff"/>
+      <stop offset="1" stop-color="#39d4ff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="canopy" cx="0.5" cy="0.3" r="0.8">
+      <stop offset="0" stop-color="#e6fdff"/>
+      <stop offset="0.5" stop-color="#39d4ff"/>
+      <stop offset="1" stop-color="#0b3a52"/>
+    </radialGradient>
+  </defs>
+  <ellipse cx="8" cy="74" rx="30" ry="5" fill="url(#eng)"/>
+  <ellipse cx="8" cy="82" rx="34" ry="6" fill="url(#eng)"/>
+  <ellipse cx="8" cy="90" rx="28" ry="5" fill="url(#eng)"/>
+  <path d="M172,96 L96,128 L132,123 L186,98 Z" fill="url(#wing)" stroke="#33507a" stroke-width="0.8"/>
+  <path d="M40,82 C80,68 138,60 205,62 C256,63 296,69 318,80 L326,82 L318,84 C296,94 256,99 205,100 C138,102 80,94 40,82 Z"
+        fill="url(#hull)" stroke="#6a92c0" stroke-width="1.2"/>
+  <path d="M40,70 L58,70 L58,94 L40,94 C33,94 33,70 40,70 Z" fill="#132133" stroke="#39d4ff" stroke-width="0.9"/>
+  <rect x="30" y="72" width="8" height="6" rx="1.5" fill="#0c1826" stroke="#39d4ff" stroke-width="0.9"/>
+  <rect x="30" y="80" width="8" height="6" rx="1.5" fill="#0c1826" stroke="#39d4ff" stroke-width="0.9"/>
+  <rect x="30" y="88" width="8" height="6" rx="1.5" fill="#0c1826" stroke="#39d4ff" stroke-width="0.9"/>
+  <circle cx="33" cy="75" r="1.8" fill="#e6fdff"/>
+  <circle cx="33" cy="83" r="1.8" fill="#e6fdff"/>
+  <circle cx="33" cy="91" r="1.8" fill="#e6fdff"/>
+  <path d="M226,64 L246,42 L280,46 L294,66 Z" fill="url(#tower)" stroke="#5b82b0" stroke-width="1"/>
+  <path d="M278,49 L292,64 L286,66 L272,52 Z" fill="url(#canopy)"/>
+  <circle cx="252" cy="55" r="2" fill="#39d4ff"/>
+  <circle cx="262" cy="53" r="2" fill="#39d4ff"/>
+  <path d="M50,78 C96,66 150,60 214,62 C258,63 296,68 316,79" fill="none" stroke="#9dc2ea" stroke-width="1.4" opacity="0.75"/>
+  <path d="M70,86 C150,92 250,92 314,84" fill="none" stroke="#0a1320" stroke-width="1.3" opacity="0.6"/>
+  <path d="M100,76 C170,73 250,75 306,81" fill="none" stroke="#12233a" stroke-width="1" opacity="0.7"/>
+  <circle cx="316" cy="79" r="2.4" fill="#ffb13b"/>
+  <circle cx="150" cy="76" r="1.7" fill="#39d4ff"/>
+  <circle cx="110" cy="84" r="1.7" fill="#ffb13b"/>
+</svg>
