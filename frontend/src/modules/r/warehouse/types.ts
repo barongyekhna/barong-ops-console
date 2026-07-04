@@ -102,14 +102,21 @@ export type RwRule = {
 
 export type RwProductsResponse = {
   count: number;
+  has_next?: boolean;
+  has_previous?: boolean;
   returned_count?: number;
   items: RwProduct[];
   mode: "production";
   organization: string;
+  page?: number;
+  page_size?: number;
   storage_status?: string;
+  total_pages?: number;
   filters?: {
     q: string | null;
     category_id: string | null;
+    page?: number;
+    page_size?: number;
     state: string | null;
     sort_by: string;
     sort_order: string;

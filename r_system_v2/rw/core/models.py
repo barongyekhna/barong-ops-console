@@ -66,6 +66,10 @@ class KeepaProductData:
     parent_category_name: str | None = None
     subcategory_rank: int | None = None
     subcategory_name: str | None = None
+    category_id: str | None = None
+    category_path: list[str] = field(default_factory=list)
+    category_id_path: list[str] = field(default_factory=list)
+    image_candidates: list[str] = field(default_factory=list)
     mock_generated: bool = True
     fetched_at: str = field(default_factory=utc_now_iso)
 

@@ -205,8 +205,12 @@ class KeepaWorker:
         )
         product = extract_product_features(record.source_query, keepa_data)
         if record.category_id:
+            product.features["selected_keepa_category_id"] = record.category_id
+            product.features["selected_keepa_category_path"] = [
+                record.category_id,
+                *product.category_path,
+            ]
             product.category_id = record.category_id
-            product.category_path = [record.category_id, product.category]
             self._apply_category_bestseller_rank(record.category_id, product)
         if self.deepseek_skill is not None and hasattr(self.deepseek_skill, "translate_title"):
             translation = await asyncio.to_thread(
@@ -283,7 +287,8 @@ class KeepaWorker:
         cached = self.category_bestseller_cache.get(category_id)
         parent_rank = _positive_int_feature(product.features, "parent_category_rank")
         parent_name = _string_feature(product.features, "parent_category_name")
-        if cached is None and parent_rank is not None:
+        subcategory_rank = _positive_int_feature(product.features, "subcategory_rank")
+        if cached is None and parent_rank is not None and subcategory_rank == 1:
             cached = {
                 "rank": parent_rank,
                 "category": parent_name or product.category,

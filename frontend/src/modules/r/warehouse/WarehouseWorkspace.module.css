@@ -314,6 +314,13 @@
   gap: 6px;
 }
 
+.categoryPath {
+  max-width: min(620px, 100%);
+  color: var(--color-muted) !important;
+  font-size: 0.7rem !important;
+  line-height: 1.35;
+}
+
 .asinTag {
   display: inline-flex;
   width: fit-content;
@@ -414,6 +421,23 @@
   color: var(--color-muted);
   font-size: 0.7rem;
   font-weight: 720;
+}
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
+.pagination div {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .warningBadge {
@@ -602,6 +626,31 @@
   width: 16px;
   height: 16px;
   margin: 0;
+}
+
+.categoryLabel {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.categoryLabel span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.categoryLabel em {
+  width: fit-content;
+  padding: 1px 5px;
+  color: var(--color-muted);
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-line);
+  border-radius: 5px;
+  font-size: 0.66rem;
+  font-style: normal;
+  font-weight: 760;
 }
 
 .message {

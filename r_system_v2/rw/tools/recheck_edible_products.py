@@ -21,9 +21,10 @@ from r_system_v2.rw.workers.deepseek_cron import _dict_value, _is_postgres, _pro
 
 
 DEFAULT_BATCH_SIZE = 500
-POLICY_RECHECK_VERSION = "2026-07-04-v4"
+POLICY_RECHECK_VERSION = "2026-07-04-v7"
 POLICY_REJECT_REASONS = {
     "deepseek_edible_product",
+    "deepseek_liquid_powder_spray_product",
     "deepseek_pest_control_product",
 }
 
@@ -83,6 +84,7 @@ def _load_rows(db, *, limit: int) -> list[dict[str, Any]]:
 
 def _reject_product(db, row: dict[str, Any], screening, reason: str) -> None:
     features = _dict_value(row.get("features"))
+    _sanitize_rank_features(row, features)
     features.update(
         {
             "deepseek_score": screening.score,
@@ -140,6 +142,7 @@ def _reject_product(db, row: dict[str, Any], screening, reason: str) -> None:
 
 def _mark_checked(db, row: dict[str, Any]) -> None:
     features = _dict_value(row.get("features"))
+    _sanitize_rank_features(row, features)
     if features.get("deepseek_policy_recheck_version") == POLICY_RECHECK_VERSION:
         return
     features["deepseek_policy_recheck_version"] = POLICY_RECHECK_VERSION
@@ -156,6 +159,7 @@ def _mark_checked(db, row: dict[str, Any]) -> None:
 
 def _restore_policy_product(db, row: dict[str, Any], screening, reason: str) -> None:
     features = _dict_value(row.get("features"))
+    _sanitize_rank_features(row, features)
     features.update(
         {
             "deepseek_score": screening.score,
@@ -189,6 +193,50 @@ def _restore_policy_product(db, row: dict[str, Any], screening, reason: str) -> 
             payload=screening.strict_json,
         ),
     )
+
+
+def _sanitize_rank_features(row: dict[str, Any], features: dict[str, Any]) -> None:
+    image_url = row.get("image_url")
+    if (
+        isinstance(image_url, str)
+        and image_url.startswith(("http://", "https://"))
+        and not isinstance(features.get("image_candidates"), list)
+    ):
+        features["image_candidates"] = [image_url]
+    if not isinstance(features.get("amazon_category_path"), list):
+        category_path = _category_path_from_row(row)
+        if category_path:
+            features["amazon_category_path"] = category_path
+    bsr = row.get("bsr")
+    subcategory_rank = features.get("subcategory_rank")
+    has_leaf_category = bool(features.get("amazon_leaf_category_id"))
+    try:
+        same_as_bsr = int(subcategory_rank) == int(bsr)
+    except (TypeError, ValueError):
+        same_as_bsr = False
+    if same_as_bsr and not has_leaf_category:
+        features["subcategory_rank"] = None
+        features["subcategory_rank_source"] = "missing_keepa_salesRanks"
+    for key in (
+        "bestseller_parent_rank",
+        "bestseller_parent_category",
+        "category_bestseller_asin",
+    ):
+        features.pop(key, None)
+
+
+def _category_path_from_row(row: dict[str, Any]) -> list[str]:
+    raw_path = row.get("category_path")
+    parts: list[str] = []
+    if isinstance(raw_path, str):
+        parts = [part.strip() for part in raw_path.split(">") if part.strip()]
+    elif isinstance(raw_path, list):
+        parts = [str(part).strip() for part in raw_path if str(part).strip()]
+    names = [part for part in parts if not part.isdigit()]
+    category = row.get("category")
+    if isinstance(category, str) and category.strip() and category.strip() not in names:
+        names.append(category.strip())
+    return names
 
 
 def _update_product(

@@ -115,6 +115,7 @@ def test_keepa_product_parser_uses_stats_for_reviews_sellers_and_rating():
     assert product.seller_count == 6
     assert product.rating == 4.6
     assert product.image_url == "https://images-na.ssl-images-amazon.com/images/I/test-image.jpg"
+    assert "https://m.media-amazon.com/images/I/test-image.jpg" in product.image_candidates
 
 
 def test_keepa_product_parser_uses_avg90_and_bsr_features_when_current_missing():
@@ -156,6 +157,40 @@ def test_keepa_product_parser_uses_avg90_and_bsr_features_when_current_missing()
     assert product.monthly_sales == 320
     assert product.parent_category_rank == 1200
     assert product.subcategory_rank == 4400
+    assert product.category == "Storage"
+    assert product.category_id == "13679381"
+    assert product.category_path == ["Home & Kitchen", "Storage"]
+    assert product.category_id_path == ["1055398", "13679381"]
+
+
+def test_keepa_product_parser_does_not_fake_missing_subcategory_rank():
+    current = [-1] * 18
+    current[1] = 2999
+    current[3] = 4400
+
+    product = _parse_product_payload(
+        {
+            "products": [
+                {
+                    "asin": "B012345678",
+                    "title": "Compact Storage Basket",
+                    "brand": "Fixture",
+                    "stats": {"current": current},
+                    "salesRanks": {"1055398": [[1, 1200]]},
+                    "categoryTree": [
+                        {"name": "Home & Kitchen", "catId": 1055398},
+                        {"name": "Storage", "catId": 13679381},
+                    ],
+                }
+            ]
+        },
+        asin="B012345678",
+        source_query="test",
+    )
+
+    assert product.bsr == 4400
+    assert product.parent_category_rank == 1200
+    assert product.subcategory_rank is None
 
 
 def test_keepa_product_parser_ignores_monthly_sales_history_timestamps():

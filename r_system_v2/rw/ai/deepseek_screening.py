@@ -215,6 +215,31 @@ class DeepSeekScreeningSkill:
         )
 
     def evaluate(self, product: NormalizedProduct) -> DeepSeekScreening:
+        edible_reason = _edible_reject_reason(product)
+        if edible_reason:
+            payload = {
+                "score": 0,
+                "verdict": "cut",
+                "competition_attackability": 0,
+                "demand_quality": 0,
+                "top_reason": edible_reason,
+                "channel_guess": "amazon",
+            }
+            strict_json = self._strict_json(payload)
+            return DeepSeekScreening(
+                asin=product.asin,
+                score=0,
+                verdict="cut",
+                competition_attackability=0,
+                demand_quality=0,
+                top_reason=strict_json["top_reason"],
+                channel_guess="amazon",
+                strict_json=strict_json,
+                skill_loaded=self.status.loaded,
+                quant_filter_enabled=self.status.quant_filter_enabled,
+                rule_based_scoring_active=self.status.rule_based_scoring_active,
+                output_schema_strict_json=self.status.output_schema_strict_json,
+            )
         pest_control_reason = _pest_control_reject_reason(product)
         if pest_control_reason:
             payload = {
@@ -240,14 +265,14 @@ class DeepSeekScreeningSkill:
                 rule_based_scoring_active=self.status.rule_based_scoring_active,
                 output_schema_strict_json=self.status.output_schema_strict_json,
             )
-        edible_reason = _edible_reject_reason(product)
-        if edible_reason:
+        restricted_form_reason = _restricted_form_reject_reason(product)
+        if restricted_form_reason:
             payload = {
                 "score": 0,
                 "verdict": "cut",
                 "competition_attackability": 0,
                 "demand_quality": 0,
-                "top_reason": edible_reason,
+                "top_reason": restricted_form_reason,
                 "channel_guess": "amazon",
             }
             strict_json = self._strict_json(payload)
@@ -456,10 +481,31 @@ def _pest_control_reject_reason(product: NormalizedProduct) -> str | None:
     return None
 
 
+def _restricted_form_reject_reason(product: NormalizedProduct) -> str | None:
+    haystack = _product_text(product)
+    if not haystack:
+        return None
+    if _contains_any(haystack, _SPRAY_CONTAINER_OR_TOOL_TERMS):
+        return None
+    if _contains_any(haystack, _LIQUID_CONTAINER_OR_TOOL_TERMS):
+        return None
+    if _contains_any(haystack, _POWDER_FALSE_POSITIVE_TERMS):
+        return None
+    if _contains_any(haystack, _LIQUID_STRONG_PHRASES):
+        return "剔除：DeepSeek 判断该产品本体含液体，不进入 R-A。"
+    if _contains_any(haystack, _POWDER_STRONG_PHRASES):
+        return "剔除：DeepSeek 判断该产品本体为粉末，不进入 R-A。"
+    if _contains_any(haystack, _SPRAY_STRONG_PHRASES):
+        return "剔除：DeepSeek 判断该产品本体为喷雾类内容物，不进入 R-A。"
+    return None
+
+
 def deepseek_reject_code(top_reason: str | None) -> str:
     reason = str(top_reason or "").lower()
     if any(term in reason for term in ("杀虫", "灭虫", "驱虫", "灭蚊", "捕虫", "虫害")):
         return "deepseek_pest_control_product"
+    if any(term in reason for term in ("液体", "粉末", "喷雾")):
+        return "deepseek_liquid_powder_spray_product"
     return "deepseek_edible_product"
 
 
@@ -472,6 +518,7 @@ def _product_text(product: NormalizedProduct) -> str:
         " ".join(product.category_path),
     ]
     for key in (
+        "amazon_category_path",
         "subcategory_name",
         "parent_category_name",
         "bestseller_parent_category",
@@ -479,6 +526,8 @@ def _product_text(product: NormalizedProduct) -> str:
         value = product.features.get(key)
         if isinstance(value, str):
             values.append(value)
+        elif isinstance(value, list):
+            values.extend(str(item) for item in value if isinstance(item, str))
     return " ".join(values).lower()
 
 
@@ -733,6 +782,111 @@ _PEST_CONTROL_ACTION_TERMS = (
     "捕",
     "粘",
     "诱饵",
+)
+_LIQUID_STRONG_PHRASES = (
+    "liquid",
+    "liquid cleaner",
+    "liquid soap",
+    "liquid detergent",
+    "liquid fertilizer",
+    "liquid plant food",
+    "liquid solution",
+    "liquid refill",
+    "liquid drops",
+    "cleaning solution",
+    "soap refill",
+    "detergent refill",
+    "essential oil",
+    "fragrance oil",
+    "液体",
+    "清洁液",
+    "补充液",
+    "精油",
+)
+_POWDER_STRONG_PHRASES = (
+    "powder",
+    "powdered",
+    "cleaning powder",
+    "detergent powder",
+    "soap powder",
+    "deodorizing powder",
+    "powder refill",
+    "粉末",
+    "粉剂",
+    "清洁粉",
+    "补充粉",
+)
+_SPRAY_STRONG_PHRASES = (
+    "aerosol",
+    "spray refill",
+    "cleaning spray",
+    "room spray",
+    "fabric spray",
+    "fragrance spray",
+    "deodorizing spray",
+    "spray cleaner",
+    "喷雾",
+    "喷剂",
+    "喷雾剂",
+)
+_SPRAY_CONTAINER_OR_TOOL_TERMS = (
+    "spray bottle",
+    "spray bottles",
+    "empty spray bottle",
+    "refillable spray bottle",
+    "sprayer bottle",
+    "mist bottle",
+    "misting bottle",
+    "trigger sprayer",
+    "spray nozzle",
+    "sprayer nozzle",
+    "spray head",
+    "spray gun",
+    "paint sprayer",
+    "garden sprayer",
+    "pump sprayer",
+    "spray can holder",
+    "spray bottle holder",
+    "喷壶",
+    "空喷瓶",
+    "喷瓶",
+    "喷头",
+    "喷枪",
+    "喷雾瓶",
+)
+_LIQUID_CONTAINER_OR_TOOL_TERMS = (
+    "liquid measuring cup",
+    "liquid measuring cups",
+    "liquid dispenser",
+    "liquid soap dispenser",
+    "liquid pump",
+    "liquid transfer pump",
+    "liquid level sensor",
+    "liquid storage tank",
+    "liquid container",
+    "liquid containers",
+    "liquid bottle",
+    "liquid bottles",
+    "液体容器",
+    "液体分配器",
+    "皂液器",
+)
+_POWDER_FALSE_POSITIVE_TERMS = (
+    "powder coated",
+    "powder-coated",
+    "powder coating",
+    "powder room",
+    "powder puff",
+    "powder brush",
+    "powder measure",
+    "powder funnel",
+    "powder dispenser",
+    "powder shaker",
+    "powder container",
+    "powder containers",
+    "powder scoop",
+    "粉末容器",
+    "粉末漏斗",
 )
 
 

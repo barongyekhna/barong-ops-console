@@ -40,6 +40,12 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
         monthly_sales=keepa_data.monthly_sales,
     )
 
+    category_path = keepa_data.category_path or [keepa_data.category]
+    category_id_path = keepa_data.category_id_path
+    amazon_leaf_category_id = keepa_data.category_id or (
+        category_id_path[-1] if category_id_path else None
+    )
+
     return NormalizedProduct(
         asin=keepa_data.asin,
         source_query=source_query,
@@ -61,8 +67,8 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
         lithium_battery_warning=keepa_data.lithium_battery_warning,
         margin_source=margin_source,
         margin_confidence=margin_confidence,
-        category_id=_category_id(keepa_data.category),
-        category_path=[keepa_data.category],
+        category_id=amazon_leaf_category_id or _category_id(keepa_data.category),
+        category_path=category_path,
         state=ProductState.ENRICHED,
         features={
             "demand_bucket": demand_bucket,
@@ -79,7 +85,11 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
             **monthly_sales_estimate.to_features(),
             "parent_category_name": keepa_data.parent_category_name,
             "parent_category_rank": keepa_data.parent_category_rank,
+            "amazon_category_path": category_path,
+            "amazon_category_id_path": category_id_path,
+            "amazon_leaf_category_id": amazon_leaf_category_id,
             "subcategory_name": keepa_data.subcategory_name or keepa_data.category,
-            "subcategory_rank": keepa_data.subcategory_rank or keepa_data.bsr,
+            "subcategory_rank": keepa_data.subcategory_rank,
+            "image_candidates": keepa_data.image_candidates,
         },
     )

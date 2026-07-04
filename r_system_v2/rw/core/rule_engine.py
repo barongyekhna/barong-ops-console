@@ -19,14 +19,11 @@ class RuleConfig:
     max_weight_lb: float = 2.0
     blocked_price_trends: tuple[str, ...] = ("declining", "price_war")
     redline_terms: tuple[str, ...] = (
-        "liquid",
-        "aerosol",
         "medical",
         "knife",
         "restricted",
         "fda",
         "children safety",
-        "液体",
         "医疗",
         "刀",
         "强制认证",

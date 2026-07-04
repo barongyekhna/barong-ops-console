@@ -24,6 +24,8 @@ export function getRwProducts() {
 export function getRwProductsWithFilters(filters: {
   q?: string;
   category_id?: string;
+  page?: number;
+  page_size?: number;
   state?: "pass" | "reject" | "pending_review" | "";
   sort_by?: "updated_at" | "skill_score";
   sort_order?: "asc" | "desc";
@@ -34,6 +36,12 @@ export function getRwProductsWithFilters(filters: {
   }
   if (filters.category_id) {
     params.set("category_id", filters.category_id);
+  }
+  if (filters.page) {
+    params.set("page", String(filters.page));
+  }
+  if (filters.page_size) {
+    params.set("page_size", String(filters.page_size));
   }
   if (filters.state) {
     params.set("state", filters.state);

@@ -353,6 +353,10 @@ class KeepaProvider:
                 parent_category_name="Home & Kitchen",
                 subcategory_rank=8421,
                 subcategory_name="Draft Stoppers",
+                category_id="13679381",
+                category_path=["Home & Kitchen", "Draft Stoppers"],
+                category_id_path=["1055398", "13679381"],
+                image_candidates=[_fallback_image_url(asin)] if _fallback_image_url(asin) else [],
                 mock_generated=True,
             )
 
@@ -383,6 +387,10 @@ class KeepaProvider:
             parent_category_name="Home & Kitchen",
             subcategory_rank=bsr,
             subcategory_name="Mock Category",
+            category_id="1055398",
+            category_path=["Home & Kitchen", "Mock Category"],
+            category_id_path=["1055398"],
+            image_candidates=[_fallback_image_url(asin)] if _fallback_image_url(asin) else [],
             mock_generated=True,
         )
 
@@ -578,39 +586,56 @@ def _stats_value(product: dict[str, Any], key: str, index: int) -> Any:
 
 
 def _category_name(product: dict[str, Any]) -> str:
-    category_tree = product.get("categoryTree")
-    if isinstance(category_tree, list) and category_tree:
-        first = category_tree[0]
-        if isinstance(first, dict) and isinstance(first.get("name"), str):
-            return first["name"]
+    details = _category_tree_details(product)
+    if details["names"]:
+        return details["names"][-1]
     root_category = product.get("rootCategory")
     if root_category is not None:
         return str(root_category)
     return "Unknown"
 
 
-def _category_rank_details(product: dict[str, Any], *, default_bsr: int) -> dict[str, Any]:
+def _category_tree_details(product: dict[str, Any]) -> dict[str, list[str]]:
     category_tree = product.get("categoryTree")
+    names: list[str] = []
+    ids: list[str] = []
+    if isinstance(category_tree, list):
+        for node in category_tree:
+            if not isinstance(node, dict):
+                continue
+            name = str(node.get("name") or "").strip()
+            category_id = _category_id_from_node(node)
+            if name:
+                names.append(name)
+            if category_id:
+                ids.append(category_id)
+    return {"names": names, "ids": ids}
+
+
+def _category_rank_details(product: dict[str, Any], *, default_bsr: int) -> dict[str, Any]:
+    del default_bsr
+    details = _category_tree_details(product)
     parent_name: str | None = None
     parent_id: str | None = None
     leaf_name: str | None = None
     leaf_id: str | None = None
-    if isinstance(category_tree, list) and category_tree:
-        first = category_tree[0]
-        last = category_tree[-1]
-        if isinstance(first, dict):
-            parent_name = str(first.get("name") or "") or None
-            parent_id = _category_id_from_node(first)
-        if isinstance(last, dict):
-            leaf_name = str(last.get("name") or "") or None
-            leaf_id = _category_id_from_node(last)
+    if details["names"]:
+        parent_name = details["names"][0]
+        leaf_name = details["names"][-1]
+    if details["ids"]:
+        parent_id = details["ids"][0]
+        leaf_id = details["ids"][-1]
     parent_rank = _rank_for_sales_rank_category(product, parent_id)
-    subcategory_rank = _rank_for_sales_rank_category(product, leaf_id) or default_bsr
+    subcategory_rank = _rank_for_sales_rank_category(product, leaf_id)
     return {
         "parent_category_name": parent_name,
         "parent_category_rank": parent_rank,
         "subcategory_name": leaf_name or _category_name(product),
         "subcategory_rank": subcategory_rank,
+        "amazon_leaf_category_id": leaf_id,
+        "amazon_parent_category_id": parent_id,
+        "amazon_category_path": details["names"],
+        "amazon_category_id_path": details["ids"],
     }
 
 
@@ -696,19 +721,35 @@ def _plausible_monthly_sales(value: Any) -> bool:
     return 0 < int(value) <= 100_000
 
 
-def _image_url_from_product(product: dict[str, Any], *, asin: str | None = None) -> str | None:
+def _image_candidates_from_product(product: dict[str, Any], *, asin: str | None = None) -> list[str]:
+    candidates: list[str] = []
     direct = product.get("imageUrl") or product.get("image_url")
     if isinstance(direct, str) and direct.startswith(("http://", "https://")):
-        return direct
+        candidates.append(direct)
     images_csv = product.get("imagesCSV")
-    if not isinstance(images_csv, str) or not images_csv.strip():
-        return _fallback_image_url(str(product.get("asin") or asin or ""))
-    image_name = images_csv.split(",", 1)[0].strip()
-    if not image_name:
-        return _fallback_image_url(str(product.get("asin") or asin or ""))
-    if image_name.startswith(("http://", "https://")):
-        return image_name
-    return f"https://images-na.ssl-images-amazon.com/images/I/{image_name}"
+    if isinstance(images_csv, str) and images_csv.strip():
+        for raw_name in images_csv.split(","):
+            image_name = raw_name.strip()
+            if not image_name:
+                continue
+            if image_name.startswith(("http://", "https://")):
+                candidates.append(image_name)
+                continue
+            candidates.append(f"https://images-na.ssl-images-amazon.com/images/I/{image_name}")
+            candidates.append(f"https://m.media-amazon.com/images/I/{image_name}")
+    fallback = _fallback_image_url(str(product.get("asin") or asin or ""))
+    if fallback:
+        candidates.append(fallback)
+    unique: list[str] = []
+    for candidate in candidates:
+        if candidate not in unique:
+            unique.append(candidate)
+    return unique
+
+
+def _image_url_from_product(product: dict[str, Any], *, asin: str | None = None) -> str | None:
+    candidates = _image_candidates_from_product(product, asin=asin)
+    return candidates[0] if candidates else None
 
 
 def _fallback_image_url(asin: str) -> str | None:
@@ -753,6 +794,7 @@ def _parse_product_payload(
     lithium_warning = _has_lithium_warning(product)
     category_details = _category_rank_details(product, default_bsr=bsr)
     monthly_sales = _monthly_sales_from_product(product)
+    image_candidates = _image_candidates_from_product(product, asin=parsed_asin)
 
     return KeepaProductData(
         asin=parsed_asin,
@@ -768,7 +810,7 @@ def _parse_product_payload(
         price_trend=str(product.get("priceTrend") or "unknown"),
         marketplace="US",
         rating=_rating_from_product(product),
-        image_url=_image_url_from_product(product, asin=parsed_asin),
+        image_url=image_candidates[0] if image_candidates else None,
         fulfillment_method=fulfillment_method,
         lithium_battery_warning=lithium_warning,
         margin_source="missing_landed_cost",
@@ -778,6 +820,10 @@ def _parse_product_payload(
         parent_category_name=category_details["parent_category_name"],
         subcategory_rank=category_details["subcategory_rank"],
         subcategory_name=category_details["subcategory_name"],
+        category_id=category_details["amazon_leaf_category_id"],
+        category_path=category_details["amazon_category_path"],
+        category_id_path=category_details["amazon_category_id_path"],
+        image_candidates=image_candidates,
         mock_generated=False,
     )
 

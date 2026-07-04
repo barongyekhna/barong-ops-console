@@ -262,6 +262,149 @@ def test_deepseek_does_not_reject_non_insect_animal_repellent_as_pest_control():
     assert screening.verdict != "cut"
 
 
+def test_deepseek_rejects_liquid_powder_and_spray_content_before_ra_review():
+    skill = DeepSeekScreeningSkill()
+    products = [
+        NormalizedProduct(
+            asin="B0LIQUID01",
+            source_query="keepa_category:home",
+            marketplace="US",
+            title="Concentrated Liquid Cleaner Refill for Home Surfaces",
+            brand="CleanCo",
+            category="Household Cleaning",
+            price=29.99,
+            bsr=3200,
+            reviews=90,
+            seller_count=4,
+            landed_cost=None,
+            est_net_margin=None,
+            brand_share=0.12,
+            price_trend="stable",
+            rating=4.3,
+            features={"monthly_sales_estimate": 520},
+        ),
+        NormalizedProduct(
+            asin="B0POWDER01",
+            source_query="keepa_category:home",
+            marketplace="US",
+            title="Deodorizing Powder Refill for Storage and Closets",
+            brand="FreshCo",
+            category="Home Care",
+            price=26.99,
+            bsr=4100,
+            reviews=110,
+            seller_count=5,
+            landed_cost=None,
+            est_net_margin=None,
+            brand_share=0.14,
+            price_trend="stable",
+            rating=4.2,
+            features={"monthly_sales_estimate": 480},
+        ),
+        NormalizedProduct(
+            asin="B0SPRAY001",
+            source_query="keepa_category:home",
+            marketplace="US",
+            title="Room Spray Refill for Fabric and Air Freshening",
+            brand="FreshAir",
+            category="Home Fragrance",
+            price=32.99,
+            bsr=3800,
+            reviews=130,
+            seller_count=6,
+            landed_cost=None,
+            est_net_margin=None,
+            brand_share=0.18,
+            price_trend="stable",
+            rating=4.4,
+            features={"monthly_sales_estimate": 610},
+        ),
+    ]
+
+    for product in products:
+        screening = skill.evaluate(product)
+        assert screening.verdict == "cut"
+        assert screening.score == 0
+        assert deepseek_reject_code(screening.top_reason) == (
+            "deepseek_liquid_powder_spray_product"
+        )
+
+
+def test_rule_engine_leaves_liquid_form_policy_to_deepseek():
+    product = NormalizedProduct(
+        asin="B0RULELIQ1",
+        source_query="keepa_category:home",
+        marketplace="US",
+        title="Concentrated Liquid Cleaner Refill for Home Surfaces",
+        brand="CleanCo",
+        category="Household Cleaning",
+        price=29.99,
+        bsr=3200,
+        reviews=90,
+        seller_count=4,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.12,
+        price_trend="stable",
+        rating=4.3,
+        features={"monthly_sales_estimate": 520},
+    )
+
+    result = RuleEngine().evaluate(product)
+
+    assert result.passed is True
+
+
+def test_deepseek_does_not_reject_empty_spray_bottle_as_spray_content():
+    product = NormalizedProduct(
+        asin="B0BOTTLE01",
+        source_query="keepa_category:home",
+        marketplace="US",
+        title="Empty Refillable Spray Bottle for Plants and Cleaning",
+        brand="BottleCo",
+        category="Home & Kitchen",
+        price=25.99,
+        bsr=6200,
+        reviews=95,
+        seller_count=5,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.12,
+        price_trend="stable",
+        rating=4.1,
+        features={"monthly_sales_estimate": 390},
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+
+    assert screening.verdict != "cut"
+
+
+def test_deepseek_does_not_reject_spray_tools_or_usage_context_as_spray_content():
+    product = NormalizedProduct(
+        asin="B0HEATGUN1",
+        source_query="keepa_category:tools",
+        marketplace="US",
+        title="Spraytech Heat Gun for Removing Paint and Adhesive",
+        brand="ToolCo",
+        category="Tools & Home Improvement",
+        price=32.99,
+        bsr=5200,
+        reviews=140,
+        seller_count=6,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.15,
+        price_trend="stable",
+        rating=4.4,
+        features={"monthly_sales_estimate": 450},
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+
+    assert screening.verdict != "cut"
+
+
 def test_monthly_sales_estimator_prefers_keepa_truth_and_estimates_missing_values():
     real = estimate_monthly_sales(
         bsr=8_000,

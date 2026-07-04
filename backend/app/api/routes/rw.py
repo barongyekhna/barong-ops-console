@@ -83,7 +83,7 @@ RULES = [
         "label": "合规红线过滤",
         "enabled": True,
         "result": "已启用",
-        "threshold": "液体/强认证/IP/易碎重货等直接剔除；锂电仅提示不硬剔除",
+        "threshold": "强认证/IP/易碎重货等硬门直接剔除；液体/粉末/喷雾交由 DeepSeek 策略剔除；锂电仅提示不硬剔除",
     },
     {
         "id": "lithium_warning",
@@ -340,6 +340,8 @@ def rw_products(
     state: str | None = Query(default=None, pattern="^(pass|reject|pending_review|ai1_passed|ai1_rejected|rejected|rule_passed)$"),
     sort_by: str = Query(default="updated_at", pattern="^(updated_at|skill_score)$"),
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=50),
     db: Session = Depends(get_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
@@ -349,8 +351,9 @@ def rw_products(
     total_count = 0
     order_sql = "ASC" if sort_order == "asc" else "DESC"
     order_column = "skill_score" if sort_by == "skill_score" else "updated_at"
+    offset = (page - 1) * page_size
     filters = []
-    params: dict[str, object] = {}
+    params: dict[str, object] = {"limit": page_size, "offset": offset}
     if q:
         filters.append(
             "(LOWER(title) LIKE :q OR LOWER(COALESCE(title_zh, '')) LIKE :q "
@@ -397,7 +400,8 @@ def rw_products(
                 FROM products_rw
                 {where_sql}
                 ORDER BY {order_column} {order_sql} NULLS LAST
-                LIMIT 100
+                LIMIT :limit
+                OFFSET :offset
                 """
             ),
             params,
@@ -449,6 +453,11 @@ def rw_products(
         "items": rows,
         "count": total_count,
         "returned_count": len(rows),
+        "page": page,
+        "page_size": page_size,
+        "total_pages": max(1, (total_count + page_size - 1) // page_size),
+        "has_previous": page > 1,
+        "has_next": offset + len(rows) < total_count,
         "mode": "production",
         "organization": R_SERIES_TARGET_ORGANIZATION_NAME,
         "storage_status": storage_status,
@@ -458,6 +467,8 @@ def rw_products(
             "state": state,
             "sort_by": sort_by,
             "sort_order": sort_order,
+            "page": page,
+            "page_size": page_size,
         },
     }
 

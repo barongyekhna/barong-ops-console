@@ -77,6 +77,7 @@ const tabs: Array<{ href: string; label: string; view: WarehouseView }> = [
 ];
 
 const DEEPSEEK_DAILY_REPORT_KEY_PREFIX = "rw-deepseek-daily-report-date";
+const PRODUCT_PAGE_SIZE = 50;
 
 function currency(value: number) {
   return new Intl.NumberFormat("zh-CN", {
@@ -186,6 +187,9 @@ function rejectReasonLabel(value: string | null, features: Record<string, unknow
     competition_filter: "卖家数量过多",
     too_many_sellers: "卖家数量过多",
     brand_dominance: "品牌垄断风险过高",
+    deepseek_edible_product: "DeepSeek 剔除：食品/保健品/药品/可食用品",
+    deepseek_liquid_powder_spray_product: "DeepSeek 剔除：液体/粉末/喷雾内容物",
+    deepseek_pest_control_product: "DeepSeek 剔除：杀虫/灭虫/虫害控制产品",
     redline_category: "命中合规红线",
     too_heavy: "重量超过规则阈值",
     viral_unproven: "疑似短期爆款，缺少稳定需求证明",
@@ -214,7 +218,15 @@ function fallbackImageUrl(asin: string) {
 
 function productImageCandidates(product: RwProduct) {
   const cleaned = product.asin.trim().toUpperCase();
+  const featureCandidates = product.features.image_candidates;
+  const keepaCandidates = Array.isArray(featureCandidates)
+    ? featureCandidates.filter(
+        (candidate): candidate is string =>
+          typeof candidate === "string" && candidate.startsWith("http"),
+      )
+    : [];
   const candidates = [
+    ...keepaCandidates,
     product.image_url,
     product.image_url?.replace(
       "https://images-na.ssl-images-amazon.com/images/I/",
@@ -290,7 +302,7 @@ function BsrCell({ product }: { product: RwProduct }) {
   const bestsellerParentRank = numberFeature(product, "bestseller_parent_rank");
   const bestsellerParentCategory =
     stringFeature(product, "bestseller_parent_category") ?? "大类目";
-  const subcategoryRank = numberFeature(product, "subcategory_rank") ?? product.bsr;
+  const subcategoryRank = numberFeature(product, "subcategory_rank");
   const subcategoryName = stringFeature(product, "subcategory_name") ?? product.category;
 
   return (
@@ -304,11 +316,29 @@ function BsrCell({ product }: { product: RwProduct }) {
       </span>
       <span>
         <strong>产品小类目</strong>
-        #{subcategoryRank.toLocaleString("zh-CN")}
+        {subcategoryRank === null
+          ? "暂无真实排名"
+          : `#${subcategoryRank.toLocaleString("zh-CN")}`}
         <em>{subcategoryName}</em>
       </span>
     </div>
   );
+}
+
+function categoryPathDisplay(product: RwProduct) {
+  const featurePath = product.features.amazon_category_path;
+  if (Array.isArray(featurePath)) {
+    const labels = featurePath.filter(
+      (item): item is string => typeof item === "string" && item.trim().length > 0,
+    );
+    if (labels.length > 0) {
+      return labels.join(" > ");
+    }
+  }
+  if (product.category_path.length > 0) {
+    return product.category_path.join(" > ");
+  }
+  return product.category;
 }
 
 function monthlySalesDisplay(product: RwProduct) {
@@ -445,7 +475,9 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
                       <span className={styles.metaLine}>
                         <AsinTag asin={product.asin} />
                         <span>{product.brand ?? "未知品牌"}</span>
-                        <span>{product.category}</span>
+                        <span className={styles.categoryPath}>
+                          {categoryPathDisplay(product)}
+                        </span>
                       </span>
                       <span>
                         评分 {product.rating ?? "无"} · 趋势 {priceTrendLabel(product.price_trend)}
@@ -497,6 +529,52 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
   );
 }
 
+function ProductPagination({
+  loading,
+  onPageChange,
+  products,
+}: {
+  loading: boolean;
+  onPageChange: (page: number) => void;
+  products: RwProductsResponse;
+}) {
+  const page = products.page ?? 1;
+  const pageSize = products.page_size ?? PRODUCT_PAGE_SIZE;
+  const totalPages = products.total_pages ?? Math.max(1, Math.ceil(products.count / pageSize));
+  const start = products.count === 0 ? 0 : (page - 1) * pageSize + 1;
+  const end =
+    products.count === 0
+      ? 0
+      : Math.min(products.count, start + (products.returned_count ?? products.items.length) - 1);
+
+  return (
+    <div className={styles.pagination}>
+      <span>
+        第 {page} / {totalPages} 页，每页 {pageSize} 条，显示 {start}-{end} / 共{" "}
+        {products.count.toLocaleString("zh-CN")} 条
+      </span>
+      <div>
+        <button
+          className={styles.filterButton}
+          disabled={loading || page <= 1}
+          onClick={() => onPageChange(page - 1)}
+          type="button"
+        >
+          上一页
+        </button>
+        <button
+          className={styles.filterButton}
+          disabled={loading || page >= totalPages}
+          onClick={() => onPageChange(page + 1)}
+          type="button"
+        >
+          下一页
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function RulesList({ rules }: { rules: RwRulesResponse }) {
   return (
     <div className={styles.ruleList}>
@@ -534,7 +612,10 @@ function CategorySelectionList({
           }}
           type="checkbox"
         />
-        <span>{node.name}</span>
+        <span className={styles.categoryLabel}>
+          <span>{node.name}</span>
+          <em>{node.id}</em>
+        </span>
       </label>
       {node.children.map((child) => (
         <CategorySelectionList
@@ -847,6 +928,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   const [deletingRejected, setDeletingRejected] = useState(false);
   const [showDeepseekReport, setShowDeepseekReport] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<string | null>(null);
+  const [productPage, setProductPage] = useState(1);
   const [filters, setFilters] = useState<ProductFilters>({
     category_id: "",
     q: "",
@@ -856,6 +938,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   });
   const stateRef = useRef(state);
   const filtersRef = useRef(filters);
+  const productPageRef = useRef(productPage);
   const deepseekDailyReportKey = `${DEEPSEEK_DAILY_REPORT_KEY_PREFIX}:${
     user?.id ?? "anonymous"
   }`;
@@ -867,6 +950,10 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   useEffect(() => {
     filtersRef.current = filters;
   }, [filters]);
+
+  useEffect(() => {
+    productPageRef.current = productPage;
+  }, [productPage]);
 
   useEffect(() => {
     if (!state.status || typeof window === "undefined") {
@@ -899,6 +986,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             "products",
             getRwProductsWithFilters({
               category_id: filtersRef.current.category_id || undefined,
+              page: productPageRef.current,
+              page_size: PRODUCT_PAGE_SIZE,
               q: filtersRef.current.q || undefined,
               state: filtersRef.current.state || undefined,
               sort_by: filtersRef.current.sort_by,
@@ -992,6 +1081,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     setRefreshing(true);
     getRwProductsWithFilters({
       category_id: filters.category_id || undefined,
+      page: productPageRef.current,
+      page_size: PRODUCT_PAGE_SIZE,
       q: filters.q || undefined,
       state: filters.state || undefined,
       sort_by: filters.sort_by,
@@ -1021,7 +1112,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     return () => {
       cancelled = true;
     };
-  }, [filters]);
+  }, [filters, productPage]);
 
   const readyState = readableWarehouseState(state, filters);
   const products = state.products?.items ?? [];
@@ -1056,11 +1147,16 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     }
   }
 
-  async function refreshProductsOnly(activeFilters: ProductFilters = filtersRef.current) {
+  async function refreshProductsOnly(
+    activeFilters: ProductFilters = filtersRef.current,
+    page: number = productPageRef.current,
+  ) {
     setRefreshing(true);
     try {
       const response = await getRwProductsWithFilters({
         category_id: activeFilters.category_id || undefined,
+        page,
+        page_size: PRODUCT_PAGE_SIZE,
         q: activeFilters.q || undefined,
         sort_by: activeFilters.sort_by,
         sort_order: activeFilters.sort_order,
@@ -1078,6 +1174,12 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     } finally {
       setRefreshing(false);
     }
+  }
+
+  function updateProductFilters(updater: (current: ProductFilters) => ProductFilters) {
+    setProductPage(1);
+    productPageRef.current = 1;
+    setFilters(updater);
   }
 
   async function saveCategories(selectedCategories: string[]) {
@@ -1300,14 +1402,14 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
           <div className={styles.filters}>
             <input
               onChange={(event) =>
-                setFilters((current) => ({ ...current, q: event.target.value }))
+                updateProductFilters((current) => ({ ...current, q: event.target.value }))
               }
               placeholder="搜索标题 / ASIN / 类目"
               value={filters.q}
             />
             <select
               onChange={(event) =>
-                setFilters((current) => ({
+                updateProductFilters((current) => ({
                   ...current,
                   category_id: event.target.value,
                 }))
@@ -1323,7 +1425,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             </select>
             <select
               onChange={(event) =>
-                setFilters((current) => ({
+                updateProductFilters((current) => ({
                   ...current,
                   sort_by: event.target.value as ProductFilters["sort_by"],
                 }))
@@ -1337,7 +1439,9 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               className={styles.filterButton}
               disabled={refreshing}
               onClick={() => {
-                void refreshProductsOnly(filters);
+                setProductPage(1);
+                productPageRef.current = 1;
+                void refreshProductsOnly(filters, 1);
               }}
               type="button"
             >
@@ -1347,7 +1451,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             <button
               className={styles.filterButton}
               onClick={() =>
-                setFilters((current) => ({
+                updateProductFilters((current) => ({
                   ...current,
                   state: current.state === "pass" ? "" : "pass",
                 }))
@@ -1369,7 +1473,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             <button
               className={styles.filterButton}
               onClick={() =>
-                setFilters((current) => ({
+                updateProductFilters((current) => ({
                   ...current,
                   sort_order: current.sort_order === "asc" ? "desc" : "asc",
                 }))
@@ -1381,6 +1485,14 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             </button>
           </div>
           <ProductsTable products={products} />
+          <ProductPagination
+            loading={refreshing}
+            onPageChange={(page) => {
+              setProductPage(page);
+              productPageRef.current = page;
+            }}
+            products={readyState.products}
+          />
         </section>
       ) : null}
 
@@ -1443,15 +1555,22 @@ function emptyProductsResponse(
     count: 0,
     filters: {
       category_id: filters.category_id || null,
+      page: 1,
+      page_size: PRODUCT_PAGE_SIZE,
       q: filters.q || null,
       sort_by: filters.sort_by,
       sort_order: filters.sort_order,
       state: filters.state || null,
     },
+    has_next: false,
+    has_previous: false,
     items: [],
     mode: "production",
     organization: status.organization,
+    page: 1,
+    page_size: PRODUCT_PAGE_SIZE,
     returned_count: 0,
+    total_pages: 1,
   };
 }
 
