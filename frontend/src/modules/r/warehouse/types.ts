@@ -49,6 +49,8 @@ export type RwStatus = {
   category_tree: {
     selected_count: number;
     selected_categories: string[];
+    runnable_selected_count?: number;
+    runnable_selected_categories?: string[];
   };
   runtime: RwRuntimeOverview;
 };
@@ -210,5 +212,7 @@ export type RwCategoryTreeResponse = {
   root: RwCategoryNode;
   selected_categories: string[];
   runnable_selected_categories?: string[];
+  selected_count?: number;
+  runnable_selected_count?: number;
   queue_pruned?: number;
 };

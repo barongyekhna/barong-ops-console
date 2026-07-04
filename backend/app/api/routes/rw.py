@@ -241,7 +241,8 @@ def rw_status(
         load_category_tree(),
         settings.selected_categories,
     )
-    selected_categories = runnable_selected_category_ids(category_tree)
+    selected_categories = selected_category_ids(category_tree)
+    runnable_categories = runnable_selected_category_ids(category_tree)
     runtime = runtime_overview(db, event_limit=10)
     return {
         "module": "R-W",
@@ -296,6 +297,8 @@ def rw_status(
         "category_tree": {
             "selected_count": len(selected_categories),
             "selected_categories": selected_categories,
+            "runnable_selected_count": len(runnable_categories),
+            "runnable_selected_categories": runnable_categories,
         },
         "endpoints": [
             "/api/rw/products",
@@ -561,6 +564,8 @@ def rw_category_select(
     runnable_categories = runnable_selected_category_ids(result)
     result["selected_categories"] = selected_categories
     result["runnable_selected_categories"] = runnable_categories
+    result["selected_count"] = len(selected_categories)
+    result["runnable_selected_count"] = len(runnable_categories)
     return result
 
 
@@ -580,10 +585,11 @@ def rw_category_save(
         if str(category_id).strip()
     ]
     current_tree = apply_selected_categories(load_category_tree(), selected)
+    selected_categories = selected_category_ids(current_tree)
     runnable_categories = runnable_selected_category_ids(current_tree)
     try:
         pruned_queue = _prune_unselected_pending_queue(db, runnable_categories)
-        save_runtime_settings(db, {"selected_categories": runnable_categories})
+        save_runtime_settings(db, {"selected_categories": selected_categories})
         db.commit()
     except SQLAlchemyError as exc:
         db.rollback()
@@ -591,8 +597,10 @@ def rw_category_save(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="rw_category_settings_unavailable",
         ) from exc
-    current_tree["selected_categories"] = runnable_categories
+    current_tree["selected_categories"] = selected_categories
     current_tree["runnable_selected_categories"] = runnable_categories
+    current_tree["selected_count"] = len(selected_categories)
+    current_tree["runnable_selected_count"] = len(runnable_categories)
     current_tree["queue_pruned"] = pruned_queue
     return current_tree
 

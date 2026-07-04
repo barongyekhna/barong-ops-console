@@ -768,6 +768,9 @@ function BatchStatusView({
           <strong>Keepa 抓取类目</strong>
           <span>
             草稿 {draftSelectedCategories.length} 个 / 已保存 {status.category_tree.selected_count} 个
+            {typeof status.category_tree.runnable_selected_count === "number"
+              ? ` / 实抓 ${status.category_tree.runnable_selected_count} 个`
+              : ""}
           </span>
         </div>
         <div className={styles.selectorActions}>
@@ -1057,31 +1060,29 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     setSavingCategory(true);
     try {
       const response = await saveRwCategoryTree(selectedCategories);
+      const [settingsResponse, statusResponse] = await Promise.all([
+        getRwSettings(),
+        getRwStatus(),
+      ]);
       const runnableCategories =
         response.runnable_selected_categories ?? response.selected_categories;
       setState((current) => {
         const updated: WarehouseState = {
           ...current,
           categoryTree: response,
-          settings: current.settings
-            ? {
-                ...current.settings,
-                settings: {
-                  ...current.settings.settings,
-                  selected_categories: response.selected_categories,
-                },
-              }
-            : current.settings,
-          status: current.status
-            ? {
-                ...current.status,
-                category_tree: {
-                  ...current.status.category_tree,
-                  selected_categories: runnableCategories,
-                  selected_count: runnableCategories.length,
-                },
-              }
-            : current.status,
+          settings: settingsResponse,
+          status: {
+            ...statusResponse,
+            category_tree: {
+              ...statusResponse.category_tree,
+              selected_categories: response.selected_categories,
+              selected_count:
+                response.selected_count ?? response.selected_categories.length,
+              runnable_selected_categories: runnableCategories,
+              runnable_selected_count:
+                response.runnable_selected_count ?? runnableCategories.length,
+            },
+          },
         };
         stateRef.current = updated;
         return updated;

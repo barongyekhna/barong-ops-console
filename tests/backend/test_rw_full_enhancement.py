@@ -3,7 +3,7 @@ from __future__ import annotations
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
-from backend.app.api.routes.rw import rw_category_select
+from backend.app.api.routes.rw import rw_category_save, rw_category_select
 from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.category.category_tree import (
     generate_category_tree_from_amazon_doc,
@@ -76,6 +76,54 @@ def test_rw_category_select_preview_does_not_persist_runtime_settings():
 
     assert "172574" not in result["selected_categories"]
     assert persisted.selected_categories == ["1055398"]
+
+
+def test_rw_category_save_persists_user_selection_not_runnable_projection():
+    engine = create_engine("sqlite:///:memory:")
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    db.execute(
+        text(
+            """
+            CREATE TABLE rw_runtime_settings (
+              key TEXT PRIMARY KEY,
+              value TEXT,
+              updated_at TEXT
+            )
+            """
+        )
+    )
+    db.execute(
+        text(
+            """
+            CREATE TABLE enrich_queue (
+              asin TEXT PRIMARY KEY,
+              marketplace TEXT,
+              source_query TEXT,
+              category_id TEXT,
+              category_path TEXT,
+              picked BOOLEAN,
+              retry_count INTEGER,
+              last_error TEXT,
+              enqueued_at TEXT,
+              picked_at TEXT
+            )
+            """
+        )
+    )
+
+    result = rw_category_save(
+        {"selected_categories": ["1055398", "284507", "16510975011"]},
+        db=db,
+        user=object(),
+    )
+    persisted = load_runtime_settings(db)
+
+    assert result["selected_categories"] == ["1055398", "284507", "16510975011"]
+    assert result["selected_count"] == 3
+    assert result["runnable_selected_categories"] == ["284507", "16510975011"]
+    assert result["runnable_selected_count"] == 2
+    assert persisted.selected_categories == ["1055398", "284507", "16510975011"]
 
 
 def test_rw_deepseek_model_defaults_to_pro_and_prefers_rw_override(monkeypatch):
