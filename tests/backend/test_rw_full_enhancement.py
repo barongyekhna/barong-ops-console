@@ -11,10 +11,17 @@ from r_system_v2.rw.category.category_tree import (
     select_category,
     selected_category_ids,
 )
-from r_system_v2.rw.core.models import IngestionRecord, NormalizedProduct, ProductState
+from r_system_v2.rw.core.models import (
+    IngestionRecord,
+    KeepaProductData,
+    NormalizedProduct,
+    ProductState,
+)
 from r_system_v2.rw.core.rule_engine import RuleEngine
 from r_system_v2.rw.core.warehouse_engine import WarehouseEngine
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
+from r_system_v2.rw.processor.feature_extractor import extract_product_features
+from r_system_v2.rw.processor.monthly_sales_estimator import estimate_monthly_sales
 from r_system_v2.rw.providers.keepa_provider import KeepaProvider
 from r_system_v2.rw.scoring_engine import ScoringEngine
 from r_system_v2.rw.scheduler.category_rate_limiter import CategoryRateLimiter
@@ -191,6 +198,61 @@ def test_deepseek_rejects_edible_products_before_ra_review():
     assert screening.score == 0
     assert decision.action == "reject"
     assert "食品" in decision.reason
+
+
+def test_monthly_sales_estimator_prefers_keepa_truth_and_estimates_missing_values():
+    real = estimate_monthly_sales(
+        bsr=8_000,
+        category="Home & Kitchen",
+        monthly_sales=320,
+    )
+    estimated = estimate_monthly_sales(
+        bsr=8_000,
+        category="Home & Kitchen",
+        parent_category_name="Home & Kitchen",
+        subcategory_name="Storage",
+    )
+
+    assert real.estimate == 320
+    assert real.minimum == 320
+    assert real.maximum == 320
+    assert real.source == "keepa_monthly_sold"
+    assert real.confidence == "high"
+    assert estimated.estimate > 0
+    assert estimated.minimum <= estimated.estimate <= estimated.maximum
+    assert estimated.source == "bsr_estimate_v1"
+    assert estimated.confidence in {"medium", "low"}
+
+
+def test_feature_extractor_adds_monthly_sales_estimate_for_missing_keepa_sales():
+    product = extract_product_features(
+        "keepa_category:13679381",
+        KeepaProductData(
+            asin="B0ESTIMATE1",
+            marketplace="US",
+            title="Portable Storage Basket",
+            brand="Fixture",
+            category="Home & Kitchen",
+            price=34.99,
+            bsr=8_000,
+            reviews=120,
+            seller_count=6,
+            landed_cost=None,
+            brand_share=0.18,
+            price_trend="stable",
+            monthly_sales=None,
+            parent_category_name="Home & Kitchen",
+            subcategory_name="Storage",
+            subcategory_rank=8_000,
+            mock_generated=False,
+        ),
+    )
+
+    assert product.features["monthly_sales"] is None
+    assert product.features["monthly_sales_source"] == "unknown"
+    assert product.features["monthly_sales_estimate"] > 0
+    assert product.features["monthly_sales_estimate_source"] == "bsr_estimate_v1"
+    assert product.features["monthly_sales_confidence"] == "medium"
 
 
 def test_category_rate_limiter_balances_twenty_categories_for_ten_minutes():

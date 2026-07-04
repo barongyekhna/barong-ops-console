@@ -555,7 +555,7 @@ _NON_EDIBLE_ACCESSORY_TERMS = (
 
 def _score_demand_quality(product: NormalizedProduct) -> int:
     score = 35
-    monthly_sales = _int_feature(product, "monthly_sales")
+    monthly_sales = _monthly_sales_for_scoring(product)
     if product.bsr <= 5_000:
         score += 28
     elif product.bsr <= 20_000:
@@ -653,12 +653,39 @@ def _top_reason(product: NormalizedProduct, score: int) -> str:
 
 def _monthly_sales_label(product: NormalizedProduct) -> str:
     value = product.features.get("monthly_sales")
+    parsed_value = _positive_int(value)
+    if parsed_value is not None:
+        return str(parsed_value)
+    estimate = _positive_int(product.features.get("monthly_sales_estimate"))
+    minimum = _positive_int(product.features.get("monthly_sales_estimate_min"))
+    maximum = _positive_int(product.features.get("monthly_sales_estimate_max"))
+    confidence = str(product.features.get("monthly_sales_confidence") or "").strip()
+    confidence_label = {
+        "high": "高",
+        "medium": "中",
+        "low": "低",
+    }.get(confidence, "低")
+    if estimate is None:
+        return "未知"
+    if minimum is not None and maximum is not None and minimum != maximum:
+        return f"约 {minimum}-{maximum}（估算，置信度{confidence_label}）"
+    return f"约 {estimate}（估算，置信度{confidence_label}）"
+
+
+def _monthly_sales_for_scoring(product: NormalizedProduct) -> int:
+    return _positive_int(product.features.get("monthly_sales")) or _positive_int(
+        product.features.get("monthly_sales_estimate")
+    ) or 0
+
+
+def _positive_int(value: object) -> int | None:
     if isinstance(value, bool) or value is None:
-        return "未知"
+        return None
     try:
-        return str(max(0, int(value)))
+        parsed = int(value)
     except (TypeError, ValueError):
-        return "未知"
+        return None
+    return parsed if parsed > 0 else None
 
 
 def _int_feature(product: NormalizedProduct, key: str) -> int:

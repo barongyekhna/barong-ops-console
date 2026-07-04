@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from r_system_v2.rw.core.models import KeepaProductData, NormalizedProduct, ProductState
+from r_system_v2.rw.processor.monthly_sales_estimator import estimate_monthly_sales
 
 
 def _category_id(category: str) -> str:
@@ -31,6 +32,13 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
         margin_source = keepa_data.margin_source or "estimated_from_landed_cost"
         margin_confidence = keepa_data.margin_confidence or "estimated"
     demand_bucket = "high" if keepa_data.bsr <= 10_000 else "medium" if keepa_data.bsr <= 50_000 else "low"
+    monthly_sales_estimate = estimate_monthly_sales(
+        bsr=keepa_data.bsr,
+        category=keepa_data.category,
+        parent_category_name=keepa_data.parent_category_name,
+        subcategory_name=keepa_data.subcategory_name,
+        monthly_sales=keepa_data.monthly_sales,
+    )
 
     return NormalizedProduct(
         asin=keepa_data.asin,
@@ -68,6 +76,7 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
             "monthly_sales_source": "keepa_monthly_sold"
             if keepa_data.monthly_sales is not None
             else "unknown",
+            **monthly_sales_estimate.to_features(),
             "parent_category_name": keepa_data.parent_category_name,
             "parent_category_rank": keepa_data.parent_category_rank,
             "subcategory_name": keepa_data.subcategory_name or keepa_data.category,

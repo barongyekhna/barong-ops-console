@@ -311,6 +311,34 @@ function BsrCell({ product }: { product: RwProduct }) {
   );
 }
 
+function monthlySalesDisplay(product: RwProduct) {
+  const realMonthlySales = numberFeature(product, "monthly_sales");
+  if (realMonthlySales !== null) {
+    return `月销量 ${realMonthlySales.toLocaleString("zh-CN")}`;
+  }
+  const estimate = numberFeature(product, "monthly_sales_estimate");
+  if (estimate === null) {
+    return "月销量 未知";
+  }
+  const minimum = numberFeature(product, "monthly_sales_estimate_min");
+  const maximum = numberFeature(product, "monthly_sales_estimate_max");
+  const confidence = stringFeature(product, "monthly_sales_confidence");
+  const confidenceLabel: Record<string, string> = {
+    high: "高",
+    low: "低",
+    medium: "中",
+  };
+  const suffix = `估算${
+    confidence ? `·置信度${confidenceLabel[confidence] ?? confidence}` : ""
+  }`;
+  if (minimum !== null && maximum !== null && minimum !== maximum) {
+    return `月销量约 ${minimum.toLocaleString("zh-CN")}-${maximum.toLocaleString(
+      "zh-CN",
+    )}（${suffix}）`;
+  }
+  return `月销量约 ${estimate.toLocaleString("zh-CN")}（${suffix}）`;
+}
+
 function productMetrics(
   products: readonly RwProduct[],
   counts: RwStatus["runtime"]["counts"] | undefined,
@@ -403,7 +431,7 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
         </thead>
         <tbody>
           {products.map((product) => {
-            const monthlySales = numberFeature(product, "monthly_sales");
+            const monthlySales = monthlySalesDisplay(product);
             return (
               <tr key={product.asin}>
                 <td>
@@ -424,12 +452,7 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
                       </span>
                       <span className={styles.metaLine}>
                         <span>{fulfillmentLabel(product.fulfillment_method)}</span>
-                        <span className={styles.salesTag}>
-                          月销量{" "}
-                          {monthlySales === null
-                            ? "未知"
-                            : monthlySales.toLocaleString("zh-CN")}
-                        </span>
+                        <span className={styles.salesTag}>{monthlySales}</span>
                         {product.lithium_battery_warning ? (
                           <span className={styles.lithiumTag}>锂电提示</span>
                         ) : null}

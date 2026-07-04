@@ -300,7 +300,10 @@ class KeepaWorker:
         transitions: list[str],
         started_at: float,
     ) -> PipelineResult:
-        monthly_sales = _positive_int_feature(product.features, "monthly_sales") or 0
+        monthly_sales = _positive_int_feature(
+            product.features,
+            "monthly_sales",
+        ) or _positive_int_feature(product.features, "monthly_sales_estimate") or 0
         score = _holiday_sales_score(monthly_sales=monthly_sales, bsr=product.bsr)
         product.features["holiday_mode"] = "sales_only"
         product.features["hard_rule_exempt"] = True
