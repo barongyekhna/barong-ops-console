@@ -132,6 +132,17 @@ class RwRealtimeEngine:
             "RW_KEEPA_DISCOVERY_ERROR_COOLDOWN_SECONDS",
             21_600,
         )
+        self.max_discovery_requests_per_cycle = max(
+            1,
+            min(
+                MAX_REQUESTS_PER_MINUTE,
+                _int_env("RW_KEEPA_MAX_DISCOVERY_REQUESTS_PER_CYCLE", 1),
+            ),
+        )
+        self.discovery_request_interval_seconds = max(
+            0,
+            _int_env("RW_KEEPA_DISCOVERY_REQUEST_INTERVAL_SECONDS", 3),
+        )
         self.keepa_backoff_until: datetime | None = None
         self.adaptive_fetch_cap = self.keepa_batch_size
         self.processed_total = 0
@@ -303,14 +314,6 @@ class RwRealtimeEngine:
             self.adaptive_fetch_cap,
             _safe_fetch_budget(tokens_left),
         )
-        discovery_budget = max(0, min(self.discovery_categories_per_cycle, tokens_left - requested))
-        if self.discovery_enabled and requested > 0 and discovery_budget > 0:
-            self._discover_if_needed(
-                db,
-                selected_categories,
-                requested,
-                max_category_attempts=discovery_budget,
-            )
         records, scheduler_report = self.scheduler.claim(
             db,
             selected_categories=selected_categories,
@@ -367,6 +370,27 @@ class RwRealtimeEngine:
         else:
             processed = 0
             failed = 0
+        discovery_budget = max(
+            0,
+            min(
+                self.discovery_categories_per_cycle,
+                self.max_discovery_requests_per_cycle,
+                MAX_REQUESTS_PER_MINUTE - len(records),
+                tokens_left - len(records),
+            ),
+        )
+        if (
+            self.discovery_enabled
+            and requested > 0
+            and len(records) < requested
+            and discovery_budget > 0
+        ):
+            self._discover_if_needed(
+                db,
+                selected_categories,
+                requested,
+                max_category_attempts=discovery_budget,
+            )
         scheduler_payload = scheduler_report.to_dict()
         scheduler_payload["stale_released"] = stale_released
         scheduler_payload["processed_purged"] = processed_purged
@@ -404,7 +428,6 @@ class RwRealtimeEngine:
         max_category_attempts: int,
     ) -> None:
         pending = self.scheduler.pending_count(db, selected_categories)
-        db.rollback()
         if pending >= requested_tokens or not selected_categories:
             return
         missing = requested_tokens - pending
@@ -425,6 +448,8 @@ class RwRealtimeEngine:
                 self.discovery_blocked_until.pop(category_id, None)
             attempted += 1
             try:
+                if self.discovery_request_interval_seconds > 0:
+                    time.sleep(self.discovery_request_interval_seconds)
                 page = self.discovery_pages.get(category_id, 0)
                 asins = self.provider.discover_asins(
                     category_id=category_id,

@@ -1,6 +1,14 @@
 "use client";
 
-import { Activity, AlertCircle, CheckCircle2, Copy, Database, RefreshCw } from "lucide-react";
+import {
+  Activity,
+  AlertCircle,
+  CheckCircle2,
+  Copy,
+  Database,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -669,6 +677,10 @@ function BatchStatusView({
           <dd>抓取后实时运行</dd>
         </div>
         <div>
+          <dt>DeepSeek 模型</dt>
+          <dd>{status.deepseek_batch.model ?? "deepseek-v4-pro"}</dd>
+        </div>
+        <div>
           <dt>DeepSeek 已处理</dt>
           <dd>{status.deepseek_batch.total_processed}</dd>
         </div>
@@ -906,14 +918,14 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
           setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
           if (failed.length === 0) {
             setError(null);
-          } else if (hasCompleteWarehouseState(nextState)) {
+          } else if (readableWarehouseState(nextState, filtersRef.current)) {
             setError("部分后端数据刷新失败，已保留上一轮可读数据。");
           } else {
             const loadError = failed[0].reason;
             setError(
               loadError instanceof Error && loadError.message.includes("无权")
                 ? "暂无权限，请联系管理员开通权限。"
-                : "R-W 后端数据暂时不可用。",
+                : "R-W 后端连接中，页面会自动重试。",
             );
           }
         }
@@ -922,7 +934,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
           setError(
             loadError instanceof Error && loadError.message.includes("无权")
               ? "暂无权限，请联系管理员开通权限。"
-              : "R-W 后端数据暂时不可用。",
+              : "R-W 后端连接中，页面会自动重试。",
           );
         }
       } finally {
@@ -984,7 +996,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     };
   }, [filters]);
 
-  const readyState = hasCompleteWarehouseState(state) ? state : null;
+  const readyState = readableWarehouseState(state, filters);
   const products = state.products?.items ?? [];
   const metrics = useMemo(
     () =>
@@ -1014,6 +1026,30 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       setError("R-W 运行设置保存失败，现有页面数据已保留。");
     } finally {
       setSavingSettings(false);
+    }
+  }
+
+  async function refreshProductsOnly(activeFilters: ProductFilters = filtersRef.current) {
+    setRefreshing(true);
+    try {
+      const response = await getRwProductsWithFilters({
+        category_id: activeFilters.category_id || undefined,
+        q: activeFilters.q || undefined,
+        sort_by: activeFilters.sort_by,
+        sort_order: activeFilters.sort_order,
+        state: activeFilters.state || undefined,
+      });
+      setState((current) => {
+        const updated = { ...current, products: response };
+        stateRef.current = updated;
+        return updated;
+      });
+      setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
+      setError(null);
+    } catch {
+      setError("产品列表刷新失败，已保留上一轮可读数据。");
+    } finally {
+      setRefreshing(false);
     }
   }
 
@@ -1274,6 +1310,17 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
             </select>
             <button
               className={styles.filterButton}
+              disabled={refreshing}
+              onClick={() => {
+                void refreshProductsOnly(filters);
+              }}
+              type="button"
+            >
+              <Search aria-hidden="true" size={15} />
+              筛选
+            </button>
+            <button
+              className={styles.filterButton}
               onClick={() =>
                 setFilters((current) => ({
                   ...current,
@@ -1304,6 +1351,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               }
               type="button"
             >
+              {filters.sort_by === "skill_score" ? "评分" : "时间"}
               {filters.sort_order === "asc" ? "升序" : "降序"}
             </button>
           </div>
@@ -1345,8 +1393,51 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   );
 }
 
-function hasCompleteWarehouseState(value: WarehouseState): value is CompleteWarehouseState {
-  return Boolean(value.status && value.products && value.pipeline);
+function readableWarehouseState(
+  value: WarehouseState,
+  filters: ProductFilters,
+): CompleteWarehouseState | null {
+  if (!value.status) {
+    return null;
+  }
+  return {
+    categoryTree: value.categoryTree,
+    pipeline: value.pipeline ?? emptyPipelineResponse(value.status),
+    products: value.products ?? emptyProductsResponse(value.status, filters),
+    rules: value.rules,
+    settings: value.settings,
+    status: value.status,
+  };
+}
+
+function emptyProductsResponse(
+  status: RwStatus,
+  filters: ProductFilters,
+): RwProductsResponse {
+  return {
+    count: 0,
+    filters: {
+      category_id: filters.category_id || null,
+      q: filters.q || null,
+      sort_by: filters.sort_by,
+      sort_order: filters.sort_order,
+      state: filters.state || null,
+    },
+    items: [],
+    mode: "production",
+    organization: status.organization,
+    returned_count: 0,
+  };
+}
+
+function emptyPipelineResponse(status: RwStatus): RwPipelineResponse {
+  return {
+    mode: "production",
+    module: "R-W",
+    organization: status.organization,
+    refresh_seconds: 5,
+    runtime: status.runtime,
+  };
 }
 
 function applyWarehouseStateValue(

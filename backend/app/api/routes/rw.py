@@ -21,6 +21,7 @@ from r_system_v2.rw.category.category_tree import (
     select_category_in_payload,
     selected_category_ids,
 )
+from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.scheduler.category_rate_limiter import CategoryRateLimiter
 from r_system_v2.rw.skill_metadata import load_deepseek_skill_metadata
 from r_system_v2.rw.storage.pipeline_events import runtime_overview
@@ -173,6 +174,7 @@ def _deepseek_batch_status(db: Session) -> dict[str, object]:
         run_time_range = "暂无已完成批次"
     return {
         "mode": "realtime_inline",
+        "model": rw_deepseek_model(),
         "controls_execution": False,
         "run_time_range": run_time_range,
         "total_processed": total_processed,
@@ -557,15 +559,6 @@ def rw_category_select(
     result = select_category_in_payload(current_tree, category_id, selected)
     selected_categories = selected_category_ids(result)
     runnable_categories = runnable_selected_category_ids(result)
-    try:
-        save_runtime_settings(db, {"selected_categories": selected_categories})
-        db.commit()
-    except SQLAlchemyError as exc:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="rw_category_settings_unavailable",
-        ) from exc
     result["selected_categories"] = selected_categories
     result["runnable_selected_categories"] = runnable_categories
     return result

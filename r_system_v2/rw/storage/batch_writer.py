@@ -14,6 +14,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import Session
 
+from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.core.models import PipelineResult
 
 
@@ -336,7 +337,7 @@ def _ai_row(result: PipelineResult) -> dict[str, Any]:
     return {
         "asin": screening.asin,
         "layer": "deepseek",
-        "model": "deepseek-chat",
+        "model": rw_deepseek_model(),
         "score": screening.score,
         "verdict": screening.verdict,
         "payload": dict(screening.strict_json),

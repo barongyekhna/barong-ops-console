@@ -11,6 +11,7 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
+from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.core.models import DeepSeekScreening, NormalizedProduct
 
 
@@ -162,7 +163,7 @@ class DeepSeekScreeningSkill:
                 error="deepseek_api_key_missing",
             )
         base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
-        model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+        model = rw_deepseek_model()
         timeout = _float_env("RW_DEEPSEEK_TRANSLATION_TIMEOUT_SECONDS", 8.0)
         payload = {
             "model": model,

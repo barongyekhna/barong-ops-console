@@ -3,6 +3,8 @@ from __future__ import annotations
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 
+from backend.app.api.routes.rw import rw_category_select
+from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.category.category_tree import (
     generate_category_tree_from_amazon_doc,
     runnable_selected_category_ids,
@@ -19,6 +21,10 @@ from r_system_v2.rw.scheduler.category_scheduler import CategoryScheduler
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
 from r_system_v2.rw.skill_metadata import load_deepseek_skill_metadata
 from r_system_v2.rw.storage.repository import MockWarehouseRepository
+from r_system_v2.rw.storage.runtime_settings import (
+    load_runtime_settings,
+    save_runtime_settings,
+)
 
 
 def test_category_tree_parent_cascades_but_child_selection_is_local(tmp_path):
@@ -40,6 +46,45 @@ def test_category_tree_parent_cascades_but_child_selection_is_local(tmp_path):
     child_off = select_category("172574", False, path=tree_path)
     assert "1064954" in selected_category_ids(child_off)
     assert "172574" not in selected_category_ids(child_off)
+
+
+def test_rw_category_select_preview_does_not_persist_runtime_settings():
+    engine = create_engine("sqlite:///:memory:")
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    db.execute(
+        text(
+            """
+            CREATE TABLE rw_runtime_settings (
+              key TEXT PRIMARY KEY,
+              value TEXT,
+              updated_at TEXT
+            )
+            """
+        )
+    )
+    save_runtime_settings(db, {"selected_categories": ["1055398"]})
+    db.commit()
+
+    result = rw_category_select(
+        {"category_id": "172574", "selected": False},
+        db=db,
+        user=object(),  # route deletes user after dependency authorization
+    )
+    persisted = load_runtime_settings(db)
+
+    assert "172574" not in result["selected_categories"]
+    assert persisted.selected_categories == ["1055398"]
+
+
+def test_rw_deepseek_model_defaults_to_pro_and_prefers_rw_override(monkeypatch):
+    monkeypatch.delenv("RW_DEEPSEEK_MODEL", raising=False)
+    monkeypatch.delenv("DEEPSEEK_MODEL", raising=False)
+    assert rw_deepseek_model() == "deepseek-v4-pro"
+
+    monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
+    monkeypatch.setenv("RW_DEEPSEEK_MODEL", "deepseek-v4-pro")
+    assert rw_deepseek_model() == "deepseek-v4-pro"
 
 
 def test_category_rate_limiter_balances_twenty_categories_for_ten_minutes():

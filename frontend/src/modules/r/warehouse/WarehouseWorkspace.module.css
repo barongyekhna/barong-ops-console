@@ -115,6 +115,10 @@
 
 .popupButton,
 .filterButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
   min-height: 38px;
   width: fit-content;
   padding: 0 12px;
@@ -124,6 +128,11 @@
   border-radius: 6px;
   font-size: 0.76rem;
   font-weight: 780;
+}
+
+.filterButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
 }
 
 .popupStats {

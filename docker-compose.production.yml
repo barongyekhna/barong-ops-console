@@ -57,6 +57,8 @@ services:
       DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
       I_IMAGE_MEDIA_STORAGE_DIR: "/var/lib/barong/i-media"
       K_PRODUCT_MEDIA_STORAGE_DIR: "/var/lib/barong/k-media"
+      RW_DEEPSEEK_MODEL: "deepseek-v4-pro"
+      DEEPSEEK_MODEL: "deepseek-v4-pro"
     volumes:
       - console_i_media_data:/var/lib/barong/i-media
       - console_k_media_data:/var/lib/barong/k-media
@@ -85,6 +87,10 @@ services:
       DB_POOL_RECYCLE_SECONDS: "600"
       DB_STATEMENT_TIMEOUT_MS: "8000"
       DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
+      RW_DEEPSEEK_MODEL: "deepseek-v4-pro"
+      DEEPSEEK_MODEL: "deepseek-v4-pro"
+      RW_KEEPA_MAX_DISCOVERY_REQUESTS_PER_CYCLE: "1"
+      RW_KEEPA_DISCOVERY_REQUEST_INTERVAL_SECONDS: "3"
     command:
       - python
       - -m

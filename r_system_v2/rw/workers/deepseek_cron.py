@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
 from r_system_v2.rw.core.models import NormalizedProduct, ProductState
 from r_system_v2.rw.scoring_engine import ScoringEngine
@@ -151,13 +152,14 @@ class DeepSeekPreFilterCron:
                           asin, layer, model, score, verdict, payload, created_at
                         )
                         VALUES (
-                          :asin, 'deepseek', 'deepseek-chat',
+                          :asin, 'deepseek', :model,
                           :score, :verdict, {json_value}, CURRENT_TIMESTAMP
                         )
                         """
                     ),
                     {
                         "asin": screening.asin,
+                        "model": rw_deepseek_model(),
                         "score": screening.score,
                         "verdict": screening.verdict,
                         "payload": json.dumps(screening.strict_json, ensure_ascii=False),

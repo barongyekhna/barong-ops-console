@@ -30,6 +30,7 @@ export type RwStatus = {
   };
   deepseek_batch: {
     mode: "batch_processor_only" | "realtime_inline";
+    model?: string;
     controls_execution: boolean;
     run_time_range: string;
     total_processed: number;

@@ -227,6 +227,8 @@ class KeepaProvider:
         try:
             return self._query_discovery(api_key=api_key, selection=selection, limit=limit)
         except Exception as query_error:
+            if _is_keepa_429(query_error):
+                raise
             fallback_selection = dict(selection)
             fallback_selection.pop("current_COUNT_NEW_lte", None)
             fallback_selection.pop("current_COUNT_REVIEWS_lte", None)
@@ -795,6 +797,11 @@ def _rating_from_product(product: dict[str, Any]) -> float | None:
     if isinstance(avg_rating, (int, float)) and avg_rating > 0:
         return round(float(avg_rating) / 10 if avg_rating > 5 else float(avg_rating), 1)
     return None
+
+
+def _is_keepa_429(exc: Exception) -> bool:
+    message = str(exc)
+    return "429" in message or "Too Many Requests" in message
 
 
 def _has_lithium_warning(product: dict[str, Any]) -> bool:

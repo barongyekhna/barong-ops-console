@@ -6,6 +6,7 @@ import json
 from pathlib import Path
 from typing import Any
 
+from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.core.models import (
     DeepSeekScreening,
     IngestionRecord,
@@ -51,7 +52,7 @@ class MockWarehouseRepository:
             {
                 "asin": result.asin,
                 "layer": "deepseek",
-                "model": "deepseek-chat",
+                "model": rw_deepseek_model(),
                 "score": result.score,
                 "verdict": result.verdict,
                 "payload": result.strict_json,
