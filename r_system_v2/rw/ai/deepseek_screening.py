@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -214,6 +215,31 @@ class DeepSeekScreeningSkill:
         )
 
     def evaluate(self, product: NormalizedProduct) -> DeepSeekScreening:
+        pest_control_reason = _pest_control_reject_reason(product)
+        if pest_control_reason:
+            payload = {
+                "score": 0,
+                "verdict": "cut",
+                "competition_attackability": 0,
+                "demand_quality": 0,
+                "top_reason": pest_control_reason,
+                "channel_guess": "amazon",
+            }
+            strict_json = self._strict_json(payload)
+            return DeepSeekScreening(
+                asin=product.asin,
+                score=0,
+                verdict="cut",
+                competition_attackability=0,
+                demand_quality=0,
+                top_reason=strict_json["top_reason"],
+                channel_guess="amazon",
+                strict_json=strict_json,
+                skill_loaded=self.status.loaded,
+                quant_filter_enabled=self.status.quant_filter_enabled,
+                rule_based_scoring_active=self.status.rule_based_scoring_active,
+                output_schema_strict_json=self.status.output_schema_strict_json,
+            )
         edible_reason = _edible_reject_reason(product)
         if edible_reason:
             payload = {
@@ -411,6 +437,32 @@ def _edible_reject_reason(product: NormalizedProduct) -> str | None:
     return None
 
 
+def _pest_control_reject_reason(product: NormalizedProduct) -> str | None:
+    haystack = _product_text(product)
+    if not haystack:
+        return None
+    has_strong_pest_phrase = _contains_any(haystack, _PEST_CONTROL_STRONG_PHRASES)
+    if _contains_any(haystack, _NON_INSECT_REPELLENT_TERMS) and not has_strong_pest_phrase:
+        return None
+    if _contains_any(haystack, _PEST_CONTROL_CATEGORY_TERMS):
+        return "剔除：DeepSeek 判断该产品属于杀虫、灭虫、驱虫或虫害控制类产品，不进入 R-A。"
+    if has_strong_pest_phrase:
+        return "剔除：DeepSeek 命中杀虫剂、灭蚊灯、捕虫器、驱虫喷雾或虫害控制关键词，不进入 R-A。"
+    if _contains_pest_general_term(haystack) and _contains_any(
+        haystack,
+        _PEST_CONTROL_ACTION_TERMS,
+    ):
+        return "剔除：DeepSeek 判断该产品与杀虫灭虫用途直接相关，不进入 R-A。"
+    return None
+
+
+def deepseek_reject_code(top_reason: str | None) -> str:
+    reason = str(top_reason or "").lower()
+    if any(term in reason for term in ("杀虫", "灭虫", "驱虫", "灭蚊", "捕虫", "虫害")):
+        return "deepseek_pest_control_product"
+    return "deepseek_edible_product"
+
+
 def _product_text(product: NormalizedProduct) -> str:
     values: list[str] = [
         product.title,
@@ -432,6 +484,17 @@ def _product_text(product: NormalizedProduct) -> str:
 
 def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
     return any(term in text for term in terms)
+
+
+def _contains_pest_general_term(text: str) -> bool:
+    for term in _PEST_CONTROL_GENERAL_TERMS:
+        if term.isascii() and term.replace(" ", "").isalpha() and len(term) <= 5:
+            if re.search(rf"\b{re.escape(term)}\b", text):
+                return True
+            continue
+        if term in text:
+            return True
+    return False
 
 
 _EDIBLE_CATEGORY_TERMS = (
@@ -550,6 +613,126 @@ _NON_EDIBLE_ACCESSORY_TERMS = (
     "餐饮设备",
     "食品容器",
     "食品收纳",
+)
+_PEST_CONTROL_CATEGORY_TERMS = (
+    "insect control",
+    "mosquito control",
+    "bug control",
+    "虫害控制",
+    "杀虫",
+    "灭虫",
+    "灭蚊",
+    "驱虫",
+)
+_PEST_CONTROL_STRONG_PHRASES = (
+    "insecticide",
+    "pesticide",
+    "bug killer",
+    "insect killer",
+    "mosquito killer",
+    "mosquito zapper",
+    "bug zapper",
+    "fly zapper",
+    "electric fly swatter",
+    "fly trap",
+    "fly repellent",
+    "mosquito trap",
+    "bug trap",
+    "insect trap",
+    "ant bait",
+    "roach bait",
+    "roach killer",
+    "cockroach killer",
+    "termite killer",
+    "wasp killer",
+    "hornet killer",
+    "bed bug killer",
+    "flea killer",
+    "tick killer",
+    "mite killer",
+    "gnat trap",
+    "fruit fly trap",
+    "insect repellent",
+    "bug repellent",
+    "mosquito repellent",
+    "repellent spray",
+    "杀虫剂",
+    "杀虫喷雾",
+    "灭虫",
+    "灭蚊灯",
+    "灭蚊器",
+    "捕蚊",
+    "捕虫",
+    "捕蝇",
+    "粘虫",
+    "粘蝇",
+    "驱虫剂",
+    "驱蚊",
+    "蚊香",
+    "蟑螂药",
+    "蚂蚁药",
+    "白蚁",
+    "跳蚤",
+    "蜱虫",
+    "臭虫",
+)
+_NON_INSECT_REPELLENT_TERMS = (
+    "deer",
+    "rabbit",
+    "bunny",
+    "elk",
+    "moose",
+    "squirrel",
+    "bird",
+    "snake",
+    "mole",
+    "gopher",
+    "raccoon",
+    "cat repellent",
+    "dog repellent",
+    "鹿",
+    "兔",
+    "鸟",
+    "蛇",
+)
+_PEST_CONTROL_GENERAL_TERMS = (
+    "mosquito",
+    "insect",
+    "bug",
+    "fly",
+    "ant",
+    "roach",
+    "cockroach",
+    "termite",
+    "wasp",
+    "hornet",
+    "gnat",
+    "flea",
+    "tick",
+    "mite",
+    "bed bug",
+    "蚊",
+    "虫",
+    "苍蝇",
+    "蚂蚁",
+    "蟑螂",
+    "白蚁",
+)
+_PEST_CONTROL_ACTION_TERMS = (
+    "killer",
+    "zapper",
+    "trap",
+    "bait",
+    "repellent",
+    "control",
+    "spray",
+    "poison",
+    "杀",
+    "灭",
+    "驱",
+    "捕",
+    "粘",
+    "诱饵",
 )
 
 

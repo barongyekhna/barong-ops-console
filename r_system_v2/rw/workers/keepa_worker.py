@@ -7,7 +7,10 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
+from r_system_v2.rw.ai.deepseek_screening import (
+    DeepSeekScreeningSkill,
+    deepseek_reject_code,
+)
 from r_system_v2.rw.category.category_tree import is_holiday_category_id
 from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
 from r_system_v2.rw.core.models import (
@@ -246,7 +249,9 @@ class KeepaWorker:
                 product.features["deepseek_reason"] = deepseek_screening.top_reason
                 product.features["score_reason"] = deepseek_screening.top_reason
                 if deepseek_screening.verdict == "cut":
-                    product.rule_reject_reason = "deepseek_edible_product"
+                    product.rule_reject_reason = deepseek_reject_code(
+                        deepseek_screening.top_reason,
+                    )
                     product.features["score_action"] = "reject"
                     product.features["ra_review_required"] = False
                     product.transition_to(ProductState.AI1_REJECTED)

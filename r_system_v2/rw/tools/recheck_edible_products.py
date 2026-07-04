@@ -1,4 +1,4 @@
-"""Recheck existing R-W products and reject edible/medical products."""
+"""Recheck existing R-W products and reject DeepSeek policy-cut products."""
 
 from __future__ import annotations
 
@@ -9,7 +9,10 @@ from typing import Any
 from sqlalchemy import text
 
 from backend.app.db.session import SessionLocal
-from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
+from r_system_v2.rw.ai.deepseek_screening import (
+    DeepSeekScreeningSkill,
+    deepseek_reject_code,
+)
 from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.core.models import ProductState
 from r_system_v2.rw.scoring_engine import ScoringEngine
@@ -18,11 +21,16 @@ from r_system_v2.rw.workers.deepseek_cron import _dict_value, _is_postgres, _pro
 
 
 DEFAULT_BATCH_SIZE = 500
+POLICY_RECHECK_VERSION = "2026-07-04-v4"
+POLICY_REJECT_REASONS = {
+    "deepseek_edible_product",
+    "deepseek_pest_control_product",
+}
 
 
 def main() -> None:
-    limit = _int_env("RW_EDIBLE_RECHECK_LIMIT", 0)
-    batch_size = _int_env("RW_EDIBLE_RECHECK_BATCH_SIZE", DEFAULT_BATCH_SIZE)
+    limit = _int_env("RW_DEEPSEEK_POLICY_RECHECK_LIMIT", 0)
+    batch_size = _int_env("RW_DEEPSEEK_POLICY_RECHECK_BATCH_SIZE", DEFAULT_BATCH_SIZE)
     scanned = 0
     rejected = 0
     skill = DeepSeekScreeningSkill()
@@ -40,6 +48,8 @@ def main() -> None:
                 if decision.action == "reject":
                     _reject_product(db, row, screening, decision.reason)
                     rejected += 1
+                elif row.get("rule_reject_reason") in POLICY_REJECT_REASONS:
+                    _restore_policy_product(db, row, screening, decision.reason)
                 else:
                     _mark_checked(db, row)
                 if limit and scanned >= limit:
@@ -61,12 +71,12 @@ def _load_rows(db, *, limit: int) -> list[dict[str, Any]]:
                    category_id, category_path, state, skill_score, features,
                    rule_reject_reason
             FROM products_rw
-            WHERE COALESCE(features->>'edible_recheck_version', '') <> '2026-07-04-v1'
+            WHERE COALESCE(features->>'deepseek_policy_recheck_version', '') <> :version
             ORDER BY updated_at ASC
             LIMIT :limit
             """
         ),
-        {"limit": max(1, limit)},
+        {"limit": max(1, limit), "version": POLICY_RECHECK_VERSION},
     ).mappings()
     return [dict(row) for row in rows]
 
@@ -81,7 +91,7 @@ def _reject_product(db, row: dict[str, Any], screening, reason: str) -> None:
             "score_action": "reject",
             "score_reason": reason,
             "ra_review_required": False,
-            "edible_recheck_version": "2026-07-04-v1",
+            "deepseek_policy_recheck_version": POLICY_RECHECK_VERSION,
         }
     )
     json_value = "CAST(:payload AS JSONB)" if _is_postgres(db) else ":payload"
@@ -110,7 +120,7 @@ def _reject_product(db, row: dict[str, Any], screening, reason: str) -> None:
         asin=screening.asin,
         state=ProductState.AI1_REJECTED.value,
         skill_score=screening.score,
-        rule_reject_reason="deepseek_edible_product",
+        rule_reject_reason=deepseek_reject_code(screening.top_reason),
         features=features,
     )
     emit_pipeline_event(
@@ -118,7 +128,7 @@ def _reject_product(db, row: dict[str, Any], screening, reason: str) -> None:
         PipelineEvent(
             asin=screening.asin,
             category_id=str(row["category_id"]) if row.get("category_id") else None,
-            event_type="deepseek_edible_recheck",
+            event_type="deepseek_policy_recheck",
             stage=ProductState.AI1_REJECTED.value,
             status="processed",
             score_action="reject",
@@ -130,9 +140,9 @@ def _reject_product(db, row: dict[str, Any], screening, reason: str) -> None:
 
 def _mark_checked(db, row: dict[str, Any]) -> None:
     features = _dict_value(row.get("features"))
-    if features.get("edible_recheck_version") == "2026-07-04-v1":
+    if features.get("deepseek_policy_recheck_version") == POLICY_RECHECK_VERSION:
         return
-    features["edible_recheck_version"] = "2026-07-04-v1"
+    features["deepseek_policy_recheck_version"] = POLICY_RECHECK_VERSION
     _update_product(
         db,
         asin=str(row["asin"]),
@@ -141,6 +151,43 @@ def _mark_checked(db, row: dict[str, Any]) -> None:
         rule_reject_reason=row.get("rule_reject_reason"),
         features=features,
         preserve_state=True,
+    )
+
+
+def _restore_policy_product(db, row: dict[str, Any], screening, reason: str) -> None:
+    features = _dict_value(row.get("features"))
+    features.update(
+        {
+            "deepseek_score": screening.score,
+            "deepseek_verdict": screening.verdict,
+            "deepseek_reason": screening.top_reason,
+            "score_action": "pending_review",
+            "score_reason": reason,
+            "ra_review_required": True,
+            "deepseek_policy_recheck_version": POLICY_RECHECK_VERSION,
+            "policy_recheck_restored": True,
+        }
+    )
+    _update_product(
+        db,
+        asin=str(row["asin"]),
+        state=ProductState.AI1_PASSED.value,
+        skill_score=screening.score,
+        rule_reject_reason=None,
+        features=features,
+    )
+    emit_pipeline_event(
+        db,
+        PipelineEvent(
+            asin=screening.asin,
+            category_id=str(row["category_id"]) if row.get("category_id") else None,
+            event_type="deepseek_policy_recheck",
+            stage=ProductState.AI1_PASSED.value,
+            status="restored",
+            score_action="pending_review",
+            message=reason,
+            payload=screening.strict_json,
+        ),
     )
 
 

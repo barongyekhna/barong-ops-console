@@ -13,7 +13,10 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from r_system_v2.rw.ai.model_config import rw_deepseek_model
-from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
+from r_system_v2.rw.ai.deepseek_screening import (
+    DeepSeekScreeningSkill,
+    deepseek_reject_code,
+)
 from r_system_v2.rw.core.models import NormalizedProduct, ProductState
 from r_system_v2.rw.scoring_engine import ScoringEngine
 from r_system_v2.rw.storage.pipeline_events import PipelineEvent, emit_pipeline_event
@@ -199,7 +202,7 @@ class DeepSeekPreFilterCron:
                         "state": state,
                         "skill_score": screening.score,
                         "rule_reject_reason": (
-                            "deepseek_edible_product"
+                            deepseek_reject_code(screening.top_reason)
                             if decision.action == "reject"
                             else row.get("rule_reject_reason")
                         ),

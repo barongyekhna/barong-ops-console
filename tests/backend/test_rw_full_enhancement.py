@@ -19,7 +19,10 @@ from r_system_v2.rw.core.models import (
 )
 from r_system_v2.rw.core.rule_engine import RuleEngine
 from r_system_v2.rw.core.warehouse_engine import WarehouseEngine
-from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
+from r_system_v2.rw.ai.deepseek_screening import (
+    DeepSeekScreeningSkill,
+    deepseek_reject_code,
+)
 from r_system_v2.rw.processor.feature_extractor import extract_product_features
 from r_system_v2.rw.processor.monthly_sales_estimator import estimate_monthly_sales
 from r_system_v2.rw.providers.keepa_provider import KeepaProvider
@@ -198,6 +201,65 @@ def test_deepseek_rejects_edible_products_before_ra_review():
     assert screening.score == 0
     assert decision.action == "reject"
     assert "食品" in decision.reason
+
+
+def test_deepseek_rejects_pest_control_products_before_ra_review():
+    product = NormalizedProduct(
+        asin="B0BUGZAPER",
+        source_query="keepa_category:pest-control",
+        marketplace="US",
+        title="Outdoor Mosquito Killer Lamp and Bug Zapper for Patio",
+        brand="BugStop",
+        category="Pest Control",
+        price=39.99,
+        bsr=2400,
+        reviews=96,
+        seller_count=5,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.16,
+        price_trend="stable",
+        rating=4.2,
+        features={"monthly_sales_estimate": 500},
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+    decision = ScoringEngine().score_deepseek(screening)
+
+    assert screening.verdict == "cut"
+    assert screening.score == 0
+    assert decision.action == "reject"
+    assert "杀虫" in screening.top_reason or "灭虫" in screening.top_reason
+    assert deepseek_reject_code(screening.top_reason) == "deepseek_pest_control_product"
+
+
+def test_deepseek_does_not_reject_non_insect_animal_repellent_as_pest_control():
+    product = NormalizedProduct(
+        asin="B0DEERTEST",
+        source_query="keepa_category:garden",
+        marketplace="US",
+        title="Outdoor Deer and Rabbit Repellent for Garden Plants",
+        brand="GardenGuard",
+        category="Patio, Lawn & Garden",
+        price=29.99,
+        bsr=5200,
+        reviews=88,
+        seller_count=5,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.16,
+        price_trend="stable",
+        rating=4.1,
+        features={
+            "monthly_sales_estimate": 420,
+            "parent_category_name": "Patio, Lawn & Garden",
+            "subcategory_name": "Beneficial Insects",
+        },
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+
+    assert screening.verdict != "cut"
 
 
 def test_monthly_sales_estimator_prefers_keepa_truth_and_estimates_missing_values():
