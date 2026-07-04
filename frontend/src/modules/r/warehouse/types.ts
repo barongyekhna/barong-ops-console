@@ -101,6 +101,12 @@ export type RwRule = {
 };
 
 export type RwProductsResponse = {
+  category_options?: Array<{
+    id: string;
+    label: string;
+    path: string[];
+    source: string;
+  }>;
   count: number;
   has_next?: boolean;
   has_previous?: boolean;

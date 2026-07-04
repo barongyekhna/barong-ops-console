@@ -361,7 +361,14 @@ def rw_products(
         )
         params["q"] = f"%{q.strip().lower()}%"
     if category_id:
-        filters.append("category_id = :category_id")
+        filters.append(
+            "("
+            "category_id = :category_id OR "
+            "features->>'selected_keepa_category_id' = :category_id OR "
+            "features->>'amazon_leaf_category_id' = :category_id OR "
+            "features->'amazon_category_id_path' ? :category_id"
+            ")"
+        )
         params["category_id"] = category_id
     if state:
         if state == "pass":
@@ -451,6 +458,7 @@ def rw_products(
         storage_status = "products_rw_unavailable"
     return {
         "items": rows,
+        "category_options": _product_category_options(db),
         "count": total_count,
         "returned_count": len(rows),
         "page": page,
@@ -471,6 +479,70 @@ def rw_products(
             "page_size": page_size,
         },
     }
+
+
+def _product_category_options(db: Session) -> list[dict[str, object]]:
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT category_id, category_path, category, features
+                FROM products_rw
+                WHERE category_id IS NOT NULL OR features ? 'amazon_leaf_category_id'
+                """
+            )
+        ).mappings().all()
+    except SQLAlchemyError:
+        return []
+    options: dict[str, dict[str, object]] = {}
+    for row in rows:
+        features = row.get("features") if isinstance(row.get("features"), dict) else {}
+        for category_id, label, path in _category_options_from_row(row, features):
+            if category_id not in options:
+                options[category_id] = {
+                    "id": category_id,
+                    "label": label,
+                    "path": path,
+                    "source": "products_rw",
+                }
+    return sorted(
+        options.values(),
+        key=lambda item: str(item.get("label") or item.get("id")),
+    )
+
+
+def _category_options_from_row(
+    row: object,
+    features: dict[str, object],
+) -> list[tuple[str, str, list[str]]]:
+    output: list[tuple[str, str, list[str]]] = []
+    raw_path = row["category_path"]
+    row_category = row["category"]
+    row_category_id = row["category_id"]
+    path = _category_path_parts(raw_path, row_category)
+    if row_category_id:
+        output.append((str(row_category_id), " > ".join(path) if path else str(row_category_id), path))
+    leaf_id = features.get("amazon_leaf_category_id")
+    amazon_path = features.get("amazon_category_path")
+    if isinstance(leaf_id, str) and leaf_id.strip():
+        leaf_path = []
+        if isinstance(amazon_path, list):
+            leaf_path = [str(part).strip() for part in amazon_path if str(part).strip()]
+        label = " > ".join(leaf_path) if leaf_path else str(leaf_id)
+        output.append((leaf_id.strip(), label, leaf_path))
+    return output
+
+
+def _category_path_parts(raw_path: object, category: object) -> list[str]:
+    if isinstance(raw_path, str):
+        parts = [part.strip() for part in raw_path.split(">") if part.strip()]
+    elif isinstance(raw_path, list):
+        parts = [str(part).strip() for part in raw_path if str(part).strip()]
+    else:
+        parts = []
+    if isinstance(category, str) and category.strip() and category.strip() not in parts:
+        parts.append(category.strip())
+    return parts
 
 
 @router.get("/rules")

@@ -1125,9 +1125,13 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       ),
     [products, readyState?.status.runtime.counts, state.products?.count],
   );
-  const categoryLabels = useMemo(
-    () => collectCategoryLabels(readyState?.categoryTree?.root ?? null),
-    [readyState?.categoryTree?.root],
+  const productCategoryOptions = useMemo(
+    () =>
+      collectCategoryOptions(
+        readyState?.categoryTree?.root ?? null,
+        readyState?.products.category_options ?? [],
+      ),
+    [readyState?.categoryTree?.root, readyState?.products.category_options],
   );
 
   async function saveSettings(settings: Partial<RwRuntimeSettings>) {
@@ -1417,9 +1421,9 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               value={filters.category_id}
             >
               <option value="">全部类目</option>
-              {readyState.status.category_tree.selected_categories.map((category) => (
-                <option key={category} value={category}>
-                  {categoryLabels.get(category) ?? category}
+              {productCategoryOptions.map((category) => (
+                <option key={category.id} value={category.id}>
+                  {`${"　".repeat(category.depth)}${category.label} · ${category.id}`}
                 </option>
               ))}
             </select>
@@ -1552,6 +1556,7 @@ function emptyProductsResponse(
   filters: ProductFilters,
 ): RwProductsResponse {
   return {
+    category_options: [],
     count: 0,
     filters: {
       category_id: filters.category_id || null,
@@ -1604,16 +1609,30 @@ function applyWarehouseStateValue(
   }
 }
 
-function collectCategoryLabels(root: RwCategoryNode | null) {
-  const labels = new Map<string, string>();
-  function visit(node: RwCategoryNode) {
-    labels.set(node.id, node.name);
-    node.children.forEach(visit);
+function collectCategoryOptions(
+  root: RwCategoryNode | null,
+  productOptions: NonNullable<RwProductsResponse["category_options"]>,
+) {
+  const options: Array<{ depth: number; id: string; label: string }> = [];
+  const seen = new Set<string>();
+  productOptions.forEach((option) => {
+    if (!option.id || seen.has(option.id)) {
+      return;
+    }
+    seen.add(option.id);
+    options.push({ depth: 0, id: option.id, label: option.label || option.id });
+  });
+  function visit(node: RwCategoryNode, depth: number) {
+    if (depth > 0 && !seen.has(node.id)) {
+      seen.add(node.id);
+      options.push({ depth: depth - 1, id: node.id, label: node.name });
+    }
+    node.children.forEach((child) => visit(child, depth + 1));
   }
   if (root) {
-    visit(root);
+    visit(root, 0);
   }
-  return labels;
+  return options;
 }
 
 function collectSelectedCategoryIds(root: RwCategoryNode) {

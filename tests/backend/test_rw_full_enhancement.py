@@ -203,6 +203,46 @@ def test_deepseek_rejects_edible_products_before_ra_review():
     assert "食品" in decision.reason
 
 
+def test_deepseek_does_not_reject_food_processing_appliance_as_edible_product():
+    product = NormalizedProduct(
+        asin="B0FHJ4Q436",
+        source_query="keepa_category:284507",
+        marketplace="US",
+        title=(
+            "Turelar Immersion Blender Handheld 1100W - 3 in 1 Hand Blenders "
+            "Set with Trigger Speed Control Emulsion Stick with Whisk and Milk "
+            "Frother, Emulsifier for Kitchen for Soup, Smoothie, Puree"
+        ),
+        brand="Turelar",
+        category="Hand Blenders",
+        price=29.99,
+        bsr=1,
+        reviews=64,
+        seller_count=3,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.12,
+        price_trend="stable",
+        rating=4.5,
+        features={
+            "amazon_category_path": [
+                "Home & Kitchen",
+                "Kitchen & Dining",
+                "Small Appliances",
+                "Blenders",
+                "Hand Blenders",
+            ],
+            "monthly_sales": 800,
+            "monthly_sales_estimate": 800,
+            "subcategory_name": "Hand Blenders",
+        },
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+
+    assert screening.verdict != "cut"
+
+
 def test_deepseek_rejects_pest_control_products_before_ra_review():
     product = NormalizedProduct(
         asin="B0BUGZAPER",

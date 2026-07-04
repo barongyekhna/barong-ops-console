@@ -21,7 +21,7 @@ from r_system_v2.rw.workers.deepseek_cron import _dict_value, _is_postgres, _pro
 
 
 DEFAULT_BATCH_SIZE = 500
-POLICY_RECHECK_VERSION = "2026-07-04-v7"
+POLICY_RECHECK_VERSION = "2026-07-04-v8"
 POLICY_REJECT_REASONS = {
     "deepseek_edible_product",
     "deepseek_liquid_powder_spray_product",
