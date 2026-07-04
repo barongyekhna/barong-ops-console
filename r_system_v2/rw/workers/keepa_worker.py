@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 from dataclasses import dataclass, field
 
@@ -68,16 +69,29 @@ class AsyncKeepaRateLimiter:
         self.enforce_wall_clock = enforce_wall_clock
         self._interval_seconds = 60.0 / self.rate_limit_per_min
         self._next_allowed_at = 0.0
-        self._lock = asyncio.Lock()
+        self._lock = threading.Lock()
 
     async def wait_turn(self) -> None:
         if not self.enforce_wall_clock:
             return
-        async with self._lock:
+        sleep_for = self._reserve_delay()
+        if sleep_for > 0:
+            await asyncio.sleep(sleep_for)
+
+    def wait_turn_sync(self) -> None:
+        if not self.enforce_wall_clock:
+            return
+        sleep_for = self._reserve_delay()
+        if sleep_for > 0:
+            time.sleep(sleep_for)
+
+    def _reserve_delay(self) -> float:
+        with self._lock:
             now = time.monotonic()
-            if now < self._next_allowed_at:
-                await asyncio.sleep(self._next_allowed_at - now)
-            self._next_allowed_at = time.monotonic() + self._interval_seconds
+            sleep_for = max(0.0, self._next_allowed_at - now)
+            base = max(now, self._next_allowed_at)
+            self._next_allowed_at = base + self._interval_seconds
+            return sleep_for
 
 
 class KeepaWorker:
@@ -94,6 +108,7 @@ class KeepaWorker:
         rate_limit_per_min: int = MAX_REQUESTS_PER_MINUTE,
         max_concurrency: int = MAX_REQUESTS_PER_MINUTE,
         enforce_wall_clock_rate: bool = True,
+        rate_limiter: AsyncKeepaRateLimiter | None = None,
         category_bestseller_cache: dict[str, dict[str, object]] | None = None,
     ) -> None:
         self.provider = provider
@@ -107,7 +122,7 @@ class KeepaWorker:
             if deepseek_inline
             else None
         )
-        self.rate_limiter = AsyncKeepaRateLimiter(
+        self.rate_limiter = rate_limiter or AsyncKeepaRateLimiter(
             rate_limit_per_min,
             enforce_wall_clock=enforce_wall_clock_rate,
         )
@@ -229,10 +244,16 @@ class KeepaWorker:
                 product.features["deepseek_score"] = deepseek_screening.score
                 product.features["deepseek_verdict"] = deepseek_screening.verdict
                 product.features["deepseek_reason"] = deepseek_screening.top_reason
-                product.features["score_action"] = "pending_review"
                 product.features["score_reason"] = deepseek_screening.top_reason
-                product.features["ra_review_required"] = True
-                product.transition_to(ProductState.AI1_PASSED)
+                if deepseek_screening.verdict == "cut":
+                    product.rule_reject_reason = "deepseek_edible_product"
+                    product.features["score_action"] = "reject"
+                    product.features["ra_review_required"] = False
+                    product.transition_to(ProductState.AI1_REJECTED)
+                else:
+                    product.features["score_action"] = "pending_review"
+                    product.features["ra_review_required"] = True
+                    product.transition_to(ProductState.AI1_PASSED)
             else:
                 product.features["deepseek_mode"] = "cron_pending"
                 product.features["score_action"] = "pending_review"

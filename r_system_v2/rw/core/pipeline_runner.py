@@ -11,7 +11,11 @@ from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
 from r_system_v2.rw.core.models import IngestionRecord
 from r_system_v2.rw.core.rule_engine import RuleEngine
 from r_system_v2.rw.providers.keepa_provider import MAX_REQUESTS_PER_MINUTE, KeepaProvider
-from r_system_v2.rw.workers.keepa_worker import KeepaWorker, KeepaWorkerRunReport
+from r_system_v2.rw.workers.keepa_worker import (
+    AsyncKeepaRateLimiter,
+    KeepaWorker,
+    KeepaWorkerRunReport,
+)
 
 
 @dataclass(frozen=True)
@@ -58,6 +62,10 @@ class PipelineRunner:
         self.deepseek_inline = deepseek_inline
         self.enforce_wall_clock_rate = enforce_wall_clock_rate
         self.category_bestseller_cache: dict[str, dict[str, object]] = {}
+        self.rate_limiter = AsyncKeepaRateLimiter(
+            MAX_REQUESTS_PER_MINUTE,
+            enforce_wall_clock=enforce_wall_clock_rate,
+        )
 
     def run(self, records: Sequence[IngestionRecord]) -> PipelineRunReport:
         return asyncio.run(self.run_async(records))
@@ -71,6 +79,7 @@ class PipelineRunner:
             deepseek_inline=self.deepseek_inline,
             max_concurrency=MAX_REQUESTS_PER_MINUTE,
             enforce_wall_clock_rate=self.enforce_wall_clock_rate,
+            rate_limiter=self.rate_limiter,
             category_bestseller_cache=self.category_bestseller_cache,
         )
         worker.enqueue(list(records))
@@ -83,6 +92,9 @@ class PipelineRunner:
             processed_asins=sorted(requested - set(failed)),
             failed_asins=failed,
         )
+
+    def wait_keepa_turn(self) -> None:
+        self.rate_limiter.wait_turn_sync()
 
 
 def _failed_asins(report: KeepaWorkerRunReport) -> dict[str, str]:

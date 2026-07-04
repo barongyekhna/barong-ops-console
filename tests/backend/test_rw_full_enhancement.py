@@ -11,11 +11,12 @@ from r_system_v2.rw.category.category_tree import (
     select_category,
     selected_category_ids,
 )
-from r_system_v2.rw.core.models import IngestionRecord, ProductState
+from r_system_v2.rw.core.models import IngestionRecord, NormalizedProduct, ProductState
 from r_system_v2.rw.core.rule_engine import RuleEngine
 from r_system_v2.rw.core.warehouse_engine import WarehouseEngine
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
 from r_system_v2.rw.providers.keepa_provider import KeepaProvider
+from r_system_v2.rw.scoring_engine import ScoringEngine
 from r_system_v2.rw.scheduler.category_rate_limiter import CategoryRateLimiter
 from r_system_v2.rw.scheduler.category_scheduler import CategoryScheduler
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
@@ -85,6 +86,35 @@ def test_rw_deepseek_model_defaults_to_pro_and_prefers_rw_override(monkeypatch):
     monkeypatch.setenv("DEEPSEEK_MODEL", "deepseek-v4-flash")
     monkeypatch.setenv("RW_DEEPSEEK_MODEL", "deepseek-v4-pro")
     assert rw_deepseek_model() == "deepseek-v4-pro"
+
+
+def test_deepseek_rejects_edible_products_before_ra_review():
+    product = NormalizedProduct(
+        asin="B0FOODTEST",
+        source_query="keepa_category:pet-food",
+        marketplace="US",
+        title="Chicken Flavor Dog Treats with Vitamins",
+        brand="Pet Pantry",
+        category="Pet Food",
+        price=29.99,
+        bsr=1200,
+        reviews=86,
+        seller_count=4,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.12,
+        price_trend="stable",
+        rating=4.6,
+        features={"monthly_sales": 800},
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+    decision = ScoringEngine().score_deepseek(screening)
+
+    assert screening.verdict == "cut"
+    assert screening.score == 0
+    assert decision.action == "reject"
+    assert "食品" in decision.reason
 
 
 def test_category_rate_limiter_balances_twenty_categories_for_ten_minutes():

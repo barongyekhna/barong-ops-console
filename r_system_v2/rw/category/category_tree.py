@@ -179,7 +179,14 @@ DEFAULT_TREE = CategoryNode(
             selected=True,
             children=[
                 _node("23466320011", "运动与健身", selected=True),
-                _node("2358921011", "户外运动", selected=True),
+                _node(
+                    "2358921011",
+                    "户外运动",
+                    selected=True,
+                    children=[
+                        _node("3400371", "露营与徒步", selected=True),
+                    ],
+                ),
                 _node("3407731", "狩猎与钓鱼", selected=True),
                 _node("3422351", "团队运动", selected=True),
                 _node("10971181011", "训练与健身器材", selected=True),

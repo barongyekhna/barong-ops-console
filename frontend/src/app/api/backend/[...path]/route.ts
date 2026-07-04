@@ -851,7 +851,7 @@ function isAllowedRwPath(method: string, path: string[]) {
     method === "POST" &&
     path.length === 3 &&
     path[1] === "category-tree" &&
-    path[2] === "select"
+    ["select", "save"].includes(path[2])
   );
 }
 

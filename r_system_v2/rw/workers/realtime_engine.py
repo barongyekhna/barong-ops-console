@@ -136,7 +136,7 @@ class RwRealtimeEngine:
             1,
             min(
                 MAX_REQUESTS_PER_MINUTE,
-                _int_env("RW_KEEPA_MAX_DISCOVERY_REQUESTS_PER_CYCLE", 1),
+                _int_env("RW_KEEPA_MAX_DISCOVERY_REQUESTS_PER_CYCLE", 3),
             ),
         )
         self.discovery_request_interval_seconds = max(
@@ -370,6 +370,7 @@ class RwRealtimeEngine:
         else:
             processed = 0
             failed = 0
+        discovery_token_budget = max(0, (tokens_left - len(records)) // 5)
         discovery_budget = max(
             0,
             min(
@@ -377,6 +378,7 @@ class RwRealtimeEngine:
                 self.max_discovery_requests_per_cycle,
                 MAX_REQUESTS_PER_MINUTE - len(records),
                 tokens_left - len(records),
+                discovery_token_budget,
             ),
         )
         if (
@@ -448,8 +450,7 @@ class RwRealtimeEngine:
                 self.discovery_blocked_until.pop(category_id, None)
             attempted += 1
             try:
-                if self.discovery_request_interval_seconds > 0:
-                    time.sleep(self.discovery_request_interval_seconds)
+                self.pipeline_runner.wait_keepa_turn()
                 page = self.discovery_pages.get(category_id, 0)
                 asins = self.provider.discover_asins(
                     category_id=category_id,

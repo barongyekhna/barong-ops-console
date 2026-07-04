@@ -214,6 +214,31 @@ class DeepSeekScreeningSkill:
         )
 
     def evaluate(self, product: NormalizedProduct) -> DeepSeekScreening:
+        edible_reason = _edible_reject_reason(product)
+        if edible_reason:
+            payload = {
+                "score": 0,
+                "verdict": "cut",
+                "competition_attackability": 0,
+                "demand_quality": 0,
+                "top_reason": edible_reason,
+                "channel_guess": "amazon",
+            }
+            strict_json = self._strict_json(payload)
+            return DeepSeekScreening(
+                asin=product.asin,
+                score=0,
+                verdict="cut",
+                competition_attackability=0,
+                demand_quality=0,
+                top_reason=strict_json["top_reason"],
+                channel_guess="amazon",
+                strict_json=strict_json,
+                skill_loaded=self.status.loaded,
+                quant_filter_enabled=self.status.quant_filter_enabled,
+                rule_based_scoring_active=self.status.rule_based_scoring_active,
+                output_schema_strict_json=self.status.output_schema_strict_json,
+            )
         demand_quality = _score_demand_quality(product)
         competition_attackability = _score_competition_attackability(product)
         margin_score = _score_margin(product.est_net_margin)
@@ -365,6 +390,167 @@ def _extract_translation_text(payload: dict[str, Any]) -> str | None:
 
 def _clamp_int(value: float) -> int:
     return max(0, min(100, int(round(value))))
+
+
+def _edible_reject_reason(product: NormalizedProduct) -> str | None:
+    haystack = _product_text(product)
+    if not haystack:
+        return None
+    if _contains_any(haystack, _EDIBLE_CATEGORY_TERMS) and not _contains_any(
+        haystack,
+        _NON_EDIBLE_ACCESSORY_TERMS,
+    ):
+        return "剔除：DeepSeek 判断该产品属于食品、饮品、保健品、药品或宠物可食用品，不进入 R-A。"
+    if _contains_any(haystack, _EDIBLE_STRONG_PHRASES):
+        return "剔除：DeepSeek 命中食品/保健品/药品/宠物食品关键词，不进入 R-A。"
+    if _contains_any(haystack, _EDIBLE_GENERAL_TERMS) and not _contains_any(
+        haystack,
+        _NON_EDIBLE_ACCESSORY_TERMS,
+    ):
+        return "剔除：DeepSeek 判断该产品有可食用属性，不进入 R-A。"
+    return None
+
+
+def _product_text(product: NormalizedProduct) -> str:
+    values: list[str] = [
+        product.title,
+        product.brand,
+        product.category,
+        product.source_query,
+        " ".join(product.category_path),
+    ]
+    for key in (
+        "subcategory_name",
+        "parent_category_name",
+        "bestseller_parent_category",
+    ):
+        value = product.features.get(key)
+        if isinstance(value, str):
+            values.append(value)
+    return " ".join(values).lower()
+
+
+def _contains_any(text: str, terms: tuple[str, ...]) -> bool:
+    return any(term in text for term in terms)
+
+
+_EDIBLE_CATEGORY_TERMS = (
+    "grocery",
+    "gourmet food",
+    "pantry",
+    "beverage",
+    "coffee",
+    "tea",
+    "snack",
+    "candy",
+    "chocolate",
+    "pet food",
+    "dog food",
+    "cat food",
+    "vitamins",
+    "dietary supplement",
+    "sports nutrition",
+    "nutrition",
+    "营养与保健",
+    "运动营养",
+    "维生素与膳食补充剂",
+    "饮品",
+    "保健",
+    "药品",
+)
+_EDIBLE_STRONG_PHRASES = (
+    "dog food",
+    "cat food",
+    "pet food",
+    "dog treat",
+    "cat treat",
+    "pet treat",
+    "puppy treat",
+    "kitten treat",
+    "dietary supplement",
+    "vitamin",
+    "multivitamin",
+    "probiotic",
+    "collagen",
+    "protein powder",
+    "protein bar",
+    "omega-3",
+    "omega 3",
+    "fish oil",
+    "medicine",
+    "medication",
+    "drug",
+    "supplement capsule",
+    "medicine capsule",
+    "vitamin tablet",
+    "supplement tablet",
+    "gummy vitamins",
+    "herbal supplement",
+    "baby food",
+    "infant formula",
+    "食品",
+    "零食",
+    "饮料",
+    "保健品",
+    "补充剂",
+    "维生素",
+    "药",
+    "宠物粮",
+    "狗粮",
+    "猫粮",
+    "宠物零食",
+)
+_EDIBLE_GENERAL_TERMS = (
+    "snack",
+    "candy",
+    "cookie",
+    "cracker",
+    "chocolate",
+    "coffee",
+    "tea",
+    "beverage",
+    "drink mix",
+    "juice",
+    "soda",
+    "sauce",
+    "seasoning",
+    "spice",
+    "honey",
+    "syrup",
+    "cereal",
+    "noodle",
+    "pasta",
+    "rice",
+    "soup",
+    "broth",
+    "meal",
+    "edible",
+    "food",
+    "treats",
+)
+_NON_EDIBLE_ACCESSORY_TERMS = (
+    "food storage",
+    "food container",
+    "food processor",
+    "food saver",
+    "food sealer",
+    "food bag",
+    "food jar",
+    "food bowl",
+    "food mat",
+    "treat pouch",
+    "treat bag",
+    "cookie cutter",
+    "coffee maker",
+    "tea kettle",
+    "spice rack",
+    "honey dipper",
+    "food service equipment",
+    "食品服务设备",
+    "餐饮设备",
+    "食品容器",
+    "食品收纳",
+)
 
 
 def _score_demand_quality(product: NormalizedProduct) -> int:

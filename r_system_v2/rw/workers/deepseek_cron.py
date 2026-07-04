@@ -142,8 +142,15 @@ class DeepSeekPreFilterCron:
                 product = _product_from_row(row)
                 screening = self.skill.evaluate(product)
                 decision = self.scoring_engine.score_deepseek(screening)
-                state = ProductState.AI1_PASSED.value
-                passed += 1
+                state = (
+                    ProductState.AI1_REJECTED.value
+                    if decision.action == "reject"
+                    else ProductState.AI1_PASSED.value
+                )
+                if decision.action == "reject":
+                    rejected += 1
+                else:
+                    passed += 1
                 json_value = "CAST(:payload AS JSONB)" if _is_postgres(db) else ":payload"
                 db.execute(
                     text(
@@ -169,9 +176,9 @@ class DeepSeekPreFilterCron:
                 features["deepseek_score"] = screening.score
                 features["deepseek_verdict"] = screening.verdict
                 features["deepseek_reason"] = screening.top_reason
-                features["score_action"] = "pending_review"
-                features["score_reason"] = screening.top_reason
-                features["ra_review_required"] = True
+                features["score_action"] = decision.action
+                features["score_reason"] = decision.reason
+                features["ra_review_required"] = decision.action != "reject"
                 features_value = (
                     "CAST(:features AS JSONB)" if _is_postgres(db) else ":features"
                 )
@@ -181,6 +188,7 @@ class DeepSeekPreFilterCron:
                         UPDATE products_rw
                         SET state = :state,
                             skill_score = :skill_score,
+                            rule_reject_reason = :rule_reject_reason,
                             features = {features_value},
                             updated_at = CURRENT_TIMESTAMP
                         WHERE asin = :asin
@@ -190,6 +198,11 @@ class DeepSeekPreFilterCron:
                         "asin": screening.asin,
                         "state": state,
                         "skill_score": screening.score,
+                        "rule_reject_reason": (
+                            "deepseek_edible_product"
+                            if decision.action == "reject"
+                            else row.get("rule_reject_reason")
+                        ),
                         "features": json.dumps(features, ensure_ascii=False),
                     },
                 )
@@ -201,8 +214,8 @@ class DeepSeekPreFilterCron:
                         event_type="deepseek_prefilter",
                         stage=state,
                         status="processed",
-                        score_action="pending_review",
-                        message=screening.top_reason,
+                        score_action=decision.action,
+                        message=decision.reason,
                         payload=decision.to_dict(),
                     ),
                 )
