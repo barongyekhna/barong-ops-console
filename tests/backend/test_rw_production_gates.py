@@ -23,6 +23,7 @@ from r_system_v2.rw.providers.keepa_provider import (
     KeepaProvider,
     KeepaResponseError,
     _default_http_get_json,
+    _parse_discovery_payload,
     _parse_product_payload,
 )
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
@@ -297,6 +298,13 @@ def test_keepa_discovery_does_not_use_unfiltered_bestseller_fallback():
     with pytest.raises(KeepaResponseError):
         provider.discover_asins(category_id="1055398", limit=20)
     assert [url.rsplit("/", 1)[-1] for url in called_urls] == ["query"]
+
+
+def test_keepa_discovery_empty_result_advances_without_blocking_category():
+    assert _parse_discovery_payload({"totalResults": 0}, limit=20) == []
+    assert _parse_discovery_payload({"asinList": []}, limit=20) == []
+    with pytest.raises(KeepaResponseError, match="keepa_query_error"):
+        _parse_discovery_payload({"error": {"message": "bad selection"}}, limit=20)
 
 
 def test_holiday_categories_are_runnable_and_use_sales_only_discovery():

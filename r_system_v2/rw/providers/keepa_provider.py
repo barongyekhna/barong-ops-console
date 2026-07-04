@@ -492,12 +492,14 @@ def _resolve_keepa_category_id(category_id: str) -> int | None:
 
 
 def _parse_discovery_payload(payload: dict[str, Any], *, limit: int) -> list[str]:
+    if payload.get("error") or payload.get("errors"):
+        raise KeepaResponseError("keepa_query_error")
     raw_asins = payload.get("asinList") or payload.get("asins") or payload.get("asin_list")
     if not isinstance(raw_asins, list):
         asins = _extract_asins(payload, limit=limit)
         if asins:
             return asins
-        raise KeepaResponseError("keepa_query_asin_list_missing")
+        return []
     return _extract_asins(raw_asins, limit=limit)
 
 

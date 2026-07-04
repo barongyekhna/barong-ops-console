@@ -6,11 +6,16 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 import json
+import os
 from typing import Any
 
 from sqlalchemy import bindparam, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
+
+
+DEFAULT_FAILURE_MAX_RETRIES = 3
+DEAD_LETTER_PREFIX = "dead_letter:"
 
 
 def utc_now() -> datetime:
@@ -76,19 +81,82 @@ def delete_queue_successes(db: Session, asins: list[str]) -> None:
 
 def release_queue_failures(db: Session, errors: dict[str, str]) -> None:
     for asin, error in errors.items():
+        row = db.execute(
+            text("SELECT retry_count FROM enrich_queue WHERE asin = :asin"),
+            {"asin": asin},
+        ).mappings().first()
+        if not row:
+            continue
+        retry_count = _int_value(row.get("retry_count")) + 1
+        max_retries = _failure_max_retries()
+        dead_letter = (
+            retry_count >= max_retries
+            and max_retries > 0
+            and not _is_transient_keepa_error(error)
+        )
+        if dead_letter:
+            db.execute(
+                text(
+                    """
+                    UPDATE enrich_queue
+                    SET picked = true,
+                        retry_count = :retry_count,
+                        last_error = :last_error,
+                        picked_at = CURRENT_TIMESTAMP
+                    WHERE asin = :asin
+                    """
+                ),
+                {
+                    "asin": asin,
+                    "retry_count": retry_count,
+                    "last_error": f"{DEAD_LETTER_PREFIX}{error}"[:500],
+                },
+            )
+            continue
         db.execute(
             text(
                 """
                 UPDATE enrich_queue
                 SET picked = false,
-                    retry_count = retry_count + 1,
+                    retry_count = :retry_count,
                     last_error = :last_error,
                     picked_at = NULL
                 WHERE asin = :asin
                 """
             ),
-            {"asin": asin, "last_error": error[:500]},
+            {"asin": asin, "retry_count": retry_count, "last_error": error[:500]},
         )
+
+
+def _failure_max_retries() -> int:
+    try:
+        return max(1, int(os.getenv("RW_KEEPA_FAILURE_MAX_RETRIES", DEFAULT_FAILURE_MAX_RETRIES)))
+    except (TypeError, ValueError):
+        return DEFAULT_FAILURE_MAX_RETRIES
+
+
+def _int_value(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _is_transient_keepa_error(error: str) -> bool:
+    text_value = str(error or "").lower()
+    transient_markers = (
+        "429",
+        "rate limit",
+        "too many requests",
+        "timeout",
+        "timed out",
+        "temporarily",
+        "connection reset",
+        "connection aborted",
+        "network",
+        "urlopen error",
+    )
+    return any(marker in text_value for marker in transient_markers)
 
 
 def upsert_worker_status(

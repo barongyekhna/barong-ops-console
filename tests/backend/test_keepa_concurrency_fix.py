@@ -235,3 +235,39 @@ def test_async_keepa_worker_queues_results_and_flushes_batch_writer() -> None:
     assert writer.transaction_count == 1
     assert len(writer.products) == 20
     assert writer.max_batch_size == 20
+
+
+def test_holiday_keepa_worker_processes_sales_only_products_without_retry_error() -> None:
+    class FakeDeepSeekSkill:
+        pass
+
+    writer = InMemoryBatchWriter()
+    buffer = KeepaBufferQueue(writer=writer.write, batch_size=100, flush_interval_seconds=5)
+    worker = KeepaWorker(
+        provider=KeepaProvider(force_mock=True),
+        buffer_queue=buffer,
+        deepseek_skill=FakeDeepSeekSkill(),  # type: ignore[arg-type]
+        enforce_wall_clock_rate=False,
+    )
+    worker.enqueue(
+        [
+            IngestionRecord(
+                asin="B0HOLIDAY1",
+                source_query="keepa_category:holiday-halloween",
+                category_id="holiday-halloween",
+            )
+        ]
+    )
+
+    async def run() -> None:
+        report = await worker.run_once()
+        assert report.processed == 1
+        assert report.failed == 0
+        await buffer.flush()
+
+    asyncio.run(run())
+
+    product = writer.products["B0HOLIDAY1"]
+    assert product["state"] == ProductState.AI1_PASSED.value
+    assert product["features"]["hard_rule_exempt"] is True
+    assert product["features"]["deepseek_mode"] == "skipped_holiday_sales_only"

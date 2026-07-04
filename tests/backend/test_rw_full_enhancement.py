@@ -40,6 +40,7 @@ from r_system_v2.rw.storage.discovery_state import (
     load_discovery_cursor,
     save_discovery_cursor,
 )
+from r_system_v2.rw.storage.pipeline_events import release_queue_failures
 
 
 def test_category_tree_parent_cascades_but_child_selection_is_local(tmp_path):
@@ -631,6 +632,113 @@ def test_category_scheduler_fills_unused_tokens_from_other_selected_queues():
 
     assert [record.asin for record in records] == ["B0FILL0001", "B0FILL0002"]
     assert report.claimed == 2
+
+
+def test_queue_failures_dead_letter_non_transient_errors_after_retry_limit():
+    engine = create_engine("sqlite:///:memory:")
+    session_factory = sessionmaker(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE enrich_queue (
+                  asin TEXT PRIMARY KEY,
+                  marketplace TEXT,
+                  source_query TEXT,
+                  category_id TEXT,
+                  category_path TEXT,
+                  picked BOOLEAN,
+                  retry_count INTEGER,
+                  last_error TEXT,
+                  enqueued_at TEXT,
+                  picked_at TEXT
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO enrich_queue (
+                  asin, marketplace, source_query, category_id,
+                  category_path, picked, retry_count, enqueued_at, picked_at
+                )
+                VALUES (
+                  'B0FAIL0001', 'US', 'keepa_category:holiday-halloween',
+                  'holiday-halloween', 'holiday-halloween', true, 2,
+                  CURRENT_TIMESTAMP, datetime('now', '-600 seconds')
+                )
+                """
+            )
+        )
+    with session_factory() as db:
+        release_queue_failures(
+            db,
+            {"B0FAIL0001": "name 'RuleEvaluation' is not defined"},
+        )
+        row = db.execute(
+            text("SELECT picked, retry_count, last_error FROM enrich_queue WHERE asin='B0FAIL0001'")
+        ).mappings().one()
+        released = CategoryScheduler().release_stale_picks(db, older_than_seconds=1)
+        after_stale = db.execute(
+            text("SELECT picked, retry_count, last_error FROM enrich_queue WHERE asin='B0FAIL0001'")
+        ).mappings().one()
+
+    assert bool(row["picked"]) is True
+    assert row["retry_count"] == 3
+    assert str(row["last_error"]).startswith("dead_letter:")
+    assert released == 0
+    assert bool(after_stale["picked"]) is True
+    assert str(after_stale["last_error"]).startswith("dead_letter:")
+
+
+def test_queue_failures_keep_transient_keepa_errors_retryable():
+    engine = create_engine("sqlite:///:memory:")
+    session_factory = sessionmaker(bind=engine)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                """
+                CREATE TABLE enrich_queue (
+                  asin TEXT PRIMARY KEY,
+                  marketplace TEXT,
+                  source_query TEXT,
+                  category_id TEXT,
+                  category_path TEXT,
+                  picked BOOLEAN,
+                  retry_count INTEGER,
+                  last_error TEXT,
+                  enqueued_at TEXT,
+                  picked_at TEXT
+                )
+                """
+            )
+        )
+        connection.execute(
+            text(
+                """
+                INSERT INTO enrich_queue (
+                  asin, marketplace, source_query, category_id,
+                  category_path, picked, retry_count, enqueued_at, picked_at
+                )
+                VALUES (
+                  'B0RATE0001', 'US', 'keepa_category:1055398',
+                  '1055398', '1055398', true, 2,
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+    with session_factory() as db:
+        release_queue_failures(db, {"B0RATE0001": "HTTP Error 429: Too Many Requests"})
+        row = db.execute(
+            text("SELECT picked, retry_count, last_error, picked_at FROM enrich_queue WHERE asin='B0RATE0001'")
+        ).mappings().one()
+
+    assert bool(row["picked"]) is False
+    assert row["retry_count"] == 3
+    assert str(row["last_error"]) == "HTTP Error 429: Too Many Requests"
+    assert row["picked_at"] is None
 
 
 def test_deepseek_batch_processor_has_no_scheduling_authority():

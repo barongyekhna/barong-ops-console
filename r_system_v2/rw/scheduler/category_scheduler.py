@@ -71,6 +71,7 @@ class CategoryScheduler:
                         picked_at = NULL
                     WHERE picked = true
                       AND picked_at < CURRENT_TIMESTAMP - (:older_than_seconds * INTERVAL '1 second')
+                      AND COALESCE(last_error, '') NOT LIKE 'dead_letter:%'
                     """
                 ),
                 {"older_than_seconds": max(1, older_than_seconds)},
@@ -86,6 +87,7 @@ class CategoryScheduler:
                     picked_at = NULL
                 WHERE picked = true
                   AND picked_at < datetime('now', '-' || :older_than_seconds || ' seconds')
+                  AND COALESCE(last_error, '') NOT LIKE 'dead_letter:%'
                 """
             ),
             {"older_than_seconds": max(1, older_than_seconds)},

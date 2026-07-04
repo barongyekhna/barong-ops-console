@@ -19,6 +19,7 @@ from r_system_v2.rw.core.models import (
     PipelineResult,
     ProductState,
     RuleDecision,
+    RuleEvaluation,
     utc_now_iso,
 )
 from r_system_v2.rw.core.rule_engine import RuleEngine
