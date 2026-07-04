@@ -6232,3 +6232,184 @@ textarea:focus-visible {
   80% { opacity: 0; }
   100% { transform: translateX(115vw); opacity: 0; }
 }
+
+/* =====================================================================
+   CONSOLE DASHBOARD · 火凤凰指挥中心风 + 可定制卡片
+   .cc-* = 卡片/抽屉(限定 .cc-dash) · .dsc-* = 深空背景 + 导弹彩蛋
+   ===================================================================== */
+.cc-dash {
+  --cc-cyan: #39d4ff;
+  --cc-amber: #ffb13b;
+  --cc-green: #4dffa1;
+  --cc-red: #ff6b8a;
+  --cc-ink: #d6e8f6;
+  --cc-dim: #7d95ae;
+  --cc-line: rgb(120 200 255 / 16%);
+  --cc-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  position: relative;
+  min-height: 84vh;
+  color: var(--cc-ink);
+}
+.dsc-space {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  border-radius: 14px;
+  background-color: #04070e;
+  background-image:
+    linear-gradient(rgb(120 200 255 / 4%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(120 200 255 / 4%) 1px, transparent 1px),
+    radial-gradient(150% 130% at 50% 26%, #070f1a 0%, #04070e 72%);
+  background-size: 36px 36px, 36px 36px, 100% 100%;
+}
+.dsc-stars { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0.7; }
+.dsc-nebula {
+  position: absolute;
+  inset: -10%;
+  filter: blur(60px);
+  opacity: 0.32;
+  mix-blend-mode: screen;
+  background:
+    radial-gradient(closest-side at 20% 24%, rgb(124 92 255 / 40%), transparent 70%),
+    radial-gradient(closest-side at 78% 70%, rgb(0 180 220 / 32%), transparent 70%);
+  animation: dscNeb 30s ease-in-out infinite alternate;
+}
+@keyframes dscNeb { 100% { transform: translate(24px, -16px) scale(1.06); } }
+.dsc-phoenix {
+  position: absolute;
+  right: -4%;
+  bottom: -8%;
+  width: min(420px, 38vw);
+  height: min(420px, 38vw);
+  background: url("/assets/brand/barong-phoenix.svg") center / contain no-repeat;
+  opacity: 0.07;
+  filter: drop-shadow(0 0 30px rgb(255 140 50 / 40%));
+}
+.dsc-ship {
+  position: absolute;
+  bottom: 7%;
+  left: -320px;
+  width: 290px;
+  height: 128px;
+  background: url("/assets/brand/starship.svg") center / contain no-repeat;
+  filter: drop-shadow(-16px 0 18px rgb(57 212 255 / 45%));
+  opacity: 0;
+  animation: dscCruise 34s linear infinite;
+}
+@keyframes dscCruise {
+  0% { transform: translateX(0); opacity: 0; }
+  6% { opacity: 0.9; }
+  70% { opacity: 0.9; }
+  80% { opacity: 0; }
+  100% { transform: translateX(118vw); opacity: 0; }
+}
+
+/* 彩蛋:锁定框 + 追踪导弹(fx 挂在 body 上,覆盖全视口) */
+.dsc-fx { position: fixed; inset: 0; z-index: 4000; pointer-events: none; overflow: hidden; }
+.dsc-reticle { position: fixed; pointer-events: none; animation: dscLock 0.25s ease; }
+@keyframes dscLock { from { transform: scale(1.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.dsc-br { position: absolute; width: 16px; height: 16px; border: 2px solid #ff5c7a; filter: drop-shadow(0 0 4px rgb(255 92 122 / 80%)); }
+.dsc-br.tl { left: 0; top: 0; border-right: 0; border-bottom: 0; }
+.dsc-br.tr { right: 0; top: 0; border-left: 0; border-bottom: 0; }
+.dsc-br.bl { left: 0; bottom: 0; border-right: 0; border-top: 0; }
+.dsc-br.br2 { right: 0; bottom: 0; border-left: 0; border-top: 0; }
+.dsc-cross { position: absolute; left: 50%; top: 50%; width: 28px; height: 28px; transform: translate(-50%, -50%); }
+.dsc-cross::before, .dsc-cross::after { content: ""; position: absolute; background: rgb(255 92 122 / 90%); box-shadow: 0 0 6px rgb(255 92 122 / 80%); }
+.dsc-cross::before { left: 50%; top: 0; width: 1.5px; height: 100%; transform: translateX(-50%); }
+.dsc-cross::after { top: 50%; left: 0; height: 1.5px; width: 100%; transform: translateY(-50%); }
+.dsc-ring { position: absolute; inset: 24%; border: 1px dashed rgb(255 92 122 / 60%); border-radius: 50%; animation: dscSpin 2s linear infinite; }
+@keyframes dscSpin { to { transform: rotate(360deg); } }
+.dsc-lbl { position: absolute; left: 0; top: -17px; font: 700 9px var(--cc-mono); letter-spacing: 2px; color: #ff5c7a; text-shadow: 0 0 6px rgb(255 92 122 / 70%); white-space: nowrap; animation: dscBlink 0.5s steps(1) infinite; }
+@keyframes dscBlink { 50% { opacity: 0.3; } }
+.dsc-missile { position: fixed; left: 0; top: 0; width: 26px; height: 4px; margin: -2px 0 0 -13px; border-radius: 2px; background: linear-gradient(90deg, rgb(255 180 60 / 0), #ffb13b 55%, #fff); box-shadow: 0 0 10px #ffb13b, 0 0 5px #fff; transform-origin: center; }
+.dsc-boom { position: fixed; left: 0; top: 0; width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: radial-gradient(circle, #fff, #ffcf6a 38%, rgb(255 90 20 / 55%) 70%, transparent 75%); animation: dscBoom 0.5s ease-out forwards; }
+@keyframes dscBoom { 0% { transform: scale(0.3); opacity: 1; } 100% { transform: scale(5); opacity: 0; } }
+
+/* 头部 */
+.cc-dash .cc-head { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 16px 8px 18px; }
+.cc-dash .cc-head .eyebrow { color: var(--cc-cyan); font-family: var(--cc-mono); letter-spacing: 0.28em; font-size: 0.62rem; text-transform: uppercase; }
+.cc-dash .cc-head h2 { margin-top: 4px; color: #eafaff; font-size: 1.4rem; letter-spacing: 0.5px; text-shadow: 0 0 24px rgb(57 212 255 / 20%); }
+.cc-head-right { display: flex; align-items: center; gap: 12px; }
+.cc-status { font: 600 10px var(--cc-mono); letter-spacing: 1px; color: var(--cc-dim); padding: 6px 11px; border: 1px solid var(--cc-line); border-radius: 20px; background: rgb(6 14 22 / 40%); }
+.cc-customize { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 9px; cursor: pointer; font-weight: 700; font-size: 0.8rem; letter-spacing: 0.04em; color: #03121a; border: 1px solid rgb(57 212 255 / 60%); background: linear-gradient(180deg, #5fe3ff, #22a7d8); box-shadow: 0 8px 22px -8px rgb(57 212 255 / 55%); transition: transform 0.15s ease, filter 0.15s ease; }
+.cc-customize:hover { filter: brightness(1.08); transform: translateY(-1px); }
+
+/* 网格 + 卡片 */
+.cc-dash .cc-grid { position: relative; z-index: 1; display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 14px; align-items: start; padding: 0 4px 48px; }
+.cc-card { position: relative; padding: 16px; border-radius: 12px; background: linear-gradient(180deg, rgb(9 17 29 / 62%), rgb(6 12 22 / 56%)); border: 1px solid var(--cc-line); backdrop-filter: blur(9px); box-shadow: 0 20px 50px -26px rgb(0 0 0 / 80%); animation: ccPop 0.3s ease both; }
+@keyframes ccPop { from { opacity: 0; transform: translateY(8px) scale(0.98); } }
+.cc-card::before, .cc-card::after { content: ""; position: absolute; width: 13px; height: 13px; border: 2px solid var(--cc-amber); opacity: 0.55; }
+.cc-card::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+.cc-card::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+.cc-card.wide { grid-column: span 2; }
+.cc-hide { position: absolute; top: 9px; right: 9px; z-index: 2; width: 22px; height: 22px; border-radius: 6px; cursor: pointer; display: grid; place-items: center; font-size: 15px; line-height: 1; color: var(--cc-dim); opacity: 0; transition: 0.15s; background: rgb(10 20 34 / 70%); border: 1px solid var(--cc-line); }
+.cc-card:hover .cc-hide { opacity: 1; }
+.cc-hide:hover { color: var(--cc-red); border-color: rgb(255 107 138 / 55%); }
+
+/* 复用组件的重新着色 */
+.cc-dash .metric-card { background: none; border: 0; box-shadow: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cc-dash .metric-card span { font: 600 9.5px var(--cc-mono); letter-spacing: 2px; color: var(--cc-dim); text-transform: uppercase; }
+.cc-dash .metric-card strong { font-size: 30px; font-weight: 800; letter-spacing: 0.5px; color: var(--cc-cyan); text-shadow: 0 0 16px rgb(57 212 255 / 45%); line-height: 1; }
+.cc-dash .metric-card small { font: 500 11px var(--cc-mono); color: var(--cc-dim); }
+.cc-dash .module-card { background: none; border: 0; box-shadow: none; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.cc-dash .module-card .module-card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+.cc-dash .module-card h3 { margin-top: 6px; color: #eafaff; font-size: 14px; font-weight: 650; }
+.cc-dash .module-card p { color: var(--cc-dim); font-size: 12px; line-height: 1.5; }
+.cc-dash .module-card .status-pill { display: inline-flex; align-items: center; gap: 6px; font: 600 9px var(--cc-mono); letter-spacing: 1px; padding: 2px 8px; border-radius: 20px; }
+.cc-dash .module-card .status-pill.active { color: var(--cc-green); background: rgb(77 255 161 / 10%); }
+.cc-dash .module-card .status-pill.disabled { color: var(--cc-dim); background: rgb(120 150 180 / 10%); }
+.cc-dash .module-card .status-pill.error { color: var(--cc-red); background: rgb(255 107 138 / 10%); }
+.cc-dash .module-card .status-pill span { width: 6px; height: 6px; border-radius: 50%; background: currentColor; box-shadow: 0 0 6px currentColor; }
+.cc-dash .module-card .subtle-badge { font: 600 9px var(--cc-mono); letter-spacing: 1px; color: var(--cc-cyan); padding: 2px 7px; border: 1px solid rgb(57 212 255 / 25%); border-radius: 20px; }
+.cc-dash .module-card .module-card-action { display: inline-flex; align-items: center; justify-content: center; padding: 8px 12px; border-radius: 8px; font: 600 12px var(--cc-mono); color: #03121a; background: linear-gradient(180deg, #5fe3ff, #22a7d8); border: 0; text-decoration: none; cursor: pointer; }
+.cc-dash .module-card .module-card-action:disabled { background: rgb(120 150 180 / 18%); color: var(--cc-dim); cursor: not-allowed; }
+.cc-dash .activity-feed { background: none; border: 0; box-shadow: none; padding: 0; }
+.cc-dash .activity-feed .activity-feed-heading { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+.cc-dash .activity-feed h2 { color: #eafaff; font-size: 14px; letter-spacing: 1px; }
+.cc-dash .activity-feed .activity-feed-heading span { font: 500 10px var(--cc-mono); color: var(--cc-dim); }
+.cc-dash .activity-feed ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+.cc-dash .activity-feed li { display: flex; gap: 10px; }
+.cc-dash .activity-feed .activity-dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--cc-cyan); box-shadow: 0 0 8px currentColor; }
+.cc-dash .activity-feed .activity-dot.active { color: var(--cc-green); background: var(--cc-green); }
+.cc-dash .activity-feed .activity-dot.error { color: var(--cc-red); background: var(--cc-red); }
+.cc-dash .activity-feed .activity-dot.disabled { color: var(--cc-dim); background: var(--cc-dim); }
+.cc-dash .activity-feed .activity-row { display: flex; align-items: center; gap: 8px; }
+.cc-dash .activity-feed strong { color: #eafaff; font-size: 12.5px; }
+.cc-dash .activity-feed p { color: var(--cc-ink); font-size: 12px; margin-top: 2px; }
+.cc-dash .activity-feed small { color: var(--cc-dim); font: 500 10px var(--cc-mono); }
+
+/* 添加瓷片 / 空态 */
+.cc-add { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 120px; border: 1.5px dashed rgb(57 212 255 / 30%); border-radius: 12px; cursor: pointer; color: var(--cc-dim); background: rgb(57 212 255 / 3%); transition: 0.16s; font-family: var(--cc-mono); font-size: 11px; letter-spacing: 1px; }
+.cc-add:hover { border-color: rgb(57 212 255 / 60%); color: var(--cc-cyan); background: rgb(57 212 255 / 7%); }
+.cc-add-plus { font-size: 26px; line-height: 1; color: var(--cc-cyan); }
+.cc-empty { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 70px 0; text-align: center; color: var(--cc-dim); }
+.cc-empty b { color: #eafaff; font-size: 16px; }
+
+/* 卡片库抽屉 */
+.cc-scrim { position: fixed; inset: 0; z-index: 4100; background: rgb(2 5 10 / 55%); backdrop-filter: blur(2px); border: 0; padding: 0; cursor: pointer; }
+.cc-drawer { position: fixed; top: 0; right: 0; bottom: 0; z-index: 4101; width: min(380px, 92vw); display: flex; flex-direction: column; background: linear-gradient(180deg, rgb(8 15 26 / 97%), rgb(5 10 18 / 97%)); border-left: 1px solid var(--cc-line); box-shadow: -30px 0 80px -20px rgb(0 0 0 / 80%); animation: ccSlide 0.28s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes ccSlide { from { transform: translateX(100%); } }
+.cc-drawer-head { display: flex; align-items: center; gap: 10px; padding: 20px 20px 14px; border-bottom: 1px solid var(--cc-line); }
+.cc-drawer-head h3 { color: #eafaff; font-size: 15px; letter-spacing: 1px; }
+.cc-drawer-head span { display: block; font: 500 10px var(--cc-mono); color: var(--cc-dim); margin-top: 3px; }
+.cc-drawer-close { margin-left: auto; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--cc-line); background: rgb(10 20 34 / 60%); color: var(--cc-dim); cursor: pointer; font-size: 17px; }
+.cc-drawer-close:hover { color: var(--cc-red); }
+.cc-drawer-body { flex: 1; overflow: auto; padding: 12px 16px; }
+.cc-group { font: 600 9.5px var(--cc-mono); letter-spacing: 2px; color: var(--cc-dim); text-transform: uppercase; margin: 14px 6px 8px; }
+.cc-lib { display: flex; align-items: center; gap: 11px; padding: 10px 12px; border-radius: 9px; border: 1px solid transparent; transition: 0.14s; }
+.cc-lib:hover { background: rgb(57 212 255 / 5%); border-color: var(--cc-line); }
+.cc-lib-name { font-size: 13px; color: var(--cc-ink); }
+.cc-lib-desc { font: 500 10px var(--cc-mono); color: var(--cc-dim); margin-top: 2px; }
+.cc-switch { margin-left: auto; width: 42px; height: 24px; border-radius: 24px; background: rgb(120 150 180 / 18%); border: 1px solid var(--cc-line); position: relative; cursor: pointer; flex: none; transition: 0.18s; padding: 0; }
+.cc-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #8aa0b8; transition: 0.18s; }
+.cc-switch.on { background: linear-gradient(180deg, #39d4ff, #1f92c4); border-color: rgb(57 212 255 / 60%); box-shadow: 0 0 12px rgb(57 212 255 / 40%); }
+.cc-switch.on::after { left: 20px; background: #04121c; }
+.cc-drawer-foot { padding: 14px 18px; border-top: 1px solid var(--cc-line); display: flex; gap: 10px; }
+.cc-drawer-foot button { flex: 1; padding: 9px; border-radius: 8px; cursor: pointer; font: 600 11px var(--cc-mono); letter-spacing: 1px; background: rgb(10 20 34 / 60%); border: 1px solid var(--cc-line); color: var(--cc-dim); }
+.cc-drawer-foot button:hover { color: var(--cc-ink); border-color: rgb(57 212 255 / 40%); }
+
+@media (max-width: 720px) {
+  .cc-dash .cc-grid { grid-template-columns: 1fr; }
+  .cc-card.wide { grid-column: span 1; }
+}

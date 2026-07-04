@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
+import { DashboardScene } from "@/components/dashboard-scene";
 import {
   ActivityFeed,
   DashboardSkeleton,
@@ -18,6 +19,18 @@ import {
 } from "@/lib/api";
 import type { ProductCapabilityItem } from "@/lib/frontend-capability-state";
 import { getModuleDisplayName } from "@/lib/i18n";
+
+const DASH_STORAGE_KEY = "barong-dash-cards-v1";
+const DEFAULT_DASH_CARDS = ["m-modules", "m-approvals", "activity"];
+
+type DashCard = {
+  desc: string;
+  group: "指标" | "模块" | "动态";
+  id: string;
+  name: string;
+  node: ReactNode;
+  wide?: boolean;
+};
 
 type HealthResponse = {
   status?: string | null;
@@ -398,54 +411,229 @@ export function OperationsDashboard() {
     [logs, modules],
   );
 
-  return (
-    <div className="dashboard-page">
-      <section className="metrics-row" aria-label="控制台指标">
+  const [visible, setVisible] = useState<string[]>(DEFAULT_DASH_CARDS);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem(DASH_STORAGE_KEY);
+      if (stored) {
+        const parsed: unknown = JSON.parse(stored);
+        if (Array.isArray(parsed) && parsed.every((item) => typeof item === "string")) {
+          setVisible(parsed as string[]);
+        }
+      }
+    } catch {
+      /* localStorage 不可用时忽略 */
+    }
+  }, []);
+
+  const persist = (next: string[]) => {
+    setVisible(next);
+    try {
+      window.localStorage.setItem(DASH_STORAGE_KEY, JSON.stringify(next));
+    } catch {
+      /* 忽略持久化失败 */
+    }
+  };
+
+  const setCardVisible = (id: string, on: boolean) => {
+    persist(
+      on
+        ? visible.includes(id)
+          ? visible
+          : [...visible, id]
+        : visible.filter((value) => value !== id),
+    );
+  };
+
+  const cards: DashCard[] = [
+    {
+      desc: "活跃模块数",
+      group: "指标",
+      id: "m-modules",
+      name: "可用模块",
+      node: (
         <MetricCard
           detail={`${capabilityState.sidebarItems.length} 个可见模块`}
           label="可用模块"
           value={activeModules}
         />
+      ),
+    },
+    {
+      desc: "近期执行数",
+      group: "指标",
+      id: "m-exec",
+      name: "执行记录",
+      node: (
         <MetricCard
           detail={state.logsError ? "数据等待同步" : "近期执行记录"}
           label="执行记录"
           value={executionCount}
         />
+      ),
+    },
+    {
+      desc: "执行成功比例",
+      group: "指标",
+      id: "m-success",
+      name: "成功率",
+      node: (
         <MetricCard
           detail={`最近记录中 ${failedLogs} 条异常`}
           label="成功率"
           value={`${successRate}%`}
         />
+      ),
+    },
+    {
+      desc: "等待处理的审核",
+      group: "指标",
+      id: "m-approvals",
+      name: "待处理审核",
+      node: (
         <MetricCard
           detail={state.approvalsError ? "审核数据等待同步" : "等待处理"}
           label="待处理审核"
           value={pendingApprovals}
         />
-      </section>
+      ),
+    },
+    ...moduleCards.map((module, index) => ({
+      desc: module.badge,
+      group: "模块" as const,
+      id: `mod-${modules[index]?.module_key ?? index}`,
+      name: module.name,
+      node: <ModuleCard {...module} />,
+    })),
+    {
+      desc: "实时执行 / 事件流",
+      group: "动态",
+      id: "activity",
+      name: "活动动态",
+      node: <ActivityFeed items={activityItems} />,
+      wide: true,
+    },
+  ];
 
-      <section className="dashboard-main-grid" aria-label="工作台概览">
-        <div className="modules-section">
-          <div className="dashboard-section-heading">
-            <div>
-              <span className="eyebrow">模块</span>
-              <h2>模块总览</h2>
-            </div>
-            <span>{isLoading ? "同步中" : "就绪"}</span>
-          </div>
+  const visibleCards = cards.filter((card) => visible.includes(card.id));
+  const groups: Array<DashCard["group"]> = ["指标", "模块", "动态"];
 
-          {isLoading && moduleCards.length === 0 ? (
-            <DashboardSkeleton />
-          ) : (
-            <div className="module-card-grid">
-              {moduleCards.map((module) => (
-                <ModuleCard key={module.name} {...module} />
-              ))}
-            </div>
-          )}
+  return (
+    <div className="dashboard-page cc-dash">
+      <DashboardScene />
+
+      <div className="cc-head">
+        <div>
+          <span className="eyebrow">工作台</span>
+          <h2>控制台概览</h2>
         </div>
+        <div className="cc-head-right">
+          <span className="cc-status">{isLoading ? "同步中" : "就绪"}</span>
+          <button className="cc-customize" onClick={() => setDrawerOpen(true)} type="button">
+            ⚙ 定制
+          </button>
+        </div>
+      </div>
 
-        <ActivityFeed items={activityItems} />
-      </section>
+      {isLoading && cards.length === 0 ? (
+        <DashboardSkeleton />
+      ) : visibleCards.length === 0 ? (
+        <div className="cc-empty">
+          <b>工作台是空的 ✨</b>
+          <span>点右上「⚙ 定制」把你需要的卡片调出来</span>
+          <button className="cc-customize" onClick={() => setDrawerOpen(true)} type="button">
+            ⚙ 打开卡片库
+          </button>
+        </div>
+      ) : (
+        <div className="cc-grid">
+          {visibleCards.map((card) => (
+            <div className={card.wide ? "cc-card wide" : "cc-card"} key={card.id}>
+              <button
+                aria-label={`收起「${card.name}」`}
+                className="cc-hide"
+                onClick={() => setCardVisible(card.id, false)}
+                type="button"
+              >
+                ×
+              </button>
+              {card.node}
+            </div>
+          ))}
+          <button className="cc-add" onClick={() => setDrawerOpen(true)} type="button">
+            <span className="cc-add-plus">＋</span>
+            <span>添加卡片</span>
+          </button>
+        </div>
+      )}
+
+      {drawerOpen ? (
+        <>
+          <button
+            aria-label="关闭卡片库"
+            className="cc-scrim"
+            onClick={() => setDrawerOpen(false)}
+            type="button"
+          />
+          <aside aria-label="卡片库" className="cc-drawer">
+            <div className="cc-drawer-head">
+              <div>
+                <h3>卡片库</h3>
+                <span>开关任意卡片 · 选择会被记住</span>
+              </div>
+              <button
+                aria-label="关闭"
+                className="cc-drawer-close"
+                onClick={() => setDrawerOpen(false)}
+                type="button"
+              >
+                ×
+              </button>
+            </div>
+            <div className="cc-drawer-body">
+              {groups.map((group) => {
+                const groupCards = cards.filter((card) => card.group === group);
+                if (groupCards.length === 0) {
+                  return null;
+                }
+                return (
+                  <div key={group}>
+                    <div className="cc-group">{group}</div>
+                    {groupCards.map((card) => {
+                      const on = visible.includes(card.id);
+                      return (
+                        <div className="cc-lib" key={card.id}>
+                          <div>
+                            <div className="cc-lib-name">{card.name}</div>
+                            <div className="cc-lib-desc">{card.desc}</div>
+                          </div>
+                          <button
+                            aria-label={on ? `隐藏「${card.name}」` : `显示「${card.name}」`}
+                            aria-pressed={on}
+                            className={on ? "cc-switch on" : "cc-switch"}
+                            onClick={() => setCardVisible(card.id, !on)}
+                            type="button"
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="cc-drawer-foot">
+              <button onClick={() => persist(DEFAULT_DASH_CARDS)} type="button">
+                恢复默认
+              </button>
+              <button onClick={() => persist([])} type="button">
+                全部收起
+              </button>
+            </div>
+          </aside>
+        </>
+      ) : null}
     </div>
   );
 }
