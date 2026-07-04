@@ -61,7 +61,7 @@ class KeepaProductData:
     lithium_battery_warning: bool = False
     margin_source: str | None = None
     margin_confidence: str | None = None
-    monthly_sales: int = 0
+    monthly_sales: int | None = None
     parent_category_rank: int | None = None
     parent_category_name: str | None = None
     subcategory_rank: int | None = None

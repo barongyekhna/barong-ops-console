@@ -28,6 +28,18 @@ QUEUE_BASED_INGESTION_REQUIRED = True
 DEFAULT_KEEPA_BASE_URL = "https://api.keepa.com"
 DEFAULT_KEEPA_DOMAIN = 1
 MIN_PRODUCT_FINDER_PER_PAGE = 50
+DISCOVERY_PRICE_BUCKETS = ((2500, 3500), (3501, 5000), (5001, 7000))
+DISCOVERY_SALES_RANK_BUCKETS = ((1, 5000), (5001, 20000), (20001, 50000))
+DISCOVERY_WINDOWS = tuple(
+    {
+        "price_min": price_min,
+        "price_max": price_max,
+        "sales_rank_min": sales_rank_min,
+        "sales_rank_max": sales_rank_max,
+    }
+    for price_min, price_max in DISCOVERY_PRICE_BUCKETS
+    for sales_rank_min, sales_rank_max in DISCOVERY_SALES_RANK_BUCKETS
+)
 DEFAULT_CATEGORY_ID_MAP = {
     "home-kitchen": 1055398,
     "home-draft-proofing": 1055398,
@@ -212,37 +224,21 @@ class KeepaProvider:
         if keepa_category is None:
             raise KeepaConfigurationError(f"keepa_category_mapping_missing:{category_id}")
         api_key = self.current_api_key()
-        selection = {
-            "categories_include": [keepa_category],
-            "current_NEW_gte": 2500,
-            "current_NEW_lte": 7000,
-            "current_SALES_gte": 1,
-            "current_SALES_lte": 50000,
-            "current_COUNT_NEW_lte": 15,
-            "current_COUNT_REVIEWS_lte": 500,
-            "perPage": MIN_PRODUCT_FINDER_PER_PAGE,
-            "page": max(0, int(page)),
-            "sort": [["current_SALES", "asc"]],
-        }
+        selection = _product_finder_selection(
+            keepa_category=keepa_category,
+            page=max(0, int(page)),
+        )
         try:
             return self._query_discovery(api_key=api_key, selection=selection, limit=limit)
         except Exception as query_error:
-            if _is_keepa_429(query_error):
-                raise
-            fallback_selection = dict(selection)
-            fallback_selection.pop("current_COUNT_NEW_lte", None)
-            fallback_selection.pop("current_COUNT_REVIEWS_lte", None)
-            try:
-                return self._query_discovery(
-                    api_key=api_key,
-                    selection=fallback_selection,
-                    limit=limit,
-                )
-            except Exception as fallback_error:
-                raise KeepaResponseError(
-                    f"keepa_prefilter_discovery_failed:{query_error};"
-                    f" fallback_failed:{fallback_error}"
-                ) from fallback_error
+            raise KeepaResponseError(
+                f"keepa_prefilter_discovery_failed:{query_error}"
+            ) from query_error
+
+    def discovery_window_for_page(self, page: int) -> dict[str, int]:
+        """Expose the Product Finder window for observability/tests."""
+
+        return _discovery_window_for_page(page)
 
     def _query_discovery(
         self,
@@ -389,6 +385,30 @@ class KeepaProvider:
             subcategory_name="Mock Category",
             mock_generated=True,
         )
+
+
+def _product_finder_selection(*, keepa_category: int, page: int) -> dict[str, Any]:
+    window = _discovery_window_for_page(page)
+    return {
+            "categories_include": [keepa_category],
+            "current_NEW_gte": window["price_min"],
+            "current_NEW_lte": window["price_max"],
+            "current_SALES_gte": window["sales_rank_min"],
+            "current_SALES_lte": window["sales_rank_max"],
+            "current_COUNT_NEW_lte": 15,
+            "current_COUNT_REVIEWS_lte": 500,
+            "perPage": MIN_PRODUCT_FINDER_PER_PAGE,
+            "page": _window_page(page),
+            "sort": [["current_SALES", "asc"]],
+        }
+
+
+def _discovery_window_for_page(page: int) -> dict[str, int]:
+    return DISCOVERY_WINDOWS[max(0, int(page)) % len(DISCOVERY_WINDOWS)]
+
+
+def _window_page(page: int) -> int:
+    return max(0, int(page)) // len(DISCOVERY_WINDOWS)
 
 
 def _default_http_get_json(
@@ -630,7 +650,7 @@ def _latest_rank_value(value: Any) -> int | None:
     return None
 
 
-def _monthly_sales_from_product(product: dict[str, Any]) -> int:
+def _monthly_sales_from_product(product: dict[str, Any]) -> int | None:
     direct = _int_from_payload(
         product,
         "monthlySold",
@@ -652,7 +672,7 @@ def _monthly_sales_from_product(product: dict[str, Any]) -> int:
                 nested = _latest_monthly_sales_value(item)
                 if nested:
                     return nested
-    return 0
+    return None
 
 
 def _latest_monthly_sales_value(value: Any) -> int | None:

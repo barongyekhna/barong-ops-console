@@ -26,6 +26,10 @@ from r_system_v2.rw.storage.runtime_settings import (
     load_runtime_settings,
     save_runtime_settings,
 )
+from r_system_v2.rw.storage.discovery_state import (
+    load_discovery_cursor,
+    save_discovery_cursor,
+)
 
 
 def test_category_tree_parent_cascades_but_child_selection_is_local(tmp_path):
@@ -124,6 +128,30 @@ def test_rw_category_save_persists_user_selection_not_runnable_projection():
     assert result["runnable_selected_categories"] == ["284507", "16510975011"]
     assert result["runnable_selected_count"] == 2
     assert persisted.selected_categories == ["1055398", "284507", "16510975011"]
+
+
+def test_keepa_discovery_cursor_persists_in_runtime_settings():
+    engine = create_engine("sqlite:///:memory:")
+    Session = sessionmaker(bind=engine)
+    db = Session()
+    db.execute(
+        text(
+            """
+            CREATE TABLE rw_runtime_settings (
+              key TEXT PRIMARY KEY,
+              value TEXT,
+              updated_at TEXT
+            )
+            """
+        )
+    )
+
+    assert load_discovery_cursor(db, "3400371") == 0
+    save_discovery_cursor(db, "3400371", 17)
+    db.commit()
+
+    assert load_discovery_cursor(db, "3400371") == 17
+    assert load_discovery_cursor(db, "553844") == 0
 
 
 def test_rw_deepseek_model_defaults_to_pro_and_prefers_rw_override(monkeypatch):

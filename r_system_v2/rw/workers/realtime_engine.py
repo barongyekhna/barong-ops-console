@@ -38,6 +38,10 @@ from r_system_v2.rw.storage.pipeline_events import (
     upsert_worker_status,
     utc_now,
 )
+from r_system_v2.rw.storage.discovery_state import (
+    load_discovery_cursor,
+    save_discovery_cursor,
+)
 from r_system_v2.rw.storage.runtime_settings import load_runtime_settings
 
 
@@ -126,7 +130,6 @@ class RwRealtimeEngine:
             enforce_wall_clock_rate=enforce,
         )
         self.discovery_cursor = 0
-        self.discovery_pages: dict[str, int] = {}
         self.discovery_blocked_until: dict[str, datetime] = {}
         self.discovery_error_cooldown_seconds = _int_env(
             "RW_KEEPA_DISCOVERY_ERROR_COOLDOWN_SECONDS",
@@ -449,15 +452,14 @@ class RwRealtimeEngine:
             if blocked_until:
                 self.discovery_blocked_until.pop(category_id, None)
             attempted += 1
+            page = load_discovery_cursor(db, category_id)
             try:
                 self.pipeline_runner.wait_keepa_turn()
-                page = self.discovery_pages.get(category_id, 0)
                 asins = self.provider.discover_asins(
                     category_id=category_id,
                     limit=min(missing, self.keepa_batch_size),
                     page=page,
                 )
-                self.discovery_pages[category_id] = page + 1
             except Exception as exc:  # category mapping or API issue; keep current queue running.
                 if _has_keepa_429({"discovery": str(exc)}):
                     self.keepa_backoff_until = utc_now() + timedelta(
@@ -486,8 +488,8 @@ class RwRealtimeEngine:
                 category_id=category_id,
                 asins=asins,
             )
-            if inserted == 0:
-                self.discovery_pages[category_id] = self.discovery_pages.get(category_id, 0) + 1
+            next_page = page + (2 if inserted == 0 else 1)
+            save_discovery_cursor(db, category_id, next_page)
             missing -= inserted
             emit_pipeline_event(
                 db,
@@ -499,7 +501,8 @@ class RwRealtimeEngine:
                     payload={
                         "discovered": len(asins),
                         "inserted": inserted,
-                        "page": self.discovery_pages.get(category_id, 0),
+                        "cursor": page,
+                        "next_cursor": next_page,
                     },
                 ),
             )

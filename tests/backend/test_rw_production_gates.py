@@ -179,6 +179,26 @@ def test_keepa_product_parser_ignores_monthly_sales_history_timestamps():
     assert product.monthly_sales == 300
 
 
+def test_keepa_product_parser_marks_missing_monthly_sales_unknown():
+    product = _parse_product_payload(
+        {
+            "products": [
+                {
+                    "asin": "B012345678",
+                    "title": "Compact Storage Basket",
+                    "brand": "Fixture",
+                    "stats": {"current": [-1, 3499, -1, 4200]},
+                    "categoryTree": [{"name": "Home & Kitchen"}],
+                }
+            ]
+        },
+        asin="B012345678",
+        source_query="test",
+    )
+
+    assert product.monthly_sales is None
+
+
 def test_keepa_discovery_pushes_hard_rules_into_product_finder_selection():
     captured_selection: dict[str, object] = {}
 
@@ -192,10 +212,41 @@ def test_keepa_discovery_pushes_hard_rules_into_product_finder_selection():
 
     assert provider.discover_asins(category_id="1055398", limit=20) == ["B012345678"]
     assert captured_selection["current_NEW_gte"] == 2500
-    assert captured_selection["current_NEW_lte"] == 7000
+    assert captured_selection["current_NEW_lte"] <= 7000
+    assert captured_selection["current_SALES_gte"] >= 1
+    assert captured_selection["current_SALES_lte"] <= 50000
     assert captured_selection["current_COUNT_NEW_lte"] == 15
     assert captured_selection["current_COUNT_REVIEWS_lte"] == 500
     assert captured_selection["perPage"] == MIN_PRODUCT_FINDER_PER_PAGE
+
+
+def test_keepa_discovery_segments_product_finder_pages():
+    captured: list[dict[str, object]] = []
+
+    def fake_http_get_json(url, params, timeout):
+        del timeout
+        assert url.endswith("/query")
+        selection = json.loads(str(params["selection"]))
+        captured.append(selection)
+        return {"asinList": ["B012345678"]}
+
+    provider = KeepaProvider(api_key="test-key", http_get_json=fake_http_get_json)
+
+    provider.discover_asins(category_id="1055398", limit=20, page=0)
+    provider.discover_asins(category_id="1055398", limit=20, page=1)
+    provider.discover_asins(category_id="1055398", limit=20, page=9)
+
+    assert captured[0]["current_NEW_gte"] == 2500
+    assert captured[0]["current_NEW_lte"] == 3500
+    assert captured[0]["current_SALES_gte"] == 1
+    assert captured[0]["current_SALES_lte"] == 5000
+    assert captured[0]["page"] == 0
+    assert captured[1]["current_NEW_gte"] == 2500
+    assert captured[1]["current_SALES_gte"] == 5001
+    assert captured[1]["page"] == 0
+    assert captured[2]["current_NEW_gte"] == 2500
+    assert captured[2]["current_SALES_gte"] == 1
+    assert captured[2]["page"] == 1
 
 
 def test_keepa_discovery_does_not_use_unfiltered_bestseller_fallback():
@@ -210,10 +261,7 @@ def test_keepa_discovery_does_not_use_unfiltered_bestseller_fallback():
 
     with pytest.raises(KeepaResponseError):
         provider.discover_asins(category_id="1055398", limit=20)
-    assert [url.rsplit("/", 1)[-1] for url in called_urls] == [
-        "query",
-        "query",
-    ]
+    assert [url.rsplit("/", 1)[-1] for url in called_urls] == ["query"]
 
 
 def test_holiday_categories_are_runnable_and_use_sales_only_discovery():

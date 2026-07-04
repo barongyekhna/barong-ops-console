@@ -65,6 +65,9 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
             "margin_source": margin_source,
             "margin_confidence": margin_confidence,
             "monthly_sales": keepa_data.monthly_sales,
+            "monthly_sales_source": "keepa_monthly_sold"
+            if keepa_data.monthly_sales is not None
+            else "unknown",
             "parent_category_name": keepa_data.parent_category_name,
             "parent_category_rank": keepa_data.parent_category_rank,
             "subcategory_name": keepa_data.subcategory_name or keepa_data.category,

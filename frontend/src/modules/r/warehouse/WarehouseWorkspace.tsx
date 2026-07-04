@@ -424,11 +424,12 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
                       </span>
                       <span className={styles.metaLine}>
                         <span>{fulfillmentLabel(product.fulfillment_method)}</span>
-                        {monthlySales !== null ? (
-                          <span className={styles.salesTag}>
-                            月销量 {monthlySales.toLocaleString("zh-CN")}
-                          </span>
-                        ) : null}
+                        <span className={styles.salesTag}>
+                          月销量{" "}
+                          {monthlySales === null
+                            ? "未知"
+                            : monthlySales.toLocaleString("zh-CN")}
+                        </span>
                         {product.lithium_battery_warning ? (
                           <span className={styles.lithiumTag}>锂电提示</span>
                         ) : null}
