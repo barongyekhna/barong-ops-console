@@ -59,6 +59,9 @@ def main() -> None:
                     print(f"scanned={scanned} rejected={rejected}")
                     return
             db.commit()
+            if target_asins:
+                print(f"scanned={scanned} rejected={rejected}")
+                return
     print(f"scanned={scanned} rejected={rejected}")
 
 
