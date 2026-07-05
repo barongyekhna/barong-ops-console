@@ -7,6 +7,8 @@ import type {
   RaProfitRunResult,
   RaProfitSnapshot,
   RaProfitSnapshotList,
+  RaSupplierSearchPayload,
+  RaSupplierSearchResult,
 } from "@/modules/r/analysis/types";
 
 const RA_API_BASE = "/api/backend/r/analysis";
@@ -36,5 +38,13 @@ export function runRaProfitForExistingOffers(limit = 50) {
     body: { limit },
     method: "POST",
     timeoutMs: 60_000,
+  });
+}
+
+export function searchRaSuppliers(payload: RaSupplierSearchPayload) {
+  return apiRequest<RaSupplierSearchResult>(`${RA_API_BASE}/supplier-search`, {
+    body: payload,
+    method: "POST",
+    timeoutMs: 90_000,
   });
 }

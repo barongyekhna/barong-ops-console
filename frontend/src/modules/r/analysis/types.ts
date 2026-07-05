@@ -151,6 +151,38 @@ export type RaProfitRunResult = {
   formula: RaProfitFormula;
 };
 
+export type RaSupplierSearchResult = {
+  asin: string;
+  candidate_id: string;
+  queries: string[];
+  searches: Array<{
+    search_id: string;
+    query: string;
+    status: string;
+    result_count: number;
+  }>;
+  offers: Array<{
+    offer_id: string;
+    search_id: string;
+    supplier_name: string | null;
+    supplier_url: string | null;
+    unit_price_cny: number | null;
+    domestic_shipping_cny: number | null;
+    moq: number | null;
+    match_score: number | null;
+    offer_status: string;
+    crawler_status: string;
+    warning: string | null;
+  }>;
+  profit_run: RaProfitRunResult | null;
+  counts: {
+    searches: number;
+    candidate_offers: number;
+    priced_offers: number;
+  };
+  warnings: string[];
+};
+
 export type RaManualProfitPayload = {
   asin: string;
   unit_price_cny: number;
@@ -158,6 +190,14 @@ export type RaManualProfitPayload = {
   supplier_name?: string | null;
   supplier_url?: string | null;
   moq?: number | null;
+  exchange_rate_usd_cny?: number | null;
+  min_gross_margin?: number | null;
+};
+
+export type RaSupplierSearchPayload = {
+  asin: string;
+  result_limit: number;
+  auto_calculate: boolean;
   exchange_rate_usd_cny?: number | null;
   min_gross_margin?: number | null;
 };

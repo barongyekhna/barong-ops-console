@@ -124,10 +124,11 @@ def run_profit_for_existing_offers(
     *,
     org_id: str,
     limit: int,
+    asin: str | None = None,
     exchange_rate_usd_cny: Decimal | None = None,
     min_gross_margin: Decimal | None = None,
 ) -> dict[str, object]:
-    rows = _load_supplier_offer_rows(db, org_id=org_id, limit=limit)
+    rows = _load_supplier_offer_rows(db, org_id=org_id, limit=limit, asin=asin)
     items: list[dict[str, object]] = []
     counts = {"processed": 0, "pass": 0, "reject": 0, "blocked": 0}
     for row in rows:
@@ -293,12 +294,17 @@ def _insert_supplier_offer(
     org_id: str,
     candidate_id: str,
     asin: str,
-    unit_price_cny: Decimal,
+    unit_price_cny: Decimal | None,
     domestic_shipping_cny: Decimal | None,
     supplier_name: str | None,
     supplier_url: str | None,
     moq: int | None,
     source: str,
+    search_id: str | None = None,
+    rating: Decimal | None = None,
+    match_score: int | None = 100,
+    offer_status: str = "selected",
+    payload_extra: dict[str, Any] | None = None,
 ) -> str:
     offer_id = str(uuid4())
     payload = {
@@ -307,28 +313,36 @@ def _insert_supplier_offer(
         "shipping_fee_cny": _decimal_number(domestic_shipping_cny),
         "captured_at": datetime.now(UTC).isoformat(),
     }
+    if payload_extra:
+        payload.update(payload_extra)
     db.execute(
         text(
             f"""
             INSERT INTO ra_supplier_offers (
-              id, org_id, candidate_id, asin, supplier_name, supplier_url,
-              unit_price_cny, moq, match_score, offer_status, payload
+              id, org_id, search_id, candidate_id, asin, supplier_name,
+              supplier_url, unit_price_cny, moq, rating, match_score,
+              offer_status, payload
             )
             VALUES (
-              :id, :org_id, :candidate_id, :asin, :supplier_name, :supplier_url,
-              :unit_price_cny, :moq, 100, 'selected', {_json_bind(db, "payload")}
+              :id, :org_id, :search_id, :candidate_id, :asin, :supplier_name,
+              :supplier_url, :unit_price_cny, :moq, :rating, :match_score,
+              :offer_status, {_json_bind(db, "payload")}
             )
             """
         ),
         {
             "id": offer_id,
             "org_id": org_id,
+            "search_id": search_id,
             "candidate_id": candidate_id,
             "asin": asin,
             "supplier_name": supplier_name,
             "supplier_url": supplier_url,
             "unit_price_cny": unit_price_cny,
             "moq": moq,
+            "rating": rating,
+            "match_score": match_score,
+            "offer_status": offer_status,
             "payload": json.dumps(payload, ensure_ascii=False),
         },
     )
@@ -438,11 +452,13 @@ def _load_supplier_offer_rows(
     *,
     org_id: str,
     limit: int,
+    asin: str | None = None,
 ) -> list[dict[str, Any]]:
+    asin_filter = "AND COALESCE(o.asin, c.source_asin) = :asin" if asin else ""
     rows = db.execute(
         text(
-            """
-            SELECT o.id, o.candidate_id, o.asin, o.supplier_name, o.supplier_url,
+            f"""
+            SELECT o.id, o.search_id, o.candidate_id, o.asin, o.supplier_name, o.supplier_url,
                    o.unit_price_cny, o.moq, o.rating, o.match_score,
                    o.offer_status, o.payload,
                    p.asin AS product_asin, p.marketplace, p.source_query, p.title,
@@ -455,6 +471,7 @@ def _load_supplier_offer_rows(
             WHERE o.org_id = :org_id
               AND o.unit_price_cny IS NOT NULL
               AND p.asin IS NOT NULL
+              {asin_filter}
             ORDER BY
               CASE WHEN o.offer_status = 'selected' THEN 0 ELSE 1 END,
               o.match_score DESC NULLS LAST,
@@ -463,7 +480,11 @@ def _load_supplier_offer_rows(
             LIMIT :limit
             """
         ),
-        {"org_id": org_id, "limit": max(1, min(limit, 200))},
+        {
+            "org_id": org_id,
+            "limit": max(1, min(limit, 200)),
+            "asin": asin.strip().upper() if asin else None,
+        },
     ).mappings()
     return [dict(row) for row in rows]
 
@@ -515,6 +536,7 @@ def _supplier_payload(offer: dict[str, Any]) -> dict[str, Any]:
     payload = _dict_value(offer.get("payload"))
     return {
         "offer_id": offer.get("id"),
+        "search_id": offer.get("search_id"),
         "supplier_name": offer.get("supplier_name"),
         "supplier_url": offer.get("supplier_url"),
         "unit_price_cny": _decimal_number(offer.get("unit_price_cny")),
@@ -523,6 +545,8 @@ def _supplier_payload(offer: dict[str, Any]) -> dict[str, Any]:
         "rating": _decimal_number(offer.get("rating")),
         "match_score": offer.get("match_score"),
         "offer_status": offer.get("offer_status"),
+        "source": payload.get("source"),
+        "crawler_status": payload.get("crawler_status"),
         "shipping_notice": payload.get("shipping_notice")
         or payload.get("freight_notice")
         or payload.get("shipping_text"),

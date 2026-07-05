@@ -814,6 +814,42 @@ function isAllowedRPath(method: string, path: string[]) {
     return false;
   }
 
+  if (path[1] === "analysis") {
+    if (
+      method === "GET" &&
+      path.length === 3 &&
+      ["framework", "status"].includes(path[2])
+    ) {
+      return true;
+    }
+
+    if (
+      method === "GET" &&
+      path.length === 4 &&
+      path[2] === "profit" &&
+      ["config", "snapshots"].includes(path[3])
+    ) {
+      return true;
+    }
+
+    if (
+      method === "POST" &&
+      path.length === 4 &&
+      path[2] === "profit" &&
+      ["manual", "run"].includes(path[3])
+    ) {
+      return true;
+    }
+
+    if (
+      method === "POST" &&
+      path.length === 3 &&
+      path[2] === "supplier-search"
+    ) {
+      return true;
+    }
+  }
+
   if (path.length === 3 && path[1] === "commerce") {
     if (["skills", "report"].includes(path[2])) {
       return method === "GET";

@@ -50,6 +50,18 @@ test("backend proxy maps public and app paths to non-control-plane APIs", () => 
     getBackendApiPath("GET", ["permissions", "me"]),
     "/api/app/permissions/me",
   );
+  assert.equal(
+    getBackendApiPath("GET", ["r", "analysis", "status"]),
+    "/api/app/r/analysis/status",
+  );
+  assert.equal(
+    getBackendApiPath("GET", ["r", "analysis", "profit", "snapshots"]),
+    "/api/app/r/analysis/profit/snapshots",
+  );
+  assert.equal(
+    getBackendApiPath("POST", ["r", "analysis", "supplier-search"]),
+    "/api/app/r/analysis/supplier-search",
+  );
 });
 
 test("backend proxy maps C14 C15 and execution paths to control-plane only", () => {

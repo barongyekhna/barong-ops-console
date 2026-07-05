@@ -17,6 +17,10 @@ from r_system_v2.ra.profit_service import (
     profit_formula_config,
     run_profit_for_existing_offers,
 )
+from r_system_v2.ra.supplier_discovery import (
+    RASupplierDiscoveryError,
+    discover_1688_supplier_offers,
+)
 
 
 router = APIRouter(prefix="/r/analysis", tags=["r-analysis"])
@@ -35,6 +39,15 @@ class RAProfitManualRequest(BaseModel):
 
 class RAProfitRunRequest(BaseModel):
     limit: int = Field(default=50, ge=1, le=200)
+    asin: str | None = Field(default=None, min_length=10, max_length=20)
+    exchange_rate_usd_cny: float | None = Field(default=None, gt=0)
+    min_gross_margin: float | None = Field(default=None, ge=0)
+
+
+class RASupplierSearchRequest(BaseModel):
+    asin: str = Field(min_length=10, max_length=20)
+    result_limit: int = Field(default=5, ge=3, le=5)
+    auto_calculate: bool = True
     exchange_rate_usd_cny: float | None = Field(default=None, gt=0)
     min_gross_margin: float | None = Field(default=None, ge=0)
 
@@ -118,9 +131,35 @@ def ra_profit_run(
             db,
             org_id=target_org.org_id,
             limit=payload.limit,
+            asin=payload.asin.strip().upper() if payload.asin else None,
             exchange_rate_usd_cny=decimal_value(payload.exchange_rate_usd_cny),
             min_gross_margin=decimal_value(payload.min_gross_margin),
         )
+
+
+@router.post("/supplier-search")
+def ra_supplier_search(
+    payload: RASupplierSearchRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    try:
+        with without_org_data_isolation():
+            return discover_1688_supplier_offers(
+                db,
+                org_id=target_org.org_id,
+                asin=payload.asin.strip().upper(),
+                result_limit=payload.result_limit,
+                auto_calculate=payload.auto_calculate,
+                exchange_rate_usd_cny=decimal_value(payload.exchange_rate_usd_cny),
+                min_gross_margin=decimal_value(payload.min_gross_margin),
+            )
+    except (RAProfitError, RASupplierDiscoveryError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 def _framework_payload(db: Session, user: User) -> dict[str, object]:

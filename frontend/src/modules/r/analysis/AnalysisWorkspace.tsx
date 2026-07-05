@@ -23,11 +23,13 @@ import {
   getRaFrameworkStatus,
   getRaProfitSnapshots,
   runRaProfitForExistingOffers,
+  searchRaSuppliers,
 } from "@/modules/r/analysis/api";
 import type {
   RaFrameworkStatus,
   RaProfitSnapshot,
   RaStage,
+  RaSupplierSearchResult,
 } from "@/modules/r/analysis/types";
 
 import styles from "./AnalysisWorkspace.module.css";
@@ -55,6 +57,8 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
   const [profitSnapshots, setProfitSnapshots] = useState<RaProfitSnapshot[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [profitError, setProfitError] = useState<string | null>(null);
+  const [supplierResult, setSupplierResult] =
+    useState<RaSupplierSearchResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [profitLoading, setProfitLoading] = useState(false);
   const [profitForm, setProfitForm] = useState({
@@ -166,6 +170,42 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
     }
   }
 
+  async function handleSupplierSearch() {
+    const asin = profitForm.asin.trim().toUpperCase();
+    if (!asin) {
+      setProfitError("请先输入要搜索供应商的 ASIN。");
+      return;
+    }
+    setProfitLoading(true);
+    setProfitError(null);
+    try {
+      const result = await searchRaSuppliers({
+        asin,
+        auto_calculate: true,
+        exchange_rate_usd_cny: optionalNumber(profitForm.exchangeRate),
+        min_gross_margin: null,
+        result_limit: 5,
+      });
+      setSupplierResult(result);
+      if (result.profit_run?.items.length) {
+        setProfitSnapshots((current) =>
+          [...result.profit_run!.items, ...current].slice(0, 50),
+        );
+      } else {
+        const snapshots = await getRaProfitSnapshots();
+        setProfitSnapshots(snapshots.items);
+      }
+    } catch (requestError) {
+      setProfitError(
+        requestError instanceof Error
+          ? requestError.message
+          : "1688 供应商搜索失败。",
+      );
+    } finally {
+      setProfitLoading(false);
+    }
+  }
+
   return (
     <div className={styles.workspace}>
       <section className={styles.heroBand}>
@@ -173,8 +213,9 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           <span className={styles.kicker}>R-A 框架</span>
           <h2>{view === "dashboard" ? "产品分析总览" : "产品深度分析"}</h2>
           <p>
-            {ORGANIZATION_NAME} 的 R-A 正在接入真实利润测算；当前公式按美国站执行，佣金固定为售价
-            15%，头程按体积重和实际重取大值后以 8 元/kg 计算。
+            {ORGANIZATION_NAME} 的 R-A 已接入真实利润测算入口；当前公式按美国站执行，佣金固定为售价
+            15%，头程按体积重和实际重取大值后以 8 元/kg 计算，供应商成本由
+            Serper + 1688 页面抓取或人工录入提供。
           </p>
         </div>
         <div className={styles.statusPill} data-state={error ? "error" : "ready"}>
@@ -215,8 +256,8 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
         <MetricCard
           icon={KeyRound}
           label="外部调用"
-          value={status?.external_calls_enabled ? "已启用" : "未启用"}
-          detail="框架阶段不会消耗 token"
+          value={status?.external_calls_enabled ? "可手动调用" : "未启用"}
+          detail="只在点击搜索时调用"
         />
       </section>
 
@@ -366,6 +407,14 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
               <RefreshCw size={16} />
               批量计算已有报价
             </button>
+            <button
+              disabled={profitLoading}
+              type="button"
+              onClick={handleSupplierSearch}
+            >
+              <Search size={16} />
+              搜索 1688 并计算
+            </button>
           </div>
         </form>
         {profitError ? (
@@ -374,6 +423,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
             <span>{profitError}</span>
           </div>
         ) : null}
+        {supplierResult ? <SupplierSearchPanel result={supplierResult} /> : null}
         <ProfitSnapshotTable snapshots={profitSnapshots} />
       </section>
 
@@ -438,15 +488,18 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
         <div className={styles.sectionHeader}>
           <div>
             <span className={styles.kicker}>后续接入</span>
-            <h3>当前不可执行的功能入口</h3>
+            <h3>R-A 操作入口</h3>
           </div>
-          <span className={styles.pendingTag}>功能未接入</span>
+          <span className={styles.pendingTag}>分阶段接入</span>
         </div>
         <div className={styles.actionGrid}>
           <button disabled type="button">导入 R-W 候选品</button>
           <button disabled type="button">启动 DeepSeek 分析</button>
           <button disabled type="button">启动 GPT / Opus 分析</button>
-          <button disabled type="button">搜索 1688 供应商</button>
+          <button type="button" onClick={handleSupplierSearch}>
+            <Search size={15} />
+            搜索 1688 供应商
+          </button>
           <button type="button" onClick={handleRunExistingOffers}>
             <Save size={15} />
             生成利润测算
@@ -463,6 +516,55 @@ function FormulaItem({ label, value }: { label: string; value: string }) {
     <div className={styles.formulaItem}>
       <span>{label}</span>
       <strong>{value}</strong>
+    </div>
+  );
+}
+
+function SupplierSearchPanel({ result }: { result: RaSupplierSearchResult }) {
+  return (
+    <div className={styles.supplierPanel}>
+      <div className={styles.supplierHeader}>
+        <div>
+          <span className={styles.kicker}>1688 供应商发现</span>
+          <strong>{result.asin}</strong>
+        </div>
+        <div className={styles.supplierStats}>
+          <span>搜索 {result.counts.searches}</span>
+          <span>候选 {result.counts.candidate_offers}</span>
+          <span>有价格 {result.counts.priced_offers}</span>
+        </div>
+      </div>
+      {result.warnings.length > 0 ? (
+        <div className={styles.inlineWarning}>
+          <AlertTriangle size={15} />
+          <span>{result.warnings[0]}</span>
+        </div>
+      ) : null}
+      <div className={styles.offerGrid}>
+        {result.offers.length > 0 ? (
+          result.offers.map((offer) => (
+            <article className={styles.offerCard} key={offer.offer_id}>
+              <div>
+                <strong>{offer.supplier_name || "1688 供应商"}</strong>
+                <span>{crawlerLabel(offer.crawler_status)}</span>
+              </div>
+              <div className={styles.offerNumbers}>
+                <span>成本 {formatCny(offer.unit_price_cny)}</span>
+                <span>运费 {formatCny(offer.domestic_shipping_cny)}</span>
+                <span>MOQ {offer.moq ?? "未获取"}</span>
+              </div>
+              {offer.warning ? <small>{offer.warning}</small> : null}
+              {offer.supplier_url ? (
+                <a href={offer.supplier_url} rel="noreferrer" target="_blank">
+                  打开 1688 页面
+                </a>
+              ) : null}
+            </article>
+          ))
+        ) : (
+          <div className={styles.emptyLine}>本次没有找到可用 1688 候选。</div>
+        )}
+      </div>
     </div>
   );
 }
@@ -597,6 +699,19 @@ function verdictLabel(value: string | null | undefined) {
     return "缺少字段";
   }
   return "待计算";
+}
+
+function crawlerLabel(value: string | null | undefined) {
+  if (value === "playwright") {
+    return "Playwright 抓取";
+  }
+  if (value === "playwright_unavailable") {
+    return "HTML 兜底抓取";
+  }
+  if (value === "playwright_failed") {
+    return "Playwright 失败后兜底";
+  }
+  return value || "等待抓取";
 }
 
 function requiredNumber(value: string) {

@@ -1,7 +1,7 @@
-"""Read-only framework state for R-A.
+"""Framework and manual execution state for R-A.
 
-This module builds the R-A skeleton status without starting analysis jobs or
-calling external providers.
+This module builds the R-A status without starting background analysis jobs.
+External providers are only called by explicit R-A action endpoints.
 """
 
 from __future__ import annotations
@@ -98,8 +98,8 @@ RA_STAGES: tuple[dict[str, object], ...] = (
         "id": "supplier_cost",
         "label": "供货商与成本",
         "owner": "R-A",
-        "status": "pending_integration",
-        "description": "Serper 发现 1688，Playwright 抓供应商与报价。",
+        "status": "framework_ready",
+        "description": "Serper 发现 1688，Playwright 或 HTML 抓取供应商与报价。",
     },
     {
         "id": "profit_engine",
@@ -121,8 +121,8 @@ NEXT_STEPS: tuple[str, ...] = (
     "接入 R-W 候选导入接口。",
     "接入 DeepSeek 第一层 R-A 分析，不复用 R-W 实时筛选逻辑。",
     "接入 4sapi GPT / Opus 角色路由。",
-    "接入 Serper 手动搜索与 1688 Playwright 抓取。",
-    "接入 Serper / Playwright 后自动写入 1688 供应商报价。",
+    "增强 1688 登录态 Playwright 抓取，提高被反爬页面的价格命中率。",
+    "接入 R-A 最终报告与人工确认队列。",
 )
 
 
@@ -143,14 +143,18 @@ class RATableStatus:
 
 
 def load_ra_framework_overview(db: Session, *, org_id: str) -> dict[str, Any]:
+    providers = RAnalysisProviderBinding(
+        org_id=org_id,
+        secret_manager=SecretManager(db_session=db),
+    ).status()
     return {
         "module": "r.analysis",
         "label": "R-A 产品分析中心",
         "organization_id": org_id,
         "status": "framework_ready",
-        "runtime_mode": "framework_only",
-        "execution_enabled": False,
-        "external_calls_enabled": False,
+        "runtime_mode": "manual_execution_ready",
+        "execution_enabled": True,
+        "external_calls_enabled": bool(providers.get("external_calls_enabled")),
         "manual_trigger_only": True,
         "data_boundary": {
             "reads": ["products_rw"],
@@ -160,10 +164,7 @@ def load_ra_framework_overview(db: Session, *, org_id: str) -> dict[str, Any]:
         "candidate_source": _load_candidate_source(db),
         "tables": [item.to_dict() for item in _load_table_statuses(db)],
         "skill": load_ra_skill_manifest(),
-        "providers": RAnalysisProviderBinding(
-            org_id=org_id,
-            secret_manager=SecretManager(db_session=db),
-        ).status(),
+        "providers": providers,
         "profit_formula": profit_formula_config(),
         "channels": list(RA_CHANNELS),
         "stages": list(RA_STAGES),

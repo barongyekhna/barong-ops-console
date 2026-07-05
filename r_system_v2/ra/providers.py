@@ -95,8 +95,12 @@ class RAnalysisProviderBinding:
         )
 
     def status(self) -> dict[str, Any]:
+        role_statuses = self.role_statuses()
+        serper_ready = any(
+            item.role == "serper" and item.configured for item in role_statuses
+        )
         return {
-            "roles": [item.to_dict() for item in self.role_statuses()],
+            "roles": [item.to_dict() for item in role_statuses],
             "routing": {
                 "deepseek": "deepseek",
                 "gpt": "4sapi",
@@ -104,7 +108,7 @@ class RAnalysisProviderBinding:
                 "serper": "serper",
                 "crawler_1688": "playwright",
             },
-            "external_calls_enabled": False,
+            "external_calls_enabled": serper_ready,
         }
 
     def role_statuses(self) -> list[RAnalysisProviderStatus]:
