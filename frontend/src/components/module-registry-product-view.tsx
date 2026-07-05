@@ -21,6 +21,7 @@ import {
 import { CapabilityEmptyStateEngine } from "@/components/capability-empty-state";
 import { useAuth } from "@/components/auth-provider";
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
+import { DashboardScene } from "@/components/dashboard-scene";
 import { useModuleAccess } from "@/components/module-access-provider";
 import { ApiError } from "@/lib/api";
 import {
@@ -471,6 +472,8 @@ function OwnerModuleControlCenter() {
   const [organizationCount, setOrganizationCount] = useState(0);
   const [apiKeys, setApiKeys] = useState<ApiKeyRecord[]>([]);
   const [bindings, setBindings] = useState<ApiKeyBindingRecord[]>([]);
+  const [activeTab, setActiveTab] =
+    useState<"mod" | "key" | "bind" | "hook">("mod");
   const [isOrganizationsLoading, setIsOrganizationsLoading] = useState(true);
   const [isControlDataLoading, setIsControlDataLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -996,7 +999,8 @@ function OwnerModuleControlCenter() {
     );
 
   return (
-    <section className="module-registry-workspace" aria-label="模块管理中心">
+    <section className="module-registry-workspace mm-page" aria-label="模块管理中心">
+      <DashboardScene />
       <div className="registry-command-bar">
         <div>
           <span className="eyebrow">owner</span>
@@ -1052,6 +1056,38 @@ function OwnerModuleControlCenter() {
         </p>
       ) : null}
 
+      <div className="mm-tabs" role="tablist">
+        <button
+          className={`mm-tab ${activeTab === "mod" ? "on" : ""}`}
+          onClick={() => setActiveTab("mod")}
+          type="button"
+        >
+          📦 模块 <span className="mm-n">{moduleCount}</span>
+        </button>
+        <button
+          className={`mm-tab ${activeTab === "key" ? "on" : ""}`}
+          onClick={() => setActiveTab("key")}
+          type="button"
+        >
+          🔑 密钥 <span className="mm-n">{apiKeys.length}</span>
+        </button>
+        <button
+          className={`mm-tab ${activeTab === "bind" ? "on" : ""}`}
+          onClick={() => setActiveTab("bind")}
+          type="button"
+        >
+          🔗 绑定 <span className="mm-n">{bindings.length}</span>
+        </button>
+        <button
+          className={`mm-tab ${activeTab === "hook" ? "on" : ""}`}
+          onClick={() => setActiveTab("hook")}
+          type="button"
+        >
+          🧪 Webhook
+        </button>
+      </div>
+
+      {activeTab === "mod" ? (
       <div className="module-control-org-list">
         {isOrganizationsLoading && organizations.length === 0 ? (
           <section className="ops-panel ops-panel-wide">
@@ -1161,8 +1197,12 @@ function OwnerModuleControlCenter() {
           </section>
         ))}
       </div>
+      ) : null}
 
+      {activeTab !== "mod" ? (
       <section className="ops-panel ops-panel-wide">
+        {activeTab === "key" ? (
+        <>
         <div className="ops-panel-heading">
           <div>
             <h3>密钥管理</h3>
@@ -1405,7 +1445,10 @@ function OwnerModuleControlCenter() {
             </tbody>
           </table>
         </div>
+        </>
+        ) : null}
 
+        {activeTab === "bind" ? (
         <form className="api-key-binding-form" onSubmit={submitBinding}>
           <label className="field-group">
             <span>组织</span>
@@ -1521,7 +1564,9 @@ function OwnerModuleControlCenter() {
             绑定
           </button>
         </form>
+        ) : null}
 
+        {activeTab === "hook" ? (
         <div className="webhook-test-band">
           <div className="ops-panel-heading">
             <div>
@@ -1604,8 +1649,9 @@ function OwnerModuleControlCenter() {
             </div>
           ) : null}
         </div>
+        ) : null}
 
-        {bindings.length > 0 ? (
+        {activeTab === "bind" && bindings.length > 0 ? (
           <div className="api-key-binding-list">
             {bindings.map((binding) => (
               <div className="api-key-binding-chip" key={binding.binding_id}>
@@ -1626,6 +1672,7 @@ function OwnerModuleControlCenter() {
           </div>
         ) : null}
       </section>
+      ) : null}
     </section>
   );
 }
