@@ -224,6 +224,7 @@ def discover_1688_supplier_offers(
     limit = _bounded_limit(result_limit)
     product = _load_product(db, normalized_asin)
     candidate_id = _ensure_candidate(db, org_id=org_id, product=product)
+    db.commit()
     client = serper_client or _serper_client(db, org_id=org_id)
     crawler = crawler or Playwright1688Crawler()
     queries = build_1688_queries(product)
@@ -257,6 +258,7 @@ def discover_1688_supplier_offers(
                 "searched_at": datetime.now(UTC).isoformat(),
             },
         )
+        db.commit()
         searches.append(
             {
                 "search_id": search_id,
@@ -304,6 +306,7 @@ def discover_1688_supplier_offers(
                     ),
                 },
             )
+            db.commit()
             offers.append(
                 {
                     "offer_id": offer_id,
