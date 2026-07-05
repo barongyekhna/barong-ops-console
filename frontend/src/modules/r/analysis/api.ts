@@ -1,7 +1,13 @@
 "use client";
 
 import { apiRequest } from "@/lib/api";
-import type { RaFrameworkStatus } from "@/modules/r/analysis/types";
+import type {
+  RaFrameworkStatus,
+  RaManualProfitPayload,
+  RaProfitRunResult,
+  RaProfitSnapshot,
+  RaProfitSnapshotList,
+} from "@/modules/r/analysis/types";
 
 const RA_API_BASE = "/api/backend/r/analysis";
 
@@ -11,3 +17,24 @@ export function getRaFrameworkStatus() {
   });
 }
 
+export function getRaProfitSnapshots() {
+  return apiRequest<RaProfitSnapshotList>(`${RA_API_BASE}/profit/snapshots`, {
+    bypassCache: true,
+  });
+}
+
+export function calculateManualRaProfit(payload: RaManualProfitPayload) {
+  return apiRequest<RaProfitSnapshot>(`${RA_API_BASE}/profit/manual`, {
+    body: payload,
+    method: "POST",
+    timeoutMs: 30_000,
+  });
+}
+
+export function runRaProfitForExistingOffers(limit = 50) {
+  return apiRequest<RaProfitRunResult>(`${RA_API_BASE}/profit/run`, {
+    body: { limit },
+    method: "POST",
+    timeoutMs: 60_000,
+  });
+}

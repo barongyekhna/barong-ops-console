@@ -3,6 +3,7 @@
 import {
   AlertTriangle,
   BarChart3,
+  Calculator,
   CheckCircle2,
   ClipboardCheck,
   Database,
@@ -10,13 +11,24 @@ import {
   KeyRound,
   Layers3,
   PackageSearch,
+  RefreshCw,
+  Save,
   Search,
   Truck,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 
-import { getRaFrameworkStatus } from "@/modules/r/analysis/api";
-import type { RaFrameworkStatus, RaStage } from "@/modules/r/analysis/types";
+import {
+  calculateManualRaProfit,
+  getRaFrameworkStatus,
+  getRaProfitSnapshots,
+  runRaProfitForExistingOffers,
+} from "@/modules/r/analysis/api";
+import type {
+  RaFrameworkStatus,
+  RaProfitSnapshot,
+  RaStage,
+} from "@/modules/r/analysis/types";
 
 import styles from "./AnalysisWorkspace.module.css";
 
@@ -40,18 +52,31 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) {
   const [status, setStatus] = useState<RaFrameworkStatus | null>(null);
+  const [profitSnapshots, setProfitSnapshots] = useState<RaProfitSnapshot[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [profitError, setProfitError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [profitLoading, setProfitLoading] = useState(false);
+  const [profitForm, setProfitForm] = useState({
+    asin: "",
+    domesticShippingCny: "",
+    exchangeRate: "",
+    moq: "",
+    supplierName: "",
+    supplierUrl: "",
+    unitPriceCny: "",
+  });
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    getRaFrameworkStatus()
-      .then((payload) => {
+    Promise.all([getRaFrameworkStatus(), getRaProfitSnapshots()])
+      .then(([payload, snapshots]) => {
         if (cancelled) {
           return;
         }
         setStatus(payload);
+        setProfitSnapshots(snapshots.items);
         setError(null);
       })
       .catch((requestError: unknown) => {
@@ -85,6 +110,61 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
   const candidateSource = status?.candidate_source;
   const stages = status?.stages ?? fallbackStages();
   const providers = status?.providers.roles ?? [];
+  const formula = status?.profit_formula;
+
+  async function handleManualProfit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setProfitLoading(true);
+    setProfitError(null);
+    try {
+      const snapshot = await calculateManualRaProfit({
+        asin: profitForm.asin.trim().toUpperCase(),
+        domestic_shipping_cny: optionalNumber(profitForm.domesticShippingCny),
+        exchange_rate_usd_cny: optionalNumber(profitForm.exchangeRate),
+        moq: optionalInteger(profitForm.moq),
+        supplier_name: profitForm.supplierName.trim() || null,
+        supplier_url: profitForm.supplierUrl.trim() || null,
+        unit_price_cny: requiredNumber(profitForm.unitPriceCny),
+      });
+      setProfitSnapshots((current) => [snapshot, ...current].slice(0, 50));
+      setProfitForm((current) => ({
+        ...current,
+        domesticShippingCny: "",
+        moq: "",
+        supplierName: "",
+        supplierUrl: "",
+        unitPriceCny: "",
+      }));
+    } catch (requestError) {
+      setProfitError(
+        requestError instanceof Error ? requestError.message : "利润测算失败。",
+      );
+    } finally {
+      setProfitLoading(false);
+    }
+  }
+
+  async function handleRunExistingOffers() {
+    setProfitLoading(true);
+    setProfitError(null);
+    try {
+      const result = await runRaProfitForExistingOffers(50);
+      if (result.items.length > 0) {
+        setProfitSnapshots((current) =>
+          [...result.items, ...current].slice(0, 50),
+        );
+      } else {
+        const snapshots = await getRaProfitSnapshots();
+        setProfitSnapshots(snapshots.items);
+      }
+    } catch (requestError) {
+      setProfitError(
+        requestError instanceof Error ? requestError.message : "批量利润测算失败。",
+      );
+    } finally {
+      setProfitLoading(false);
+    }
+  }
 
   return (
     <div className={styles.workspace}>
@@ -93,8 +173,8 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           <span className={styles.kicker}>R-A 框架</span>
           <h2>{view === "dashboard" ? "产品分析总览" : "产品深度分析"}</h2>
           <p>
-            {ORGANIZATION_NAME} 的 R-A 已按 R 系列文档搭好分析框架；当前只读展示结构状态，真实模型、
-            Serper、1688 和利润计算将在后续阶段逐项接入。
+            {ORGANIZATION_NAME} 的 R-A 正在接入真实利润测算；当前公式按美国站执行，佣金固定为售价
+            15%，头程按体积重和实际重取大值后以 8 元/kg 计算。
           </p>
         </div>
         <div className={styles.statusPill} data-state={error ? "error" : "ready"}>
@@ -153,6 +233,148 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
             <StageCard key={stage.id} stage={stage} />
           ))}
         </div>
+      </section>
+
+      <section className={styles.sectionBand}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <span className={styles.kicker}>利润测算</span>
+            <h3>美国站毛利润公式</h3>
+          </div>
+          <span className={styles.readyTag}>已接入</span>
+        </div>
+        <div className={styles.formulaGrid}>
+          <FormulaItem label="亚马逊佣金" value="售价 × 15%" />
+          <FormulaItem label="头程运费" value="计费重 × 8 元/kg" />
+          <FormulaItem label="体积重" value="长 × 宽 × 高 / 6000" />
+          <FormulaItem
+            label="毛利润"
+            value={formula?.gross_profit_formula ?? "读取中"}
+          />
+        </div>
+        <form className={styles.profitForm} onSubmit={handleManualProfit}>
+          <label>
+            <span>ASIN</span>
+            <input
+              required
+              maxLength={20}
+              value={profitForm.asin}
+              onChange={(event) =>
+                setProfitForm((current) => ({
+                  ...current,
+                  asin: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>1688 产品成本（元）</span>
+            <input
+              required
+              min="0.01"
+              step="0.01"
+              type="number"
+              value={profitForm.unitPriceCny}
+              onChange={(event) =>
+                setProfitForm((current) => ({
+                  ...current,
+                  unitPriceCny: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>1688 国内运费（元）</span>
+            <input
+              min="0"
+              step="0.01"
+              type="number"
+              value={profitForm.domesticShippingCny}
+              onChange={(event) =>
+                setProfitForm((current) => ({
+                  ...current,
+                  domesticShippingCny: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>汇率</span>
+            <input
+              min="0.01"
+              step="0.01"
+              type="number"
+              value={profitForm.exchangeRate}
+              placeholder={String(formula?.default_exchange_rate_usd_cny ?? 7.2)}
+              onChange={(event) =>
+                setProfitForm((current) => ({
+                  ...current,
+                  exchangeRate: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>供应商</span>
+            <input
+              value={profitForm.supplierName}
+              onChange={(event) =>
+                setProfitForm((current) => ({
+                  ...current,
+                  supplierName: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>MOQ</span>
+            <input
+              min="1"
+              step="1"
+              type="number"
+              value={profitForm.moq}
+              onChange={(event) =>
+                setProfitForm((current) => ({
+                  ...current,
+                  moq: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <label className={styles.wideField}>
+            <span>供应商链接</span>
+            <input
+              value={profitForm.supplierUrl}
+              onChange={(event) =>
+                setProfitForm((current) => ({
+                  ...current,
+                  supplierUrl: event.target.value,
+                }))
+              }
+            />
+          </label>
+          <div className={styles.profitActions}>
+            <button disabled={profitLoading} type="submit">
+              <Calculator size={16} />
+              计算并保存
+            </button>
+            <button
+              disabled={profitLoading}
+              type="button"
+              onClick={handleRunExistingOffers}
+            >
+              <RefreshCw size={16} />
+              批量计算已有报价
+            </button>
+          </div>
+        </form>
+        {profitError ? (
+          <div className={styles.inlineError}>
+            <AlertTriangle size={16} />
+            <span>{profitError}</span>
+          </div>
+        ) : null}
+        <ProfitSnapshotTable snapshots={profitSnapshots} />
       </section>
 
       <section className={styles.splitBand}>
@@ -225,10 +447,74 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           <button disabled type="button">启动 DeepSeek 分析</button>
           <button disabled type="button">启动 GPT / Opus 分析</button>
           <button disabled type="button">搜索 1688 供应商</button>
-          <button disabled type="button">生成利润测算</button>
+          <button type="button" onClick={handleRunExistingOffers}>
+            <Save size={15} />
+            生成利润测算
+          </button>
           <button disabled type="button">输出最终报告</button>
         </div>
       </section>
+    </div>
+  );
+}
+
+function FormulaItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className={styles.formulaItem}>
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function ProfitSnapshotTable({ snapshots }: { snapshots: RaProfitSnapshot[] }) {
+  if (snapshots.length === 0) {
+    return <div className={styles.emptyLine}>暂无利润快照。</div>;
+  }
+  return (
+    <div className={styles.profitTableWrap}>
+      <table className={styles.profitTable}>
+        <thead>
+          <tr>
+            <th>产品</th>
+            <th>1688成本</th>
+            <th>售价</th>
+            <th>毛利润</th>
+            <th>毛利率</th>
+            <th>ROI</th>
+            <th>状态</th>
+          </tr>
+        </thead>
+        <tbody>
+          {snapshots.slice(0, 20).map((snapshot) => (
+            <tr key={snapshot.snapshot_id}>
+              <td>
+                <strong>{snapshot.asin}</strong>
+                <span>{snapshot.title_zh || snapshot.title || "未命名产品"}</span>
+              </td>
+              <td>
+                <strong>{formatCny(snapshot.supplier.unit_price_cny)}</strong>
+                <span>运费 {formatCny(snapshot.supplier.domestic_shipping_cny)}</span>
+              </td>
+              <td>{formatUsd(snapshot.sell_price_usd)}</td>
+              <td>{formatUsd(snapshot.gross_profit_usd)}</td>
+              <td>{formatPercent(snapshot.gross_margin)}</td>
+              <td>{formatPercent(snapshot.roi)}</td>
+              <td>
+                <span className={styles.verdictTag} data-verdict={snapshot.verdict}>
+                  {verdictLabel(snapshot.verdict)}
+                </span>
+                {snapshot.warnings.length > 0 ? (
+                  <small>{snapshot.warnings[0]}</small>
+                ) : null}
+                {snapshot.blocked_reasons.length > 0 ? (
+                  <small>{snapshot.blocked_reasons[0]}</small>
+                ) : null}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -277,6 +563,64 @@ function formatNumber(value: number | null | undefined) {
     return "读取中";
   }
   return new Intl.NumberFormat("zh-CN").format(value);
+}
+
+function formatUsd(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "未计算";
+  }
+  return `$${value.toFixed(2)}`;
+}
+
+function formatCny(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "未获取";
+  }
+  return `￥${value.toFixed(2)}`;
+}
+
+function formatPercent(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "未计算";
+  }
+  return `${(value * 100).toFixed(1)}%`;
+}
+
+function verdictLabel(value: string | null | undefined) {
+  if (value === "pass") {
+    return "利润通过";
+  }
+  if (value === "reject") {
+    return "利润不足";
+  }
+  if (value === "blocked") {
+    return "缺少字段";
+  }
+  return "待计算";
+}
+
+function requiredNumber(value: string) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error("请输入有效成本。");
+  }
+  return parsed;
+}
+
+function optionalNumber(value: string) {
+  if (!value.trim()) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function optionalInteger(value: string) {
+  if (!value.trim()) {
+    return null;
+  }
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
 function fallbackStages(): RaStage[] {

@@ -294,6 +294,190 @@
   font-size: 0.8rem;
 }
 
+.formulaGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.formulaItem {
+  display: grid;
+  min-height: 78px;
+  align-content: start;
+  gap: 7px;
+  padding: 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+}
+
+.formulaItem span {
+  color: var(--color-muted);
+  font-size: 0.73rem;
+  font-weight: 780;
+}
+
+.formulaItem strong {
+  color: var(--color-text);
+  font-size: 0.84rem;
+  line-height: 1.45;
+}
+
+.profitForm {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--color-surface-muted);
+}
+
+.profitForm label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.profitForm label span {
+  color: var(--color-muted);
+  font-size: 0.74rem;
+  font-weight: 780;
+}
+
+.profitForm input {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 8px 10px;
+  color: var(--color-text);
+  border: 1px solid var(--color-line);
+  border-radius: 7px;
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 0.84rem;
+}
+
+.wideField {
+  grid-column: span 2;
+}
+
+.profitActions {
+  display: flex;
+  grid-column: span 2;
+  align-items: end;
+  gap: 8px;
+}
+
+.profitActions button,
+.actionGrid button:not(:disabled) {
+  display: inline-flex;
+  min-height: 38px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 11px;
+  color: #0f172a;
+  border: 1px solid rgb(37 99 235 / 24%);
+  border-radius: 7px;
+  background: #eff6ff;
+  font-size: 0.8rem;
+  font-weight: 820;
+}
+
+.profitActions button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.inlineError {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 12px;
+  color: #991b1b;
+  border: 1px solid rgb(220 38 38 / 24%);
+  border-radius: 8px;
+  background: #fee2e2;
+  font-size: 0.8rem;
+  font-weight: 760;
+}
+
+.profitTableWrap {
+  overflow-x: auto;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+}
+
+.profitTable {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: collapse;
+  background: var(--color-surface);
+}
+
+.profitTable th,
+.profitTable td {
+  padding: 11px 12px;
+  border-bottom: 1px solid var(--color-line);
+  text-align: left;
+  vertical-align: top;
+}
+
+.profitTable th {
+  color: var(--color-muted);
+  background: var(--color-surface-muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+}
+
+.profitTable td {
+  color: var(--color-text);
+  font-size: 0.82rem;
+}
+
+.profitTable td:first-child,
+.profitTable td:nth-child(2),
+.profitTable td:last-child {
+  display: grid;
+  gap: 4px;
+}
+
+.profitTable td span,
+.profitTable td small {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  line-height: 1.4;
+}
+
+.profitTable tr:last-child td {
+  border-bottom: 0;
+}
+
+.verdictTag {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 0.7rem;
+  font-weight: 820;
+}
+
+.verdictTag[data-verdict="pass"] {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.verdictTag[data-verdict="reject"] {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.verdictTag[data-verdict="blocked"] {
+  color: #854d0e;
+  background: #fef9c3;
+}
+
 .actionGrid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -318,12 +502,17 @@
 
 @media (max-width: 1100px) {
   .metricGrid,
-  .stageGrid {
+  .stageGrid,
+  .formulaGrid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .splitBand {
     grid-template-columns: 1fr;
+  }
+
+  .profitForm {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
@@ -338,12 +527,24 @@
 
   .metricGrid,
   .stageGrid,
-  .actionGrid {
+  .actionGrid,
+  .formulaGrid,
+  .profitForm {
     grid-template-columns: 1fr;
   }
 
   .heroBand,
   .sectionBand {
     padding: 15px;
+  }
+
+  .wideField,
+  .profitActions {
+    grid-column: auto;
+  }
+
+  .profitActions {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

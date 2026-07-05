@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import SecretManager
 from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.ra.profit_service import profit_formula_config
 from r_system_v2.ra.skill_loader import load_ra_skill_manifest
 
 
@@ -104,8 +105,8 @@ RA_STAGES: tuple[dict[str, object], ...] = (
         "id": "profit_engine",
         "label": "利润引擎",
         "owner": "R-A",
-        "status": "pending_integration",
-        "description": "确定性公式计算 landed cost、净利、ROI。",
+        "status": "framework_ready",
+        "description": "按美国站公式计算体积重、头程、佣金、FBA、毛利润和 ROI。",
     },
     {
         "id": "final_report",
@@ -121,7 +122,7 @@ NEXT_STEPS: tuple[str, ...] = (
     "接入 DeepSeek 第一层 R-A 分析，不复用 R-W 实时筛选逻辑。",
     "接入 4sapi GPT / Opus 角色路由。",
     "接入 Serper 手动搜索与 1688 Playwright 抓取。",
-    "接入确定性利润计算引擎。",
+    "接入 Serper / Playwright 后自动写入 1688 供应商报价。",
 )
 
 
@@ -163,6 +164,7 @@ def load_ra_framework_overview(db: Session, *, org_id: str) -> dict[str, Any]:
             org_id=org_id,
             secret_manager=SecretManager(db_session=db),
         ).status(),
+        "profit_formula": profit_formula_config(),
         "channels": list(RA_CHANNELS),
         "stages": list(RA_STAGES),
         "next_steps": list(NEXT_STEPS),
@@ -245,4 +247,3 @@ def _row_count(db: Session, table_name: str) -> int | None:
     except SQLAlchemyError:
         return None
     return int(row["count"] or 0) if row else 0
-

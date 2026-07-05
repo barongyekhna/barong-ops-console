@@ -84,8 +84,80 @@ export type RaFrameworkStatus = {
     routing: Record<string, string>;
     external_calls_enabled: boolean;
   };
+  profit_formula: RaProfitFormula;
   channels: RaChannel[];
   stages: RaStage[];
   next_steps: string[];
 };
 
+export type RaProfitFormula = {
+  marketplace: string;
+  formula_version: string;
+  referral_fee_rate: number;
+  seller_receipt_rate: number;
+  first_mile_cny_per_kg: number;
+  default_exchange_rate_usd_cny: number;
+  default_min_gross_margin: number;
+  volume_weight_formula: string;
+  chargeable_weight_rule: string;
+  gross_profit_formula: string;
+};
+
+export type RaProfitSnapshot = {
+  snapshot_id: string;
+  candidate_id: string | null;
+  asin: string;
+  title: string | null;
+  title_zh: string | null;
+  image_url: string | null;
+  category: string | null;
+  sell_price_usd: number | null;
+  landed_cost_usd: number | null;
+  amazon_fees_usd: number | null;
+  gross_profit_usd: number | null;
+  gross_margin: number | null;
+  roi: number | null;
+  confidence: string | null;
+  verdict: string | null;
+  warnings: string[];
+  blocked_reasons: string[];
+  supplier: {
+    offer_id?: string | null;
+    supplier_name?: string | null;
+    supplier_url?: string | null;
+    unit_price_cny?: number | null;
+    domestic_shipping_cny?: number | null;
+    moq?: number | null;
+    shipping_notice?: string | null;
+  };
+  formula: RaProfitFormula;
+  created_at: string | null;
+};
+
+export type RaProfitSnapshotList = {
+  items: RaProfitSnapshot[];
+  count: number;
+  formula: RaProfitFormula;
+};
+
+export type RaProfitRunResult = {
+  counts: {
+    processed: number;
+    pass: number;
+    reject: number;
+    blocked: number;
+  };
+  items: RaProfitSnapshot[];
+  formula: RaProfitFormula;
+};
+
+export type RaManualProfitPayload = {
+  asin: string;
+  unit_price_cny: number;
+  domestic_shipping_cny?: number | null;
+  supplier_name?: string | null;
+  supplier_url?: string | null;
+  moq?: number | null;
+  exchange_rate_usd_cny?: number | null;
+  min_gross_margin?: number | null;
+};
