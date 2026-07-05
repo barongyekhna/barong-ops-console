@@ -70,6 +70,17 @@ class KeepaProductData:
     category_path: list[str] = field(default_factory=list)
     category_id_path: list[str] = field(default_factory=list)
     image_candidates: list[str] = field(default_factory=list)
+    fba_fee_usd: float | None = None
+    fba_fee_last_update: int | None = None
+    referral_fee_percentage: float | None = None
+    package_weight_g: int | None = None
+    package_length_mm: int | None = None
+    package_width_mm: int | None = None
+    package_height_mm: int | None = None
+    item_weight_g: int | None = None
+    item_length_mm: int | None = None
+    item_width_mm: int | None = None
+    item_height_mm: int | None = None
     mock_generated: bool = True
     fetched_at: str = field(default_factory=utc_now_iso)
 

@@ -119,6 +119,43 @@ def test_keepa_product_parser_uses_stats_for_reviews_sellers_and_rating():
     assert "https://m.media-amazon.com/images/I/test-image.jpg" in product.image_candidates
 
 
+def test_keepa_product_parser_extracts_fba_fee_and_fee_inputs():
+    product = _parse_product_payload(
+        {
+            "products": [
+                {
+                    "asin": "B0FBAFEE01",
+                    "title": "Outdoor Tool Organizer",
+                    "brand": "Fixture",
+                    "newPrice": 3299,
+                    "salesRank": 4500,
+                    "reviewCount": 80,
+                    "sellerCount": 5,
+                    "categoryTree": [{"name": "Patio, Lawn & Garden", "catId": 2972638011}],
+                    "fbaFees": {"pickAndPackFee": 476, "lastUpdate": 8153992},
+                    "referralFeePercentage": 15.01,
+                    "packageWeight": 449,
+                    "packageLength": 226,
+                    "packageWidth": 163,
+                    "packageHeight": 61,
+                    "itemWeight": 410,
+                }
+            ]
+        },
+        asin="B0FBAFEE01",
+        source_query="test",
+    )
+
+    assert product.fba_fee_usd == 4.76
+    assert product.fba_fee_last_update == 8153992
+    assert product.referral_fee_percentage == 15.01
+    assert product.package_weight_g == 449
+    assert product.package_length_mm == 226
+    assert product.package_width_mm == 163
+    assert product.package_height_mm == 61
+    assert product.item_weight_g == 410
+
+
 def test_keepa_product_parser_uses_avg90_and_bsr_features_when_current_missing():
     current = [-1] * 18
     current[1] = 2999

@@ -74,6 +74,9 @@ export type RwProduct = {
   margin_source: string | null;
   margin_confidence: string | null;
   fulfillment_method: string | null;
+  fba_fee: number | null;
+  fba_fee_source: string | null;
+  referral_fee_percentage: number | null;
   lithium_battery_warning: boolean;
   brand_share: number | null;
   price_trend: string | null;

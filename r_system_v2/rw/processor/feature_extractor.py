@@ -82,6 +82,22 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
             "monthly_sales_source": "keepa_monthly_sold"
             if keepa_data.monthly_sales is not None
             else "unknown",
+            "fba_fee_usd": keepa_data.fba_fee_usd,
+            "fba_pick_pack_fee_usd": keepa_data.fba_fee_usd,
+            "fba_fee_currency": "USD" if keepa_data.fba_fee_usd is not None else None,
+            "fba_fee_source": "keepa_fbaFees.pickAndPackFee"
+            if keepa_data.fba_fee_usd is not None
+            else "missing_keepa_fbaFees",
+            "fba_fee_last_update": keepa_data.fba_fee_last_update,
+            "referral_fee_percentage": keepa_data.referral_fee_percentage,
+            "package_weight_g": keepa_data.package_weight_g,
+            "package_length_mm": keepa_data.package_length_mm,
+            "package_width_mm": keepa_data.package_width_mm,
+            "package_height_mm": keepa_data.package_height_mm,
+            "item_weight_g": keepa_data.item_weight_g,
+            "item_length_mm": keepa_data.item_length_mm,
+            "item_width_mm": keepa_data.item_width_mm,
+            "item_height_mm": keepa_data.item_height_mm,
             **monthly_sales_estimate.to_features(),
             "parent_category_name": keepa_data.parent_category_name,
             "parent_category_rank": keepa_data.parent_category_rank,

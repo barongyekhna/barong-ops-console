@@ -202,6 +202,27 @@ def _decision_from_state(state: str, features: object) -> str:
     return "pending_review"
 
 
+def _feature_float(features: dict[str, object], key: str) -> float | None:
+    value = features.get(key)
+    if isinstance(value, bool) or value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            return float(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _feature_string(features: dict[str, object], key: str) -> str | None:
+    value = features.get(key)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
 def require_r_series_org(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
@@ -413,47 +434,54 @@ def rw_products(
             ),
             params,
         )
-        rows = [
-            {
-                "asin": row.asin,
-                "marketplace": row.marketplace,
-                "source_query": row.source_query,
-                "title": row.title,
-                "title_zh": row.title_zh,
-                "title_zh_source": row.title_zh_source,
-                "title_zh_updated_at": str(row.title_zh_updated_at)
-                if row.title_zh_updated_at
-                else None,
-                "image_url": row.image_url,
-                "brand": row.brand,
-                "category": row.category,
-                "price": float(row.price) if row.price is not None else None,
-                "bsr": row.bsr,
-                "reviews": row.reviews,
-                "seller_count": row.seller_count,
-                "landed_cost": float(row.landed_cost) if row.landed_cost is not None else None,
-                "margin_source": row.margin_source,
-                "margin_confidence": row.margin_confidence,
-                "fulfillment_method": row.fulfillment_method,
-                "lithium_battery_warning": bool(row.lithium_battery_warning),
-                "brand_share": float(row.brand_share) if row.brand_share is not None else None,
-                "price_trend": row.price_trend,
-                "rating": float(row.rating) if row.rating is not None else None,
-                "state": row.state,
-                "rule_result": row.state,
-                "rule_reject_reason": row.rule_reject_reason,
-                "margin": float(row.est_net_margin) if row.est_net_margin is not None else None,
-                "category_id": row.category_id,
-                "category_path": row.category_path.split(">") if row.category_path else [],
-                "skill_score": row.skill_score,
-                "features": row.features if isinstance(row.features, dict) else {},
-                "pipeline_decision": _decision_from_state(row.state, row.features),
-                "last_keepa_pull": str(row.last_keepa_pull) if row.last_keepa_pull else None,
-                "updated_at": str(row.updated_at) if row.updated_at else None,
-                "source": "products_rw",
-            }
-            for row in result
-        ]
+        for row in result:
+            features = row.features if isinstance(row.features, dict) else {}
+            rows.append(
+                {
+                    "asin": row.asin,
+                    "marketplace": row.marketplace,
+                    "source_query": row.source_query,
+                    "title": row.title,
+                    "title_zh": row.title_zh,
+                    "title_zh_source": row.title_zh_source,
+                    "title_zh_updated_at": str(row.title_zh_updated_at)
+                    if row.title_zh_updated_at
+                    else None,
+                    "image_url": row.image_url,
+                    "brand": row.brand,
+                    "category": row.category,
+                    "price": float(row.price) if row.price is not None else None,
+                    "bsr": row.bsr,
+                    "reviews": row.reviews,
+                    "seller_count": row.seller_count,
+                    "landed_cost": float(row.landed_cost) if row.landed_cost is not None else None,
+                    "margin_source": row.margin_source,
+                    "margin_confidence": row.margin_confidence,
+                    "fulfillment_method": row.fulfillment_method,
+                    "lithium_battery_warning": bool(row.lithium_battery_warning),
+                    "brand_share": float(row.brand_share) if row.brand_share is not None else None,
+                    "price_trend": row.price_trend,
+                    "rating": float(row.rating) if row.rating is not None else None,
+                    "state": row.state,
+                    "rule_result": row.state,
+                    "rule_reject_reason": row.rule_reject_reason,
+                    "margin": float(row.est_net_margin) if row.est_net_margin is not None else None,
+                    "category_id": row.category_id,
+                    "category_path": row.category_path.split(">") if row.category_path else [],
+                    "skill_score": row.skill_score,
+                    "features": features,
+                    "fba_fee": _feature_float(features, "fba_fee_usd"),
+                    "fba_fee_source": _feature_string(features, "fba_fee_source"),
+                    "referral_fee_percentage": _feature_float(
+                        features,
+                        "referral_fee_percentage",
+                    ),
+                    "pipeline_decision": _decision_from_state(row.state, features),
+                    "last_keepa_pull": str(row.last_keepa_pull) if row.last_keepa_pull else None,
+                    "updated_at": str(row.updated_at) if row.updated_at else None,
+                    "source": "products_rw",
+                }
+            )
     except SQLAlchemyError:
         storage_status = "products_rw_unavailable"
     return {

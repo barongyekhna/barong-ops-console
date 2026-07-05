@@ -548,6 +548,47 @@ def _money_from_cents(value: Any) -> float | None:
     return None
 
 
+def _positive_int_from_product(product: dict[str, Any], key: str) -> int | None:
+    value = product.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and value > 0:
+        return int(value)
+    if isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+        return parsed if parsed > 0 else None
+    return None
+
+
+def _positive_float_from_product(product: dict[str, Any], key: str) -> float | None:
+    value = product.get(key)
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and value > 0:
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = float(value.strip())
+        except ValueError:
+            return None
+        return parsed if parsed > 0 else None
+    return None
+
+
+def _fba_fee_details(product: dict[str, Any]) -> dict[str, int | float | None]:
+    fees = product.get("fbaFees")
+    if not isinstance(fees, dict):
+        return {"fba_fee_usd": None, "fba_fee_last_update": None}
+    fee_usd = _money_from_cents(fees.get("pickAndPackFee"))
+    last_update = fees.get("lastUpdate")
+    return {
+        "fba_fee_usd": fee_usd,
+        "fba_fee_last_update": int(last_update)
+        if isinstance(last_update, (int, float)) and not isinstance(last_update, bool)
+        else None,
+    }
+
+
 def _price_from_product(product: dict[str, Any]) -> float | None:
     for key in (
         "newPrice",
@@ -797,6 +838,7 @@ def _parse_product_payload(
     category_details = _category_rank_details(product, default_bsr=bsr)
     monthly_sales = _monthly_sales_from_product(product)
     image_candidates = _image_candidates_from_product(product, asin=parsed_asin)
+    fba_fee = _fba_fee_details(product)
 
     return KeepaProductData(
         asin=parsed_asin,
@@ -826,6 +868,20 @@ def _parse_product_payload(
         category_path=category_details["amazon_category_path"],
         category_id_path=category_details["amazon_category_id_path"],
         image_candidates=image_candidates,
+        fba_fee_usd=fba_fee["fba_fee_usd"],
+        fba_fee_last_update=fba_fee["fba_fee_last_update"],
+        referral_fee_percentage=_positive_float_from_product(
+            product,
+            "referralFeePercentage",
+        ),
+        package_weight_g=_positive_int_from_product(product, "packageWeight"),
+        package_length_mm=_positive_int_from_product(product, "packageLength"),
+        package_width_mm=_positive_int_from_product(product, "packageWidth"),
+        package_height_mm=_positive_int_from_product(product, "packageHeight"),
+        item_weight_g=_positive_int_from_product(product, "itemWeight"),
+        item_length_mm=_positive_int_from_product(product, "itemLength"),
+        item_width_mm=_positive_int_from_product(product, "itemWidth"),
+        item_height_mm=_positive_int_from_product(product, "itemHeight"),
         mock_generated=False,
     )
 

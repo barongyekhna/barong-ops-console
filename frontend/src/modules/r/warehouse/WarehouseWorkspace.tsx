@@ -125,6 +125,17 @@ function fulfillmentLabel(value: string | null) {
   return "履约未知";
 }
 
+function fbaFeeValue(product: RwProduct) {
+  if (typeof product.fba_fee === "number" && Number.isFinite(product.fba_fee)) {
+    return product.fba_fee;
+  }
+  const featureFee = numberFeature(product, "fba_fee_usd");
+  if (featureFee !== null) {
+    return featureFee;
+  }
+  return numberFeature(product, "fba_pick_pack_fee_usd");
+}
+
 function modeLabel(value: string) {
   const labels: Record<string, string> = {
     production: "生产运行",
@@ -298,6 +309,30 @@ function AsinTag({ asin }: { asin: string }) {
   );
 }
 
+function FbaFeeTag({ product }: { product: RwProduct }) {
+  const fee = fbaFeeValue(product);
+  const referralFee = product.referral_fee_percentage ?? numberFeature(product, "referral_fee_percentage");
+  if (fee === null) {
+    return (
+      <span className={styles.fbaFeeMissingTag} title="历史产品正在按 Keepa token 节流补齐 FBA 费用">
+        FBA费待补
+      </span>
+    );
+  }
+  return (
+    <span
+      className={styles.fbaFeeTag}
+      title={
+        referralFee === null
+          ? "Keepa fbaFees.pickAndPackFee"
+          : `Keepa FBA履约费；平台佣金 ${Math.round(referralFee * 100) / 100}%`
+      }
+    >
+      FBA费 {currency(fee)}
+    </span>
+  );
+}
+
 function BsrCell({ product }: { product: RwProduct }) {
   const bestsellerParentRank = numberFeature(product, "bestseller_parent_rank");
   const bestsellerParentCategory =
@@ -451,6 +486,7 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
           <tr>
             <th>产品</th>
             <th>价格</th>
+            <th>FBA费</th>
             <th>BSR</th>
             <th>评论</th>
             <th>卖家</th>
@@ -493,6 +529,9 @@ function ProductsTable({ products }: { products: readonly RwProduct[] }) {
                   </div>
                 </td>
                 <td>{product.price === null ? "无" : currency(product.price)}</td>
+                <td>
+                  <FbaFeeTag product={product} />
+                </td>
                 <td>
                   <BsrCell product={product} />
                 </td>

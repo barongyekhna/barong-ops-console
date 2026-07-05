@@ -358,6 +358,32 @@
   line-height: 1.2;
 }
 
+.fbaFeeTag,
+.fbaFeeMissingTag {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  min-height: 26px;
+  padding: 3px 8px;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 880;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.fbaFeeTag {
+  color: #7c2d12;
+  background: #ffedd5;
+  border: 1px solid rgb(234 88 12 / 34%);
+}
+
+.fbaFeeMissingTag {
+  color: #854d0e;
+  background: #fef9c3;
+  border: 1px solid rgb(202 138 4 / 34%);
+}
+
 .bsrStack {
   display: grid;
   gap: 6px;

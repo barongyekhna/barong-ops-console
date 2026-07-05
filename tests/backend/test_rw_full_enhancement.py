@@ -490,6 +490,13 @@ def test_feature_extractor_adds_monthly_sales_estimate_for_missing_keepa_sales()
             parent_category_name="Home & Kitchen",
             subcategory_name="Storage",
             subcategory_rank=8_000,
+            fba_fee_usd=4.76,
+            fba_fee_last_update=8153992,
+            referral_fee_percentage=15.0,
+            package_weight_g=449,
+            package_length_mm=226,
+            package_width_mm=163,
+            package_height_mm=61,
             mock_generated=False,
         ),
     )
@@ -499,6 +506,10 @@ def test_feature_extractor_adds_monthly_sales_estimate_for_missing_keepa_sales()
     assert product.features["monthly_sales_estimate"] > 0
     assert product.features["monthly_sales_estimate_source"] == "bsr_estimate_v1"
     assert product.features["monthly_sales_confidence"] == "medium"
+    assert product.features["fba_fee_usd"] == 4.76
+    assert product.features["fba_fee_source"] == "keepa_fbaFees.pickAndPackFee"
+    assert product.features["referral_fee_percentage"] == 15.0
+    assert product.features["package_weight_g"] == 449
 
 
 def test_category_rate_limiter_balances_twenty_categories_for_ten_minutes():
