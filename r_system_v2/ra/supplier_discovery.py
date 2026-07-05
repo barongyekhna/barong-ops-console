@@ -364,11 +364,11 @@ def build_1688_queries(product: dict[str, Any]) -> list[str]:
     if len(base) > 120:
         base = base[:120]
     queries = [
-        f"site:1688.com {base} 1688 批发 同款",
+        f"1688 {base} 批发 同款",
         f"{base} 阿里巴巴 1688 批发 厂家",
     ]
     if category:
-        queries.append(f"site:1688.com {category} {base[:80]} 批发")
+        queries.append(f"1688 {category} {base[:80]} 批发")
     return _dedupe_preserve_order(queries)
 
 
