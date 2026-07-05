@@ -14,7 +14,6 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
-from backend.app.services.data_isolation import without_org_data_isolation
 from r_system_v2.ra.auto_profit import (
     DEFAULT_SUPPLIER_LIMIT,
     MAX_ASIN_LIMIT,
@@ -125,7 +124,7 @@ class RaProfitJobWorker:
 
     def run_once(self, *, log: Callable[[str], None] | None = None) -> bool:
         with self.session_factory() as db:
-            with without_org_data_isolation():
+            with _without_org_data_isolation():
                 job = _claim_next_job(db)
         if job is None:
             return False
@@ -138,7 +137,7 @@ class RaProfitJobWorker:
             self._process_job(job, log=log)
         except Exception as exc:
             with self.session_factory() as db:
-                with without_org_data_isolation():
+                with _without_org_data_isolation():
                     row = _load_job_row(db, org_id=org_id, run_id=run_id)
                     counts = _dict_value(row.get("counts") if row else {})
                     warnings = list(counts.get("warnings") or [])
@@ -162,7 +161,7 @@ class RaProfitJobWorker:
         quote = get_usd_cny_quote()
 
         with self.session_factory() as db:
-            with without_org_data_isolation():
+            with _without_org_data_isolation():
                 products = match_rw_products_for_query(
                     db,
                     org_id=org_id,
@@ -187,7 +186,7 @@ class RaProfitJobWorker:
 
         if not products:
             with self.session_factory() as db:
-                with without_org_data_isolation():
+                with _without_org_data_isolation():
                     counts = _dict_value(_load_job_row(db, org_id=org_id, run_id=run_id)["counts"])
                     _update_job(db, run_id=run_id, status="completed", counts=counts, finish=True)
             return
@@ -209,7 +208,7 @@ class RaProfitJobWorker:
             for future in as_completed(futures):
                 result = future.result()
                 with self.session_factory() as db:
-                    with without_org_data_isolation():
+                    with _without_org_data_isolation():
                         row = _load_job_row(db, org_id=org_id, run_id=run_id)
                         counts = _dict_value(row.get("counts") if row else {})
                         counts["processed_products"] = int(
@@ -230,7 +229,7 @@ class RaProfitJobWorker:
                     )
 
         with self.session_factory() as db:
-            with without_org_data_isolation():
+            with _without_org_data_isolation():
                 row = _load_job_row(db, org_id=org_id, run_id=run_id)
                 counts = _dict_value(row.get("counts") if row else {})
                 counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
@@ -251,7 +250,7 @@ def _process_product_for_job(
 ) -> dict[str, object]:
     try:
         with session_factory() as db:
-            with without_org_data_isolation():
+            with _without_org_data_isolation():
                 discovery = discover_1688_supplier_offers(
                     db,
                     org_id=org_id,
@@ -614,3 +613,9 @@ def _iso(value: Any) -> str | None:
             value = value.replace(tzinfo=UTC)
         return value.isoformat()
     return str(value)
+
+
+def _without_org_data_isolation():
+    from backend.app.services.data_isolation import without_org_data_isolation
+
+    return without_org_data_isolation()
