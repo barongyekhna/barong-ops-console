@@ -6747,8 +6747,7 @@ textarea:focus-visible {
   align-content: start;
   color: var(--mm-ink);
 }
-.mm-page > * { position: relative; z-index: 1; }
-.mm-page > .dsc-space { z-index: 0; }
+.mm-page > *:not(.dsc-space) { position: relative; z-index: 1; }
 
 .mm-page .registry-command-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
 .mm-page .registry-command-bar .eyebrow { color: var(--mm-cyan); font: 700 9px var(--mm-mono); letter-spacing: 0.28em; text-transform: uppercase; }
@@ -6780,7 +6779,12 @@ textarea:focus-visible {
 .mm-page .ops-panel-heading h3 { color: #eafaff; font-size: 14px; letter-spacing: 0.5px; }
 .mm-page .ops-panel-heading p { color: var(--mm-dim); font-size: 12px; margin-top: 3px; }
 .mm-page .ops-panel-heading svg { color: var(--mm-amber); }
-.mm-page .ops-source { font: 600 10px var(--mm-mono); color: var(--mm-cyan); border: 1px solid rgb(57 212 255 / 25%); border-radius: 20px; padding: 2px 9px; background: rgb(57 212 255 / 8%); }
+.mm-page .ops-source { font: 600 10px var(--mm-mono); color: var(--mm-cyan); border: 1px solid rgb(57 212 255 / 25%); border-radius: 20px; padding: 2px 9px; background: rgb(57 212 255 / 8%); white-space: nowrap; }
+.mm-page .mm-org-chev { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border-radius: 7px; border: 1px solid var(--mm-line); background: rgb(10 20 34 / 55%); color: var(--mm-cyan); cursor: pointer; font-size: 11px; }
+.mm-page .mm-org-chev:hover { border-color: rgb(57 212 255 / 50%); color: #eafaff; }
+.mm-page .ops-panel.collapsed .module-control-card-grid,
+.mm-page .ops-panel.collapsed .ops-empty-state { display: none; }
+.mm-page .ops-panel.collapsed .ops-panel-heading { margin-bottom: 0; }
 
 /* 模块卡 */
 .mm-page .module-control-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }

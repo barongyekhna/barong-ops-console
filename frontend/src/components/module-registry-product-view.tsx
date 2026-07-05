@@ -474,6 +474,19 @@ function OwnerModuleControlCenter() {
   const [bindings, setBindings] = useState<ApiKeyBindingRecord[]>([]);
   const [activeTab, setActiveTab] =
     useState<"mod" | "key" | "bind" | "hook">("mod");
+  const [collapsedOrgs, setCollapsedOrgs] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const toggleOrg = (orgId: string) =>
+    setCollapsedOrgs((current) => {
+      const next = new Set(current);
+      if (next.has(orgId)) {
+        next.delete(orgId);
+      } else {
+        next.add(orgId);
+      }
+      return next;
+    });
   const [isOrganizationsLoading, setIsOrganizationsLoading] = useState(true);
   const [isControlDataLoading, setIsControlDataLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -1125,13 +1138,27 @@ function OwnerModuleControlCenter() {
           </section>
         ) : null}
         {moduleGroups.map((group) => (
-          <section className="ops-panel ops-panel-wide" key={group.org_id}>
+          <section
+            className={`ops-panel ops-panel-wide ${
+              collapsedOrgs.has(group.org_id) ? "collapsed" : ""
+            }`}
+            key={group.org_id}
+          >
             <div className="ops-panel-heading">
               <div>
                 <h3>{group.org_name}</h3>
                 <p>当前组织已同步真实模块清单。</p>
               </div>
               <span className="ops-source">{group.modules.length} 个模块</span>
+              <button
+                aria-expanded={!collapsedOrgs.has(group.org_id)}
+                className="mm-org-chev"
+                onClick={() => toggleOrg(group.org_id)}
+                title={collapsedOrgs.has(group.org_id) ? "展开" : "收起"}
+                type="button"
+              >
+                {collapsedOrgs.has(group.org_id) ? "▸" : "▾"}
+              </button>
             </div>
             {isControlDataLoading && group.modules.length === 0 ? (
               <div className="ops-empty-state" role="status">

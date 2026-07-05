@@ -175,18 +175,6 @@ export const navigationGroups: NavigationGroup[] = [
       {
         category: "admin",
         denied_behavior: "hide_when_denied",
-        href: "/api-key-management",
-        icon: LockKeyhole,
-        label: "API密钥管理",
-        module_key: "admin.key_management",
-        owner_only: true,
-        required_permission: "modules.read",
-        route_namespace: "/api-key-management",
-        status: "sealed",
-      },
-      {
-        category: "admin",
-        denied_behavior: "hide_when_denied",
         href: "/settings",
         icon: Settings,
         label: "设置",
