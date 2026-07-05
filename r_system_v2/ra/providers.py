@@ -8,6 +8,7 @@ not direct OpenAI/Anthropic SDK bindings; both are expected to route through the
 from __future__ import annotations
 
 from dataclasses import dataclass
+from importlib.util import find_spec
 import os
 from typing import Any
 
@@ -160,8 +161,8 @@ class RAnalysisProviderBinding:
                 role="crawler_1688",
                 service="playwright",
                 label="1688 Playwright 页面抓取",
-                configured=bool(os.getenv("RA_1688_COOKIE_PROFILE", "").strip()),
-                source="runtime_profile",
+                configured=_playwright_runtime_available(),
+                source=_playwright_runtime_source(),
             ),
         ]
 
@@ -179,3 +180,15 @@ class RAnalysisProviderBinding:
             "configured": bool(status.get("configured")),
             "source": str(status.get("source") or "api_key_orchestration"),
         }
+
+
+def _playwright_runtime_available() -> bool:
+    return find_spec("playwright") is not None
+
+
+def _playwright_runtime_source() -> str:
+    if bool(os.getenv("RA_1688_COOKIE_PROFILE", "").strip()):
+        return "runtime_profile"
+    if _playwright_runtime_available():
+        return "python_runtime"
+    return "missing_runtime"
