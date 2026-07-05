@@ -10,6 +10,11 @@ from ...services.data_isolation import without_org_data_isolation
 from .rw import _target_org_for_user, require_r_series_org
 from r_system_v2.ra.framework import load_ra_framework_overview
 from r_system_v2.ra.auto_profit import run_auto_profit_analysis
+from r_system_v2.ra.job_queue import (
+    RAJobError,
+    create_auto_profit_job,
+    get_auto_profit_job,
+)
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.profit_service import (
     RAProfitError,
@@ -56,6 +61,13 @@ class RASupplierSearchRequest(BaseModel):
 class RAAutoProfitRequest(BaseModel):
     query: str = Field(min_length=1, max_length=120)
     asin_limit: int = Field(default=1, ge=1, le=20)
+    supplier_limit: int = Field(default=3, ge=3, le=5)
+    min_gross_margin: float | None = Field(default=None, ge=0)
+
+
+class RAAutoProfitJobRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=120)
+    asin_limit: int = Field(default=20, ge=1, le=20)
     supplier_limit: int = Field(default=3, ge=3, le=5)
     min_gross_margin: float | None = Field(default=None, ge=0)
 
@@ -165,6 +177,52 @@ def ra_profit_auto_run(
     except (RAProfitError, RASupplierDiscoveryError) as exc:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post("/profit/jobs")
+def ra_profit_job_create(
+    payload: RAAutoProfitJobRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    try:
+        with without_org_data_isolation():
+            return create_auto_profit_job(
+                db,
+                org_id=target_org.org_id,
+                query=payload.query,
+                asin_limit=payload.asin_limit,
+                supplier_limit=payload.supplier_limit,
+                min_gross_margin=decimal_value(payload.min_gross_margin),
+                triggered_by=str(user.id),
+            )
+    except RAJobError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get("/profit/jobs/{run_id}")
+def ra_profit_job_get(
+    run_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    try:
+        with without_org_data_isolation():
+            return get_auto_profit_job(
+                db,
+                org_id=target_org.org_id,
+                run_id=run_id,
+            )
+    except RAJobError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
 

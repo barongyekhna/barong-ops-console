@@ -11,6 +11,7 @@ from dataclasses import asdict, dataclass
 from r_system_v2.core.secret_manager import SecretManager
 from r_system_v2.core.secret_manager import TARGET_ORGANIZATION_NAME
 from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.ra.job_queue import RaProfitJobWorker
 from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
 from r_system_v2.rw.category.category_tree import load_category_tree, selected_category_ids
 from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
@@ -39,6 +40,7 @@ class WorkerRuntimeStatus:
 
 RUNNING = True
 RW_ENGINE: RwRealtimeEngine | None = None
+RA_JOB_WORKER: RaProfitJobWorker | None = None
 
 
 def _handle_stop(signum: int, frame: object) -> None:
@@ -180,6 +182,11 @@ def _build_batch_writer() -> SQLAlchemyBatchWriter | None:
 
 
 def run_ra_worker() -> WorkerRuntimeStatus:
+    status, _worker = build_ra_worker_runtime()
+    return status
+
+
+def build_ra_worker_runtime() -> tuple[WorkerRuntimeStatus, RaProfitJobWorker]:
     org_id = _resolve_org_id()
     manager = SecretManager()
     binding = RAnalysisProviderBinding(org_id=org_id, secret_manager=manager)
@@ -197,16 +204,20 @@ def run_ra_worker() -> WorkerRuntimeStatus:
     configured["opus"] = bool(configured.get("foursapi"))
     _log("SecretManager connected")
     _log("R-A analysis module ready")
-    _log("R-A worker idle / ready")
+    _log("R-A worker queue ready")
     _log(f"R-A standby mode provider_configured={configured}")
-    return WorkerRuntimeStatus(
+    from backend.app.db.session import SessionLocal
+
+    worker = RaProfitJobWorker(session_factory=SessionLocal)
+    status = WorkerRuntimeStatus(
         worker="r-a-worker",
         ready=True,
-        mode="standby",
+        mode="background_profit_queue",
         keepa_loaded=False,
         deepseek_loaded=bool(configured.get("deepseek")),
         secret_manager_connected=True,
     )
+    return status, worker
 
 
 def main() -> None:
@@ -218,13 +229,17 @@ def main() -> None:
         global RW_ENGINE
         RW_ENGINE = engine
     elif worker == "ra":
-        status = run_ra_worker()
+        status, ra_worker = build_ra_worker_runtime()
+        global RA_JOB_WORKER
+        RA_JOB_WORKER = ra_worker
         engine = None
     else:
         raise SystemExit(f"unsupported worker: {worker}")
     _log(f"worker_status={asdict(status)}")
     if worker == "rw" and engine is not None:
         engine.run_forever(should_stop=lambda: not RUNNING)
+    elif worker == "ra" and RA_JOB_WORKER is not None:
+        RA_JOB_WORKER.run_forever(should_stop=lambda: not RUNNING, log=_log)
     else:
         while RUNNING:
             time.sleep(5)

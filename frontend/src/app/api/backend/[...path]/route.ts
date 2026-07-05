@@ -848,6 +848,25 @@ function isAllowedRPath(method: string, path: string[]) {
     ) {
       return true;
     }
+
+    if (
+      method === "POST" &&
+      path.length === 4 &&
+      path[2] === "profit" &&
+      path[3] === "jobs"
+    ) {
+      return true;
+    }
+
+    if (
+      method === "GET" &&
+      path.length === 5 &&
+      path[2] === "profit" &&
+      path[3] === "jobs" &&
+      isUuidPathSegment(path[4])
+    ) {
+      return true;
+    }
   }
 
   if (path.length === 3 && path[1] === "commerce") {

@@ -12,27 +12,29 @@ import {
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 
 import {
+  createRaAutoProfitJob,
+  getRaAutoProfitJob,
   getRaFrameworkStatus,
   getRaProfitSnapshots,
-  runRaAutoProfit,
 } from "@/modules/r/analysis/api";
 import type {
   RaAutoProfitItem,
-  RaAutoProfitResult,
+  RaAutoProfitJobResult,
   RaFrameworkStatus,
   RaProfitSnapshot,
 } from "@/modules/r/analysis/types";
 
 import styles from "./AnalysisWorkspace.module.css";
 
-const DEFAULT_ASIN_LIMIT = 1;
+const DEFAULT_ASIN_LIMIT = 20;
 const DEFAULT_SUPPLIER_LIMIT = 3;
+const POLL_INTERVAL_MS = 3_000;
 
 export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) {
   const [status, setStatus] = useState<RaFrameworkStatus | null>(null);
   const [snapshots, setSnapshots] = useState<RaProfitSnapshot[]>([]);
   const [query, setQuery] = useState("");
-  const [result, setResult] = useState<RaAutoProfitResult | null>(null);
+  const [result, setResult] = useState<RaAutoProfitJobResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -70,6 +72,47 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
     };
   }, []);
 
+  useEffect(() => {
+    if (!result?.run_id || isTerminalStatus(result.status)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const payload = await getRaAutoProfitJob(result.run_id);
+        if (cancelled) {
+          return;
+        }
+        setResult(payload);
+        if (isTerminalStatus(payload.status)) {
+          setRunning(false);
+          const snapshotPayload = await getRaProfitSnapshots();
+          if (!cancelled) {
+            setSnapshots(snapshotPayload.items);
+          }
+        }
+      } catch (requestError) {
+        if (!cancelled) {
+          setRunError(
+            requestError instanceof Error
+              ? requestError.message
+              : "读取后台任务进度失败。",
+          );
+        }
+      }
+    };
+
+    const timer = window.setInterval(() => {
+      void poll();
+    }, POLL_INTERVAL_MS);
+    void poll();
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [result?.run_id, result?.status]);
+
   const resultItems = result?.items ?? [];
   const summary = useMemo(() => {
     if (!result) {
@@ -98,14 +141,13 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
     setRunning(true);
     setRunError(null);
     try {
-      const payload = await runRaAutoProfit({
+      const payload = await createRaAutoProfitJob({
         asin_limit: DEFAULT_ASIN_LIMIT,
         query: cleaned,
         supplier_limit: DEFAULT_SUPPLIER_LIMIT,
       });
       setResult(payload);
-      const snapshotPayload = await getRaProfitSnapshots();
-      setSnapshots(snapshotPayload.items);
+      setRunning(!isTerminalStatus(payload.status));
     } catch (requestError) {
       setRunError(
         requestError instanceof Error
@@ -158,12 +200,13 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
             />
             <button disabled={running || !query.trim()} type="submit">
               {running ? <Loader2 className={styles.spinIcon} size={17} /> : <Search size={17} />}
-              <span>{running ? "自动分析中" : "开始自动分析"}</span>
+              <span>{running ? "后台分析中" : "开始自动分析"}</span>
             </button>
           </div>
           <p>
-            默认每次匹配 {DEFAULT_ASIN_LIMIT} 个 R-W 候选 ASIN，每个 ASIN 优先抓取{" "}
-            {DEFAULT_SUPPLIER_LIMIT} 个一件代发/一件起批 1688 供应商。
+            默认每次提交 {DEFAULT_ASIN_LIMIT} 个 R-W 候选 ASIN 到后台队列，每个
+            ASIN 优先抓取 {DEFAULT_SUPPLIER_LIMIT} 个一件代发/一件起批 1688
+            供应商，页面每 3 秒自动刷新结果。
           </p>
         </form>
         {runError ? (
@@ -188,9 +231,13 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
             <strong>{result.query}</strong>
           </div>
           <div>
+            <span>任务状态</span>
+            <strong>{jobStatusLabel(result.status)}</strong>
+          </div>
+          <div>
             <span>实时汇率</span>
             <strong>
-              1 USD = {result.exchange_rate.usd_cny.toFixed(4)} CNY
+              1 USD = {formatRate(result.exchange_rate.usd_cny)} CNY
             </strong>
           </div>
           <div>
@@ -467,6 +514,36 @@ function statusLabel(value: string | null | undefined) {
     return "任务失败";
   }
   return "处理中";
+}
+
+function jobStatusLabel(value: string | null | undefined) {
+  if (value === "queued") {
+    return "已排队";
+  }
+  if (value === "running") {
+    return "运行中";
+  }
+  if (value === "completed") {
+    return "已完成";
+  }
+  if (value === "partial") {
+    return "部分完成";
+  }
+  if (value === "failed") {
+    return "任务失败";
+  }
+  return value || "等待中";
+}
+
+function isTerminalStatus(value: string | null | undefined) {
+  return value === "completed" || value === "partial" || value === "failed";
+}
+
+function formatRate(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "读取中";
+  }
+  return value.toFixed(4);
 }
 
 function verdictLabel(value: string | null | undefined) {

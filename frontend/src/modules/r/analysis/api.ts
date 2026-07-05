@@ -4,6 +4,8 @@ import { apiRequest } from "@/lib/api";
 import type {
   RaFrameworkStatus,
   RaAutoProfitPayload,
+  RaAutoProfitJobPayload,
+  RaAutoProfitJobResult,
   RaAutoProfitResult,
   RaManualProfitPayload,
   RaProfitRunResult,
@@ -56,5 +58,20 @@ export function runRaAutoProfit(payload: RaAutoProfitPayload) {
     body: payload,
     method: "POST",
     timeoutMs: 180_000,
+  });
+}
+
+export function createRaAutoProfitJob(payload: RaAutoProfitJobPayload) {
+  return apiRequest<RaAutoProfitJobResult>(`${RA_API_BASE}/profit/jobs`, {
+    body: payload,
+    method: "POST",
+    timeoutMs: 30_000,
+  });
+}
+
+export function getRaAutoProfitJob(runId: string) {
+  return apiRequest<RaAutoProfitJobResult>(`${RA_API_BASE}/profit/jobs/${runId}`, {
+    bypassCache: true,
+    timeoutMs: 30_000,
   });
 }

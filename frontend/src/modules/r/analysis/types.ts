@@ -216,6 +216,8 @@ export type RaAutoProfitPayload = {
   min_gross_margin?: number | null;
 };
 
+export type RaAutoProfitJobPayload = RaAutoProfitPayload;
+
 export type RaAutoProfitItem = {
   status: string;
   asin: string | null;
@@ -281,4 +283,13 @@ export type RaAutoProfitResult = {
   };
   formula: RaProfitFormula;
   warnings: string[];
+};
+
+export type RaAutoProfitJobResult = RaAutoProfitResult & {
+  run_id: string;
+  status: "queued" | "running" | "completed" | "partial" | "failed" | string;
+  runtime_mode: string | null;
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
 };

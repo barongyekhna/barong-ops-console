@@ -238,6 +238,7 @@ def discover_1688_supplier_offers(
     *,
     org_id: str,
     asin: str,
+    run_id: str | None = None,
     result_limit: int = DEFAULT_DISCOVERY_LIMIT,
     auto_calculate: bool = True,
     exchange_rate_usd_cny: Decimal | None = None,
@@ -248,7 +249,12 @@ def discover_1688_supplier_offers(
     normalized_asin = asin.strip().upper()
     limit = _bounded_limit(result_limit)
     product = _load_product(db, normalized_asin)
-    candidate_id = _ensure_candidate(db, org_id=org_id, product=product)
+    candidate_id = _ensure_candidate(
+        db,
+        org_id=org_id,
+        product=product,
+        run_id=run_id,
+    )
     db.commit()
     client = serper_client or _serper_client(db, org_id=org_id)
     crawler = crawler or Playwright1688Crawler()
@@ -275,6 +281,7 @@ def discover_1688_supplier_offers(
             org_id=org_id,
             candidate_id=candidate_id,
             asin=normalized_asin,
+            run_id=run_id,
             query=query,
             status=status,
             result_count=len(results),
@@ -379,6 +386,7 @@ def discover_1688_supplier_offers(
             db,
             org_id=org_id,
             asin=normalized_asin,
+            candidate_id=candidate_id,
             limit=limit,
             exchange_rate_usd_cny=exchange_rate_usd_cny,
             min_gross_margin=min_gross_margin,
@@ -440,6 +448,7 @@ def _insert_supplier_search(
     org_id: str,
     candidate_id: str,
     asin: str,
+    run_id: str | None,
     query: str,
     status: str,
     result_count: int,
@@ -450,11 +459,11 @@ def _insert_supplier_search(
             f"""
             INSERT INTO ra_supplier_searches (
               id, org_id, candidate_id, asin, query, provider, status,
-              result_count, payload
+              result_count, run_id, payload
             )
             VALUES (
               :id, :org_id, :candidate_id, :asin, :query, 'serper',
-              :status, :result_count, {_json_bind(db, "payload")}
+              :status, :result_count, :run_id, {_json_bind(db, "payload")}
             )
             """
         ),
@@ -463,6 +472,7 @@ def _insert_supplier_search(
             "org_id": org_id,
             "candidate_id": candidate_id,
             "asin": asin,
+            "run_id": run_id,
             "query": query,
             "status": status,
             "result_count": result_count,

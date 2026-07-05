@@ -130,10 +130,17 @@ def run_profit_for_existing_offers(
     org_id: str,
     limit: int,
     asin: str | None = None,
+    candidate_id: str | None = None,
     exchange_rate_usd_cny: Decimal | None = None,
     min_gross_margin: Decimal | None = None,
 ) -> dict[str, object]:
-    rows = _load_supplier_offer_rows(db, org_id=org_id, limit=limit, asin=asin)
+    rows = _load_supplier_offer_rows(
+        db,
+        org_id=org_id,
+        limit=limit,
+        asin=asin,
+        candidate_id=candidate_id,
+    )
     items: list[dict[str, object]] = []
     counts = {"processed": 0, "pass": 0, "reject": 0, "blocked": 0}
     for row in rows:
@@ -258,21 +265,61 @@ def _load_product(db: Session, asin: str) -> dict[str, Any]:
     return dict(row)
 
 
-def _ensure_candidate(db: Session, *, org_id: str, product: dict[str, Any]) -> str:
-    existing = db.execute(
-        text(
-            """
-            SELECT id
-            FROM ra_candidates
-            WHERE org_id = :org_id AND source_asin = :asin
-            ORDER BY created_at DESC
-            LIMIT 1
-            """
-        ),
-        {"org_id": org_id, "asin": product["asin"]},
-    ).mappings().first()
-    if existing is not None:
-        return str(existing["id"])
+def _ensure_candidate(
+    db: Session,
+    *,
+    org_id: str,
+    product: dict[str, Any],
+    run_id: str | None = None,
+) -> str:
+    return _ensure_candidate_for_run(
+        db,
+        org_id=org_id,
+        product=product,
+        run_id=run_id,
+    )
+
+
+def _ensure_candidate_for_run(
+    db: Session,
+    *,
+    org_id: str,
+    product: dict[str, Any],
+    run_id: str | None = None,
+) -> str:
+    if run_id:
+        existing = db.execute(
+            text(
+                """
+                SELECT id
+                FROM ra_candidates
+                WHERE org_id = :org_id
+                  AND run_id = :run_id
+                  AND source_asin = :asin
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"org_id": org_id, "run_id": run_id, "asin": product["asin"]},
+        ).mappings().first()
+        if existing is not None:
+            return str(existing["id"])
+
+    if not run_id:
+        existing = db.execute(
+            text(
+                """
+                SELECT id
+                FROM ra_candidates
+                WHERE org_id = :org_id AND source_asin = :asin
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"org_id": org_id, "asin": product["asin"]},
+        ).mappings().first()
+        if existing is not None:
+            return str(existing["id"])
 
     candidate_id = str(uuid4())
     snapshot = _product_snapshot(product)
@@ -281,11 +328,11 @@ def _ensure_candidate(db: Session, *, org_id: str, product: dict[str, Any]) -> s
             f"""
             INSERT INTO ra_candidates (
               id, org_id, source_asin, marketplace, source_state, title,
-              title_zh, channel_hint, candidate_status, snapshot
+              title_zh, channel_hint, candidate_status, run_id, snapshot
             )
             VALUES (
               :id, :org_id, :source_asin, :marketplace, :source_state, :title,
-              :title_zh, 'amazon', 'profit_pending', {_json_bind(db, "snapshot")}
+              :title_zh, 'amazon', 'profit_pending', :run_id, {_json_bind(db, "snapshot")}
             )
             """
         ),
@@ -297,6 +344,7 @@ def _ensure_candidate(db: Session, *, org_id: str, product: dict[str, Any]) -> s
             "source_state": product.get("state"),
             "title": product.get("title"),
             "title_zh": product.get("title_zh"),
+            "run_id": run_id,
             "snapshot": json.dumps(snapshot, ensure_ascii=False),
         },
     )
@@ -468,8 +516,10 @@ def _load_supplier_offer_rows(
     org_id: str,
     limit: int,
     asin: str | None = None,
+    candidate_id: str | None = None,
 ) -> list[dict[str, Any]]:
     asin_filter = "AND COALESCE(o.asin, c.source_asin) = :asin" if asin else ""
+    candidate_filter = "AND o.candidate_id = :candidate_id" if candidate_id else ""
     rows = db.execute(
         text(
             f"""
@@ -487,6 +537,7 @@ def _load_supplier_offer_rows(
               AND o.unit_price_cny IS NOT NULL
               AND p.asin IS NOT NULL
               {asin_filter}
+              {candidate_filter}
             ORDER BY
               CASE WHEN o.offer_status = 'selected' THEN 0 ELSE 1 END,
               o.match_score DESC NULLS LAST,
@@ -499,6 +550,7 @@ def _load_supplier_offer_rows(
             "org_id": org_id,
             "limit": max(1, min(limit, 200)),
             "asin": asin.strip().upper() if asin else None,
+            "candidate_id": candidate_id,
         },
     ).mappings()
     return [dict(row) for row in rows]
