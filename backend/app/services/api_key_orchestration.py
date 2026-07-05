@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hmac
 import secrets
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from hashlib import sha256
@@ -783,8 +784,22 @@ def resolve_module_api_key_for_injection(
         raise ApiKeyIsolationError("api_key_not_active")
     if key.org_id != org_id:
         raise ApiKeyIsolationError("api_key_org_mismatch")
+    return _injection_context_from_binding(
+        binding=binding,
+        key=key,
+        record_usage=True,
+    )
+
+
+def _injection_context_from_binding(
+    *,
+    binding: ApiKeyModuleBindingRecord,
+    key: ApiKeyRecord,
+    record_usage: bool,
+) -> ApiKeyInjectionContext:
     secret_value = _decrypt_key_value(key.encrypted_key_value)
-    record_api_key_usage(key.key_id)
+    if record_usage:
+        record_api_key_usage(key.key_id)
     key_type_payload = _key_type_payload(key)
     key_type = str(key_type_payload["key_type"])
     if key_type == KEEPA_KEY_TYPE:
@@ -798,8 +813,8 @@ def resolve_module_api_key_for_injection(
         query_param_name = None
         query_param_value = None
     return ApiKeyInjectionContext(
-        org_id=org_id,
-        module_id=module_id,
+        org_id=binding.org_id,
+        module_id=binding.module_id,
         key_id=key.key_id,
         key_alias=binding.key_alias,
         name=key.name,
@@ -814,6 +829,71 @@ def resolve_module_api_key_for_injection(
         query_param_name=query_param_name,
         query_param_value=query_param_value,
     )
+
+
+def resolve_module_api_key_candidates_for_injection(
+    db: Session,
+    *,
+    org_id: str,
+    module_id: str,
+    key_aliases: Sequence[str],
+) -> list[ApiKeyInjectionContext]:
+    normalized_aliases = [
+        alias.strip().lower().replace(" ", "_") or "default"
+        for alias in key_aliases
+    ]
+    alias_rank = {
+        alias: index
+        for index, alias in enumerate(dict.fromkeys(normalized_aliases))
+    }
+    if not alias_rank:
+        raise ApiKeyIsolationError("api_key_not_bound_to_module")
+
+    bindings = list(
+        db.scalars(
+            select(ApiKeyModuleBindingRecord).where(
+                ApiKeyModuleBindingRecord.org_id == org_id,
+                ApiKeyModuleBindingRecord.module_id == module_id,
+                ApiKeyModuleBindingRecord.key_alias.in_(alias_rank.keys()),
+                ApiKeyModuleBindingRecord.status == "active",
+            )
+        )
+    )
+    bindings.sort(
+        key=lambda binding: (
+            binding.created_at,
+            alias_rank.get(binding.key_alias, len(alias_rank)),
+            binding.binding_id,
+        )
+    )
+    if not bindings:
+        raise ApiKeyIsolationError("api_key_not_bound_to_module")
+
+    keys = {
+        key.key_id: key
+        for key in db.scalars(
+            select(ApiKeyRecord).where(
+                ApiKeyRecord.key_id.in_([binding.key_id for binding in bindings])
+            )
+        )
+    }
+    contexts: list[ApiKeyInjectionContext] = []
+    for binding in bindings:
+        key = keys.get(binding.key_id)
+        if key is None or key.status != "active":
+            continue
+        if key.org_id != org_id:
+            raise ApiKeyIsolationError("api_key_org_mismatch")
+        contexts.append(
+            _injection_context_from_binding(
+                binding=binding,
+                key=key,
+                record_usage=False,
+            )
+        )
+    if not contexts:
+        raise ApiKeyIsolationError("api_key_not_active")
+    return contexts
 
 
 def validate_api_key_value(

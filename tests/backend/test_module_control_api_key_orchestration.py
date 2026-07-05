@@ -530,6 +530,64 @@ def test_keepa_key_type_binds_to_r_warehouse_ingestion(
     assert rw_payload["adapter"] == "KeepaAdapter"
 
 
+def test_openai_key_type_binds_to_i_image_system(
+    owner_client: TestClient,
+) -> None:
+    target_org_id = DEFAULT_ORG_ID
+
+    key_types = owner_client.get(
+        "/api/control-plane/api-key-orchestration/key-types"
+    )
+    assert key_types.status_code == 200, key_types.text
+    openai_type = next(
+        item for item in key_types.json()["items"] if item["type"] == "openai"
+    )
+    assert "I" in openai_type["scope"]
+
+    created = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{target_org_id}/keys",
+        json={
+            "name": "I image 4sapi backup",
+            "url": "https://4sapi.example/v1",
+            "key_value": "i-image-4sapi-secret",
+            "key_type": "openai",
+        },
+    )
+    assert created.status_code == 201, created.text
+    created_item = created.json()["item"]
+    assert created_item["key_type"] == "openai"
+    assert "I" in created_item["scope"]
+
+    bound = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{target_org_id}/bindings",
+        json={
+            "module_id": "i.image_system",
+            "key_id": created_item["key_id"],
+            "key_alias": "4sapi",
+        },
+    )
+    assert bound.status_code == 201, bound.text
+    binding_item = bound.json()["item"]
+    assert binding_item["module_id"] == "i.image_system"
+    assert binding_item["key_alias"] == "4sapi"
+    assert binding_item["key_type"] == "openai"
+
+    with SessionLocal() as db:
+        context = resolve_module_api_key_for_injection(
+            db,
+            org_id=target_org_id,
+            module_id="i.image_system",
+            key_alias="4sapi",
+        )
+        assert context.key_alias == "4sapi"
+        assert context.key_type == "openai"
+        assert context.url == "https://4sapi.example/v1"
+        assert context.header_name == "Authorization"
+        assert context.header_value == "Bearer i-image-4sapi-secret"
+
+
 def test_k_series_key_reevaluation_activates_target_org_runtime(
     owner_client: TestClient,
 ) -> None:

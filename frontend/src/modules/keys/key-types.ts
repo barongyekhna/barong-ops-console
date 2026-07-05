@@ -29,7 +29,7 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
   {
     type: "openai",
     label: "OpenAI",
-    description: "OpenAI-compatible AI API",
+    description: "OpenAI-compatible AI API for K, I, and R-A modules",
     defaultUrl: "https://api.openai.com/v1",
     defaultAlias: "chatgpt",
   },
@@ -61,7 +61,7 @@ const LOOKUP_KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
   {
     type: "chatgpt",
     label: "ChatGPT / 4sapi",
-    description: "ChatGPT-compatible AI API",
+    description: "ChatGPT-compatible AI API for K, I, and R-A modules",
     defaultUrl: "https://api.openai.com/v1",
     defaultAlias: "chatgpt",
   },

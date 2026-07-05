@@ -23,6 +23,7 @@ from backend.app.modules.i_series.image_system.schemas import (
 from backend.app.modules.i_series.image_system.service import (
     IImagePromptEngine,
     IImageModelEngine,
+    IImageSystemService,
     _IMAGE_GENERATION_CACHE,
     _PROMPT_TRANSFORM_CACHE,
     decode_image_base64,
@@ -33,6 +34,7 @@ from backend.app.modules.i_series.image_system.service import (
     sha256_hex,
     validate_image_bytes,
 )
+from backend.app.services.api_key_orchestration import ApiKeyInjectionContext
 
 
 def test_i_generated_candidate_png_is_valid_base64_image() -> None:
@@ -277,3 +279,118 @@ def test_i_image_generation_cache_returns_cached_image_without_model_call(
     assert second[0].content_sha256 == first[0].content_sha256
     assert second[0].image_base64 == first[0].image_base64
     assert second[0].candidate_id != first[0].candidate_id
+
+
+def test_i_image_provider_falls_back_per_request_without_sticky_switch(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("I_IMAGE_ALLOW_LOCAL_FALLBACK", raising=False)
+    _IMAGE_GENERATION_CACHE.clear()
+    primary = ApiKeyInjectionContext(
+        org_id="org_1",
+        module_id="i.image_system",
+        key_id="key_primary",
+        key_alias="chatgpt",
+        name="primary image key",
+        url="https://primary.example",
+        header_name="Authorization",
+        header_value="Bearer primary",
+    )
+    backup = ApiKeyInjectionContext(
+        org_id="org_1",
+        module_id="i.image_system",
+        key_id="key_backup",
+        key_alias="chatgpt",
+        name="backup image key",
+        url="https://backup.example",
+        header_name="Authorization",
+        header_value="Bearer backup",
+    )
+    engine = IImageModelEngine(db=None)  # type: ignore[arg-type]
+    monkeypatch.setattr(engine, "_provider_keys", lambda **_kwargs: [primary, backup])
+    attempts: list[str] = []
+    contents = deterministic_png(64, 64, "provider-backup-output")
+
+    def fake_request_provider_candidates(**kwargs):
+        key = kwargs["key"]
+        attempts.append(key.key_id)
+        if key.key_id == "key_primary":
+            raise HTTPException(
+                status_code=502,
+                detail={
+                    "code": "I_IMAGE_PROVIDER_REQUEST_FAILED",
+                    "message": "primary channel failed",
+                    "details": {"provider_status": 503},
+                },
+            )
+        return engine._candidates_from_provider_response(
+            response_payload={"data": [{"b64_json": encode_image_base64(contents)}]},
+            source_type=SOURCE_GENERATE,
+            image_prompt_enhanced=kwargs["image_prompt_enhanced"],
+            requested_width=64,
+            requested_height=64,
+            endpoint=kwargs["endpoint"],
+            generation_count=1,
+            reference_image_count=0,
+        )
+
+    monkeypatch.setattr(
+        engine,
+        "_request_provider_candidates",
+        fake_request_provider_candidates,
+    )
+
+    first = engine.generate_candidates(
+        event_id=uuid4(),
+        source_type=SOURCE_GENERATE,
+        image_prompt_enhanced="Professional ecommerce image prompt.",
+        aspect_ratio="1:1",
+        generation_count=1,
+        request=None,  # type: ignore[arg-type]
+        user=None,  # type: ignore[arg-type]
+    )
+    second = engine.generate_candidates(
+        event_id=uuid4(),
+        source_type=SOURCE_GENERATE,
+        image_prompt_enhanced="Professional ecommerce image prompt.",
+        aspect_ratio="1:1",
+        generation_count=1,
+        request=None,  # type: ignore[arg-type]
+        user=None,  # type: ignore[arg-type]
+    )
+
+    assert attempts == ["key_primary", "key_backup", "key_primary", "key_backup"]
+    assert first[0].metadata["provider_fallback_used"] is True
+    assert first[0].metadata["provider_attempt"] == 2
+    assert second[0].metadata["provider_fallback_used"] is True
+
+
+def test_i_failure_translation_returns_chinese_frontend_message(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    service = IImageSystemService(db=None)  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        service.prompt_engine,
+        "translate_failure_to_chinese",
+        lambda **_kwargs: "图片生成失败：主 key 和备用 key 都不可用。",
+    )
+    exc = HTTPException(
+        status_code=502,
+        detail={
+            "code": "I_IMAGE_PROVIDER_REQUEST_FAILED",
+            "message": "No available channel for model gpt-image-2.",
+            "details": {"fallback_attempted": True},
+        },
+    )
+
+    translated = service._translated_failure_exception(
+        exc=exc,
+        request=None,  # type: ignore[arg-type]
+        user=None,  # type: ignore[arg-type]
+    )
+
+    assert translated.status_code == 502
+    assert translated.detail["message"] == "图片生成失败：主 key 和备用 key 都不可用。"
+    assert translated.detail["details"]["original_message"].startswith(
+        "No available channel"
+    )

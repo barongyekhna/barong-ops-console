@@ -34,11 +34,13 @@ except Exception:  # pragma: no cover - optional local fallback dependency
 from ....models.organization import OrganizationRecord
 from ....models.user import User
 from ....services.api_key_orchestration import (
+    ApiKeyInjectionContext,
     ApiKeyIsolationError,
     ApiKeyOrchestrationError,
-    resolve_module_api_key_for_injection,
+    resolve_module_api_key_candidates_for_injection,
 )
 from ....services.ai_provider_router import AIExecutionRouter
+from ....services.api_key_usage_tracker import record_api_key_usage
 from ....services.module_execution_gate import (
     ModuleExecutionGateError,
     require_module_execution_ready,
@@ -612,6 +614,27 @@ def local_enhanced_prompt(payload: PromptTransformRequest) -> str:
     )
 
 
+def local_chinese_failure_message(message: str) -> str:
+    lowered = message.lower()
+    if "no available channel" in lowered:
+        return (
+            "图片生成失败：当前图片模型 gpt-image-2 的 4sapi/Azure 通道暂不可用，"
+            "请稍后重试或检查备用 key 通道。"
+        )
+    if "safety_violations" in lowered or "safety system" in lowered:
+        return (
+            "图片生成失败：图片模型安全系统拒绝了这次请求。请调整提示词，"
+            "避免敏感、暴力、性暗示或容易被误判的身体接触描述。"
+        )
+    if "timed out" in lowered or "timeout" in lowered:
+        return "图片生成失败：图片模型请求超时，请稍后重试。"
+    if "not contain usable image data" in lowered:
+        return "图片生成失败：图片模型返回结果中没有可用的图片数据。"
+    if message.strip():
+        return f"图片生成失败：{message.strip()}"
+    return "图片生成失败：后端没有收到可用的失败原因。"
+
+
 def target_organization(db: Session) -> OrganizationRecord:
     organization = db.scalar(
         select(OrganizationRecord).where(
@@ -633,6 +656,15 @@ def resolve_i_image_provider_key(
     request: Request,
     user: User,
 ):
+    return resolve_i_image_provider_keys(db, request=request, user=user)[0]
+
+
+def resolve_i_image_provider_keys(
+    db: Session,
+    *,
+    request: Request,
+    user: User,
+) -> list[ApiKeyInjectionContext]:
     organization = target_organization(db)
     try:
         execution_context = require_module_execution_ready(
@@ -649,25 +681,22 @@ def resolve_i_image_provider_key(
             detail=exc.code,
         ) from exc
 
-    for alias in IMAGE_PROVIDER_KEY_ALIASES:
-        try:
-            return resolve_module_api_key_for_injection(
-                db,
-                org_id=organization.org_id,
-                module_id=execution_context.control_module_id,
-                key_alias=alias,
-            )
-        except (ApiKeyIsolationError, ApiKeyOrchestrationError):
-            continue
-
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail=(
-            "I image provider API key is not bound to i.image_system. "
-            "Bind the 4sapi image key with alias 4sapi, gpt_image, "
-            "ai_provider, openai, chatgpt, or default."
-        ),
-    )
+    try:
+        return resolve_module_api_key_candidates_for_injection(
+            db,
+            org_id=organization.org_id,
+            module_id=execution_context.control_module_id,
+            key_aliases=IMAGE_PROVIDER_KEY_ALIASES,
+        )
+    except (ApiKeyIsolationError, ApiKeyOrchestrationError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "I image provider API key is not bound to i.image_system. "
+                "Bind the 4sapi image key with alias 4sapi, gpt_image, "
+                "ai_provider, openai, chatgpt, or default."
+            ),
+        ) from exc
 
 
 def _provider_response_items(response: dict[str, Any]) -> list[dict[str, Any]]:
@@ -763,7 +792,7 @@ class IImagePromptEngine:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
                     detail=(
-                        "DeepSeek V4 Pro prompt enhancement failed or is not configured."
+                        "DeepSeek V4 Pro 提示词优化失败或未正确配置。"
                     ),
                 ) from exc
             fallback = (local_enhanced_prompt(payload), "local_fallback")
@@ -783,6 +812,68 @@ class IImagePromptEngine:
         _prompt_cache_put(cache_key, result)
         return result
 
+    def translate_failure_to_chinese(
+        self,
+        *,
+        message: str,
+        details: dict[str, Any],
+        request: Request,
+        user: User,
+    ) -> str:
+        fallback = local_chinese_failure_message(message)
+        if local_image_fallback_enabled():
+            return fallback
+
+        provider_payload = {
+            "module_id": MODULE_KEY,
+            "task": "i_image_failure_reason_translate",
+            "failure_message": message,
+            "failure_details": details,
+            "required_output": ["zh_message"],
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Translate the image generation failure reason into concise "
+                        "Chinese for an operations console user. Preserve key model, "
+                        "provider, channel, safety, timeout, and fallback-attempt facts. "
+                        "Return JSON only with key zh_message."
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": json.dumps(
+                        {
+                            "failure_message": message,
+                            "failure_details": details,
+                        },
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
+                },
+            ],
+        }
+        try:
+            output = AIExecutionRouter(self.db).execute(
+                provider="deepseek",
+                task_type="generate",
+                payload=provider_payload,
+                org=TARGET_ORGANIZATION_NAME,
+                module_id=MODULE_KEY,
+                user=user,
+                request=request,
+                fallback_provider=None,
+            )
+        except Exception:
+            return fallback
+
+        translated = output.get("zh_message")
+        if not isinstance(translated, str) or not translated.strip():
+            translated = output.get("message") or output.get("content")
+        if isinstance(translated, str) and translated.strip():
+            return translated.strip()
+        return fallback
+
 
 class IImageProviderError(RuntimeError):
     pass
@@ -801,20 +892,26 @@ class IImageModelEngine:
             self.db.rollback()
             raise
 
-    def _provider_key(self, *, request: Request, user: User):
-        return resolve_i_image_provider_key(
+    def _provider_keys(
+        self,
+        *,
+        request: Request,
+        user: User,
+    ) -> list[ApiKeyInjectionContext]:
+        return resolve_i_image_provider_keys(
             self.db,
             request=request,
             user=user,
         )
 
-    def _raise_provider_error(
+    def _provider_error_exception(
         self,
         *,
         endpoint: str,
         exc: Exception,
         response: httpx.Response | None = None,
-    ) -> None:
+        key: ApiKeyInjectionContext | None = None,
+    ) -> HTTPException:
         provider_message = None
         details: dict[str, Any] = {
             "endpoint": endpoint,
@@ -822,6 +919,9 @@ class IImageModelEngine:
             "provider": "4sapi",
             "error_class": exc.__class__.__name__,
         }
+        if key is not None:
+            details["provider_key_alias"] = key.key_alias
+            details["provider_key_name"] = key.name
         if response is not None:
             details["provider_status"] = response.status_code
             try:
@@ -835,7 +935,7 @@ class IImageModelEngine:
                     if isinstance(message, str) and message.strip():
                         provider_message = message.strip()
                         details["provider_error"] = provider_message[:500]
-        raise HTTPException(
+        return HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail={
                 "code": "I_IMAGE_PROVIDER_REQUEST_FAILED",
@@ -846,7 +946,22 @@ class IImageModelEngine:
                 ),
                 "details": details,
             },
-        ) from exc
+        )
+
+    def _raise_provider_error(
+        self,
+        *,
+        endpoint: str,
+        exc: Exception,
+        response: httpx.Response | None = None,
+        key: ApiKeyInjectionContext | None = None,
+    ) -> None:
+        raise self._provider_error_exception(
+            endpoint=endpoint,
+            exc=exc,
+            response=response,
+            key=key,
+        )
 
     def _candidates_from_provider_response(
         self,
@@ -962,57 +1077,85 @@ class IImageModelEngine:
             )
         return candidates
 
-    def generate_candidates(
+    @staticmethod
+    def _attempt_error_summary(
+        *,
+        attempt: int,
+        key: ApiKeyInjectionContext,
+        exc: HTTPException,
+    ) -> dict[str, Any]:
+        detail = exc.detail
+        message = str(detail)
+        details: dict[str, Any] = {}
+        if isinstance(detail, dict):
+            raw_message = detail.get("message")
+            if isinstance(raw_message, str):
+                message = raw_message
+            raw_details = detail.get("details")
+            if isinstance(raw_details, dict):
+                details = raw_details
+        return {
+            "attempt": attempt,
+            "key_alias": key.key_alias,
+            "key_name": key.name,
+            "message": message[:500],
+            "provider_status": details.get("provider_status"),
+            "provider_error": details.get("provider_error"),
+        }
+
+    @staticmethod
+    def _with_attempt_metadata(
+        *,
+        exc: HTTPException,
+        attempts: list[dict[str, Any]],
+    ) -> HTTPException:
+        detail = exc.detail
+        if isinstance(detail, dict):
+            next_detail = dict(detail)
+            details = (
+                dict(next_detail.get("details"))
+                if isinstance(next_detail.get("details"), dict)
+                else {}
+            )
+            details["attempts"] = attempts
+            details["fallback_attempted"] = len(attempts) > 1
+            next_detail["details"] = details
+            message = next_detail.get("message")
+            if isinstance(message, str) and len(attempts) > 1:
+                next_detail["message"] = f"{message}（已尝试备用 key，仍失败。）"
+            return HTTPException(status_code=exc.status_code, detail=next_detail)
+        return HTTPException(
+            status_code=exc.status_code,
+            detail={
+                "code": "I_IMAGE_PROVIDER_REQUEST_FAILED",
+                "message": f"{detail}",
+                "details": {
+                    "attempts": attempts,
+                    "fallback_attempted": len(attempts) > 1,
+                },
+            },
+        )
+
+    def _request_provider_candidates(
         self,
         *,
-        event_id: UUID,
+        key: ApiKeyInjectionContext,
+        endpoint: str,
+        size: str,
+        requested_width: int,
+        requested_height: int,
         source_type: str,
         image_prompt_enhanced: str,
-        aspect_ratio: str,
         generation_count: int,
-        request: Request,
-        user: User,
-        style_config: dict[str, Any] | None = None,
-        reference_image_count: int = 0,
-        reference_images: list[tuple[str, bytes, str | None]] | None = None,
+        reference_image_count: int,
+        reference_images: list[tuple[str, bytes, str | None]] | None,
     ) -> list[ImageCandidate]:
-        size, requested_width, requested_height = provider_size_for_aspect_ratio(
-            aspect_ratio
-        )
-        cache_key = None
-        if source_type == SOURCE_GENERATE and reference_image_count == 0:
-            cache_key = image_generation_cache_key(
-                image_prompt_enhanced=image_prompt_enhanced,
-                style_config=style_config,
-                aspect_ratio=aspect_ratio,
-            )
-            cached = _image_cache_get(cache_key, generation_count)
-            if cached is not None:
-                return cached
-
-        if local_image_fallback_enabled():
-            candidates = self._local_candidates(
-                event_id=event_id,
-                source_type=source_type,
-                image_prompt_enhanced=image_prompt_enhanced,
-                aspect_ratio=aspect_ratio,
-                generation_count=generation_count,
-                reference_image_count=reference_image_count,
-            )
-            if cache_key is not None:
-                _image_cache_put(cache_key, candidates)
-            return candidates
-
-        key = self._provider_key(request=request, user=user)
-        endpoint = (
-            IMAGE_EDIT_ENDPOINT if source_type == SOURCE_EDIT else IMAGE_GENERATION_ENDPOINT
-        )
         url = provider_url(key.url, endpoint)
         headers = {
             "Accept": "application/json",
             key.header_name: key.header_value,
         }
-        self._release_db_transaction()
+        record_api_key_usage(key.key_id)
 
         try:
             with httpx.Client(timeout=IMAGE_PROVIDER_TIMEOUT_SECONDS) as client:
@@ -1066,23 +1209,128 @@ class IImageModelEngine:
                 endpoint=endpoint,
                 exc=exc,
                 response=exc.response,
+                key=key,
             )
         except (httpx.HTTPError, ValueError) as exc:
-            self._raise_provider_error(endpoint=endpoint, exc=exc)
+            self._raise_provider_error(endpoint=endpoint, exc=exc, key=key)
 
-        candidates = self._candidates_from_provider_response(
-            response_payload=payload,
-            source_type=source_type,
-            image_prompt_enhanced=image_prompt_enhanced,
-            requested_width=requested_width,
-            requested_height=requested_height,
-            endpoint=endpoint,
-            generation_count=generation_count,
-            reference_image_count=reference_image_count,
-        )
-        if cache_key is not None:
-            _image_cache_put(cache_key, candidates)
+        try:
+            candidates = self._candidates_from_provider_response(
+                response_payload=payload,
+                source_type=source_type,
+                image_prompt_enhanced=image_prompt_enhanced,
+                requested_width=requested_width,
+                requested_height=requested_height,
+                endpoint=endpoint,
+                generation_count=generation_count,
+                reference_image_count=reference_image_count,
+            )
+        except HTTPException:
+            raise
+        except (httpx.HTTPError, ValueError) as exc:
+            self._raise_provider_error(endpoint=endpoint, exc=exc, key=key)
         return candidates
+
+    def generate_candidates(
+        self,
+        *,
+        event_id: UUID,
+        source_type: str,
+        image_prompt_enhanced: str,
+        aspect_ratio: str,
+        generation_count: int,
+        request: Request,
+        user: User,
+        style_config: dict[str, Any] | None = None,
+        reference_image_count: int = 0,
+        reference_images: list[tuple[str, bytes, str | None]] | None = None,
+    ) -> list[ImageCandidate]:
+        size, requested_width, requested_height = provider_size_for_aspect_ratio(
+            aspect_ratio
+        )
+        cache_key = None
+        if source_type == SOURCE_GENERATE and reference_image_count == 0:
+            cache_key = image_generation_cache_key(
+                image_prompt_enhanced=image_prompt_enhanced,
+                style_config=style_config,
+                aspect_ratio=aspect_ratio,
+            )
+
+        if local_image_fallback_enabled():
+            if cache_key is not None:
+                cached = _image_cache_get(cache_key, generation_count)
+                if cached is not None:
+                    return cached
+            candidates = self._local_candidates(
+                event_id=event_id,
+                source_type=source_type,
+                image_prompt_enhanced=image_prompt_enhanced,
+                aspect_ratio=aspect_ratio,
+                generation_count=generation_count,
+                reference_image_count=reference_image_count,
+            )
+            if cache_key is not None:
+                _image_cache_put(cache_key, candidates)
+            return candidates
+
+        keys = self._provider_keys(request=request, user=user)
+        endpoint = (
+            IMAGE_EDIT_ENDPOINT if source_type == SOURCE_EDIT else IMAGE_GENERATION_ENDPOINT
+        )
+        self._release_db_transaction()
+
+        attempts: list[dict[str, Any]] = []
+        last_error: HTTPException | None = None
+        for index, key in enumerate(keys, start=1):
+            try:
+                candidates = self._request_provider_candidates(
+                    key=key,
+                    endpoint=endpoint,
+                    size=size,
+                    requested_width=requested_width,
+                    requested_height=requested_height,
+                    source_type=source_type,
+                    image_prompt_enhanced=image_prompt_enhanced,
+                    generation_count=generation_count,
+                    reference_image_count=reference_image_count,
+                    reference_images=reference_images,
+                )
+                for candidate in candidates:
+                    candidate.metadata.update(
+                        {
+                            "provider_attempt": index,
+                            "provider_fallback_used": index > 1,
+                            "provider_key_alias": key.key_alias,
+                        }
+                    )
+                return candidates
+            except HTTPException as exc:
+                last_error = exc
+                attempts.append(
+                    self._attempt_error_summary(
+                        attempt=index,
+                        key=key,
+                        exc=exc,
+                    )
+                )
+                continue
+
+        raise self._with_attempt_metadata(
+            exc=last_error
+            or HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail={
+                    "code": "I_IMAGE_PROVIDER_REQUEST_FAILED",
+                    "message": "图片模型请求失败。",
+                    "details": {
+                        "endpoint": endpoint,
+                        "model": IMAGE_MODEL_NAME,
+                        "provider": "4sapi",
+                    },
+                },
+            ),
+            attempts=attempts,
+        )
 
 
 class IImageSystemService:
@@ -1090,6 +1338,50 @@ class IImageSystemService:
         self.db = db
         self.prompt_engine = IImagePromptEngine(db)
         self.image_engine = IImageModelEngine(db)
+
+    @staticmethod
+    def _failure_payload_from_exception(exc: Exception) -> tuple[int, str, dict[str, Any], str]:
+        status_code = getattr(exc, "status_code", status.HTTP_500_INTERNAL_SERVER_ERROR)
+        if not isinstance(status_code, int):
+            status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+        detail = getattr(exc, "detail", None)
+        if isinstance(detail, dict):
+            raw_message = detail.get("message")
+            message = raw_message if isinstance(raw_message, str) else str(detail)
+            raw_details = detail.get("details")
+            details = dict(raw_details) if isinstance(raw_details, dict) else {}
+            code = str(detail.get("code") or "I_IMAGE_TASK_FAILED")
+            return status_code, message, details, code
+        if isinstance(detail, str):
+            return status_code, detail, {}, "I_IMAGE_TASK_FAILED"
+        return status_code, str(exc), {}, "I_IMAGE_TASK_FAILED"
+
+    def _translated_failure_exception(
+        self,
+        *,
+        exc: Exception,
+        request: Request,
+        user: User,
+    ) -> HTTPException:
+        status_code, message, details, code = self._failure_payload_from_exception(exc)
+        translated = self.prompt_engine.translate_failure_to_chinese(
+            message=message,
+            details=details,
+            request=request,
+            user=user,
+        )
+        return HTTPException(
+            status_code=status_code,
+            detail={
+                "code": code,
+                "message": translated,
+                "details": {
+                    **details,
+                    "original_message": message,
+                    "translated_by": "deepseek-v4-pro_or_local_fallback",
+                },
+            },
+        )
 
     def transform_prompt(
         self,
@@ -1159,8 +1451,13 @@ class IImageSystemService:
                 style_config=payload.style_config,
             )
         except Exception as exc:
-            self._record_generation_error(event_id, exc)
-            raise
+            translated_exc = self._translated_failure_exception(
+                exc=exc,
+                request=request,
+                user=user,
+            )
+            self._record_generation_error(event_id, translated_exc)
+            raise translated_exc from exc
 
         stored_event = self._update_generated_event(event_id, len(candidates))
         return stored_event, candidates, provider
@@ -1250,8 +1547,13 @@ class IImageSystemService:
                     reference_images=reference_images,
                 )
             except Exception as exc:
-                self._record_generation_error(event_id, exc)
-                raise
+                translated_exc = self._translated_failure_exception(
+                    exc=exc,
+                    request=request,
+                    user=user,
+                )
+                self._record_generation_error(event_id, translated_exc)
+                raise translated_exc from exc
         stored_event = self._update_generated_event(event_id, len(candidates))
         return stored_event, candidates, provider, False
 
@@ -1280,7 +1582,11 @@ class IImageSystemService:
         if event is None:
             return
         detail = getattr(exc, "detail", None)
-        message = detail if isinstance(detail, str) else str(exc)
+        if isinstance(detail, dict):
+            raw_message = detail.get("message")
+            message = raw_message if isinstance(raw_message, str) else str(detail)
+        else:
+            message = detail if isinstance(detail, str) else str(exc)
         event.error_message = message[:2000]
         self.db.add(event)
         self.db.commit()
