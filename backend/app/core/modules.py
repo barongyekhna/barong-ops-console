@@ -1016,15 +1016,16 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         module_key="r.analysis",
         display_name="R-A 产品分析中心",
         description=(
-            "R-series Analysis placeholder. Runtime remains inactive until the "
-            "Warehouse module is ready for real key-bound data."
+            "R-series Analysis framework for candidate review, supplier cost, "
+            "profit snapshots, and final product-selection reports. Execution "
+            "workers remain disabled until each R-A integration is connected."
         ),
         category="business",
         status="active",
         lifecycle="production_released",
         route_namespace="/r-a",
-        api_namespace="no_api",
-        no_api=True,
+        api_namespace="/r/analysis",
+        no_api=False,
         navigation=_navigation(
             group="Registry",
             label="R-A 产品分析中心",
@@ -1033,25 +1034,36 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
         denied_behavior="show_locked",
         unavailable_behavior="show_unavailable",
-        external_dependencies=(),
+        external_dependencies=("deepseek", "chatgpt", "claude_opus", "serper"),
         execution_provider_required=False,
         module_adapter_required=False,
         sandbox_required=False,
         feature_flag_key="modules.r.analysis",
         data_boundary=_data_boundary(
             reads=("products_rw",),
-            writes=(),
+            writes=(
+                "ra_selection_runs",
+                "ra_candidates",
+                "ra_ai_evaluations",
+                "ra_supplier_searches",
+                "ra_supplier_offers",
+                "ra_profit_snapshots",
+                "ra_final_decisions",
+                "ra_reports",
+                "ra_alerts",
+            ),
             blocked_objects=(
-                "r_analysis_runtime",
-                "ai_provider",
-                "external_provider_config",
                 "cross_module_writes",
             ),
         ),
         release_requirements=_release_requirements(
-            required_checks=("placeholder route present", "r-a runtime inactive"),
+            required_checks=(
+                "r-a framework api present",
+                "r-a database boundary present",
+                "r-a execution workers inactive",
+            ),
         ),
-        docs_path="r_system_v2/docs/ARCHITECTURE.md",
+        docs_path="r_system_v2/docs/RA_TASKS.md",
     ),
     _manifest(
         module_key="business.approvals",

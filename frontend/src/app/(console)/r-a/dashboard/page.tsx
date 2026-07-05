@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { AnalysisPlaceholder } from "@/modules/r/analysis/AnalysisPlaceholder";
+import { AnalysisWorkspace } from "@/modules/r/analysis/AnalysisWorkspace";
 
 export const metadata: Metadata = {
   title: "R-A 产品分析中心",
@@ -15,12 +15,11 @@ export default function RaDashboardPage() {
         <span className="section-index">R-A</span>
         <div>
           <h1>R-A 产品分析中心</h1>
-          <p>Analysis remains inactive until R-W exits mock mode.</p>
+          <p>从 R-W 产品仓库进入深度分析、供货商成本和最终选品决策。</p>
         </div>
       </section>
 
-      <AnalysisPlaceholder view="dashboard" />
+      <AnalysisWorkspace view="dashboard" />
     </div>
   );
 }
-

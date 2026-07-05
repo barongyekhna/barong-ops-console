@@ -186,13 +186,15 @@ def run_ra_worker() -> WorkerRuntimeStatus:
     configured = {}
     for name, loader in (
         ("deepseek", binding.deepseek_key),
-        ("openai", binding.gpt_key),
+        ("foursapi", binding.foursapi_key),
         ("serper", binding.serper_key),
     ):
         try:
             configured[name] = bool(loader())
         except Exception:
             configured[name] = False
+    configured["gpt"] = bool(configured.get("foursapi"))
+    configured["opus"] = bool(configured.get("foursapi"))
     _log("SecretManager connected")
     _log("R-A analysis module ready")
     _log("R-A worker idle / ready")

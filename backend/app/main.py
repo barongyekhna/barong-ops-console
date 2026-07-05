@@ -65,6 +65,7 @@ from .api.routes.payload_standardization import (
     router as payload_standardization_router,
 )
 from .api.routes.permissions import router as permissions_router
+from .api.routes.ra import router as ra_router
 from .api.routes.reviews import router as reviews_router
 from .api.routes.rw import router as rw_router
 from .api.routes.result_normalization import router as result_normalization_router
@@ -939,6 +940,7 @@ app.include_router(k_product_knowledge_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(k_product_knowledge_router)
 app.include_router(i_image_system_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(rw_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(ra_router, prefix=APPLICATION_API_PREFIX)
 
 app.include_router(modules_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)

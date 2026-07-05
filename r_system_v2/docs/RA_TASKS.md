@@ -294,11 +294,11 @@ R-A 前台必须全部中文化。
 | --- | --- | --- |
 | RA-0 | 审计 R 系列文档并确认 R-A 边界 | 已完成 |
 | RA-1 | 编写 R-A 任务总文档 | 已完成 |
-| RA-2 | 修正 R-A provider 架构，支持 4sapi GPT/Opus | 未开始 |
-| RA-3 | 建立 R-A 数据表与迁移 | 未开始 |
-| RA-4 | 实现 skill_loader | 未开始 |
-| RA-5 | 实现 R-A 后端 API | 未开始 |
-| RA-6 | 实现 R-A 中文前端 | 未开始 |
+| RA-2 | 修正 R-A provider 架构，支持 4sapi GPT/Opus | 框架已完成，真实调用未接入 |
+| RA-3 | 建立 R-A 数据表与迁移 | 框架表已完成 |
+| RA-4 | 实现 skill_loader | 元数据加载已完成，prompt 组装未接入 |
+| RA-5 | 实现 R-A 后端 API | 只读框架 API 已完成 |
+| RA-6 | 实现 R-A 中文前端 | 框架工作台已完成 |
 | RA-7 | 实现 R-W 候选池导入 | 未开始 |
 | RA-8 | 实现 DeepSeek 第一层分析 | 未开始 |
 | RA-9 | 实现 GPT 第二层验证 | 未开始 |
@@ -314,12 +314,12 @@ R-A 前台必须全部中文化。
 
 ## 12. 当前阻塞点
 
-- R-A 目前仍是 placeholder。
-- 现有 R-A manifest 标记为 `no_api=True`。
+- R-A 已从 placeholder 升级为框架工作台。
+- R-A manifest 已接入只读 API，执行功能仍未启用。
 - 当前 R-A worker 只是 standby。
-- Opus provider 不能继续绑定到官方 Anthropic 模式，必须改为 4sapi。
-- R-A 缺少独立数据表。
-- R-A 缺少中文前台。
+- Opus / GPT 角色已按 4sapi provider 框架定义，真实调用未接入。
+- R-A 独立数据表框架已建立，尚未写入真实任务数据。
+- R-A 中文前台框架已建立，候选导入和分析按钮尚未接入。
 - 1688 抓取需要确认 cookie、登录态、反爬、代理和速率限制方案。
 
 ## 13. 交付标准
@@ -336,4 +336,3 @@ R-A 达到可交付必须满足：
 - 最终报告可持久保存。
 - 前台全中文。
 - R-W 持续运行不受 R-A 失败影响。
-

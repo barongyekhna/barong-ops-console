@@ -31,6 +31,8 @@ SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
         (K_PRODUCT_KNOWLEDGE_MODULE_ID, "deepseek"),
     ),
     "openai": (
+        (R_ANALYSIS_MODULE_ID, "4sapi"),
+        (R_ANALYSIS_MODULE_ID, "chatgpt"),
         (R_ANALYSIS_MODULE_ID, "openai"),
         (I_IMAGE_SYSTEM_MODULE_ID, "openai"),
         (I_IMAGE_SYSTEM_MODULE_ID, "chatgpt"),
