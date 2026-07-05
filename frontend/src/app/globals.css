@@ -5932,16 +5932,18 @@ textarea:focus-visible {
   height: min(560px, 60%);
   z-index: 0;
   pointer-events: none;
+  display: block;
   background: url("/assets/brand/barong-phoenix.svg") center / contain no-repeat;
-  opacity: 0.14;
-  filter: drop-shadow(0 0 30px rgb(255 140 50 / 40%));
+  opacity: 0.32;
+  mix-blend-mode: screen;
+  filter: drop-shadow(0 0 34px rgb(255 140 50 / 55%));
   transition: opacity 0.6s ease, filter 0.6s ease;
   animation: lxFloat 8s ease-in-out infinite;
 }
 @keyframes lxFloat { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-14px); } }
 .login-page .login-identity:hover::after {
-  opacity: 0.3;
-  filter: drop-shadow(0 0 46px rgb(255 120 30 / 75%)) saturate(1.2);
+  opacity: 0.6;
+  filter: drop-shadow(0 0 52px rgb(255 120 30 / 90%)) saturate(1.3);
 }
 
 /* 品牌标记 → 透明凤凰 + 辉光 */
@@ -6154,7 +6156,7 @@ textarea:focus-visible {
     border-bottom: 1px solid var(--lx-line);
     box-shadow: none;
   }
-  .login-page .login-identity::after { width: 300px; height: 300px; opacity: 0.1; }
+  .login-page .login-identity::after { width: 300px; height: 300px; opacity: 0.28; }
   .login-page .login-panel { min-height: auto; padding: 28px 20px 52px; }
   .login-page .identity-copy h1 { font-size: 2.2rem; }
 }
