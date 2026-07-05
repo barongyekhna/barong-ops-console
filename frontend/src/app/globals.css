@@ -6431,7 +6431,7 @@ textarea:focus-visible {
   --sh-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   display: block;
 }
-.console-main { min-width: 0; }
+.console-main { min-width: 0; margin-left: 0; }
 
 /* 侧栏收起后内容铺满全宽,不再居中留白 */
 .page-content { width: 100%; max-width: none; margin: 0; padding: clamp(18px, 3vw, 40px); }
