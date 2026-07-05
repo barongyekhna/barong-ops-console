@@ -97,6 +97,10 @@ export type RaProfitFormula = {
   seller_receipt_rate: number;
   first_mile_cny_per_kg: number;
   default_exchange_rate_usd_cny: number;
+  exchange_rate_source?: string;
+  exchange_rate_live?: boolean;
+  exchange_rate_fetched_at?: string | null;
+  exchange_rate_warning?: string | null;
   default_min_gross_margin: number;
   volume_weight_formula: string;
   chargeable_weight_rule: string;
@@ -115,6 +119,7 @@ export type RaProfitSnapshot = {
   landed_cost_usd: number | null;
   amazon_fees_usd: number | null;
   gross_profit_usd: number | null;
+  gross_profit_cny: number | null;
   gross_margin: number | null;
   roi: number | null;
   confidence: string | null;
@@ -128,6 +133,7 @@ export type RaProfitSnapshot = {
     unit_price_cny?: number | null;
     domestic_shipping_cny?: number | null;
     moq?: number | null;
+    one_piece_hint?: boolean | null;
     shipping_notice?: string | null;
   };
   formula: RaProfitFormula;
@@ -170,6 +176,7 @@ export type RaSupplierSearchResult = {
     domestic_shipping_cny: number | null;
     moq: number | null;
     match_score: number | null;
+    one_piece_hint?: boolean | null;
     offer_status: string;
     crawler_status: string;
     warning: string | null;
@@ -200,4 +207,78 @@ export type RaSupplierSearchPayload = {
   auto_calculate: boolean;
   exchange_rate_usd_cny?: number | null;
   min_gross_margin?: number | null;
+};
+
+export type RaAutoProfitPayload = {
+  query: string;
+  asin_limit?: number;
+  supplier_limit?: number;
+  min_gross_margin?: number | null;
+};
+
+export type RaAutoProfitItem = {
+  status: string;
+  asin: string | null;
+  image_url: string | null;
+  keyword: string;
+  matched_source_query: string | null;
+  title: string | null;
+  title_zh: string | null;
+  category: string | null;
+  supplier_name: string | null;
+  supplier_url: string | null;
+  unit_price_cny: number | null;
+  domestic_shipping_cny: number | null;
+  supplier_total_cny: number | null;
+  moq: number | null;
+  one_piece_hint: boolean;
+  gross_profit_usd: number | null;
+  gross_profit_cny: number | null;
+  gross_margin: number | null;
+  verdict: string | null;
+  warnings: string[];
+  blocked_reasons: string[];
+  exchange_rate_usd_cny?: number | null;
+  snapshot_id?: string | null;
+};
+
+export type RaAutoProfitResult = {
+  query: string;
+  asin_limit: number;
+  supplier_limit: number;
+  exchange_rate: {
+    usd_cny: number;
+    source: string;
+    live: boolean;
+    fetched_at: string | null;
+    warning: string | null;
+  };
+  matched_products: Array<{
+    asin: string;
+    title: string | null;
+    title_zh: string | null;
+    image_url: string | null;
+    category: string | null;
+    source_query: string | null;
+    match_score: number | null;
+  }>;
+  supplier_runs: Array<{
+    asin: string;
+    candidate_id?: string | null;
+    counts?: Record<string, number>;
+    warnings?: string[];
+  }>;
+  items: RaAutoProfitItem[];
+  counts: {
+    matched_products: number;
+    processed_products: number;
+    candidate_offers: number;
+    priced_offers: number;
+    profit_snapshots: number;
+    profit_pass: number;
+    profit_reject: number;
+    profit_blocked: number;
+  };
+  formula: RaProfitFormula;
+  warnings: string[];
 };

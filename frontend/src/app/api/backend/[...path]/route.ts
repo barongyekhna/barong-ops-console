@@ -836,7 +836,7 @@ function isAllowedRPath(method: string, path: string[]) {
       method === "POST" &&
       path.length === 4 &&
       path[2] === "profit" &&
-      ["manual", "run"].includes(path[3])
+      ["manual", "run", "auto-run"].includes(path[3])
     ) {
       return true;
     }

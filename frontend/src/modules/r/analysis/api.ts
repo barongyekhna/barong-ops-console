@@ -3,6 +3,8 @@
 import { apiRequest } from "@/lib/api";
 import type {
   RaFrameworkStatus,
+  RaAutoProfitPayload,
+  RaAutoProfitResult,
   RaManualProfitPayload,
   RaProfitRunResult,
   RaProfitSnapshot,
@@ -46,5 +48,13 @@ export function searchRaSuppliers(payload: RaSupplierSearchPayload) {
     body: payload,
     method: "POST",
     timeoutMs: 90_000,
+  });
+}
+
+export function runRaAutoProfit(payload: RaAutoProfitPayload) {
+  return apiRequest<RaAutoProfitResult>(`${RA_API_BASE}/profit/auto-run`, {
+    body: payload,
+    method: "POST",
+    timeoutMs: 180_000,
   });
 }

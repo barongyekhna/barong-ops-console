@@ -59,6 +59,7 @@ class CrawledOffer:
     crawler_status: str
     warning: str | None
     raw_excerpt: str | None
+    one_piece_hint: bool = False
 
 
 class Serper1688Client:
@@ -322,6 +323,7 @@ def discover_1688_supplier_offers(
                     "crawler_status": crawled.crawler_status,
                     "crawler_warning": crawled.warning,
                     "raw_excerpt": crawled.raw_excerpt,
+                    "one_piece_hint": _one_piece_hint(result, crawled),
                     "shipping_notice": (
                         "1688 页面显示包邮或抓取到运费"
                         if crawled.domestic_shipping_cny is not None
@@ -342,6 +344,7 @@ def discover_1688_supplier_offers(
                     ),
                     "moq": crawled.moq,
                     "match_score": _match_score(result, crawled),
+                    "one_piece_hint": _one_piece_hint(result, crawled),
                     "offer_status": (
                         "priced" if crawled.unit_price_cny is not None else "price_pending"
                     ),
@@ -390,11 +393,11 @@ def build_1688_queries(product: dict[str, Any]) -> list[str]:
     if len(base) > 120:
         base = base[:120]
     queries = [
-        f"1688 {base} 批发 同款",
-        f"{base} 阿里巴巴 1688 批发 厂家",
+        f"1688 {base} 一件代发 一件起批 同款",
+        f"{base} 阿里巴巴 1688 一件代发 批发 厂家",
     ]
     if category:
-        queries.append(f"1688 {category} {base[:80]} 批发")
+        queries.append(f"1688 {category} {base[:80]} 一件起批 批发")
     return _dedupe_preserve_order(queries)
 
 
@@ -461,6 +464,7 @@ def _parse_1688_html(
     unit_price = _extract_price_cny(text)
     shipping = _extract_shipping_cny(text)
     moq = _extract_moq(text)
+    one_piece_hint = bool(re.search(r"(?:一件代发|一件起批|1\s*件\s*起批|一件可发)", text))
     warning = None
     if unit_price is None:
         warning = "未从 1688 页面抓到明确价格，可能需要登录态或页面反爬。"
@@ -473,6 +477,7 @@ def _parse_1688_html(
         crawler_status=crawler_status,
         warning=warning,
         raw_excerpt=_raw_excerpt(text),
+        one_piece_hint=one_piece_hint,
     )
 
 
@@ -572,9 +577,27 @@ def _match_score(result: SerperResult, crawled: CrawledOffer) -> int:
         score -= min(20, max(0, result.position - 1) * 2)
     if crawled.unit_price_cny is not None:
         score += 10
+    if _one_piece_hint(result, crawled):
+        score += 8
     if crawled.moq is not None:
-        score += 3
+        if crawled.moq <= 1:
+            score += 12
+        elif crawled.moq <= 5:
+            score += 6
+        elif crawled.moq > 20:
+            score -= 10
     return max(0, min(100, score))
+
+
+def _one_piece_hint(result: SerperResult, crawled: CrawledOffer) -> bool:
+    if crawled.one_piece_hint:
+        return True
+    combined = " ".join(
+        value
+        for value in (result.title, result.snippet, crawled.title, crawled.raw_excerpt)
+        if value
+    )
+    return bool(re.search(r"(?:一件代发|一件起批|1\s*件\s*起批|一件可发)", combined))
 
 
 def _is_1688_url(url: str) -> bool:

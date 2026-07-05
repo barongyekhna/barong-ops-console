@@ -73,8 +73,14 @@ class ProfitResult:
             "domestic_shipping_usd": _number(self.domestic_shipping_usd),
             "first_mile_freight_usd": _number(self.first_mile_freight_usd),
             "landed_cost_usd": _number(self.landed_cost_usd),
+            "landed_cost_cny": _number(
+                _usd_to_cny(self.landed_cost_usd, self.exchange_rate_usd_cny)
+            ),
             "amazon_fees_usd": _number(self.amazon_fees_usd),
             "gross_profit_usd": _number(self.gross_profit_usd),
+            "gross_profit_cny": _number(
+                _usd_to_cny(self.gross_profit_usd, self.exchange_rate_usd_cny)
+            ),
             "gross_margin": _number(self.gross_margin),
             "roi": _number(self.roi),
             "actual_weight_kg": _number(self.actual_weight_kg),
@@ -258,3 +264,9 @@ def _q4_or_none(value: Decimal | None) -> Decimal | None:
 
 def _number(value: Decimal | None) -> float | None:
     return float(value) if value is not None else None
+
+
+def _usd_to_cny(value: Decimal | None, exchange_rate: Decimal) -> Decimal | None:
+    if value is None:
+        return None
+    return _q2(value * exchange_rate)

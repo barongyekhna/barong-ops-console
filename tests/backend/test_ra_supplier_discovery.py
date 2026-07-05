@@ -20,6 +20,8 @@ def test_ra_supplier_queries_prefer_chinese_product_title() -> None:
     )
 
     assert queries[0].startswith("1688 手持电动打奶器 奶泡器")
+    assert "一件代发" in queries[0]
+    assert "一件起批" in queries[0]
     assert any("厨房小工具" in query for query in queries)
     assert all("B0SUPPLY01" not in query for query in queries)
     assert all("site:" not in query for query in queries)

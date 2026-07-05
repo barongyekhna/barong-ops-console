@@ -9,6 +9,7 @@ from ...models.user import User
 from ...services.data_isolation import without_org_data_isolation
 from .rw import _target_org_for_user, require_r_series_org
 from r_system_v2.ra.framework import load_ra_framework_overview
+from r_system_v2.ra.auto_profit import run_auto_profit_analysis
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.profit_service import (
     RAProfitError,
@@ -49,6 +50,13 @@ class RASupplierSearchRequest(BaseModel):
     result_limit: int = Field(default=5, ge=3, le=5)
     auto_calculate: bool = True
     exchange_rate_usd_cny: float | None = Field(default=None, gt=0)
+    min_gross_margin: float | None = Field(default=None, ge=0)
+
+
+class RAAutoProfitRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=120)
+    asin_limit: int = Field(default=5, ge=1, le=20)
+    supplier_limit: int = Field(default=3, ge=3, le=5)
     min_gross_margin: float | None = Field(default=None, ge=0)
 
 
@@ -135,6 +143,30 @@ def ra_profit_run(
             exchange_rate_usd_cny=decimal_value(payload.exchange_rate_usd_cny),
             min_gross_margin=decimal_value(payload.min_gross_margin),
         )
+
+
+@router.post("/profit/auto-run")
+def ra_profit_auto_run(
+    payload: RAAutoProfitRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    try:
+        with without_org_data_isolation():
+            return run_auto_profit_analysis(
+                db,
+                org_id=target_org.org_id,
+                query=payload.query,
+                asin_limit=payload.asin_limit,
+                supplier_limit=payload.supplier_limit,
+                min_gross_margin=decimal_value(payload.min_gross_margin),
+            )
+    except (RAProfitError, RASupplierDiscoveryError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.post("/supplier-search")

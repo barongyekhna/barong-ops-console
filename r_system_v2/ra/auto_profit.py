@@ -1,0 +1,419 @@
+"""Automatic R-A profit workflow driven by a keyword or category request."""
+
+from __future__ import annotations
+
+from decimal import Decimal
+import json
+import re
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from r_system_v2.ra.exchange_rate import get_usd_cny_quote
+from r_system_v2.ra.profit_engine import decimal_value
+from r_system_v2.ra.profit_service import RAProfitError, profit_formula_config
+from r_system_v2.ra.supplier_discovery import (
+    RASupplierDiscoveryError,
+    discover_1688_supplier_offers,
+)
+
+
+DEFAULT_ASIN_LIMIT = 5
+MAX_ASIN_LIMIT = 20
+DEFAULT_SUPPLIER_LIMIT = 3
+MAX_SUPPLIER_LIMIT = 5
+
+
+def run_auto_profit_analysis(
+    db: Session,
+    *,
+    org_id: str,
+    query: str,
+    asin_limit: int = DEFAULT_ASIN_LIMIT,
+    supplier_limit: int = DEFAULT_SUPPLIER_LIMIT,
+    min_gross_margin: Decimal | None = None,
+) -> dict[str, object]:
+    cleaned_query = _clean_user_query(query)
+    if not cleaned_query:
+        raise RAProfitError("请输入关键词或类目。")
+
+    bounded_asin_limit = max(1, min(int(asin_limit), MAX_ASIN_LIMIT))
+    bounded_supplier_limit = max(3, min(int(supplier_limit), MAX_SUPPLIER_LIMIT))
+    quote = get_usd_cny_quote()
+    products = match_rw_products_for_query(
+        db,
+        query=cleaned_query,
+        limit=bounded_asin_limit,
+    )
+    items: list[dict[str, object]] = []
+    supplier_runs: list[dict[str, object]] = []
+    warnings: list[str] = []
+    counts = {
+        "matched_products": len(products),
+        "processed_products": 0,
+        "candidate_offers": 0,
+        "priced_offers": 0,
+        "profit_snapshots": 0,
+        "profit_pass": 0,
+        "profit_reject": 0,
+        "profit_blocked": 0,
+    }
+
+    for product in products:
+        counts["processed_products"] += 1
+        asin = str(product["asin"])
+        try:
+            discovery = discover_1688_supplier_offers(
+                db,
+                org_id=org_id,
+                asin=asin,
+                result_limit=bounded_supplier_limit,
+                auto_calculate=True,
+                exchange_rate_usd_cny=quote.rate,
+                min_gross_margin=min_gross_margin,
+            )
+        except (RAProfitError, RASupplierDiscoveryError) as exc:
+            warnings.append(f"{asin}: {exc}")
+            items.append(_error_item(product, keyword=cleaned_query, error=str(exc)))
+            continue
+
+        supplier_runs.append(
+            {
+                "asin": asin,
+                "candidate_id": discovery.get("candidate_id"),
+                "counts": discovery.get("counts"),
+                "warnings": discovery.get("warnings") or [],
+            }
+        )
+        discovery_counts = discovery.get("counts") or {}
+        counts["candidate_offers"] += int(discovery_counts.get("candidate_offers") or 0)
+        counts["priced_offers"] += int(discovery_counts.get("priced_offers") or 0)
+
+        profit_run = discovery.get("profit_run")
+        profit_items = (
+            profit_run.get("items") if isinstance(profit_run, dict) else None
+        )
+        if profit_items:
+            for snapshot in profit_items:
+                if not isinstance(snapshot, dict):
+                    continue
+                counts["profit_snapshots"] += 1
+                verdict = snapshot.get("verdict")
+                if verdict == "pass":
+                    counts["profit_pass"] += 1
+                elif verdict == "reject":
+                    counts["profit_reject"] += 1
+                elif verdict == "blocked":
+                    counts["profit_blocked"] += 1
+                items.append(
+                    _snapshot_item(
+                        snapshot,
+                        product=product,
+                        keyword=cleaned_query,
+                        exchange_rate=float(quote.rate),
+                    )
+                )
+            continue
+
+        offers = discovery.get("offers")
+        if isinstance(offers, list) and offers:
+            for offer in offers[:bounded_supplier_limit]:
+                if isinstance(offer, dict):
+                    items.append(
+                        _pending_offer_item(
+                            product,
+                            offer=offer,
+                            keyword=cleaned_query,
+                            exchange_rate=float(quote.rate),
+                        )
+                    )
+        else:
+            items.append(_no_supplier_item(product, keyword=cleaned_query))
+
+    return {
+        "query": cleaned_query,
+        "asin_limit": bounded_asin_limit,
+        "supplier_limit": bounded_supplier_limit,
+        "exchange_rate": {
+            "usd_cny": float(quote.rate),
+            "source": quote.source,
+            "live": quote.live,
+            "fetched_at": quote.fetched_at,
+            "warning": quote.warning,
+        },
+        "matched_products": [
+            {
+                "asin": product.get("asin"),
+                "title": product.get("title"),
+                "title_zh": product.get("title_zh"),
+                "image_url": product.get("image_url"),
+                "category": product.get("category"),
+                "source_query": product.get("source_query"),
+                "match_score": product.get("match_score"),
+            }
+            for product in products
+        ],
+        "supplier_runs": supplier_runs,
+        "items": items,
+        "counts": counts,
+        "formula": profit_formula_config(),
+        "warnings": warnings,
+    }
+
+
+def match_rw_products_for_query(
+    db: Session,
+    *,
+    query: str,
+    limit: int,
+) -> list[dict[str, Any]]:
+    cleaned_query = _clean_user_query(query)
+    terms = _query_terms(cleaned_query)
+    if not terms:
+        return []
+
+    search_values = _dedupe_preserve_order([cleaned_query, *terms])
+    params: dict[str, object] = {"scan_limit": max(50, min(limit * 30, 500))}
+    clauses: list[str] = []
+    for index, value in enumerate(search_values):
+        key = f"q{index}"
+        params[key] = f"%{value.lower()}%"
+        clauses.append(
+            " OR ".join(
+                [
+                    f"LOWER(COALESCE(source_query, '')) LIKE :{key}",
+                    f"LOWER(COALESCE(title, '')) LIKE :{key}",
+                    f"LOWER(COALESCE(title_zh, '')) LIKE :{key}",
+                    f"LOWER(COALESCE(category, '')) LIKE :{key}",
+                    f"LOWER(COALESCE(category_id, '')) LIKE :{key}",
+                    f"LOWER(COALESCE(category_path, '')) LIKE :{key}",
+                    f"LOWER(COALESCE(brand, '')) LIKE :{key}",
+                ]
+            )
+        )
+
+    rows = db.execute(
+        text(
+            f"""
+            SELECT asin, marketplace, source_query, title, title_zh, image_url,
+                   brand, category, category_id, category_path, price, state,
+                   skill_score, features, updated_at
+            FROM products_rw
+            WHERE COALESCE(LOWER(state), '') NOT LIKE '%reject%'
+              AND ({' OR '.join(f'({clause})' for clause in clauses)})
+            ORDER BY updated_at DESC NULLS LAST, asin ASC
+            LIMIT :scan_limit
+            """
+        ),
+        params,
+    ).mappings()
+
+    scored: list[dict[str, Any]] = []
+    for row in rows:
+        product = dict(row)
+        score = _product_match_score(product, cleaned_query, terms)
+        if score <= 0:
+            continue
+        product["match_score"] = score
+        scored.append(product)
+
+    scored.sort(
+        key=lambda product: (
+            int(product.get("match_score") or 0),
+            int(product.get("skill_score") or 0),
+            str(product.get("updated_at") or ""),
+        ),
+        reverse=True,
+    )
+    return scored[: max(1, min(int(limit), MAX_ASIN_LIMIT))]
+
+
+def _snapshot_item(
+    snapshot: dict[str, Any],
+    *,
+    product: dict[str, Any],
+    keyword: str,
+    exchange_rate: float,
+) -> dict[str, object]:
+    supplier = snapshot.get("supplier") if isinstance(snapshot.get("supplier"), dict) else {}
+    unit_price = _float_value(supplier.get("unit_price_cny"))
+    shipping = _float_value(supplier.get("domestic_shipping_cny"))
+    return {
+        "status": "profit_calculated",
+        "asin": snapshot.get("asin") or product.get("asin"),
+        "image_url": snapshot.get("image_url") or product.get("image_url"),
+        "keyword": keyword,
+        "matched_source_query": product.get("source_query"),
+        "title": snapshot.get("title") or product.get("title"),
+        "title_zh": snapshot.get("title_zh") or product.get("title_zh"),
+        "category": snapshot.get("category") or product.get("category"),
+        "supplier_name": supplier.get("supplier_name"),
+        "supplier_url": supplier.get("supplier_url"),
+        "unit_price_cny": unit_price,
+        "domestic_shipping_cny": shipping,
+        "supplier_total_cny": _sum_optional(unit_price, shipping),
+        "moq": supplier.get("moq"),
+        "one_piece_hint": bool(supplier.get("one_piece_hint")),
+        "gross_profit_usd": snapshot.get("gross_profit_usd"),
+        "gross_profit_cny": snapshot.get("gross_profit_cny"),
+        "gross_margin": snapshot.get("gross_margin"),
+        "verdict": snapshot.get("verdict"),
+        "warnings": snapshot.get("warnings") or [],
+        "blocked_reasons": snapshot.get("blocked_reasons") or [],
+        "exchange_rate_usd_cny": exchange_rate,
+        "snapshot_id": snapshot.get("snapshot_id"),
+    }
+
+
+def _pending_offer_item(
+    product: dict[str, Any],
+    *,
+    offer: dict[str, Any],
+    keyword: str,
+    exchange_rate: float,
+) -> dict[str, object]:
+    unit_price = _float_value(offer.get("unit_price_cny"))
+    shipping = _float_value(offer.get("domestic_shipping_cny"))
+    return {
+        "status": "cost_pending",
+        "asin": product.get("asin"),
+        "image_url": product.get("image_url"),
+        "keyword": keyword,
+        "matched_source_query": product.get("source_query"),
+        "title": product.get("title"),
+        "title_zh": product.get("title_zh"),
+        "category": product.get("category"),
+        "supplier_name": offer.get("supplier_name"),
+        "supplier_url": offer.get("supplier_url"),
+        "unit_price_cny": unit_price,
+        "domestic_shipping_cny": shipping,
+        "supplier_total_cny": _sum_optional(unit_price, shipping),
+        "moq": offer.get("moq"),
+        "one_piece_hint": bool(offer.get("one_piece_hint")),
+        "gross_profit_usd": None,
+        "gross_profit_cny": None,
+        "gross_margin": None,
+        "verdict": "pending",
+        "warnings": [offer.get("warning") or "1688 成本暂未抓到，利润率未计算。"],
+        "blocked_reasons": [],
+        "exchange_rate_usd_cny": exchange_rate,
+        "snapshot_id": None,
+    }
+
+
+def _no_supplier_item(product: dict[str, Any], *, keyword: str) -> dict[str, object]:
+    return {
+        "status": "supplier_not_found",
+        "asin": product.get("asin"),
+        "image_url": product.get("image_url"),
+        "keyword": keyword,
+        "matched_source_query": product.get("source_query"),
+        "title": product.get("title"),
+        "title_zh": product.get("title_zh"),
+        "category": product.get("category"),
+        "supplier_name": None,
+        "supplier_url": None,
+        "unit_price_cny": None,
+        "domestic_shipping_cny": None,
+        "supplier_total_cny": None,
+        "moq": None,
+        "one_piece_hint": False,
+        "gross_profit_usd": None,
+        "gross_profit_cny": None,
+        "gross_margin": None,
+        "verdict": "pending",
+        "warnings": ["Serper 没有返回可用的 1688 候选。"],
+        "blocked_reasons": [],
+        "snapshot_id": None,
+    }
+
+
+def _error_item(
+    product: dict[str, Any],
+    *,
+    keyword: str,
+    error: str,
+) -> dict[str, object]:
+    item = _no_supplier_item(product, keyword=keyword)
+    item["status"] = "failed"
+    item["warnings"] = [error]
+    return item
+
+
+def _product_match_score(
+    product: dict[str, Any],
+    query: str,
+    terms: list[str],
+) -> int:
+    full_query = query.lower()
+    source_fields = _joined_lower(
+        product.get("source_query"),
+        product.get("category"),
+        product.get("category_id"),
+        product.get("category_path"),
+    )
+    title_fields = _joined_lower(product.get("title_zh"), product.get("title"))
+    brand = _joined_lower(product.get("brand"))
+    score = 0
+    if full_query in source_fields:
+        score += 100
+    if full_query in title_fields:
+        score += 80
+    if full_query in brand:
+        score += 45
+    for term in terms:
+        if term in source_fields:
+            score += 35
+        if term in title_fields:
+            score += 30
+        if term in brand:
+            score += 15
+    return score
+
+
+def _query_terms(query: str) -> list[str]:
+    parts = [part.lower() for part in re.split(r"[\s,，/|]+", query) if part.strip()]
+    if not parts and query:
+        parts = [query.lower()]
+    return _dedupe_preserve_order([part for part in parts if len(part) >= 2])
+
+
+def _clean_user_query(value: str) -> str:
+    cleaned = re.sub(r"[^\w\u4e00-\u9fff\s,，/|-]", " ", str(value or ""))
+    cleaned = re.sub(r"\s+", " ", cleaned).strip()
+    return cleaned[:120]
+
+
+def _joined_lower(*values: Any) -> str:
+    parts: list[str] = []
+    for value in values:
+        if value is None:
+            continue
+        if isinstance(value, (dict, list)):
+            parts.append(json.dumps(value, ensure_ascii=False))
+        else:
+            parts.append(str(value))
+    return " ".join(parts).lower()
+
+
+def _sum_optional(left: float | None, right: float | None) -> float | None:
+    if left is None and right is None:
+        return None
+    return round((left or 0) + (right or 0), 2)
+
+
+def _float_value(value: Any) -> float | None:
+    parsed = decimal_value(value)
+    return float(parsed) if parsed is not None else None
+
+
+def _dedupe_preserve_order(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for value in values:
+        if value in seen:
+            continue
+        seen.add(value)
+        deduped.append(value)
+    return deduped

@@ -15,7 +15,6 @@ from sqlalchemy.orm import Session
 
 from r_system_v2.ra.profit_engine import (
     DEFAULT_MIN_GROSS_MARGIN,
-    DEFAULT_USD_CNY_RATE,
     FIRST_MILE_CNY_PER_KG,
     FORMULA_VERSION,
     REFERRAL_FEE_RATE,
@@ -24,6 +23,7 @@ from r_system_v2.ra.profit_engine import (
     calculate_us_profit,
     decimal_value,
 )
+from r_system_v2.ra.exchange_rate import get_usd_cny_quote
 
 
 class RAProfitError(ValueError):
@@ -31,13 +31,18 @@ class RAProfitError(ValueError):
 
 
 def profit_formula_config() -> dict[str, object]:
+    quote = get_usd_cny_quote()
     return {
         "marketplace": "US",
         "formula_version": FORMULA_VERSION,
         "referral_fee_rate": float(REFERRAL_FEE_RATE),
         "seller_receipt_rate": 0.85,
         "first_mile_cny_per_kg": float(FIRST_MILE_CNY_PER_KG),
-        "default_exchange_rate_usd_cny": float(_exchange_rate()),
+        "default_exchange_rate_usd_cny": float(quote.rate),
+        "exchange_rate_source": quote.source,
+        "exchange_rate_live": quote.live,
+        "exchange_rate_fetched_at": quote.fetched_at,
+        "exchange_rate_warning": quote.warning,
         "default_min_gross_margin": float(_min_gross_margin()),
         "volume_weight_formula": "长(cm) * 宽(cm) * 高(cm) / 6000",
         "chargeable_weight_rule": "体积重量与实际重量取较大值",
@@ -197,6 +202,15 @@ def list_profit_snapshots(
     items: list[dict[str, object]] = []
     for row in rows:
         payload = _dict_value(row.get("payload"))
+        exchange_rate = decimal_value(
+            payload.get("exchange_rate_usd_cny")
+            or (payload.get("formula") or {}).get("default_exchange_rate_usd_cny")
+        )
+        gross_profit_cny = decimal_value(payload.get("gross_profit_cny"))
+        if gross_profit_cny is None and exchange_rate is not None:
+            net_profit = decimal_value(row["net_profit_usd"])
+            if net_profit is not None:
+                gross_profit_cny = net_profit * exchange_rate
         items.append(
             {
                 "snapshot_id": row["id"],
@@ -210,6 +224,7 @@ def list_profit_snapshots(
                 "landed_cost_usd": _decimal_number(row["landed_cost_usd"]),
                 "amazon_fees_usd": _decimal_number(row["amazon_fees_usd"]),
                 "gross_profit_usd": _decimal_number(row["net_profit_usd"]),
+                "gross_profit_cny": _decimal_number(gross_profit_cny),
                 "gross_margin": _decimal_number(row["net_margin"]),
                 "roi": _decimal_number(row["roi"]),
                 "confidence": row["confidence"],
@@ -547,6 +562,7 @@ def _supplier_payload(offer: dict[str, Any]) -> dict[str, Any]:
         "offer_status": offer.get("offer_status"),
         "source": payload.get("source"),
         "crawler_status": payload.get("crawler_status"),
+        "one_piece_hint": bool(payload.get("one_piece_hint")),
         "shipping_notice": payload.get("shipping_notice")
         or payload.get("freight_notice")
         or payload.get("shipping_text"),
@@ -574,6 +590,11 @@ def _snapshot_response(
         "landed_cost_usd": _decimal_number(result.landed_cost_usd),
         "amazon_fees_usd": _decimal_number(result.amazon_fees_usd),
         "gross_profit_usd": _decimal_number(result.gross_profit_usd),
+        "gross_profit_cny": _decimal_number(
+            result.gross_profit_usd * result.exchange_rate_usd_cny
+            if result.gross_profit_usd is not None
+            else None
+        ),
         "gross_margin": _decimal_number(result.gross_margin),
         "roi": _decimal_number(result.roi),
         "confidence": result.confidence,
@@ -662,7 +683,7 @@ def _is_postgres(db: Session) -> bool:
 
 
 def _exchange_rate() -> Decimal:
-    return decimal_value(os.getenv("RA_USD_CNY_RATE")) or DEFAULT_USD_CNY_RATE
+    return get_usd_cny_quote().rate
 
 
 def _min_gross_margin() -> Decimal:
