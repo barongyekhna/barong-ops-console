@@ -244,6 +244,85 @@ def test_deepseek_does_not_reject_food_processing_appliance_as_edible_product():
     assert screening.verdict != "cut"
 
 
+def test_deepseek_does_not_reject_bakery_coffee_shop_label_printer_as_food():
+    product = NormalizedProduct(
+        asin="B0GT48P7NT",
+        source_query="keepa_category:172574",
+        marketplace="US",
+        title=(
+            "NIIMBOT B2 Label Maker Machine with Tape, Portable Bluetooth 2Inch "
+            "Label Printer with Multiple Templates, Thermal Labeler for Home Kitchen "
+            "Office Coffee Shop Bakery Organization, Gray White"
+        ),
+        brand="NIIMBOT",
+        category="Portable Thermal Printers",
+        price=39.99,
+        bsr=34,
+        reviews=120,
+        seller_count=3,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.12,
+        price_trend="stable",
+        rating=4.5,
+        features={
+            "amazon_category_path": [
+                "Office Products",
+                "Office Electronics",
+                "Printers & Accessories",
+                "Printers",
+                "Portable Thermal Printers",
+            ],
+            "monthly_sales": 50,
+            "monthly_sales_estimate": 50,
+            "subcategory_name": "Portable Thermal Printers",
+            "parent_category_name": "Office Products",
+        },
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+
+    assert not (
+        screening.verdict == "cut"
+        and screening.score == 0
+        and "食品" in screening.top_reason
+    )
+
+
+def test_deepseek_still_rejects_real_coffee_product_as_edible():
+    product = NormalizedProduct(
+        asin="B0COFFEE01",
+        source_query="keepa_category:grocery",
+        marketplace="US",
+        title="Ground Coffee Beans Medium Roast Breakfast Blend",
+        brand="RoastCo",
+        category="Grocery & Gourmet Food",
+        price=29.99,
+        bsr=900,
+        reviews=90,
+        seller_count=4,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.12,
+        price_trend="stable",
+        rating=4.6,
+        features={
+            "amazon_category_path": [
+                "Grocery & Gourmet Food",
+                "Beverages",
+                "Coffee",
+            ],
+            "monthly_sales": 800,
+        },
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+
+    assert screening.verdict == "cut"
+    assert screening.score == 0
+    assert "食品" in screening.top_reason or "饮品" in screening.top_reason
+
+
 def test_deepseek_rejects_pest_control_products_before_ra_review():
     product = NormalizedProduct(
         asin="B0BUGZAPER",

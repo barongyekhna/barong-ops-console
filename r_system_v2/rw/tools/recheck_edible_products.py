@@ -21,7 +21,7 @@ from r_system_v2.rw.workers.deepseek_cron import _dict_value, _is_postgres, _pro
 
 
 DEFAULT_BATCH_SIZE = 500
-POLICY_RECHECK_VERSION = "2026-07-04-v8"
+POLICY_RECHECK_VERSION = "2026-07-05-v9"
 POLICY_REJECT_REASONS = {
     "deepseek_edible_product",
     "deepseek_liquid_powder_spray_product",
@@ -32,13 +32,14 @@ POLICY_REJECT_REASONS = {
 def main() -> None:
     limit = _int_env("RW_DEEPSEEK_POLICY_RECHECK_LIMIT", 0)
     batch_size = _int_env("RW_DEEPSEEK_POLICY_RECHECK_BATCH_SIZE", DEFAULT_BATCH_SIZE)
+    target_asins = _csv_env("RW_DEEPSEEK_POLICY_RECHECK_ASINS")
     scanned = 0
     rejected = 0
     skill = DeepSeekScreeningSkill()
     scoring = ScoringEngine()
     with SessionLocal() as db:
         while True:
-            rows = _load_rows(db, limit=batch_size)
+            rows = _load_rows(db, limit=batch_size, target_asins=target_asins)
             if not rows:
                 break
             for row in rows:
@@ -61,7 +62,14 @@ def main() -> None:
     print(f"scanned={scanned} rejected={rejected}")
 
 
-def _load_rows(db, *, limit: int) -> list[dict[str, Any]]:
+def _load_rows(
+    db,
+    *,
+    limit: int,
+    target_asins: tuple[str, ...] = (),
+) -> list[dict[str, Any]]:
+    if target_asins:
+        return _load_target_rows(db, target_asins=target_asins)[: max(1, limit)]
     rows = db.execute(
         text(
             """
@@ -80,6 +88,28 @@ def _load_rows(db, *, limit: int) -> list[dict[str, Any]]:
         {"limit": max(1, limit), "version": POLICY_RECHECK_VERSION},
     ).mappings()
     return [dict(row) for row in rows]
+
+
+def _load_target_rows(db, *, target_asins: tuple[str, ...]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    query = text(
+        """
+        SELECT asin, marketplace, source_query, title, image_url, brand, category,
+               price, bsr, reviews, seller_count, landed_cost, est_net_margin,
+               brand_share, price_trend, rating, fulfillment_method,
+               lithium_battery_warning, margin_source, margin_confidence,
+               category_id, category_path, state, skill_score, features,
+               rule_reject_reason
+        FROM products_rw
+        WHERE asin = :asin
+        LIMIT 1
+        """
+    )
+    for asin in target_asins:
+        row = db.execute(query, {"asin": asin}).mappings().first()
+        if row is not None:
+            rows.append(dict(row))
+    return rows
 
 
 def _reject_product(db, row: dict[str, Any], screening, reason: str) -> None:
@@ -287,6 +317,13 @@ def _int_env(name: str, default: int) -> int:
         return int(raw)
     except ValueError:
         return default
+
+
+def _csv_env(name: str) -> tuple[str, ...]:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return ()
+    return tuple(part.strip().upper() for part in raw.split(",") if part.strip())
 
 
 if __name__ == "__main__":

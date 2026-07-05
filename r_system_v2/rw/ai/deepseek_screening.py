@@ -447,17 +447,13 @@ def _edible_reject_reason(product: NormalizedProduct) -> str | None:
     haystack = _product_text(product)
     if not haystack:
         return None
-    if _contains_any(haystack, _EDIBLE_CATEGORY_TERMS) and not _contains_any(
-        haystack,
-        _NON_EDIBLE_ACCESSORY_TERMS,
-    ):
+    category_text = _product_category_text(product)
+    non_edible_context = _contains_any(haystack, _NON_EDIBLE_ACCESSORY_TERMS)
+    if _contains_any(category_text, _EDIBLE_CATEGORY_TERMS) and not non_edible_context:
         return "剔除：DeepSeek 判断该产品属于食品、饮品、保健品、药品或宠物可食用品，不进入 R-A。"
-    if _contains_any(haystack, _EDIBLE_STRONG_PHRASES):
+    if _contains_any(haystack, _EDIBLE_STRONG_PHRASES) and not non_edible_context:
         return "剔除：DeepSeek 命中食品/保健品/药品/宠物食品关键词，不进入 R-A。"
-    if _contains_any(haystack, _EDIBLE_GENERAL_TERMS) and not _contains_any(
-        haystack,
-        _NON_EDIBLE_ACCESSORY_TERMS,
-    ):
+    if _contains_any(haystack, _EDIBLE_GENERAL_TERMS) and not non_edible_context:
         return "剔除：DeepSeek 判断该产品有可食用属性，不进入 R-A。"
     return None
 
@@ -513,6 +509,26 @@ def _product_text(product: NormalizedProduct) -> str:
     values: list[str] = [
         product.title,
         product.brand,
+        product.category,
+        product.source_query,
+        " ".join(product.category_path),
+    ]
+    for key in (
+        "amazon_category_path",
+        "subcategory_name",
+        "parent_category_name",
+        "bestseller_parent_category",
+    ):
+        value = product.features.get(key)
+        if isinstance(value, str):
+            values.append(value)
+        elif isinstance(value, list):
+            values.extend(str(item) for item in value if isinstance(item, str))
+    return " ".join(values).lower()
+
+
+def _product_category_text(product: NormalizedProduct) -> str:
+    values: list[str] = [
         product.category,
         product.source_query,
         " ".join(product.category_path),
@@ -600,6 +616,23 @@ _EDIBLE_STRONG_PHRASES = (
     "herbal supplement",
     "baby food",
     "infant formula",
+    "coffee beans",
+    "coffee bean",
+    "ground coffee",
+    "instant coffee",
+    "coffee pods",
+    "coffee pod",
+    "k-cup",
+    "k cup",
+    "tea bags",
+    "tea bag",
+    "loose leaf tea",
+    "herbal tea",
+    "milk tea",
+    "energy drink",
+    "soft drink",
+    "drink powder",
+    "beverage powder",
     "食品",
     "零食",
     "饮料",
@@ -618,9 +651,6 @@ _EDIBLE_GENERAL_TERMS = (
     "cookie",
     "cracker",
     "chocolate",
-    "coffee",
-    "tea",
-    "beverage",
     "drink mix",
     "juice",
     "soda",
@@ -673,6 +703,27 @@ _NON_EDIBLE_ACCESSORY_TERMS = (
     "smoothie blender",
     "soup maker",
     "food service equipment",
+    "commercial kitchen equipment",
+    "restaurant equipment",
+    "bakery equipment",
+    "cafe equipment",
+    "coffee shop",
+    "bakery organization",
+    "label maker",
+    "label machine",
+    "label printer",
+    "labeler",
+    "thermal labeler",
+    "thermal printer",
+    "portable thermal printer",
+    "barcode printer",
+    "shipping label",
+    "label tape",
+    "label roll",
+    "labels",
+    "sticker label",
+    "price tag",
+    "meal prep container",
     "打奶器",
     "奶泡器",
     "搅拌机",
@@ -683,6 +734,13 @@ _NON_EDIBLE_ACCESSORY_TERMS = (
     "厨房电器",
     "食品服务设备",
     "餐饮设备",
+    "标签机",
+    "标签打印机",
+    "热敏打印机",
+    "便携打印机",
+    "条码打印机",
+    "标签纸",
+    "标签带",
     "食品容器",
     "食品收纳",
 )
