@@ -188,6 +188,8 @@ export function UserManagementPanel() {
   const [createOrganizationId, setCreateOrganizationId] = useState("");
   const [createRole, setCreateRole] =
     useState<ManagedUserRole>("viewer");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [listCollapsed, setListCollapsed] = useState(false);
 
   const userCanManageUsers = canManageUsersForRole(currentUser?.role);
   const isBusy = pendingAction !== null;
@@ -681,6 +683,25 @@ export function UserManagementPanel() {
   return (
     <section className="users-workspace" aria-label="用户管理">
       {userCanManageUsers ? (
+        <>
+          <button
+            aria-label="关闭创建面板"
+            className={`um-scrim ${createOpen ? "on" : ""}`}
+            onClick={() => setCreateOpen(false)}
+            type="button"
+          />
+          <aside
+            aria-label="创建用户"
+            className={`um-drawer um-create ${createOpen ? "on" : ""}`}
+          >
+            <button
+              aria-label="关闭"
+              className="um-drawer-x"
+              onClick={() => setCreateOpen(false)}
+              type="button"
+            >
+              ×
+            </button>
         <form className="users-create-panel" onSubmit={handleCreate}>
         <div className="users-panel-heading">
           <div>
@@ -813,6 +834,8 @@ export function UserManagementPanel() {
           创建用户
         </button>
         </form>
+          </aside>
+        </>
       ) : null}
 
       {actionError ? (
@@ -829,7 +852,17 @@ export function UserManagementPanel() {
       ) : null}
 
       {resetTarget && canManageTarget(resetTarget) ? (
-        <form className="users-reset-panel" onSubmit={handleReset}>
+        <>
+          <button
+            aria-label="取消重置"
+            className="um-scrim on"
+            onClick={() => {
+              setResetTarget(null);
+              setResetPassword("");
+            }}
+            type="button"
+          />
+        <form className="users-reset-panel um-modal" onSubmit={handleReset}>
           <div>
             <span className="eyebrow">密码重置</span>
             <h3>{resetTarget.username}</h3>
@@ -873,23 +906,45 @@ export function UserManagementPanel() {
             </button>
           </div>
         </form>
+        </>
       ) : null}
 
-      <div className="users-list-panel">
+      <div className={`users-list-panel ${listCollapsed ? "collapsed" : ""}`}>
         <div className="users-list-heading">
+          <button
+            aria-expanded={!listCollapsed}
+            className="um-collapse"
+            onClick={() => setListCollapsed((value) => !value)}
+            title={listCollapsed ? "展开列表" : "收起列表"}
+            type="button"
+          >
+            {listCollapsed ? "▸" : "▾"}
+          </button>
           <div>
             <h3>用户列表</h3>
             <p>共 {userCount} 个账号，每页 {USERS_PAGE_LIMIT} 条。</p>
           </div>
-          <button
-            className="secondary-button"
-            disabled={isBusy || isLoading}
-            onClick={() => void loadUsers()}
-            type="button"
-          >
-            <RotateCcw aria-hidden="true" size={17} />
-            刷新
-          </button>
+          <div className="um-toolbar">
+            {userCanManageUsers ? (
+              <button
+                className="primary-button um-create-btn"
+                onClick={() => setCreateOpen(true)}
+                type="button"
+              >
+                <Plus aria-hidden="true" size={17} />
+                创建用户
+              </button>
+            ) : null}
+            <button
+              className="secondary-button"
+              disabled={isBusy || isLoading}
+              onClick={() => void loadUsers()}
+              type="button"
+            >
+              <RotateCcw aria-hidden="true" size={17} />
+              刷新
+            </button>
+          </div>
         </div>
 
         {isLoading && users.length === 0 ? (
@@ -1127,7 +1182,14 @@ export function UserManagementPanel() {
       </div>
 
       {expandedUser ? (
-        <section className="user-detail-panel" aria-label="用户详情">
+        <>
+          <button
+            aria-label="关闭详情"
+            className="um-scrim on"
+            onClick={() => setExpandedUser(null)}
+            type="button"
+          />
+        <section className="user-detail-panel um-drawer on" aria-label="用户详情">
           <div className="users-panel-heading">
             <div>
               <span className="eyebrow">用户详情</span>
@@ -1239,6 +1301,7 @@ export function UserManagementPanel() {
             </p>
           )}
         </section>
+        </>
       ) : null}
     </section>
   );
