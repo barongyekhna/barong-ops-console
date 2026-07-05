@@ -6248,6 +6248,7 @@ textarea:focus-visible {
   --cc-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
   position: relative;
   min-height: 84vh;
+  align-content: start;
   color: var(--cc-ink);
 }
 .dsc-space {
@@ -6413,3 +6414,199 @@ textarea:focus-visible {
   .cc-dash .cc-grid { grid-template-columns: 1fr; }
   .cc-card.wide { grid-column: span 1; }
 }
+
+/* =====================================================================
+   CONSOLE SHELL · 火凤凰指挥中心风:抽屉侧边栏(默认收起)+ 深色顶栏
+   仅覆盖外壳类名(.console-layout / .sidebar / .topbar / .nav-scrim),
+   不影响各页面内容;末层覆盖。
+   ===================================================================== */
+.console-layout {
+  --sh-cyan: #39d4ff;
+  --sh-amber: #ffb13b;
+  --sh-green: #4dffa1;
+  --sh-red: #ff6b8a;
+  --sh-ink: #d6e8f6;
+  --sh-dim: #7d95ae;
+  --sh-line: rgb(120 200 255 / 16%);
+  --sh-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+  display: block;
+}
+.console-main { min-width: 0; }
+
+/* 遮罩 */
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 4200;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  background: rgb(2 5 10 / 55%);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.22s ease, visibility 0.22s ease;
+}
+.nav-scrim.nav-scrim-open { opacity: 1; visibility: visible; }
+
+/* 抽屉侧边栏 */
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 4201;
+  width: 250px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 16px 12px;
+  transform: translateX(-100%);
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+  background: linear-gradient(180deg, rgb(8 15 26 / 97%), rgb(5 10 18 / 97%));
+  border-right: 1px solid var(--sh-line);
+  box-shadow: 30px 0 80px -20px rgb(0 0 0 / 80%);
+}
+.sidebar.sidebar-open { transform: translateX(0); }
+.sidebar .brand-lockup {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  padding: 6px 44px 14px 8px;
+  margin-bottom: 8px;
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--sh-line);
+  cursor: pointer;
+}
+.sidebar .brand-lockup .brand-mark {
+  width: 36px;
+  height: 36px;
+  flex: none;
+  border-radius: 10px;
+  background: url("/assets/brand/barong-phoenix.svg") center / 78% no-repeat, rgb(255 140 40 / 8%);
+  border: 1px solid rgb(255 177 59 / 40%);
+  box-shadow: 0 0 14px rgb(255 150 50 / 30%);
+}
+.sidebar .brand-lockup .brand-logo-image { display: none; }
+.sidebar .brand-lockup strong { color: #ffe7c6; font-size: 14px; letter-spacing: 1px; }
+.sidebar .brand-lockup small { color: var(--sh-amber); font: 600 8.5px var(--sh-mono); letter-spacing: 2px; }
+.sidebar-close {
+  position: absolute;
+  top: 15px;
+  right: 12px;
+  z-index: 1;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  border: 1px solid var(--sh-line);
+  background: rgb(10 20 34 / 60%);
+  color: var(--sh-dim);
+  cursor: pointer;
+}
+.sidebar-close:hover { color: var(--sh-red); border-color: rgb(255 107 138 / 45%); }
+.sidebar .sidebar-navigation { flex: 1; overflow: auto; display: flex; flex-direction: column; gap: 2px; }
+.sidebar .navigation-group { display: flex; flex-direction: column; gap: 2px; }
+.sidebar .navigation-label { padding: 12px 10px 5px; font: 600 9px var(--sh-mono); letter-spacing: 2px; text-transform: uppercase; color: var(--sh-dim); }
+.sidebar .navigation-divider { height: 1px; margin: 8px 6px; background: var(--sh-line); }
+.sidebar .navigation-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: var(--sh-dim);
+  text-decoration: none;
+  font-size: 13px;
+  border-left: 2px solid transparent;
+  transition: 0.14s;
+}
+.sidebar .navigation-link svg { width: 18px; height: 18px; flex: none; color: var(--sh-cyan); opacity: 0.85; }
+.sidebar .navigation-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sidebar .navigation-link:hover { color: var(--sh-ink); background: rgb(57 212 255 / 6%); }
+.sidebar .navigation-link.active { color: #ffe7c6; background: rgb(255 140 40 / 8%); border-left-color: var(--sh-amber); }
+.sidebar .navigation-link.active svg { color: var(--sh-amber); opacity: 1; filter: drop-shadow(0 0 6px rgb(255 177 59 / 40%)); }
+.sidebar .navigation-link.locked, .sidebar .navigation-link.unavailable { opacity: 0.5; }
+.sidebar .navigation-lock { color: var(--sh-dim); }
+.sidebar .navigation-status-badge { margin-left: auto; font: 600 8.5px var(--sh-mono); letter-spacing: 0.5px; padding: 2px 6px; border-radius: 20px; color: var(--sh-cyan); background: rgb(57 212 255 / 10%); border: 1px solid rgb(57 212 255 / 22%); }
+.sidebar .navigation-tree-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 11px;
+  border-radius: 9px;
+  color: var(--sh-dim);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+}
+.sidebar .navigation-tree-toggle:hover { color: var(--sh-ink); background: rgb(57 212 255 / 6%); }
+.sidebar .navigation-tree-items { display: flex; flex-direction: column; gap: 2px; padding-left: 12px; }
+.sidebar .navigation-tree-empty { padding: 8px 12px; font: 500 11px var(--sh-mono); color: var(--sh-dim); }
+.sidebar .sidebar-footer { display: flex; align-items: center; gap: 8px; padding: 12px 10px 4px; margin-top: 8px; border-top: 1px solid var(--sh-line); font: 600 9px var(--sh-mono); letter-spacing: 1px; color: var(--sh-dim); }
+.sidebar .environment-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--sh-green); box-shadow: 0 0 8px var(--sh-green); }
+
+/* 深色顶栏 */
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  min-height: 62px;
+  gap: 16px;
+  padding: 10px clamp(16px, 3vw, 32px);
+  background: rgb(6 12 22 / 85%);
+  border-bottom: 1px solid var(--sh-line);
+  box-shadow: 0 1px 0 rgb(57 212 255 / 12%), 0 10px 30px -20px rgb(0 0 0 / 80%);
+  backdrop-filter: blur(14px);
+}
+.topbar .menu-button {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  flex: none;
+  color: var(--sh-cyan);
+  background: rgb(57 212 255 / 6%);
+  border: 1px solid var(--sh-line);
+  border-radius: 9px;
+}
+.topbar .menu-button:hover { border-color: rgb(57 212 255 / 55%); box-shadow: 0 0 14px rgb(57 212 255 / 30%); }
+.topbar .topbar-brand-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: url("/assets/brand/barong-phoenix.svg") center / 78% no-repeat, rgb(255 140 40 / 8%);
+  border: 1px solid rgb(255 177 59 / 40%);
+  box-shadow: 0 0 14px rgb(255 150 50 / 30%);
+}
+.topbar .topbar-brand-mark .brand-logo-image { display: none; }
+.topbar .eyebrow { color: var(--sh-cyan); font: 700 9px var(--sh-mono); letter-spacing: 0.28em; text-transform: uppercase; }
+.topbar h1 { color: #eafaff; text-shadow: 0 0 20px rgb(57 212 255 / 25%); }
+.topbar .release-badge { color: var(--sh-amber); border-left-color: var(--sh-line); font-family: var(--sh-mono); }
+.topbar .topbar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 9px;
+  color: var(--sh-dim);
+  background: rgb(6 14 24 / 70%);
+  border: 1px solid var(--sh-line);
+}
+.topbar .topbar-search svg { color: var(--sh-cyan); opacity: 0.8; }
+.topbar .topbar-search input { color: #eafaff; background: none; }
+.topbar .topbar-search input::placeholder { color: #4f6b86; }
+.topbar .topbar-search:focus-within { border-color: rgb(57 212 255 / 55%); box-shadow: 0 0 0 3px rgb(57 212 255 / 12%); }
+.topbar .secondary-button, .topbar .icon-button { color: var(--sh-dim); background: rgb(10 20 34 / 55%); border: 1px solid var(--sh-line); }
+.topbar .secondary-button:hover, .topbar .icon-button:hover { color: var(--sh-ink); border-color: rgb(57 212 255 / 40%); }
+.topbar .secondary-button svg, .topbar .icon-button svg { color: var(--sh-cyan); }
+.topbar .account-copy strong { color: #eafaff; }
+.topbar .account-copy span { color: var(--sh-amber); }
+.topbar .logout-button { color: var(--sh-dim); background: rgb(10 20 34 / 55%); border: 1px solid var(--sh-line); }
+.topbar .logout-button:hover:not(:disabled) { color: var(--sh-red); border-color: rgb(255 107 138 / 45%); }

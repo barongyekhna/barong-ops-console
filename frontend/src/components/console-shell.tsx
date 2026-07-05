@@ -64,8 +64,15 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="console-layout">
+      <button
+        aria-label="关闭导航"
+        className={`nav-scrim ${isNavigationOpen ? "nav-scrim-open" : ""}`}
+        onClick={() => setIsNavigationOpen(false)}
+        type="button"
+      />
       <Sidebar
         isOpen={isNavigationOpen}
+        onClose={() => setIsNavigationOpen(false)}
         onLogoClick={handleLogoClick}
         onNavigate={() => setIsNavigationOpen(false)}
         pathname={pathname}

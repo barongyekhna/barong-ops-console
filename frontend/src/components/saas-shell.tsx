@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, Menu, RefreshCcw, Search } from "lucide-react";
+import { LogOut, Menu, RefreshCcw, Search, X } from "lucide-react";
 
 import { Logo } from "@/components/brand-logo";
 import { CapabilitySidebarEngine } from "@/components/capability-sidebar-engine";
@@ -8,6 +8,7 @@ import { RELEASE_STATUS, RELEASE_VERSION } from "@/lib/release-metadata";
 
 type SidebarProps = {
   isOpen: boolean;
+  onClose: () => void;
   onLogoClick: () => void;
   onNavigate: () => void;
   pathname: string;
@@ -25,6 +26,7 @@ type TopHeaderProps = {
 
 export function Sidebar({
   isOpen,
+  onClose,
   onLogoClick,
   onNavigate,
   pathname,
@@ -45,6 +47,16 @@ export function Sidebar({
           <strong>Barong</strong>
           <small>Operations</small>
         </span>
+      </button>
+
+      <button
+        aria-label="收起导航"
+        className="sidebar-close"
+        onClick={onClose}
+        title="收起导航"
+        type="button"
+      >
+        <X aria-hidden="true" size={18} />
       </button>
 
       <CapabilitySidebarEngine onNavigate={onNavigate} pathname={pathname} />
