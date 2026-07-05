@@ -182,13 +182,13 @@ def match_rw_products_for_query(
         clauses.append(
             " OR ".join(
                 [
-                    f"LOWER(COALESCE(source_query, '')) LIKE :{key}",
-                    f"LOWER(COALESCE(title, '')) LIKE :{key}",
-                    f"LOWER(COALESCE(title_zh, '')) LIKE :{key}",
-                    f"LOWER(COALESCE(category, '')) LIKE :{key}",
-                    f"LOWER(COALESCE(category_id, '')) LIKE :{key}",
-                    f"LOWER(COALESCE(category_path, '')) LIKE :{key}",
-                    f"LOWER(COALESCE(brand, '')) LIKE :{key}",
+                    f"LOWER(COALESCE(CAST(source_query AS TEXT), '')) LIKE :{key}",
+                    f"LOWER(COALESCE(CAST(title AS TEXT), '')) LIKE :{key}",
+                    f"LOWER(COALESCE(CAST(title_zh AS TEXT), '')) LIKE :{key}",
+                    f"LOWER(COALESCE(CAST(category AS TEXT), '')) LIKE :{key}",
+                    f"LOWER(COALESCE(CAST(category_id AS TEXT), '')) LIKE :{key}",
+                    f"LOWER(COALESCE(CAST(category_path AS TEXT), '')) LIKE :{key}",
+                    f"LOWER(COALESCE(CAST(brand AS TEXT), '')) LIKE :{key}",
                 ]
             )
         )
@@ -200,7 +200,7 @@ def match_rw_products_for_query(
                    brand, category, category_id, category_path, price, state,
                    skill_score, features, updated_at
             FROM products_rw
-            WHERE COALESCE(LOWER(state), '') NOT LIKE '%reject%'
+            WHERE COALESCE(LOWER(CAST(state AS TEXT)), '') NOT LIKE '%reject%'
               AND ({' OR '.join(f'({clause})' for clause in clauses)})
             ORDER BY updated_at DESC NULLS LAST, asin ASC
             LIMIT :scan_limit
