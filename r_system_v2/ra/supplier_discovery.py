@@ -35,6 +35,7 @@ SERPER_SEARCH_URL = "https://google.serper.dev/search"
 DEFAULT_DISCOVERY_LIMIT = 5
 MIN_DISCOVERY_LIMIT = 3
 MAX_DISCOVERY_LIMIT = 5
+DEFAULT_CRAWLER_TIMEOUT_MS = 8_000
 
 
 class RASupplierDiscoveryError(RuntimeError):
@@ -122,8 +123,8 @@ class Serper1688Client:
 
 
 class Playwright1688Crawler:
-    def __init__(self, *, timeout_ms: int = 15_000) -> None:
-        self.timeout_ms = timeout_ms
+    def __init__(self, *, timeout_ms: int | None = None) -> None:
+        self.timeout_ms = timeout_ms or _crawler_timeout_ms()
 
     def crawl(self, url: str) -> CrawledOffer:
         if not _is_1688_url(url):
@@ -644,6 +645,17 @@ def _normalized_1688_link(url: str) -> str | None:
 
 def _bounded_limit(value: int) -> int:
     return max(MIN_DISCOVERY_LIMIT, min(MAX_DISCOVERY_LIMIT, int(value)))
+
+
+def _crawler_timeout_ms() -> int:
+    raw_value = os.getenv("RA_1688_CRAWLER_TIMEOUT_MS")
+    if not raw_value:
+        return DEFAULT_CRAWLER_TIMEOUT_MS
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return DEFAULT_CRAWLER_TIMEOUT_MS
+    return max(3_000, min(parsed, 15_000))
 
 
 def _clean_query_text(value: Any) -> str:

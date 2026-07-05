@@ -55,7 +55,7 @@ class RASupplierSearchRequest(BaseModel):
 
 class RAAutoProfitRequest(BaseModel):
     query: str = Field(min_length=1, max_length=120)
-    asin_limit: int = Field(default=5, ge=1, le=20)
+    asin_limit: int = Field(default=1, ge=1, le=20)
     supplier_limit: int = Field(default=3, ge=3, le=5)
     min_gross_margin: float | None = Field(default=None, ge=0)
 

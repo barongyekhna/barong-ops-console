@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from decimal import Decimal
 import json
+import os
 import re
+import time
 from typing import Any
 
 from sqlalchemy import text
@@ -19,10 +21,11 @@ from r_system_v2.ra.supplier_discovery import (
 )
 
 
-DEFAULT_ASIN_LIMIT = 5
+DEFAULT_ASIN_LIMIT = 1
 MAX_ASIN_LIMIT = 20
 DEFAULT_SUPPLIER_LIMIT = 3
 MAX_SUPPLIER_LIMIT = 5
+DEFAULT_REQUEST_BUDGET_SECONDS = 70.0
 
 
 def run_auto_profit_analysis(
@@ -38,11 +41,15 @@ def run_auto_profit_analysis(
     if not cleaned_query:
         raise RAProfitError("请输入关键词或类目。")
 
-    bounded_asin_limit = max(1, min(int(asin_limit), MAX_ASIN_LIMIT))
+    requested_asin_limit = max(1, min(int(asin_limit), MAX_ASIN_LIMIT))
+    sync_limit = _sync_asin_limit()
+    bounded_asin_limit = min(requested_asin_limit, sync_limit)
     bounded_supplier_limit = max(3, min(int(supplier_limit), MAX_SUPPLIER_LIMIT))
+    deadline = time.monotonic() + _request_budget_seconds()
     quote = get_usd_cny_quote()
     products = match_rw_products_for_query(
         db,
+        org_id=org_id,
         query=cleaned_query,
         limit=bounded_asin_limit,
     )
@@ -59,8 +66,15 @@ def run_auto_profit_analysis(
         "profit_reject": 0,
         "profit_blocked": 0,
     }
+    if requested_asin_limit > bounded_asin_limit:
+        warnings.append(
+            f"为避免前端请求超时，本次先处理前 {bounded_asin_limit} 个匹配 ASIN。"
+        )
 
-    for product in products:
+    for index, product in enumerate(products):
+        if index > 0 and time.monotonic() >= deadline:
+            warnings.append("本次自动分析达到时间预算，已返回已完成结果。")
+            break
         counts["processed_products"] += 1
         asin = str(product["asin"])
         try:
@@ -167,6 +181,7 @@ def match_rw_products_for_query(
     *,
     query: str,
     limit: int,
+    org_id: str | None = None,
 ) -> list[dict[str, Any]]:
     cleaned_query = _clean_user_query(query)
     terms = _query_terms(cleaned_query)
@@ -175,6 +190,8 @@ def match_rw_products_for_query(
 
     search_values = _dedupe_preserve_order([cleaned_query, *terms])
     params: dict[str, object] = {"scan_limit": max(50, min(limit * 30, 500))}
+    if org_id:
+        params["org_id"] = org_id
     clauses: list[str] = []
     for index, value in enumerate(search_values):
         key = f"q{index}"
@@ -198,11 +215,12 @@ def match_rw_products_for_query(
             f"""
             SELECT asin, marketplace, source_query, title, title_zh, image_url,
                    brand, category, category_id, category_path, price, state,
-                   skill_score, features, updated_at
+                   skill_score, features, updated_at,
+                   {_last_profit_sql(org_id)}
             FROM products_rw
             WHERE COALESCE(LOWER(CAST(state AS TEXT)), '') NOT LIKE '%reject%'
               AND ({' OR '.join(f'({clause})' for clause in clauses)})
-            ORDER BY updated_at DESC NULLS LAST, asin ASC
+            ORDER BY last_profit_at ASC NULLS FIRST, updated_at DESC NULLS LAST, asin ASC
             LIMIT :scan_limit
             """
         ),
@@ -417,3 +435,40 @@ def _dedupe_preserve_order(values: list[str]) -> list[str]:
         seen.add(value)
         deduped.append(value)
     return deduped
+
+
+def _sync_asin_limit() -> int:
+    configured = _int_env("RA_AUTO_PROFIT_SYNC_ASIN_LIMIT")
+    if configured is None:
+        return DEFAULT_ASIN_LIMIT
+    return max(1, min(configured, MAX_ASIN_LIMIT))
+
+
+def _request_budget_seconds() -> float:
+    value = os.getenv("RA_AUTO_PROFIT_REQUEST_BUDGET_SECONDS")
+    if not value:
+        return DEFAULT_REQUEST_BUDGET_SECONDS
+    try:
+        parsed = float(value)
+    except ValueError:
+        return DEFAULT_REQUEST_BUDGET_SECONDS
+    return max(15.0, min(parsed, 100.0))
+
+
+def _int_env(name: str) -> int | None:
+    value = os.getenv(name)
+    if not value:
+        return None
+    try:
+        return int(value)
+    except ValueError:
+        return None
+
+
+def _last_profit_sql(org_id: str | None) -> str:
+    if not org_id:
+        return "NULL AS last_profit_at"
+    return (
+        "(SELECT MAX(s.created_at) FROM ra_profit_snapshots s "
+        "WHERE s.org_id = :org_id AND s.asin = products_rw.asin) AS last_profit_at"
+    )

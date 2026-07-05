@@ -25,7 +25,7 @@ import type {
 
 import styles from "./AnalysisWorkspace.module.css";
 
-const DEFAULT_ASIN_LIMIT = 5;
+const DEFAULT_ASIN_LIMIT = 1;
 const DEFAULT_SUPPLIER_LIMIT = 3;
 
 export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) {
@@ -200,6 +200,16 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           {result.exchange_rate.warning ? (
             <div className={styles.metaWarning}>{result.exchange_rate.warning}</div>
           ) : null}
+        </section>
+      ) : null}
+
+      {result?.warnings.length ? (
+        <section className={styles.noticeBand}>
+          <AlertTriangle size={18} />
+          <div>
+            <strong>本次任务提示</strong>
+            <span>{result.warnings[0]}</span>
+          </div>
         </section>
       ) : null}
 
