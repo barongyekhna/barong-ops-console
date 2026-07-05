@@ -302,6 +302,19 @@ def discover_1688_supplier_offers(
                 continue
             seen_links.add(normalized_link)
             crawled = crawler.crawl(normalized_link)
+            result_price = _result_price_cny(result)
+            result_shipping = _result_shipping_cny(result)
+            unit_price_cny = crawled.unit_price_cny or result_price
+            domestic_shipping_cny = (
+                crawled.domestic_shipping_cny
+                if crawled.domestic_shipping_cny is not None
+                else result_shipping
+            )
+            crawler_warning = (
+                None
+                if crawled.unit_price_cny is not None or result_price is not None
+                else crawled.warning
+            )
             offer_id = _insert_supplier_offer(
                 db,
                 org_id=org_id,
@@ -310,23 +323,30 @@ def discover_1688_supplier_offers(
                 asin=normalized_asin,
                 supplier_name=crawled.title or result.title or "1688 供应商",
                 supplier_url=crawled.final_url or normalized_link,
-                unit_price_cny=crawled.unit_price_cny,
-                domestic_shipping_cny=crawled.domestic_shipping_cny,
+                unit_price_cny=unit_price_cny,
+                domestic_shipping_cny=domestic_shipping_cny,
                 moq=crawled.moq,
                 source="serper_1688",
                 match_score=_match_score(result, crawled),
-                offer_status="priced" if crawled.unit_price_cny is not None else "price_pending",
+                offer_status="priced" if unit_price_cny is not None else "price_pending",
                 payload_extra={
                     "serper_title": result.title,
                     "serper_snippet": result.snippet,
                     "serper_position": result.position,
                     "crawler_status": crawled.crawler_status,
-                    "crawler_warning": crawled.warning,
+                    "crawler_warning": crawler_warning,
+                    "price_source": (
+                        "1688_page"
+                        if crawled.unit_price_cny is not None
+                        else "serper_snippet"
+                        if result_price is not None
+                        else None
+                    ),
                     "raw_excerpt": crawled.raw_excerpt,
                     "one_piece_hint": _one_piece_hint(result, crawled),
                     "shipping_notice": (
                         "1688 页面显示包邮或抓取到运费"
-                        if crawled.domestic_shipping_cny is not None
+                        if domestic_shipping_cny is not None
                         else None
                     ),
                 },
@@ -338,18 +358,16 @@ def discover_1688_supplier_offers(
                     "search_id": search_id,
                     "supplier_name": crawled.title or result.title or "1688 供应商",
                     "supplier_url": crawled.final_url or normalized_link,
-                    "unit_price_cny": _decimal_number(crawled.unit_price_cny),
-                    "domestic_shipping_cny": _decimal_number(
-                        crawled.domestic_shipping_cny
-                    ),
+                    "unit_price_cny": _decimal_number(unit_price_cny),
+                    "domestic_shipping_cny": _decimal_number(domestic_shipping_cny),
                     "moq": crawled.moq,
                     "match_score": _match_score(result, crawled),
                     "one_piece_hint": _one_piece_hint(result, crawled),
                     "offer_status": (
-                        "priced" if crawled.unit_price_cny is not None else "price_pending"
+                        "priced" if unit_price_cny is not None else "price_pending"
                     ),
                     "crawler_status": crawled.crawler_status,
-                    "warning": crawled.warning,
+                    "warning": crawler_warning,
                 }
             )
 
@@ -512,6 +530,16 @@ def _extract_price_cny(text: str) -> Decimal | None:
     if values:
         return min(values)
     return None
+
+
+def _result_price_cny(result: SerperResult) -> Decimal | None:
+    text = " ".join(value for value in (result.title, result.snippet) if value)
+    return _extract_price_cny(text)
+
+
+def _result_shipping_cny(result: SerperResult) -> Decimal | None:
+    text = " ".join(value for value in (result.title, result.snippet) if value)
+    return _extract_shipping_cny(text)
 
 
 def _extract_decimal_matches(text: str, patterns: tuple[str, ...]) -> list[Decimal]:

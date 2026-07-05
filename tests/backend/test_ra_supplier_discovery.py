@@ -5,6 +5,8 @@ from decimal import Decimal
 from r_system_v2.ra.supplier_discovery import (
     _normalized_1688_link,
     _parse_1688_html,
+    _result_price_cny,
+    SerperResult,
     build_1688_queries,
 )
 
@@ -56,3 +58,16 @@ def test_ra_1688_link_normalization_keeps_only_1688_hosts() -> None:
         == "https://detail.1688.com/offer/123.html?x=1"
     )
     assert _normalized_1688_link("https://example.com/offer/123.html") is None
+
+
+def test_ra_serper_result_can_supply_explicit_1688_price() -> None:
+    price = _result_price_cny(
+        SerperResult(
+            title="手持电动打奶器 一件代发 ￥18.80",
+            link="https://detail.1688.com/offer/123.html",
+            snippet="现货批发，1件起批，运费 ￥6.50",
+            position=1,
+        )
+    )
+
+    assert price == Decimal("18.80")
