@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 import json
 import os
 from typing import Any
@@ -224,7 +224,7 @@ def list_profit_snapshots(
                 "landed_cost_usd": _decimal_number(row["landed_cost_usd"]),
                 "amazon_fees_usd": _decimal_number(row["amazon_fees_usd"]),
                 "gross_profit_usd": _decimal_number(row["net_profit_usd"]),
-                "gross_profit_cny": _decimal_number(gross_profit_cny),
+                "gross_profit_cny": _money_number(gross_profit_cny),
                 "gross_margin": _decimal_number(row["net_margin"]),
                 "roi": _decimal_number(row["roi"]),
                 "confidence": row["confidence"],
@@ -590,7 +590,7 @@ def _snapshot_response(
         "landed_cost_usd": _decimal_number(result.landed_cost_usd),
         "amazon_fees_usd": _decimal_number(result.amazon_fees_usd),
         "gross_profit_usd": _decimal_number(result.gross_profit_usd),
-        "gross_profit_cny": _decimal_number(
+        "gross_profit_cny": _money_number(
             result.gross_profit_usd * result.exchange_rate_usd_cny
             if result.gross_profit_usd is not None
             else None
@@ -667,6 +667,13 @@ def _dict_value(value: Any) -> dict[str, Any]:
 def _decimal_number(value: Any) -> float | None:
     decimal = decimal_value(value)
     return float(decimal) if decimal is not None else None
+
+
+def _money_number(value: Any) -> float | None:
+    decimal = decimal_value(value)
+    if decimal is None:
+        return None
+    return float(decimal.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP))
 
 
 def _json_bind(db: Session, name: str) -> str:
