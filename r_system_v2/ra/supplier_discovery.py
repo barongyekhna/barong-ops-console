@@ -11,7 +11,7 @@ import os
 import re
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -51,6 +51,7 @@ class SerperResult:
 
 @dataclass(frozen=True)
 class CrawledOffer:
+    final_url: str | None
     title: str | None
     unit_price_cny: Decimal | None
     domestic_shipping_cny: Decimal | None
@@ -126,6 +127,7 @@ class Playwright1688Crawler:
     def crawl(self, url: str) -> CrawledOffer:
         if not _is_1688_url(url):
             return CrawledOffer(
+                final_url=None,
                 title=None,
                 unit_price_cny=None,
                 domestic_shipping_cny=None,
@@ -144,6 +146,7 @@ class Playwright1688Crawler:
             if fallback.warning:
                 return fallback
             return CrawledOffer(
+                final_url=fallback.final_url,
                 title=fallback.title,
                 unit_price_cny=fallback.unit_price_cny,
                 domestic_shipping_cny=fallback.domestic_shipping_cny,
@@ -172,11 +175,25 @@ class Playwright1688Crawler:
                 )
                 page.goto(url, wait_until="domcontentloaded", timeout=self.timeout_ms)
                 page.wait_for_timeout(800)
+                detail_url = _first_detail_offer_url(page, base_url=page.url)
+                if detail_url and detail_url != page.url:
+                    page.goto(
+                        detail_url,
+                        wait_until="domcontentloaded",
+                        timeout=self.timeout_ms,
+                    )
+                    page.wait_for_timeout(800)
                 html = page.content()
                 title = page.title()
+                final_url = page.url
             finally:
                 browser.close()
-        return _parse_1688_html(html, title=title, crawler_status="playwright")
+        return _parse_1688_html(
+            html,
+            title=title,
+            crawler_status="playwright",
+            final_url=final_url,
+        )
 
     def _crawl_with_html_fallback(self, url: str, status: str) -> CrawledOffer:
         request = Request(
@@ -197,6 +214,7 @@ class Playwright1688Crawler:
                 html = response.read(1_500_000).decode("utf-8", errors="replace")
         except Exception as exc:
             return CrawledOffer(
+                final_url=None,
                 title=None,
                 unit_price_cny=None,
                 domestic_shipping_cny=None,
@@ -205,7 +223,12 @@ class Playwright1688Crawler:
                 warning=f"1688 页面抓取失败：{exc}",
                 raw_excerpt=None,
             )
-        return _parse_1688_html(html, title=None, crawler_status=status)
+        return _parse_1688_html(
+            html,
+            title=None,
+            crawler_status=status,
+            final_url=url,
+        )
 
 
 def discover_1688_supplier_offers(
@@ -285,7 +308,7 @@ def discover_1688_supplier_offers(
                 candidate_id=candidate_id,
                 asin=normalized_asin,
                 supplier_name=crawled.title or result.title or "1688 供应商",
-                supplier_url=normalized_link,
+                supplier_url=crawled.final_url or normalized_link,
                 unit_price_cny=crawled.unit_price_cny,
                 domestic_shipping_cny=crawled.domestic_shipping_cny,
                 moq=crawled.moq,
@@ -312,7 +335,7 @@ def discover_1688_supplier_offers(
                     "offer_id": offer_id,
                     "search_id": search_id,
                     "supplier_name": crawled.title or result.title or "1688 供应商",
-                    "supplier_url": normalized_link,
+                    "supplier_url": crawled.final_url or normalized_link,
                     "unit_price_cny": _decimal_number(crawled.unit_price_cny),
                     "domestic_shipping_cny": _decimal_number(
                         crawled.domestic_shipping_cny
@@ -431,6 +454,7 @@ def _parse_1688_html(
     *,
     title: str | None,
     crawler_status: str,
+    final_url: str | None = None,
 ) -> CrawledOffer:
     text = unescape(html)
     page_title = title or _extract_title(text)
@@ -441,6 +465,7 @@ def _parse_1688_html(
     if unit_price is None:
         warning = "未从 1688 页面抓到明确价格，可能需要登录态或页面反爬。"
     return CrawledOffer(
+        final_url=final_url,
         title=_clean_page_title(page_title),
         unit_price_cny=unit_price,
         domestic_shipping_cny=shipping,
@@ -449,6 +474,21 @@ def _parse_1688_html(
         warning=warning,
         raw_excerpt=_raw_excerpt(text),
     )
+
+
+def _first_detail_offer_url(page: Any, *, base_url: str) -> str | None:
+    if "detail.1688.com/offer/" in base_url:
+        return None
+    try:
+        href = page.locator('a[href*="detail.1688.com/offer/"]').first.get_attribute(
+            "href",
+            timeout=2_000,
+        )
+    except Exception:
+        return None
+    if not href:
+        return None
+    return urljoin(base_url, href)
 
 
 def _extract_price_cny(text: str) -> Decimal | None:
