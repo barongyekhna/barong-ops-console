@@ -34,6 +34,13 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     defaultAlias: "chatgpt",
   },
   {
+    type: "serp",
+    label: "Serper",
+    description: "Google search and supplier discovery API",
+    defaultUrl: "https://google.serper.dev",
+    defaultAlias: "serp",
+  },
+  {
     type: "keepa",
     label: "Keepa API",
     description: "Amazon market intelligence data API",
@@ -64,13 +71,6 @@ const LOOKUP_KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     description: "Anthropic Claude API",
     defaultUrl: "https://api.anthropic.com",
     defaultAlias: "claude_opus",
-  },
-  {
-    type: "serp",
-    label: "SERP",
-    description: "Search engine result provider API",
-    defaultUrl: "https://google.serper.dev",
-    defaultAlias: "serp",
   },
   {
     type: "n8n",

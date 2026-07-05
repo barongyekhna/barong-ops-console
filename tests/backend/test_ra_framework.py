@@ -1,4 +1,9 @@
+from backend.app.core.key_registry import key_type_allows_module, key_type_definition
 from backend.app.core.modules import MODULE_MANIFESTS_V1
+from r_system_v2.core.secret_manager import (
+    R_ANALYSIS_MODULE_ID,
+    SERVICE_BINDING_CANDIDATES,
+)
 from r_system_v2.ra.framework import RA_REQUIRED_TABLES, RA_STAGES
 from r_system_v2.ra.providers import RAnalysisProviderKeys
 from r_system_v2.ra.skill_loader import (
@@ -83,3 +88,21 @@ def test_ra_framework_stages_are_non_executing_skeleton() -> None:
     assert "framework_ready" in statuses
     assert "pending_integration" in statuses
     assert all("running" not in stage["status"] for stage in RA_STAGES)
+
+
+def test_ra_key_types_can_bind_to_analysis_module() -> None:
+    expected_key_types = ("deepseek", "openai", "chatgpt", "claude_opus", "serp")
+
+    for key_type in expected_key_types:
+        definition = key_type_definition(key_type)
+        assert "R-A" in definition["scope"]
+        assert key_type_allows_module(key_type, R_ANALYSIS_MODULE_ID)
+
+    assert not key_type_allows_module("keepa", R_ANALYSIS_MODULE_ID)
+
+
+def test_ra_secret_manager_prefers_analysis_bindings_for_required_services() -> None:
+    assert (R_ANALYSIS_MODULE_ID, "deepseek") in SERVICE_BINDING_CANDIDATES["deepseek"]
+    assert (R_ANALYSIS_MODULE_ID, "serp") in SERVICE_BINDING_CANDIDATES["serper"]
+    assert (R_ANALYSIS_MODULE_ID, "serper") in SERVICE_BINDING_CANDIDATES["serper"]
+    assert (R_ANALYSIS_MODULE_ID, "4sapi") in SERVICE_BINDING_CANDIDATES["openai"]

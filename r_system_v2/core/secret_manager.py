@@ -27,6 +27,7 @@ SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
         (R_WAREHOUSE_MODULE_ID, "keepa"),
     ),
     "deepseek": (
+        (R_ANALYSIS_MODULE_ID, "deepseek"),
         (R_WAREHOUSE_MODULE_ID, "deepseek"),
         (K_PRODUCT_KNOWLEDGE_MODULE_ID, "deepseek"),
     ),
@@ -41,6 +42,7 @@ SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
         (K_PRODUCT_KNOWLEDGE_MODULE_ID, "ai_provider"),
     ),
     "serper": (
+        (R_ANALYSIS_MODULE_ID, "serp"),
         (R_ANALYSIS_MODULE_ID, "serper"),
         (K_PRODUCT_KNOWLEDGE_MODULE_ID, "serp"),
         (K_PRODUCT_KNOWLEDGE_MODULE_ID, "serper"),

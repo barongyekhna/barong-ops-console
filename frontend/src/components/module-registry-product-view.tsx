@@ -72,7 +72,9 @@ const MODULE_PAGE_LIMIT = 10;
 const KEY_BINDING_ALIAS_OPTIONS = [
   "default",
   "serp",
+  "serper",
   "chatgpt",
+  "4sapi",
   "deepseek",
   "claude_opus",
   "n8n",
