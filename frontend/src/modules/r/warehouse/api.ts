@@ -27,6 +27,7 @@ export function getRwProductsWithFilters(filters: {
   category_id?: string;
   page?: number;
   page_size?: number;
+  include_categories?: boolean;
   state?: "pass" | "reject" | "pending_review" | "";
   sort_by?: "updated_at" | "skill_score";
   sort_order?: "asc" | "desc";
@@ -43,6 +44,9 @@ export function getRwProductsWithFilters(filters: {
   }
   if (filters.page_size) {
     params.set("page_size", String(filters.page_size));
+  }
+  if (filters.include_categories) {
+    params.set("include_categories", "true");
   }
   if (filters.state) {
     params.set("state", filters.state);

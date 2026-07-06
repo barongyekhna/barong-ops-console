@@ -78,6 +78,7 @@ const tabs: Array<{ href: string; label: string; view: WarehouseView }> = [
 
 const DEEPSEEK_DAILY_REPORT_KEY_PREFIX = "rw-deepseek-daily-report-date";
 const PRODUCT_PAGE_SIZE = 50;
+const PRODUCT_REFRESH_INTERVAL_MS = 20_000;
 
 function currency(value: number) {
   return new Intl.NumberFormat("zh-CN", {
@@ -1030,6 +1031,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   const stateRef = useRef(state);
   const filtersRef = useRef(filters);
   const productPageRef = useRef(productPage);
+  const lastProductRefreshAtRef = useRef(0);
   const deepseekDailyReportKey = `${DEEPSEEK_DAILY_REPORT_KEY_PREFIX}:${
     user?.id ?? "anonymous"
   }`;
@@ -1068,15 +1070,28 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
       }
       try {
         const currentState = stateRef.current;
+        const now = Date.now();
+        const shouldLoadProducts =
+          firstLoad ||
+          !currentState.products ||
+          now - lastProductRefreshAtRef.current >= PRODUCT_REFRESH_INTERVAL_MS;
+        const shouldLoadProductCategories =
+          view === "products" &&
+          (!currentState.products?.category_options ||
+            currentState.products.category_options.length === 0);
         const requests: Array<[
           RwEndpointKey,
           Promise<WarehouseState[RwEndpointKey]>,
         ]> = [
           ["status", getRwStatus()],
-          [
+          ["pipeline", getRwPipeline()],
+        ];
+        if (shouldLoadProducts) {
+          requests.push([
             "products",
             getRwProductsWithFilters({
               category_id: filtersRef.current.category_id || undefined,
+              include_categories: shouldLoadProductCategories,
               page: productPageRef.current,
               page_size: PRODUCT_PAGE_SIZE,
               q: filtersRef.current.q || undefined,
@@ -1084,9 +1099,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               sort_by: filtersRef.current.sort_by,
               sort_order: filtersRef.current.sort_order,
             }),
-          ],
-          ["pipeline", getRwPipeline()],
-        ];
+          ]);
+        }
         if (firstLoad || view === "rules" || !currentState.rules) {
           requests.push(["rules", getRwRules()]);
         }
@@ -1116,6 +1130,9 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
                   requests[index][0],
                   result.value,
                 );
+                if (requests[index][0] === "products") {
+                  lastProductRefreshAtRef.current = Date.now();
+                }
               }
             });
             nextState = updated;
@@ -1172,6 +1189,9 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     setRefreshing(true);
     getRwProductsWithFilters({
       category_id: filters.category_id || undefined,
+      include_categories:
+        !stateRef.current.products?.category_options ||
+        stateRef.current.products.category_options.length === 0,
       page: productPageRef.current,
       page_size: PRODUCT_PAGE_SIZE,
       q: filters.q || undefined,
@@ -1185,9 +1205,11 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
         }
         setState((current) => {
           const updated = { ...current, products: response };
+          updated.products = mergeProductResponse(current.products, response);
           stateRef.current = updated;
           return updated;
         });
+        lastProductRefreshAtRef.current = Date.now();
         setError(null);
       })
       .catch(() => {
@@ -1250,6 +1272,9 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
     try {
       const response = await getRwProductsWithFilters({
         category_id: activeFilters.category_id || undefined,
+        include_categories:
+          !stateRef.current.products?.category_options ||
+          stateRef.current.products.category_options.length === 0,
         page,
         page_size: PRODUCT_PAGE_SIZE,
         q: activeFilters.q || undefined,
@@ -1258,10 +1283,14 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
         state: activeFilters.state || undefined,
       });
       setState((current) => {
-        const updated = { ...current, products: response };
+        const updated = {
+          ...current,
+          products: mergeProductResponse(current.products, response),
+        };
         stateRef.current = updated;
         return updated;
       });
+      lastProductRefreshAtRef.current = Date.now();
       setLastRefresh(new Date().toLocaleTimeString("zh-CN"));
       setError(null);
     } catch {
@@ -1688,7 +1717,10 @@ function applyWarehouseStateValue(
   if (key === "status") {
     target.status = value as RwStatus;
   } else if (key === "products") {
-    target.products = value as RwProductsResponse;
+    target.products = mergeProductResponse(
+      target.products,
+      value as RwProductsResponse,
+    );
   } else if (key === "rules") {
     target.rules = value as RwRulesResponse;
   } else if (key === "pipeline") {
@@ -1698,6 +1730,22 @@ function applyWarehouseStateValue(
   } else {
     target.settings = value as RwSettingsResponse;
   }
+}
+
+function mergeProductResponse(
+  current: RwProductsResponse | null,
+  next: RwProductsResponse,
+): RwProductsResponse {
+  if (next.category_options && next.category_options.length > 0) {
+    return next;
+  }
+  if (!current?.category_options || current.category_options.length === 0) {
+    return next;
+  }
+  return {
+    ...next,
+    category_options: current.category_options,
+  };
 }
 
 function collectCategoryOptions(

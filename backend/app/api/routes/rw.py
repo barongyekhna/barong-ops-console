@@ -116,7 +116,7 @@ PRODUCT_FEATURE_RESPONSE_KEYS = frozenset(
         "subcategory_rank",
     }
 )
-PRODUCT_IMAGE_CANDIDATE_LIMIT = 8
+PRODUCT_IMAGE_CANDIDATE_LIMIT = 3
 
 
 def _user_has_rw_role_access(user: User) -> bool:
@@ -387,6 +387,7 @@ def rw_products(
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=50),
+    include_categories: bool = Query(default=False),
     db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
@@ -519,9 +520,8 @@ def rw_products(
             )
     except SQLAlchemyError:
         storage_status = "products_rw_unavailable"
-    return {
+    response: dict[str, object] = {
         "items": rows,
-        "category_options": _product_category_options(db),
         "count": total_count,
         "returned_count": len(rows),
         "page": page,
@@ -542,6 +542,9 @@ def rw_products(
             "page_size": page_size,
         },
     }
+    if include_categories:
+        response["category_options"] = _product_category_options(db)
+    return response
 
 
 def _product_category_options(db: Session) -> list[dict[str, object]]:
