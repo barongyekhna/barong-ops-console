@@ -60,7 +60,7 @@ class ProfitResult:
         return {
             "formula_version": FORMULA_VERSION,
             "marketplace": "US",
-            "formula": "售价*0.85 - 头程运费 - FBA费用 - 产品成本 - 1688国内运费",
+            "formula": "售价*0.85 - 头程运费 - FBA费用 - 供应商产品成本 - 供应商国内运费",
             "referral_fee_rate": _number(REFERRAL_FEE_RATE),
             "seller_receipt_rate": _number(SELLER_RECEIPT_RATE),
             "first_mile_cny_per_kg": _number(FIRST_MILE_CNY_PER_KG),
@@ -113,9 +113,9 @@ def calculate_us_profit(inputs: ProfitInput) -> ProfitResult:
     if fba_fee is None:
         blocked.append("缺少 Keepa FBA fee。")
     if unit_price_cny is None:
-        blocked.append("缺少 1688 产品成本。")
+        blocked.append("缺少供应商产品成本。")
     if inputs.domestic_shipping_cny is None:
-        warnings.append("未获取 1688 国内运费提醒，暂按 0 元计入。")
+        warnings.append("未获取供应商国内运费提醒，暂按 0 元计入。")
 
     volume_weight = _volume_weight_kg(inputs.length_cm, inputs.width_cm, inputs.height_cm)
     actual_weight = _positive(inputs.actual_weight_kg)

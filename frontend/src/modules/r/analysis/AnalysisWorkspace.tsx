@@ -27,7 +27,7 @@ import type {
 import styles from "./AnalysisWorkspace.module.css";
 
 const DEFAULT_ASIN_LIMIT = 20;
-const DEFAULT_SUPPLIER_LIMIT = 3;
+const DEFAULT_SUPPLIER_LIMIT = 5;
 const POLL_INTERVAL_MS = 3_000;
 
 export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) {
@@ -165,7 +165,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           <h2>{view === "dashboard" ? "利润候选总览" : "关键词/类目利润测算"}</h2>
           <p>
             输入模糊关键词或类目后，系统只从 R-W 产品库中匹配同关键词/同类目的
-            ASIN，再自动搜索 1688 供应商并按美国站公式计算毛利润。
+            ASIN，再自动搜索多平台供应商并按美国站公式计算毛利润。
           </p>
         </div>
         <div className={styles.statusPill} data-state={error ? "error" : "ready"}>
@@ -203,8 +203,8 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           </div>
           <p>
             默认每次提交 {DEFAULT_ASIN_LIMIT} 个 R-W 候选 ASIN 到后台队列，每个
-            ASIN 优先抓取 {DEFAULT_SUPPLIER_LIMIT} 个一件代发/一件起批 1688
-            供应商，页面每 3 秒自动刷新结果。
+            ASIN 优先抓取 {DEFAULT_SUPPLIER_LIMIT} 个一件代发/一件起批供应商，
+            页面每 3 秒自动刷新结果。
           </p>
         </form>
         {runError ? (
@@ -217,7 +217,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
 
       <section className={styles.metricGrid} aria-label="R-A 自动利润指标">
         <Metric label="R-W 匹配产品" value={formatCount(summary.matched)} />
-        <Metric label="1688 候选报价" value={formatCount(summary.offers)} />
+        <Metric label="供应商候选报价" value={formatCount(summary.offers)} />
         <Metric label="已抓到成本" value={formatCount(summary.priced)} />
         <Metric label="利润通过" value={formatCount(summary.passed)} />
       </section>
@@ -293,7 +293,7 @@ function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
       </div>
       <div className={styles.progressStats}>
         <span>已处理 {formatCount(processed)} / {formatCount(matched)} 个产品</span>
-        <span>1688 候选 {formatCount(result.counts.candidate_offers)}</span>
+        <span>供应商候选 {formatCount(result.counts.candidate_offers)}</span>
         <span>已抓到成本 {formatCount(result.counts.priced_offers)}</span>
         <span>利润快照 {formatCount(result.counts.profit_snapshots)}</span>
         <span>实时汇率 1 USD = {formatRate(result.exchange_rate.usd_cny)} CNY</span>
@@ -327,10 +327,10 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
             <th>关键词</th>
             <th>中文产品名</th>
             <th>产品信息</th>
-            <th>1688 成本</th>
+            <th>供应商成本</th>
             <th>毛利润</th>
             <th>利润率</th>
-            <th>1688 供应商</th>
+            <th>供应商链接</th>
           </tr>
         </thead>
         <tbody>
@@ -362,7 +362,7 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
                 <span>{item.category || "未标注类目"}</span>
               </td>
               <td>
-                <strong>{formatUsd(item.sell_price_usd)}</strong>
+                <strong>售价 {formatUsd(item.sell_price_usd)}</strong>
                 <span>配送 {item.fulfillment_method || "未标注"}</span>
                 <span>FBA {formatUsd(item.fba_fee_usd)}</span>
                 <span>重量 {item.weight_label || formatWeight(item.package_weight_g)}</span>
@@ -398,21 +398,35 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
                 {supplierOptions(item).length ? (
                   <div className={styles.supplierList}>
                     {supplierOptions(item).map((supplier, supplierIndex) => (
-                      <a
-                        key={`${supplier.supplier_url ?? "supplier"}-${supplierIndex}`}
-                        href={supplier.supplier_url ?? "#"}
-                        rel="noreferrer"
-                        target="_blank"
+                      <div
+                        className={styles.supplierOption}
+                        key={`${supplier.supplier_detail_url ?? supplier.supplier_url ?? "supplier"}-${supplierIndex}`}
                       >
-                        <ExternalLink size={15} />
-                        <span>
-                          供应商 {supplierIndex + 1}
-                          {supplier.supplier_total_cny
-                            ? ` · ${formatCny(supplier.supplier_total_cny)}`
-                            : ""}
-                          {supplier.one_piece_hint || supplier.moq === 1 ? " · 一件" : ""}
-                        </span>
-                      </a>
+                        <a
+                          href={supplier.supplier_detail_url ?? supplier.supplier_url ?? "#"}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          <ExternalLink size={15} />
+                          <span>
+                            {supplierPlatformLabel(supplier)} 详情页 {supplierIndex + 1}
+                            {supplier.supplier_total_cny
+                              ? ` · ${formatCny(supplier.supplier_total_cny)}`
+                              : ""}
+                            {supplier.one_piece_hint || supplier.moq === 1 ? " · 一件" : ""}
+                          </span>
+                        </a>
+                        {supplier.supplier_search_url ? (
+                          <a
+                            href={supplier.supplier_search_url}
+                            rel="noreferrer"
+                            target="_blank"
+                          >
+                            <Search size={15} />
+                            <span>{supplierPlatformLabel(supplier)} 平台搜索页</span>
+                          </a>
+                        ) : null}
+                      </div>
                     ))}
                   </div>
                 ) : (
@@ -463,10 +477,10 @@ function SnapshotPreview({ snapshots }: { snapshots: RaProfitSnapshot[] }) {
             <th>ASIN</th>
             <th>关键词</th>
             <th>中文产品名</th>
-            <th>1688 成本</th>
+            <th>供应商成本</th>
             <th>毛利润</th>
             <th>利润率</th>
-            <th>1688 链接</th>
+            <th>供应商链接</th>
           </tr>
         </thead>
         <tbody>
@@ -507,10 +521,29 @@ function SnapshotPreview({ snapshots }: { snapshots: RaProfitSnapshot[] }) {
               </td>
               <td>
                 {snapshot.supplier.supplier_url ? (
-                  <a href={snapshot.supplier.supplier_url} rel="noreferrer" target="_blank">
-                    <ExternalLink size={15} />
-                    打开供应商
-                  </a>
+                  <div className={styles.supplierList}>
+                    <a
+                      href={
+                        snapshot.supplier.supplier_detail_url ??
+                        snapshot.supplier.supplier_url
+                      }
+                      rel="noreferrer"
+                      target="_blank"
+                    >
+                      <ExternalLink size={15} />
+                      {supplierPlatformLabel(snapshot.supplier)} 详情页
+                    </a>
+                    {snapshot.supplier.supplier_search_url ? (
+                      <a
+                        href={snapshot.supplier.supplier_search_url}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <Search size={15} />
+                        {supplierPlatformLabel(snapshot.supplier)} 平台搜索页
+                      </a>
+                    ) : null}
+                  </div>
                 ) : (
                   <span>未记录</span>
                 )}
@@ -592,6 +625,11 @@ function supplierOptions(item: RaAutoProfitItem) {
     {
       supplier_name: item.supplier_name,
       supplier_url: item.supplier_url,
+      supplier_platform: item.supplier_platform,
+      supplier_platform_label: item.supplier_platform_label,
+      supplier_url_type: item.supplier_url_type,
+      supplier_detail_url: item.supplier_detail_url || item.supplier_url,
+      supplier_search_url: item.supplier_search_url,
       unit_price_cny: item.unit_price_cny,
       domestic_shipping_cny: item.domestic_shipping_cny,
       supplier_total_cny: item.supplier_total_cny,
@@ -599,6 +637,25 @@ function supplierOptions(item: RaAutoProfitItem) {
       one_piece_hint: item.one_piece_hint,
     },
   ];
+}
+
+function supplierPlatformLabel(supplier: {
+  supplier_platform?: string | null;
+  supplier_platform_label?: string | null;
+}) {
+  if (supplier.supplier_platform_label) {
+    return supplier.supplier_platform_label;
+  }
+  if (supplier.supplier_platform === "pdd") {
+    return "拼多多";
+  }
+  if (supplier.supplier_platform === "taobao") {
+    return "淘宝/天猫";
+  }
+  if (supplier.supplier_platform === "jd") {
+    return "京东";
+  }
+  return "1688";
 }
 
 function productImageCandidates({

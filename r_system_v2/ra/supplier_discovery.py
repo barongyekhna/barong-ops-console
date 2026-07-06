@@ -1,4 +1,4 @@
-"""Serper + 1688 supplier discovery for R-A profit analysis."""
+"""Serper + supplier discovery for R-A profit analysis."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import os
 import re
 from typing import Any
 from urllib.error import HTTPError, URLError
-from urllib.parse import urljoin, urlparse
+from urllib.parse import quote_plus, urljoin, urlparse
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -36,6 +36,12 @@ DEFAULT_DISCOVERY_LIMIT = 5
 MIN_DISCOVERY_LIMIT = 3
 MAX_DISCOVERY_LIMIT = 5
 DEFAULT_CRAWLER_TIMEOUT_MS = 8_000
+SUPPLIER_PLATFORM_LABELS = {
+    "1688": "1688",
+    "pdd": "拼多多",
+    "taobao": "淘宝/天猫",
+    "jd": "京东",
+}
 
 
 class RASupplierDiscoveryError(RuntimeError):
@@ -48,6 +54,14 @@ class SerperResult:
     link: str
     snippet: str | None
     position: int | None
+
+
+@dataclass(frozen=True)
+class SupplierSearchQuery:
+    query: str
+    platform: str
+    platform_label: str
+    search_url: str
 
 
 @dataclass(frozen=True)
@@ -258,15 +272,17 @@ def discover_1688_supplier_offers(
     db.commit()
     client = serper_client or _serper_client(db, org_id=org_id)
     crawler = crawler or Playwright1688Crawler()
-    queries = build_1688_queries(product)
+    search_queries = build_supplier_queries(product)
+    queries = [item.query for item in search_queries]
     searches: list[dict[str, object]] = []
     offers: list[dict[str, object]] = []
     seen_links: set[str] = set()
     warnings: list[str] = []
 
-    for query in queries:
+    for search_query in search_queries:
         if len(offers) >= limit:
             break
+        query = search_query.query
         search_id = str(uuid4())
         try:
             results = client.search(query, num=max(10, limit * 4))
@@ -286,6 +302,9 @@ def discover_1688_supplier_offers(
             status=status,
             result_count=len(results),
             payload={
+                "platform": search_query.platform,
+                "platform_label": search_query.platform_label,
+                "search_url": search_query.search_url,
                 "results": [result.__dict__ for result in results],
                 "searched_at": datetime.now(UTC).isoformat(),
             },
@@ -295,6 +314,9 @@ def discover_1688_supplier_offers(
             {
                 "search_id": search_id,
                 "query": query,
+                "platform": search_query.platform,
+                "platform_label": search_query.platform_label,
+                "search_url": search_query.search_url,
                 "status": status,
                 "result_count": len(results),
             }
@@ -302,14 +324,25 @@ def discover_1688_supplier_offers(
         if status == "failed":
             continue
 
-        for result in _ranked_1688_results(results):
+        for result in _ranked_supplier_results(results, platform=search_query.platform):
             if len(offers) >= limit:
                 break
-            normalized_link = _normalized_1688_link(result.link)
+            normalized_link = _normalized_supplier_link(
+                result.link,
+                platform=search_query.platform,
+            )
             if normalized_link is None or normalized_link in seen_links:
                 continue
             seen_links.add(normalized_link)
-            crawled = crawler.crawl(normalized_link)
+            crawled = (
+                crawler.crawl(normalized_link)
+                if search_query.platform == "1688"
+                else _serper_only_offer(
+                    result,
+                    normalized_link,
+                    platform=search_query.platform,
+                )
+            )
             result_price = _result_price_cny(result)
             result_shipping = _result_shipping_cny(result)
             unit_price_cny = crawled.unit_price_cny or result_price
@@ -318,9 +351,15 @@ def discover_1688_supplier_offers(
                 if crawled.domestic_shipping_cny is not None
                 else result_shipping
             )
-            supplier_url = _supplier_detail_url(crawled.final_url, normalized_link)
+            supplier_url = _supplier_detail_url(
+                crawled.final_url,
+                normalized_link,
+                platform=search_query.platform,
+            )
             if supplier_url is None:
-                warnings.append(f"{normalized_asin}: 未找到可打开的 1688 详情页链接。")
+                warnings.append(
+                    f"{normalized_asin}: 未找到可打开的{search_query.platform_label}详情页链接。"
+                )
                 continue
             crawler_warning = (
                 None
@@ -333,15 +372,27 @@ def discover_1688_supplier_offers(
                 search_id=search_id,
                 candidate_id=candidate_id,
                 asin=normalized_asin,
-                supplier_name=crawled.title or result.title or "1688 供应商",
+                supplier_name=(
+                    crawled.title
+                    or result.title
+                    or f"{search_query.platform_label}供应商"
+                ),
                 supplier_url=supplier_url,
                 unit_price_cny=unit_price_cny,
                 domestic_shipping_cny=domestic_shipping_cny,
                 moq=crawled.moq,
-                source="serper_1688",
+                source=f"serper_{search_query.platform}",
                 match_score=_match_score(result, crawled),
                 offer_status="priced" if unit_price_cny is not None else "price_pending",
                 payload_extra={
+                    "platform": search_query.platform,
+                    "platform_label": search_query.platform_label,
+                    "supplier_url_type": "detail",
+                    "supplier_detail_url": supplier_url,
+                    "supplier_search_url": search_query.search_url,
+                    "search_url": search_query.search_url,
+                    "choice_page_url": search_query.search_url,
+                    "result_url": result.link,
                     "serper_title": result.title,
                     "serper_snippet": result.snippet,
                     "serper_position": result.position,
@@ -349,15 +400,17 @@ def discover_1688_supplier_offers(
                     "crawler_warning": crawler_warning,
                     "price_source": (
                         "1688_page"
-                        if crawled.unit_price_cny is not None
+                        if search_query.platform == "1688"
+                        and crawled.unit_price_cny is not None
                         else "serper_snippet"
                         if result_price is not None
                         else None
                     ),
                     "raw_excerpt": crawled.raw_excerpt,
                     "one_piece_hint": _one_piece_hint(result, crawled),
+                    "retail_platform_hint": search_query.platform != "1688",
                     "shipping_notice": (
-                        "1688 页面显示包邮或抓取到运费"
+                        f"{search_query.platform_label}页面显示包邮或抓取到运费"
                         if domestic_shipping_cny is not None
                         else None
                     ),
@@ -368,8 +421,17 @@ def discover_1688_supplier_offers(
                 {
                     "offer_id": offer_id,
                     "search_id": search_id,
-                    "supplier_name": crawled.title or result.title or "1688 供应商",
+                    "supplier_name": (
+                        crawled.title
+                        or result.title
+                        or f"{search_query.platform_label}供应商"
+                    ),
                     "supplier_url": supplier_url,
+                    "supplier_platform": search_query.platform,
+                    "supplier_platform_label": search_query.platform_label,
+                    "supplier_url_type": "detail",
+                    "supplier_detail_url": supplier_url,
+                    "supplier_search_url": search_query.search_url,
                     "unit_price_cny": _decimal_number(unit_price_cny),
                     "domestic_shipping_cny": _decimal_number(domestic_shipping_cny),
                     "moq": crawled.moq,
@@ -415,6 +477,10 @@ def discover_1688_supplier_offers(
 
 
 def build_1688_queries(product: dict[str, Any]) -> list[str]:
+    return [item.query for item in build_supplier_queries(product) if item.platform == "1688"]
+
+
+def build_supplier_queries(product: dict[str, Any]) -> list[SupplierSearchQuery]:
     title_zh = _clean_query_text(product.get("title_zh"))
     title = _clean_query_text(product.get("title"))
     category = _clean_query_text(product.get("category"))
@@ -424,13 +490,68 @@ def build_1688_queries(product: dict[str, Any]) -> list[str]:
     if len(base) > 120:
         base = base[:120]
     queries = [
-        f"site:detail.1688.com/offer 1688 {base} 一件代发 一件起批",
-        f"1688 {base} 一件代发 一件起批 同款 detail.1688.com/offer",
-        f"{base} 阿里巴巴 1688 一件代发 批发 厂家",
+        _supplier_search_query(
+            "1688",
+            f"site:detail.1688.com/offer 1688 {base} 一件代发 一件起批",
+            base,
+        ),
+        _supplier_search_query(
+            "pdd",
+            f"site:yangkeduo.com/goods.html 拼多多 {base} 同款 现货",
+            base,
+        ),
+        _supplier_search_query(
+            "taobao",
+            f"site:item.taobao.com/item.htm 淘宝 {base} 同款 现货",
+            base,
+        ),
+        _supplier_search_query(
+            "jd",
+            f"site:item.jd.com 京东 {base} 同款 现货",
+            base,
+        ),
+        _supplier_search_query(
+            "1688",
+            f"1688 {base} 一件代发 一件起批 同款 detail.1688.com/offer",
+            base,
+        ),
+        _supplier_search_query(
+            "1688",
+            f"{base} 阿里巴巴 1688 一件代发 批发 厂家",
+            base,
+        ),
     ]
     if category:
-        queries.append(f"1688 {category} {base[:80]} 一件起批 批发")
+        queries.append(
+            _supplier_search_query(
+                "1688",
+                f"1688 {category} {base[:80]} 一件起批 批发",
+                base,
+            )
+        )
     return _dedupe_preserve_order(queries)
+
+
+def _supplier_search_query(platform: str, query: str, base_keyword: str) -> SupplierSearchQuery:
+    return SupplierSearchQuery(
+        query=query,
+        platform=platform,
+        platform_label=SUPPLIER_PLATFORM_LABELS.get(platform, platform),
+        search_url=_platform_search_url(platform, base_keyword),
+    )
+
+
+def _platform_search_url(platform: str, keyword: str) -> str:
+    encoded = quote_plus(keyword)
+    if platform == "1688":
+        return f"https://s.1688.com/selloffer/offer_search.htm?keywords={encoded}"
+    if platform == "pdd":
+        return f"https://mobile.yangkeduo.com/search_result.html?search_key={encoded}"
+    if platform == "taobao":
+        return f"https://s.taobao.com/search?q={encoded}"
+    if platform == "jd":
+        return f"https://search.jd.com/Search?keyword={encoded}&enc=utf-8"
+    return f"https://www.google.com/search?q={encoded}"
 
 
 def _serper_client(db: Session, *, org_id: str) -> Serper1688Client:
@@ -645,17 +766,64 @@ def _one_piece_hint(result: SerperResult, crawled: CrawledOffer) -> bool:
 
 
 def _ranked_1688_results(results: list[SerperResult]) -> list[SerperResult]:
+    return _ranked_supplier_results(results, platform="1688")
+
+
+def _ranked_supplier_results(
+    results: list[SerperResult],
+    *,
+    platform: str,
+) -> list[SerperResult]:
     return sorted(
         results,
         key=lambda result: (
-            0 if _canonical_1688_offer_url(result.link) else 1,
-            0 if _is_1688_url(result.link) else 1,
+            0 if _supplier_detail_url(result.link, result.link, platform=platform) else 1,
+            0 if _is_platform_url(result.link, platform=platform) else 1,
             result.position or 999,
         ),
     )
 
 
-def _supplier_detail_url(final_url: str | None, normalized_link: str) -> str | None:
+def _serper_only_offer(
+    result: SerperResult,
+    normalized_link: str,
+    *,
+    platform: str,
+) -> CrawledOffer:
+    price = _result_price_cny(result)
+    return CrawledOffer(
+        final_url=normalized_link,
+        title=result.title or None,
+        unit_price_cny=price,
+        domestic_shipping_cny=_result_shipping_cny(result),
+        moq=1,
+        crawler_status="serper_result",
+        warning=None
+        if price is not None
+        else f"{SUPPLIER_PLATFORM_LABELS.get(platform, platform)}详情页暂未抓取价格，仅保留候选链接。",
+        raw_excerpt=result.snippet,
+        one_piece_hint=True,
+    )
+
+
+def _supplier_detail_url(
+    final_url: str | None,
+    normalized_link: str,
+    *,
+    platform: str = "1688",
+) -> str | None:
+    if platform == "pdd":
+        return _canonical_pdd_product_url(final_url) or _canonical_pdd_product_url(
+            normalized_link
+        )
+    if platform == "taobao":
+        return _canonical_taobao_product_url(final_url) or _canonical_taobao_product_url(
+            normalized_link
+        )
+    if platform == "jd":
+        return _canonical_jd_product_url(final_url) or _canonical_jd_product_url(
+            normalized_link
+        )
     canonical = _canonical_1688_offer_url(final_url) or _canonical_1688_offer_url(
         normalized_link
     )
@@ -668,14 +836,63 @@ def _supplier_detail_url(final_url: str | None, normalized_link: str) -> str | N
     return None
 
 
+def _normalized_supplier_link(url: str, *, platform: str) -> str | None:
+    if platform == "1688":
+        return _normalized_1688_link(url)
+    if platform == "pdd":
+        return _canonical_pdd_product_url(url)
+    if platform == "taobao":
+        return _canonical_taobao_product_url(url)
+    if platform == "jd":
+        return _canonical_jd_product_url(url)
+    return None
+
+
 def _is_login_url(url: str) -> bool:
     host = urlparse(url).netloc.lower()
-    return host.endswith("taobao.com") or "login.1688.com" in host
+    return host == "login.taobao.com" or host.endswith(".login.taobao.com") or "login.1688.com" in host
+
+
+def _is_platform_url(url: str, *, platform: str) -> bool:
+    if platform == "1688":
+        return _is_1688_url(url)
+    if platform == "pdd":
+        return _is_pdd_url(url)
+    if platform == "taobao":
+        return _is_taobao_url(url)
+    if platform == "jd":
+        return _is_jd_url(url)
+    return False
 
 
 def _is_1688_url(url: str) -> bool:
     host = urlparse(url).netloc.lower()
     return host == "1688.com" or host.endswith(".1688.com")
+
+
+def _is_pdd_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return (
+        host == "pinduoduo.com"
+        or host.endswith(".pinduoduo.com")
+        or host == "yangkeduo.com"
+        or host.endswith(".yangkeduo.com")
+    )
+
+
+def _is_taobao_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return (
+        host == "taobao.com"
+        or host.endswith(".taobao.com")
+        or host == "tmall.com"
+        or host.endswith(".tmall.com")
+    )
+
+
+def _is_jd_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return host == "jd.com" or host.endswith(".jd.com")
 
 
 def _normalized_1688_link(url: str) -> str | None:
@@ -700,6 +917,48 @@ def _canonical_1688_offer_url(url: str | None) -> str | None:
     if not match:
         return None
     return f"https://detail.1688.com/offer/{match.group(1)}.html"
+
+
+def _canonical_pdd_product_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url.strip())
+    if not parsed.scheme or not _is_pdd_url(parsed.geturl()):
+        return None
+    match = re.search(r"(?:goods_id|goodsId)=([0-9]{6,})", parsed.query)
+    if not match:
+        match = re.search(r"/goods(?:/|_)([0-9]{6,})", parsed.path)
+    if not match and parsed.path.endswith("/goods.html"):
+        return parsed._replace(fragment="").geturl()
+    if not match:
+        return None
+    return f"https://mobile.yangkeduo.com/goods.html?goods_id={match.group(1)}"
+
+
+def _canonical_taobao_product_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url.strip())
+    if not parsed.scheme or not _is_taobao_url(parsed.geturl()) or _is_login_url(parsed.geturl()):
+        return None
+    match = re.search(r"(?:^|&)id=([0-9]{6,})(?:&|$)", parsed.query)
+    if not match:
+        return None
+    return f"https://item.taobao.com/item.htm?id={match.group(1)}"
+
+
+def _canonical_jd_product_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url.strip())
+    if not parsed.scheme or not _is_jd_url(parsed.geturl()):
+        return None
+    match = re.search(r"/([0-9]{6,})\.html", parsed.path)
+    if not match:
+        match = re.search(r"/product/([0-9]{6,})", parsed.path)
+    if not match:
+        return None
+    return f"https://item.jd.com/{match.group(1)}.html"
 
 
 def _bounded_limit(value: int) -> int:
@@ -727,13 +986,16 @@ def _clean_query_text(value: Any) -> str:
     return text_value
 
 
-def _dedupe_preserve_order(values: list[str]) -> list[str]:
+def _dedupe_preserve_order(
+    values: list[str] | list[SupplierSearchQuery],
+) -> list[str] | list[SupplierSearchQuery]:
     seen: set[str] = set()
-    deduped: list[str] = []
+    deduped = []
     for value in values:
-        if value in seen:
+        key = value.query if isinstance(value, SupplierSearchQuery) else value
+        if key in seen:
             continue
-        seen.add(value)
+        seen.add(key)
         deduped.append(value)
     return deduped
 

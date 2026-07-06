@@ -573,6 +573,15 @@
   gap: 7px;
 }
 
+.supplierOption {
+  display: grid;
+  gap: 5px;
+  padding: 7px;
+  border: 1px solid var(--color-line);
+  border-radius: 7px;
+  background: var(--color-surface-muted);
+}
+
 @keyframes spin {
   to {
     transform: rotate(360deg);

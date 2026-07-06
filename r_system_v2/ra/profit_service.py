@@ -48,7 +48,7 @@ def profit_formula_config() -> dict[str, object]:
         "volume_weight_formula": "长(cm) * 宽(cm) * 高(cm) / 6000",
         "chargeable_weight_rule": "体积重量与实际重量取较大值",
         "gross_profit_formula": (
-            "售价 * 0.85 - 头程运费 - FBA费用 - 1688产品成本 - 1688国内运费"
+            "售价 * 0.85 - 头程运费 - FBA费用 - 供应商产品成本 - 供应商国内运费"
         ),
     }
 
@@ -634,6 +634,13 @@ def _supplier_payload(offer: dict[str, Any]) -> dict[str, Any]:
         "match_score": offer.get("match_score"),
         "offer_status": offer.get("offer_status"),
         "source": payload.get("source"),
+        "supplier_platform": payload.get("platform"),
+        "supplier_platform_label": payload.get("platform_label"),
+        "supplier_url_type": payload.get("supplier_url_type"),
+        "supplier_detail_url": payload.get("supplier_detail_url") or offer.get("supplier_url"),
+        "supplier_search_url": payload.get("supplier_search_url")
+        or payload.get("search_url")
+        or payload.get("choice_page_url"),
         "crawler_status": payload.get("crawler_status"),
         "one_piece_hint": bool(payload.get("one_piece_hint")),
         "shipping_notice": payload.get("shipping_notice")

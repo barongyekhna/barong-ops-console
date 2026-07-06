@@ -131,6 +131,11 @@ export type RaProfitSnapshot = {
     offer_id?: string | null;
     supplier_name?: string | null;
     supplier_url?: string | null;
+    supplier_platform?: string | null;
+    supplier_platform_label?: string | null;
+    supplier_url_type?: string | null;
+    supplier_detail_url?: string | null;
+    supplier_search_url?: string | null;
     unit_price_cny?: number | null;
     domestic_shipping_cny?: number | null;
     moq?: number | null;
@@ -165,6 +170,9 @@ export type RaSupplierSearchResult = {
   searches: Array<{
     search_id: string;
     query: string;
+    platform?: string | null;
+    platform_label?: string | null;
+    search_url?: string | null;
     status: string;
     result_count: number;
   }>;
@@ -173,6 +181,11 @@ export type RaSupplierSearchResult = {
     search_id: string;
     supplier_name: string | null;
     supplier_url: string | null;
+    supplier_platform?: string | null;
+    supplier_platform_label?: string | null;
+    supplier_url_type?: string | null;
+    supplier_detail_url?: string | null;
+    supplier_search_url?: string | null;
     unit_price_cny: number | null;
     domestic_shipping_cny: number | null;
     moq: number | null;
@@ -248,6 +261,11 @@ export type RaAutoProfitItem = {
   relevance_blocked_terms?: string[];
   supplier_name: string | null;
   supplier_url: string | null;
+  supplier_platform?: string | null;
+  supplier_platform_label?: string | null;
+  supplier_url_type?: string | null;
+  supplier_detail_url?: string | null;
+  supplier_search_url?: string | null;
   unit_price_cny: number | null;
   domestic_shipping_cny: number | null;
   supplier_total_cny: number | null;
@@ -256,6 +274,11 @@ export type RaAutoProfitItem = {
   suppliers?: Array<{
     supplier_name: string | null;
     supplier_url: string | null;
+    supplier_platform?: string | null;
+    supplier_platform_label?: string | null;
+    supplier_url_type?: string | null;
+    supplier_detail_url?: string | null;
+    supplier_search_url?: string | null;
     unit_price_cny: number | null;
     domestic_shipping_cny: number | null;
     supplier_total_cny: number | null;

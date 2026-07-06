@@ -3,11 +3,13 @@ from __future__ import annotations
 from decimal import Decimal
 
 from r_system_v2.ra.supplier_discovery import (
+    _normalized_supplier_link,
     _normalized_1688_link,
     _parse_1688_html,
     _result_price_cny,
     SerperResult,
     build_1688_queries,
+    build_supplier_queries,
 )
 
 
@@ -26,6 +28,22 @@ def test_ra_supplier_queries_prefer_chinese_product_title() -> None:
     assert "一件起批" in queries[0]
     assert any("厨房小工具" in query for query in queries)
     assert all("B0SUPPLY01" not in query for query in queries)
+
+
+def test_ra_supplier_queries_include_multi_platform_choice_pages() -> None:
+    queries = build_supplier_queries(
+        {
+            "asin": "B0SUPPLY01",
+            "title": "Cat Tree Tower",
+            "title_zh": "猫爬架",
+            "category": "宠物用品",
+        }
+    )
+
+    platforms = {query.platform for query in queries}
+    assert {"1688", "pdd", "taobao", "jd"}.issubset(platforms)
+    assert all(query.search_url.startswith("https://") for query in queries)
+    assert any("猫爬架" in query.query for query in queries)
 
 
 def test_ra_1688_html_parser_extracts_cost_shipping_and_moq() -> None:
@@ -61,6 +79,28 @@ def test_ra_1688_link_normalization_keeps_only_1688_hosts() -> None:
         == "https://detail.1688.com/offer/987654321.html"
     )
     assert _normalized_1688_link("https://example.com/offer/123.html") is None
+
+
+def test_ra_multi_platform_link_normalization_keeps_detail_pages() -> None:
+    assert (
+        _normalized_supplier_link(
+            "https://mobile.yangkeduo.com/goods.html?goods_id=123456789&refer=search",
+            platform="pdd",
+        )
+        == "https://mobile.yangkeduo.com/goods.html?goods_id=123456789"
+    )
+    assert (
+        _normalized_supplier_link(
+            "https://item.taobao.com/item.htm?id=987654321&spm=a21n57",
+            platform="taobao",
+        )
+        == "https://item.taobao.com/item.htm?id=987654321"
+    )
+    assert (
+        _normalized_supplier_link("https://item.jd.com/100012345678.html?cu=true", platform="jd")
+        == "https://item.jd.com/100012345678.html"
+    )
+    assert _normalized_supplier_link("https://search.jd.com/Search?keyword=猫爬架", platform="jd") is None
 
 
 def test_ra_serper_result_can_supply_explicit_1688_price() -> None:

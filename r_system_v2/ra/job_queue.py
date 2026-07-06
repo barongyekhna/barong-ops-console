@@ -518,6 +518,11 @@ def _snapshot_item_from_row(
         "category": row.get("category") or product.get("category"),
         "supplier_name": supplier.get("supplier_name"),
         "supplier_url": supplier.get("supplier_url"),
+        "supplier_platform": supplier.get("supplier_platform"),
+        "supplier_platform_label": supplier.get("supplier_platform_label"),
+        "supplier_url_type": supplier.get("supplier_url_type"),
+        "supplier_detail_url": supplier.get("supplier_detail_url") or supplier.get("supplier_url"),
+        "supplier_search_url": supplier.get("supplier_search_url"),
         "unit_price_cny": _number(supplier.get("unit_price_cny")),
         "domestic_shipping_cny": _number(supplier.get("domestic_shipping_cny")),
         "supplier_total_cny": _sum_optional(
@@ -562,6 +567,13 @@ def _pending_item_from_row(
         "category": row.get("category"),
         "supplier_name": row.get("supplier_name"),
         "supplier_url": row.get("supplier_url"),
+        "supplier_platform": payload.get("platform"),
+        "supplier_platform_label": payload.get("platform_label"),
+        "supplier_url_type": payload.get("supplier_url_type"),
+        "supplier_detail_url": payload.get("supplier_detail_url") or row.get("supplier_url"),
+        "supplier_search_url": payload.get("supplier_search_url")
+        or payload.get("search_url")
+        or payload.get("choice_page_url"),
         "unit_price_cny": unit_price,
         "domestic_shipping_cny": shipping,
         "supplier_total_cny": _sum_optional(unit_price, shipping),
@@ -571,7 +583,7 @@ def _pending_item_from_row(
         "gross_profit_cny": None,
         "gross_margin": None,
         "verdict": "pending",
-        "warnings": [payload.get("crawler_warning") or "1688 成本暂未抓到，利润率未计算。"],
+        "warnings": [payload.get("crawler_warning") or "供应商成本暂未抓到，利润率未计算。"],
         "blocked_reasons": [],
         "snapshot_id": None,
         "suppliers": suppliers,
@@ -592,6 +604,11 @@ def _supplier_not_found_item_from_row(row: dict[str, Any], *, query: str) -> dic
         "category": row.get("category") or product.get("category"),
         "supplier_name": None,
         "supplier_url": None,
+        "supplier_platform": None,
+        "supplier_platform_label": None,
+        "supplier_url_type": None,
+        "supplier_detail_url": None,
+        "supplier_search_url": None,
         "unit_price_cny": None,
         "domestic_shipping_cny": None,
         "supplier_total_cny": None,
@@ -601,7 +618,7 @@ def _supplier_not_found_item_from_row(row: dict[str, Any], *, query: str) -> dic
         "gross_profit_cny": None,
         "gross_margin": None,
         "verdict": "pending",
-        "warnings": ["未找到可打开的 1688 详情页供应商链接。"],
+        "warnings": ["未找到可打开的供应商详情页链接。"],
         "blocked_reasons": [],
         "snapshot_id": None,
         "suppliers": [],
@@ -662,7 +679,20 @@ def _supplier_option_from_row(row: dict[str, Any]) -> dict[str, object]:
     )
     return {
         "supplier_name": row.get("supplier_name"),
-        "supplier_url": _canonical_1688_url(row.get("supplier_url")),
+        "supplier_url": _canonical_supplier_url(
+            row.get("supplier_url"),
+            platform=str(payload.get("platform") or ""),
+        ),
+        "supplier_platform": payload.get("platform"),
+        "supplier_platform_label": payload.get("platform_label"),
+        "supplier_url_type": payload.get("supplier_url_type"),
+        "supplier_detail_url": _canonical_supplier_url(
+            payload.get("supplier_detail_url") or row.get("supplier_url"),
+            platform=str(payload.get("platform") or ""),
+        ),
+        "supplier_search_url": payload.get("supplier_search_url")
+        or payload.get("search_url")
+        or payload.get("choice_page_url"),
         "unit_price_cny": unit_price,
         "domestic_shipping_cny": shipping,
         "supplier_total_cny": _sum_optional(unit_price, shipping),
@@ -745,6 +775,24 @@ def _canonical_1688_url(value: Any) -> str | None:
     if "1688.com" in lowered and "/offer/" in lowered:
         return cleaned
     return None
+
+
+def _canonical_supplier_url(value: Any, *, platform: str) -> str | None:
+    if not isinstance(value, str):
+        return None
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+    if platform == "1688" or not platform:
+        canonical_1688 = _canonical_1688_url(cleaned)
+        if canonical_1688:
+            return canonical_1688
+    lowered = cleaned.lower()
+    if "login.taobao.com" in lowered or "login.1688.com" in lowered:
+        return None
+    if not cleaned.startswith(("http://", "https://")):
+        return None
+    return cleaned
 
 
 def _keyword_from_original_title(value: Any) -> str | None:

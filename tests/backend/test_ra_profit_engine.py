@@ -75,5 +75,5 @@ def test_ra_us_profit_blocks_when_required_cost_fields_are_missing() -> None:
     assert result.verdict == "blocked"
     assert result.confidence == "blocked"
     assert "缺少 Keepa FBA fee。" in result.blocked_reasons
-    assert "缺少 1688 产品成本。" in result.blocked_reasons
-    assert "未获取 1688 国内运费提醒，暂按 0 元计入。" in result.warnings
+    assert "缺少供应商产品成本。" in result.blocked_reasons
+    assert "未获取供应商国内运费提醒，暂按 0 元计入。" in result.warnings
