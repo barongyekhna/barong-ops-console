@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import time
 from dataclasses import dataclass
@@ -140,6 +141,13 @@ class RwRealtimeEngine:
             min(
                 MAX_REQUESTS_PER_MINUTE,
                 _int_env("RW_KEEPA_MAX_DISCOVERY_REQUESTS_PER_CYCLE", 3),
+            ),
+        )
+        self.image_backfill_per_cycle = max(
+            0,
+            min(
+                MAX_REQUESTS_PER_MINUTE,
+                _int_env("RW_PRODUCT_IMAGE_BACKFILL_PER_CYCLE", 2),
             ),
         )
         self.discovery_request_interval_seconds = max(
@@ -396,9 +404,19 @@ class RwRealtimeEngine:
                 requested,
                 max_category_attempts=discovery_budget,
             )
+        image_backfill_budget = min(
+            self.image_backfill_per_cycle,
+            max(0, tokens_left - len(records) - discovery_budget - 1),
+        )
+        image_backfill = (
+            self._backfill_missing_product_images(db, limit=image_backfill_budget)
+            if image_backfill_budget > 0
+            else {"requested": 0, "updated": 0, "skipped": 0, "failed": 0}
+        )
         scheduler_payload = scheduler_report.to_dict()
         scheduler_payload["stale_released"] = stale_released
         scheduler_payload["processed_purged"] = processed_purged
+        scheduler_payload["image_backfill"] = image_backfill
         deepseek = self._deepseek_realtime_report(processed=processed)
         self.processed_total += processed
         self.failed_total += failed
@@ -507,6 +525,90 @@ class RwRealtimeEngine:
                 ),
             )
             db.commit()
+
+    def _backfill_missing_product_images(self, db: Session, *, limit: int) -> dict[str, int]:
+        if limit <= 0:
+            return {"requested": 0, "updated": 0, "skipped": 0, "failed": 0}
+        rows = db.execute(
+            text(
+                """
+                SELECT asin, title, image_url, features
+                FROM products_rw
+                WHERE image_url IS NULL
+                   OR image_url = ''
+                   OR image_url LIKE '%/images/P/%'
+                   OR COALESCE(features->>'image_candidates', '') LIKE '%/images/P/%'
+                ORDER BY updated_at DESC NULLS LAST, asin ASC
+                LIMIT :limit
+                """
+            ),
+            {"limit": max(1, min(int(limit), MAX_REQUESTS_PER_MINUTE))},
+        ).mappings().all()
+        updated = 0
+        skipped = 0
+        failed = 0
+        for row in rows:
+            asin = str(row["asin"])
+            try:
+                self.pipeline_runner.wait_keepa_turn()
+                keepa_data = self.provider.fetch_product(
+                    asin,
+                    source_query=str(row.get("title") or asin),
+                )
+            except Exception as exc:
+                failed += 1
+                if _has_keepa_429({asin: str(exc)}):
+                    self.keepa_backoff_until = utc_now() + timedelta(
+                        seconds=self.keepa_429_backoff_seconds,
+                    )
+                    break
+                continue
+
+            image_candidates = _real_keepa_image_candidates(keepa_data.image_candidates)
+            if not image_candidates:
+                skipped += 1
+                continue
+
+            features = row.get("features")
+            next_features = dict(features) if isinstance(features, dict) else {}
+            next_features["image_candidates"] = image_candidates
+            next_features["image_backfill_source"] = "rw_worker_keepa_product_images"
+            next_features["image_backfill_candidate_count"] = len(image_candidates)
+            next_features["image_backfilled_at"] = utc_now().isoformat()
+            db.execute(
+                text(
+                    """
+                    UPDATE products_rw
+                    SET image_url = :image_url,
+                        features = CAST(:features AS jsonb),
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE asin = :asin
+                    """
+                ),
+                {
+                    "asin": asin,
+                    "image_url": image_candidates[0],
+                    "features": json.dumps(next_features, ensure_ascii=False),
+                },
+            )
+            emit_pipeline_event(
+                db,
+                PipelineEvent(
+                    asin=asin,
+                    event_type="product_image_backfill",
+                    stage="keepa_image_backfill",
+                    status="updated",
+                    message="Replaced transparent ASIN fallback image with Keepa image candidates",
+                    payload={"candidate_count": len(image_candidates)},
+                ),
+            )
+            updated += 1
+        return {
+            "requested": len(rows),
+            "updated": updated,
+            "skipped": skipped,
+            "failed": failed,
+        }
 
     def _write_status(
         self,
@@ -620,6 +722,19 @@ def _runnable_categories(category_ids: list[str]) -> list[str]:
         if category_id not in runnable:
             runnable.append(category_id)
     return runnable
+
+
+def _real_keepa_image_candidates(candidates: list[str]) -> list[str]:
+    real_images: list[str] = []
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            continue
+        cleaned = candidate.strip()
+        if "/images/I/" not in cleaned:
+            continue
+        if cleaned not in real_images:
+            real_images.append(cleaned)
+    return real_images
 
 
 def _has_keepa_429(errors: dict[str, str]) -> bool:

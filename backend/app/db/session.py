@@ -82,10 +82,21 @@ def rollback_open_transaction(db: Session) -> bool:
     return True
 
 
+def discard_open_transaction(db: Session) -> bool:
+    try:
+        return rollback_open_transaction(db)
+    except Exception:
+        try:
+            db.invalidate()
+        except Exception:
+            pass
+        return False
+
+
 class ManagedSession(OrgDataIsolationSession):
     def close(self) -> None:
         try:
-            rollback_open_transaction(self)
+            discard_open_transaction(self)
         finally:
             super().close()
 
@@ -128,7 +139,7 @@ def managed_read_session() -> Iterator[Session]:
     try:
         yield db
     finally:
-        rollback_open_transaction(db)
+        discard_open_transaction(db)
         db.close()
 
 
@@ -149,7 +160,7 @@ def get_read_db() -> Generator[Session, None, None]:
     try:
         yield db
     finally:
-        rollback_open_transaction(db)
+        discard_open_transaction(db)
         db.close()
 
 

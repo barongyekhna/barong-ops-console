@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from ...core.roles import is_owner_role, is_super_admin_role
 from ...db.session import MAX_OVERFLOW, POOL_SIZE, STATEMENT_TIMEOUT_MS
-from ...db.session import get_db
+from ...db.session import get_db, get_read_db
 from ...models.org_membership import OrgMembershipRecord
 from ...models.organization import OrganizationRecord
 from ...models.user import User
@@ -225,7 +225,7 @@ def _feature_string(features: dict[str, object], key: str) -> str | None:
 
 
 def require_r_series_org(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(get_current_user),
 ) -> User:
     if not _user_has_rw_role_access(user):
@@ -243,7 +243,7 @@ def require_r_series_org(
 
 @router.get("/status")
 def rw_status(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     target_org = _target_org_for_user(db, user)
@@ -334,7 +334,7 @@ def rw_status(
 
 @router.get("/ingestion/status")
 def rw_ingestion_status(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     target_org = _target_org_for_user(db, user)
@@ -364,7 +364,7 @@ def rw_products(
     sort_order: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=50),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     del user
@@ -598,7 +598,7 @@ def rw_rules(user: User = Depends(require_r_series_org)) -> dict[str, object]:
 
 @router.get("/pipeline")
 def rw_pipeline(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     del user
@@ -613,7 +613,7 @@ def rw_pipeline(
 
 @router.get("/settings")
 def rw_settings(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     del user
@@ -652,7 +652,7 @@ def rw_update_settings(
 
 @router.get("/category-tree")
 def rw_category_tree(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     del user
@@ -669,7 +669,7 @@ def rw_category_tree(
 @router.post("/category-tree/select")
 def rw_category_select(
     payload: dict[str, object] = Body(...),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     del user
@@ -754,7 +754,7 @@ def _prune_unselected_pending_queue(db: Session, runnable_categories: list[str])
 @router.get("/category-rate-plan")
 def rw_category_rate_plan(
     window_minutes: int = Query(default=10, ge=1, le=1440),
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     del user
