@@ -345,7 +345,13 @@ def discover_1688_supplier_offers(
             )
             result_price = _result_price_cny(result)
             result_shipping = _result_shipping_cny(result)
-            unit_price_cny = crawled.unit_price_cny or result_price
+            unit_price_cny, price_source, price_warning = _select_supplier_price(
+                crawled.unit_price_cny,
+                result_price,
+                product=product,
+                exchange_rate_usd_cny=exchange_rate_usd_cny,
+                platform=search_query.platform,
+            )
             domestic_shipping_cny = (
                 crawled.domestic_shipping_cny
                 if crawled.domestic_shipping_cny is not None
@@ -361,10 +367,8 @@ def discover_1688_supplier_offers(
                     f"{normalized_asin}: 未找到可打开的{search_query.platform_label}详情页链接。"
                 )
                 continue
-            crawler_warning = (
-                None
-                if crawled.unit_price_cny is not None or result_price is not None
-                else crawled.warning
+            crawler_warning = price_warning or (
+                None if unit_price_cny is not None else crawled.warning
             )
             offer_id = _insert_supplier_offer(
                 db,
@@ -398,14 +402,9 @@ def discover_1688_supplier_offers(
                     "serper_position": result.position,
                     "crawler_status": crawled.crawler_status,
                     "crawler_warning": crawler_warning,
-                    "price_source": (
-                        "1688_page"
-                        if search_query.platform == "1688"
-                        and crawled.unit_price_cny is not None
-                        else "serper_snippet"
-                        if result_price is not None
-                        else None
-                    ),
+                    "price_source": price_source,
+                    "raw_crawled_price_cny": _decimal_number(crawled.unit_price_cny),
+                    "raw_serper_price_cny": _decimal_number(result_price),
                     "raw_excerpt": crawled.raw_excerpt,
                     "one_piece_hint": _one_piece_hint(result, crawled),
                     "retail_platform_hint": search_query.platform != "1688",
@@ -652,20 +651,31 @@ def _first_detail_offer_url(page: Any, *, base_url: str) -> str | None:
 
 
 def _extract_price_cny(text: str) -> Decimal | None:
-    labeled_patterns = (
-        r'"(?:price|offerPrice|skuPrice|discountPrice|salePrice)"\s*:\s*"?([0-9]+(?:\.[0-9]{1,2})?)',
-        r'"priceRange"\s*:\s*"\s*([0-9]+(?:\.[0-9]{1,2})?)',
-        r'(?:价格|批发价|拿货价|现货价)[^0-9￥¥]{0,20}(?:￥|¥)?\s*([0-9]+(?:\.[0-9]{1,2})?)',
+    strong_values = _extract_price_range_matches(text)
+    strong_values.extend(
+        _extract_decimal_matches(
+            text,
+            (
+                r'"(?:skuPrice|offerPrice|discountPrice|salePrice|unitPrice|wholesalePrice|activityPrice)"\s*:\s*"?([0-9]+(?:\.[0-9]{1,2})?)',
+                r'(?:价格|批发价|拿货价|现货价|到手价|活动价)[^0-9￥¥]{0,20}(?:￥|¥)?\s*([0-9]+(?:\.[0-9]{1,2})?)',
+            ),
+        )
     )
-    generic_patterns = (
-        r'(?<!运费\s)(?<!邮费\s)(?<!快递\s)(?<!物流\s)(?:￥|¥)\s*([0-9]+(?:\.[0-9]{1,2})?)',
+    strong_values = _credible_price_values(strong_values)
+    if strong_values:
+        return min(strong_values)
+
+    money_values = _extract_contextual_money_values(text)
+    if money_values:
+        return min(money_values)
+
+    weak_values = _extract_decimal_matches(
+        text,
+        (r'"price"\s*:\s*"?([0-9]+(?:\.[0-9]{1,2})?)',),
     )
-    values = _extract_decimal_matches(text, labeled_patterns)
-    if values:
-        return min(values)
-    values = _extract_decimal_matches(text, generic_patterns)
-    if values:
-        return min(values)
+    weak_values = _credible_price_values(weak_values, min_value=Decimal("2"))
+    if weak_values:
+        return min(weak_values)
     return None
 
 
@@ -687,6 +697,109 @@ def _extract_decimal_matches(text: str, patterns: tuple[str, ...]) -> list[Decim
             if value is not None and Decimal("0.1") <= value <= Decimal("50000"):
                 values.append(value)
     return values
+
+
+def _extract_price_range_matches(text: str) -> list[Decimal]:
+    values: list[Decimal] = []
+    patterns = (
+        r'"(?:priceRange|priceRangeOriginal|priceRangeStr)"\s*:\s*"?\s*([0-9]+(?:\.[0-9]{1,2})?)(?:\s*(?:-|~|—|至|到)\s*([0-9]+(?:\.[0-9]{1,2})?))?',
+        r'(?:￥|¥)\s*([0-9]+(?:\.[0-9]{1,2})?)\s*(?:-|~|—|至|到)\s*(?:￥|¥)?\s*([0-9]+(?:\.[0-9]{1,2})?)',
+    )
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            for group in match.groups():
+                value = decimal_value(group)
+                if value is not None and Decimal("0.1") <= value <= Decimal("50000"):
+                    values.append(value)
+    return values
+
+
+def _extract_contextual_money_values(text: str) -> list[Decimal]:
+    values: list[Decimal] = []
+    for match in re.finditer(r"(?:￥|¥)\s*([0-9]+(?:\.[0-9]{1,2})?)", text):
+        start = max(0, match.start() - 12)
+        end = min(len(text), match.end() + 8)
+        context = text[start:end]
+        if re.search(r"(?:运费|邮费|快递|物流|配送|起批|起订|优惠券|满减|立减|库存|销量|月销|评价|评分)", context):
+            continue
+        value = decimal_value(match.group(1))
+        if value is not None and Decimal("0.1") <= value <= Decimal("50000"):
+            values.append(value)
+    return _credible_price_values(values)
+
+
+def _credible_price_values(
+    values: list[Decimal],
+    *,
+    min_value: Decimal = Decimal("0.1"),
+) -> list[Decimal]:
+    if not values:
+        return []
+    values = [value for value in values if min_value <= value <= Decimal("50000")]
+    if not values:
+        return []
+    high_values = [value for value in values if value >= Decimal("5")]
+    if high_values:
+        return high_values
+    return values
+
+
+def _select_supplier_price(
+    crawled_price: Decimal | None,
+    result_price: Decimal | None,
+    *,
+    product: dict[str, Any],
+    exchange_rate_usd_cny: Decimal | None,
+    platform: str,
+) -> tuple[Decimal | None, str | None, str | None]:
+    candidates = [
+        (
+            crawled_price,
+            "1688_page" if platform == "1688" else "supplier_page",
+        ),
+        (result_price, "serper_snippet"),
+    ]
+    warnings: list[str] = []
+    for price, source in candidates:
+        if price is None:
+            continue
+        warning = _supplier_price_warning(
+            price,
+            product=product,
+            exchange_rate_usd_cny=exchange_rate_usd_cny,
+        )
+        if warning is None:
+            return price, source, None
+        warnings.append(warning)
+    return None, None, warnings[0] if warnings else None
+
+
+def _supplier_price_warning(
+    price: Decimal,
+    *,
+    product: dict[str, Any],
+    exchange_rate_usd_cny: Decimal | None,
+) -> str | None:
+    if price <= 0:
+        return "供应商价格小于等于 0，疑似页面解析错误，已暂停利润计算。"
+    if price < Decimal("2"):
+        return f"供应商价格 {price} 元过低，疑似页面数量/噪声字段，已暂停利润计算。"
+
+    sell_price_usd = decimal_value(product.get("price"))
+    if sell_price_usd is None or exchange_rate_usd_cny is None:
+        return None
+    if sell_price_usd < Decimal("15"):
+        return None
+    minimum_reasonable = max(
+        Decimal("3"),
+        sell_price_usd * exchange_rate_usd_cny * Decimal("0.02"),
+    )
+    if price < minimum_reasonable:
+        return (
+            f"供应商价格 {price} 元明显低于亚马逊售价，"
+            "疑似页面数量/噪声字段，已暂停利润计算。"
+        )
+    return None
 
 
 def _extract_shipping_cny(text: str) -> Decimal | None:

@@ -593,22 +593,64 @@ function ProductImage({
 }
 
 function AsinTag({ asin }: { asin: string | null }) {
+  const [copied, setCopied] = useState(false);
+
   if (!asin) {
     return <span className={styles.asinTag}>未记录</span>;
   }
+  const asinValue = asin;
+
+  async function handleCopy() {
+    let copiedSuccessfully = false;
+    try {
+      await navigator.clipboard?.writeText(asinValue);
+      copiedSuccessfully = true;
+    } catch {
+      copiedSuccessfully = fallbackCopyText(asinValue);
+    }
+    if (!copiedSuccessfully) {
+      copiedSuccessfully = fallbackCopyText(asinValue);
+    }
+    setCopied(copiedSuccessfully);
+    if (copiedSuccessfully) {
+      window.setTimeout(() => setCopied(false), 1400);
+    }
+  }
+
   return (
     <button
       className={styles.asinTag}
-      title="复制 ASIN"
+      data-copied={copied ? "true" : "false"}
+      title={copied ? "ASIN 已复制" : "复制 ASIN"}
       type="button"
-      onClick={() => {
-        void navigator.clipboard?.writeText(asin);
-      }}
+      onClick={() => void handleCopy()}
     >
-      <span>{asin}</span>
+      <span>{asinValue}</span>
       <Copy size={13} />
     </button>
   );
+}
+
+function fallbackCopyText(value: string) {
+  if (typeof document === "undefined") {
+    return false;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("readonly", "true");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  textarea.style.top = "0";
+  document.body.appendChild(textarea);
+  textarea.focus();
+  textarea.select();
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    document.body.removeChild(textarea);
+  }
 }
 
 function supplierOptions(item: RaAutoProfitItem) {

@@ -503,6 +503,16 @@
   color: #15803d;
 }
 
+.asinTag[data-copied="true"] {
+  color: #ffffff;
+  border-color: #15803d;
+  background: #16a34a;
+}
+
+.asinTag[data-copied="true"] svg {
+  color: #ffffff;
+}
+
 .onePieceTag,
 .moqTag,
 .marginTag,

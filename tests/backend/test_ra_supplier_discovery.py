@@ -3,10 +3,12 @@ from __future__ import annotations
 from decimal import Decimal
 
 from r_system_v2.ra.supplier_discovery import (
+    _extract_price_cny,
     _normalized_supplier_link,
     _normalized_1688_link,
     _parse_1688_html,
     _result_price_cny,
+    _select_supplier_price,
     SerperResult,
     build_1688_queries,
     build_supplier_queries,
@@ -67,6 +69,43 @@ def test_ra_1688_html_parser_extracts_cost_shipping_and_moq() -> None:
     assert offer.domestic_shipping_cny == Decimal("6.50")
     assert offer.moq == 3
     assert offer.warning is None
+
+
+def test_ra_1688_price_parser_ignores_generic_one_yuan_noise() -> None:
+    price = _extract_price_cny(
+        """
+        <script>
+          {"price":"1","skuPrice":"49.90","offerPrice":"69.00"}
+        </script>
+        """
+    )
+
+    assert price == Decimal("49.90")
+
+
+def test_ra_1688_price_parser_prefers_real_price_range() -> None:
+    price = _extract_price_cny(
+        """
+        <script>{"price":"1","priceRange":"49.90-69.00"}</script>
+        """
+    )
+
+    assert price == Decimal("49.90")
+
+
+def test_ra_supplier_price_selector_rejects_implausible_low_cost() -> None:
+    price, source, warning = _select_supplier_price(
+        Decimal("1.00"),
+        None,
+        product={"price": Decimal("26.97")},
+        exchange_rate_usd_cny=Decimal("7.2"),
+        platform="1688",
+    )
+
+    assert price is None
+    assert source is None
+    assert warning is not None
+    assert "明显低于亚马逊售价" in warning or "过低" in warning
 
 
 def test_ra_1688_link_normalization_keeps_only_1688_hosts() -> None:
