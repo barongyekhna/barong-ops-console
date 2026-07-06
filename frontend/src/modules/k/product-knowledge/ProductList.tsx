@@ -885,6 +885,7 @@ export function ProductListFull() {
             className="primary-button"
             onClick={() => {
               setCreateError("");
+              setOpenProductId(null);
               setShowCreate(true);
             }}
             type="button"
@@ -907,6 +908,27 @@ export function ProductListFull() {
           </button>
         </div>
       </div>
+
+      {showCreate ? (
+        <div className={styles.createPanel}>
+          <button
+            aria-label="取消"
+            className={styles.createClose}
+            disabled={isCreating}
+            onClick={() => setShowCreate(false)}
+            type="button"
+          >
+            <X aria-hidden="true" size={15} />
+            取消
+          </button>
+          <ProductForm
+            error={createError}
+            isSubmitting={isCreating}
+            onCreate={handleCreate}
+            onDismissError={() => setCreateError("")}
+          />
+        </div>
+      ) : null}
 
       {openProduct ? (
         <div className={styles.dossier}>
@@ -1207,30 +1229,6 @@ export function ProductListFull() {
           ) : null}
         </section>
       )}
-
-      {showCreate ? (
-        <div
-          className={styles.drawerBackdrop}
-          onMouseDown={() => {
-            if (!isCreating) {
-              setShowCreate(false);
-            }
-          }}
-          role="presentation"
-        >
-          <aside
-            className={styles.drawer}
-            onMouseDown={(event) => event.stopPropagation()}
-          >
-            <ProductForm
-              error={createError}
-              isSubmitting={isCreating}
-              onCreate={handleCreate}
-              onDismissError={() => setCreateError("")}
-            />
-          </aside>
-        </div>
-      ) : null}
 
       {deleteCandidate ? (
         <div

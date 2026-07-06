@@ -6748,6 +6748,15 @@ textarea:focus-visible {
   color: var(--mm-ink);
 }
 .mm-page > *:not(.dsc-space) { position: relative; z-index: 1; }
+/* 命令中心页固定深空底：盖住白天模式外壳的浅灰背景，暗夜/白天都统一 */
+.mm-page::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: #04070e;
+  pointer-events: none;
+}
 
 .mm-page .registry-command-bar { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; background: none; border: 0; box-shadow: none; padding: 0; }
 .mm-page .registry-command-bar .eyebrow { color: var(--mm-cyan); font: 700 9px var(--mm-mono); letter-spacing: 0.28em; text-transform: uppercase; }

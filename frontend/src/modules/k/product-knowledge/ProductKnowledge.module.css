@@ -508,6 +508,7 @@
 
 .detailGrid {
   display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 10px;
   margin: 0;
 }
@@ -1710,3 +1711,36 @@
 
 /* 场景层安全：内容压在深空之上 */
 .workspace > *:not(.dsc-space) { position: relative; z-index: 1; }
+
+/* 建品内联面板：出现在命令栏下方、列表上方，完成即消失 */
+.createPanel {
+  position: relative;
+  animation: kCreateIn 0.2s ease;
+}
+
+@keyframes kCreateIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+.createClose {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(10 20 34 / 60%);
+  color: var(--mm-dim, #7d95ae);
+  cursor: pointer;
+  font: 600 12px "Inter", system-ui, sans-serif;
+}
+
+.createClose:hover {
+  color: var(--mm-ink, #d6e8f6);
+  border-color: rgb(57 212 255 / 45%);
+}
