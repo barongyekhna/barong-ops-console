@@ -1709,9 +1709,6 @@
 .lightDot[data-state="blocked"] { background: #ff6b8a; box-shadow: 0 0 7px rgb(255 107 138 / 70%); }
 .lightsLoading { color: var(--mm-dim, #7d95ae); font: 600 10px var(--mm-mono, ui-monospace, monospace); }
 
-/* 场景层安全：内容压在深空之上 */
-.workspace > *:not(.dsc-space) { position: relative; z-index: 1; }
-
 /* 建品内联面板：出现在命令栏下方、列表上方，完成即消失 */
 .createPanel {
   position: relative;
