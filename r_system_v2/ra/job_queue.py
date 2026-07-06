@@ -25,6 +25,7 @@ from r_system_v2.ra.exchange_rate import get_usd_cny_quote
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.profit_service import _json_bind
 from r_system_v2.ra.profit_service import profit_formula_config
+from r_system_v2.ra.relevance import classify_product_relevance
 from r_system_v2.ra.supplier_discovery import discover_1688_supplier_offers
 from r_system_v2.rw.product_images import primary_product_image_url, product_image_candidates
 
@@ -523,7 +524,7 @@ def _snapshot_item_from_row(
         "snapshot_id": row.get("snapshot_id"),
         "suppliers": suppliers,
     }
-    item.update(_product_fields(row, product=product))
+    item.update(_product_fields(row, product=product, query=query))
     return item
 
 
@@ -564,7 +565,7 @@ def _pending_item_from_row(
         "snapshot_id": None,
         "suppliers": suppliers,
     }
-    item.update(_product_fields(row, product={}))
+    item.update(_product_fields(row, product={}, query=query))
     return item
 
 
@@ -594,7 +595,7 @@ def _supplier_not_found_item_from_row(row: dict[str, Any], *, query: str) -> dic
         "snapshot_id": None,
         "suppliers": [],
     }
-    item.update(_product_fields(row, product=product))
+    item.update(_product_fields(row, product=product, query=query))
     return item
 
 
@@ -666,7 +667,12 @@ def _supplier_option_from_row(row: dict[str, Any]) -> dict[str, object]:
     }
 
 
-def _product_fields(row: dict[str, Any], *, product: dict[str, Any]) -> dict[str, object]:
+def _product_fields(
+    row: dict[str, Any],
+    *,
+    product: dict[str, Any],
+    query: str,
+) -> dict[str, object]:
     asin = row.get("asin") or product.get("asin")
     features = _dict_value(row.get("features") or product.get("features"))
     image_url = row.get("image_url") or product.get("image_url")
@@ -676,6 +682,7 @@ def _product_fields(row: dict[str, Any], *, product: dict[str, Any]) -> dict[str
         features=features,
     )
     title = row.get("title") or product.get("title")
+    relevance = classify_product_relevance(query, {**product, **row})
     lithium_value = row.get("lithium_battery_warning")
     if lithium_value is None:
         lithium_value = features.get("lithium_battery_warning")
@@ -706,6 +713,7 @@ def _product_fields(row: dict[str, Any], *, product: dict[str, Any]) -> dict[str
         ),
         "weight_label": _weight_label(features),
         "dimensions_label": _dimensions_label(features),
+        **relevance.to_product_fields(),
     }
 
 

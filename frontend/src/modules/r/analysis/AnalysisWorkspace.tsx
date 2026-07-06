@@ -345,6 +345,11 @@ function AutoResultTable({ items }: { items: RaAutoProfitItem[] }) {
               <td>
                 <strong>{item.product_keyword || item.keyword}</strong>
                 <span>{item.matched_source_query || item.category || "R-W 匹配"}</span>
+                <span className={styles.relevanceTag} data-status={item.relevance_status}>
+                  {relevanceLabel(item.relevance_status)}
+                  {typeof item.relevance_score === "number" ? ` · ${item.relevance_score}` : ""}
+                </span>
+                {item.relevance_reason ? <small>{item.relevance_reason}</small> : null}
               </td>
               <td>
                 <strong>{item.title_zh || "等待中文名"}</strong>
@@ -665,6 +670,28 @@ function statusLabel(value: string | null | undefined) {
     return "任务失败";
   }
   return "处理中";
+}
+
+function relevanceLabel(value: string | null | undefined) {
+  if (value === "exact_match") {
+    return "主体匹配";
+  }
+  if (value === "variant_match") {
+    return "变体匹配";
+  }
+  if (value === "accessory_only") {
+    return "仅配件";
+  }
+  if (value === "consumable_only") {
+    return "仅耗材";
+  }
+  if (value === "replacement_part_only") {
+    return "替换件";
+  }
+  if (value === "unrelated") {
+    return "不相关";
+  }
+  return "相关性待判定";
 }
 
 function jobStatusLabel(value: string | null | undefined) {

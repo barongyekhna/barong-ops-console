@@ -453,7 +453,8 @@
 .onePieceTag,
 .moqTag,
 .marginTag,
-.lithiumTag {
+.lithiumTag,
+.relevanceTag {
   display: inline-flex;
   width: fit-content;
   margin-top: 7px;
@@ -475,6 +476,25 @@
 }
 
 .lithiumTag {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.relevanceTag {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
+.relevanceTag[data-status="exact_match"],
+.relevanceTag[data-status="variant_match"] {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.relevanceTag[data-status="accessory_only"],
+.relevanceTag[data-status="consumable_only"],
+.relevanceTag[data-status="replacement_part_only"],
+.relevanceTag[data-status="unrelated"] {
   color: #991b1b;
   background: #fee2e2;
 }

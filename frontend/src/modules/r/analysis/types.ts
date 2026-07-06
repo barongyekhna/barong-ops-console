@@ -240,6 +240,12 @@ export type RaAutoProfitItem = {
   package_height_mm?: number | null;
   weight_label?: string | null;
   dimensions_label?: string | null;
+  relevance_status?: string | null;
+  relevance_score?: number | null;
+  relevance_should_process?: boolean | null;
+  relevance_reason?: string | null;
+  relevance_matched_terms?: string[];
+  relevance_blocked_terms?: string[];
   supplier_name: string | null;
   supplier_url: string | null;
   unit_price_cny: number | null;
@@ -290,6 +296,9 @@ export type RaAutoProfitResult = {
     category: string | null;
     source_query: string | null;
     match_score: number | null;
+    relevance_status?: string | null;
+    relevance_score?: number | null;
+    relevance_reason?: string | null;
   }>;
   supplier_runs: Array<{
     asin: string;

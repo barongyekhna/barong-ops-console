@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 from r_system_v2.ra.exchange_rate import get_usd_cny_quote
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.profit_service import RAProfitError, profit_formula_config
+from r_system_v2.ra.relevance import classify_product_relevance
 from r_system_v2.ra.supplier_discovery import (
     RASupplierDiscoveryError,
     discover_1688_supplier_offers,
@@ -165,6 +166,9 @@ def run_auto_profit_analysis(
                 "category": product.get("category"),
                 "source_query": product.get("source_query"),
                 "match_score": product.get("match_score"),
+                "relevance_status": product.get("relevance_status"),
+                "relevance_score": product.get("relevance_score"),
+                "relevance_reason": product.get("relevance_reason"),
             }
             for product in products
         ],
@@ -189,7 +193,7 @@ def match_rw_products_for_query(
         return []
 
     search_values = _dedupe_preserve_order([cleaned_query, *terms])
-    params: dict[str, object] = {"scan_limit": max(50, min(limit * 30, 500))}
+    params: dict[str, object] = {"scan_limit": max(100, min(limit * 100, 1500))}
     if org_id:
         params["org_id"] = org_id
     clauses: list[str] = []
@@ -230,12 +234,14 @@ def match_rw_products_for_query(
     scored: list[dict[str, Any]] = []
     for row in rows:
         product = dict(row)
-        if _is_query_product_accessory_mismatch(cleaned_query, terms, product):
+        relevance = classify_product_relevance(cleaned_query, product)
+        if not relevance.should_process:
             continue
         score = _product_match_score(product, cleaned_query, terms)
-        if score <= 0:
+        if score <= 0 and relevance.score <= 0:
             continue
-        product["match_score"] = score
+        product["match_score"] = score + relevance.score
+        product.update(relevance.to_product_fields())
         scored.append(product)
 
     scored.sort(
@@ -283,6 +289,7 @@ def _snapshot_item(
         "blocked_reasons": snapshot.get("blocked_reasons") or [],
         "exchange_rate_usd_cny": exchange_rate,
         "snapshot_id": snapshot.get("snapshot_id"),
+        **_relevance_fields(product, keyword),
     }
 
 
@@ -319,6 +326,7 @@ def _pending_offer_item(
         "blocked_reasons": [],
         "exchange_rate_usd_cny": exchange_rate,
         "snapshot_id": None,
+        **_relevance_fields(product, keyword),
     }
 
 
@@ -346,6 +354,7 @@ def _no_supplier_item(product: dict[str, Any], *, keyword: str) -> dict[str, obj
         "warnings": ["Serper 没有返回可用的 1688 候选。"],
         "blocked_reasons": [],
         "snapshot_id": None,
+        **_relevance_fields(product, keyword),
     }
 
 
@@ -359,6 +368,10 @@ def _error_item(
     item["status"] = "failed"
     item["warnings"] = [error]
     return item
+
+
+def _relevance_fields(product: dict[str, Any], query: str) -> dict[str, object]:
+    return classify_product_relevance(query, product).to_product_fields()
 
 
 def _product_match_score(
@@ -390,68 +403,6 @@ def _product_match_score(
         if term in brand:
             score += 15
     return score
-
-
-def _is_query_product_accessory_mismatch(
-    query: str,
-    terms: list[str],
-    product: dict[str, Any],
-) -> bool:
-    if not _query_wants_dining_table(query, terms):
-        return False
-    haystack = _joined_lower(
-        product.get("title"),
-        product.get("title_zh"),
-        product.get("category"),
-        product.get("category_path"),
-    )
-    accessory_terms = (
-        "tablecloth",
-        "table cloth",
-        "table cover",
-        "table runner",
-        "table mat",
-        "placemat",
-        "place mat",
-        "napkin",
-        "paper towel",
-        "桌布",
-        "台布",
-        "桌旗",
-        "桌垫",
-        "餐垫",
-        "餐巾",
-        "餐具",
-        "纸巾",
-        "装饰用品",
-    )
-    return any(term in haystack for term in accessory_terms)
-
-
-def _query_wants_dining_table(query: str, terms: list[str]) -> bool:
-    normalized = " ".join([query.lower(), *terms])
-    accessory_intents = (
-        "桌布",
-        "台布",
-        "桌旗",
-        "桌垫",
-        "餐垫",
-        "tablecloth",
-        "table cloth",
-        "table runner",
-        "placemat",
-    )
-    if any(intent in normalized for intent in accessory_intents):
-        return False
-    table_intents = (
-        "餐桌",
-        "饭桌",
-        "dining table",
-        "kitchen table",
-        "restaurant table",
-        "cafeteria table",
-    )
-    return any(intent in normalized for intent in table_intents)
 
 
 def _query_terms(query: str) -> list[str]:
