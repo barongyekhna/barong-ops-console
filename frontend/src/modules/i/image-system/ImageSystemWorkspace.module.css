@@ -1,53 +1,58 @@
+/* =====================================================================
+   I 系列 AI 作图系统 —— 命令中心暗色主题
+   复用 globals.css 的 .mm-page 底座（变量 / 深空场景 / 按钮暗色）
+   ===================================================================== */
 .workspace {
   display: grid;
-  gap: 20px;
+  gap: 18px;
 }
 
-.contextBar,
-.toolPanel,
-.libraryPanel {
-  border: 1px solid var(--border-subtle, #d8dee8);
-  border-radius: 8px;
-  background: var(--surface, #ffffff);
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
-}
-
+/* 顶部命令栏 */
 .contextBar {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  padding: 18px 20px;
 }
 
-.contextBar h2,
-.toolPanel h3,
-.libraryPanel h3 {
-  margin: 0;
-  color: #16202e;
+.contextBar h2 {
+  margin: 3px 0 0;
+  color: #eafaff;
+  text-shadow: 0 0 24px rgb(57 212 255 / 20%);
+}
+
+.contextBar p {
+  margin: 6px 0 0;
+  max-width: 640px;
+  color: var(--mm-dim, #7d95ae);
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
 .eyebrow {
   display: block;
-  color: #5d6b7c;
-  font-size: 0.78rem;
-  font-weight: 700;
-  letter-spacing: 0;
+  color: var(--mm-cyan, #39d4ff);
+  font: 700 9px var(--mm-mono, ui-monospace, monospace);
+  letter-spacing: 0.28em;
   text-transform: uppercase;
 }
 
 .kContext {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: min(520px, 100%);
 }
 
 .kContextDetails {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-width: 0;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(8 15 26 / 55%);
 }
 
 .kContextDetails strong {
@@ -55,6 +60,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: #eafaff;
+  font-size: 13px;
 }
 
 .kContext select,
@@ -63,10 +70,10 @@
 .field input,
 .field select,
 .field textarea {
-  border: 1px solid #c9d2df;
-  border-radius: 7px;
-  background: #ffffff;
-  color: #172033;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border-radius: 9px;
+  background: rgb(6 14 24 / 75%);
+  color: #eafaff;
   font: inherit;
 }
 
@@ -75,54 +82,126 @@
 .libraryFilters input,
 .field input,
 .field select {
-  min-height: 38px;
-  padding: 0 10px;
+  min-height: 40px;
+  padding: 0 12px;
+}
+
+.kContext select option,
+.libraryFilters select option,
+.field select option {
+  background: #0a1420;
+  color: #eafaff;
+}
+
+.kContext select:focus,
+.libraryFilters select:focus,
+.libraryFilters input:focus,
+.field input:focus,
+.field select:focus,
+.field textarea:focus {
+  outline: 0;
+  border-color: rgb(57 212 255 / 55%);
+  box-shadow: 0 0 0 3px rgb(57 212 255 / 12%);
 }
 
 .clearKContextButton {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border: 1px solid #c9d2df;
-  border-radius: 7px;
-  background: #ffffff;
-  color: #5d6b7c;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border-radius: 9px;
+  background: rgb(10 20 34 / 55%);
+  color: var(--mm-dim, #7d95ae);
   cursor: pointer;
   flex: 0 0 auto;
 }
 
 .clearKContextButton:hover {
-  border-color: #b93b3b;
-  color: #b93b3b;
+  border-color: rgb(255 107 138 / 50%);
+  color: var(--mm-red, #ff6b8a);
 }
 
+/* 工具双栏 —— align-items:start 让两栏各自独立高度，一栏出图不再拉长另一栏 */
 .toolGrid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 18px;
+  align-items: start;
+  gap: 16px;
 }
 
+/* 面板 = ops-panel（HUD 角标 + 玻璃质感） */
 .toolPanel,
 .libraryPanel {
+  position: relative;
   display: grid;
-  gap: 16px;
+  gap: 14px;
   padding: 18px;
+  border-radius: 12px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(8 15 26 / 58%);
+  backdrop-filter: blur(9px);
+  box-shadow: 0 20px 50px -26px rgb(0 0 0 / 80%);
 }
 
-.panelTitle,
-.libraryHeader,
-.saveRow,
-.mediaActions {
+.toolPanel::before,
+.toolPanel::after,
+.libraryPanel::before,
+.libraryPanel::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--mm-amber, #ffb13b);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.toolPanel::before,
+.libraryPanel::before {
+  left: -1px;
+  top: -1px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.toolPanel::after,
+.libraryPanel::after {
+  right: -1px;
+  bottom: -1px;
+  border-left: 0;
+  border-top: 0;
+}
+
+.panelTitle {
   display: flex;
   align-items: center;
+  gap: 10px;
+}
+
+.panelTitle h3 {
+  margin: 0;
+  color: #eafaff;
+  font-size: 14px;
+  letter-spacing: 0.4px;
+}
+
+.panelTitle svg {
+  color: var(--mm-amber, #ffb13b);
+}
+
+.libraryHeader {
+  display: flex;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
 }
 
-.panelTitle {
-  justify-content: flex-start;
+.libraryHeader h3 {
+  margin: 2px 0 0;
+  color: #eafaff;
+  font-size: 14px;
 }
 
 .field {
@@ -131,29 +210,48 @@
 }
 
 .field span {
-  color: #39475a;
-  font-size: 0.86rem;
-  font-weight: 700;
+  color: var(--mm-dim, #7d95ae);
+  font: 600 10px var(--mm-mono, ui-monospace, monospace);
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
 }
 
 .field textarea {
-  min-height: 104px;
+  min-height: 108px;
   resize: vertical;
-  padding: 10px;
-  line-height: 1.5;
+  padding: 11px 12px;
+  line-height: 1.55;
 }
 
 .field input::placeholder,
-.field textarea::placeholder {
-  color: #8a97a8;
+.field textarea::placeholder,
+.libraryFilters input::placeholder {
+  color: rgb(125 149 174 / 70%);
   opacity: 1;
 }
 
+.field input[type="file"] {
+  padding: 9px 12px;
+  color: var(--mm-dim, #7d95ae);
+  cursor: pointer;
+}
+
+.field input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 7px 12px;
+  border: 1px solid rgb(57 212 255 / 40%);
+  border-radius: 7px;
+  background: rgb(57 212 255 / 10%);
+  color: var(--mm-cyan, #39d4ff);
+  font: 600 12px "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+
 .helpText {
-  margin: -2px 0 0;
-  color: #66758a;
-  font-size: 0.78rem;
-  line-height: 1.45;
+  margin: -1px 0 0;
+  color: var(--mm-dim, #7d95ae);
+  font-size: 11px;
+  line-height: 1.5;
 }
 
 .formGrid {
@@ -162,53 +260,54 @@
   gap: 12px;
 }
 
+/* 生成/编辑结果 */
 .candidateSurface {
   display: grid;
   gap: 14px;
-  border-top: 1px solid #e3e9f2;
+  border-top: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
   padding-top: 14px;
 }
 
 .promptBox {
   display: grid;
   gap: 6px;
-  border-left: 3px solid #168a7a;
-  background: #f4faf8;
+  border-left: 3px solid var(--mm-cyan, #39d4ff);
+  border-radius: 0 8px 8px 0;
+  background: rgb(57 212 255 / 7%);
   padding: 10px 12px;
 }
 
 .promptBox span {
-  color: #32675f;
-  font-size: 0.78rem;
-  font-weight: 800;
+  color: var(--mm-cyan, #39d4ff);
+  font: 700 9px var(--mm-mono, ui-monospace, monospace);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .promptBox p {
   margin: 0;
-  color: #1d2b3a;
-  font-size: 0.9rem;
-  line-height: 1.5;
+  color: var(--mm-ink, #d6e8f6);
+  font-size: 12.5px;
+  line-height: 1.55;
 }
 
-.candidateGrid,
-.mediaGrid {
+.candidateGrid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(178px, 1fr));
   gap: 14px;
 }
 
-.candidateCard,
-.mediaCard {
+.candidateCard {
   display: grid;
   gap: 10px;
-  border: 1px solid #d8dee8;
-  border-radius: 8px;
-  background: #ffffff;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border-radius: 10px;
+  background: rgb(10 18 30 / 55%);
   padding: 10px;
 }
 
 .candidateCard[data-removed="true"] {
-  opacity: 0.48;
+  opacity: 0.42;
 }
 
 .previewButton {
@@ -233,45 +332,223 @@
   align-items: center;
   gap: 5px;
   border-radius: 999px;
-  background: rgba(18, 27, 40, 0.82);
-  color: #ffffff;
-  font-size: 0.76rem;
-  font-weight: 800;
-  padding: 5px 8px;
+  background: rgb(4 10 18 / 82%);
+  border: 1px solid rgb(57 212 255 / 30%);
+  color: var(--mm-cyan, #39d4ff);
+  font: 700 11px var(--mm-mono, ui-monospace, monospace);
+  padding: 4px 9px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.previewButton:hover span {
+  opacity: 1;
 }
 
 .previewButton:disabled span {
   display: none;
 }
 
-.previewButton img,
-.mediaCard img {
+.previewButton img {
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 6px;
-  background: #eef2f7;
+  border-radius: 8px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(4 10 18 / 60%);
   object-fit: cover;
 }
 
+.candidateMeta {
+  display: grid;
+  gap: 3px;
+}
+
+.candidateMeta strong {
+  color: #eafaff;
+  font: 600 12px var(--mm-mono, ui-monospace, monospace);
+  overflow-wrap: anywhere;
+}
+
+.candidateMeta span,
+.saveRow span,
+.empty {
+  color: var(--mm-dim, #7d95ae);
+  font-size: 12px;
+}
+
+.saveRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.saveRow span {
+  font-family: var(--mm-mono, ui-monospace, monospace);
+}
+
+.fileChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-height: 10px;
+}
+
+.fileChips span {
+  border: 1px solid rgb(57 212 255 / 25%);
+  border-radius: 999px;
+  background: rgb(57 212 255 / 8%);
+  color: var(--mm-cyan, #39d4ff);
+  font: 600 11px var(--mm-mono, ui-monospace, monospace);
+  padding: 4px 10px;
+}
+
+/* 媒体库 —— 瀑布流 */
+.libraryFilters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.libraryFilters input {
+  width: 150px;
+}
+
+.mediaGrid {
+  columns: 208px;
+  column-gap: 14px;
+}
+
+.mediaCard {
+  break-inside: avoid;
+  margin: 0 0 14px;
+}
+
+.mediaThumb {
+  position: relative;
+  overflow: hidden;
+  border-radius: 11px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(4 10 18 / 60%);
+  line-height: 0;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+
+.mediaThumb:hover {
+  border-color: rgb(57 212 255 / 45%);
+  box-shadow: 0 0 24px -6px rgb(57 212 255 / 40%);
+  transform: translateY(-2px);
+}
+
+.mediaThumb img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+.mediaTag {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 2;
+  border-radius: 999px;
+  background: rgb(4 10 18 / 78%);
+  border: 1px solid rgb(57 212 255 / 25%);
+  color: var(--mm-cyan, #39d4ff);
+  font: 700 9px var(--mm-mono, ui-monospace, monospace);
+  letter-spacing: 0.08em;
+  padding: 3px 9px;
+}
+
+.mediaOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px;
+  background: linear-gradient(180deg, transparent 45%, rgb(2 6 12 / 82%));
+  opacity: 0;
+  transition: opacity 0.16s;
+}
+
+.mediaThumb:hover .mediaOverlay,
+.mediaThumb:focus-within .mediaOverlay {
+  opacity: 1;
+}
+
+.mediaIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 9px;
+  border: 1px solid rgb(57 212 255 / 35%);
+  background: rgb(8 18 30 / 85%);
+  color: var(--mm-ink, #d6e8f6);
+  cursor: pointer;
+  transition: 0.14s;
+}
+
+.mediaIcon:hover {
+  border-color: rgb(57 212 255 / 70%);
+  color: var(--mm-cyan, #39d4ff);
+  background: rgb(14 30 48 / 92%);
+}
+
+/* 灯箱 */
 .lightbox {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 90;
   display: grid;
   place-items: center;
-  background: rgba(11, 18, 28, 0.78);
+  background: rgb(2 6 12 / 82%);
+  backdrop-filter: blur(6px);
   padding: 22px;
 }
 
 .lightboxPanel {
+  position: relative;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) auto;
   gap: 12px;
   width: min(1120px, 100%);
   max-height: min(92vh, 980px);
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(8 15 26 / 97%);
+  box-shadow: 0 40px 90px -34px rgb(0 0 0 / 85%);
+  padding: 16px;
+}
+
+.lightboxPanel::before,
+.lightboxPanel::after {
+  content: "";
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  border: 2px solid var(--mm-amber, #ffb13b);
+  opacity: 0.55;
+}
+
+.lightboxPanel::before {
+  left: -1px;
+  top: -1px;
+  border-right: 0;
+  border-bottom: 0;
+}
+
+.lightboxPanel::after {
+  right: -1px;
+  bottom: -1px;
+  border-left: 0;
+  border-top: 0;
 }
 
 .lightboxHeader,
@@ -288,13 +565,14 @@
 }
 
 .lightboxHeader strong {
-  color: #172033;
-  font-size: 0.98rem;
+  color: #eafaff;
+  font-size: 14px;
+  overflow-wrap: anywhere;
 }
 
 .lightboxHeader span {
-  color: #5d6b7c;
-  font-size: 0.84rem;
+  color: var(--mm-dim, #7d95ae);
+  font: 500 12px var(--mm-mono, ui-monospace, monospace);
 }
 
 .lightboxImageWrap {
@@ -302,8 +580,9 @@
   min-height: 0;
   place-items: center;
   overflow: auto;
-  border-radius: 6px;
-  background: #eef2f7;
+  border-radius: 10px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(2 6 12 / 60%);
 }
 
 .lightboxImageWrap img {
@@ -313,99 +592,66 @@
   object-fit: contain;
 }
 
-.candidateMeta,
-.mediaCard div {
-  display: grid;
-  gap: 3px;
+/* 灯箱 portal 到 body 后不在 .mm-page 作用域内，按钮需自带暗色 */
+.lightbox :global(.secondary-button) {
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border-radius: 8px;
+  background: rgb(10 20 34 / 75%);
+  color: var(--mm-ink, #d6e8f6);
 }
 
-.candidateMeta strong,
-.mediaCard strong {
-  color: #172033;
-  font-size: 0.9rem;
-  overflow-wrap: anywhere;
+.lightbox :global(.secondary-button):hover {
+  border-color: rgb(57 212 255 / 45%);
+  color: #eafaff;
 }
 
-.candidateMeta span,
-.mediaCard span,
-.saveRow span,
-.empty {
-  color: #5d6b7c;
-  font-size: 0.86rem;
-}
-
-.fileChips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  min-height: 24px;
-}
-
-.fileChips span {
-  border: 1px solid #cfd8e5;
-  border-radius: 999px;
-  background: #f7f9fc;
-  color: #344256;
-  font-size: 0.78rem;
-  padding: 4px 8px;
-}
-
-.libraryHeader {
-  align-items: flex-start;
-}
-
-.libraryFilters {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.libraryFilters input {
-  width: 160px;
-}
-
+/* 提示条 */
 .notice,
 .error,
 .empty {
   margin: 0;
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: 10px;
+  padding: 11px 14px;
+  font-size: 12.5px;
 }
 
 .notice {
-  border: 1px solid #b7ddcb;
-  background: #effaf5;
-  color: #17613f;
+  border: 1px solid rgb(77 255 161 / 25%);
+  background: rgb(77 255 161 / 8%);
+  color: var(--mm-green, #4dffa1);
 }
 
 .error {
-  border: 1px solid #efc3c3;
-  background: #fff3f3;
-  color: #9b1c1c;
+  border: 1px solid rgb(255 107 138 / 25%);
+  background: rgb(255 107 138 / 8%);
+  color: var(--mm-red, #ff6b8a);
 }
 
 .empty {
-  background: #f7f9fc;
+  border: 1px dashed var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(8 15 26 / 40%);
+  color: var(--mm-dim, #7d95ae);
+  text-align: center;
 }
 
+/* 进度条 */
 .progressPanel {
   display: grid;
   gap: 8px;
-  border: 1px solid #cbd8ea;
-  border-radius: 8px;
-  background: #f7fbff;
-  padding: 12px 14px;
+  border: 1px solid rgb(57 212 255 / 25%);
+  border-radius: 11px;
+  background: rgb(57 212 255 / 6%);
+  padding: 13px 15px;
 }
 
 .progressPanel[data-status="done"] {
-  border-color: #a7d8bd;
-  background: #f2fbf6;
+  border-color: rgb(77 255 161 / 30%);
+  background: rgb(77 255 161 / 7%);
 }
 
 .progressPanel[data-status="failed"] {
-  border-color: #efc3c3;
-  background: #fff6f6;
+  border-color: rgb(255 107 138 / 30%);
+  background: rgb(255 107 138 / 7%);
 }
 
 .progressHeader {
@@ -417,34 +663,38 @@
 
 .progressHeader span,
 .progressHeader strong {
-  color: #26364a;
-  font-size: 0.86rem;
-  font-weight: 800;
+  color: #eafaff;
+  font: 700 12px var(--mm-mono, ui-monospace, monospace);
 }
 
 .progressTrack {
   height: 8px;
   overflow: hidden;
   border-radius: 999px;
-  background: #dce6f3;
+  background: rgb(120 200 255 / 12%);
 }
 
 .progressTrack span {
   display: block;
   height: 100%;
   border-radius: inherit;
-  background: #168a7a;
+  background: linear-gradient(90deg, #39d4ff, #22a7d8);
+  box-shadow: 0 0 12px rgb(57 212 255 / 60%);
   transition: width 360ms ease;
 }
 
+.progressPanel[data-status="done"] .progressTrack span {
+  background: linear-gradient(90deg, #4dffa1, #2fd483);
+}
+
 .progressPanel[data-status="failed"] .progressTrack span {
-  background: #c43d3d;
+  background: linear-gradient(90deg, #ff6b8a, #d43d5c);
 }
 
 .progressPanel p {
   margin: 0;
-  color: #5d6b7c;
-  font-size: 0.84rem;
+  color: var(--mm-dim, #7d95ae);
+  font-size: 12px;
 }
 
 @media (max-width: 1080px) {
@@ -465,6 +715,10 @@
 
   .formGrid {
     grid-template-columns: 1fr;
+  }
+
+  .mediaGrid {
+    columns: 150px;
   }
 
   .libraryFilters {

@@ -16,7 +16,9 @@ import {
 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
+import { DashboardScene } from "@/components/dashboard-scene";
 import {
   getProduct,
   importISystemImagesToProduct,
@@ -176,16 +178,6 @@ function sourceTypeLabel(sourceType: ISourceType) {
   return sourceType === "generate" ? "生成图" : "编辑图";
 }
 
-function mediaBucketLabel(bucket: string) {
-  if (bucket === "generated_images") {
-    return "生成图库";
-  }
-  if (bucket === "edited_images") {
-    return "编辑图库";
-  }
-  return bucket;
-}
-
 function activeCandidates(batch: CandidateBatch | null) {
   if (!batch) {
     return [];
@@ -272,7 +264,7 @@ function CandidateGrid({
         })}
       </div>
 
-      {previewCandidate ? (
+      {previewCandidate && typeof document !== "undefined" ? createPortal(
         <div
           className={styles.lightbox}
           onClick={() => setPreviewCandidateId(null)}
@@ -319,7 +311,8 @@ function CandidateGrid({
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
 
       <div className={styles.saveRow}>
@@ -390,11 +383,11 @@ function MediaLibraryPreview({
   onClose: () => void;
   onRemove: (assetId: string) => void;
 }) {
-  if (!asset) {
+  if (!asset || typeof document === "undefined") {
     return null;
   }
 
-  return (
+  return createPortal(
     <div
       className={styles.lightbox}
       onClick={onClose}
@@ -442,7 +435,8 @@ function MediaLibraryPreview({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -830,11 +824,18 @@ export function ImageSystemWorkspace() {
   }
 
   return (
-    <section className={styles.workspace} aria-label="I 系列 AI 作图系统">
+    <section
+      aria-label="I 系列 AI 作图系统"
+      className={`${styles.workspace} mm-page i-page`}
+    >
+      <DashboardScene />
       <div className={styles.contextBar}>
         <div>
           <span className={styles.eyebrow}>I 系列</span>
           <h2>AI 作图系统</h2>
+          <p>
+            生成与编辑分栏独立处理；直接进入保存到 I 媒体库，从 K 进入则保存回对应产品变体。
+          </p>
         </div>
         {isKContext ? (
           <div className={styles.kContext}>
@@ -1110,47 +1111,45 @@ export function ImageSystemWorkspace() {
           <div className={styles.mediaGrid}>
             {media.map((asset) => (
               <article className={styles.mediaCard} key={asset.id}>
-                <button
-                  aria-label="放大查看媒体库图片"
-                  className={styles.previewButton}
-                  onClick={() => setPreviewMediaAsset(asset)}
-                  type="button"
-                >
+                <div className={styles.mediaThumb}>
                   <img
                     alt=""
                     decoding="async"
                     loading="lazy"
                     src={iMediaThumbnailUrl(asset.id)}
                   />
-                  <span>
-                    <Maximize2 aria-hidden="true" size={15} />
-                    放大
-                  </span>
-                </button>
-                <div>
-                  <strong>{asset.image_id}</strong>
-                  <span>
-                    {mediaBucketLabel(asset.media_bucket)} /{" "}
+                  <span className={styles.mediaTag}>
                     {sourceTypeLabel(asset.source_type)}
                   </span>
-                </div>
-                <div className={styles.mediaActions}>
-                  <a
-                    className="secondary-button"
-                    download
-                    href={iMediaFileUrl(asset.id)}
-                  >
-                    <Download aria-hidden="true" size={15} />
-                    下载
-                  </a>
-                  <button
-                    className="secondary-button"
-                    onClick={() => void removeMedia(asset.id)}
-                    type="button"
-                  >
-                    <Trash2 aria-hidden="true" size={15} />
-                    删除
-                  </button>
+                  <div className={styles.mediaOverlay}>
+                    <button
+                      aria-label="放大查看"
+                      className={styles.mediaIcon}
+                      onClick={() => setPreviewMediaAsset(asset)}
+                      title="放大"
+                      type="button"
+                    >
+                      <Maximize2 aria-hidden="true" size={16} />
+                    </button>
+                    <a
+                      aria-label="下载"
+                      className={styles.mediaIcon}
+                      download
+                      href={iMediaFileUrl(asset.id)}
+                      title="下载"
+                    >
+                      <Download aria-hidden="true" size={16} />
+                    </a>
+                    <button
+                      aria-label="删除"
+                      className={styles.mediaIcon}
+                      onClick={() => void removeMedia(asset.id)}
+                      title="删除"
+                      type="button"
+                    >
+                      <Trash2 aria-hidden="true" size={16} />
+                    </button>
+                  </div>
                 </div>
               </article>
             ))}
