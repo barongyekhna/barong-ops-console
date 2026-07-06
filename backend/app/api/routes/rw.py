@@ -24,6 +24,7 @@ from r_system_v2.rw.category.category_tree import (
 from r_system_v2.rw.ai.model_config import rw_deepseek_model
 from r_system_v2.rw.scheduler.category_rate_limiter import CategoryRateLimiter
 from r_system_v2.rw.skill_metadata import load_deepseek_skill_metadata
+from r_system_v2.rw.product_images import primary_product_image_url, product_image_candidates
 from r_system_v2.rw.storage.pipeline_events import runtime_overview
 from r_system_v2.rw.storage.runtime_settings import (
     load_runtime_settings,
@@ -436,6 +437,13 @@ def rw_products(
         )
         for row in result:
             features = row.features if isinstance(row.features, dict) else {}
+            image_candidates = product_image_candidates(
+                asin=row.asin,
+                image_url=row.image_url,
+                features=features,
+            )
+            response_features = dict(features)
+            response_features["image_candidates"] = image_candidates
             rows.append(
                 {
                     "asin": row.asin,
@@ -447,7 +455,11 @@ def rw_products(
                     "title_zh_updated_at": str(row.title_zh_updated_at)
                     if row.title_zh_updated_at
                     else None,
-                    "image_url": row.image_url,
+                    "image_url": primary_product_image_url(
+                        asin=row.asin,
+                        image_url=row.image_url,
+                        features=features,
+                    ),
                     "brand": row.brand,
                     "category": row.category,
                     "price": float(row.price) if row.price is not None else None,
@@ -469,7 +481,7 @@ def rw_products(
                     "category_id": row.category_id,
                     "category_path": row.category_path.split(">") if row.category_path else [],
                     "skill_score": row.skill_score,
-                    "features": features,
+                    "features": response_features,
                     "fba_fee": _feature_float(features, "fba_fee_usd"),
                     "fba_fee_source": _feature_string(features, "fba_fee_source"),
                     "referral_fee_percentage": _feature_float(

@@ -24,6 +24,7 @@ from r_system_v2.ra.profit_engine import (
     decimal_value,
 )
 from r_system_v2.ra.exchange_rate import get_usd_cny_quote
+from r_system_v2.rw.product_images import primary_product_image_url, product_image_candidates
 
 
 class RAProfitError(ValueError):
@@ -196,7 +197,7 @@ def list_profit_snapshots(
             SELECT s.id, s.candidate_id, s.asin, s.sell_price_usd,
                    s.landed_cost_usd, s.amazon_fees_usd, s.net_profit_usd,
                    s.net_margin, s.roi, s.confidence, s.payload, s.created_at,
-                   p.title, p.title_zh, p.image_url, p.category
+                   p.title, p.title_zh, p.image_url, p.category, p.features
             FROM ra_profit_snapshots s
             LEFT JOIN products_rw p ON p.asin = s.asin
             WHERE s.org_id = :org_id
@@ -218,6 +219,7 @@ def list_profit_snapshots(
             net_profit = decimal_value(row["net_profit_usd"])
             if net_profit is not None:
                 gross_profit_cny = net_profit * exchange_rate
+        features = _dict_value(row.get("features"))
         items.append(
             {
                 "snapshot_id": row["id"],
@@ -225,7 +227,16 @@ def list_profit_snapshots(
                 "asin": row["asin"],
                 "title": row["title"],
                 "title_zh": row["title_zh"],
-                "image_url": row["image_url"],
+                "image_url": primary_product_image_url(
+                    asin=str(row["asin"] or ""),
+                    image_url=str(row["image_url"]) if row["image_url"] else None,
+                    features=features,
+                ),
+                "image_candidates": product_image_candidates(
+                    asin=str(row["asin"] or ""),
+                    image_url=str(row["image_url"]) if row["image_url"] else None,
+                    features=features,
+                ),
                 "category": row["category"],
                 "sell_price_usd": _decimal_number(row["sell_price_usd"]),
                 "landed_cost_usd": _decimal_number(row["landed_cost_usd"]),
@@ -579,12 +590,22 @@ def _product_from_offer_row(row: dict[str, Any]) -> dict[str, Any] | None:
 
 def _product_snapshot(product: dict[str, Any]) -> dict[str, Any]:
     features = _dict_value(product.get("features"))
+    image_candidates = product_image_candidates(
+        asin=str(product.get("asin") or ""),
+        image_url=str(product.get("image_url")) if product.get("image_url") else None,
+        features=features,
+    )
     return {
         "asin": product.get("asin"),
         "marketplace": product.get("marketplace"),
         "title": product.get("title"),
         "title_zh": product.get("title_zh"),
-        "image_url": product.get("image_url"),
+        "image_url": primary_product_image_url(
+            asin=str(product.get("asin") or ""),
+            image_url=str(product.get("image_url")) if product.get("image_url") else None,
+            features=features,
+        ),
+        "image_candidates": image_candidates,
         "category": product.get("category"),
         "category_id": product.get("category_id"),
         "category_path": product.get("category_path"),
@@ -630,13 +651,23 @@ def _snapshot_response(
     result: ProfitResult,
     offer: dict[str, Any],
 ) -> dict[str, object]:
+    features = _dict_value(product.get("features"))
     return {
         "snapshot_id": snapshot_id,
         "candidate_id": candidate_id,
         "asin": asin,
         "title": product.get("title"),
         "title_zh": product.get("title_zh"),
-        "image_url": product.get("image_url"),
+        "image_url": primary_product_image_url(
+            asin=asin,
+            image_url=str(product.get("image_url")) if product.get("image_url") else None,
+            features=features,
+        ),
+        "image_candidates": product_image_candidates(
+            asin=asin,
+            image_url=str(product.get("image_url")) if product.get("image_url") else None,
+            features=features,
+        ),
         "category": product.get("category"),
         "sell_price_usd": _decimal_number(result.sell_price_usd),
         "landed_cost_usd": _decimal_number(result.landed_cost_usd),

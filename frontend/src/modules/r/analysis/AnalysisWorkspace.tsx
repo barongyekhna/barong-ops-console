@@ -149,13 +149,12 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
       setResult(payload);
       setRunning(!isTerminalStatus(payload.status));
     } catch (requestError) {
+      setRunning(false);
       setRunError(
         requestError instanceof Error
           ? requestError.message
           : "自动利润分析失败。",
       );
-    } finally {
-      setRunning(false);
     }
   }
 
@@ -225,29 +224,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
       </section>
 
       {result ? (
-        <section className={styles.resultMetaBand}>
-          <div>
-            <span className={styles.kicker}>本次任务</span>
-            <strong>{result.query}</strong>
-          </div>
-          <div>
-            <span>任务状态</span>
-            <strong>{jobStatusLabel(result.status)}</strong>
-          </div>
-          <div>
-            <span>实时汇率</span>
-            <strong>
-              1 USD = {formatRate(result.exchange_rate.usd_cny)} CNY
-            </strong>
-          </div>
-          <div>
-            <span>汇率来源</span>
-            <strong>{result.exchange_rate.live ? "实时接口" : "备用汇率"}</strong>
-          </div>
-          {result.exchange_rate.warning ? (
-            <div className={styles.metaWarning}>{result.exchange_rate.warning}</div>
-          ) : null}
-        </section>
+        <JobProgressPanel result={result} />
       ) : null}
 
       {result?.warnings.length ? (
@@ -290,6 +267,45 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
+  const matched = result.counts.matched_products ?? 0;
+  const processed = result.counts.processed_products ?? 0;
+  const progress = matched > 0 ? Math.min(100, Math.round((processed / matched) * 100)) : 0;
+  return (
+    <section className={styles.progressBand}>
+      <div className={styles.progressHeader}>
+        <div>
+          <span className={styles.kicker}>本次任务</span>
+          <strong>{result.query}</strong>
+        </div>
+        <span className={styles.jobState} data-status={result.status}>
+          {jobStatusLabel(result.status)}
+        </span>
+      </div>
+      <div
+        aria-label="R-A 自动分析进度"
+        aria-valuemax={100}
+        aria-valuemin={0}
+        aria-valuenow={progress}
+        className={styles.progressTrack}
+        role="progressbar"
+      >
+        <span style={{ width: `${progress}%` }} />
+      </div>
+      <div className={styles.progressStats}>
+        <span>已处理 {formatCount(processed)} / {formatCount(matched)} 个产品</span>
+        <span>1688 候选 {formatCount(result.counts.candidate_offers)}</span>
+        <span>已抓到成本 {formatCount(result.counts.priced_offers)}</span>
+        <span>利润快照 {formatCount(result.counts.profit_snapshots)}</span>
+        <span>实时汇率 1 USD = {formatRate(result.exchange_rate.usd_cny)} CNY</span>
+      </div>
+      {result.exchange_rate.warning ? (
+        <div className={styles.metaWarning}>{result.exchange_rate.warning}</div>
+      ) : null}
+    </section>
+  );
+}
+
 function AutoResultTable({ items }: { items: RaAutoProfitItem[] }) {
   if (items.length === 0) {
     return <div className={styles.emptyLine}>没有找到与关键词/类目匹配的 R-W 产品。</div>;
@@ -304,29 +320,45 @@ function AutoResultTable({ items }: { items: RaAutoProfitItem[] }) {
             <th>ASIN</th>
             <th>关键词</th>
             <th>中文产品名</th>
+            <th>产品信息</th>
             <th>1688 成本</th>
             <th>毛利润</th>
             <th>利润率</th>
-            <th>1688 链接</th>
+            <th>1688 供应商</th>
           </tr>
         </thead>
         <tbody>
           {items.map((item, index) => (
             <tr key={`${item.asin ?? "unknown"}-${item.supplier_url ?? index}`}>
               <td>
-                <ProductImage src={item.image_url} title={item.title_zh || item.title} />
+                <ProductImage
+                  asin={item.asin}
+                  candidates={item.image_candidates}
+                  src={item.image_url}
+                  title={item.title_zh || item.title}
+                />
               </td>
               <td>
                 <AsinTag asin={item.asin} />
                 <small>{statusLabel(item.status)}</small>
               </td>
               <td>
-                <strong>{item.keyword}</strong>
+                <strong>{item.product_keyword || item.keyword}</strong>
                 <span>{item.matched_source_query || item.category || "R-W 匹配"}</span>
               </td>
               <td>
                 <strong>{item.title_zh || "等待中文名"}</strong>
                 <span>{item.category || "未标注类目"}</span>
+              </td>
+              <td>
+                <strong>{formatUsd(item.sell_price_usd)}</strong>
+                <span>配送 {item.fulfillment_method || "未标注"}</span>
+                <span>FBA {formatUsd(item.fba_fee_usd)}</span>
+                <span>重量 {item.weight_label || formatWeight(item.package_weight_g)}</span>
+                <span>尺寸 {item.dimensions_label || formatDimensions(item)}</span>
+                {item.lithium_battery_warning ? (
+                  <em className={styles.lithiumTag}>锂电提示</em>
+                ) : null}
               </td>
               <td>
                 <strong>{formatCny(item.unit_price_cny)}</strong>
@@ -352,11 +384,26 @@ function AutoResultTable({ items }: { items: RaAutoProfitItem[] }) {
                 ) : null}
               </td>
               <td>
-                {item.supplier_url ? (
-                  <a href={item.supplier_url} rel="noreferrer" target="_blank">
-                    <ExternalLink size={15} />
-                    打开供应商
-                  </a>
+                {supplierOptions(item).length ? (
+                  <div className={styles.supplierList}>
+                    {supplierOptions(item).map((supplier, supplierIndex) => (
+                      <a
+                        key={`${supplier.supplier_url ?? "supplier"}-${supplierIndex}`}
+                        href={supplier.supplier_url ?? "#"}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        <ExternalLink size={15} />
+                        <span>
+                          供应商 {supplierIndex + 1}
+                          {supplier.supplier_total_cny
+                            ? ` · ${formatCny(supplier.supplier_total_cny)}`
+                            : ""}
+                          {supplier.one_piece_hint || supplier.moq === 1 ? " · 一件" : ""}
+                        </span>
+                      </a>
+                    ))}
+                  </div>
                 ) : (
                   <span>未找到</span>
                 )}
@@ -392,7 +439,12 @@ function SnapshotPreview({ snapshots }: { snapshots: RaProfitSnapshot[] }) {
           {snapshots.slice(0, 20).map((snapshot) => (
             <tr key={snapshot.snapshot_id}>
               <td>
-                <ProductImage src={snapshot.image_url} title={snapshot.title_zh || snapshot.title} />
+                <ProductImage
+                  asin={snapshot.asin}
+                  candidates={snapshot.image_candidates}
+                  src={snapshot.image_url}
+                  title={snapshot.title_zh || snapshot.title}
+                />
               </td>
               <td>
                 <AsinTag asin={snapshot.asin} />
@@ -437,9 +489,29 @@ function SnapshotPreview({ snapshots }: { snapshots: RaProfitSnapshot[] }) {
   );
 }
 
-function ProductImage({ src, title }: { src: string | null; title: string | null }) {
-  const [failed, setFailed] = useState(false);
-  if (!src || failed) {
+function ProductImage({
+  asin,
+  candidates,
+  src,
+  title,
+}: {
+  asin?: string | null;
+  candidates?: string[];
+  src: string | null;
+  title: string | null;
+}) {
+  const imageCandidates = useMemo(
+    () => productImageCandidates({ asin, candidates, src }),
+    [asin, candidates, src],
+  );
+  const [candidateIndex, setCandidateIndex] = useState(0);
+  const currentSrc = imageCandidates[candidateIndex] ?? null;
+
+  useEffect(() => {
+    setCandidateIndex(0);
+  }, [imageCandidates]);
+
+  if (!currentSrc) {
     return <div className={styles.imagePlaceholder}>无图</div>;
   }
   return (
@@ -447,8 +519,8 @@ function ProductImage({ src, title }: { src: string | null; title: string | null
       alt={title || "产品图片"}
       className={styles.productImage}
       loading="lazy"
-      src={src}
-      onError={() => setFailed(true)}
+      src={currentSrc}
+      onError={() => setCandidateIndex((current) => current + 1)}
     />
   );
 }
@@ -472,6 +544,63 @@ function AsinTag({ asin }: { asin: string | null }) {
   );
 }
 
+function supplierOptions(item: RaAutoProfitItem) {
+  const fromList = (item.suppliers ?? []).filter(
+    (supplier) => typeof supplier.supplier_url === "string" && supplier.supplier_url.length > 0,
+  );
+  if (fromList.length) {
+    return fromList.slice(0, 5);
+  }
+  if (!item.supplier_url) {
+    return [];
+  }
+  return [
+    {
+      supplier_name: item.supplier_name,
+      supplier_url: item.supplier_url,
+      unit_price_cny: item.unit_price_cny,
+      domestic_shipping_cny: item.domestic_shipping_cny,
+      supplier_total_cny: item.supplier_total_cny,
+      moq: item.moq,
+      one_piece_hint: item.one_piece_hint,
+    },
+  ];
+}
+
+function productImageCandidates({
+  asin,
+  candidates,
+  src,
+}: {
+  asin?: string | null;
+  candidates?: string[];
+  src: string | null;
+}) {
+  const cleanedAsin = asin?.trim().toUpperCase() ?? "";
+  const output = [
+    ...(candidates ?? []),
+    src,
+    src?.replace(
+      "https://images-na.ssl-images-amazon.com/images/I/",
+      "https://m.media-amazon.com/images/I/",
+    ),
+    src?.replace(
+      "https://images-na.ssl-images-amazon.com/images/P/",
+      "https://m.media-amazon.com/images/P/",
+    )?.replace("._SCLZZZZZZZ_", "._SL160_"),
+    cleanedAsin.length === 10
+      ? `https://m.media-amazon.com/images/P/${cleanedAsin}.01._SL160_.jpg`
+      : null,
+    cleanedAsin.length === 10
+      ? `https://images-na.ssl-images-amazon.com/images/P/${cleanedAsin}.01._SCLZZZZZZZ_.jpg`
+      : null,
+  ];
+  return output.filter(
+    (candidate, index): candidate is string =>
+      Boolean(candidate) && output.indexOf(candidate) === index,
+  );
+}
+
 function formatCount(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "读取中";
@@ -491,6 +620,28 @@ function formatCny(value: number | null | undefined) {
     return "待获取";
   }
   return `￥${value.toFixed(2)}`;
+}
+
+function formatWeight(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "未标注";
+  }
+  if (value >= 1000) {
+    return `${(value / 1000).toFixed(2)} kg`;
+  }
+  return `${value.toFixed(0)} g`;
+}
+
+function formatDimensions(item: RaAutoProfitItem) {
+  const values = [
+    item.package_length_mm,
+    item.package_width_mm,
+    item.package_height_mm,
+  ];
+  if (values.some((value) => typeof value !== "number" || !Number.isFinite(value))) {
+    return "未标注";
+  }
+  return values.map((value) => `${((value ?? 0) / 10).toFixed(1)}`).join(" x ") + " cm";
 }
 
 function formatPercent(value: number | null | undefined) {

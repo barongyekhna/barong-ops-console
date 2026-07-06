@@ -230,6 +230,8 @@ def match_rw_products_for_query(
     scored: list[dict[str, Any]] = []
     for row in rows:
         product = dict(row)
+        if _is_query_product_accessory_mismatch(cleaned_query, terms, product):
+            continue
         score = _product_match_score(product, cleaned_query, terms)
         if score <= 0:
             continue
@@ -388,6 +390,68 @@ def _product_match_score(
         if term in brand:
             score += 15
     return score
+
+
+def _is_query_product_accessory_mismatch(
+    query: str,
+    terms: list[str],
+    product: dict[str, Any],
+) -> bool:
+    if not _query_wants_dining_table(query, terms):
+        return False
+    haystack = _joined_lower(
+        product.get("title"),
+        product.get("title_zh"),
+        product.get("category"),
+        product.get("category_path"),
+    )
+    accessory_terms = (
+        "tablecloth",
+        "table cloth",
+        "table cover",
+        "table runner",
+        "table mat",
+        "placemat",
+        "place mat",
+        "napkin",
+        "paper towel",
+        "桌布",
+        "台布",
+        "桌旗",
+        "桌垫",
+        "餐垫",
+        "餐巾",
+        "餐具",
+        "纸巾",
+        "装饰用品",
+    )
+    return any(term in haystack for term in accessory_terms)
+
+
+def _query_wants_dining_table(query: str, terms: list[str]) -> bool:
+    normalized = " ".join([query.lower(), *terms])
+    accessory_intents = (
+        "桌布",
+        "台布",
+        "桌旗",
+        "桌垫",
+        "餐垫",
+        "tablecloth",
+        "table cloth",
+        "table runner",
+        "placemat",
+    )
+    if any(intent in normalized for intent in accessory_intents):
+        return False
+    table_intents = (
+        "餐桌",
+        "饭桌",
+        "dining table",
+        "kitchen table",
+        "restaurant table",
+        "cafeteria table",
+    )
+    return any(intent in normalized for intent in table_intents)
 
 
 def _query_terms(query: str) -> list[str]:

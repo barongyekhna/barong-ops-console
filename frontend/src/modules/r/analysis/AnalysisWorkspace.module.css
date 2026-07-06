@@ -7,7 +7,8 @@
 .searchBand,
 .sectionBand,
 .noticeBand,
-.resultMetaBand {
+.resultMetaBand,
+.progressBand {
   border: 1px solid var(--color-line);
   border-radius: 8px;
   background: var(--color-surface);
@@ -235,6 +236,83 @@
   font-size: 0.9rem;
 }
 
+.progressBand {
+  display: grid;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.progressHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.progressHeader > div {
+  display: grid;
+  gap: 4px;
+}
+
+.progressHeader strong {
+  color: var(--color-text);
+  font-size: 0.94rem;
+}
+
+.jobState {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  padding: 5px 8px;
+  border-radius: 6px;
+  color: #1d4ed8;
+  background: #dbeafe;
+  font-size: 0.74rem;
+  font-weight: 840;
+  white-space: nowrap;
+}
+
+.jobState[data-status="completed"] {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.jobState[data-status="failed"] {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.progressTrack {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+}
+
+.progressTrack span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: #16a34a;
+  transition: width 180ms ease;
+}
+
+.progressStats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.progressStats span {
+  padding: 5px 8px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  color: var(--color-muted);
+  background: var(--color-surface-muted);
+  font-size: 0.74rem;
+  font-weight: 760;
+}
+
 .metaWarning {
   grid-column: 1 / -1;
   color: #92400e;
@@ -280,7 +358,7 @@
 
 .resultTable {
   width: 100%;
-  min-width: 1180px;
+  min-width: 1460px;
   border-collapse: collapse;
   background: var(--color-surface);
 }
@@ -374,7 +452,8 @@
 
 .onePieceTag,
 .moqTag,
-.marginTag {
+.marginTag,
+.lithiumTag {
   display: inline-flex;
   width: fit-content;
   margin-top: 7px;
@@ -395,6 +474,11 @@
   background: #fef9c3;
 }
 
+.lithiumTag {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
 .marginTag {
   color: #854d0e;
   background: #fef9c3;
@@ -409,6 +493,11 @@
 .marginTag[data-verdict="blocked"] {
   color: #991b1b;
   background: #fee2e2;
+}
+
+.supplierList {
+  display: grid;
+  gap: 7px;
 }
 
 @keyframes spin {

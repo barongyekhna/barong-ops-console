@@ -21,12 +21,11 @@ def test_ra_supplier_queries_prefer_chinese_product_title() -> None:
         }
     )
 
-    assert queries[0].startswith("1688 手持电动打奶器 奶泡器")
+    assert queries[0].startswith("site:detail.1688.com/offer 1688 手持电动打奶器 奶泡器")
     assert "一件代发" in queries[0]
     assert "一件起批" in queries[0]
     assert any("厨房小工具" in query for query in queries)
     assert all("B0SUPPLY01" not in query for query in queries)
-    assert all("site:" not in query for query in queries)
 
 
 def test_ra_1688_html_parser_extracts_cost_shipping_and_moq() -> None:
@@ -54,8 +53,12 @@ def test_ra_1688_html_parser_extracts_cost_shipping_and_moq() -> None:
 
 def test_ra_1688_link_normalization_keeps_only_1688_hosts() -> None:
     assert (
-        _normalized_1688_link("https://detail.1688.com/offer/123.html?x=1#top")
-        == "https://detail.1688.com/offer/123.html?x=1"
+        _normalized_1688_link("https://detail.1688.com/offer/123456789.html?x=1#top")
+        == "https://detail.1688.com/offer/123456789.html"
+    )
+    assert (
+        _normalized_1688_link("https://m.1688.com/offer/987654321.html?spm=test")
+        == "https://detail.1688.com/offer/987654321.html"
     )
     assert _normalized_1688_link("https://example.com/offer/123.html") is None
 

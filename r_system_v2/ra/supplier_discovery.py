@@ -302,7 +302,7 @@ def discover_1688_supplier_offers(
         if status == "failed":
             continue
 
-        for result in results:
+        for result in _ranked_1688_results(results):
             if len(offers) >= limit:
                 break
             normalized_link = _normalized_1688_link(result.link)
@@ -318,6 +318,10 @@ def discover_1688_supplier_offers(
                 if crawled.domestic_shipping_cny is not None
                 else result_shipping
             )
+            supplier_url = _supplier_detail_url(crawled.final_url, normalized_link)
+            if supplier_url is None:
+                warnings.append(f"{normalized_asin}: 未找到可打开的 1688 详情页链接。")
+                continue
             crawler_warning = (
                 None
                 if crawled.unit_price_cny is not None or result_price is not None
@@ -330,7 +334,7 @@ def discover_1688_supplier_offers(
                 candidate_id=candidate_id,
                 asin=normalized_asin,
                 supplier_name=crawled.title or result.title or "1688 供应商",
-                supplier_url=crawled.final_url or normalized_link,
+                supplier_url=supplier_url,
                 unit_price_cny=unit_price_cny,
                 domestic_shipping_cny=domestic_shipping_cny,
                 moq=crawled.moq,
@@ -365,7 +369,7 @@ def discover_1688_supplier_offers(
                     "offer_id": offer_id,
                     "search_id": search_id,
                     "supplier_name": crawled.title or result.title or "1688 供应商",
-                    "supplier_url": crawled.final_url or normalized_link,
+                    "supplier_url": supplier_url,
                     "unit_price_cny": _decimal_number(unit_price_cny),
                     "domestic_shipping_cny": _decimal_number(domestic_shipping_cny),
                     "moq": crawled.moq,
@@ -420,7 +424,8 @@ def build_1688_queries(product: dict[str, Any]) -> list[str]:
     if len(base) > 120:
         base = base[:120]
     queries = [
-        f"1688 {base} 一件代发 一件起批 同款",
+        f"site:detail.1688.com/offer 1688 {base} 一件代发 一件起批",
+        f"1688 {base} 一件代发 一件起批 同款 detail.1688.com/offer",
         f"{base} 阿里巴巴 1688 一件代发 批发 厂家",
     ]
     if category:
@@ -522,7 +527,7 @@ def _first_detail_offer_url(page: Any, *, base_url: str) -> str | None:
         return None
     if not href:
         return None
-    return urljoin(base_url, href)
+    return _canonical_1688_offer_url(urljoin(base_url, href)) or urljoin(base_url, href)
 
 
 def _extract_price_cny(text: str) -> Decimal | None:
@@ -639,6 +644,35 @@ def _one_piece_hint(result: SerperResult, crawled: CrawledOffer) -> bool:
     return bool(re.search(r"(?:一件代发|一件起批|1\s*件\s*起批|一件可发)", combined))
 
 
+def _ranked_1688_results(results: list[SerperResult]) -> list[SerperResult]:
+    return sorted(
+        results,
+        key=lambda result: (
+            0 if _canonical_1688_offer_url(result.link) else 1,
+            0 if _is_1688_url(result.link) else 1,
+            result.position or 999,
+        ),
+    )
+
+
+def _supplier_detail_url(final_url: str | None, normalized_link: str) -> str | None:
+    canonical = _canonical_1688_offer_url(final_url) or _canonical_1688_offer_url(
+        normalized_link
+    )
+    if canonical:
+        return canonical
+    if _is_1688_url(normalized_link) and not _is_login_url(normalized_link):
+        parsed = urlparse(normalized_link)
+        if "/offer/" in parsed.path:
+            return normalized_link
+    return None
+
+
+def _is_login_url(url: str) -> bool:
+    host = urlparse(url).netloc.lower()
+    return host.endswith("taobao.com") or "login.1688.com" in host
+
+
 def _is_1688_url(url: str) -> bool:
     host = urlparse(url).netloc.lower()
     return host == "1688.com" or host.endswith(".1688.com")
@@ -650,7 +684,22 @@ def _normalized_1688_link(url: str) -> str | None:
         return None
     if not _is_1688_url(url):
         return None
-    return parsed._replace(fragment="").geturl()
+    normalized = parsed._replace(fragment="").geturl()
+    return _canonical_1688_offer_url(normalized) or normalized
+
+
+def _canonical_1688_offer_url(url: str | None) -> str | None:
+    if not url:
+        return None
+    parsed = urlparse(url.strip())
+    if not parsed.scheme or not _is_1688_url(parsed.geturl()):
+        return None
+    match = re.search(r"/offer/([0-9]{6,})", parsed.path)
+    if not match:
+        match = re.search(r"(?:offerId|offer_id|id)=([0-9]{6,})", parsed.query)
+    if not match:
+        return None
+    return f"https://detail.1688.com/offer/{match.group(1)}.html"
 
 
 def _bounded_limit(value: int) -> int:
