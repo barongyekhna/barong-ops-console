@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  ChevronDown,
   Download,
   ImagePlus,
   Images,
@@ -9,6 +10,7 @@ import {
   RefreshCcw,
   Save,
   Send,
+  SlidersHorizontal,
   Sparkles,
   Trash2,
   Wand2,
@@ -176,6 +178,27 @@ function variantLabel(variant: ProductKnowledgeVariant | null | undefined) {
 
 function sourceTypeLabel(sourceType: ISourceType) {
   return sourceType === "generate" ? "生成图" : "编辑图";
+}
+
+type MediaTileVariant = "big" | "wide" | "tall" | "normal";
+
+// 图墙图块大小由图片自身比例决定：最新一张当封面大图，横图铺宽、竖图拉高。
+function mediaTileVariant(asset: IMediaAsset, index: number): MediaTileVariant {
+  if (index === 0) {
+    return "big";
+  }
+  const { width, height } = asset;
+  if (!width || !height) {
+    return "normal";
+  }
+  const ratio = width / height;
+  if (ratio >= 1.35) {
+    return "wide";
+  }
+  if (ratio <= 0.74) {
+    return "tall";
+  }
+  return "normal";
 }
 
 function activeCandidates(batch: CandidateBatch | null) {
@@ -462,6 +485,9 @@ export function ImageSystemWorkspace() {
   const kSaveLabel = selectedVariant
     ? `保存到 ${variantLabel(selectedVariant)}`
     : "保存到产品变体";
+
+  const [mode, setMode] = useState<"generate" | "edit">("generate");
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   const [generatePrompt, setGeneratePrompt] = useState("");
   const [generateCount, setGenerateCount] = useState("");
@@ -879,194 +905,245 @@ export function ImageSystemWorkspace() {
       {notice ? <p className={styles.notice}>{notice}</p> : null}
       <ProgressBar progress={progress} />
 
-      <div className={styles.toolGrid}>
-        <section className={styles.toolPanel} aria-labelledby="i-generate">
-          <div className={styles.panelTitle}>
-            <Sparkles aria-hidden="true" size={18} />
-            <h3 id="i-generate">图片生成</h3>
-          </div>
-          <label className={styles.field}>
-            <span>生成提示词</span>
-            <textarea
-              onChange={(event) => setGeneratePrompt(event.target.value)}
-              placeholder="输入你要生成的图片内容、产品特征、场景或风格要求。"
-              value={generatePrompt}
-            />
-            <p className={styles.helpText}>
-              已安装 {PROMPT_SKILL_LABEL}，启动后会调用 DeepSeek V4 Pro 转换成英文作图指令。
-            </p>
-          </label>
-          <div className={styles.formGrid}>
-            <label className={styles.field}>
-              <span>比例</span>
-              <input
-                list="i-generate-aspect-ratios"
-                onChange={(event) => setGenerateAspect(event.target.value)}
-                placeholder="默认比例：1:1"
-                value={generateAspect}
-              />
-              <datalist id="i-generate-aspect-ratios">
-                {ASPECT_RATIOS.map((ratio) => (
-                  <option key={ratio} value={ratio}>
-                    {ratio}
-                  </option>
-                ))}
-              </datalist>
-            </label>
-            <label className={styles.field}>
-              <span>数量</span>
-              <input
-                max={8}
-                min={1}
-                onChange={(event) => setGenerateCount(event.target.value)}
-                placeholder="默认图片数量：1张"
-                type="number"
-                value={generateCount}
-              />
-            </label>
-          </div>
-          <div className={styles.formGrid}>
-            {STYLE_FIELDS.map((field) => (
-              <label className={styles.field} key={field.key}>
-                <span>{field.label}</span>
-                <input
-                  onChange={(event) =>
-                    setGenerateStyle((current) => ({
-                      ...current,
-                      [field.key]: event.target.value,
-                    }))
-                  }
-                  placeholder={field.generatePlaceholder}
-                  value={generateStyle[field.key]}
-                />
-              </label>
-            ))}
-          </div>
+      <div className={styles.composer}>
+        <div className={styles.modeSwitch} role="tablist" aria-label="作图模式">
           <button
-            className="primary-button"
-            disabled={isGenerating || !generatePrompt.trim()}
-            onClick={() => void runGenerate()}
+            aria-selected={mode === "generate"}
+            data-on={mode === "generate"}
+            onClick={() => setMode("generate")}
+            role="tab"
             type="button"
           >
-            {isGenerating ? (
-              <LoaderCircle aria-hidden="true" className="spin" size={16} />
-            ) : (
-              <Wand2 aria-hidden="true" size={16} />
-            )}
-            生成图片
+            <Sparkles aria-hidden="true" size={17} />
+            图片生成
           </button>
-          <CandidateGrid
-            batch={generationBatch}
-            isKContext={isKContext}
-            isSaving={isSaving}
-            kSaveLabel={kSaveLabel}
-            onRemove={(candidateId) => removeCandidate("generate", candidateId)}
-            onSaveI={() => void saveBatchToI(generationBatch)}
-            onSaveK={() => void saveBatchToK(generationBatch)}
-          />
-        </section>
+          <button
+            aria-selected={mode === "edit"}
+            data-on={mode === "edit"}
+            onClick={() => setMode("edit")}
+            role="tab"
+            type="button"
+          >
+            <Images aria-hidden="true" size={17} />
+            图片编辑
+          </button>
+        </div>
 
-        <section className={styles.toolPanel} aria-labelledby="i-edit">
-          <div className={styles.panelTitle}>
-            <Images aria-hidden="true" size={18} />
-            <h3 id="i-edit">图片编辑</h3>
-          </div>
-          <label className={styles.field}>
-            <span>参考图</span>
-            <input
-              accept="image/*"
-              multiple
-              onChange={(event) =>
-                updateEditFiles(Array.from(event.target.files ?? []))
-              }
-              type="file"
-            />
-          </label>
-          <div className={styles.fileChips}>
-            {editFiles.map((file) => (
-              <span key={`${file.name}-${file.size}`}>{file.name}</span>
-            ))}
-          </div>
-          <label className={styles.field}>
-            <span>编辑提示词</span>
-            <textarea
-              onChange={(event) => setEditPrompt(event.target.value)}
-              placeholder="输入要对参考图执行的修改，例如换背景、调整光线、增加场景或保留产品身份。"
-              value={editPrompt}
-            />
-            <p className={styles.helpText}>
-              已安装 {PROMPT_SKILL_LABEL}，启动后会调用 DeepSeek V4 Pro 转换成英文作图指令。
-            </p>
-          </label>
-          <div className={styles.formGrid}>
+        {mode === "generate" ? (
+          <section className={styles.toolPanel} aria-label="图片生成">
             <label className={styles.field}>
-              <span>比例</span>
-              <input
-                list="i-edit-aspect-ratios"
-                onChange={(event) => setEditAspect(event.target.value)}
-                placeholder="默认比例：1:1"
-                value={editAspect}
+              <span>生成提示词</span>
+              <textarea
+                onChange={(event) => setGeneratePrompt(event.target.value)}
+                placeholder="输入你要生成的图片内容、产品特征、场景或风格要求。"
+                value={generatePrompt}
               />
-              <datalist id="i-edit-aspect-ratios">
-                {ASPECT_RATIOS.map((ratio) => (
-                  <option key={ratio} value={ratio}>
-                    {ratio}
-                  </option>
-                ))}
-              </datalist>
+              <p className={styles.helpText}>
+                已安装 {PROMPT_SKILL_LABEL}，启动后会调用 DeepSeek V4 Pro 转换成英文作图指令。
+              </p>
             </label>
-            <label className={styles.field}>
-              <span>数量</span>
-              <input
-                max={8}
-                min={1}
-                onChange={(event) => setEditCount(event.target.value)}
-                placeholder="默认图片数量：1张"
-                type="number"
-                value={editCount}
-              />
-            </label>
-          </div>
-          <div className={styles.formGrid}>
-            {STYLE_FIELDS.map((field) => (
-              <label className={styles.field} key={field.key}>
-                <span>{field.label}</span>
+            <div className={styles.formGrid}>
+              <label className={styles.field}>
+                <span>比例</span>
                 <input
-                  onChange={(event) =>
-                    setEditStyle((current) => ({
-                      ...current,
-                      [field.key]: event.target.value,
-                    }))
-                  }
-                  placeholder={field.editPlaceholder}
-                  value={editStyle[field.key]}
+                  list="i-generate-aspect-ratios"
+                  onChange={(event) => setGenerateAspect(event.target.value)}
+                  placeholder="默认比例：1:1"
+                  value={generateAspect}
+                />
+                <datalist id="i-generate-aspect-ratios">
+                  {ASPECT_RATIOS.map((ratio) => (
+                    <option key={ratio} value={ratio}>
+                      {ratio}
+                    </option>
+                  ))}
+                </datalist>
+              </label>
+              <label className={styles.field}>
+                <span>数量</span>
+                <input
+                  max={8}
+                  min={1}
+                  onChange={(event) => setGenerateCount(event.target.value)}
+                  placeholder="默认图片数量：1张"
+                  type="number"
+                  value={generateCount}
                 />
               </label>
-            ))}
-          </div>
-          <button
-            className="primary-button"
-            disabled={isEditing || !editPrompt.trim() || editFiles.length === 0}
-            onClick={() => void runEdit()}
-            type="button"
-          >
-            {isEditing ? (
-              <LoaderCircle aria-hidden="true" className="spin" size={16} />
-            ) : (
-              <ImagePlus aria-hidden="true" size={16} />
-            )}
-            启动图片编辑
-          </button>
-          <CandidateGrid
-            batch={editBatch}
-            isKContext={isKContext}
-            isSaving={isSaving}
-            kSaveLabel={kSaveLabel}
-            onRemove={(candidateId) => removeCandidate("edit", candidateId)}
-            onSaveI={() => void saveBatchToI(editBatch)}
-            onSaveK={() => void saveBatchToK(editBatch)}
-          />
-        </section>
+            </div>
+            <button
+              aria-expanded={showAdvanced}
+              className={styles.advancedToggle}
+              onClick={() => setShowAdvanced((value) => !value)}
+              type="button"
+            >
+              <SlidersHorizontal aria-hidden="true" size={15} />
+              高级参数
+              <span className={styles.advancedHint}>风格 / 光线 / 构图 / 背景</span>
+              <ChevronDown
+                aria-hidden="true"
+                className={showAdvanced ? styles.chevOpen : styles.chev}
+                size={15}
+              />
+            </button>
+            {showAdvanced ? (
+              <div className={styles.formGrid}>
+                {STYLE_FIELDS.map((field) => (
+                  <label className={styles.field} key={field.key}>
+                    <span>{field.label}</span>
+                    <input
+                      onChange={(event) =>
+                        setGenerateStyle((current) => ({
+                          ...current,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                      placeholder={field.generatePlaceholder}
+                      value={generateStyle[field.key]}
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            <button
+              className="primary-button"
+              disabled={isGenerating || !generatePrompt.trim()}
+              onClick={() => void runGenerate()}
+              type="button"
+            >
+              {isGenerating ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              ) : (
+                <Wand2 aria-hidden="true" size={16} />
+              )}
+              生成图片
+            </button>
+            <CandidateGrid
+              batch={generationBatch}
+              isKContext={isKContext}
+              isSaving={isSaving}
+              kSaveLabel={kSaveLabel}
+              onRemove={(candidateId) => removeCandidate("generate", candidateId)}
+              onSaveI={() => void saveBatchToI(generationBatch)}
+              onSaveK={() => void saveBatchToK(generationBatch)}
+            />
+          </section>
+        ) : (
+          <section className={styles.toolPanel} aria-label="图片编辑">
+            <label className={styles.field}>
+              <span>参考图</span>
+              <input
+                accept="image/*"
+                multiple
+                onChange={(event) =>
+                  updateEditFiles(Array.from(event.target.files ?? []))
+                }
+                type="file"
+              />
+            </label>
+            <div className={styles.fileChips}>
+              {editFiles.map((file) => (
+                <span key={`${file.name}-${file.size}`}>{file.name}</span>
+              ))}
+            </div>
+            <label className={styles.field}>
+              <span>编辑提示词</span>
+              <textarea
+                onChange={(event) => setEditPrompt(event.target.value)}
+                placeholder="输入要对参考图执行的修改，例如换背景、调整光线、增加场景或保留产品身份。"
+                value={editPrompt}
+              />
+              <p className={styles.helpText}>
+                已安装 {PROMPT_SKILL_LABEL}，启动后会调用 DeepSeek V4 Pro 转换成英文作图指令。
+              </p>
+            </label>
+            <div className={styles.formGrid}>
+              <label className={styles.field}>
+                <span>比例</span>
+                <input
+                  list="i-edit-aspect-ratios"
+                  onChange={(event) => setEditAspect(event.target.value)}
+                  placeholder="默认比例：1:1"
+                  value={editAspect}
+                />
+                <datalist id="i-edit-aspect-ratios">
+                  {ASPECT_RATIOS.map((ratio) => (
+                    <option key={ratio} value={ratio}>
+                      {ratio}
+                    </option>
+                  ))}
+                </datalist>
+              </label>
+              <label className={styles.field}>
+                <span>数量</span>
+                <input
+                  max={8}
+                  min={1}
+                  onChange={(event) => setEditCount(event.target.value)}
+                  placeholder="默认图片数量：1张"
+                  type="number"
+                  value={editCount}
+                />
+              </label>
+            </div>
+            <button
+              aria-expanded={showAdvanced}
+              className={styles.advancedToggle}
+              onClick={() => setShowAdvanced((value) => !value)}
+              type="button"
+            >
+              <SlidersHorizontal aria-hidden="true" size={15} />
+              高级参数
+              <span className={styles.advancedHint}>风格 / 光线 / 构图 / 背景</span>
+              <ChevronDown
+                aria-hidden="true"
+                className={showAdvanced ? styles.chevOpen : styles.chev}
+                size={15}
+              />
+            </button>
+            {showAdvanced ? (
+              <div className={styles.formGrid}>
+                {STYLE_FIELDS.map((field) => (
+                  <label className={styles.field} key={field.key}>
+                    <span>{field.label}</span>
+                    <input
+                      onChange={(event) =>
+                        setEditStyle((current) => ({
+                          ...current,
+                          [field.key]: event.target.value,
+                        }))
+                      }
+                      placeholder={field.editPlaceholder}
+                      value={editStyle[field.key]}
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            <button
+              className="primary-button"
+              disabled={isEditing || !editPrompt.trim() || editFiles.length === 0}
+              onClick={() => void runEdit()}
+              type="button"
+            >
+              {isEditing ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              ) : (
+                <ImagePlus aria-hidden="true" size={16} />
+              )}
+              启动图片编辑
+            </button>
+            <CandidateGrid
+              batch={editBatch}
+              isKContext={isKContext}
+              isSaving={isSaving}
+              kSaveLabel={kSaveLabel}
+              onRemove={(candidateId) => removeCandidate("edit", candidateId)}
+              onSaveI={() => void saveBatchToI(editBatch)}
+              onSaveK={() => void saveBatchToK(editBatch)}
+            />
+          </section>
+        )}
       </div>
 
       {!isKContext ? (
@@ -1109,8 +1186,13 @@ export function ImageSystemWorkspace() {
             </div>
           </div>
           <div className={styles.mediaGrid}>
-            {media.map((asset) => (
-              <article className={styles.mediaCard} key={asset.id}>
+            {media.map((asset, index) => {
+              const variant = mediaTileVariant(asset, index);
+              return (
+              <article
+                className={`${styles.mediaCard} ${styles[`tile_${variant}`]}`}
+                key={asset.id}
+              >
                 <div className={styles.mediaThumb}>
                   <img
                     alt=""
@@ -1152,7 +1234,8 @@ export function ImageSystemWorkspace() {
                   </div>
                 </div>
               </article>
-            ))}
+              );
+            })}
           </div>
           {media.length === 0 ? (
             <p className={styles.empty}>暂无 I 媒体库图片。</p>
