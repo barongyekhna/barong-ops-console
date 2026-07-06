@@ -182,7 +182,8 @@ function sourceTypeLabel(sourceType: ISourceType) {
 
 type MediaTileVariant = "big" | "wide" | "tall" | "normal";
 
-// 没有尺寸信息时用节奏化版式，保证图墙错落不呆板（dense 会自动填缝）。
+// 缩略图是后端裁好的方图、原始尺寸也接近方形，按比例排会全变方块。
+// 所以用一套节奏化版式驱动图块大小，保证图墙错落有造型（dense 自动填缝）。
 const TILE_PATTERN: MediaTileVariant[] = [
   "big",
   "normal",
@@ -190,30 +191,15 @@ const TILE_PATTERN: MediaTileVariant[] = [
   "normal",
   "wide",
   "normal",
-  "normal",
+  "big",
   "tall",
   "normal",
   "wide",
   "normal",
-  "big",
+  "normal",
 ];
 
-// 图块大小：最新一张当封面大图；有真实尺寸就按比例（横铺宽、竖拉高），否则走节奏版式。
-function mediaTileVariant(asset: IMediaAsset, index: number): MediaTileVariant {
-  if (index === 0) {
-    return "big";
-  }
-  const { width, height } = asset;
-  if (width && height) {
-    const ratio = width / height;
-    if (ratio >= 1.25) {
-      return "wide";
-    }
-    if (ratio <= 0.8) {
-      return "tall";
-    }
-    return "normal";
-  }
+function mediaTileVariant(index: number): MediaTileVariant {
   return TILE_PATTERN[index % TILE_PATTERN.length];
 }
 
@@ -1203,7 +1189,7 @@ export function ImageSystemWorkspace() {
           </div>
           <div className={styles.mediaGrid}>
             {media.map((asset, index) => {
-              const variant = mediaTileVariant(asset, index);
+              const variant = mediaTileVariant(index);
               return (
               <article
                 className={`${styles.mediaCard} ${styles[`tile_${variant}`]}`}
