@@ -29,6 +29,10 @@ from r_system_v2.ra.profit_service import (
     run_profit_for_existing_offers,
 )
 from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.ra.supplier_keyword_skill import (
+    build_supplier_keyword_profile,
+    evaluate_supplier_alignment,
+)
 
 
 SERPER_SEARCH_URL = "https://google.serper.dev/search"
@@ -272,7 +276,8 @@ def discover_1688_supplier_offers(
     db.commit()
     client = serper_client or _serper_client(db, org_id=org_id)
     crawler = crawler or Playwright1688Crawler()
-    search_queries = build_supplier_queries(product)
+    keyword_profile = build_supplier_keyword_profile(db, org_id=org_id, product=product)
+    search_queries = build_supplier_queries(product, keyword_profile=keyword_profile)
     queries = [item.query for item in search_queries]
     searches: list[dict[str, object]] = []
     offers: list[dict[str, object]] = []
@@ -305,6 +310,7 @@ def discover_1688_supplier_offers(
                 "platform": search_query.platform,
                 "platform_label": search_query.platform_label,
                 "search_url": search_query.search_url,
+                "keyword_profile": keyword_profile,
                 "results": [result.__dict__ for result in results],
                 "searched_at": datetime.now(UTC).isoformat(),
             },
@@ -352,6 +358,25 @@ def discover_1688_supplier_offers(
                 exchange_rate_usd_cny=exchange_rate_usd_cny,
                 platform=search_query.platform,
             )
+            supplier_name = (
+                crawled.title
+                or result.title
+                or f"{search_query.platform_label}供应商"
+            )
+            alignment = evaluate_supplier_alignment(
+                product=product,
+                keyword_profile=keyword_profile,
+                supplier_title=supplier_name,
+                supplier_snippet=result.snippet,
+                raw_excerpt=crawled.raw_excerpt,
+                unit_price_cny=unit_price_cny,
+            )
+            alignment_status = str(alignment.get("match_status") or "review")
+            alignment_price = decimal_value(alignment.get("adjusted_unit_price_cny"))
+            if alignment_status == "match" and alignment_price is not None:
+                unit_price_cny = alignment_price
+            elif alignment_status != "match":
+                unit_price_cny = None
             domestic_shipping_cny = (
                 crawled.domestic_shipping_cny
                 if crawled.domestic_shipping_cny is not None
@@ -367,8 +392,21 @@ def discover_1688_supplier_offers(
                     f"{normalized_asin}: 未找到可打开的{search_query.platform_label}详情页链接。"
                 )
                 continue
-            crawler_warning = price_warning or (
+            alignment_warning = (
+                None
+                if alignment_status == "match"
+                else str(alignment.get("match_reason") or "供应商匹配待人工确认。")
+            )
+            crawler_warning = alignment_warning or price_warning or (
                 None if unit_price_cny is not None else crawled.warning
+            )
+            offer_status = _offer_status(
+                unit_price_cny=unit_price_cny,
+                alignment_status=alignment_status,
+            )
+            match_score = min(
+                _match_score(result, crawled),
+                _int_value(alignment.get("match_score")) or 0,
             )
             offer_id = _insert_supplier_offer(
                 db,
@@ -376,18 +414,14 @@ def discover_1688_supplier_offers(
                 search_id=search_id,
                 candidate_id=candidate_id,
                 asin=normalized_asin,
-                supplier_name=(
-                    crawled.title
-                    or result.title
-                    or f"{search_query.platform_label}供应商"
-                ),
+                supplier_name=supplier_name,
                 supplier_url=supplier_url,
                 unit_price_cny=unit_price_cny,
                 domestic_shipping_cny=domestic_shipping_cny,
                 moq=crawled.moq,
                 source=f"serper_{search_query.platform}",
-                match_score=_match_score(result, crawled),
-                offer_status="priced" if unit_price_cny is not None else "price_pending",
+                match_score=match_score,
+                offer_status=offer_status,
                 payload_extra={
                     "platform": search_query.platform,
                     "platform_label": search_query.platform_label,
@@ -405,9 +439,15 @@ def discover_1688_supplier_offers(
                     "price_source": price_source,
                     "raw_crawled_price_cny": _decimal_number(crawled.unit_price_cny),
                     "raw_serper_price_cny": _decimal_number(result_price),
+                    "raw_selected_price_cny": _decimal_number(
+                        alignment.get("raw_unit_price_cny")
+                    ),
+                    "adjusted_unit_price_cny": _decimal_number(unit_price_cny),
                     "raw_excerpt": crawled.raw_excerpt,
                     "one_piece_hint": _one_piece_hint(result, crawled),
                     "retail_platform_hint": search_query.platform != "1688",
+                    "keyword_profile": keyword_profile,
+                    "supplier_alignment": alignment,
                     "shipping_notice": (
                         f"{search_query.platform_label}页面显示包邮或抓取到运费"
                         if domestic_shipping_cny is not None
@@ -420,11 +460,7 @@ def discover_1688_supplier_offers(
                 {
                     "offer_id": offer_id,
                     "search_id": search_id,
-                    "supplier_name": (
-                        crawled.title
-                        or result.title
-                        or f"{search_query.platform_label}供应商"
-                    ),
+                    "supplier_name": supplier_name,
                     "supplier_url": supplier_url,
                     "supplier_platform": search_query.platform,
                     "supplier_platform_label": search_query.platform_label,
@@ -434,19 +470,20 @@ def discover_1688_supplier_offers(
                     "unit_price_cny": _decimal_number(unit_price_cny),
                     "domestic_shipping_cny": _decimal_number(domestic_shipping_cny),
                     "moq": crawled.moq,
-                    "match_score": _match_score(result, crawled),
+                    "match_score": match_score,
                     "one_piece_hint": _one_piece_hint(result, crawled),
-                    "offer_status": (
-                        "priced" if unit_price_cny is not None else "price_pending"
-                    ),
+                    "offer_status": offer_status,
                     "crawler_status": crawled.crawler_status,
                     "warning": crawler_warning,
+                    "keyword_profile": keyword_profile,
+                    "supplier_alignment": alignment,
                 }
             )
 
     priced_count = sum(1 for offer in offers if offer["unit_price_cny"] is not None)
     profit_run: dict[str, object] | None = None
-    if auto_calculate and priced_count > 0:
+    min_profit_suppliers = _min_profit_supplier_count()
+    if auto_calculate and priced_count >= min_profit_suppliers:
         profit_run = run_profit_for_existing_offers(
             db,
             org_id=org_id,
@@ -457,6 +494,11 @@ def discover_1688_supplier_offers(
             min_gross_margin=min_gross_margin,
         )
     else:
+        if auto_calculate and priced_count > 0:
+            warnings.append(
+                f"{normalized_asin}: 可靠可定价供应商仅 {priced_count} 条，"
+                f"不足 {min_profit_suppliers} 条，未生成正式利润结论。"
+            )
         db.commit()
 
     return {
@@ -466,6 +508,7 @@ def discover_1688_supplier_offers(
         "searches": searches,
         "offers": offers,
         "profit_run": profit_run,
+        "keyword_profile": keyword_profile,
         "counts": {
             "searches": len(searches),
             "candidate_offers": len(offers),
@@ -479,55 +522,36 @@ def build_1688_queries(product: dict[str, Any]) -> list[str]:
     return [item.query for item in build_supplier_queries(product) if item.platform == "1688"]
 
 
-def build_supplier_queries(product: dict[str, Any]) -> list[SupplierSearchQuery]:
-    title_zh = _clean_query_text(product.get("title_zh"))
-    title = _clean_query_text(product.get("title"))
-    category = _clean_query_text(product.get("category"))
-    base = title_zh or title
+def build_supplier_queries(
+    product: dict[str, Any],
+    *,
+    keyword_profile: dict[str, Any] | None = None,
+) -> list[SupplierSearchQuery]:
+    profile = keyword_profile or build_supplier_keyword_profile(None, org_id=None, product=product)
+    base = _clean_query_text(profile.get("product_type_zh")) or _clean_query_text(
+        product.get("title_zh") or product.get("title")
+    )
     if not base:
         raise RAProfitError("该产品缺少标题，无法搜索 1688。")
-    if len(base) > 120:
-        base = base[:120]
-    queries = [
-        _supplier_search_query(
-            "1688",
-            f"site:detail.1688.com/offer 1688 {base} 一件代发 一件起批",
-            base,
-        ),
-        _supplier_search_query(
-            "pdd",
-            f"site:yangkeduo.com/goods.html 拼多多 {base} 同款 现货",
-            base,
-        ),
-        _supplier_search_query(
-            "taobao",
-            f"site:item.taobao.com/item.htm 淘宝 {base} 同款 现货",
-            base,
-        ),
-        _supplier_search_query(
-            "jd",
-            f"site:item.jd.com 京东 {base} 同款 现货",
-            base,
-        ),
-        _supplier_search_query(
-            "1688",
-            f"1688 {base} 一件代发 一件起批 同款 detail.1688.com/offer",
-            base,
-        ),
-        _supplier_search_query(
-            "1688",
-            f"{base} 阿里巴巴 1688 一件代发 批发 厂家",
-            base,
-        ),
-    ]
-    if category:
-        queries.append(
-            _supplier_search_query(
-                "1688",
-                f"1688 {category} {base[:80]} 一件起批 批发",
-                base,
+    search_queries = profile.get("search_queries") if isinstance(profile, dict) else {}
+    if not isinstance(search_queries, dict):
+        search_queries = {}
+    queries: list[SupplierSearchQuery] = []
+    for platform in ("1688", "pdd", "taobao", "jd"):
+        platform_queries = search_queries.get(platform)
+        if not isinstance(platform_queries, list) or not platform_queries:
+            platform_queries = _default_platform_queries(base, platform)
+        for query in platform_queries:
+            cleaned_query = _clean_query_text(query)
+            if not cleaned_query:
+                continue
+            queries.append(
+                _supplier_search_query(
+                    platform,
+                    cleaned_query,
+                    base,
+                )
             )
-        )
     return _dedupe_preserve_order(queries)
 
 
@@ -538,6 +562,23 @@ def _supplier_search_query(platform: str, query: str, base_keyword: str) -> Supp
         platform_label=SUPPLIER_PLATFORM_LABELS.get(platform, platform),
         search_url=_platform_search_url(platform, base_keyword),
     )
+
+
+def _default_platform_queries(base: str, platform: str) -> list[str]:
+    if platform == "1688":
+        return [
+            f"{base} 一件代发",
+            f"{base} 一件起批",
+            f"{base} 批发 厂家",
+            f"{base} 现货",
+        ]
+    if platform == "pdd":
+        return [f"拼多多 {base}", f"{base} 拼多多 现货"]
+    if platform == "taobao":
+        return [f"淘宝 {base}", f"{base} 淘宝 同款"]
+    if platform == "jd":
+        return [f"京东 {base}", f"{base} 京东 现货"]
+    return [base]
 
 
 def _platform_search_url(platform: str, keyword: str) -> str:
@@ -1076,6 +1117,29 @@ def _canonical_jd_product_url(url: str | None) -> str | None:
 
 def _bounded_limit(value: int) -> int:
     return max(MIN_DISCOVERY_LIMIT, min(MAX_DISCOVERY_LIMIT, int(value)))
+
+
+def _offer_status(
+    *,
+    unit_price_cny: Decimal | None,
+    alignment_status: str,
+) -> str:
+    if alignment_status == "mismatch":
+        return "match_rejected"
+    if alignment_status == "review":
+        return "variant_pending"
+    return "priced" if unit_price_cny is not None else "price_pending"
+
+
+def _min_profit_supplier_count() -> int:
+    raw_value = os.getenv("RA_MIN_VALID_SUPPLIERS_FOR_PROFIT")
+    if not raw_value:
+        return MIN_DISCOVERY_LIMIT
+    try:
+        parsed = int(raw_value)
+    except ValueError:
+        return MIN_DISCOVERY_LIMIT
+    return max(1, min(parsed, MAX_DISCOVERY_LIMIT))
 
 
 def _crawler_timeout_ms() -> int:

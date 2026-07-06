@@ -19,17 +19,18 @@ def test_ra_supplier_queries_prefer_chinese_product_title() -> None:
     queries = build_1688_queries(
         {
             "asin": "B0SUPPLY01",
+            "brand": "FrothPro",
             "title": "Milk Frother Handheld Foam Maker",
             "title_zh": "手持电动打奶器 奶泡器",
             "category": "厨房小工具",
         }
     )
 
-    assert queries[0].startswith("site:detail.1688.com/offer 1688 手持电动打奶器 奶泡器")
+    assert queries[0].startswith("打奶器")
     assert "一件代发" in queries[0]
-    assert "一件起批" in queries[0]
-    assert any("厨房小工具" in query for query in queries)
+    assert any("一件起批" in query for query in queries)
     assert all("B0SUPPLY01" not in query for query in queries)
+    assert all("FrothPro" not in query for query in queries)
 
 
 def test_ra_supplier_queries_include_multi_platform_choice_pages() -> None:

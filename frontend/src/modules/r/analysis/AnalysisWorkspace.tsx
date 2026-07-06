@@ -426,12 +426,14 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
                             <span>{supplierPlatformLabel(supplier)} 平台搜索页</span>
                           </a>
                         ) : null}
+                        <SupplierRiskTags supplier={supplier} />
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <span>未找到</span>
+                  <span>未找到详情页</span>
                 )}
+                <SupplierSearchPages pages={item.supplier_search_pages} />
               </td>
             </tr>
           ))}
@@ -593,7 +595,7 @@ function ProductImage({
 }
 
 function AsinTag({ asin }: { asin: string | null }) {
-  const [copied, setCopied] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "manual">("idle");
 
   if (!asin) {
     return <span className={styles.asinTag}>未记录</span>;
@@ -603,30 +605,39 @@ function AsinTag({ asin }: { asin: string | null }) {
   async function handleCopy() {
     let copiedSuccessfully = false;
     try {
-      await navigator.clipboard?.writeText(asinValue);
-      copiedSuccessfully = true;
+      if (window.isSecureContext && navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(asinValue);
+        copiedSuccessfully = true;
+      }
     } catch {
       copiedSuccessfully = fallbackCopyText(asinValue);
     }
     if (!copiedSuccessfully) {
       copiedSuccessfully = fallbackCopyText(asinValue);
     }
-    setCopied(copiedSuccessfully);
+    if (!copiedSuccessfully) {
+      window.prompt("复制 ASIN", asinValue);
+      setCopyState("manual");
+      window.setTimeout(() => setCopyState("idle"), 2200);
+      return;
+    }
+    setCopyState("copied");
     if (copiedSuccessfully) {
-      window.setTimeout(() => setCopied(false), 1400);
+      window.setTimeout(() => setCopyState("idle"), 1400);
     }
   }
 
   return (
     <button
       className={styles.asinTag}
-      data-copied={copied ? "true" : "false"}
-      title={copied ? "ASIN 已复制" : "复制 ASIN"}
+      data-copied={copyState === "copied" ? "true" : "false"}
+      title={copyState === "copied" ? "ASIN 已复制" : "复制 ASIN"}
       type="button"
       onClick={() => void handleCopy()}
     >
       <span>{asinValue}</span>
       <Copy size={13} />
+      {copyState === "manual" ? <em>手动复制</em> : null}
     </button>
   );
 }
@@ -677,8 +688,67 @@ function supplierOptions(item: RaAutoProfitItem) {
       supplier_total_cny: item.supplier_total_cny,
       moq: item.moq,
       one_piece_hint: item.one_piece_hint,
+      supplier_alignment: item.supplier_alignment,
     },
   ];
+}
+
+function SupplierSearchPages({ pages }: { pages?: RaAutoProfitItem["supplier_search_pages"] }) {
+  const visiblePages = (pages ?? []).filter((page) => page.search_url).slice(0, 8);
+  if (!visiblePages.length) {
+    return null;
+  }
+  return (
+    <div className={styles.searchPageList}>
+      <strong>平台搜索页</strong>
+      {visiblePages.map((page, index) => (
+        <a
+          href={page.search_url ?? "#"}
+          key={`${page.platform ?? "platform"}-${page.search_url ?? index}`}
+          rel="noreferrer"
+          target="_blank"
+        >
+          <Search size={14} />
+          <span>
+            {page.platform_label || supplierPlatformLabel({ supplier_platform: page.platform })}
+            {typeof page.result_count === "number" ? ` · ${page.result_count} 条` : ""}
+          </span>
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function SupplierRiskTags({
+  supplier,
+}: {
+  supplier: NonNullable<RaAutoProfitItem["suppliers"]>[number];
+}) {
+  const alignment = supplier.supplier_alignment;
+  if (!alignment) {
+    return null;
+  }
+  const quantityStatus = alignment.quantity?.status;
+  const dimensionStatus = alignment.dimensions?.status;
+  return (
+    <div className={styles.supplierTags}>
+      <span data-status={alignment.match_status || "review"}>
+        {alignmentStatusLabel(alignment.match_status)}
+        {typeof alignment.match_score === "number" ? ` · ${alignment.match_score}` : ""}
+      </span>
+      {quantityStatus && quantityStatus !== "not_required" ? (
+        <span data-status={quantityStatus === "aligned" ? "match" : "review"}>
+          数量{quantityStatus === "aligned" ? "已对齐" : "待确认"}
+        </span>
+      ) : null}
+      {dimensionStatus && dimensionStatus !== "not_required" ? (
+        <span data-status={dimensionStatus === "aligned" ? "match" : "review"}>
+          尺寸{dimensionStatus === "aligned" ? "已对齐" : "待确认"}
+        </span>
+      ) : null}
+      {alignment.match_reason ? <small>{alignment.match_reason}</small> : null}
+    </div>
+  );
 }
 
 function supplierPlatformLabel(supplier: {
@@ -698,6 +768,19 @@ function supplierPlatformLabel(supplier: {
     return "京东";
   }
   return "1688";
+}
+
+function alignmentStatusLabel(value: string | null | undefined) {
+  if (value === "match") {
+    return "匹配通过";
+  }
+  if (value === "mismatch") {
+    return "匹配拒绝";
+  }
+  if (value === "review") {
+    return "需确认";
+  }
+  return "匹配待判定";
 }
 
 function productImageCandidates({

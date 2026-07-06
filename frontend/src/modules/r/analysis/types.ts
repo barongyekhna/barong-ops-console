@@ -194,6 +194,7 @@ export type RaSupplierSearchResult = {
     offer_status: string;
     crawler_status: string;
     warning: string | null;
+    supplier_alignment?: RaSupplierAlignment | null;
   }>;
   profit_run: RaProfitRunResult | null;
   counts: {
@@ -266,6 +267,7 @@ export type RaAutoProfitItem = {
   supplier_url_type?: string | null;
   supplier_detail_url?: string | null;
   supplier_search_url?: string | null;
+  supplier_search_pages?: RaSupplierSearchPage[];
   unit_price_cny: number | null;
   domestic_shipping_cny: number | null;
   supplier_total_cny: number | null;
@@ -288,8 +290,11 @@ export type RaAutoProfitItem = {
     offer_status?: string | null;
     crawler_status?: string | null;
     one_piece_hint?: boolean | null;
+    supplier_alignment?: RaSupplierAlignment | null;
+    match_reason?: string | null;
     shipping_notice?: string | null;
   }>;
+  supplier_alignment?: RaSupplierAlignment | null;
   gross_profit_usd: number | null;
   gross_profit_cny: number | null;
   gross_margin: number | null;
@@ -298,6 +303,39 @@ export type RaAutoProfitItem = {
   blocked_reasons: string[];
   exchange_rate_usd_cny?: number | null;
   snapshot_id?: string | null;
+};
+
+export type RaSupplierSearchPage = {
+  query?: string | null;
+  platform?: string | null;
+  platform_label?: string | null;
+  search_url?: string | null;
+  status?: string | null;
+  result_count?: number | null;
+};
+
+export type RaSupplierAlignment = {
+  match_status?: "match" | "review" | "mismatch" | string;
+  match_score?: number | null;
+  match_reason?: string | null;
+  warnings?: string[];
+  cost_multiplier?: number | null;
+  raw_unit_price_cny?: number | null;
+  adjusted_unit_price_cny?: number | null;
+  quantity?: {
+    status?: string | null;
+    amazon_pack_count?: number | null;
+    supplier_pack_count?: number | null;
+    cost_multiplier?: number | null;
+    reason?: string | null;
+  };
+  dimensions?: {
+    status?: string | null;
+    reason?: string | null;
+    cost_multiplier?: number | null;
+    amazon_dimensions?: unknown[];
+    supplier_dimensions?: unknown[];
+  };
 };
 
 export type RaAutoProfitResult = {

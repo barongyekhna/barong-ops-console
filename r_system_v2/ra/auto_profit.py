@@ -109,6 +109,7 @@ def run_auto_profit_analysis(
         profit_items = (
             profit_run.get("items") if isinstance(profit_run, dict) else None
         )
+        supplier_search_pages = _supplier_search_pages(discovery.get("searches"))
         if profit_items:
             for snapshot in profit_items:
                 if not isinstance(snapshot, dict):
@@ -127,6 +128,7 @@ def run_auto_profit_analysis(
                         product=product,
                         keyword=cleaned_query,
                         exchange_rate=float(quote.rate),
+                        supplier_search_pages=supplier_search_pages,
                     )
                 )
             continue
@@ -141,10 +143,17 @@ def run_auto_profit_analysis(
                             offer=offer,
                             keyword=cleaned_query,
                             exchange_rate=float(quote.rate),
+                            supplier_search_pages=supplier_search_pages,
                         )
                     )
         else:
-            items.append(_no_supplier_item(product, keyword=cleaned_query))
+            items.append(
+                _no_supplier_item(
+                    product,
+                    keyword=cleaned_query,
+                    supplier_search_pages=supplier_search_pages,
+                )
+            )
 
     return {
         "query": cleaned_query,
@@ -261,6 +270,7 @@ def _snapshot_item(
     product: dict[str, Any],
     keyword: str,
     exchange_rate: float,
+    supplier_search_pages: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     supplier = snapshot.get("supplier") if isinstance(snapshot.get("supplier"), dict) else {}
     unit_price = _float_value(supplier.get("unit_price_cny"))
@@ -294,6 +304,7 @@ def _snapshot_item(
         "blocked_reasons": snapshot.get("blocked_reasons") or [],
         "exchange_rate_usd_cny": exchange_rate,
         "snapshot_id": snapshot.get("snapshot_id"),
+        "supplier_search_pages": supplier_search_pages or [],
         **_relevance_fields(product, keyword),
     }
 
@@ -304,6 +315,7 @@ def _pending_offer_item(
     offer: dict[str, Any],
     keyword: str,
     exchange_rate: float,
+    supplier_search_pages: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
     unit_price = _float_value(offer.get("unit_price_cny"))
     shipping = _float_value(offer.get("domestic_shipping_cny"))
@@ -336,11 +348,18 @@ def _pending_offer_item(
         "blocked_reasons": [],
         "exchange_rate_usd_cny": exchange_rate,
         "snapshot_id": None,
+        "supplier_search_pages": supplier_search_pages or [],
+        "supplier_alignment": offer.get("supplier_alignment"),
         **_relevance_fields(product, keyword),
     }
 
 
-def _no_supplier_item(product: dict[str, Any], *, keyword: str) -> dict[str, object]:
+def _no_supplier_item(
+    product: dict[str, Any],
+    *,
+    keyword: str,
+    supplier_search_pages: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
     return {
         "status": "supplier_not_found",
         "asin": product.get("asin"),
@@ -369,6 +388,7 @@ def _no_supplier_item(product: dict[str, Any], *, keyword: str) -> dict[str, obj
         "warnings": ["Serper 没有返回可用的供应商详情页候选。"],
         "blocked_reasons": [],
         "snapshot_id": None,
+        "supplier_search_pages": supplier_search_pages or [],
         **_relevance_fields(product, keyword),
     }
 
@@ -383,6 +403,34 @@ def _error_item(
     item["status"] = "failed"
     item["warnings"] = [error]
     return item
+
+
+def _supplier_search_pages(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    pages: list[dict[str, object]] = []
+    seen: set[str] = set()
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        search_url = item.get("search_url")
+        if not isinstance(search_url, str) or not search_url:
+            continue
+        key = f"{item.get('platform')}::{search_url}"
+        if key in seen:
+            continue
+        seen.add(key)
+        pages.append(
+            {
+                "query": item.get("query"),
+                "platform": item.get("platform"),
+                "platform_label": item.get("platform_label"),
+                "search_url": search_url,
+                "status": item.get("status"),
+                "result_count": item.get("result_count"),
+            }
+        )
+    return pages[:12]
 
 
 def _relevance_fields(product: dict[str, Any], query: str) -> dict[str, object]:

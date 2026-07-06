@@ -21,6 +21,7 @@ SKILL_FILES: tuple[tuple[str, str, str], ...] = (
     ("dtc", "独立站 DTC 准则", "dtc.md"),
     ("dtc_data", "独立站数据源准则", "dtc_data.md"),
     ("shared", "双平台通用红线", "shared.md"),
+    ("ra_supplier_keyword", "R-A 供应商关键词与变体匹配", "ra_supplier_keyword_skill.md"),
 )
 
 CHANNEL_FILE_KEYS: dict[str, tuple[str, ...]] = {
@@ -28,6 +29,7 @@ CHANNEL_FILE_KEYS: dict[str, tuple[str, ...]] = {
     "dtc_seo": ("skill", "dtc", "dtc_data", "shared"),
     "dtc_ad": ("skill", "dtc", "dtc_data", "shared"),
     "both": ("skill", "amazon", "dtc", "dtc_data", "shared"),
+    "profit_supplier": ("skill", "amazon", "shared", "ra_supplier_keyword"),
 }
 
 
@@ -136,4 +138,3 @@ def _skill_frontmatter(path: Path) -> dict[str, str]:
         key, value = line.split(":", 1)
         metadata[key.strip()] = value.strip()
     return metadata
-

@@ -403,6 +403,11 @@ def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
 
 def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dict[str, object]]:
     suppliers_by_candidate = _supplier_options_by_candidate(db, org_id=org_id, run_id=run_id)
+    search_pages_by_candidate = _supplier_search_pages_by_candidate(
+        db,
+        org_id=org_id,
+        run_id=run_id,
+    )
     snapshot_rows = db.execute(
         text(
             """
@@ -427,6 +432,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
             dict(row),
             query=query,
             suppliers=suppliers_by_candidate.get(str(row["candidate_id"]), []),
+            supplier_search_pages=search_pages_by_candidate.get(str(row["candidate_id"]), []),
         )
         for row in snapshot_rows
     ]
@@ -467,6 +473,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
                 dict(row),
                 query=query,
                 suppliers=suppliers_by_candidate.get(candidate_id, []),
+                supplier_search_pages=search_pages_by_candidate.get(candidate_id, []),
             )
         )
     empty_candidate_rows = db.execute(
@@ -495,7 +502,14 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
         {"org_id": org_id, "run_id": run_id},
     ).mappings()
     for row in empty_candidate_rows:
-        items.append(_supplier_not_found_item_from_row(dict(row), query=query))
+        candidate_id = str(row["candidate_id"])
+        items.append(
+            _supplier_not_found_item_from_row(
+                dict(row),
+                query=query,
+                supplier_search_pages=search_pages_by_candidate.get(candidate_id, []),
+            )
+        )
     return items
 
 
@@ -504,6 +518,7 @@ def _snapshot_item_from_row(
     *,
     query: str,
     suppliers: list[dict[str, object]],
+    supplier_search_pages: list[dict[str, object]],
 ) -> dict[str, object]:
     payload = _dict_value(row.get("payload"))
     supplier = _dict_value(payload.get("supplier"))
@@ -539,6 +554,7 @@ def _snapshot_item_from_row(
         "blocked_reasons": payload.get("blocked_reasons") or [],
         "snapshot_id": row.get("snapshot_id"),
         "suppliers": suppliers,
+        "supplier_search_pages": supplier_search_pages,
     }
     item.update(_product_fields(row, product=product, query=query))
     return item
@@ -549,6 +565,7 @@ def _pending_item_from_row(
     *,
     query: str,
     suppliers: list[dict[str, object]],
+    supplier_search_pages: list[dict[str, object]],
 ) -> dict[str, object]:
     payload = _dict_value(row.get("payload"))
     unit_price = _number(row.get("unit_price_cny"))
@@ -587,12 +604,19 @@ def _pending_item_from_row(
         "blocked_reasons": [],
         "snapshot_id": None,
         "suppliers": suppliers,
+        "supplier_search_pages": supplier_search_pages,
+        "supplier_alignment": payload.get("supplier_alignment"),
     }
     item.update(_product_fields(row, product={}, query=query))
     return item
 
 
-def _supplier_not_found_item_from_row(row: dict[str, Any], *, query: str) -> dict[str, object]:
+def _supplier_not_found_item_from_row(
+    row: dict[str, Any],
+    *,
+    query: str,
+    supplier_search_pages: list[dict[str, object]],
+) -> dict[str, object]:
     product = _dict_value(row.get("snapshot"))
     item = {
         "status": "supplier_not_found",
@@ -622,6 +646,7 @@ def _supplier_not_found_item_from_row(row: dict[str, Any], *, query: str) -> dic
         "blocked_reasons": [],
         "snapshot_id": None,
         "suppliers": [],
+        "supplier_search_pages": supplier_search_pages,
     }
     item.update(_product_fields(row, product=product, query=query))
     return item
@@ -669,6 +694,54 @@ def _supplier_options_by_candidate(
     return output
 
 
+def _supplier_search_pages_by_candidate(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+) -> dict[str, list[dict[str, object]]]:
+    rows = db.execute(
+        text(
+            """
+            SELECT s.candidate_id, s.query, s.status, s.result_count, s.payload
+            FROM ra_supplier_searches s
+            JOIN ra_candidates c ON c.id = s.candidate_id
+            WHERE c.org_id = :org_id AND c.run_id = :run_id
+            ORDER BY s.created_at ASC
+            LIMIT 2000
+            """
+        ),
+        {"org_id": org_id, "run_id": run_id},
+    ).mappings()
+    output: dict[str, list[dict[str, object]]] = {}
+    seen: dict[str, set[str]] = {}
+    for row in rows:
+        candidate_id = str(row["candidate_id"])
+        payload = _dict_value(row.get("payload"))
+        search_url = payload.get("search_url")
+        if not search_url:
+            continue
+        key = f"{payload.get('platform')}::{search_url}"
+        candidate_seen = seen.setdefault(candidate_id, set())
+        if key in candidate_seen:
+            continue
+        candidate_seen.add(key)
+        pages = output.setdefault(candidate_id, [])
+        if len(pages) >= 12:
+            continue
+        pages.append(
+            {
+                "query": row.get("query"),
+                "platform": payload.get("platform"),
+                "platform_label": payload.get("platform_label"),
+                "search_url": search_url,
+                "status": row.get("status"),
+                "result_count": row.get("result_count"),
+            }
+        )
+    return output
+
+
 def _supplier_option_from_row(row: dict[str, Any]) -> dict[str, object]:
     payload = _dict_value(row.get("payload"))
     unit_price = _number(row.get("unit_price_cny"))
@@ -702,6 +775,8 @@ def _supplier_option_from_row(row: dict[str, Any]) -> dict[str, object]:
         "offer_status": row.get("offer_status"),
         "crawler_status": payload.get("crawler_status"),
         "one_piece_hint": bool(payload.get("one_piece_hint")),
+        "supplier_alignment": payload.get("supplier_alignment"),
+        "match_reason": _dict_value(payload.get("supplier_alignment")).get("match_reason"),
         "shipping_notice": payload.get("shipping_notice")
         or payload.get("freight_notice")
         or payload.get("shipping_text"),
