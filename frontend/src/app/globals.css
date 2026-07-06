@@ -6796,12 +6796,12 @@ textarea:focus-visible {
 .mm-page .module-control-status.error, .mm-page .module-control-status[class*="error"] { color: var(--mm-red); background: rgb(255 107 138 / 10%); }
 .mm-page .module-control-card-bottom { display: flex; align-items: center; gap: 10px; }
 .mm-page .module-control-card-bottom > span { color: var(--mm-dim); font: 600 11px var(--mm-mono); }
-.mm-page .module-toggle { position: relative; display: inline-flex; width: 42px; height: 24px; flex: none; cursor: pointer; }
+.mm-page .module-toggle { position: relative; display: inline-flex; width: 44px; height: 24px; flex: none; cursor: pointer; box-sizing: border-box; overflow: hidden; border-radius: 24px; }
 .mm-page .module-toggle input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
-.mm-page .module-toggle span { position: absolute; inset: 0; border-radius: 24px; background: rgb(120 150 180 / 18%); border: 1px solid var(--mm-line); transition: 0.18s; }
-.mm-page .module-toggle span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: #8aa0b8; transition: 0.18s; }
-.mm-page .module-toggle input:checked + span { background: linear-gradient(180deg, #39d4ff, #1f92c4); border-color: rgb(57 212 255 / 60%); box-shadow: 0 0 12px rgb(57 212 255 / 40%); }
-.mm-page .module-toggle input:checked + span::after { left: 20px; background: #04121c; }
+.mm-page .module-toggle span { position: absolute; inset: 0; width: auto; box-sizing: border-box; border-radius: 24px; background: rgb(120 150 180 / 18%); border: 1px solid var(--mm-line); transition: 0.18s; }
+.mm-page .module-toggle span::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #8aa0b8; transform: none; transition: left 0.18s, background 0.18s; }
+.mm-page .module-toggle input:checked + span { background: linear-gradient(180deg, #39d4ff, #1f92c4); border-color: rgb(57 212 255 / 60%); box-shadow: inset 0 0 10px rgb(4 18 28 / 40%); }
+.mm-page .module-toggle input:checked + span::after { left: 23px; transform: none; background: #04121c; }
 .mm-page .module-error-badge { color: var(--mm-red); font: 500 11px var(--mm-mono); }
 
 /* 表单控件 */
@@ -6825,10 +6825,11 @@ textarea:focus-visible {
 .mm-page button:disabled { opacity: 0.55; cursor: not-allowed; }
 
 /* 表格 */
-.mm-page .module-registry-table-scroll { overflow-x: auto; }
-.mm-page .module-registry-table { width: 100%; border-collapse: collapse; }
-.mm-page .module-registry-table thead th { text-align: left; padding: 12px 14px; font: 600 9.5px var(--mm-mono); letter-spacing: 2px; text-transform: uppercase; color: var(--mm-dim); border-bottom: 1px solid var(--mm-line); }
-.mm-page .module-registry-table tbody td { padding: 11px 14px; border-bottom: 1px solid rgb(120 200 255 / 8%); font-size: 12.5px; vertical-align: middle; }
+.mm-page .ops-panel { color: var(--mm-ink); }
+.mm-page .module-registry-table-scroll { overflow-x: auto; background: rgb(4 10 18 / 55%); border: 1px solid var(--mm-line); border-radius: 12px; }
+.mm-page .module-registry-table { width: 100%; border-collapse: collapse; background: transparent; color: var(--mm-ink); }
+.mm-page .module-registry-table thead th { text-align: left; padding: 12px 14px; font: 600 9.5px var(--mm-mono); letter-spacing: 2px; text-transform: uppercase; color: var(--mm-dim); background: rgb(57 212 255 / 6%); border-bottom: 1px solid var(--mm-line); }
+.mm-page .module-registry-table tbody td { padding: 11px 14px; border-bottom: 1px solid rgb(120 200 255 / 8%); font-size: 12.5px; vertical-align: middle; color: var(--mm-ink); background: transparent; }
 .mm-page .module-registry-table tbody tr:hover { background: rgb(57 212 255 / 5%); }
 .mm-page .module-registry-table strong { color: #eafaff; }
 .mm-page .module-registry-table small { display: block; color: var(--mm-dim); font: 500 10px var(--mm-mono); margin-top: 2px; }
