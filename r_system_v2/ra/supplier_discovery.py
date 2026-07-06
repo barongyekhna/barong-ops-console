@@ -277,6 +277,7 @@ def discover_1688_supplier_offers(
     client = serper_client or _serper_client(db, org_id=org_id)
     crawler = crawler or Playwright1688Crawler()
     keyword_profile = build_supplier_keyword_profile(db, org_id=org_id, product=product)
+    _discard_db_transaction(db)
     search_queries = build_supplier_queries(product, keyword_profile=keyword_profile)
     queries = [item.query for item in search_queries]
     searches: list[dict[str, object]] = []
@@ -289,6 +290,7 @@ def discover_1688_supplier_offers(
             break
         query = search_query.query
         search_id = str(uuid4())
+        _discard_db_transaction(db)
         try:
             results = client.search(query, num=max(10, limit * 4))
             status = "complete"
@@ -340,6 +342,7 @@ def discover_1688_supplier_offers(
             if normalized_link is None or normalized_link in seen_links:
                 continue
             seen_links.add(normalized_link)
+            _discard_db_transaction(db)
             crawled = (
                 crawler.crawl(normalized_link)
                 if search_query.platform == "1688"
@@ -597,16 +600,40 @@ def _platform_search_url(platform: str, keyword: str) -> str:
 
 
 def _serper_client(db: Session, *, org_id: str) -> Serper1688Client:
-    try:
-        api_key = RAnalysisProviderBinding(
-            org_id=org_id,
-            secret_manager=SecretManager(db_session=db),
-        ).serper_key()
-    except SecretManagerError as exc:
-        raise RASupplierDiscoveryError("R-A 没有绑定 Serper key。") from exc
+    last_error: Exception | None = None
+    for _ in range(2):
+        _discard_db_transaction(db)
+        try:
+            api_key = RAnalysisProviderBinding(
+                org_id=org_id,
+                secret_manager=SecretManager(db_session=db),
+            ).serper_key()
+            _discard_db_transaction(db)
+            break
+        except SecretManagerError as exc:
+            _discard_db_transaction(db)
+            raise RASupplierDiscoveryError("R-A 没有绑定 Serper key。") from exc
+        except Exception as exc:
+            last_error = exc
+            _discard_db_transaction(db)
+    else:
+        raise RASupplierDiscoveryError(
+            f"R-A Serper key 读取失败：{str(last_error)[:180]}"
+        )
     if not api_key.strip():
         raise RASupplierDiscoveryError("R-A 没有绑定 Serper key。")
     return Serper1688Client(api_key=api_key)
+
+
+def _discard_db_transaction(db: Session) -> None:
+    try:
+        if db.in_transaction() or db.in_nested_transaction():
+            db.rollback()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def _insert_supplier_search(

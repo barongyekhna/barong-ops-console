@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from ...db.session import get_db
+from ...db.session import get_db, get_read_db
 from ...models.user import User
 from ...services.data_isolation import without_org_data_isolation
 from .rw import _target_org_for_user, require_r_series_org
@@ -74,7 +74,7 @@ class RAAutoProfitJobRequest(BaseModel):
 
 @router.get("/status")
 def ra_status(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     return _framework_payload(db, user)
@@ -82,7 +82,7 @@ def ra_status(
 
 @router.get("/framework")
 def ra_framework(
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     return _framework_payload(db, user)
@@ -99,7 +99,7 @@ def ra_profit_config(
 @router.get("/profit/snapshots")
 def ra_profit_snapshots(
     limit: int = 50,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     target_org = _required_target_org(db, user)
@@ -209,7 +209,7 @@ def ra_profit_job_create(
 @router.get("/profit/jobs/{run_id}")
 def ra_profit_job_get(
     run_id: str,
-    db: Session = Depends(get_db),
+    db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
     target_org = _required_target_org(db, user)

@@ -171,6 +171,7 @@ class RaProfitJobWorker:
                     query=query,
                     limit=asin_limit,
                 )
+                db.rollback()
                 counts = _dict_value(job.get("counts"))
                 counts.update(
                     {
@@ -374,8 +375,8 @@ def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
     live_counts = _live_counts(db, org_id=org_id, run_id=run_id)
     counts.update({key: value for key, value in live_counts.items() if value is not None})
     items = _job_items(db, org_id=org_id, run_id=run_id, query=str(filters.get("query") or ""))
+    db.rollback()
     quote = get_usd_cny_quote()
-    amazon_price = _number(row.get("price") or product.get("price"))
     return {
         "run_id": run_id,
         "status": row.get("status"),
@@ -803,6 +804,12 @@ def _product_fields(
     lithium_value = row.get("lithium_battery_warning")
     if lithium_value is None:
         lithium_value = features.get("lithium_battery_warning")
+    amazon_price = _number(
+        row.get("price")
+        or product.get("price")
+        or product.get("amazon_price_usd")
+        or product.get("sell_price_usd")
+    )
     return {
         "image_url": primary_product_image_url(
             asin=str(asin or ""),

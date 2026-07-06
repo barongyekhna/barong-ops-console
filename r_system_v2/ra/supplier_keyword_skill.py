@@ -99,11 +99,17 @@ def build_supplier_keyword_profile(
         return fallback
 
     try:
+        _discard_db_transaction(db)
         api_key = RAnalysisProviderBinding(
             org_id=org_id,
             secret_manager=SecretManager(db_session=db),
         ).deepseek_key()
+        _discard_db_transaction(db)
     except SecretManagerError:
+        _discard_db_transaction(db)
+        return fallback
+    except Exception:
+        _discard_db_transaction(db)
         return fallback
     if not api_key.strip():
         return fallback
@@ -216,11 +222,17 @@ def evaluate_supplier_alignment(
         return heuristic
 
     try:
+        _discard_db_transaction(db)
         api_key = RAnalysisProviderBinding(
             org_id=org_id,
             secret_manager=SecretManager(db_session=db),
         ).deepseek_key()
+        _discard_db_transaction(db)
     except SecretManagerError:
+        _discard_db_transaction(db)
+        return heuristic
+    except Exception:
+        _discard_db_transaction(db)
         return heuristic
     if not api_key.strip():
         return heuristic
@@ -1049,6 +1061,17 @@ def _deepseek_keyword_enabled() -> bool:
 
 def _deepseek_supplier_match_enabled() -> bool:
     return os.getenv("RA_DEEPSEEK_SUPPLIER_MATCH_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+
+
+def _discard_db_transaction(db: Session) -> None:
+    try:
+        if db.in_transaction() or db.in_nested_transaction():
+            db.rollback()
+    except Exception:
+        try:
+            db.rollback()
+        except Exception:
+            pass
 
 
 def _deepseek_timeout_seconds() -> float:

@@ -95,6 +95,28 @@ RULES = [
     },
 ]
 
+PRODUCT_FEATURE_RESPONSE_KEYS = frozenset(
+    {
+        "amazon_category_path",
+        "bestseller_parent_category",
+        "bestseller_parent_rank",
+        "deepseek_reason",
+        "fba_fee_source",
+        "fba_fee_usd",
+        "fba_pick_pack_fee_usd",
+        "image_candidates",
+        "monthly_sales",
+        "monthly_sales_confidence",
+        "monthly_sales_estimate",
+        "monthly_sales_estimate_max",
+        "monthly_sales_estimate_min",
+        "referral_fee_percentage",
+        "score_reason",
+        "subcategory_name",
+        "subcategory_rank",
+    }
+)
+
 
 def _user_has_rw_role_access(user: User) -> bool:
     return is_owner_role(user.role) or is_super_admin_role(user.role)
@@ -442,7 +464,7 @@ def rw_products(
                 image_url=row.image_url,
                 features=features,
             )
-            response_features = dict(features)
+            response_features = _public_product_features(features)
             response_features["image_candidates"] = image_candidates
             rows.append(
                 {
@@ -526,7 +548,12 @@ def _product_category_options(db: Session) -> list[dict[str, object]]:
         rows = db.execute(
             text(
                 """
-                SELECT category_id, category_path, category, features
+                SELECT DISTINCT
+                       category_id,
+                       category_path,
+                       category,
+                       features->>'amazon_leaf_category_id' AS amazon_leaf_category_id,
+                       features->'amazon_category_path' AS amazon_category_path
                 FROM products_rw
                 WHERE category_id IS NOT NULL OR features ? 'amazon_leaf_category_id'
                 """
@@ -536,7 +563,10 @@ def _product_category_options(db: Session) -> list[dict[str, object]]:
         return []
     options: dict[str, dict[str, object]] = {}
     for row in rows:
-        features = row.get("features") if isinstance(row.get("features"), dict) else {}
+        features = {
+            "amazon_leaf_category_id": row.get("amazon_leaf_category_id"),
+            "amazon_category_path": row.get("amazon_category_path"),
+        }
         for category_id, label, path in _category_options_from_row(row, features):
             if category_id not in options:
                 options[category_id] = {
@@ -549,6 +579,14 @@ def _product_category_options(db: Session) -> list[dict[str, object]]:
         options.values(),
         key=lambda item: str(item.get("label") or item.get("id")),
     )
+
+
+def _public_product_features(features: dict[str, object]) -> dict[str, object]:
+    return {
+        key: value
+        for key, value in features.items()
+        if key in PRODUCT_FEATURE_RESPONSE_KEYS
+    }
 
 
 def _category_options_from_row(
