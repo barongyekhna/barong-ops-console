@@ -1686,9 +1686,9 @@
   box-shadow: 0 0 12px rgb(57 212 255 / 50%);
 }
 .pipeStage[data-state="blocked"] .pipeDot {
-  color: #ffd0da;
-  background: rgb(255 107 138 / 15%);
-  border-color: rgb(255 107 138 / 55%);
+  color: #ffcf8a;
+  background: rgb(255 177 59 / 15%);
+  border-color: rgb(255 177 59 / 55%);
 }
 
 /* 名册进度灯 */
@@ -1706,7 +1706,7 @@
 }
 .lightDot[data-state="done"] { background: #4dffa1; box-shadow: 0 0 7px rgb(77 255 161 / 70%); }
 .lightDot[data-state="active"] { background: #39d4ff; box-shadow: 0 0 7px rgb(57 212 255 / 70%); }
-.lightDot[data-state="blocked"] { background: #ff6b8a; box-shadow: 0 0 7px rgb(255 107 138 / 70%); }
+.lightDot[data-state="blocked"] { background: #ffb13b; box-shadow: 0 0 7px rgb(255 177 59 / 70%); }
 .lightsLoading { color: var(--mm-dim, #7d95ae); font: 600 10px var(--mm-mono, ui-monospace, monospace); }
 
 /* 建品内联面板：出现在命令栏下方、列表上方，完成即消失 */
