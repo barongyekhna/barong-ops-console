@@ -182,23 +182,39 @@ function sourceTypeLabel(sourceType: ISourceType) {
 
 type MediaTileVariant = "big" | "wide" | "tall" | "normal";
 
-// 图墙图块大小由图片自身比例决定：最新一张当封面大图，横图铺宽、竖图拉高。
+// 没有尺寸信息时用节奏化版式，保证图墙错落不呆板（dense 会自动填缝）。
+const TILE_PATTERN: MediaTileVariant[] = [
+  "big",
+  "normal",
+  "tall",
+  "normal",
+  "wide",
+  "normal",
+  "normal",
+  "tall",
+  "normal",
+  "wide",
+  "normal",
+  "big",
+];
+
+// 图块大小：最新一张当封面大图；有真实尺寸就按比例（横铺宽、竖拉高），否则走节奏版式。
 function mediaTileVariant(asset: IMediaAsset, index: number): MediaTileVariant {
   if (index === 0) {
     return "big";
   }
   const { width, height } = asset;
-  if (!width || !height) {
+  if (width && height) {
+    const ratio = width / height;
+    if (ratio >= 1.25) {
+      return "wide";
+    }
+    if (ratio <= 0.8) {
+      return "tall";
+    }
     return "normal";
   }
-  const ratio = width / height;
-  if (ratio >= 1.35) {
-    return "wide";
-  }
-  if (ratio <= 0.74) {
-    return "tall";
-  }
-  return "normal";
+  return TILE_PATTERN[index % TILE_PATTERN.length];
 }
 
 function activeCandidates(batch: CandidateBatch | null) {
