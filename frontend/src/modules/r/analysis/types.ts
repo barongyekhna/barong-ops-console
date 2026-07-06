@@ -316,6 +316,9 @@ export type RaAutoProfitResult = {
     profit_pass: number;
     profit_reject: number;
     profit_blocked: number;
+    rw_empty_result?: boolean;
+    empty_reason?: string | null;
+    empty_recommendation?: string | null;
   };
   formula: RaProfitFormula;
   warnings: string[];

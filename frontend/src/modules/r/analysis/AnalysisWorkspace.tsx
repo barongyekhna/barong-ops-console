@@ -113,7 +113,6 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
     };
   }, [result?.run_id, result?.status]);
 
-  const resultItems = result?.items ?? [];
   const summary = useMemo(() => {
     if (!result) {
       return {
@@ -248,7 +247,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           </span>
         </div>
         {result ? (
-          <AutoResultTable items={resultItems} />
+          <AutoResultTable result={result} />
         ) : (
           <SnapshotPreview snapshots={snapshots} />
         )}
@@ -306,9 +305,16 @@ function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
   );
 }
 
-function AutoResultTable({ items }: { items: RaAutoProfitItem[] }) {
+function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
+  const items = result.items ?? [];
   if (items.length === 0) {
-    return <div className={styles.emptyLine}>没有找到与关键词/类目匹配的 R-W 产品。</div>;
+    if (
+      result.counts.rw_empty_result ||
+      (isTerminalStatus(result.status) && result.counts.matched_products === 0)
+    ) {
+      return <RwEmptyResultNotice result={result} />;
+    }
+    return <div className={styles.emptyLine}>正在等待 R-W 匹配产品进入利润测算。</div>;
   }
 
   return (
@@ -417,6 +423,29 @@ function AutoResultTable({ items }: { items: RaAutoProfitItem[] }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function RwEmptyResultNotice({ result }: { result: RaAutoProfitJobResult }) {
+  const reason =
+    result.counts.empty_reason ||
+    `R-W 仓库中暂无“${result.query || "该关键词/类目"}”相关产品。`;
+  const recommendation =
+    result.counts.empty_recommendation ||
+    "请先到 R-W 仓库的类目设置中选择相关类目，等待 Keepa 自动抓取后再回到 R-A 重新分析。";
+
+  return (
+    <div className={styles.emptyActionPanel}>
+      <AlertTriangle size={20} />
+      <div>
+        <strong>{reason}</strong>
+        <span>{recommendation}</span>
+        <div className={styles.emptyActions}>
+          <a href="/r-w/products">查看 R-W 产品库</a>
+          <a href="/r-w/dashboard">进入 R-W 类目设置</a>
+        </div>
+      </div>
     </div>
   );
 }

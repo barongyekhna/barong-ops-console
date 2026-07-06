@@ -350,6 +350,59 @@
   font-size: 0.84rem;
 }
 
+.emptyActionPanel {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
+  padding: 16px;
+  color: #92400e;
+  border: 1px solid rgb(217 119 6 / 28%);
+  border-radius: 8px;
+  background: #fffbeb;
+}
+
+.emptyActionPanel svg {
+  margin-top: 1px;
+}
+
+.emptyActionPanel > div {
+  display: grid;
+  gap: 7px;
+}
+
+.emptyActionPanel strong {
+  color: #78350f;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.emptyActionPanel span {
+  color: #92400e;
+  font-size: 0.84rem;
+  line-height: 1.6;
+}
+
+.emptyActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.emptyActions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgb(146 64 14 / 24%);
+  border-radius: 7px;
+  color: #78350f;
+  background: #ffffff;
+  font-size: 0.8rem;
+  font-weight: 820;
+  text-decoration: none;
+}
+
 .tableWrap {
   overflow-x: auto;
   border: 1px solid var(--color-line);

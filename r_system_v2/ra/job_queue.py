@@ -191,6 +191,17 @@ class RaProfitJobWorker:
             with self.session_factory() as db:
                 with _without_org_data_isolation():
                     counts = _dict_value(_load_job_row(db, org_id=org_id, run_id=run_id)["counts"])
+                    notice = _no_rw_product_notice(query)
+                    warnings = list(counts.get("warnings") or [])
+                    warnings.append(notice["message"])
+                    counts.update(
+                        {
+                            "rw_empty_result": True,
+                            "empty_reason": notice["reason"],
+                            "empty_recommendation": notice["recommendation"],
+                            "warnings": warnings[-10:],
+                        }
+                    )
                     _update_job(db, run_id=run_id, status="completed", counts=counts, finish=True)
             return
 
@@ -841,7 +852,24 @@ def _initial_counts(filters: dict[str, Any]) -> dict[str, object]:
         "profit_pass": 0,
         "profit_reject": 0,
         "profit_blocked": 0,
+        "rw_empty_result": False,
+        "empty_reason": None,
+        "empty_recommendation": None,
         "warnings": [],
+    }
+
+
+def _no_rw_product_notice(query: str) -> dict[str, str]:
+    cleaned_query = str(query or "").strip() or "该关键词/类目"
+    reason = f"R-W 仓库中暂无“{cleaned_query}”相关产品。"
+    recommendation = (
+        "请先到 R-W 仓库的类目设置中选择相关类目，等待 Keepa 自动抓取后，"
+        "再回到 R-A 重新开始利润分析。"
+    )
+    return {
+        "reason": reason,
+        "recommendation": recommendation,
+        "message": f"{reason}{recommendation}",
     }
 
 

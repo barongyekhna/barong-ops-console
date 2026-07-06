@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from r_system_v2.ra.job_queue import _no_rw_product_notice
 from r_system_v2.ra.relevance import classify_product_relevance
 
 
@@ -71,3 +72,11 @@ def test_relevance_blocks_replacement_part_when_query_wants_main_product() -> No
 
     assert relevance.status == "replacement_part_only"
     assert relevance.should_process is False
+
+
+def test_empty_rw_notice_guides_user_back_to_warehouse() -> None:
+    notice = _no_rw_product_notice("猫爬架")
+
+    assert "R-W 仓库中暂无“猫爬架”相关产品" in notice["reason"]
+    assert "R-W 仓库的类目设置" in notice["recommendation"]
+    assert notice["message"].startswith(notice["reason"])
