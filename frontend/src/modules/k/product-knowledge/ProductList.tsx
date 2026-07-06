@@ -2,21 +2,23 @@
 
 import {
   AlertTriangle,
-  ChevronDown,
+  ArrowLeft,
+  ChevronRight,
   ExternalLink,
   ImagePlus,
   LoaderCircle,
   PackageOpen,
+  Plus,
   RotateCcw,
   Search,
   Trash2,
   X,
 } from "lucide-react";
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type MouseEvent,
 } from "react";
@@ -46,6 +48,7 @@ import {
   updateProduct,
   uploadProductMediaAsset,
 } from "./api";
+import { DashboardScene } from "@/components/dashboard-scene";
 import { ProductDetail } from "./ProductDetail";
 import { ProductForm } from "./ProductForm";
 import { displayProductKey } from "./display";
@@ -89,6 +92,40 @@ function displayReviewStatus(status: string) {
   };
 
   return labels[status] ?? "待处理";
+}
+
+type PipeState = "done" | "active" | "blocked" | "pending";
+
+const PIPELINE_STAGES: Array<{ label: string; code: string }> = [
+  { label: "关键词", code: "KEYWORDS" },
+  { label: "图片", code: "IMAGES" },
+  { label: "卖点", code: "SELLING" },
+  { label: "准备", code: "READY" },
+];
+
+// 由 readiness 推导 4 段流水线状态：关键词 / 图片 / 卖点 / 准备。
+function pipelineStates(readiness: ProductReadinessState | null): PipeState[] {
+  if (!readiness) {
+    return ["pending", "pending", "pending", "pending"];
+  }
+  const sections = [
+    readiness.keywords,
+    readiness.images,
+    readiness.selling_points,
+  ];
+  const states: PipeState[] = sections.map((section) =>
+    section.status === "blocked"
+      ? "blocked"
+      : section.submitted
+        ? "done"
+        : "pending",
+  );
+  states.push(readiness.ready ? "done" : "pending");
+  const activeIndex = states.findIndex((state) => state === "pending");
+  if (activeIndex >= 0) {
+    states[activeIndex] = "active";
+  }
+  return states;
 }
 
 function formatError(error: unknown, fallback: string) {
@@ -194,6 +231,11 @@ export function ProductListFull() {
   const [readinessByProductId, setReadinessByProductId] = useState<
     Record<string, ProductReadinessState>
   >({});
+  const [showCreate, setShowCreate] = useState(false);
+  const [rowReadiness, setRowReadiness] = useState<
+    Record<string, ProductReadinessState>
+  >({});
+  const attemptedReadinessRef = useRef<Set<string>>(new Set());
   const [deleteCandidate, setDeleteCandidate] =
     useState<ProductKnowledgeListItem | null>(null);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
@@ -267,6 +309,8 @@ export function ProductListFull() {
     async (preferredOpenId?: string, query?: string) => {
       setIsLoading(true);
       setLoadError("");
+      attemptedReadinessRef.current = new Set();
+      setRowReadiness({});
 
       try {
         const trimmedQuery = query?.trim() ?? "";
@@ -378,6 +422,49 @@ export function ProductListFull() {
     void loadWorkflowRuntime(openProductId);
   }, [loadWorkflowRuntime, openProductId]);
 
+  // 名册进度灯：为当前页产品拉取 readiness（ref 记录已尝试，失败也不重拉）。
+  useEffect(() => {
+    if (openProductId) {
+      return;
+    }
+    const missing = pageItems.filter(
+      (item) => !attemptedReadinessRef.current.has(item.id),
+    );
+    if (missing.length === 0) {
+      return;
+    }
+    for (const item of missing) {
+      attemptedReadinessRef.current.add(item.id);
+    }
+    let cancelled = false;
+    void (async () => {
+      const results = await Promise.all(
+        missing.map(async (item) => {
+          try {
+            return [item.id, await getProductReadiness(item.id)] as const;
+          } catch {
+            return null;
+          }
+        }),
+      );
+      if (cancelled) {
+        return;
+      }
+      setRowReadiness((current) => {
+        const next = { ...current };
+        for (const entry of results) {
+          if (entry) {
+            next[entry[0]] = entry[1];
+          }
+        }
+        return next;
+      });
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openProductId, pageItems]);
+
   async function handleCreate(payload: ProductCreateFormPayload) {
     setIsCreating(true);
     setCreateError("");
@@ -398,6 +485,7 @@ export function ProductListFull() {
       }
 
       await loadProducts(createdProduct.id, activeSearch);
+      setShowCreate(false);
       if (deepSeekError) {
         setCreateError(deepSeekError);
       }
@@ -780,36 +868,157 @@ export function ProductListFull() {
   }
 
   return (
-    <section className={styles.workspace} aria-label="产品知识库">
-      <ProductForm
-        error={createError}
-        isSubmitting={isCreating}
-        onCreate={handleCreate}
-        onDismissError={() => setCreateError("")}
-      />
+    <section
+      aria-label="产品知识库"
+      className={`${styles.workspace} mm-page k-page`}
+    >
+      <DashboardScene />
 
-      <div className={styles.contentGrid}>
-        <section className={styles.listPanel} aria-labelledby="products-full-title">
-          <div className={styles.panelHeading}>
-            <div>
-              <span className={styles.eyebrow}>产品</span>
-              <h3 id="products-full-title">产品列表</h3>
-            </div>
+      <div className={styles.kCommandBar}>
+        <div>
+          <span className={styles.eyebrow}>K 系列</span>
+          <h2>产品知识库</h2>
+          <p>创建产品后进入档案，逐步完成关键词、图片与卖点审核。</p>
+        </div>
+        <div className={styles.kCommandActions}>
+          <button
+            className="primary-button"
+            onClick={() => {
+              setCreateError("");
+              setShowCreate(true);
+            }}
+            type="button"
+          >
+            <Plus aria-hidden="true" size={16} />
+            新建产品
+          </button>
+          <button
+            className="secondary-button"
+            disabled={isLoading}
+            onClick={() => void loadProducts(undefined, activeSearch)}
+            type="button"
+          >
+            {isLoading ? (
+              <LoaderCircle aria-hidden="true" className="spin" size={16} />
+            ) : (
+              <RotateCcw aria-hidden="true" size={16} />
+            )}
+            刷新
+          </button>
+        </div>
+      </div>
+
+      {openProduct ? (
+        <div className={styles.dossier}>
+          <div className={styles.dossierBar}>
             <button
-              className="secondary-button"
-              disabled={isLoading}
-              onClick={() => void loadProducts(undefined, activeSearch)}
+              className={styles.backButton}
+              onClick={() => setOpenProductId(null)}
               type="button"
             >
-              {isLoading ? (
-                <LoaderCircle aria-hidden="true" className="spin" size={16} />
-              ) : (
-                <RotateCcw aria-hidden="true" size={16} />
-              )}
-              刷新
+              <ArrowLeft aria-hidden="true" size={16} />
+              返回名册
             </button>
+            <div className={styles.dossierTitle}>
+              <strong>
+                {openProduct.product_name_en ||
+                  displayProductKey(openProduct.product_key)}
+              </strong>
+              <span>
+                {openProduct.parent_sku ||
+                  openProduct.sku ||
+                  displayProductKey(openProduct.product_key)}
+              </span>
+            </div>
+            <div className={styles.dossierActions}>
+              <button
+                className="secondary-button"
+                onClick={(event) => openImageSystem(openProduct, event)}
+                type="button"
+              >
+                <ImagePlus aria-hidden="true" size={15} />
+                作图
+              </button>
+              <button
+                className={`secondary-button ${styles.dangerButton}`}
+                onClick={(event) => requestDelete(openProduct, event)}
+                type="button"
+              >
+                <Trash2 aria-hidden="true" size={15} />
+                删除
+              </button>
+            </div>
           </div>
 
+          <div className={styles.pipeline}>
+            {pipelineStates(
+              readinessByProductId[openProduct.id] ??
+                rowReadiness[openProduct.id] ??
+                null,
+            ).map((state, index) => (
+              <div
+                className={styles.pipeStage}
+                data-state={state}
+                key={PIPELINE_STAGES[index].code}
+              >
+                <span className={styles.pipeDot}>
+                  {state === "done" ? "✓" : index + 1}
+                </span>
+                <span className={styles.pipeText}>
+                  <strong>{PIPELINE_STAGES[index].label}</strong>
+                  <span>{PIPELINE_STAGES[index].code}</span>
+                </span>
+                {index < PIPELINE_STAGES.length - 1 ? (
+                  <span className={styles.pipeConn} />
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          <ProductDetail
+            isGeneratingSellingPoints={generatingProductId === openProduct.id}
+            isSavingProductInfo={savingProductId === openProduct.id}
+            isWorkflowBusy={workflowBusyAction !== null}
+            mediaAssets={mediaByProductId[openProduct.id] ?? []}
+            onApproveSellingPoints={(sellingPoints) =>
+              handleApproveSellingPoints(sellingPoints)
+            }
+            onBindImage={(assetId, variantSku) =>
+              void handleBindImage(assetId, variantSku)
+            }
+            onBindISystemImage={(imageAssetId, variantSku) =>
+              void handleBindISystemImage(imageAssetId, variantSku)
+            }
+            onCollapse={() => setOpenProductId(null)}
+            onCreateMedia={(file, variantSku) =>
+              handleCreateMedia(file, variantSku)
+            }
+            onDeleteMedia={(assetId) => handleDeleteMedia(assetId)}
+            onGenerateSellingPoints={handleGenerateSellingPoints}
+            onRefreshWorkflow={() => void loadWorkflowRuntime(openProduct.id)}
+            onRetryWorkflowStep={(step, payload) =>
+              void handleRetryWorkflowStep(step, payload)
+            }
+            onSaveProductInfo={() => void handleSaveProductInfo()}
+            onSubmitImages={handleSubmitImages}
+            onStartWorkflow={(payload) => void handleStartWorkflow(payload)}
+            onSubmitRiskReview={(decisions, confirmNoRiskTerms) =>
+              handleSubmitRiskReview(decisions, confirmNoRiskTerms)
+            }
+            product={openProduct}
+            readiness={readinessByProductId[openProduct.id] ?? null}
+            sellingPoints={sellingPointsByProductId[openProduct.id] ?? null}
+            productInfoSaveError={productSaveError}
+            sellingPointsError={sellingPointsError}
+            workflow={workflowByProductId[openProduct.id] ?? null}
+            workflowError={workflowError}
+          />
+        </div>
+      ) : (
+        <section
+          aria-labelledby="products-full-title"
+          className={styles.listPanel}
+        >
           <form
             className={styles.searchBar}
             onSubmit={(event) => {
@@ -909,19 +1118,21 @@ export function ProductListFull() {
                     <th scope="col">内部编号</th>
                     <th scope="col">品牌</th>
                     <th scope="col">审核</th>
+                    <th scope="col">进度</th>
                     <th scope="col">更新时间</th>
                     <th scope="col">操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {pageItems.map((product) => {
-                    const isOpen = product.id === openProductId;
+                    const stageStates = pipelineStates(
+                      rowReadiness[product.id] ?? null,
+                    );
+                    const hasReadiness = product.id in rowReadiness;
 
                     return (
-                      <Fragment key={product.id}>
                         <tr
-                          aria-selected={isOpen}
-                          className={isOpen ? styles.selectedRow : undefined}
+                          key={product.id}
                           onClick={() => toggleProduct(product.id)}
                           onKeyDown={(event) => {
                             if (event.key === "Enter" || event.key === " ") {
@@ -946,12 +1157,28 @@ export function ProductListFull() {
                               {displayReviewStatus(product.review_status)}
                             </span>
                           </td>
+                          <td>
+                            {hasReadiness ? (
+                              <span className={styles.rosterLights}>
+                                {stageStates.map((state, index) => (
+                                  <span
+                                    className={styles.lightDot}
+                                    data-state={state}
+                                    key={PIPELINE_STAGES[index].code}
+                                    title={PIPELINE_STAGES[index].label}
+                                  />
+                                ))}
+                              </span>
+                            ) : (
+                              <span className={styles.lightsLoading}>· · ·</span>
+                            )}
+                          </td>
                           <td>{formatDate(product.updated_at)}</td>
                           <td>
                             <div className={styles.rowActions}>
                               <button className="secondary-button" type="button">
-                                <ChevronDown aria-hidden="true" size={15} />
-                                {isOpen ? "收起" : "详情"}
+                                <ChevronRight aria-hidden="true" size={15} />
+                                详情
                               </button>
                               <button
                                 className="secondary-button"
@@ -972,74 +1199,6 @@ export function ProductListFull() {
                             </div>
                           </td>
                         </tr>
-                        {isOpen ? (
-                          <tr className={styles.detailRow}>
-                            <td colSpan={6}>
-                              <ProductDetail
-                                isGeneratingSellingPoints={
-                                  generatingProductId === product.id
-                                }
-                                isSavingProductInfo={savingProductId === product.id}
-                                isWorkflowBusy={workflowBusyAction !== null}
-                                mediaAssets={mediaByProductId[product.id] ?? []}
-                                onApproveSellingPoints={(sellingPoints) =>
-                                  handleApproveSellingPoints(sellingPoints)
-                                }
-                                onBindImage={(assetId, variantSku) =>
-                                  void handleBindImage(assetId, variantSku)
-                                }
-                                onBindISystemImage={(imageAssetId, variantSku) =>
-                                  void handleBindISystemImage(
-                                    imageAssetId,
-                                    variantSku,
-                                  )
-                                }
-                                onCollapse={() => setOpenProductId(null)}
-                                onCreateMedia={(file, variantSku) =>
-                                  handleCreateMedia(file, variantSku)
-                                }
-                                onDeleteMedia={(assetId) =>
-                                  handleDeleteMedia(assetId)
-                                }
-                                onGenerateSellingPoints={handleGenerateSellingPoints}
-                                onRefreshWorkflow={() =>
-                                  void loadWorkflowRuntime(product.id)
-                                }
-                                onRetryWorkflowStep={(step, payload) =>
-                                  void handleRetryWorkflowStep(step, payload)
-                                }
-                                onSaveProductInfo={() =>
-                                  void handleSaveProductInfo()
-                                }
-                                onSubmitImages={handleSubmitImages}
-                                onStartWorkflow={(payload) =>
-                                  void handleStartWorkflow(payload)
-                                }
-                                onSubmitRiskReview={(
-                                  decisions,
-                                  confirmNoRiskTerms,
-                                ) =>
-                                  handleSubmitRiskReview(
-                                    decisions,
-                                    confirmNoRiskTerms,
-                                  )
-                                }
-                                product={product}
-                                readiness={
-                                  readinessByProductId[product.id] ?? null
-                                }
-                                sellingPoints={
-                                  sellingPointsByProductId[product.id] ?? null
-                                }
-                                productInfoSaveError={productSaveError}
-                                sellingPointsError={sellingPointsError}
-                                workflow={workflowByProductId[product.id] ?? null}
-                                workflowError={workflowError}
-                              />
-                            </td>
-                          </tr>
-                        ) : null}
-                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -1047,7 +1206,31 @@ export function ProductListFull() {
             </div>
           ) : null}
         </section>
-      </div>
+      )}
+
+      {showCreate ? (
+        <div
+          className={styles.drawerBackdrop}
+          onMouseDown={() => {
+            if (!isCreating) {
+              setShowCreate(false);
+            }
+          }}
+          role="presentation"
+        >
+          <aside
+            className={styles.drawer}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <ProductForm
+              error={createError}
+              isSubmitting={isCreating}
+              onCreate={handleCreate}
+              onDismissError={() => setCreateError("")}
+            />
+          </aside>
+        </div>
+      ) : null}
 
       {deleteCandidate ? (
         <div

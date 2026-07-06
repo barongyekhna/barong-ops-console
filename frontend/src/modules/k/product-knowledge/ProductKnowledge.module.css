@@ -1189,6 +1189,22 @@
   }
 }
 
+@media (max-width: 900px) {
+  .kCommandBar,
+  .dossierBar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .pipeline {
+    grid-template-columns: 1fr;
+  }
+
+  .drawer {
+    width: min(100%, 560px);
+  }
+}
+
 @media (max-width: 760px) {
   .panelHeading,
   .detailHeading,
@@ -1263,3 +1279,434 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* =====================================================================
+   命令中心暗色主题覆盖（复用 .mm-page 底座的 --mm-* 变量）
+   保留上方全部布局，只翻转配色 + 追加新组件（命令栏/抽屉/档案/流水线/进度灯）
+   ===================================================================== */
+.workspace {
+  --surface: rgb(8 15 26 / 58%);
+  --line: rgb(120 200 255 / 16%);
+  --muted: #7d95ae;
+  --ink: #d6e8f6;
+  --signal: #39d4ff;
+  --signal-dark: #39d4ff;
+}
+
+/* 顶部命令栏 */
+.kCommandBar {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.kCommandBar h2 {
+  margin: 3px 0 0;
+  color: #eafaff;
+  text-shadow: 0 0 24px rgb(57 212 255 / 20%);
+}
+
+.kCommandBar p {
+  margin: 6px 0 0;
+  max-width: 640px;
+  color: var(--mm-dim, #7d95ae);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+.kCommandBar .eyebrow {
+  color: var(--mm-cyan, #39d4ff);
+  font: 700 9px var(--mm-mono, ui-monospace, monospace);
+  letter-spacing: 0.28em;
+}
+
+.kCommandActions {
+  display: flex;
+  gap: 10px;
+  flex: none;
+}
+
+/* 面板 = HUD ops-panel（角标 + 玻璃） */
+.form,
+.listPanel {
+  position: relative;
+  background: rgb(8 15 26 / 58%);
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  border-radius: 12px;
+  backdrop-filter: blur(9px);
+  box-shadow: 0 20px 50px -26px rgb(0 0 0 / 80%);
+  color: var(--mm-ink, #d6e8f6);
+}
+
+.listPanel::before,
+.listPanel::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--mm-amber, #ffb13b);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.listPanel::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+.listPanel::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+
+.panelHeading h3,
+.detailHeading h3,
+.detail h3 { color: #eafaff; }
+
+.eyebrow { color: var(--mm-cyan, #39d4ff); letter-spacing: 0.2em; }
+
+/* 表单分区 */
+.formSection {
+  background: rgb(10 18 30 / 45%);
+  border-color: var(--mm-line, rgb(120 200 255 / 16%));
+}
+
+.formSectionHeading { color: #eafaff; }
+.formSectionHeading h4 { color: #eafaff; }
+
+.autoKeyNotice {
+  background: rgb(57 212 255 / 8%);
+  border-color: rgb(57 212 255 / 25%);
+}
+.autoKeyNotice strong { color: #eafaff; }
+
+.variantRow { background: rgb(10 18 30 / 45%); border-color: var(--mm-line, rgb(120 200 255 / 16%)); }
+.variantPreview strong { color: var(--mm-dim, #7d95ae); }
+.variantPreview span,
+.variantImageFolder span,
+.sellingPointTagGroup strong {
+  color: var(--mm-cyan, #39d4ff);
+  background: rgb(57 212 255 / 8%);
+  border-color: rgb(57 212 255 / 25%);
+}
+.variantImageFolder { background: rgb(10 18 30 / 45%); border-color: var(--mm-line, rgb(120 200 255 / 16%)); }
+.variantImageFolder strong { color: #eafaff; }
+
+/* 输入控件 */
+.field span { color: var(--mm-dim, #7d95ae); }
+.field input,
+.field select,
+.field textarea,
+.manualAddRow input,
+.sellingPointBullets input,
+.sellingPointBullets textarea {
+  color: #eafaff;
+  background: rgb(6 14 24 / 75%);
+  border-color: var(--mm-line, rgb(120 200 255 / 16%));
+}
+.field select option { background: #0a1420; color: #eafaff; }
+.field input:focus,
+.field select:focus,
+.field textarea:focus,
+.manualAddRow input:focus,
+.sellingPointBullets input:focus,
+.sellingPointBullets textarea:focus {
+  border-color: rgb(57 212 255 / 55%);
+  box-shadow: 0 0 0 3px rgb(57 212 255 / 12%);
+}
+.field input::placeholder,
+.field textarea::placeholder { color: rgb(125 149 174 / 65%); }
+
+.formMessage,
+.sellingPointsError { color: var(--mm-red, #ff6b8a); }
+
+/* 状态/错误/空态 */
+.state,
+.errorState {
+  background: rgb(8 15 26 / 40%);
+  border-color: var(--mm-line, rgb(120 200 255 / 16%));
+  color: var(--mm-dim, #7d95ae);
+}
+.errorState { color: var(--mm-red, #ff6b8a); border-color: rgb(255 107 138 / 25%); background: rgb(255 107 138 / 8%); }
+.errorState strong { color: var(--mm-red, #ff6b8a); }
+
+/* 表格 */
+.tableScroll {
+  background: rgb(4 10 18 / 45%);
+  border-color: var(--mm-line, rgb(120 200 255 / 16%));
+}
+.table th {
+  color: var(--mm-dim, #7d95ae);
+  background: rgb(57 212 255 / 6%);
+}
+.table th,
+.table td { border-bottom-color: rgb(120 200 255 / 10%); }
+.table tbody tr:hover td,
+.table tbody tr:focus-visible td,
+.selectedRow td { background: rgb(57 212 255 / 8%); }
+.detailRow td,
+.detailRow:hover td,
+.detailRow:focus-visible td { background: transparent; }
+.table tbody tr:focus-visible { outline-color: rgb(57 212 255 / 40%); }
+.table td:first-child strong { color: #eafaff; }
+.table td:first-child span { color: var(--mm-cyan, #39d4ff); }
+
+.dangerButton {
+  color: var(--mm-red, #ff6b8a);
+  border-color: rgb(255 107 138 / 30%);
+  background: rgb(255 107 138 / 8%);
+}
+.dangerButton:hover {
+  color: #ffd0da;
+  border-color: rgb(255 107 138 / 55%);
+  background: rgb(255 107 138 / 14%);
+}
+
+.statusBadge {
+  color: var(--mm-cyan, #39d4ff);
+  background: rgb(57 212 255 / 10%);
+  border-color: rgb(57 212 255 / 28%);
+}
+
+/* 详情内各面板 */
+.detailGrid div,
+.workflowMetrics div,
+.exportSummary,
+.workflowSteps li,
+.workflowStages li,
+.riskDecisionList li,
+.mediaList li,
+.keywordList li,
+.sellingPointsMetrics div,
+.sellingPointBullets li,
+.confirmMeta div {
+  background: rgb(10 18 30 / 45%);
+  border-color: var(--mm-line, rgb(120 200 255 / 16%));
+}
+.keywordColumn { background: rgb(8 15 26 / 45%); border-color: var(--mm-line, rgb(120 200 255 / 16%)); }
+.columnHeading strong,
+.sellingPointBullets strong { color: #eafaff; }
+
+.detailGrid dd,
+.workflowMetrics dd,
+.sellingPointsMetrics dd,
+.confirmMeta dd { color: #eafaff; }
+
+.emptyDetailIcon {
+  color: var(--mm-cyan, #39d4ff);
+  background: rgb(57 212 255 / 8%);
+  border-color: rgb(57 212 255 / 25%);
+}
+
+/* 进度条 */
+.workflowProgress { background: rgb(120 200 255 / 12%); }
+.workflowProgress span {
+  background: linear-gradient(90deg, #39d4ff, #22a7d8);
+  box-shadow: 0 0 12px rgb(57 212 255 / 55%);
+}
+
+/* workflow stage 状态色 */
+.workflowStages li[data-status="running"] { background: rgb(57 212 255 / 8%); border-color: rgb(57 212 255 / 30%); }
+.workflowStages li[data-status="completed"] { background: rgb(77 255 161 / 8%); border-color: rgb(77 255 161 / 30%); }
+.workflowStages li[data-status="failed"],
+.workflowStages li[data-status="blocked"] { background: rgb(255 107 138 / 8%); border-color: rgb(255 107 138 / 30%); }
+.workflowStages strong { color: var(--mm-dim, #7d95ae); }
+.workflowStages li[data-status="running"] strong { color: var(--mm-cyan, #39d4ff); }
+.workflowStages li[data-status="completed"] strong,
+.workflowSteps strong,
+.sellingPointBullets em { color: var(--mm-green, #4dffa1); }
+.workflowStages li[data-status="failed"] strong,
+.workflowStages li[data-status="blocked"] strong { color: var(--mm-red, #ff6b8a); }
+
+.mediaPreview {
+  color: var(--mm-cyan, #39d4ff);
+  background: rgb(4 10 18 / 60%);
+  border-color: var(--mm-line, rgb(120 200 255 / 16%));
+}
+.riskDecisionList button[aria-pressed="true"] {
+  color: var(--mm-cyan, #39d4ff);
+  border-color: rgb(57 212 255 / 45%);
+  background: rgb(57 212 255 / 10%);
+}
+
+/* readiness / footer 徽章 */
+.sectionFooter > span,
+.readinessGrid span {
+  color: var(--mm-amber, #ffb13b);
+  background: rgb(255 177 59 / 10%);
+  border-color: rgb(255 177 59 / 30%);
+}
+.sectionFooter > span[data-complete="true"],
+.readinessGrid span[data-complete="true"] {
+  color: var(--mm-green, #4dffa1);
+  background: rgb(77 255 161 / 8%);
+  border-color: rgb(77 255 161 / 30%);
+}
+
+.mediaDropzone {
+  color: var(--mm-ink, #d6e8f6);
+  background: rgb(6 14 24 / 60%);
+  border-color: rgb(120 200 255 / 30%);
+}
+.mediaDropzone:focus-visible,
+.mediaDropzoneActive {
+  border-color: rgb(57 212 255 / 55%);
+  box-shadow: 0 0 0 3px rgb(57 212 255 / 12%);
+}
+
+/* 删除弹窗 */
+.modalBackdrop { background: rgb(2 6 12 / 78%); backdrop-filter: blur(6px); z-index: 80; }
+.confirmModal {
+  background: rgb(8 15 26 / 97%);
+  border-color: var(--mm-line, rgb(120 200 255 / 16%));
+  box-shadow: 0 40px 90px -34px rgb(0 0 0 / 85%);
+}
+.confirmModalHeading h3 { color: #eafaff; }
+
+/* =====================================================================
+   新组件：创建抽屉 / drill-in 档案 / 流水线 stepper / 名册进度灯
+   ===================================================================== */
+
+/* 建品抽屉 */
+.drawerBackdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 85;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(2 6 12 / 72%);
+  backdrop-filter: blur(6px);
+}
+
+.drawer {
+  width: min(100%, 760px);
+  height: 100%;
+  overflow-y: auto;
+  padding: 22px;
+  background: rgb(6 12 20 / 98%);
+  border-left: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  box-shadow: -30px 0 80px -30px rgb(0 0 0 / 85%);
+  animation: kDrawerIn 0.22s ease;
+}
+
+@keyframes kDrawerIn {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.drawer .form {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  backdrop-filter: none;
+}
+
+/* drill-in 档案 */
+.dossier {
+  display: grid;
+  gap: 16px;
+}
+
+.dossierBar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.backButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(10 20 34 / 55%);
+  color: var(--mm-cyan, #39d4ff);
+  font: 600 13px "Inter", system-ui, sans-serif;
+  cursor: pointer;
+  transition: 0.15s;
+  flex: none;
+}
+.backButton:hover { border-color: rgb(57 212 255 / 50%); color: #eafaff; }
+
+.dossierTitle {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.dossierTitle strong { color: #eafaff; font-size: 16px; overflow-wrap: anywhere; }
+.dossierTitle span { color: var(--mm-cyan, #39d4ff); font: 600 11px var(--mm-mono, ui-monospace, monospace); }
+
+.dossierActions { display: flex; gap: 8px; flex: none; }
+
+/* 流水线 stepper */
+.pipeline {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  position: relative;
+  padding: 14px 16px;
+  border-radius: 12px;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(8 15 26 / 55%);
+}
+
+.pipeStage {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.pipeDot {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  border: 1px solid var(--mm-line, rgb(120 200 255 / 16%));
+  background: rgb(10 20 34 / 60%);
+  color: var(--mm-dim, #7d95ae);
+  font: 700 12px var(--mm-mono, ui-monospace, monospace);
+}
+.pipeText { display: grid; gap: 1px; min-width: 0; }
+.pipeText strong { color: #eafaff; font-size: 12.5px; }
+.pipeText span { color: var(--mm-dim, #7d95ae); font: 600 9px var(--mm-mono, ui-monospace, monospace); letter-spacing: 0.1em; text-transform: uppercase; }
+.pipeConn { flex: 1; height: 1px; min-width: 12px; background: rgb(120 200 255 / 18%); }
+
+.pipeStage[data-state="done"] .pipeDot {
+  color: #03121a;
+  background: linear-gradient(180deg, #5fffb0, #2fd483);
+  border-color: rgb(77 255 161 / 60%);
+  box-shadow: 0 0 12px rgb(77 255 161 / 45%);
+}
+.pipeStage[data-state="active"] .pipeDot {
+  color: #03121a;
+  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
+  border-color: rgb(57 212 255 / 60%);
+  box-shadow: 0 0 12px rgb(57 212 255 / 50%);
+}
+.pipeStage[data-state="blocked"] .pipeDot {
+  color: #ffd0da;
+  background: rgb(255 107 138 / 15%);
+  border-color: rgb(255 107 138 / 55%);
+}
+
+/* 名册进度灯 */
+.rosterLights {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.lightDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: rgb(120 150 180 / 25%);
+  box-shadow: none;
+}
+.lightDot[data-state="done"] { background: #4dffa1; box-shadow: 0 0 7px rgb(77 255 161 / 70%); }
+.lightDot[data-state="active"] { background: #39d4ff; box-shadow: 0 0 7px rgb(57 212 255 / 70%); }
+.lightDot[data-state="blocked"] { background: #ff6b8a; box-shadow: 0 0 7px rgb(255 107 138 / 70%); }
+.lightsLoading { color: var(--mm-dim, #7d95ae); font: 600 10px var(--mm-mono, ui-monospace, monospace); }
+
+/* 场景层安全：内容压在深空之上 */
+.workspace > *:not(.dsc-space) { position: relative; z-index: 1; }
