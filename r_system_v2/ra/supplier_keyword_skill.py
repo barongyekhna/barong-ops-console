@@ -195,6 +195,162 @@ def sanitize_keyword_profile(
 
 def evaluate_supplier_alignment(
     *,
+    db: Session | None = None,
+    org_id: str | None = None,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+    supplier_title: str | None,
+    supplier_snippet: str | None,
+    raw_excerpt: str | None,
+    unit_price_cny: Decimal | None,
+) -> dict[str, Any]:
+    heuristic = _heuristic_supplier_alignment(
+        product=product,
+        keyword_profile=keyword_profile,
+        supplier_title=supplier_title,
+        supplier_snippet=supplier_snippet,
+        raw_excerpt=raw_excerpt,
+        unit_price_cny=unit_price_cny,
+    )
+    if db is None or not org_id or not _deepseek_supplier_match_enabled():
+        return heuristic
+
+    try:
+        api_key = RAnalysisProviderBinding(
+            org_id=org_id,
+            secret_manager=SecretManager(db_session=db),
+        ).deepseek_key()
+    except SecretManagerError:
+        return heuristic
+    if not api_key.strip():
+        return heuristic
+
+    try:
+        response = _call_deepseek_supplier_alignment(
+            api_key=api_key,
+            product=product,
+            keyword_profile=keyword_profile,
+            supplier_title=supplier_title,
+            supplier_snippet=supplier_snippet,
+            raw_excerpt=raw_excerpt,
+            unit_price_cny=unit_price_cny,
+        )
+    except Exception as exc:
+        heuristic["source"] = "heuristic_after_deepseek_match_error"
+        heuristic["error"] = str(exc)[:240]
+        return heuristic
+
+    return sanitize_supplier_alignment(
+        response,
+        heuristic_alignment=heuristic,
+        product=product,
+        keyword_profile=keyword_profile,
+        supplier_title=supplier_title,
+        supplier_snippet=supplier_snippet,
+        raw_excerpt=raw_excerpt,
+        unit_price_cny=unit_price_cny,
+    )
+
+
+def sanitize_supplier_alignment(
+    response: dict[str, Any],
+    *,
+    heuristic_alignment: dict[str, Any],
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+    supplier_title: str | None,
+    supplier_snippet: str | None,
+    raw_excerpt: str | None,
+    unit_price_cny: Decimal | None,
+) -> dict[str, Any]:
+    response = _dict_value(response)
+    heuristic = _dict_value(heuristic_alignment)
+    combined = _joined_text(supplier_title, supplier_snippet, raw_excerpt)
+    product_text = _joined_text(product.get("title"), product.get("title_zh"))
+    hard_blocks = _hard_guard_blocks(
+        product_text=product_text,
+        supplier_text=combined,
+        keyword_profile=keyword_profile,
+    )
+    status = _valid_match_status(response.get("match_status")) or str(
+        heuristic.get("match_status") or "review"
+    )
+    score = _bounded_score(response.get("match_score"), heuristic.get("match_score"))
+    reason = str(response.get("match_reason") or "").strip()
+    warnings = [
+        str(item).strip()
+        for item in _list_value(response.get("warnings"))
+        if str(item).strip()
+    ]
+
+    if hard_blocks:
+        status = "mismatch"
+        score = min(score, 25)
+        warnings = [*hard_blocks, *warnings]
+        if reason:
+            reason = "；".join([*hard_blocks, reason])
+        else:
+            reason = "；".join(hard_blocks)
+    elif not reason:
+        reason = str(heuristic.get("match_reason") or "DeepSeek 未给出明确原因。")
+
+    quantity = _sanitize_alignment_section(
+        response.get("quantity"),
+        fallback=_dict_value(heuristic.get("quantity")),
+    )
+    dimensions = _sanitize_alignment_section(
+        response.get("dimensions"),
+        fallback=_dict_value(heuristic.get("dimensions")),
+    )
+    if quantity["status"] == "needs_review":
+        status = "review" if status == "match" else status
+        score = min(score, 58)
+        reason = _append_reason(reason, quantity.get("reason"))
+    if dimensions["status"] == "needs_review":
+        status = "review" if status == "match" else status
+        score = min(score, 56)
+        reason = _append_reason(reason, dimensions.get("reason"))
+
+    cost_multiplier = _safe_multiplier(response.get("cost_multiplier"))
+    cost_multiplier = _multiply_optional(
+        cost_multiplier,
+        _safe_multiplier(quantity.get("cost_multiplier")),
+    )
+    cost_multiplier = _multiply_optional(
+        cost_multiplier,
+        _safe_multiplier(dimensions.get("cost_multiplier")),
+    )
+    if cost_multiplier is None:
+        cost_multiplier = _safe_multiplier(heuristic.get("cost_multiplier"))
+
+    adjusted_price = unit_price_cny
+    if adjusted_price is not None and cost_multiplier is not None:
+        adjusted_price = _money(adjusted_price * cost_multiplier)
+
+    return {
+        "source": "deepseek",
+        "skill_version": SKILL_VERSION,
+        "match_status": status,
+        "match_score": score,
+        "match_reason": reason,
+        "warnings": _dedupe_terms(warnings),
+        "amazon_subject": response.get("amazon_subject"),
+        "supplier_subject": response.get("supplier_subject"),
+        "same_product_type": _bool_or_none(response.get("same_product_type")),
+        "brand_risk": bool(response.get("brand_risk")),
+        "brand_terms_found": _list_value(response.get("brand_terms_found")),
+        "shape_conflict": bool(response.get("shape_conflict")),
+        "quantity": quantity,
+        "dimensions": dimensions,
+        "cost_multiplier": _decimal_number(cost_multiplier),
+        "raw_unit_price_cny": _decimal_number(unit_price_cny),
+        "adjusted_unit_price_cny": _decimal_number(adjusted_price),
+        "heuristic_alignment": heuristic,
+    }
+
+
+def _heuristic_supplier_alignment(
+    *,
     product: dict[str, Any],
     keyword_profile: dict[str, Any],
     supplier_title: str | None,
@@ -204,7 +360,6 @@ def evaluate_supplier_alignment(
 ) -> dict[str, Any]:
     combined = _joined_text(supplier_title, supplier_snippet, raw_excerpt)
     product_text = _joined_text(product.get("title"), product.get("title_zh"))
-    product_type = str(keyword_profile.get("product_type_zh") or "").strip()
     core_terms = _list_value(keyword_profile.get("core_keywords_zh"))[:4]
     forbidden = _list_value(keyword_profile.get("forbidden_terms"))
     warnings: list[str] = []
@@ -250,6 +405,8 @@ def evaluate_supplier_alignment(
         adjusted_price = _money(adjusted_price * cost_multiplier)
 
     return {
+        "source": "heuristic",
+        "skill_version": SKILL_VERSION,
         "match_status": status,
         "match_score": max(0, min(100, score)),
         "match_reason": "；".join(warnings) if warnings else "供应商主体、数量和尺寸通过基础校验。",
@@ -377,6 +534,75 @@ def _call_deepseek_keyword_profile(*, api_key: str, product: dict[str, Any]) -> 
         raise RuntimeError(f"DeepSeek 关键词抽取失败：HTTP {exc.code} {detail}") from exc
     except (URLError, TimeoutError, json.JSONDecodeError) as exc:
         raise RuntimeError(f"DeepSeek 关键词抽取失败：{exc}") from exc
+
+    content = (
+        payload.get("choices", [{}])[0]
+        .get("message", {})
+        .get("content", "")
+    )
+    return _parse_json_object(str(content))
+
+
+def _call_deepseek_supplier_alignment(
+    *,
+    api_key: str,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+    supplier_title: str | None,
+    supplier_snippet: str | None,
+    raw_excerpt: str | None,
+    unit_price_cny: Decimal | None,
+) -> dict[str, Any]:
+    prompt = {
+        "amazon_product": {
+            "asin": product.get("asin"),
+            "brand": product.get("brand"),
+            "title": product.get("title"),
+            "title_zh": product.get("title_zh"),
+            "category": product.get("category"),
+            "category_path": product.get("category_path"),
+        },
+        "keyword_profile": keyword_profile,
+        "supplier_candidate": {
+            "title": supplier_title,
+            "snippet": supplier_snippet,
+            "page_excerpt": str(raw_excerpt or "")[:1200],
+            "unit_price_cny": _decimal_number(unit_price_cny),
+        },
+        "instruction": (
+            "判断供应商候选是否与亚马逊产品属于可替代销售的同类产品。"
+            "禁止品牌同款风险；数量和尺寸必须对齐；返回严格 JSON。"
+        ),
+    }
+    body = {
+        "model": os.getenv("RA_DEEPSEEK_MODEL", os.getenv("DEEPSEEK_MODEL", "deepseek-chat")),
+        "temperature": 0,
+        "messages": [
+            {
+                "role": "system",
+                "content": _skill_text() + "\n只返回供应商详情匹配 JSON，不要 Markdown。",
+            },
+            {"role": "user", "content": json.dumps(prompt, ensure_ascii=False)},
+        ],
+    }
+    base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+    request = Request(
+        f"{base_url}/chat/completions",
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=_deepseek_match_timeout_seconds()) as response:
+            payload = json.loads(response.read().decode("utf-8", errors="replace"))
+    except HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:240]
+        raise RuntimeError(f"DeepSeek 供应商匹配失败：HTTP {exc.code} {detail}") from exc
+    except (URLError, TimeoutError, json.JSONDecodeError) as exc:
+        raise RuntimeError(f"DeepSeek 供应商匹配失败：{exc}") from exc
 
     content = (
         payload.get("choices", [{}])[0]
@@ -594,6 +820,26 @@ def _shape_conflict(product_text: str, supplier_text: str) -> tuple[str, str] | 
     return None
 
 
+def _hard_guard_blocks(
+    *,
+    product_text: str,
+    supplier_text: str,
+    keyword_profile: dict[str, Any],
+) -> list[str]:
+    blocks: list[str] = []
+    forbidden_hits = [
+        term
+        for term in _list_value(keyword_profile.get("forbidden_terms"))
+        if term and _term_in_text(str(term), supplier_text)
+    ]
+    if forbidden_hits:
+        blocks.append(f"供应商详情含品牌/商标词：{', '.join(str(item) for item in forbidden_hits[:3])}")
+    conflict = _shape_conflict(product_text, supplier_text)
+    if conflict:
+        blocks.append(f"产品形态冲突：{conflict[0]} / {conflict[1]}")
+    return blocks
+
+
 def _requires_size_alignment(text: str) -> bool:
     lowered = text.lower()
     return any(term.lower() in lowered for term in SIZE_PRICED_TERMS)
@@ -622,6 +868,79 @@ def _multiply_optional(left: Decimal | None, right: Decimal | None) -> Decimal |
     if right is None:
         return left
     return left * right
+
+
+def _sanitize_alignment_section(value: Any, *, fallback: dict[str, Any]) -> dict[str, Any]:
+    section = _dict_value(value)
+    status = _valid_section_status(section.get("status")) or _valid_section_status(
+        fallback.get("status")
+    ) or "not_required"
+    multiplier = _safe_multiplier(section.get("cost_multiplier"))
+    if multiplier is None:
+        multiplier = _safe_multiplier(fallback.get("cost_multiplier"))
+    reason = str(section.get("reason") or fallback.get("reason") or "").strip() or None
+    return {
+        **fallback,
+        **section,
+        "status": status,
+        "cost_multiplier": _decimal_number(multiplier),
+        "reason": reason,
+    }
+
+
+def _valid_match_status(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if text in {"match", "review", "mismatch"}:
+        return text
+    return None
+
+
+def _valid_section_status(value: Any) -> str | None:
+    text = str(value or "").strip().lower()
+    if text in {"aligned", "needs_review", "not_required"}:
+        return text
+    return None
+
+
+def _bounded_score(value: Any, fallback: Any = None) -> int:
+    for candidate in (value, fallback):
+        parsed = _int_value(candidate)
+        if parsed is not None:
+            return max(0, min(100, parsed))
+    return 50
+
+
+def _safe_multiplier(value: Any) -> Decimal | None:
+    parsed = decimal_value(value)
+    if parsed is None:
+        return None
+    if parsed <= 0 or parsed > Decimal("100"):
+        return None
+    if parsed < Decimal("0.05"):
+        return None
+    return parsed
+
+
+def _append_reason(reason: str, extra: Any) -> str:
+    extra_text = str(extra or "").strip()
+    if not extra_text or extra_text in reason:
+        return reason
+    if not reason:
+        return extra_text
+    return f"{reason}；{extra_text}"
+
+
+def _bool_or_none(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return None
+    text = str(value).strip().lower()
+    if text in {"true", "1", "yes", "y"}:
+        return True
+    if text in {"false", "0", "no", "n"}:
+        return False
+    return None
 
 
 def _clean_keyword(value: Any, *, forbidden_terms: list[str]) -> str:
@@ -728,6 +1047,10 @@ def _deepseek_keyword_enabled() -> bool:
     return os.getenv("RA_DEEPSEEK_KEYWORD_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
 
 
+def _deepseek_supplier_match_enabled() -> bool:
+    return os.getenv("RA_DEEPSEEK_SUPPLIER_MATCH_ENABLED", "1").strip().lower() not in {"0", "false", "no"}
+
+
 def _deepseek_timeout_seconds() -> float:
     value = os.getenv("RA_DEEPSEEK_KEYWORD_TIMEOUT_SECONDS")
     if not value:
@@ -736,4 +1059,15 @@ def _deepseek_timeout_seconds() -> float:
         parsed = float(value)
     except ValueError:
         return 12.0
+    return max(3.0, min(parsed, 30.0))
+
+
+def _deepseek_match_timeout_seconds() -> float:
+    value = os.getenv("RA_DEEPSEEK_MATCH_TIMEOUT_SECONDS")
+    if not value:
+        return 10.0
+    try:
+        parsed = float(value)
+    except ValueError:
+        return 10.0
     return max(3.0, min(parsed, 30.0))

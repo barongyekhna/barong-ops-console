@@ -28,6 +28,48 @@ R-A 利润测算只寻找可销售的同类产品供应商，不寻找品牌同�
 - 按尺寸销售的产品必须对齐尺寸，例如遮阳帆、桌布、胶带、围栏、软管、地垫。无法确认尺寸时不计算利润。
 - 尺寸单位允许换算，英寸、英尺、厘米、米统一换算为厘米。
 
+## 供应商详情匹配 JSON
+
+每一个供应商详情页都必须再做一次 DeepSeek 判断。DeepSeek 的职责是动态理解任意产品，不允许只依赖固定产品词典。代码只负责校验 JSON、执行硬阻断和成本换算。
+
+需要返回严格 JSON，不要解释文字：
+
+```json
+{
+  "match_status": "match",
+  "match_score": 88,
+  "match_reason": "供应商产品主体、数量和尺寸与亚马逊产品一致。",
+  "amazon_subject": "挂脖风扇",
+  "supplier_subject": "挂脖风扇",
+  "same_product_type": true,
+  "brand_risk": false,
+  "brand_terms_found": [],
+  "shape_conflict": false,
+  "quantity": {
+    "status": "aligned",
+    "amazon_pack_count": 2,
+    "supplier_pack_count": 1,
+    "cost_multiplier": 2,
+    "reason": "亚马逊为2只装，供应商为单只价格，成本乘以2。"
+  },
+  "dimensions": {
+    "status": "not_required",
+    "cost_multiplier": null,
+    "reason": ""
+  },
+  "warnings": []
+}
+```
+
+字段约束：
+
+- `match_status` 只能是 `match`、`review`、`mismatch`。
+- `match` 才允许进入正式利润计算。
+- 无法确认是否同类时必须返回 `review`，不能猜测通过。
+- 发现不是同类产品、品牌同款风险、形态冲突时必须返回 `mismatch`。
+- 多件装或尺寸销售无法确认时必须返回 `review`。
+- `cost_multiplier` 只允许用于数量或尺寸换算，不允许用于乐观估算。
+
 ## DeepSeek 输出 JSON
 
 需要返回严格 JSON，不要解释文字：

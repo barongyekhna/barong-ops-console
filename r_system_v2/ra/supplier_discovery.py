@@ -364,6 +364,8 @@ def discover_1688_supplier_offers(
                 or f"{search_query.platform_label}供应商"
             )
             alignment = evaluate_supplier_alignment(
+                db=db,
+                org_id=org_id,
                 product=product,
                 keyword_profile=keyword_profile,
                 supplier_title=supplier_name,
