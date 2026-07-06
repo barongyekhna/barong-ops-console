@@ -10,7 +10,7 @@ import {
   Search,
 } from "lucide-react";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 import { useAuth } from "@/components/auth-provider";
 import {
@@ -255,6 +255,9 @@ function isAsinFallbackImage(candidate: string, asin: string) {
 function ProductImage({ product }: { product: RwProduct }) {
   const candidates = useMemo(() => productImageCandidates(product), [product]);
   const [candidateIndex, setCandidateIndex] = useState(0);
+  const [previewPosition, setPreviewPosition] = useState<{ left: number; top: number } | null>(
+    null,
+  );
   const src = candidates[candidateIndex] ?? null;
 
   useEffect(() => {
@@ -264,16 +267,55 @@ function ProductImage({ product }: { product: RwProduct }) {
   if (!src) {
     return <span>无图</span>;
   }
+  function updatePreviewPosition(event: MouseEvent<HTMLElement>) {
+    setPreviewPosition(imagePreviewPosition(event));
+  }
   return (
-    <img
-      alt={product.title_zh ?? product.title}
-      loading="lazy"
-      onError={() => {
-        setCandidateIndex((current) => current + 1);
-      }}
-      src={src}
-    />
+    <span
+      className={styles.imageZoomWrap}
+      onMouseEnter={updatePreviewPosition}
+      onMouseLeave={() => setPreviewPosition(null)}
+      onMouseMove={updatePreviewPosition}
+    >
+      <img
+        alt={product.title_zh ?? product.title}
+        loading="lazy"
+        onError={() => {
+          setCandidateIndex((current) => current + 1);
+          setPreviewPosition(null);
+        }}
+        src={src}
+      />
+      {previewPosition ? (
+        <span
+          className={styles.imageZoomPreview}
+          style={{ left: previewPosition.left, top: previewPosition.top }}
+        >
+          <img alt="" src={src} />
+        </span>
+      ) : null}
+    </span>
   );
+}
+
+function imagePreviewPosition(event: MouseEvent<HTMLElement>) {
+  const previewSize = 240;
+  const gap = 18;
+  const padding = 14;
+  const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
+  let left = event.clientX + gap;
+  let top = event.clientY + gap;
+  if (left + previewSize + padding > viewportWidth) {
+    left = event.clientX - previewSize - gap;
+  }
+  if (top + previewSize + padding > viewportHeight) {
+    top = event.clientY - previewSize - gap;
+  }
+  return {
+    left: Math.max(padding, left),
+    top: Math.max(padding, top),
+  };
 }
 
 function AsinTag({ asin }: { asin: string }) {

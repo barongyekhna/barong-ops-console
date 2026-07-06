@@ -116,6 +116,7 @@ export type RaProfitSnapshot = {
   image_url: string | null;
   image_candidates?: string[];
   category: string | null;
+  amazon_price_usd?: number | null;
   sell_price_usd: number | null;
   landed_cost_usd: number | null;
   amazon_fees_usd: number | null;
@@ -244,6 +245,7 @@ export type RaAutoProfitItem = {
   title: string | null;
   title_zh: string | null;
   category: string | null;
+  amazon_price_usd?: number | null;
   sell_price_usd?: number | null;
   fulfillment_method?: string | null;
   lithium_battery_warning?: boolean | null;

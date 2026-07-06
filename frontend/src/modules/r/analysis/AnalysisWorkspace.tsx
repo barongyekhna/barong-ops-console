@@ -9,7 +9,7 @@ import {
   Loader2,
   Search,
 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useEffect, useMemo, useState, type MouseEvent } from "react";
 
 import {
   createRaAutoProfitJob,
@@ -326,7 +326,7 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
             <th>ASIN</th>
             <th>关键词</th>
             <th>中文产品名</th>
-            <th>产品信息</th>
+            <th>亚马逊信息</th>
             <th>供应商成本</th>
             <th>毛利润</th>
             <th>利润率</th>
@@ -362,7 +362,7 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
                 <span>{item.category || "未标注类目"}</span>
               </td>
               <td>
-                <strong>售价 {formatUsd(item.sell_price_usd)}</strong>
+                <strong>亚马逊售价 {formatUsd(amazonPriceUsd(item))}</strong>
                 <span>配送 {item.fulfillment_method || "未标注"}</span>
                 <span>FBA {formatUsd(item.fba_fee_usd)}</span>
                 <span>重量 {item.weight_label || formatWeight(item.package_weight_g)}</span>
@@ -479,6 +479,7 @@ function SnapshotPreview({ snapshots }: { snapshots: RaProfitSnapshot[] }) {
             <th>ASIN</th>
             <th>关键词</th>
             <th>中文产品名</th>
+            <th>亚马逊售价</th>
             <th>供应商成本</th>
             <th>毛利润</th>
             <th>利润率</th>
@@ -507,6 +508,9 @@ function SnapshotPreview({ snapshots }: { snapshots: RaProfitSnapshot[] }) {
               <td>
                 <strong>{snapshot.title_zh || snapshot.title || "未命名产品"}</strong>
                 <span>{snapshot.category || "未标注类目"}</span>
+              </td>
+              <td>
+                <strong>{formatUsd(amazonPriceUsd(snapshot))}</strong>
               </td>
               <td>
                 <strong>{formatCny(snapshot.supplier.unit_price_cny)}</strong>
@@ -574,6 +578,9 @@ function ProductImage({
     [asin, candidates, src],
   );
   const [candidateIndex, setCandidateIndex] = useState(0);
+  const [previewPosition, setPreviewPosition] = useState<{ left: number; top: number } | null>(
+    null,
+  );
   const currentSrc = imageCandidates[candidateIndex] ?? null;
 
   useEffect(() => {
@@ -583,15 +590,56 @@ function ProductImage({
   if (!currentSrc) {
     return <div className={styles.imagePlaceholder}>无图</div>;
   }
+  function updatePreviewPosition(event: MouseEvent<HTMLElement>) {
+    setPreviewPosition(imagePreviewPosition(event));
+  }
   return (
-    <img
-      alt={title || "产品图片"}
-      className={styles.productImage}
-      loading="lazy"
-      src={currentSrc}
-      onError={() => setCandidateIndex((current) => current + 1)}
-    />
+    <span
+      className={styles.imageZoomWrap}
+      onMouseEnter={updatePreviewPosition}
+      onMouseLeave={() => setPreviewPosition(null)}
+      onMouseMove={updatePreviewPosition}
+    >
+      <img
+        alt={title || "产品图片"}
+        className={styles.productImage}
+        loading="lazy"
+        src={currentSrc}
+        onError={() => {
+          setCandidateIndex((current) => current + 1);
+          setPreviewPosition(null);
+        }}
+      />
+      {previewPosition ? (
+        <span
+          className={styles.imageZoomPreview}
+          style={{ left: previewPosition.left, top: previewPosition.top }}
+        >
+          <img alt="" src={currentSrc} />
+        </span>
+      ) : null}
+    </span>
   );
+}
+
+function imagePreviewPosition(event: MouseEvent<HTMLElement>) {
+  const previewSize = 240;
+  const gap = 18;
+  const padding = 14;
+  const viewportWidth = typeof window === "undefined" ? 1440 : window.innerWidth;
+  const viewportHeight = typeof window === "undefined" ? 900 : window.innerHeight;
+  let left = event.clientX + gap;
+  let top = event.clientY + gap;
+  if (left + previewSize + padding > viewportWidth) {
+    left = event.clientX - previewSize - gap;
+  }
+  if (top + previewSize + padding > viewportHeight) {
+    top = event.clientY - previewSize - gap;
+  }
+  return {
+    left: Math.max(padding, left),
+    top: Math.max(padding, top),
+  };
 }
 
 function AsinTag({ asin }: { asin: string | null }) {
@@ -833,6 +881,13 @@ function formatUsd(value: number | null | undefined) {
     return "待计算";
   }
   return `$${value.toFixed(2)}`;
+}
+
+function amazonPriceUsd(
+  value: Pick<RaAutoProfitItem, "amazon_price_usd" | "sell_price_usd"> |
+    Pick<RaProfitSnapshot, "amazon_price_usd" | "sell_price_usd">,
+) {
+  return value.amazon_price_usd ?? value.sell_price_usd;
 }
 
 function formatCny(value: number | null | undefined) {

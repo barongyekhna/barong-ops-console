@@ -275,10 +275,17 @@ def _snapshot_item(
     supplier = snapshot.get("supplier") if isinstance(snapshot.get("supplier"), dict) else {}
     unit_price = _float_value(supplier.get("unit_price_cny"))
     shipping = _float_value(supplier.get("domestic_shipping_cny"))
+    amazon_price = _float_value(
+        snapshot.get("amazon_price_usd")
+        or snapshot.get("sell_price_usd")
+        or product.get("price")
+    )
     return {
         "status": "profit_calculated",
         "asin": snapshot.get("asin") or product.get("asin"),
         "image_url": snapshot.get("image_url") or product.get("image_url"),
+        "amazon_price_usd": amazon_price,
+        "sell_price_usd": amazon_price,
         "keyword": keyword,
         "matched_source_query": product.get("source_query"),
         "title": snapshot.get("title") or product.get("title"),
@@ -319,10 +326,13 @@ def _pending_offer_item(
 ) -> dict[str, object]:
     unit_price = _float_value(offer.get("unit_price_cny"))
     shipping = _float_value(offer.get("domestic_shipping_cny"))
+    amazon_price = _float_value(product.get("price"))
     return {
         "status": "cost_pending",
         "asin": product.get("asin"),
         "image_url": product.get("image_url"),
+        "amazon_price_usd": amazon_price,
+        "sell_price_usd": amazon_price,
         "keyword": keyword,
         "matched_source_query": product.get("source_query"),
         "title": product.get("title"),
@@ -360,10 +370,13 @@ def _no_supplier_item(
     keyword: str,
     supplier_search_pages: list[dict[str, object]] | None = None,
 ) -> dict[str, object]:
+    amazon_price = _float_value(product.get("price"))
     return {
         "status": "supplier_not_found",
         "asin": product.get("asin"),
         "image_url": product.get("image_url"),
+        "amazon_price_usd": amazon_price,
+        "sell_price_usd": amazon_price,
         "keyword": keyword,
         "matched_source_query": product.get("source_query"),
         "title": product.get("title"),

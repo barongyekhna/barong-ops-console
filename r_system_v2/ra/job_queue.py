@@ -375,6 +375,7 @@ def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
     counts.update({key: value for key, value in live_counts.items() if value is not None})
     items = _job_items(db, org_id=org_id, run_id=run_id, query=str(filters.get("query") or ""))
     quote = get_usd_cny_quote()
+    amazon_price = _number(row.get("price") or product.get("price"))
     return {
         "run_id": run_id,
         "status": row.get("status"),
@@ -810,7 +811,8 @@ def _product_fields(
         ),
         "image_candidates": candidates,
         "product_keyword": _keyword_from_original_title(title),
-        "sell_price_usd": _number(row.get("price") or product.get("price")),
+        "amazon_price_usd": amazon_price,
+        "sell_price_usd": amazon_price,
         "fulfillment_method": row.get("fulfillment_method")
         or features.get("fulfillment_method"),
         "lithium_battery_warning": bool(lithium_value),
