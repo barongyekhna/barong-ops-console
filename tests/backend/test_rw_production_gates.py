@@ -26,6 +26,7 @@ from r_system_v2.rw.providers.keepa_provider import (
     _parse_discovery_payload,
     _parse_product_payload,
 )
+from r_system_v2.rw.product_images import product_image_candidates
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
 from r_system_v2.rw.storage.repository import MockWarehouseRepository
 
@@ -117,6 +118,49 @@ def test_keepa_product_parser_uses_stats_for_reviews_sellers_and_rating():
     assert product.rating == 4.6
     assert product.image_url == "https://images-na.ssl-images-amazon.com/images/I/test-image.jpg"
     assert "https://m.media-amazon.com/images/I/test-image.jpg" in product.image_candidates
+
+
+def test_keepa_product_parser_extracts_keepa_images_list():
+    product = _parse_product_payload(
+        {
+            "products": [
+                {
+                    "asin": "B012345678",
+                    "title": "Image List Product",
+                    "brand": "ImageBrand",
+                    "newPrice": 3499,
+                    "salesRank": 1000,
+                    "reviewCount": 20,
+                    "sellerCount": 3,
+                    "images": [
+                        {
+                            "l": "713FdNCz-qL.jpg",
+                            "m": "51Tj4TKHnhL.jpg",
+                        }
+                    ],
+                    "categoryTree": [{"name": "Home & Kitchen"}],
+                }
+            ]
+        },
+        asin="B012345678",
+        source_query="test",
+    )
+
+    assert product.image_url == "https://images-na.ssl-images-amazon.com/images/I/51Tj4TKHnhL.jpg"
+    assert "https://m.media-amazon.com/images/I/51Tj4TKHnhL.jpg" in product.image_candidates
+    assert "https://images-na.ssl-images-amazon.com/images/I/713FdNCz-qL.jpg" in product.image_candidates
+
+
+def test_product_image_candidates_skip_asin_transparent_fallback():
+    candidates = product_image_candidates(
+        asin="B012345678",
+        image_url="https://images-na.ssl-images-amazon.com/images/P/B012345678.01._SCLZZZZZZZ_.jpg",
+        features={"image_candidates": ["https://m.media-amazon.com/images/I/real-image.jpg"]},
+    )
+
+    assert "https://m.media-amazon.com/images/I/real-image.jpg" in candidates
+    assert "https://images-na.ssl-images-amazon.com/images/I/real-image.jpg" in candidates
+    assert all("/images/P/B012345678.01." not in candidate for candidate in candidates)
 
 
 def test_keepa_product_parser_extracts_fba_fee_and_fee_inputs():

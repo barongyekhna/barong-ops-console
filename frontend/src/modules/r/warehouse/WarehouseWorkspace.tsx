@@ -219,14 +219,6 @@ function rejectReasonLabel(value: string | null, features: Record<string, unknow
   return "暂无详细原因";
 }
 
-function fallbackImageUrl(asin: string) {
-  const cleaned = asin.trim().toUpperCase();
-  if (cleaned.length !== 10) {
-    return null;
-  }
-  return `https://images-na.ssl-images-amazon.com/images/P/${cleaned}.01._SCLZZZZZZZ_.jpg`;
-}
-
 function productImageCandidates(product: RwProduct) {
   const cleaned = product.asin.trim().toUpperCase();
   const featureCandidates = product.features.image_candidates;
@@ -243,17 +235,21 @@ function productImageCandidates(product: RwProduct) {
       "https://images-na.ssl-images-amazon.com/images/I/",
       "https://m.media-amazon.com/images/I/",
     ),
-    cleaned.length === 10
-      ? `https://m.media-amazon.com/images/P/${cleaned}.01._SL160_.jpg`
-      : null,
-    cleaned.length === 10
-      ? `https://images-na.ssl-images-amazon.com/images/P/${cleaned}.01._SCLZZZZZZZ_.jpg`
-      : null,
   ];
   return candidates.filter(
     (candidate, index): candidate is string =>
-      Boolean(candidate) && candidates.indexOf(candidate) === index,
+      typeof candidate === "string" &&
+      !isAsinFallbackImage(candidate, cleaned) &&
+      candidates.indexOf(candidate) === index,
   );
+}
+
+function isAsinFallbackImage(candidate: string, asin: string) {
+  if (!asin) {
+    return false;
+  }
+  const upper = candidate.toUpperCase();
+  return upper.includes(`/IMAGES/P/${asin}.01.`);
 }
 
 function ProductImage({ product }: { product: RwProduct }) {

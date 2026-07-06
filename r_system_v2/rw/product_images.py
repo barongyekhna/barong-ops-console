@@ -12,20 +12,10 @@ def product_image_candidates(
     features: dict[str, Any] | None = None,
 ) -> list[str]:
     candidates: list[str] = []
-    _add_image_candidate(candidates, image_url)
-    for value in _feature_image_values(features or {}):
-        _add_image_candidate(candidates, value)
-
     cleaned_asin = str(asin or "").strip().upper()
-    if len(cleaned_asin) == 10 and cleaned_asin.isalnum():
-        _add_image_candidate(
-            candidates,
-            f"https://m.media-amazon.com/images/P/{cleaned_asin}.01._SL160_.jpg",
-        )
-        _add_image_candidate(
-            candidates,
-            f"https://images-na.ssl-images-amazon.com/images/P/{cleaned_asin}.01._SCLZZZZZZZ_.jpg",
-        )
+    _add_image_candidate(candidates, image_url, asin=cleaned_asin)
+    for value in _feature_image_values(features or {}):
+        _add_image_candidate(candidates, value, asin=cleaned_asin)
     return candidates
 
 
@@ -39,7 +29,7 @@ def primary_product_image_url(
     return candidates[0] if candidates else None
 
 
-def _add_image_candidate(candidates: list[str], value: Any) -> None:
+def _add_image_candidate(candidates: list[str], value: Any, *, asin: str = "") -> None:
     if not isinstance(value, str):
         return
     cleaned = value.strip()
@@ -52,8 +42,15 @@ def _add_image_candidate(candidates: list[str], value: Any) -> None:
             _add_image_candidate(
                 candidates,
                 f"https://images-na.ssl-images-amazon.com/images/I/{cleaned}",
+                asin=asin,
             )
-            _add_image_candidate(candidates, f"https://m.media-amazon.com/images/I/{cleaned}")
+            _add_image_candidate(
+                candidates,
+                f"https://m.media-amazon.com/images/I/{cleaned}",
+                asin=asin,
+            )
+        return
+    if _is_asin_fallback_image(cleaned, asin=asin):
         return
     for candidate in _url_variants(cleaned):
         if candidate not in candidates:
@@ -112,8 +109,25 @@ def _collect_image_values(value: Any, output: list[str]) -> None:
     if isinstance(value, list):
         for item in value:
             _collect_image_values(item, output)
+        return
+    if isinstance(value, dict):
+        for key in ("m", "l", "large", "medium", "image", "url"):
+            _collect_image_values(value.get(key), output)
 
 
 def _looks_like_keepa_image_name(value: str) -> bool:
     lowered = value.lower()
     return lowered.endswith((".jpg", ".jpeg", ".png", ".webp")) and "/" not in value
+
+
+def _is_asin_fallback_image(url: str, *, asin: str) -> bool:
+    if not asin:
+        return False
+    normalized = url.upper()
+    return (
+        f"/IMAGES/P/{asin}.01." in normalized
+        and (
+            "IMAGES-NA.SSL-IMAGES-AMAZON.COM" in normalized
+            or "M.MEDIA-AMAZON.COM" in normalized
+        )
+    )

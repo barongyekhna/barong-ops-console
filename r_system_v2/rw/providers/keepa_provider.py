@@ -9,7 +9,7 @@ import json
 import os
 from dataclasses import dataclass
 from typing import Any, Callable
-from urllib.parse import urlencode
+from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
@@ -769,20 +769,24 @@ def _image_candidates_from_product(product: dict[str, Any], *, asin: str | None 
     direct = product.get("imageUrl") or product.get("image_url")
     if isinstance(direct, str) and direct.startswith(("http://", "https://")):
         candidates.append(direct)
+    images = product.get("images")
+    if isinstance(images, list):
+        for item in images:
+            if isinstance(item, dict):
+                for key in ("m", "l", "large", "medium", "image", "url"):
+                    _append_keepa_image_candidate(candidates, item.get(key))
+            else:
+                _append_keepa_image_candidate(candidates, item)
+    elif isinstance(images, dict):
+        for key in ("m", "l", "large", "medium", "image", "url"):
+            _append_keepa_image_candidate(candidates, images.get(key))
+    elif isinstance(images, str):
+        for raw_name in images.split(","):
+            _append_keepa_image_candidate(candidates, raw_name)
     images_csv = product.get("imagesCSV")
     if isinstance(images_csv, str) and images_csv.strip():
         for raw_name in images_csv.split(","):
-            image_name = raw_name.strip()
-            if not image_name:
-                continue
-            if image_name.startswith(("http://", "https://")):
-                candidates.append(image_name)
-                continue
-            candidates.append(f"https://images-na.ssl-images-amazon.com/images/I/{image_name}")
-            candidates.append(f"https://m.media-amazon.com/images/I/{image_name}")
-    fallback = _fallback_image_url(str(product.get("asin") or asin or ""))
-    if fallback:
-        candidates.append(fallback)
+            _append_keepa_image_candidate(candidates, raw_name)
     unique: list[str] = []
     for candidate in candidates:
         if candidate not in unique:
@@ -800,6 +804,24 @@ def _fallback_image_url(asin: str) -> str | None:
     if len(cleaned) != 10 or not cleaned.isalnum():
         return None
     return f"https://images-na.ssl-images-amazon.com/images/P/{cleaned}.01._SCLZZZZZZZ_.jpg"
+
+
+def _append_keepa_image_candidate(candidates: list[str], value: Any) -> None:
+    if not isinstance(value, str):
+        return
+    image_name = value.strip()
+    if not image_name:
+        return
+    if image_name.startswith("//"):
+        image_name = f"https:{image_name}"
+    if image_name.startswith(("http://", "https://")):
+        candidates.append(image_name)
+        return
+    if "/" in image_name:
+        return
+    encoded_name = quote(image_name, safe="+._-")
+    candidates.append(f"https://images-na.ssl-images-amazon.com/images/I/{encoded_name}")
+    candidates.append(f"https://m.media-amazon.com/images/I/{encoded_name}")
 
 
 def _parse_product_payload(

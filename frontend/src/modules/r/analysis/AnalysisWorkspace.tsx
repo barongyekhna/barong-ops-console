@@ -804,17 +804,21 @@ function productImageCandidates({
       "https://images-na.ssl-images-amazon.com/images/P/",
       "https://m.media-amazon.com/images/P/",
     )?.replace("._SCLZZZZZZZ_", "._SL160_"),
-    cleanedAsin.length === 10
-      ? `https://m.media-amazon.com/images/P/${cleanedAsin}.01._SL160_.jpg`
-      : null,
-    cleanedAsin.length === 10
-      ? `https://images-na.ssl-images-amazon.com/images/P/${cleanedAsin}.01._SCLZZZZZZZ_.jpg`
-      : null,
   ];
   return output.filter(
     (candidate, index): candidate is string =>
-      Boolean(candidate) && output.indexOf(candidate) === index,
+      typeof candidate === "string" &&
+      !isAsinFallbackImage(candidate, cleanedAsin) &&
+      output.indexOf(candidate) === index,
   );
+}
+
+function isAsinFallbackImage(candidate: string, asin: string) {
+  if (!asin) {
+    return false;
+  }
+  const upper = candidate.toUpperCase();
+  return upper.includes(`/IMAGES/P/${asin}.01.`);
 }
 
 function formatCount(value: number | null | undefined) {
