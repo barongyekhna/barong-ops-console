@@ -12,6 +12,7 @@ import type {
 } from "@/modules/r/warehouse/types";
 
 const RW_API_BASE = "/api/backend/rw";
+const RW_PRODUCTS_TIMEOUT_MS = 60_000;
 
 export function getRwStatus() {
   return apiRequest<RwStatus>(`${RW_API_BASE}/status`, { bypassCache: true });
@@ -55,6 +56,7 @@ export function getRwProductsWithFilters(filters: {
   const suffix = params.toString() ? `?${params.toString()}` : "";
   return apiRequest<RwProductsResponse>(`${RW_API_BASE}/products${suffix}`, {
     bypassCache: true,
+    timeoutMs: RW_PRODUCTS_TIMEOUT_MS,
   });
 }
 

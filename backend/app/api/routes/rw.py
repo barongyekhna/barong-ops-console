@@ -116,6 +116,7 @@ PRODUCT_FEATURE_RESPONSE_KEYS = frozenset(
         "subcategory_rank",
     }
 )
+PRODUCT_IMAGE_CANDIDATE_LIMIT = 8
 
 
 def _user_has_rw_role_access(user: User) -> bool:
@@ -463,7 +464,7 @@ def rw_products(
                 asin=row.asin,
                 image_url=row.image_url,
                 features=features,
-            )
+            )[:PRODUCT_IMAGE_CANDIDATE_LIMIT]
             response_features = _public_product_features(features)
             response_features["image_candidates"] = image_candidates
             rows.append(

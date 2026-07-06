@@ -512,8 +512,22 @@ function ViewTabs({ activeView }: { activeView: WarehouseView }) {
   );
 }
 
-function ProductsTable({ products }: { products: readonly RwProduct[] }) {
+function ProductsTable({
+  backendProductCount,
+  products,
+}: {
+  backendProductCount: number;
+  products: readonly RwProduct[];
+}) {
   if (products.length === 0) {
+    if (backendProductCount > 0) {
+      return (
+        <div className={styles.empty}>
+          产品列表正在刷新，后端产品库已有{" "}
+          {backendProductCount.toLocaleString("zh-CN")} 条记录。
+        </div>
+      );
+    }
     return <div className={styles.empty}>后端产品库暂无记录。</div>;
   }
 
@@ -1468,7 +1482,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               {readyState.status.waiting_for_keys ? "等待 Keepa 密钥" : "自动运行"}
             </span>
           </div>
-          <ProductsTable products={products} />
+          <ProductsTable backendProductCount={metrics.total} products={products} />
         </section>
       ) : null}
 
@@ -1565,7 +1579,7 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
               {filters.sort_order === "asc" ? "升序" : "降序"}
             </button>
           </div>
-          <ProductsTable products={products} />
+          <ProductsTable backendProductCount={metrics.total} products={products} />
           <ProductPagination
             loading={refreshing}
             onPageChange={(page) => {
