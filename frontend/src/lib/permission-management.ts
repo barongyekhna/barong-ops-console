@@ -355,7 +355,7 @@ function normalizedPermissionAction(permissionKey: string) {
   return parts[parts.length - 1]?.trim().toLowerCase() ?? "";
 }
 
-function permissionModuleLabel(moduleKey: string) {
+export function permissionModuleLabel(moduleKey: string) {
   const normalized = moduleKey.trim().toLowerCase();
   return MODULE_DISPLAY_LABELS[normalized] ?? normalized.replace(/_/g, " ");
 }

@@ -6855,3 +6855,58 @@ textarea:focus-visible {
 @media (max-width: 720px) {
   .mm-page .module-control-card-grid { grid-template-columns: 1fr; }
 }
+
+/* =====================================================================
+   权限管理 —— 复用 .mm-page 命令中心底座，pm-page 补充权限专属样式
+   ===================================================================== */
+.pm-page .permissions-product-stack { display: flex; flex-direction: column; gap: 12px; }
+.pm-page .pm-head-tools { display: flex; align-items: center; gap: 8px; flex: none; }
+.pm-page .ops-panel .mm-org-chev svg { transition: transform 0.18s; }
+.pm-page .ops-panel.collapsed .mm-org-chev svg { transform: rotate(-90deg); }
+.pm-page .ops-panel.collapsed .permissions-card-grid { display: none; }
+
+/* 权限卡片网格 */
+.pm-page .permissions-card-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(224px, 1fr)); gap: 12px; }
+.pm-page .permissions-card { position: relative; display: flex; flex-direction: column; gap: 6px; width: 100%; text-align: left; padding: 14px; border-radius: 10px; border: 1px solid var(--mm-line); background: rgb(10 18 30 / 55%); color: var(--mm-ink); }
+.pm-page .permissions-card-button { cursor: pointer; transition: border-color 0.15s, background 0.15s, box-shadow 0.15s, transform 0.15s; }
+.pm-page .permissions-card-button:hover:not(:disabled) { border-color: rgb(57 212 255 / 45%); background: rgb(14 26 42 / 72%); box-shadow: 0 0 22px -6px rgb(57 212 255 / 40%); transform: translateY(-1px); }
+.pm-page .permissions-card-button:disabled { opacity: 0.55; cursor: not-allowed; }
+.pm-page .permissions-card-kicker { color: var(--mm-cyan); font: 700 8.5px var(--mm-mono); letter-spacing: 0.2em; text-transform: uppercase; }
+.pm-page .permissions-card strong { color: #eafaff; font-size: 13.5px; line-height: 1.35; padding-right: 54px; }
+.pm-page .permissions-card small { color: var(--mm-dim); font-size: 11px; }
+.pm-page .permissions-risk-badge { position: absolute; top: 12px; right: 12px; font: 600 9px var(--mm-mono); letter-spacing: 0.5px; padding: 3px 9px; border-radius: 20px; color: var(--mm-green); background: rgb(77 255 161 / 10%); border: 1px solid rgb(77 255 161 / 28%); }
+.pm-page .permissions-risk-high { color: var(--mm-amber); background: rgb(255 177 59 / 12%); border-color: rgb(255 177 59 / 32%); }
+
+/* 分配弹窗 */
+.pm-page .permissions-modal-backdrop { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 20px; background: rgb(2 6 12 / 78%); backdrop-filter: blur(6px); }
+.pm-page .permissions-modal { position: relative; width: min(520px, 100%); max-height: 86vh; overflow-y: auto; padding: 22px; border-radius: 14px; border: 1px solid var(--mm-line); background: rgb(8 15 26 / 97%); box-shadow: 0 40px 90px -34px rgb(0 0 0 / 85%); }
+.pm-page .permissions-modal::before, .pm-page .permissions-modal::after { content: ""; position: absolute; width: 15px; height: 15px; border: 2px solid var(--mm-amber); opacity: 0.55; }
+.pm-page .permissions-modal::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+.pm-page .permissions-modal::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+.pm-page .permissions-modal-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+.pm-page .permissions-modal-heading .eyebrow { color: var(--mm-cyan); font: 700 9px var(--mm-mono); letter-spacing: 0.28em; text-transform: uppercase; }
+.pm-page .permissions-modal-heading h3 { color: #eafaff; font-size: 16px; margin-top: 4px; text-shadow: 0 0 22px rgb(57 212 255 / 22%); }
+.pm-page .permissions-modal .field-group { margin-top: 12px; }
+.pm-page .permissions-modal .input-shell svg { color: var(--mm-dim); margin-right: 8px; }
+.pm-page .users-alert { display: flex; align-items: center; gap: 8px; margin-top: 12px; padding: 10px 12px; border-radius: 9px; font-size: 12.5px; }
+.pm-page .users-alert-error { color: var(--mm-red); background: rgb(255 107 138 / 8%); border: 1px solid rgb(255 107 138 / 25%); }
+.pm-page .users-alert-error svg { color: var(--mm-red); }
+.pm-page .users-alert-success { color: var(--mm-green); background: rgb(77 255 161 / 8%); border: 1px solid rgb(77 255 161 / 25%); }
+.pm-page .users-alert-success svg { color: var(--mm-green); }
+
+/* 员工列表 */
+.pm-page .permissions-user-list { display: flex; flex-direction: column; gap: 8px; margin-top: 14px; }
+.pm-page .permissions-user-row { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 10px; border: 1px solid var(--mm-line); background: rgb(10 18 30 / 55%); cursor: pointer; transition: border-color 0.15s, background 0.15s; }
+.pm-page .permissions-user-row:hover { border-color: rgb(57 212 255 / 40%); background: rgb(14 26 42 / 65%); }
+.pm-page .permissions-user-row input[type="checkbox"] { width: 18px; height: 18px; flex: none; accent-color: #39d4ff; cursor: pointer; }
+.pm-page .permissions-user-row > span { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.pm-page .permissions-user-row strong { color: #eafaff; font-size: 13px; }
+.pm-page .permissions-user-row small { color: var(--mm-dim); font: 500 11px var(--mm-mono); }
+.pm-page .permissions-user-row svg { color: var(--mm-cyan); flex: none; }
+.pm-page .permissions-empty { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; padding: 24px; color: var(--mm-dim); font-size: 13px; }
+.pm-page .spin { animation: mm-spin 0.9s linear infinite; }
+@keyframes mm-spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 720px) {
+  .pm-page .permissions-card-grid { grid-template-columns: 1fr; }
+}

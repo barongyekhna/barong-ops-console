@@ -2,6 +2,7 @@
 
 import {
   CheckCircle2,
+  ChevronDown,
   LoaderCircle,
   RotateCcw,
   Search,
@@ -12,6 +13,7 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { DashboardScene } from "@/components/dashboard-scene";
 import {
   HIGH_RISK_CONFIRMATION_TEXT,
   canManagePermissionAssignments,
@@ -22,6 +24,7 @@ import {
   getPermissionCategoryLabel,
   getPermissionDisplayName,
   getPermissionUiCategory,
+  permissionModuleLabel,
   grantUserPermissionAssignment,
   listPermissionRegistry,
   listUserPermissionAssignments,
@@ -156,6 +159,21 @@ export function PermissionsProductView() {
   const [error, setError] = useState("");
   const [dialogError, setDialogError] = useState("");
   const [dialogNotice, setDialogNotice] = useState("");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    () => new Set(),
+  );
+
+  const toggleGroup = useCallback((id: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  }, []);
 
   const visibleRegistry = useMemo(
     () =>
@@ -173,6 +191,27 @@ export function PermissionsProductView() {
     () => groupPermissions(visibleRegistry, "feature"),
     [visibleRegistry],
   );
+  const featureGroups = useMemo(() => {
+    const buckets = new Map<string, PermissionRegistryItem[]>();
+    for (const permission of featurePermissions) {
+      const key = permission.module_key?.trim().toLowerCase() || "other";
+      const bucket = buckets.get(key);
+      if (bucket) {
+        bucket.push(permission);
+      } else {
+        buckets.set(key, [permission]);
+      }
+    }
+    return Array.from(buckets.entries())
+      .map(([moduleKey, items]) => ({
+        moduleKey,
+        label: permissionModuleLabel(moduleKey),
+        items,
+      }))
+      .sort(
+        (a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label),
+      );
+  }, [featurePermissions]);
   const assignableUsers = useMemo(
     () =>
       users.filter((targetUser) => {
@@ -366,7 +405,8 @@ export function PermissionsProductView() {
   }
 
   return (
-    <section className="product-console" aria-label="权限管理">
+    <section className="product-console mm-page pm-page" aria-label="权限管理">
+      <DashboardScene />
       <div className="registry-command-bar">
         <div>
           <span className="eyebrow">账号与组织</span>
@@ -443,60 +483,92 @@ export function PermissionsProductView() {
 
       {(!error || registry.length > 0 || users.length > 0) &&
       (!isLoading || registry.length > 0 || users.length > 0) ? (
-        <div className="permissions-product-stack">
-          {canViewControlPlanePermissions ? (
+        <div className="permissions-product-stack module-control-org-list">
+          {canViewControlPlanePermissions &&
+          controlPlanePermissions.length > 0 ? (
             <section
-              className="permissions-group-section"
               aria-label="系统权限"
+              className={`ops-panel${
+                collapsedGroups.has("control") ? " collapsed" : ""
+              }`}
             >
-              <div className="permissions-section-heading">
-                <h3>系统权限</h3>
-                <p>仅owner可查看和管理。</p>
+              <div className="ops-panel-heading">
+                <div>
+                  <h3>系统权限</h3>
+                  <p>仅 owner 可查看与管理的控制面权限。</p>
+                </div>
+                <div className="pm-head-tools">
+                  <span className="ops-source">
+                    {controlPlanePermissions.length} 项
+                  </span>
+                  <button
+                    aria-label="折叠"
+                    className="mm-org-chev"
+                    onClick={() => toggleGroup("control")}
+                    type="button"
+                  >
+                    <ChevronDown aria-hidden="true" size={15} />
+                  </button>
+                </div>
               </div>
-              {controlPlanePermissions.length > 0 ? (
-                <div className="permissions-card-grid">
-                  {controlPlanePermissions.map((permission) => (
-                    <PermissionCard
-                      key={permission.permission_key}
-                      permission={permission}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="ops-empty-state">
-                  <strong>暂无数据</strong>
-                  <span>当前没有可显示的系统权限。</span>
-                </div>
-              )}
-            </section>
-          ) : null}
-
-          <section
-            className="permissions-group-section"
-            aria-label="功能权限"
-          >
-            <div className="permissions-section-heading">
-              <h3>功能权限</h3>
-              <p>控制员工可访问的业务功能。</p>
-            </div>
-            {featurePermissions.length > 0 ? (
               <div className="permissions-card-grid">
-                {featurePermissions.map((permission) => (
+                {controlPlanePermissions.map((permission) => (
                   <PermissionCard
                     key={permission.permission_key}
-                    disabled={isDialogLoading || pendingUserId !== null}
-                    onClick={() => openPermissionDialog(permission)}
                     permission={permission}
                   />
                 ))}
               </div>
-            ) : (
-              <div className="ops-empty-state">
-                <strong>暂无数据</strong>
-                <span>当前没有可显示的功能权限。</span>
-              </div>
-            )}
-          </section>
+            </section>
+          ) : null}
+
+          {featureGroups.map((group) => {
+            const groupId = `feat:${group.moduleKey}`;
+            const collapsed = collapsedGroups.has(groupId);
+            return (
+              <section
+                aria-label={group.label}
+                className={`ops-panel${collapsed ? " collapsed" : ""}`}
+                key={groupId}
+              >
+                <div className="ops-panel-heading">
+                  <div>
+                    <h3>{group.label}</h3>
+                    <p>点击卡片为员工分配该模块权限。</p>
+                  </div>
+                  <div className="pm-head-tools">
+                    <span className="ops-source">{group.items.length} 项</span>
+                    <button
+                      aria-label="折叠"
+                      className="mm-org-chev"
+                      onClick={() => toggleGroup(groupId)}
+                      type="button"
+                    >
+                      <ChevronDown aria-hidden="true" size={15} />
+                    </button>
+                  </div>
+                </div>
+                <div className="permissions-card-grid">
+                  {group.items.map((permission) => (
+                    <PermissionCard
+                      key={permission.permission_key}
+                      disabled={isDialogLoading || pendingUserId !== null}
+                      onClick={() => openPermissionDialog(permission)}
+                      permission={permission}
+                    />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
+
+          {featureGroups.length === 0 &&
+          controlPlanePermissions.length === 0 ? (
+            <div className="ops-empty-state">
+              <strong>暂无数据</strong>
+              <span>当前没有可显示的权限。</span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
