@@ -21,6 +21,7 @@ class KeyType(str, Enum):
     DEEPSEEK = "deepseek"
     N8N = "n8n"
     KEEPA = "keepa"
+    ALIBABA1688 = "alibaba1688"
 
 
 def _validate_provider_url(value: str) -> str:

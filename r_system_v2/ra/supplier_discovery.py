@@ -29,6 +29,8 @@ from r_system_v2.ra.profit_service import (
     run_profit_for_existing_offers,
 )
 from r_system_v2.ra.supplier_api import (
+    Alibaba1688Credentials,
+    Alibaba1688OfficialApiProvider,
     Mock1688OfficialApiProvider,
     SupplierApiProvider,
     supplier_source_mode,
@@ -299,7 +301,7 @@ def discover_1688_supplier_offers(
             auto_calculate=auto_calculate,
             exchange_rate_usd_cny=exchange_rate_usd_cny,
             min_gross_margin=min_gross_margin,
-            provider=supplier_api_provider or Mock1688OfficialApiProvider(),
+            provider=supplier_api_provider or _supplier_api_provider(db, org_id=org_id),
         )
     client = serper_client or _serper_client(db, org_id=org_id)
     crawler = crawler or Playwright1688Crawler()
@@ -571,12 +573,17 @@ def _discover_with_supplier_api_provider(
         or product.get("title")
         or asin
     ).strip()
-    query = f"1688官方API同类商品：{base_query[:80]}"
+    query = f"1688官方图搜同类商品：{base_query[:80]}"
+    # Official 1688 calls can take several seconds per product, especially when
+    # enrichment probes productInfo/freight. End any open SQL transaction before
+    # those network calls so PostgreSQL does not see an idle transaction.
+    _discard_db_transaction(db)
     offers_from_api = provider.search_offers(
         product=product,
         keyword_profile=keyword_profile,
         limit=result_limit,
     )
+    _discard_db_transaction(db)
     _insert_supplier_search(
         db,
         search_id=search_id,
@@ -648,14 +655,22 @@ def _discover_with_supplier_api_provider(
                 "supplier_alignment": {
                     "match_status": "match",
                     "match_score": offer.match_score,
-                    "match_reason": "1688 官方 API mock 返回同类商品候选，等待真实 API 后替换为官方结果。",
+                    "match_reason": (
+                        "1688 官方图搜返回同类商品候选。"
+                        if provider.provider_name != "mock_1688_api"
+                        else "1688 官方 API mock 返回同类商品候选，等待真实 API 后替换为官方结果。"
+                    ),
                     "same_product_type": True,
                     "brand_risk": False,
                     "shape_conflict": False,
                     "warnings": [],
                 },
                 "shipping_notice": (
-                    "1688 官方 API mock 返回供应商运费"
+                    (
+                        "1688 官方图搜返回供应商运费"
+                        if provider.provider_name != "mock_1688_api"
+                        else "1688 官方 API mock 返回供应商运费"
+                    )
                     if offer.domestic_shipping_cny is not None
                     else None
                 ),
@@ -686,7 +701,11 @@ def _discover_with_supplier_api_provider(
                 "supplier_alignment": {
                     "match_status": "match",
                     "match_score": offer.match_score,
-                    "match_reason": "1688 官方 API mock 返回同类商品候选。",
+                    "match_reason": (
+                        "1688 官方图搜返回同类商品候选。"
+                        if provider.provider_name != "mock_1688_api"
+                        else "1688 官方 API mock 返回同类商品候选。"
+                    ),
                 },
             }
         )
@@ -737,6 +756,37 @@ def _discover_with_supplier_api_provider(
         },
         "warnings": warnings,
     }
+
+
+def _supplier_api_provider(db: Session, *, org_id: str) -> SupplierApiProvider:
+    source_mode = supplier_source_mode()
+    if source_mode == "mock_1688_api":
+        return Mock1688OfficialApiProvider()
+
+    try:
+        _discard_db_transaction(db)
+        secret_value = RAnalysisProviderBinding(
+            org_id=org_id,
+            secret_manager=SecretManager(db_session=db),
+        ).alibaba1688_key()
+        _discard_db_transaction(db)
+    except SecretManagerError:
+        _discard_db_transaction(db)
+        if source_mode in {"official_1688_api", "alibaba1688_official_api", "1688_official"}:
+            raise RASupplierDiscoveryError("R-A 没有绑定 1688 官方 API key。")
+        return Mock1688OfficialApiProvider()
+    except Exception as exc:
+        _discard_db_transaction(db)
+        if source_mode in {"official_1688_api", "alibaba1688_official_api", "1688_official"}:
+            raise RASupplierDiscoveryError(f"1688 官方 API key 读取失败：{str(exc)[:180]}")
+        return Mock1688OfficialApiProvider()
+
+    credentials = Alibaba1688Credentials.from_secret_value(secret_value)
+    if credentials.ready:
+        return Alibaba1688OfficialApiProvider(credentials=credentials)
+    if source_mode in {"official_1688_api", "alibaba1688_official_api", "1688_official"}:
+        raise RASupplierDiscoveryError("1688 官方 API 密钥 JSON 缺少 app_key/app_secret/access_token。")
+    return Mock1688OfficialApiProvider()
 
 
 def build_1688_queries(product: dict[str, Any]) -> list[str]:

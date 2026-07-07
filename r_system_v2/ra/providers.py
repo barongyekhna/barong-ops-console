@@ -110,8 +110,8 @@ class RAnalysisProviderBinding:
         )
         supplier_source_mode = os.getenv(
             "RA_SUPPLIER_SOURCE_MODE",
-            "mock_1688_api",
-        ).strip() or "mock_1688_api"
+            "auto_1688_api",
+        ).strip() or "auto_1688_api"
         return {
             "roles": [item.to_dict() for item in role_statuses],
             "routing": {
@@ -123,7 +123,11 @@ class RAnalysisProviderBinding:
             },
             "supplier_source_mode": supplier_source_mode,
             "official_1688_configured": alibaba_ready,
-            "supplier_cost_provider_ready": supplier_source_mode == "mock_1688_api" or alibaba_ready,
+            "supplier_cost_provider_ready": supplier_source_mode in {
+                "mock_1688_api",
+                "auto_1688_api",
+            }
+            or alibaba_ready,
             "external_calls_enabled": serper_ready or alibaba_ready,
         }
 

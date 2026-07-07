@@ -20,6 +20,7 @@ from r_system_v2.ra.supplier_discovery import (
     RASupplierDiscoveryError,
     discover_1688_supplier_offers,
 )
+from r_system_v2.rw.product_images import product_image_candidates
 
 
 DEFAULT_ASIN_LIMIT = 1
@@ -232,6 +233,7 @@ def match_rw_products_for_query(
                    {_last_profit_sql(org_id)}
             FROM products_rw
             WHERE COALESCE(LOWER(CAST(state AS TEXT)), '') NOT LIKE '%reject%'
+              AND {_ra_profit_not_processed_sql(db)}
               AND ({' OR '.join(f'({clause})' for clause in clauses)})
             ORDER BY last_profit_at ASC NULLS FIRST, updated_at DESC NULLS LAST, asin ASC
             LIMIT :scan_limit
@@ -243,6 +245,13 @@ def match_rw_products_for_query(
     scored: list[dict[str, Any]] = []
     for row in rows:
         product = dict(row)
+        features = _dict_value(product.get("features"))
+        if not product_image_candidates(
+            asin=str(product.get("asin") or ""),
+            image_url=str(product.get("image_url")) if product.get("image_url") else None,
+            features=features,
+        ):
+            continue
         relevance = classify_product_relevance(cleaned_query, product)
         if not relevance.should_process:
             continue
@@ -262,6 +271,22 @@ def match_rw_products_for_query(
         reverse=True,
     )
     return scored[: max(1, min(int(limit), MAX_ASIN_LIMIT))]
+
+
+def _ra_profit_not_processed_sql(db: Session) -> str:
+    try:
+        dialect = db.get_bind().dialect.name
+    except Exception:
+        dialect = "postgresql"
+    if dialect == "postgresql":
+        return (
+            "COALESCE(features->'ra_profit'->>'status', '') "
+            "NOT IN ('pass', 'reject', 'blocked', 'failed')"
+        )
+    return (
+        "COALESCE(json_extract(features, '$.ra_profit.status'), '') "
+        "NOT IN ('pass', 'reject', 'blocked', 'failed')"
+    )
 
 
 def _snapshot_item(
@@ -515,6 +540,18 @@ def _sum_optional(left: float | None, right: float | None) -> float | None:
 def _float_value(value: Any) -> float | None:
     parsed = decimal_value(value)
     return float(parsed) if parsed is not None else None
+
+
+def _dict_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 def _dedupe_preserve_order(values: list[str]) -> list[str]:

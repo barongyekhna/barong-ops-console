@@ -401,7 +401,10 @@ export type RaAutoProfitResult = {
   items: RaAutoProfitItem[];
   counts: {
     matched_products: number;
+    selected_products?: number;
     processed_products: number;
+    target_profit_pass?: number;
+    max_products_per_job?: number;
     candidate_offers: number;
     priced_offers: number;
     profit_snapshots: number;
@@ -420,6 +423,7 @@ export type RaAutoProfitResult = {
     rw_empty_result?: boolean;
     empty_reason?: string | null;
     empty_recommendation?: string | null;
+    fatal_provider_error?: boolean;
   };
   formula: RaProfitFormula;
   warnings: string[];

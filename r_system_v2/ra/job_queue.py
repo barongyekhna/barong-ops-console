@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor, wait
 from datetime import UTC, datetime
 from decimal import Decimal
 import json
@@ -36,6 +36,8 @@ from r_system_v2.rw.product_images import primary_product_image_url, product_ima
 
 
 DEFAULT_JOB_ASIN_LIMIT = 20
+DEFAULT_TARGET_PROFIT_PASS = 10
+DEFAULT_MAX_PRODUCTS_PER_JOB = 240
 DEFAULT_WORKER_CONCURRENCY = 3
 DEFAULT_POLL_SECONDS = 3.0
 
@@ -65,6 +67,8 @@ def create_auto_profit_job(
         "query": cleaned_query[:120],
         "asin_limit": _bounded_asin_limit(asin_limit),
         "supplier_limit": _bounded_supplier_limit(supplier_limit),
+        "target_profit_pass": _target_profit_pass(),
+        "max_products_per_job": _max_products_per_job(),
         "min_gross_margin": _number(min_gross_margin),
         "run_ai_mock": bool(run_ai_mock),
         "selection_channel": _selection_channel(selection_channel),
@@ -173,20 +177,19 @@ class RaProfitJobWorker:
         run_ai_mock = filters.get("run_ai_mock") is not False
         selection_channel = _selection_channel(filters.get("selection_channel") or "amazon")
         quote = get_usd_cny_quote()
+        target_profit_pass = _target_profit_pass(filters.get("target_profit_pass"))
+        max_products_per_job = _max_products_per_job(filters.get("max_products_per_job"))
+        attempted_asins: set[str] = set()
 
         with self.session_factory() as db:
             with _without_org_data_isolation():
-                products = match_rw_products_for_query(
-                    db,
-                    org_id=org_id,
-                    query=query,
-                    limit=asin_limit,
-                )
-                db.rollback()
                 counts = _dict_value(job.get("counts"))
                 counts.update(
                     {
-                        "matched_products": len(products),
+                        "target_profit_pass": target_profit_pass,
+                        "max_products_per_job": max_products_per_job,
+                        "matched_products": 0,
+                        "selected_products": 0,
                         "processed_products": 0,
                         "candidate_offers": 0,
                         "priced_offers": 0,
@@ -199,72 +202,85 @@ class RaProfitJobWorker:
                 )
                 _update_job(db, run_id=run_id, status="running", counts=counts)
 
-        if not products:
+        while True:
             with self.session_factory() as db:
                 with _without_org_data_isolation():
-                    counts = _dict_value(_load_job_row(db, org_id=org_id, run_id=run_id)["counts"])
-                    notice = _no_rw_product_notice(query)
-                    warnings = list(counts.get("warnings") or [])
-                    warnings.append(notice["message"])
-                    counts.update(
-                        {
-                            "rw_empty_result": True,
-                            "empty_reason": notice["reason"],
-                            "empty_recommendation": notice["recommendation"],
-                            "warnings": warnings[-10:],
-                        }
+                    row = _load_job_row(db, org_id=org_id, run_id=run_id)
+                    counts = _dict_value(row.get("counts") if row else {})
+                    live_counts = _live_counts(db, org_id=org_id, run_id=run_id)
+                    counts.update(live_counts)
+                    current_pass = int(counts.get("profit_pass") or 0)
+                    processed = int(counts.get("processed_products") or 0)
+                    if (
+                        current_pass >= target_profit_pass
+                        or processed >= max_products_per_job
+                        or counts.get("fatal_provider_error")
+                    ):
+                        _update_job(db, run_id=run_id, status="running", counts=counts)
+                        break
+                    products = match_rw_products_for_query(
+                        db,
+                        org_id=org_id,
+                        query=query,
+                        limit=asin_limit,
                     )
-                    _update_job(db, run_id=run_id, status="completed", counts=counts, finish=True)
-            return
+                    fresh_products = [
+                        product
+                        for product in products
+                        if str(product.get("asin") or "").upper() not in attempted_asins
+                    ]
+                    counts["matched_products"] = int(counts.get("matched_products") or 0) + len(
+                        fresh_products
+                    )
+                    _update_job(db, run_id=run_id, status="running", counts=counts)
+                    db.rollback()
 
-        with ThreadPoolExecutor(max_workers=self.concurrency) as executor:
-            futures = [
-                executor.submit(
-                    _process_product_for_job,
-                    self.session_factory,
-                    org_id,
-                    run_id,
-                    str(product["asin"]),
-                    supplier_limit,
-                    quote.rate,
-                    min_gross_margin,
-                )
-                for product in products
-            ]
-            for future in as_completed(futures):
-                result = future.result()
+            if not fresh_products:
                 with self.session_factory() as db:
                     with _without_org_data_isolation():
                         row = _load_job_row(db, org_id=org_id, run_id=run_id)
                         counts = _dict_value(row.get("counts") if row else {})
-                        counts["processed_products"] = int(
-                            counts.get("processed_products") or 0
-                        ) + 1
-                        if result.get("error"):
+                        if int(counts.get("processed_products") or 0) == 0:
+                            notice = _no_rw_product_notice(query)
                             warnings = list(counts.get("warnings") or [])
-                            warnings.append(f"{result.get('asin')}: {result.get('error')}")
-                            counts["warnings"] = warnings[-10:]
-                        elif result.get("warnings"):
+                            warnings.append(notice["message"])
+                            counts.update(
+                                {
+                                    "rw_empty_result": True,
+                                    "empty_reason": notice["reason"],
+                                    "empty_recommendation": notice["recommendation"],
+                                    "warnings": warnings[-10:],
+                                }
+                            )
+                        else:
                             warnings = list(counts.get("warnings") or [])
-                            for warning in result.get("warnings") or []:
-                                warnings.append(str(warning))
+                            warnings.append(
+                                "本次可匹配的 R-W 产品已经全部尝试，利润通过数未达到目标。"
+                            )
                             counts["warnings"] = warnings[-10:]
-                        live_counts = _live_counts(db, org_id=org_id, run_id=run_id)
-                        counts.update(live_counts)
                         _update_job(db, run_id=run_id, status="running", counts=counts)
-                if log:
-                    log(
-                        "R-A job progress "
-                        f"run_id={run_id} asin={result.get('asin')} "
-                        f"error={result.get('error') or ''}"
-                    )
+                break
+
+            batch_result = self._process_product_batch(
+                products=fresh_products,
+                attempted_asins=attempted_asins,
+                org_id=org_id,
+                run_id=run_id,
+                supplier_limit=supplier_limit,
+                exchange_rate=quote.rate,
+                min_gross_margin=min_gross_margin,
+                target_profit_pass=target_profit_pass,
+                log=log,
+            )
+            if not batch_result["processed"]:
+                break
 
         with self.session_factory() as db:
             with _without_org_data_isolation():
                 row = _load_job_row(db, org_id=org_id, run_id=run_id)
                 counts = _dict_value(row.get("counts") if row else {})
                 counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
-                if run_ai_mock:
+                if run_ai_mock and int(counts.get("profit_pass") or 0) > 0:
                     ai_result = run_mock_ai_selection_for_run(
                         db,
                         org_id=org_id,
@@ -272,10 +288,125 @@ class RaProfitJobWorker:
                         channel=selection_channel,
                     )
                     counts.update(_dict_value(ai_result.get("counts")))
-                final_status = "completed" if not counts.get("warnings") else "partial"
+                if counts.get("fatal_provider_error"):
+                    final_status = "failed"
+                elif int(counts.get("profit_pass") or 0) >= target_profit_pass:
+                    final_status = "completed"
+                elif counts.get("warnings"):
+                    final_status = "partial"
+                else:
+                    final_status = "completed"
                 _update_job(db, run_id=run_id, status=final_status, counts=counts, finish=True)
         if log:
             log(f"R-A job finished run_id={run_id}")
+
+    def _process_product_batch(
+        self,
+        *,
+        products: list[dict[str, Any]],
+        attempted_asins: set[str],
+        org_id: str,
+        run_id: str,
+        supplier_limit: int,
+        exchange_rate: Decimal,
+        min_gross_margin: Decimal | None,
+        target_profit_pass: int,
+        log: Callable[[str], None] | None,
+    ) -> dict[str, int]:
+        processed = 0
+        product_index = 0
+        with ThreadPoolExecutor(max_workers=self.concurrency) as executor:
+            pending: set[Any] = set()
+            while product_index < len(products) or pending:
+                with self.session_factory() as db:
+                    with _without_org_data_isolation():
+                        row = _load_job_row(db, org_id=org_id, run_id=run_id)
+                        counts = _dict_value(row.get("counts") if row else {})
+                        counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
+                        current_pass = int(counts.get("profit_pass") or 0)
+                if current_pass >= target_profit_pass and not pending:
+                    break
+
+                remaining_pass_needed = max(1, target_profit_pass - current_pass)
+                max_pending = min(self.concurrency, remaining_pass_needed)
+                while (
+                    len(pending) < max_pending
+                    and product_index < len(products)
+                    and current_pass < target_profit_pass
+                ):
+                    product = products[product_index]
+                    product_index += 1
+                    asin = str(product.get("asin") or "").upper()
+                    if not asin or asin in attempted_asins:
+                        continue
+                    attempted_asins.add(asin)
+                    pending.add(
+                        executor.submit(
+                            _process_product_for_job,
+                            self.session_factory,
+                            org_id,
+                            run_id,
+                            asin,
+                            supplier_limit,
+                            exchange_rate,
+                            min_gross_margin,
+                        )
+                    )
+                    with self.session_factory() as db:
+                        with _without_org_data_isolation():
+                            row = _load_job_row(db, org_id=org_id, run_id=run_id)
+                            counts = _dict_value(row.get("counts") if row else {})
+                            counts["selected_products"] = int(
+                                counts.get("selected_products") or 0
+                            ) + 1
+                            _update_job(db, run_id=run_id, status="running", counts=counts)
+
+                if not pending:
+                    break
+                done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                for future in done:
+                    result = future.result()
+                    processed += 1
+                    self._record_product_result(
+                        org_id=org_id,
+                        run_id=run_id,
+                        result=result,
+                    )
+                    if log:
+                        log(
+                            "R-A job progress "
+                            f"run_id={run_id} asin={result.get('asin')} "
+                            f"verdict={result.get('verdict') or ''} "
+                            f"error={result.get('error') or ''}"
+                        )
+        return {"processed": processed}
+
+    def _record_product_result(
+        self,
+        *,
+        org_id: str,
+        run_id: str,
+        result: dict[str, object],
+    ) -> None:
+        with self.session_factory() as db:
+            with _without_org_data_isolation():
+                row = _load_job_row(db, org_id=org_id, run_id=run_id)
+                counts = _dict_value(row.get("counts") if row else {})
+                counts["processed_products"] = int(counts.get("processed_products") or 0) + 1
+                if result.get("error"):
+                    warnings = list(counts.get("warnings") or [])
+                    warnings.append(f"{result.get('asin')}: {result.get('error')}")
+                    counts["warnings"] = warnings[-10:]
+                    if result.get("fatal"):
+                        counts["fatal_provider_error"] = True
+                elif result.get("warnings"):
+                    warnings = list(counts.get("warnings") or [])
+                    for warning in result.get("warnings") or []:
+                        warnings.append(str(warning))
+                    counts["warnings"] = warnings[-10:]
+                live_counts = _live_counts(db, org_id=org_id, run_id=run_id)
+                counts.update(live_counts)
+                _update_job(db, run_id=run_id, status="running", counts=counts)
 
 
 def _process_product_for_job(
@@ -300,13 +431,238 @@ def _process_product_for_job(
                     exchange_rate_usd_cny=exchange_rate,
                     min_gross_margin=min_gross_margin,
                 )
+                verdict = _profit_verdict_from_discovery(discovery)
+                if verdict.get("status"):
+                    _mark_rw_profit_status(
+                        db,
+                        asin=asin,
+                        status=str(verdict["status"]),
+                        run_id=run_id,
+                        candidate_id=str(discovery.get("candidate_id") or ""),
+                        reason=str(verdict.get("reason") or ""),
+                        snapshot=verdict.get("snapshot"),
+                    )
         return {
             "asin": asin,
             "counts": discovery.get("counts"),
+            "verdict": verdict.get("status"),
             "warnings": discovery.get("warnings") or [],
         }
     except Exception as exc:  # pragma: no cover - external provider dependent.
-        return {"asin": asin, "error": str(exc)}
+        message = str(exc)
+        return {"asin": asin, "error": message, "fatal": _is_fatal_supplier_error(message)}
+
+
+def _profit_verdict_from_discovery(discovery: dict[str, object]) -> dict[str, object]:
+    profit_run = _dict_value(discovery.get("profit_run"))
+    items = profit_run.get("items")
+    if isinstance(items, list) and items:
+        normalized_items = [_dict_value(item) for item in items if isinstance(item, dict)]
+        pass_items = [item for item in normalized_items if item.get("verdict") == "pass"]
+        if pass_items:
+            best = _best_profit_item(pass_items)
+            return {
+                "status": "pass",
+                "reason": "利润率达到 R-A 当前最低毛利率要求。",
+                "snapshot": best,
+            }
+        reject_items = [item for item in normalized_items if item.get("verdict") == "reject"]
+        if reject_items:
+            best = _best_profit_item(reject_items)
+            margin = _number(best.get("gross_margin"))
+            return {
+                "status": "reject",
+                "reason": (
+                    f"利润率 {margin:.2%} 未达到最低要求。"
+                    if margin is not None
+                    else "利润率未达到最低要求。"
+                ),
+                "snapshot": best,
+            }
+        blocked_items = [item for item in normalized_items if item.get("verdict") == "blocked"]
+        if blocked_items:
+            blocked = blocked_items[0]
+            reasons = blocked.get("blocked_reasons") or []
+            reason = "；".join(str(item) for item in reasons if item) or "利润计算缺少必要字段。"
+            return {"status": "blocked", "reason": reason, "snapshot": blocked}
+
+    counts = _dict_value(discovery.get("counts"))
+    candidate_offers = int(counts.get("candidate_offers") or 0)
+    priced_offers = int(counts.get("priced_offers") or 0)
+    if candidate_offers <= 0:
+        return {
+            "status": "reject",
+            "reason": "1688 图搜未找到可用于利润计算的同款/同类供应商。",
+            "snapshot": None,
+        }
+    if priced_offers <= 0:
+        return {
+            "status": "reject",
+            "reason": "1688 图搜找到了供应商，但没有可用成本价格。",
+            "snapshot": None,
+        }
+    return {
+        "status": "reject",
+        "reason": f"可靠可定价供应商仅 {priced_offers} 条，不足正式利润计算要求。",
+        "snapshot": None,
+    }
+
+
+def _best_profit_item(items: list[dict[str, Any]]) -> dict[str, Any]:
+    return sorted(
+        items,
+        key=lambda item: (
+            _number(item.get("gross_margin")) if _number(item.get("gross_margin")) is not None else -999,
+            _number(item.get("gross_profit_usd")) if _number(item.get("gross_profit_usd")) is not None else -999,
+        ),
+        reverse=True,
+    )[0]
+
+
+def _mark_rw_profit_status(
+    db: Session,
+    *,
+    asin: str,
+    status: str,
+    run_id: str,
+    candidate_id: str,
+    reason: str,
+    snapshot: object,
+) -> None:
+    normalized_status = status if status in {"pass", "reject", "blocked"} else "failed"
+    row = db.execute(
+        text(
+            """
+            SELECT features
+            FROM products_rw
+            WHERE asin = :asin
+            LIMIT 1
+            """
+        ),
+        {"asin": asin},
+    ).mappings().first()
+    if row is None:
+        return
+    features = _dict_value(row.get("features"))
+    snapshot_payload = _dict_value(snapshot)
+    features["ra_profit"] = {
+        "status": normalized_status,
+        "run_id": run_id,
+        "candidate_id": candidate_id or None,
+        "reason": reason,
+        "snapshot_id": snapshot_payload.get("snapshot_id"),
+        "gross_margin": _number(snapshot_payload.get("gross_margin")),
+        "gross_profit_usd": _number(snapshot_payload.get("gross_profit_usd")),
+        "gross_profit_cny": _number(snapshot_payload.get("gross_profit_cny")),
+        "calculated_at": datetime.now(UTC).isoformat(),
+    }
+    params = {
+        "asin": asin,
+        "features": json.dumps(features, ensure_ascii=False),
+        "reason": f"R-A利润{_rw_profit_label(normalized_status)}：{reason}"[:500],
+    }
+    if normalized_status == "pass":
+        db.execute(
+            text(
+                f"""
+                UPDATE products_rw
+                SET features = {_json_bind(db, "features")},
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE asin = :asin
+                """
+            ),
+            params,
+        )
+    else:
+        reason_sql = (
+            ", rule_reject_reason = :reason"
+            if _products_rw_has_column(db, "rule_reject_reason")
+            else ""
+        )
+        db.execute(
+            text(
+                f"""
+                UPDATE products_rw
+                SET features = {_json_bind(db, "features")},
+                    state = 'rejected',
+                    updated_at = CURRENT_TIMESTAMP
+                    {reason_sql}
+                WHERE asin = :asin
+                """
+            ),
+            params,
+        )
+    if candidate_id:
+        candidate_status = {
+            "pass": "profit_passed",
+            "reject": "profit_rejected",
+            "blocked": "profit_blocked",
+        }.get(normalized_status, "profit_pending")
+        db.execute(
+            text(
+                """
+                UPDATE ra_candidates
+                SET candidate_status = :candidate_status,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE id = :candidate_id
+                """
+            ),
+            {"candidate_id": candidate_id, "candidate_status": candidate_status},
+        )
+    db.commit()
+
+
+def _rw_profit_label(status: str) -> str:
+    if status == "pass":
+        return "通过"
+    if status == "blocked":
+        return "阻塞"
+    return "不通过"
+
+
+def _is_fatal_supplier_error(message: str) -> bool:
+    lowered = str(message or "").lower()
+    fatal_markers = (
+        "apiunsupported",
+        "unsupport api",
+        "signature invalid",
+        "图搜 api 方法名未配置",
+        "密钥尚未完整绑定",
+        "缺少 app_key",
+        "缺少 app_secret",
+        "access_token",
+    )
+    return any(marker in lowered for marker in fatal_markers)
+
+
+def _is_idle_transaction_timeout(exc: Exception) -> bool:
+    text_value = str(exc).lower()
+    return (
+        "idle-in-transaction timeout" in text_value
+        or "idle_in_transaction_session_timeout" in text_value
+    )
+
+
+def _products_rw_has_column(db: Session, column_name: str) -> bool:
+    try:
+        dialect = db.get_bind().dialect.name
+    except Exception:
+        dialect = "postgresql"
+    if dialect == "postgresql":
+        row = db.execute(
+            text(
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'products_rw' AND column_name = :column_name
+                LIMIT 1
+                """
+            ),
+            {"column_name": column_name},
+        ).first()
+        return row is not None
+    rows = db.execute(text("PRAGMA table_info(products_rw)")).mappings().all()
+    return any(str(row.get("name")) == column_name for row in rows)
 
 
 def _claim_next_job(db: Session) -> dict[str, Any] | None:
@@ -366,24 +722,30 @@ def _update_job(
     finish: bool = False,
 ) -> None:
     finish_sql = ", finished_at = CURRENT_TIMESTAMP" if finish else ""
-    db.execute(
-        text(
-            f"""
-            UPDATE ra_selection_runs
-            SET status = :status,
-                counts = {_json_bind(db, "counts")},
-                updated_at = CURRENT_TIMESTAMP
-                {finish_sql}
-            WHERE run_id = :run_id
-            """
-        ),
-        {
-            "run_id": run_id,
-            "status": status,
-            "counts": json.dumps(counts, ensure_ascii=False),
-        },
+    statement = text(
+        f"""
+        UPDATE ra_selection_runs
+        SET status = :status,
+            counts = {_json_bind(db, "counts")},
+            updated_at = CURRENT_TIMESTAMP
+            {finish_sql}
+        WHERE run_id = :run_id
+        """
     )
-    db.commit()
+    params = {
+        "run_id": run_id,
+        "status": status,
+        "counts": json.dumps(counts, ensure_ascii=False),
+    }
+    try:
+        db.execute(statement, params)
+        db.commit()
+    except Exception as exc:
+        if not _is_idle_transaction_timeout(exc):
+            raise
+        db.rollback()
+        db.execute(statement, params)
+        db.commit()
 
 
 def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
@@ -965,7 +1327,10 @@ def _live_counts(db: Session, *, org_id: str, run_id: str) -> dict[str, int]:
               COUNT(DISTINCT c.source_asin) AS candidate_products,
               COUNT(DISTINCT o.id) AS candidate_offers,
               COUNT(DISTINCT o.id) FILTER (WHERE o.unit_price_cny IS NOT NULL) AS priced_offers,
-              COUNT(DISTINCT s.id) AS profit_snapshots
+              COUNT(DISTINCT s.id) AS profit_snapshots,
+              COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_passed') AS profit_pass,
+              COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_rejected') AS profit_reject,
+              COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_blocked') AS profit_blocked
             FROM ra_candidates c
             LEFT JOIN ra_supplier_offers o ON o.candidate_id = c.id
             LEFT JOIN ra_profit_snapshots s ON s.candidate_id = c.id
@@ -974,32 +1339,14 @@ def _live_counts(db: Session, *, org_id: str, run_id: str) -> dict[str, int]:
         ),
         {"org_id": org_id, "run_id": run_id},
     ).mappings().first()
-    verdict_rows = db.execute(
-        text(
-            """
-            SELECT s.payload
-            FROM ra_profit_snapshots s
-            JOIN ra_candidates c ON c.id = s.candidate_id
-            WHERE c.org_id = :org_id AND c.run_id = :run_id
-            """
-        ),
-        {"org_id": org_id, "run_id": run_id},
-    ).mappings()
-    verdict_counts = {"profit_pass": 0, "profit_reject": 0, "profit_blocked": 0}
-    for verdict_row in verdict_rows:
-        verdict = _dict_value(verdict_row.get("payload")).get("verdict")
-        if verdict == "pass":
-            verdict_counts["profit_pass"] += 1
-        elif verdict == "reject":
-            verdict_counts["profit_reject"] += 1
-        elif verdict == "blocked":
-            verdict_counts["profit_blocked"] += 1
     return {
         "candidate_products": int(row["candidate_products"] or 0) if row else 0,
         "candidate_offers": int(row["candidate_offers"] or 0) if row else 0,
         "priced_offers": int(row["priced_offers"] or 0) if row else 0,
         "profit_snapshots": int(row["profit_snapshots"] or 0) if row else 0,
-        **verdict_counts,
+        "profit_pass": int(row["profit_pass"] or 0) if row else 0,
+        "profit_reject": int(row["profit_reject"] or 0) if row else 0,
+        "profit_blocked": int(row["profit_blocked"] or 0) if row else 0,
     }
 
 
@@ -1007,7 +1354,10 @@ def _initial_counts(filters: dict[str, Any]) -> dict[str, object]:
     return {
         "requested_asin_limit": filters.get("asin_limit"),
         "supplier_limit": filters.get("supplier_limit"),
+        "target_profit_pass": filters.get("target_profit_pass") or _target_profit_pass(),
+        "max_products_per_job": filters.get("max_products_per_job") or _max_products_per_job(),
         "matched_products": 0,
+        "selected_products": 0,
         "processed_products": 0,
         "candidate_offers": 0,
         "priced_offers": 0,
@@ -1027,6 +1377,7 @@ def _initial_counts(filters: dict[str, Any]) -> dict[str, object]:
         "rw_empty_result": False,
         "empty_reason": None,
         "empty_recommendation": None,
+        "fatal_provider_error": False,
         "warnings": [],
     }
 
@@ -1051,6 +1402,26 @@ def _bounded_asin_limit(value: Any) -> int:
     except (TypeError, ValueError):
         parsed = DEFAULT_JOB_ASIN_LIMIT
     return max(1, min(parsed, MAX_ASIN_LIMIT))
+
+
+def _target_profit_pass(value: Any | None = None) -> int:
+    if value is None:
+        value = os.getenv("RA_AUTO_PROFIT_TARGET_PASS")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = DEFAULT_TARGET_PROFIT_PASS
+    return max(1, min(parsed, 50))
+
+
+def _max_products_per_job(value: Any | None = None) -> int:
+    if value is None:
+        value = os.getenv("RA_AUTO_PROFIT_MAX_PRODUCTS")
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = DEFAULT_MAX_PRODUCTS_PER_JOB
+    return max(DEFAULT_JOB_ASIN_LIMIT, min(parsed, 2000))
 
 
 def _bounded_supplier_limit(value: Any) -> int:

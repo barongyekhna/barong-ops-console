@@ -169,8 +169,8 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           <h2>{view === "dashboard" ? "选品候选总览" : "关键词/类目自动选品"}</h2>
           <p>
             输入模糊关键词或类目后，系统只从 R-W 产品库中匹配同关键词/同类目的
-            ASIN，再自动搜索 mock 1688 供应商、计算毛利润，并用 DeepSeek/GPT/Opus
-            三层 mock 生成选品结论。
+            ASIN，再自动用 1688 官方图搜寻找同款供应商、计算毛利润，并把利润通过的
+            产品送入 DeepSeek/GPT/Opus 三层 mock 选品链。
           </p>
         </div>
         <div className={styles.statusPill} data-state={error ? "error" : "ready"}>
@@ -207,9 +207,9 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
             </button>
           </div>
           <p>
-            默认每次提交 {DEFAULT_ASIN_LIMIT} 个 R-W 候选 ASIN 到后台队列，每个
+            后台每批最多抓取 {DEFAULT_ASIN_LIMIT} 个 R-W 候选 ASIN，每个
             ASIN 优先抓取 {DEFAULT_SUPPLIER_LIMIT} 个一件代发/一件起批供应商，
-            随后自动运行三层 AI mock，页面每 3 秒自动刷新结果。
+            若利润通过不足 10 个会继续从 R-W 补货，页面每 3 秒自动刷新结果。
           </p>
         </form>
         {runError ? (
@@ -274,8 +274,11 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
   const matched = result.counts.matched_products ?? 0;
+  const selected = result.counts.selected_products ?? 0;
   const processed = result.counts.processed_products ?? 0;
-  const progress = matched > 0 ? Math.min(100, Math.round((processed / matched) * 100)) : 0;
+  const targetPass = result.counts.target_profit_pass ?? 10;
+  const profitPass = result.counts.profit_pass ?? 0;
+  const progress = targetPass > 0 ? Math.min(100, Math.round((profitPass / targetPass) * 100)) : 0;
   return (
     <section className={styles.progressBand}>
       <div className={styles.progressHeader}>
@@ -298,7 +301,10 @@ function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
         <span style={{ width: `${progress}%` }} />
       </div>
       <div className={styles.progressStats}>
-        <span>已处理 {formatCount(processed)} / {formatCount(matched)} 个产品</span>
+        <span>利润通过 {formatCount(profitPass)} / {formatCount(targetPass)}</span>
+        <span>R-W 已匹配 {formatCount(matched)}</span>
+        <span>已选取 {formatCount(selected)}</span>
+        <span>已处理 {formatCount(processed)}</span>
         <span>供应商候选 {formatCount(result.counts.candidate_offers)}</span>
         <span>已抓到成本 {formatCount(result.counts.priced_offers)}</span>
         <span>利润快照 {formatCount(result.counts.profit_snapshots)}</span>

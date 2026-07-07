@@ -176,6 +176,7 @@ def _load_candidate_contexts(db: Session, *, org_id: str, run_id: str) -> list[d
             FROM ra_candidates c
             LEFT JOIN products_rw p ON p.asin = c.source_asin
             WHERE c.org_id = :org_id AND c.run_id = :run_id
+              AND c.candidate_status = 'profit_passed'
             ORDER BY c.created_at ASC
             """
         ),
