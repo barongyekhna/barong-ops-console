@@ -585,6 +585,24 @@ _DEVICE_CATEGORY_TERMS = (
     "blender",
     "food processor",
     "vacuum cleaner",
+    # 宠物/厨房配件是硬件设备，不是被消耗的食物本体（防止容器被当成食品剔除）
+    "feeder",
+    "waterer",
+    "bowl",
+    "dispenser",
+    "storage container",
+    "food storage",
+)
+# 宠物食品：类目在 Pet Supplies 下且叶子是食物类（亚马逊常用泛化叶子 "Food"）。
+_PET_FOOD_LEAF_TERMS = (
+    "food",
+    "treats",
+    "jerky",
+    "kibble",
+    "seed",
+    "mash",
+    "nutrition",
+    "chews",
 )
 # 类目明确属于消耗品：食品/饮品/保健品/药品/宠物食品 → 权威剔除。
 _CONSUMABLE_CATEGORY_TERMS = (
@@ -612,8 +630,12 @@ def _is_device_category(product: NormalizedProduct) -> bool:
 
 
 def _consumable_category_reject(product: NormalizedProduct) -> str | None:
-    if _contains_any(_product_category_text(product), _CONSUMABLE_CATEGORY_TERMS):
+    cat = _product_category_text(product)
+    if _contains_any(cat, _CONSUMABLE_CATEGORY_TERMS):
         return "剔除：产品类目属于食品/饮品/保健品/药品/宠物食品，不进入 R-A。"
+    # 宠物食品：类目在 Pet Supplies 下、叶子是食物类（喂食器/碗等配件已在上面的设备类目放行）。
+    if "pet supplies" in cat and _contains_any(cat, _PET_FOOD_LEAF_TERMS):
+        return "剔除：产品类目属于宠物食品，不进入 R-A。"
     return None
 
 
