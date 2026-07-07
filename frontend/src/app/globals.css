@@ -6910,3 +6910,107 @@ textarea:focus-visible {
 @media (max-width: 720px) {
   .pm-page .permissions-card-grid { grid-template-columns: 1fr; }
 }
+
+/* =====================================================================
+   控制台小游戏「深空空战」面板
+   ===================================================================== */
+.cc-arcade {
+  position: relative;
+  z-index: 1;
+  margin-top: 6px;
+  border-radius: 14px;
+  border: 1px solid rgb(120 200 255 / 16%);
+  background: rgb(8 15 26 / 55%);
+  backdrop-filter: blur(9px);
+  box-shadow: 0 20px 50px -26px rgb(0 0 0 / 80%);
+  overflow: hidden;
+}
+.cc-arcade::before,
+.cc-arcade::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--sh-amber, #ffb13b);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 3;
+}
+.cc-arcade::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+.cc-arcade::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+
+.cc-arcade-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid rgb(120 200 255 / 12%);
+}
+.cc-arcade-title { display: flex; align-items: center; gap: 10px; }
+.cc-arcade-title svg { color: var(--sh-amber, #ffb13b); }
+.cc-arcade-title > div { display: grid; gap: 1px; }
+.cc-arcade-eyebrow {
+  color: var(--sh-cyan, #39d4ff);
+  font: 700 9px ui-monospace, monospace;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+}
+.cc-arcade-title strong { color: #eafaff; font-size: 14px; }
+.cc-arcade-meta {
+  display: flex;
+  gap: 14px;
+  color: var(--sh-dim, #7d95ae);
+  font: 600 11px ui-monospace, monospace;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.cc-arcade-stage { position: relative; line-height: 0; }
+.cc-arcade-canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  background: #04070e;
+  touch-action: none;
+}
+
+.cc-arcade-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 11px;
+  text-align: center;
+  padding: 20px;
+  line-height: 1.5;
+  background: rgb(2 6 12 / 64%);
+  backdrop-filter: blur(2px);
+}
+.cc-arcade-big {
+  color: #eafaff;
+  font-size: 27px;
+  letter-spacing: 0.05em;
+  text-shadow: 0 0 26px rgb(57 212 255 / 42%);
+}
+.cc-arcade-overlay > span { color: var(--sh-dim, #7d95ae); font-size: 13px; }
+.cc-arcade-legend { display: flex; gap: 18px; flex-wrap: wrap; justify-content: center; }
+.cc-arcade-legend em { font-style: normal; font: 700 12px ui-monospace, monospace; }
+.cc-arcade-btn {
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 24px;
+  border-radius: 10px;
+  border: 1px solid rgb(57 212 255 / 55%);
+  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
+  color: #03121a;
+  font-weight: 800;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 10px 26px -10px rgb(57 212 255 / 60%);
+}
+.cc-arcade-btn:hover { filter: brightness(1.08); }

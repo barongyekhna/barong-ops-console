@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 
 import { useFrontendCapabilityState } from "@/components/capability-state-provider";
+import { ConsoleArcade } from "@/components/console-arcade";
 import { DashboardScene } from "@/components/dashboard-scene";
 import {
   ActivityFeed,
@@ -568,6 +569,8 @@ export function OperationsDashboard() {
           </button>
         </div>
       )}
+
+      <ConsoleArcade />
 
       {drawerOpen ? (
         <>
