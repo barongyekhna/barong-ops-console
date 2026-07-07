@@ -2,12 +2,16 @@
 
 import {
   Apple,
+  Bird,
+  Bomb,
   ChevronDown,
   ChevronLeft,
   CircleDot,
   Crosshair,
+  Disc,
   Gamepad2,
   Gauge,
+  Gem,
   Grid2x2,
   Grid3x3,
   Orbit,
@@ -19,6 +23,10 @@ import { useState, type ComponentType, type CSSProperties } from "react";
 import { Game2048 } from "@/components/arcade-2048";
 import { AsteroidsGame } from "@/components/arcade-asteroids";
 import { BreakoutGame } from "@/components/arcade-breakout";
+import { FlappyGame } from "@/components/arcade-flappy";
+import { Match3Game } from "@/components/arcade-match3";
+import { MinesGame } from "@/components/arcade-mines";
+import { PongGame } from "@/components/arcade-pong";
 import { RunnerGame } from "@/components/arcade-runner";
 import { ShmupGame } from "@/components/arcade-shmup";
 import { SnakeGame } from "@/components/arcade-snake";
@@ -33,7 +41,11 @@ type GameId =
   | "asteroids"
   | "breakout"
   | "2048"
-  | "runner";
+  | "runner"
+  | "match3"
+  | "mines"
+  | "flappy"
+  | "pong";
 
 const GAMES: Array<{
   id: GameId;
@@ -52,6 +64,10 @@ const GAMES: Array<{
   { id: "breakout", name: "打砖块", en: "BREAKOUT", desc: "A/D 挡板 · 空格发射 · 接道具砸墙", accent: "#ff6b8a", Icon: CircleDot, Game: BreakoutGame },
   { id: "2048", name: "2048", en: "2048", desc: "WASD 滑动合并数字 · 凑到 2048", accent: "#ffd23b", Icon: Grid2x2, Game: Game2048 },
   { id: "runner", name: "星际跑酷", en: "RUNNER", desc: "W / 空格 起跳 · 躲陨石 · 拼最远距离", accent: "#ff9a5f", Icon: Gauge, Game: RunnerGame },
+  { id: "match3", name: "宝石迷阵", en: "MATCH-3", desc: "空格选中 · 方向交换 · 凑三连消除", accent: "#ff8ac0", Icon: Gem, Game: Match3Game },
+  { id: "mines", name: "扫雷", en: "MINESWEEPER", desc: "WASD 移动 · 空格挖 · F 插旗", accent: "#6ec7ff", Icon: Bomb, Game: MinesGame },
+  { id: "flappy", name: "星舰穿梭", en: "FLAPPY", desc: "W / 空格 上浮 · 穿过能量门缝隙", accent: "#ffd23b", Icon: Bird, Game: FlappyGame },
+  { id: "pong", name: "弹球对战", en: "PONG", desc: "W/S 球拍 · 对战 AI · 先到 7 分", accent: "#4dffa1", Icon: Disc, Game: PongGame },
 ];
 
 export function ConsoleArcade() {
