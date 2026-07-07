@@ -7014,3 +7014,89 @@ textarea:focus-visible {
   box-shadow: 0 10px 26px -10px rgb(57 212 255 / 60%);
 }
 .cc-arcade-btn:hover { filter: brightness(1.08); }
+
+/* 游戏厅：菜单 + 卡片 + 退出 + HUD 条 */
+.cc-arcade-hint { color: var(--sh-dim, #7d95ae); font: 600 11px ui-monospace, monospace; }
+.cc-arcade-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid rgb(120 200 255 / 16%);
+  background: rgb(10 20 34 / 55%);
+  color: var(--sh-cyan, #39d4ff);
+  font: 600 12px "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.cc-arcade-exit:hover { border-color: rgb(57 212 255 / 50%); color: #eafaff; }
+
+.cc-arcade-menu {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+.cc-game-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 16px 16px 16px 20px;
+  border-radius: 12px;
+  border: 1px solid rgb(120 200 255 / 14%);
+  background: rgb(10 18 30 / 55%);
+  cursor: pointer;
+  text-align: left;
+  overflow: hidden;
+  transition: border-color 0.15s, transform 0.15s, box-shadow 0.15s;
+}
+.cc-game-card::after {
+  content: "";
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  background: var(--accent, #39d4ff);
+  opacity: 0.75;
+}
+.cc-game-card:hover {
+  border-color: rgb(57 212 255 / 45%);
+  transform: translateY(-2px);
+  box-shadow: 0 0 26px -8px var(--accent, #39d4ff);
+}
+.cc-game-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgb(255 255 255 / 5%);
+  color: var(--accent, #39d4ff);
+  margin-bottom: 4px;
+}
+.cc-game-card strong { color: #eafaff; font-size: 15px; }
+.cc-game-en { color: var(--accent, #39d4ff); font: 700 9px ui-monospace, monospace; letter-spacing: 0.22em; }
+.cc-game-card small { color: var(--sh-dim, #7d95ae); font-size: 11px; line-height: 1.45; }
+.cc-game-play { margin-top: 5px; color: #eafaff; font: 700 11px ui-monospace, monospace; opacity: 0.65; }
+.cc-game-card:hover .cc-game-play { opacity: 1; color: var(--accent, #39d4ff); }
+
+.cc-arcade-hudbar {
+  display: flex;
+  gap: 16px;
+  justify-content: flex-end;
+  padding: 9px 16px;
+  border-top: 1px solid rgb(120 200 255 / 10%);
+  color: var(--sh-dim, #7d95ae);
+  font: 600 11px ui-monospace, monospace;
+}
+
+.cc-arcade-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.cc-arcade-btn.ghost {
+  background: rgb(10 20 34 / 55%);
+  color: var(--sh-ink, #d6e8f6);
+  border-color: rgb(120 200 255 / 16%);
+  box-shadow: none;
+}
+.cc-arcade-btn.ghost:hover { border-color: rgb(57 212 255 / 45%); filter: none; }
