@@ -9,17 +9,5 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 export default function RwProductsPage() {
-  return (
-    <div className="page-stack">
-      <section className="page-heading">
-        <span className="section-index">R-W</span>
-        <div>
-          <h1>R-W 产品数据仓库</h1>
-          <p>来自后端实时流水线的产品、图片、分数和状态。</p>
-        </div>
-      </section>
-
-      <WarehouseWorkspace view="products" />
-    </div>
-  );
+  return <WarehouseWorkspace view="products" />;
 }

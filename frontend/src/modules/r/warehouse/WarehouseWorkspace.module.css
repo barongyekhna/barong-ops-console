@@ -751,3 +751,91 @@
   }
 
 }
+
+/* =====================================================================
+   命令中心暗色主题（复用 .mm-page 底座）—— 翻转 --color-* token + 覆盖硬编码色
+   ===================================================================== */
+.workspace {
+  --color-surface: rgb(8 15 26 / 58%);
+  --color-surface-muted: rgb(57 212 255 / 6%);
+  --color-line: rgb(120 200 255 / 16%);
+  --color-text: #d6e8f6;
+  --color-text-strong: #eafaff;
+  --color-muted: #7d95ae;
+  --color-primary-strong: #39d4ff;
+  --color-primary-soft: rgb(57 212 255 / 12%);
+  --color-success-soft: rgb(77 255 161 / 10%);
+  --color-warning-soft: rgb(255 177 59 / 10%);
+}
+
+/* 命令栏 / 标签 */
+.toolbar { align-items: flex-start; }
+.tab { border-radius: 9px; font-weight: 600; transition: 0.15s; }
+.tab:hover { color: #eafaff; border-color: rgb(57 212 255 / 35%); }
+.tabActive {
+  color: #03121a !important;
+  background: linear-gradient(180deg, #5fe3ff, #22a7d8) !important;
+  border-color: rgb(57 212 255 / 60%) !important;
+  box-shadow: 0 6px 18px -8px rgb(57 212 255 / 55%);
+}
+.skillHint { font-family: var(--mm-mono, ui-monospace, monospace); }
+.statusPill { color: #4dffa1 !important; background: rgb(77 255 161 / 10%); border-color: rgb(77 255 161 / 28%); }
+.livePill { color: #39d4ff; background: rgb(57 212 255 / 10%); border-color: rgb(57 212 255 / 28%); }
+
+/* 指标卡 */
+.metrics { grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.metric span { font: 600 10px var(--mm-mono, ui-monospace, monospace); letter-spacing: 1.2px; text-transform: uppercase; }
+.metric strong { color: #39d4ff; text-shadow: 0 0 14px rgb(57 212 255 / 40%); }
+
+/* 面板 = ops-panel（HUD 角标 + 玻璃） */
+.panel {
+  position: relative;
+  border-radius: 12px;
+  backdrop-filter: blur(9px);
+  box-shadow: 0 20px 50px -26px rgb(0 0 0 / 80%);
+}
+.panel::before, .panel::after { content: ""; position: absolute; width: 14px; height: 14px; border: 2px solid var(--mm-amber, #ffb13b); opacity: 0.5; pointer-events: none; }
+.panel::before { left: -1px; top: -1px; border-right: 0; border-bottom: 0; }
+.panel::after { right: -1px; bottom: -1px; border-left: 0; border-top: 0; }
+.panelHeader h2 { color: #eafaff; }
+
+/* 表格 */
+.tableWrap { border-radius: 12px; background: rgb(4 10 18 / 45%); }
+.table { background: transparent; }
+.table th { letter-spacing: 1px; background: rgb(57 212 255 / 6%); }
+.table tbody tr:hover td { background: rgb(57 212 255 / 5%); }
+.productPreview { background: rgb(4 10 18 / 60%); }
+/* 电商产品图保留白底才看得清 */
+.productPreview img, .imageZoomPreview img { background: #ffffff; }
+.imageZoomPreview { background: #0a1420; border-color: rgb(120 200 255 / 30%); box-shadow: 0 18px 46px rgb(0 0 0 / 60%); position: fixed !important; }
+
+/* 标签统一到 mm 调色板 */
+.asinTag { color: #39d4ff; background: rgb(57 212 255 / 10%); border-color: rgb(57 212 255 / 32%); }
+.copyState { color: #4dffa1 !important; }
+.salesTag { color: #6ec7ff !important; background: rgb(57 212 255 / 8%); border-color: rgb(57 212 255 / 22%); }
+.fbaFeeTag { color: #ffcf8a; background: rgb(255 177 59 / 12%); border-color: rgb(255 177 59 / 34%); }
+.fbaFeeMissingTag { color: #d9b06a; background: rgb(255 177 59 / 8%); border-color: rgb(255 177 59 / 24%); }
+.badge { color: #4dffa1; background: rgb(77 255 161 / 10%); border-color: rgb(77 255 161 / 28%); }
+.rejectBadge { color: #ff6b8a; background: rgb(255 107 138 / 10%); border-color: rgb(255 107 138 / 30%); }
+.lithiumTag { color: #fff !important; background: #d43d5c; border-color: #ff6b8a; }
+.warningBadge { color: #ffb13b; background: rgb(255 177 59 / 10%); border-color: rgb(255 177 59 / 30%); }
+.warningMessage { color: #ffb13b; background: rgb(255 177 59 / 10%); border-color: rgb(255 177 59 / 28%); }
+
+/* 卡片行加一点底色 */
+.ruleRow, .workerRow, .eventRow, .statusGrid div { background: rgb(10 18 30 / 45%); }
+.statusGrid dd { color: #eafaff; }
+.selectorHeader { color: #eafaff; }
+.categoryTree { background: rgb(4 10 18 / 40%); }
+.categoryNode input { accent-color: #39d4ff; }
+
+/* 输入 focus */
+.filters input:focus, .filters select:focus, .settingsGrid input:focus {
+  outline: 0; border-color: rgb(57 212 255 / 55%); box-shadow: 0 0 0 3px rgb(57 212 255 / 12%);
+}
+.filters select option, .settingsGrid select option { background: #0a1420; color: #eafaff; }
+
+/* 弹窗（fixed 需 !important 抵消 mm-page 的 position:relative） */
+.popupBackdrop { position: fixed !important; z-index: 80 !important; background: rgb(2 6 12 / 78%); backdrop-filter: blur(6px); }
+.popup { border-radius: 14px; box-shadow: 0 40px 90px -34px rgb(0 0 0 / 85%); }
+.popup strong { color: #eafaff; }
+.popupButton { color: #03121a; background: linear-gradient(180deg, #5fe3ff, #22a7d8); border-color: rgb(57 212 255 / 60%); }

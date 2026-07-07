@@ -7120,3 +7120,23 @@ textarea:focus-visible {
 .cc-arcade-chev { transition: transform 0.18s; }
 .cc-arcade-chev.up { transform: rotate(180deg); }
 .cc-arcade.collapsed .cc-arcade-head { border-bottom: 0; }
+
+/* R-W 数据仓库命令中心标题头 */
+.r-w-page .rw-eyebrow {
+  display: block;
+  color: var(--mm-cyan, #39d4ff);
+  font: 700 9px var(--mm-mono, ui-monospace, monospace);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+.r-w-page .rw-title {
+  margin: 4px 0 0;
+  color: #eafaff;
+  font-size: 22px;
+  text-shadow: 0 0 24px rgb(57 212 255 / 20%);
+}
+.r-w-page .rw-sub {
+  margin: 6px 0 0;
+  color: var(--mm-dim, #7d95ae);
+  font-size: 12.5px;
+}

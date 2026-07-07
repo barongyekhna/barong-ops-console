@@ -13,6 +13,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 
 import { useAuth } from "@/components/auth-provider";
+import { DashboardScene } from "@/components/dashboard-scene";
 import {
   deleteRejectedRwProducts,
   getRwCategoryTree,
@@ -1427,7 +1428,8 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
   }
 
   return (
-    <div className={styles.workspace}>
+    <div className={`${styles.workspace} mm-page r-w-page`}>
+      <DashboardScene />
       {showDeepseekReport ? (
         <div className={styles.popupBackdrop} role="presentation">
           <section
@@ -1476,6 +1478,13 @@ export function WarehouseWorkspace({ view }: { view: WarehouseView }) {
           <span>{error}</span>
         </div>
       ) : null}
+      <div className="rw-head">
+        <span className="rw-eyebrow">R 系列 · 数据仓库</span>
+        <h1 className="rw-title">R-W 产品数据仓库</h1>
+        <p className="rw-sub">
+          Keepa 常驻抓取 · 规则预筛 · DeepSeek 初筛 · 实时入库
+        </p>
+      </div>
       <div className={styles.toolbar}>
         <ViewTabs activeView={view} />
         <div className={styles.headerStatusGroup}>
