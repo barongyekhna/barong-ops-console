@@ -4,20 +4,36 @@ import {
   Apple,
   ChevronDown,
   ChevronLeft,
+  CircleDot,
   Crosshair,
   Gamepad2,
+  Gauge,
+  Grid2x2,
   Grid3x3,
+  Orbit,
   Rocket,
   type LucideIcon,
 } from "lucide-react";
 import { useState, type ComponentType, type CSSProperties } from "react";
 
+import { Game2048 } from "@/components/arcade-2048";
+import { AsteroidsGame } from "@/components/arcade-asteroids";
+import { BreakoutGame } from "@/components/arcade-breakout";
+import { RunnerGame } from "@/components/arcade-runner";
 import { ShmupGame } from "@/components/arcade-shmup";
 import { SnakeGame } from "@/components/arcade-snake";
 import { TankGame } from "@/components/arcade-tank";
 import { TetrisGame } from "@/components/arcade-tetris";
 
-type GameId = "shmup" | "snake" | "tetris" | "tank";
+type GameId =
+  | "shmup"
+  | "snake"
+  | "tetris"
+  | "tank"
+  | "asteroids"
+  | "breakout"
+  | "2048"
+  | "runner";
 
 const GAMES: Array<{
   id: GameId;
@@ -32,6 +48,10 @@ const GAMES: Array<{
   { id: "snake", name: "贪吃蛇", en: "SNAKE", desc: "WASD 转向 · 吃光点变长 · 别咬到自己", accent: "#4dffa1", Icon: Apple, Game: SnakeGame },
   { id: "tetris", name: "俄罗斯方块", en: "TETRIS", desc: "A/D 移动 · W 旋转 · 空格瞬降 · 消行", accent: "#a893ff", Icon: Grid3x3, Game: TetrisGame },
   { id: "tank", name: "坦克大战", en: "TANK", desc: "WASD 移动转向 · 空格开火 · 打穿砖墙", accent: "#ffb13b", Icon: Crosshair, Game: TankGame },
+  { id: "asteroids", name: "小行星", en: "ASTEROIDS", desc: "A/D 转向 · W 推进 · 空格开火 · 边缘穿越", accent: "#5b8cff", Icon: Orbit, Game: AsteroidsGame },
+  { id: "breakout", name: "打砖块", en: "BREAKOUT", desc: "A/D 挡板 · 空格发射 · 接道具砸墙", accent: "#ff6b8a", Icon: CircleDot, Game: BreakoutGame },
+  { id: "2048", name: "2048", en: "2048", desc: "WASD 滑动合并数字 · 凑到 2048", accent: "#ffd23b", Icon: Grid2x2, Game: Game2048 },
+  { id: "runner", name: "星际跑酷", en: "RUNNER", desc: "W / 空格 起跳 · 躲陨石 · 拼最远距离", accent: "#ff9a5f", Icon: Gauge, Game: RunnerGame },
 ];
 
 export function ConsoleArcade() {
