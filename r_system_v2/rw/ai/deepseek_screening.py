@@ -214,65 +214,106 @@ class DeepSeekScreeningSkill:
             source="deepseek_realtime_title_translation",
         )
 
+    def _policy_reject_reason(self, product: NormalizedProduct) -> str | None:
+        """决定该产品是否属于食品/液体/粉末/喷雾/杀虫等剔除类型。
+
+        用【类目 taxonomy】作为"这是什么产品"的权威信号（远比标题关键词可靠），
+        只有类目拿不准且标题有可疑词时，才交给真 DeepSeek 做语义判断。
+        任何不确定 / DeepSeek 出错 → 一律保留，绝不再因标题里出现某个词而误杀正常产品。
+        """
+        # 1. 类目明确是设备/工具/硬件/电子/家电/汽配/工业/泵阀等 → 本体不可能是可食用或
+        #    液体/粉末/喷雾内容物（如"给餐车用的水泵"是硬件），直接放行。
+        if _is_device_category(product):
+            return None
+        # 2. 类目明确属于食品/饮品/保健品/药品/宠物食品 → 权威剔除。
+        consumable_reason = _consumable_category_reject(product)
+        if consumable_reason:
+            return consumable_reason
+        # 3. 杀虫/灭虫（已被上面的设备类目挡在门外，剩下的才判关键词）。
+        pest_reason = _pest_control_reject_reason(product)
+        if pest_reason:
+            return pest_reason
+        # 4. 类目模糊、但标题出现食品/液体/粉末/喷雾可疑词 → 交给真 DeepSeek 判断
+        #    "产品本体 vs 装载它的容器/工具"。出错则保留。
+        if _has_restricted_hint(product):
+            return self._deepseek_form_reject(product)
+        return None
+
+    def _deepseek_form_reject(self, product: NormalizedProduct) -> str | None:
+        """真正调用 DeepSeek，语义判断产品本体是否为可食用/液体/粉末/喷雾内容物。
+
+        返回剔除理由字符串（命中）或 None（保留）。无 key / 超时 / 解析失败一律返回 None（保留）。
+        """
+        api_key = self.current_api_key()
+        if not api_key:
+            return None
+        title = " ".join(str(product.title or "").split())
+        if not title:
+            return None
+        category = " > ".join(
+            str(part) for part in (product.category_path or [product.category or ""])
+        )
+        base_url = os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com").rstrip("/")
+        model = rw_deepseek_model()
+        timeout = _float_env("RW_DEEPSEEK_FORM_TIMEOUT_SECONDS", 8.0)
+        payload = {
+            "model": model,
+            "temperature": 0,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "你是电商产品分类判官。判断【产品本体】是否属于以下需剔除类型："
+                        "①可食用/可饮用/药品/保健品（人用、宠物用、健身营养品都算）；"
+                        "②产品本体本身是液体、粉末或喷雾内容物。"
+                        "关键区分：装液体的容器/瓶子/水泵/喷头/喷雾器/工具/机器/设备/配件本身【不属于】剔除类型，"
+                        "它们是硬件设备，不是被消耗的内容物。"
+                        "只输出一个 JSON，不要任何解释："
+                        '{"reject": true 或 false, "kind": "edible"|"liquid"|"powder"|"spray"|"none"}'
+                    ),
+                },
+                {
+                    "role": "user",
+                    "content": f"标题：{title}\n类目：{category or '未知'}",
+                },
+            ],
+        }
+        request = Request(
+            f"{base_url}/chat/completions",
+            data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=timeout) as response:  # nosec B310 - fixed DeepSeek URL.
+                data = json.loads(response.read().decode("utf-8"))
+        except (HTTPError, URLError, TimeoutError, OSError, json.JSONDecodeError):
+            return None
+        verdict = _parse_form_verdict(_extract_translation_text(data) or "")
+        if not verdict or not bool(verdict.get("reject")):
+            return None
+        kind = str(verdict.get("kind") or "").strip().lower()
+        if kind == "liquid":
+            return "剔除：DeepSeek 判断该产品本体含液体，不进入 R-A。"
+        if kind == "powder":
+            return "剔除：DeepSeek 判断该产品本体为粉末，不进入 R-A。"
+        if kind == "spray":
+            return "剔除：DeepSeek 判断该产品本体为喷雾类内容物，不进入 R-A。"
+        return "剔除：DeepSeek 判断该产品属于食品、饮品、保健品、药品或宠物可食用品，不进入 R-A。"
+
     def evaluate(self, product: NormalizedProduct) -> DeepSeekScreening:
-        edible_reason = _edible_reject_reason(product)
-        if edible_reason:
+        reject_reason = self._policy_reject_reason(product)
+        if reject_reason:
             payload = {
                 "score": 0,
                 "verdict": "cut",
                 "competition_attackability": 0,
                 "demand_quality": 0,
-                "top_reason": edible_reason,
-                "channel_guess": "amazon",
-            }
-            strict_json = self._strict_json(payload)
-            return DeepSeekScreening(
-                asin=product.asin,
-                score=0,
-                verdict="cut",
-                competition_attackability=0,
-                demand_quality=0,
-                top_reason=strict_json["top_reason"],
-                channel_guess="amazon",
-                strict_json=strict_json,
-                skill_loaded=self.status.loaded,
-                quant_filter_enabled=self.status.quant_filter_enabled,
-                rule_based_scoring_active=self.status.rule_based_scoring_active,
-                output_schema_strict_json=self.status.output_schema_strict_json,
-            )
-        pest_control_reason = _pest_control_reject_reason(product)
-        if pest_control_reason:
-            payload = {
-                "score": 0,
-                "verdict": "cut",
-                "competition_attackability": 0,
-                "demand_quality": 0,
-                "top_reason": pest_control_reason,
-                "channel_guess": "amazon",
-            }
-            strict_json = self._strict_json(payload)
-            return DeepSeekScreening(
-                asin=product.asin,
-                score=0,
-                verdict="cut",
-                competition_attackability=0,
-                demand_quality=0,
-                top_reason=strict_json["top_reason"],
-                channel_guess="amazon",
-                strict_json=strict_json,
-                skill_loaded=self.status.loaded,
-                quant_filter_enabled=self.status.quant_filter_enabled,
-                rule_based_scoring_active=self.status.rule_based_scoring_active,
-                output_schema_strict_json=self.status.output_schema_strict_json,
-            )
-        restricted_form_reason = _restricted_form_reject_reason(product)
-        if restricted_form_reason:
-            payload = {
-                "score": 0,
-                "verdict": "cut",
-                "competition_attackability": 0,
-                "demand_quality": 0,
-                "top_reason": restricted_form_reason,
+                "top_reason": reject_reason,
                 "channel_guess": "amazon",
             }
             strict_json = self._strict_json(payload)
@@ -503,6 +544,107 @@ def deepseek_reject_code(top_reason: str | None) -> str:
     if any(term in reason for term in ("液体", "粉末", "喷雾")):
         return "deepseek_liquid_powder_spray_product"
     return "deepseek_edible_product"
+
+
+# 类目 = "这个产品到底是什么"的权威信号，远比"标题里出现了哪个词"可靠。
+# 命中以下任一 → 视为设备/工具/硬件/电子/家电/汽配/工业/泵阀，本体不可能是
+# 可食用或液体/粉末/喷雾内容物（如"给餐车用的水泵"是硬件）→ 绝不按违禁词剔除。
+_DEVICE_CATEGORY_TERMS = (
+    "industrial & scientific",
+    "tools & home improvement",
+    "automotive",
+    "electronics",
+    "home & kitchen",
+    "computers",
+    "cell phones & accessories",
+    "office products",
+    "camera & photo",
+    "musical instruments",
+    "video games",
+    "appliances",
+    "pump",
+    "plumbing",
+    "hydraulic",
+    "pneumatic",
+    "valve",
+    "compressor",
+    "motor",
+    "machine",
+    "machinery",
+    "generator",
+    "bearing",
+    "power tool",
+    "hand tool",
+    "hardware",
+    "cookware",
+    "bakeware",
+    "coffee maker",
+    "coffee machine",
+    "espresso machine",
+    "toaster",
+    "blender",
+    "food processor",
+    "vacuum cleaner",
+)
+# 类目明确属于消耗品：食品/饮品/保健品/药品/宠物食品 → 权威剔除。
+_CONSUMABLE_CATEGORY_TERMS = (
+    "grocery & gourmet",
+    "gourmet food",
+    "dietary supplement",
+    "vitamins & dietary supplements",
+    "sports nutrition",
+    "herbal supplement",
+    "medications & treatments",
+    "snack food",
+    "candy & chocolate",
+    "dog food",
+    "cat food",
+    "pet food",
+    "bird food",
+    "fish food",
+    "baby food",
+    "protein powder",
+)
+
+
+def _is_device_category(product: NormalizedProduct) -> bool:
+    return _contains_any(_product_category_text(product), _DEVICE_CATEGORY_TERMS)
+
+
+def _consumable_category_reject(product: NormalizedProduct) -> str | None:
+    if _contains_any(_product_category_text(product), _CONSUMABLE_CATEGORY_TERMS):
+        return "剔除：产品类目属于食品/饮品/保健品/药品/宠物食品，不进入 R-A。"
+    return None
+
+
+def _has_restricted_hint(product: NormalizedProduct) -> bool:
+    """标题/类目里是否出现任何食品/液体/粉末/喷雾可疑词——只作为"是否值得问 DeepSeek"的提示。"""
+    haystack = _product_text(product)
+    if not haystack:
+        return False
+    if _contains_any(_product_category_text(product), _EDIBLE_CATEGORY_TERMS):
+        return True
+    for terms in (
+        _EDIBLE_STRONG_PHRASES,
+        _EDIBLE_GENERAL_TERMS,
+        _LIQUID_STRONG_PHRASES,
+        _POWDER_STRONG_PHRASES,
+        _SPRAY_STRONG_PHRASES,
+    ):
+        if _contains_any(haystack, terms):
+            return True
+    return False
+
+
+def _parse_form_verdict(text: str) -> dict[str, Any] | None:
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        return None
+    try:
+        parsed = json.loads(match.group(0))
+    except (json.JSONDecodeError, ValueError):
+        return None
+    return parsed if isinstance(parsed, dict) else None
 
 
 def _product_text(product: NormalizedProduct) -> str:
