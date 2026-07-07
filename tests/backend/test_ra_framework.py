@@ -1,12 +1,17 @@
+from types import SimpleNamespace
+
 from backend.app.core.key_registry import key_type_allows_module, key_type_definition
 from backend.app.core.modules import MODULE_MANIFESTS_V1
 from r_system_v2.core.secret_manager import (
     R_ANALYSIS_MODULE_ID,
     SERVICE_BINDING_CANDIDATES,
+    SecretManager,
 )
 from r_system_v2.ra.framework import RA_REQUIRED_TABLES, RA_STAGES
 from r_system_v2.ra.providers import RAnalysisProviderKeys
+from r_system_v2.ra.providers import RAnalysisProviderBinding
 from r_system_v2.ra.skill_loader import (
+    load_ra_skill_bundle,
     load_ra_skill_manifest,
     skill_file_keys_for_channel,
 )
@@ -46,6 +51,16 @@ def test_ra_skill_channel_file_map_keeps_amazon_and_dtc_separate() -> None:
     )
 
 
+def test_ra_skill_bundle_loads_prompt_files_with_combined_hash() -> None:
+    bundle = load_ra_skill_bundle("amazon")
+
+    assert bundle.name == "product-selection"
+    assert bundle.version == "v1"
+    assert [item.key for item in bundle.files] == ["skill", "amazon", "shared"]
+    assert len(bundle.combined_hash) == 64
+    assert "亚马逊 FBA 选品准则" in bundle.prompt_text
+
+
 def test_ra_provider_keys_route_gpt_and_opus_through_foursapi() -> None:
     configured = RAnalysisProviderKeys(
         deepseek="deepseek-key",
@@ -79,16 +94,27 @@ def test_ra_manifest_exposes_framework_api_without_execution_enablement() -> Non
     assert set(manifest["data_boundary"]["writes"]) == {
         table_name for table_name, _label in RA_REQUIRED_TABLES
     }
-    assert "r-a execution workers inactive" in manifest["release_requirements"][
-        "required_checks"
-    ]
+    required_checks = manifest["release_requirements"]["required_checks"]
+    assert "r-a mock e2e pipeline pass" in required_checks
+    assert "r-a provider key binding audit pass" in required_checks
+    assert "r-a execution workers inactive" not in required_checks
 
 
-def test_ra_framework_stages_are_non_executing_skeleton() -> None:
+def test_ra_framework_stages_expose_mock_ai_pipeline() -> None:
     statuses = {stage["status"] for stage in RA_STAGES}
+    ai_stages = {
+        stage["id"]: stage["status"]
+        for stage in RA_STAGES
+        if stage["id"] in {"deepseek", "gpt", "opus", "final_report"}
+    }
 
     assert "framework_ready" in statuses
-    assert "pending_integration" in statuses
+    assert ai_stages == {
+        "deepseek": "mock_ready",
+        "gpt": "mock_ready",
+        "opus": "mock_ready",
+        "final_report": "mock_ready",
+    }
     assert all("running" not in stage["status"] for stage in RA_STAGES)
 
 
@@ -119,3 +145,55 @@ def test_ra_secret_manager_prefers_analysis_bindings_for_required_services() -> 
         R_ANALYSIS_MODULE_ID,
         "alibaba1688",
     ) in SERVICE_BINDING_CANDIDATES["alibaba1688"]
+
+
+def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatch) -> None:
+    class FakeIsolationError(Exception):
+        pass
+
+    class FakeOrchestrationError(Exception):
+        pass
+
+    calls: list[tuple[str, str]] = []
+
+    def fake_resolver(_db, *, org_id: str, module_id: str, key_alias: str):
+        assert org_id == "org-ra"
+        calls.append((module_id, key_alias))
+        values = {
+            (R_ANALYSIS_MODULE_ID, "deepseek"): "deepseek-secret",
+            (R_ANALYSIS_MODULE_ID, "4sapi"): "foursapi-secret",
+            (R_ANALYSIS_MODULE_ID, "serper"): "serper-secret",
+            (R_ANALYSIS_MODULE_ID, "alibaba1688"): "alibaba-secret",
+        }
+        value = values.get((module_id, key_alias))
+        if value is None:
+            raise FakeOrchestrationError("missing")
+        return SimpleNamespace(
+            module_id=module_id,
+            key_alias=key_alias,
+            key_id=f"{key_alias}-id",
+            header_value=f"Bearer {value}",
+            query_param_value=None,
+        )
+
+    monkeypatch.setattr(
+        "r_system_v2.core.secret_manager._backend_resolver",
+        lambda: (fake_resolver, FakeIsolationError, FakeOrchestrationError),
+    )
+    binding = RAnalysisProviderBinding(
+        org_id="org-ra",
+        secret_manager=SecretManager(db_session=object()),
+    )
+
+    keys = binding.all_keys()
+    status = binding.status()
+
+    assert keys.deepseek == "deepseek-secret"
+    assert keys.foursapi == "foursapi-secret"
+    assert keys.serper == "serper-secret"
+    assert keys.alibaba1688 == "alibaba-secret"
+    assert status["supplier_cost_provider_ready"] is True
+    role_configured = {item["role"]: item["configured"] for item in status["roles"]}
+    assert role_configured["gpt"] is True
+    assert role_configured["opus"] is True
+    assert (R_ANALYSIS_MODULE_ID, "4sapi") in calls

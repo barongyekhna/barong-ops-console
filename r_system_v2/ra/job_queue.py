@@ -15,6 +15,11 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.orm import Session, sessionmaker
 
+from r_system_v2.ra.ai_selection_mock import (
+    load_mock_ai_selection_by_candidate,
+    load_mock_ai_selection_for_run,
+    run_mock_ai_selection_for_run,
+)
 from r_system_v2.ra.auto_profit import (
     DEFAULT_SUPPLIER_LIMIT,
     MAX_ASIN_LIMIT,
@@ -47,6 +52,8 @@ def create_auto_profit_job(
     asin_limit: int = DEFAULT_JOB_ASIN_LIMIT,
     supplier_limit: int = DEFAULT_SUPPLIER_LIMIT,
     min_gross_margin: Decimal | None = None,
+    run_ai_mock: bool = True,
+    selection_channel: str = "amazon",
     triggered_by: str | None = None,
 ) -> dict[str, object]:
     cleaned_query = str(query or "").strip()
@@ -59,6 +66,8 @@ def create_auto_profit_job(
         "asin_limit": _bounded_asin_limit(asin_limit),
         "supplier_limit": _bounded_supplier_limit(supplier_limit),
         "min_gross_margin": _number(min_gross_margin),
+        "run_ai_mock": bool(run_ai_mock),
+        "selection_channel": _selection_channel(selection_channel),
     }
     counts = _initial_counts(filters)
     db.execute(
@@ -161,6 +170,8 @@ class RaProfitJobWorker:
             filters.get("supplier_limit") or DEFAULT_SUPPLIER_LIMIT
         )
         min_gross_margin = decimal_value(filters.get("min_gross_margin"))
+        run_ai_mock = filters.get("run_ai_mock") is not False
+        selection_channel = _selection_channel(filters.get("selection_channel") or "amazon")
         quote = get_usd_cny_quote()
 
         with self.session_factory() as db:
@@ -253,6 +264,14 @@ class RaProfitJobWorker:
                 row = _load_job_row(db, org_id=org_id, run_id=run_id)
                 counts = _dict_value(row.get("counts") if row else {})
                 counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
+                if run_ai_mock:
+                    ai_result = run_mock_ai_selection_for_run(
+                        db,
+                        org_id=org_id,
+                        run_id=run_id,
+                        channel=selection_channel,
+                    )
+                    counts.update(_dict_value(ai_result.get("counts")))
                 final_status = "completed" if not counts.get("warnings") else "partial"
                 _update_job(db, run_id=run_id, status=final_status, counts=counts, finish=True)
         if log:
@@ -375,6 +394,7 @@ def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
     live_counts = _live_counts(db, org_id=org_id, run_id=run_id)
     counts.update({key: value for key, value in live_counts.items() if value is not None})
     items = _job_items(db, org_id=org_id, run_id=run_id, query=str(filters.get("query") or ""))
+    ai_selection = load_mock_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
     db.rollback()
     quote = get_usd_cny_quote()
     return {
@@ -395,6 +415,7 @@ def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
         "supplier_runs": [],
         "items": items,
         "counts": counts,
+        "ai_selection": ai_selection,
         "formula": profit_formula_config(),
         "warnings": counts.get("warnings") or [],
         "created_at": _iso(row.get("created_at")),
@@ -410,6 +431,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
         org_id=org_id,
         run_id=run_id,
     )
+    ai_by_candidate = load_mock_ai_selection_by_candidate(db, org_id=org_id, run_id=run_id)
     snapshot_rows = db.execute(
         text(
             """
@@ -435,6 +457,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
             query=query,
             suppliers=suppliers_by_candidate.get(str(row["candidate_id"]), []),
             supplier_search_pages=search_pages_by_candidate.get(str(row["candidate_id"]), []),
+            ai_selection=ai_by_candidate.get(str(row["candidate_id"])),
         )
         for row in snapshot_rows
     ]
@@ -476,6 +499,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
                 query=query,
                 suppliers=suppliers_by_candidate.get(candidate_id, []),
                 supplier_search_pages=search_pages_by_candidate.get(candidate_id, []),
+                ai_selection=ai_by_candidate.get(candidate_id),
             )
         )
     empty_candidate_rows = db.execute(
@@ -510,6 +534,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
                 dict(row),
                 query=query,
                 supplier_search_pages=search_pages_by_candidate.get(candidate_id, []),
+                ai_selection=ai_by_candidate.get(candidate_id),
             )
         )
     return items
@@ -521,6 +546,7 @@ def _snapshot_item_from_row(
     query: str,
     suppliers: list[dict[str, object]],
     supplier_search_pages: list[dict[str, object]],
+    ai_selection: dict[str, object] | None,
 ) -> dict[str, object]:
     payload = _dict_value(row.get("payload"))
     supplier = _dict_value(payload.get("supplier"))
@@ -557,6 +583,7 @@ def _snapshot_item_from_row(
         "snapshot_id": row.get("snapshot_id"),
         "suppliers": suppliers,
         "supplier_search_pages": supplier_search_pages,
+        "ai_selection": ai_selection,
     }
     item.update(_product_fields(row, product=product, query=query))
     return item
@@ -568,6 +595,7 @@ def _pending_item_from_row(
     query: str,
     suppliers: list[dict[str, object]],
     supplier_search_pages: list[dict[str, object]],
+    ai_selection: dict[str, object] | None,
 ) -> dict[str, object]:
     payload = _dict_value(row.get("payload"))
     unit_price = _number(row.get("unit_price_cny"))
@@ -608,6 +636,7 @@ def _pending_item_from_row(
         "suppliers": suppliers,
         "supplier_search_pages": supplier_search_pages,
         "supplier_alignment": payload.get("supplier_alignment"),
+        "ai_selection": ai_selection,
     }
     item.update(_product_fields(row, product={}, query=query))
     return item
@@ -618,6 +647,7 @@ def _supplier_not_found_item_from_row(
     *,
     query: str,
     supplier_search_pages: list[dict[str, object]],
+    ai_selection: dict[str, object] | None,
 ) -> dict[str, object]:
     product = _dict_value(row.get("snapshot"))
     item = {
@@ -649,6 +679,7 @@ def _supplier_not_found_item_from_row(
         "snapshot_id": None,
         "suppliers": [],
         "supplier_search_pages": supplier_search_pages,
+        "ai_selection": ai_selection,
     }
     item.update(_product_fields(row, product=product, query=query))
     return item
@@ -984,6 +1015,15 @@ def _initial_counts(filters: dict[str, Any]) -> dict[str, object]:
         "profit_pass": 0,
         "profit_reject": 0,
         "profit_blocked": 0,
+        "ai_candidates": 0,
+        "ai_evaluations": 0,
+        "ai_pass": 0,
+        "ai_reject": 0,
+        "ai_review": 0,
+        "final_decisions": 0,
+        "reports": 0,
+        "mock_ai_enabled": bool(filters.get("run_ai_mock") is not False),
+        "mock_ai_version": None,
         "rw_empty_result": False,
         "empty_reason": None,
         "empty_recommendation": None,
@@ -1019,6 +1059,13 @@ def _bounded_supplier_limit(value: Any) -> int:
     except (TypeError, ValueError):
         parsed = DEFAULT_SUPPLIER_LIMIT
     return max(3, min(parsed, MAX_SUPPLIER_LIMIT))
+
+
+def _selection_channel(value: Any) -> str:
+    normalized = str(value or "amazon").strip().lower().replace("-", "_")
+    if normalized in {"amazon", "dtc_seo", "dtc_ad", "both"}:
+        return normalized
+    return "amazon"
 
 
 def _worker_concurrency(value: int | None) -> int:

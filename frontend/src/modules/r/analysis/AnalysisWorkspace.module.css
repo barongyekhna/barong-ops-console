@@ -614,6 +614,56 @@
   background: #fee2e2;
 }
 
+.aiCell {
+  display: grid;
+  gap: 7px;
+  min-width: 150px;
+}
+
+.aiPending,
+.aiVerdict,
+.aiLayerTag {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 7px;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 860;
+}
+
+.aiPending {
+  color: #64748b;
+  background: #f1f5f9;
+}
+
+.aiVerdict {
+  color: #854d0e;
+  background: #fef9c3;
+}
+
+.aiVerdict[data-verdict="pass"],
+.aiLayerTag[data-verdict="pass"] {
+  color: #166534;
+  background: #dcfce7;
+}
+
+.aiVerdict[data-verdict="reject"],
+.aiLayerTag[data-verdict="reject"] {
+  color: #991b1b;
+  background: #fee2e2;
+}
+
+.aiLayerList {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.aiLayerTag {
+  color: #1d4ed8;
+  background: #dbeafe;
+}
+
 .supplierList {
   display: grid;
   gap: 7px;

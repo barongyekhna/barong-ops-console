@@ -1,6 +1,6 @@
 # R-A 产品分析中心任务总文档
 
-更新时间：2026-07-05
+更新时间：2026-07-07
 
 本文档用于记录 R-A 系列的架构、任务范围、实施顺序和进度状态。R-W 已作为持续抓取与产品仓库层完成，后续利润、成本、供货商、二轮 AI 分析、DTC 判断和最终选品报告均归入 R-A。
 
@@ -34,10 +34,10 @@ R-A 负责：
 R-W 产品库
   -> R-A 候选池
   -> Skill Loader
-  -> DeepSeek 第一层分析
-  -> GPT 第二层验证
-  -> Opus 第三层最终判断
-  -> Serper / 1688 / Playwright 成本与供应商分析
+  -> DeepSeek 第一层分析（当前为本地 mock）
+  -> GPT 第二层验证（当前为本地 mock）
+  -> Opus 第三层最终判断（当前为本地 mock）
+  -> 1688 官方 API / mock 1688 API 成本与供应商分析
   -> 利润计算引擎
   -> 最终选品报告
   -> Telegram / 前台 UI / 持久化结果
@@ -226,7 +226,13 @@ R-A 需要补齐供应链侧数据：
 
 ## 8. 后端 API 任务
 
-待实现 API：
+已接入 API：
+
+- `GET /api/r/analysis/framework`
+- `GET /api/r/analysis/profit/jobs/{job_id}`
+- `POST /api/r/analysis/profit/jobs`
+
+待实现或待扩展 API：
 
 - `GET /api/r/analysis/overview`
 - `GET /api/r/analysis/candidates`
@@ -243,16 +249,22 @@ R-A 需要补齐供应链侧数据：
 
 ## 9. Worker 任务
 
-待实现 worker：
+当前已接入 worker：
+
+- R-A 自动利润任务 worker。
+- R-W 候选产品读取与候选池写入。
+- mock 1688 supplier discovery worker（真实 API 到位前默认启用）。
+- Profit calculation worker。
+- 本地三层 AI mock worker：DeepSeek mock -> GPT mock -> Opus mock。
+
+待实现或待替换 worker：
 
 - R-A run manager。
-- DeepSeek analysis worker。
-- GPT validation worker。
-- Opus final decision worker。
+- DeepSeek analysis worker（真实 4sapi/DeepSeek 调用）。
+- GPT validation worker（真实 4sapi GPT 调用）。
+- Opus final decision worker（真实 4sapi Claude/Opus 调用）。
 - 1688 official API supplier discovery worker。
-- 1688 mock supplier discovery worker（真实 API 到位前默认启用）。
 - Serper SEO/SERP enrichment worker（不参与利润成本主链路）。
-- Profit calculation worker。
 - Telegram notification worker。
 
 Worker 要求：
@@ -299,31 +311,30 @@ R-A 前台必须全部中文化。
 | RA-1 | 编写 R-A 任务总文档 | 已完成 |
 | RA-2 | 修正 R-A provider 架构，支持 4sapi GPT/Opus | 框架已完成，真实调用未接入 |
 | RA-3 | 建立 R-A 数据表与迁移 | 框架表已完成 |
-| RA-4 | 实现 skill_loader | 元数据加载已完成，prompt 组装未接入 |
-| RA-5 | 实现 R-A 后端 API | 只读框架 API 已完成 |
-| RA-6 | 实现 R-A 中文前端 | 框架工作台已完成 |
-| RA-7 | 实现 R-W 候选池导入 | 未开始 |
-| RA-8 | 实现 DeepSeek 第一层分析 | 未开始 |
-| RA-9 | 实现 GPT 第二层验证 | 未开始 |
-| RA-10 | 实现 Opus 最终判断 | 未开始 |
-| RA-11 | 实现 Serper 1688 候选供应商发现 | 未开始 |
-| RA-12 | 实现 Playwright 1688 页面抓取 | 未开始 |
-| RA-13 | 实现供应商比价与 3-5 家候选输出 | 未开始 |
-| RA-14 | 实现利润/成本计算引擎 | 未开始 |
-| RA-15 | 实现最终报告与人工确认 | 未开始 |
+| RA-4 | 实现 skill_loader | 已完成，mock AI 使用真实 skill bundle/hash |
+| RA-5 | 实现 R-A 后端 API | 框架 API 与自动利润任务 API 已完成 |
+| RA-6 | 实现 R-A 中文前端 | 利润 + 多 AI Mock 工作台已完成 |
+| RA-7 | 实现 R-W 候选池导入 | 自动任务链路已完成 |
+| RA-8 | 实现 DeepSeek 第一层分析 | 本地 mock 已完成，真实调用未接入 |
+| RA-9 | 实现 GPT 第二层验证 | 本地 mock 已完成，真实调用未接入 |
+| RA-10 | 实现 Opus 最终判断 | 本地 mock 已完成，真实调用未接入 |
+| RA-11 | 实现 Serper 1688 候选供应商发现 | 已废弃为主链路，保留为 SEO/SERP 辅助 |
+| RA-12 | 实现 Playwright 1688 页面抓取 | 暂停，等待官方 API；当前使用 mock 1688 API |
+| RA-13 | 实现供应商比价与 3-5 家候选输出 | mock 1688 API 已完成 |
+| RA-14 | 实现利润/成本计算引擎 | 已完成第一版确定性公式 |
+| RA-15 | 实现最终报告与人工确认 | mock AI 报告已写入，人工确认未完成 |
 | RA-16 | 实现 Telegram / 通知 | 未开始 |
-| RA-17 | E2E 全链路测试 | 未开始 |
+| RA-17 | E2E 全链路测试 | 本地 R-W -> mock 1688 -> 利润 -> 多 AI -> 报告链路已覆盖，生产实测仍需继续 |
 | RA-18 | 生产部署 | 未开始 |
 
 ## 12. 当前阻塞点
 
-- R-A 已从 placeholder 升级为框架工作台。
-- R-A manifest 已接入只读 API，执行功能仍未启用。
-- 当前 R-A worker 只是 standby。
+- R-A 已从 placeholder 升级为可执行工作台。
+- R-A 自动利润任务可以读取 R-W 候选，写入 R-A 候选池、供应商 mock、利润快照、AI mock 评估、最终决策和报告。
 - Opus / GPT 角色已按 4sapi provider 框架定义，真实调用未接入。
-- R-A 独立数据表框架已建立，尚未写入真实任务数据。
-- R-A 中文前台框架已建立，候选导入和分析按钮尚未接入。
-- 1688 抓取需要确认 cookie、登录态、反爬、代理和速率限制方案。
+- DeepSeek / GPT / Opus 当前均为本地 deterministic mock，不消耗真实 key，不代表最终 AI 判断质量。
+- 1688 官方 API key 尚未到位，当前使用 mock 1688 API 跑通流程。
+- Telegram、人工确认、最终进入下一模块的动作尚未完成。
 
 ## 13. 交付标准
 

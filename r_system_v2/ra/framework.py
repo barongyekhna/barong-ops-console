@@ -77,22 +77,22 @@ RA_STAGES: tuple[dict[str, object], ...] = (
         "id": "deepseek",
         "label": "DeepSeek 第一层",
         "owner": "R-A",
-        "status": "pending_integration",
-        "description": "结构化量化分析；后续接入真实调用。",
+        "status": "mock_ready",
+        "description": "本地 mock 结构化量化分析；不调用真实 DeepSeek key。",
     },
     {
         "id": "gpt",
         "label": "GPT 第二层",
         "owner": "R-A",
-        "status": "pending_integration",
-        "description": "通过 4sapi 验证 listing、评论和差异化缺口。",
+        "status": "mock_ready",
+        "description": "本地 mock 验证 listing、评论和差异化缺口；不调用真实 4sapi。",
     },
     {
         "id": "opus",
         "label": "Opus 第三层",
         "owner": "R-A",
-        "status": "pending_integration",
-        "description": "通过 4sapi 做最终小卖家决策与路线判断。",
+        "status": "mock_ready",
+        "description": "本地 mock 做最终小卖家决策与路线判断；不调用真实 Opus。",
     },
     {
         "id": "supplier_cost",
@@ -112,17 +112,15 @@ RA_STAGES: tuple[dict[str, object], ...] = (
         "id": "final_report",
         "label": "最终报告",
         "owner": "R-A",
-        "status": "pending_integration",
-        "description": "持久化最终选品判断与人工下一步动作。",
+        "status": "mock_ready",
+        "description": "mock 多 AI 流程会持久化最终选品判断与人工下一步动作。",
     },
 )
 
 NEXT_STEPS: tuple[str, ...] = (
-    "接入 R-W 候选导入接口。",
-    "接入 DeepSeek 第一层 R-A 分析，不复用 R-W 实时筛选逻辑。",
-    "接入 4sapi GPT / Opus 角色路由。",
+    "将当前 DeepSeek / GPT / Opus mock 评分替换为真实 provider 调用。",
     "接入真实 1688 官方 API provider，替换当前 mock 成本源。",
-    "接入 R-A 最终报告与人工确认队列。",
+    "接入人工确认队列与 R-A 到下一模块的交接动作。",
 )
 
 

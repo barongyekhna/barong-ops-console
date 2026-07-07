@@ -1017,8 +1017,8 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         display_name="R-A 产品分析中心",
         description=(
             "R-series Analysis framework for candidate review, supplier cost, "
-            "profit snapshots, and final product-selection reports. Execution "
-            "workers remain disabled until each R-A integration is connected."
+            "profit snapshots, multi-AI mock review, and final product-selection "
+            "reports. Real provider calls remain disabled until API keys are connected."
         ),
         category="business",
         status="active",
@@ -1066,7 +1066,8 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             required_checks=(
                 "r-a framework api present",
                 "r-a database boundary present",
-                "r-a execution workers inactive",
+                "r-a mock e2e pipeline pass",
+                "r-a provider key binding audit pass",
             ),
         ),
         docs_path="r_system_v2/docs/RA_TASKS.md",

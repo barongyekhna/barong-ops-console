@@ -230,9 +230,37 @@ export type RaAutoProfitPayload = {
   asin_limit?: number;
   supplier_limit?: number;
   min_gross_margin?: number | null;
+  run_ai_mock?: boolean;
+  selection_channel?: string;
 };
 
 export type RaAutoProfitJobPayload = RaAutoProfitPayload;
+
+export type RaAiLayerResult = {
+  layer: string;
+  model_role: string;
+  model_name: string;
+  score: number | null;
+  verdict: string | null;
+  reason: string | null;
+  advantages: string[];
+  risks: string[];
+  created_at: string | null;
+};
+
+export type RaAiSelectionResult = {
+  candidate_id: string;
+  asin: string | null;
+  final_score: number | null;
+  verdict: string | null;
+  channel: string | null;
+  barrier_type: string | null;
+  decision_reason: string | null;
+  layers: RaAiLayerResult[];
+  report_id?: string | null;
+  mock_pipeline_version?: string | null;
+  created_at?: string | null;
+};
 
 export type RaAutoProfitItem = {
   status: string;
@@ -305,6 +333,7 @@ export type RaAutoProfitItem = {
   blocked_reasons: string[];
   exchange_rate_usd_cny?: number | null;
   snapshot_id?: string | null;
+  ai_selection?: RaAiSelectionResult | null;
 };
 
 export type RaSupplierSearchPage = {
@@ -379,6 +408,15 @@ export type RaAutoProfitResult = {
     profit_pass: number;
     profit_reject: number;
     profit_blocked: number;
+    ai_candidates?: number;
+    ai_evaluations?: number;
+    ai_pass?: number;
+    ai_reject?: number;
+    ai_review?: number;
+    final_decisions?: number;
+    reports?: number;
+    mock_ai_enabled?: boolean;
+    mock_ai_version?: string | null;
     rw_empty_result?: boolean;
     empty_reason?: string | null;
     empty_recommendation?: string | null;
@@ -391,6 +429,22 @@ export type RaAutoProfitJobResult = RaAutoProfitResult & {
   run_id: string;
   status: "queued" | "running" | "completed" | "partial" | "failed" | string;
   runtime_mode: string | null;
+  ai_selection?: {
+    run_id: string;
+    runtime_mode: string;
+    mock: boolean;
+    mock_pipeline_version: string;
+    items: RaAiSelectionResult[];
+    counts: {
+      ai_candidates: number;
+      ai_pass: number;
+      ai_reject: number;
+      ai_review: number;
+      ai_evaluations: number;
+      final_decisions: number;
+      reports: number;
+    };
+  };
   created_at: string | null;
   started_at: string | null;
   finished_at: string | null;

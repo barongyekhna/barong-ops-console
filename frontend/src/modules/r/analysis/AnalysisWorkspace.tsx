@@ -120,6 +120,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
         offers: snapshots.length,
         priced: snapshots.filter((snapshot) => snapshot.gross_margin !== null).length,
         passed: snapshots.filter((snapshot) => snapshot.verdict === "pass").length,
+        aiPassed: null,
       };
     }
     return {
@@ -127,6 +128,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
       offers: result.counts.candidate_offers,
       priced: result.counts.priced_offers,
       passed: result.counts.profit_pass,
+      aiPassed: result.counts.ai_pass ?? result.ai_selection?.counts.ai_pass ?? 0,
     };
   }, [result, snapshots, status]);
 
@@ -143,6 +145,8 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
       const payload = await createRaAutoProfitJob({
         asin_limit: DEFAULT_ASIN_LIMIT,
         query: cleaned,
+        run_ai_mock: true,
+        selection_channel: "amazon",
         supplier_limit: DEFAULT_SUPPLIER_LIMIT,
       });
       setResult(payload);
@@ -161,11 +165,12 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
     <div className={styles.workspace}>
       <section className={styles.heroBand}>
         <div className={styles.heroText}>
-          <span className={styles.kicker}>R-A 自动利润分析</span>
-          <h2>{view === "dashboard" ? "利润候选总览" : "关键词/类目利润测算"}</h2>
+          <span className={styles.kicker}>R-A 利润 + 多 AI Mock</span>
+          <h2>{view === "dashboard" ? "选品候选总览" : "关键词/类目自动选品"}</h2>
           <p>
             输入模糊关键词或类目后，系统只从 R-W 产品库中匹配同关键词/同类目的
-            ASIN，再自动搜索多平台供应商并按美国站公式计算毛利润。
+            ASIN，再自动搜索 mock 1688 供应商、计算毛利润，并用 DeepSeek/GPT/Opus
+            三层 mock 生成选品结论。
           </p>
         </div>
         <div className={styles.statusPill} data-state={error ? "error" : "ready"}>
@@ -204,7 +209,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           <p>
             默认每次提交 {DEFAULT_ASIN_LIMIT} 个 R-W 候选 ASIN 到后台队列，每个
             ASIN 优先抓取 {DEFAULT_SUPPLIER_LIMIT} 个一件代发/一件起批供应商，
-            页面每 3 秒自动刷新结果。
+            随后自动运行三层 AI mock，页面每 3 秒自动刷新结果。
           </p>
         </form>
         {runError ? (
@@ -220,6 +225,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
         <Metric label="供应商候选报价" value={formatCount(summary.offers)} />
         <Metric label="已抓到成本" value={formatCount(summary.priced)} />
         <Metric label="利润通过" value={formatCount(summary.passed)} />
+        <Metric label="AI Mock 通过" value={formatCount(summary.aiPassed)} />
       </section>
 
       {result ? (
@@ -296,6 +302,8 @@ function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
         <span>供应商候选 {formatCount(result.counts.candidate_offers)}</span>
         <span>已抓到成本 {formatCount(result.counts.priced_offers)}</span>
         <span>利润快照 {formatCount(result.counts.profit_snapshots)}</span>
+        <span>AI 决策 {formatCount(result.counts.final_decisions ?? result.ai_selection?.counts.final_decisions ?? 0)}</span>
+        <span>AI 通过 {formatCount(result.counts.ai_pass ?? result.ai_selection?.counts.ai_pass ?? 0)}</span>
         <span>实时汇率 1 USD = {formatRate(result.exchange_rate.usd_cny)} CNY</span>
       </div>
       {result.exchange_rate.warning ? (
@@ -330,6 +338,7 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
             <th>供应商成本</th>
             <th>毛利润</th>
             <th>利润率</th>
+            <th>AI Mock</th>
             <th>供应商链接</th>
           </tr>
         </thead>
@@ -393,6 +402,9 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
                 {item.blocked_reasons[0] ? (
                   <small>{item.blocked_reasons[0]}</small>
                 ) : null}
+              </td>
+              <td>
+                <AiSelectionCell selection={item.ai_selection} />
               </td>
               <td>
                 {supplierOptions(item).length ? (
@@ -462,6 +474,34 @@ function RwEmptyResultNotice({ result }: { result: RaAutoProfitJobResult }) {
           <a href="/r-w/dashboard">进入 R-W 类目设置</a>
         </div>
       </div>
+    </div>
+  );
+}
+
+function AiSelectionCell({ selection }: { selection?: RaAutoProfitItem["ai_selection"] }) {
+  if (!selection) {
+    return <span className={styles.aiPending}>等待 AI mock</span>;
+  }
+  return (
+    <div className={styles.aiCell}>
+      <span className={styles.aiVerdict} data-verdict={selection.verdict}>
+        {aiVerdictLabel(selection.verdict)} · {selection.final_score ?? "-"}分
+      </span>
+      {selection.decision_reason ? <small>{selection.decision_reason}</small> : null}
+      {selection.layers?.length ? (
+        <div className={styles.aiLayerList}>
+          {selection.layers.map((layer) => (
+            <span
+              className={styles.aiLayerTag}
+              data-verdict={layer.verdict}
+              key={`${selection.candidate_id}-${layer.layer}`}
+              title={layer.reason || undefined}
+            >
+              {aiLayerLabel(layer.layer)} {layer.score ?? "-"}
+            </span>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -992,6 +1032,32 @@ function formatRate(value: number | null | undefined) {
     return "读取中";
   }
   return value.toFixed(4);
+}
+
+function aiVerdictLabel(value: string | null | undefined) {
+  if (value === "pass") {
+    return "AI通过";
+  }
+  if (value === "reject") {
+    return "AI淘汰";
+  }
+  if (value === "review") {
+    return "AI复核";
+  }
+  return "AI等待";
+}
+
+function aiLayerLabel(value: string | null | undefined) {
+  if (value === "deepseek") {
+    return "DS";
+  }
+  if (value === "gpt") {
+    return "GPT";
+  }
+  if (value === "opus") {
+    return "Opus";
+  }
+  return value || "AI";
 }
 
 function verdictLabel(value: string | null | undefined) {

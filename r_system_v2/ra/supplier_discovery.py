@@ -280,8 +280,13 @@ def discover_1688_supplier_offers(
         run_id=run_id,
     )
     db.commit()
-    keyword_profile = build_supplier_keyword_profile(db, org_id=org_id, product=product)
-    if supplier_source_mode() != "serper_legacy":
+    source_mode = supplier_source_mode()
+    keyword_profile = build_supplier_keyword_profile(
+        None if source_mode != "serper_legacy" else db,
+        org_id=None if source_mode != "serper_legacy" else org_id,
+        product=product,
+    )
+    if source_mode != "serper_legacy":
         return _discover_with_supplier_api_provider(
             db,
             org_id=org_id,

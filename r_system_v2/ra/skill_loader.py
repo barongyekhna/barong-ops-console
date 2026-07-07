@@ -53,6 +53,53 @@ class RASkillFile:
         }
 
 
+@dataclass(frozen=True)
+class RASkillBundleFile:
+    key: str
+    label: str
+    filename: str
+    sha256: str
+    bytes: int
+    content: str
+
+    def to_dict(self, *, include_content: bool = False) -> dict[str, object]:
+        payload: dict[str, object] = {
+            "key": self.key,
+            "label": self.label,
+            "filename": self.filename,
+            "sha256": self.sha256,
+            "bytes": self.bytes,
+        }
+        if include_content:
+            payload["content"] = self.content
+        return payload
+
+
+@dataclass(frozen=True)
+class RASkillBundle:
+    channel: str
+    name: str
+    version: str
+    description: str
+    files: tuple[RASkillBundleFile, ...]
+    combined_hash: str
+    prompt_text: str
+
+    def to_dict(self, *, include_content: bool = False) -> dict[str, object]:
+        return {
+            "channel": self.channel,
+            "name": self.name,
+            "version": self.version,
+            "description": self.description,
+            "files": [
+                item.to_dict(include_content=include_content) for item in self.files
+            ],
+            "file_keys": [item.key for item in self.files],
+            "combined_hash": self.combined_hash,
+            "prompt_text": self.prompt_text if include_content else None,
+        }
+
+
 def load_ra_skill_manifest(docs_dir: Path = DOCS_DIR) -> dict[str, Any]:
     files = [_load_file_metadata(docs_dir, *item) for item in SKILL_FILES]
     metadata = _skill_frontmatter(docs_dir / "SKILL.md")
@@ -76,8 +123,62 @@ def load_ra_skill_manifest(docs_dir: Path = DOCS_DIR) -> dict[str, Any]:
     }
 
 
+def load_ra_skill_bundle(channel: str, docs_dir: Path = DOCS_DIR) -> RASkillBundle:
+    """Load the concrete skill documents used for an R-A analysis channel."""
+
+    metadata = _skill_frontmatter(docs_dir / "SKILL.md")
+    normalized_channel = _normalize_channel(channel)
+    files_by_key = {
+        key: (label, filename)
+        for key, label, filename in SKILL_FILES
+    }
+    bundle_files: list[RASkillBundleFile] = []
+    for key in skill_file_keys_for_channel(normalized_channel):
+        label, filename = files_by_key[key]
+        path = docs_dir / filename
+        if not path.is_file():
+            raise FileNotFoundError(f"R-A skill file missing: {filename}")
+        content = path.read_text(encoding="utf-8")
+        encoded = content.encode("utf-8")
+        bundle_files.append(
+            RASkillBundleFile(
+                key=key,
+                label=label,
+                filename=filename,
+                sha256=sha256(encoded).hexdigest(),
+                bytes=len(encoded),
+                content=content,
+            )
+        )
+    combined_basis = "\n".join(
+        f"{item.key}:{item.filename}:{item.sha256}" for item in bundle_files
+    )
+    prompt_text = "\n\n".join(
+        [
+            f"## R-A Skill Document: {item.label} ({item.filename})\n{item.content}"
+            for item in bundle_files
+        ]
+    )
+    return RASkillBundle(
+        channel=normalized_channel,
+        name=metadata.get("name", "product-selection"),
+        version=metadata.get("version", ""),
+        description=metadata.get("description", ""),
+        files=tuple(bundle_files),
+        combined_hash=sha256(combined_basis.encode("utf-8")).hexdigest(),
+        prompt_text=prompt_text,
+    )
+
+
 def skill_file_keys_for_channel(channel: str) -> tuple[str, ...]:
-    return CHANNEL_FILE_KEYS.get(channel, CHANNEL_FILE_KEYS["both"])
+    return CHANNEL_FILE_KEYS.get(_normalize_channel(channel), CHANNEL_FILE_KEYS["both"])
+
+
+def _normalize_channel(channel: str) -> str:
+    normalized = str(channel or "both").strip().lower().replace("-", "_")
+    if normalized in CHANNEL_FILE_KEYS:
+        return normalized
+    return "both"
 
 
 def _load_file_metadata(
