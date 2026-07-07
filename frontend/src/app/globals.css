@@ -6970,7 +6970,8 @@ textarea:focus-visible {
 .cc-arcade-canvas {
   display: block;
   width: 100%;
-  height: auto;
+  height: min(58vh, 560px);
+  object-fit: contain;
   background: #04070e;
   touch-action: none;
 }
@@ -7100,3 +7101,22 @@ textarea:focus-visible {
   box-shadow: none;
 }
 .cc-arcade-btn.ghost:hover { border-color: rgb(57 212 255 / 45%); filter: none; }
+
+/* 游戏厅折叠 */
+.cc-arcade-head-right { display: flex; align-items: center; gap: 8px; }
+.cc-arcade-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 9px;
+  border: 1px solid rgb(120 200 255 / 16%);
+  background: rgb(10 20 34 / 55%);
+  color: var(--sh-dim, #7d95ae);
+  font: 600 12px "Inter", system-ui, sans-serif;
+  cursor: pointer;
+}
+.cc-arcade-toggle:hover { border-color: rgb(57 212 255 / 45%); color: var(--sh-ink, #d6e8f6); }
+.cc-arcade-chev { transition: transform 0.18s; }
+.cc-arcade-chev.up { transform: rotate(180deg); }
+.cc-arcade.collapsed .cc-arcade-head { border-bottom: 0; }

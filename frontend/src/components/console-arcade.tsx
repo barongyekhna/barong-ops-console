@@ -2,6 +2,7 @@
 
 import {
   Apple,
+  ChevronDown,
   ChevronLeft,
   Crosshair,
   Gamepad2,
@@ -35,10 +36,11 @@ const GAMES: Array<{
 
 export function ConsoleArcade() {
   const [active, setActive] = useState<GameId | null>(null);
+  const [collapsed, setCollapsed] = useState(true);
   const current = GAMES.find((g) => g.id === active) ?? null;
 
   return (
-    <section className="cc-arcade" aria-label="控制台游戏厅">
+    <section className={`cc-arcade${collapsed ? " collapsed" : ""}`} aria-label="控制台游戏厅">
       <div className="cc-arcade-head">
         <div className="cc-arcade-title">
           <Gamepad2 aria-hidden="true" size={16} />
@@ -47,17 +49,32 @@ export function ConsoleArcade() {
             <strong>{current ? current.name : "控制台游戏厅 · ARCADE"}</strong>
           </div>
         </div>
-        {current ? (
-          <button className="cc-arcade-exit" onClick={() => setActive(null)} type="button">
-            <ChevronLeft aria-hidden="true" size={15} />
-            返回游戏厅
+        <div className="cc-arcade-head-right">
+          {current ? (
+            <button className="cc-arcade-exit" onClick={() => setActive(null)} type="button">
+              <ChevronLeft aria-hidden="true" size={15} />
+              返回游戏厅
+            </button>
+          ) : null}
+          <button
+            className="cc-arcade-toggle"
+            onClick={() => {
+              setActive(null);
+              setCollapsed((c) => !c);
+            }}
+            type="button"
+          >
+            {collapsed ? "展开游戏厅" : "收起"}
+            <ChevronDown
+              aria-hidden="true"
+              className={collapsed ? "cc-arcade-chev" : "cc-arcade-chev up"}
+              size={15}
+            />
           </button>
-        ) : (
-          <span className="cc-arcade-hint">选一个游戏放松一下 🎮</span>
-        )}
+        </div>
       </div>
 
-      {current ? (
+      {collapsed ? null : current ? (
         <current.Game onExit={() => setActive(null)} />
       ) : (
         <div className="cc-arcade-menu">
