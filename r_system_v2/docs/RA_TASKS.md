@@ -21,7 +21,7 @@ R-A 负责：
 
 - 从 R-W 产品库读取候选产品。
 - 对通过产品进行 DeepSeek、GPT、Opus 三层深度分析。
-- 调用 Serper / 1688 / Playwright 获取真实供货商与成本。
+- 调用 1688 官方 API 获取真实供货商与成本；真实 API 到位前使用 mock 1688 API 跑通 R-A 闭环。
 - 计算真实利润、毛利、净利、ROI 和风险。
 - 判断 Amazon / DTC / Amazon+DTC / hold / reject 路由。
 - 输出最终选品报告和可执行下一步动作。
@@ -67,8 +67,9 @@ R-A provider 应设计为：
 DeepSeek provider
 4sapi GPT provider
 4sapi Claude/Opus provider
-Serper provider
-1688 Playwright crawler provider
+Serper provider（仅用于 DTC SEO / Google SERP 弱点分析，不再用于利润成本主链路）
+1688 official API provider
+1688 mock API provider
 Profit/cost engine
 ```
 
@@ -80,6 +81,7 @@ Profit/cost engine
 - `RA_GPT_MODEL`
 - `RA_OPUS_MODEL`
 - `SERPER_API_KEY`
+- `ALIBABA1688_API_KEY` 或密钥管理中 `alibaba1688` 绑定（可保存 AppKey/AppSecret/AccessToken JSON）
 - `RA_1688_COOKIE_PROFILE`
 - `RA_SUPPLIER_CRAWLER_PROXY`
 
@@ -176,9 +178,9 @@ R-W 已提供 Amazon 侧数据：
 R-A 需要补齐供应链侧数据：
 
 1. 根据产品标题、中文名、图片和类目生成中文采购关键词。
-2. 使用 Serper 搜索 1688 候选链接。
-3. 使用 Playwright 登录或半登录抓取 1688 页面。
-4. 每个产品抓取不少于 20 个候选供应商。
+2. 使用 1688 官方 API 图搜/同类商品接口获取候选供应商。
+3. 使用 1688 商品详情接口补齐 SKU 价格、起批量、库存、运费提示和供应商信息。
+4. 真实 API 到位前，使用 mock 1688 API 返回稳定的 3-5 个候选供应商，方便搭建 R-A 后续 AI 漏斗。
 5. 按价格、MOQ、店铺年限、成交、评价、图片匹配、发货能力筛选。
 6. 最终保留 3-5 个候选供应商。
 7. 使用确定性公式计算利润，AI 只能解释和判断，不能编造成本。
@@ -247,8 +249,9 @@ R-A 需要补齐供应链侧数据：
 - DeepSeek analysis worker。
 - GPT validation worker。
 - Opus final decision worker。
-- Serper supplier discovery worker。
-- 1688 Playwright crawler worker。
+- 1688 official API supplier discovery worker。
+- 1688 mock supplier discovery worker（真实 API 到位前默认启用）。
+- Serper SEO/SERP enrichment worker（不参与利润成本主链路）。
 - Profit calculation worker。
 - Telegram notification worker。
 

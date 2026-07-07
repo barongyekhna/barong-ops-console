@@ -13,6 +13,7 @@ from r_system_v2.ra.supplier_discovery import (
     build_1688_queries,
     build_supplier_queries,
 )
+from r_system_v2.ra.supplier_api import Mock1688OfficialApiProvider
 
 
 def test_ra_supplier_queries_prefer_chinese_product_title() -> None:
@@ -154,3 +155,25 @@ def test_ra_serper_result_can_supply_explicit_1688_price() -> None:
     )
 
     assert price == Decimal("18.80")
+
+
+def test_ra_mock_1688_official_api_returns_priced_detail_offers() -> None:
+    provider = Mock1688OfficialApiProvider()
+
+    offers = provider.search_offers(
+        product={
+            "asin": "B0MOCK1688",
+            "title": "Camping Folding Chair",
+            "title_zh": "户外折叠椅",
+            "price": Decimal("39.99"),
+        },
+        keyword_profile={"product_type_zh": "户外折叠椅"},
+        limit=5,
+    )
+
+    assert len(offers) == 5
+    assert all(offer.supplier_url.startswith("https://detail.1688.com/offer/") for offer in offers)
+    assert all(offer.unit_price_cny > 0 for offer in offers)
+    assert all(offer.moq >= 1 for offer in offers)
+    assert all(offer.one_piece_hint is True for offer in offers)
+    assert all((offer.payload or {}).get("official_api_mock") is True for offer in offers)

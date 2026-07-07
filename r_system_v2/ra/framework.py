@@ -23,7 +23,7 @@ RA_REQUIRED_TABLES: tuple[tuple[str, str], ...] = (
     ("ra_selection_runs", "R-A 分析任务批次"),
     ("ra_candidates", "R-A 候选产品池"),
     ("ra_ai_evaluations", "三层 AI 审计记录"),
-    ("ra_supplier_searches", "Serper / 1688 搜索任务"),
+    ("ra_supplier_searches", "1688 官方 API / Mock 搜索任务"),
     ("ra_supplier_offers", "供应商报价候选"),
     ("ra_profit_snapshots", "利润与成本快照"),
     ("ra_final_decisions", "最终选品决策"),
@@ -99,7 +99,7 @@ RA_STAGES: tuple[dict[str, object], ...] = (
         "label": "供货商与成本",
         "owner": "R-A",
         "status": "framework_ready",
-        "description": "Serper 发现 1688，Playwright 或 HTML 抓取供应商与报价。",
+        "description": "默认使用 1688 官方 API mock；真实 1688 API 到位后直接切换 provider。",
     },
     {
         "id": "profit_engine",
@@ -121,7 +121,7 @@ NEXT_STEPS: tuple[str, ...] = (
     "接入 R-W 候选导入接口。",
     "接入 DeepSeek 第一层 R-A 分析，不复用 R-W 实时筛选逻辑。",
     "接入 4sapi GPT / Opus 角色路由。",
-    "增强 1688 登录态 Playwright 抓取，提高被反爬页面的价格命中率。",
+    "接入真实 1688 官方 API provider，替换当前 mock 成本源。",
     "接入 R-A 最终报告与人工确认队列。",
 )
 

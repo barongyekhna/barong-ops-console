@@ -28,6 +28,11 @@ from r_system_v2.ra.profit_service import (
     _load_product,
     run_profit_for_existing_offers,
 )
+from r_system_v2.ra.supplier_api import (
+    Mock1688OfficialApiProvider,
+    SupplierApiProvider,
+    supplier_source_mode,
+)
 from r_system_v2.ra.providers import RAnalysisProviderBinding
 from r_system_v2.ra.supplier_keyword_skill import (
     build_supplier_keyword_profile,
@@ -263,6 +268,7 @@ def discover_1688_supplier_offers(
     min_gross_margin: Decimal | None = None,
     serper_client: Serper1688Client | None = None,
     crawler: Playwright1688Crawler | None = None,
+    supplier_api_provider: SupplierApiProvider | None = None,
 ) -> dict[str, object]:
     normalized_asin = asin.strip().upper()
     limit = _bounded_limit(result_limit)
@@ -274,9 +280,24 @@ def discover_1688_supplier_offers(
         run_id=run_id,
     )
     db.commit()
+    keyword_profile = build_supplier_keyword_profile(db, org_id=org_id, product=product)
+    if supplier_source_mode() != "serper_legacy":
+        return _discover_with_supplier_api_provider(
+            db,
+            org_id=org_id,
+            asin=normalized_asin,
+            run_id=run_id,
+            product=product,
+            candidate_id=candidate_id,
+            keyword_profile=keyword_profile,
+            result_limit=limit,
+            auto_calculate=auto_calculate,
+            exchange_rate_usd_cny=exchange_rate_usd_cny,
+            min_gross_margin=min_gross_margin,
+            provider=supplier_api_provider or Mock1688OfficialApiProvider(),
+        )
     client = serper_client or _serper_client(db, org_id=org_id)
     crawler = crawler or Playwright1688Crawler()
-    keyword_profile = build_supplier_keyword_profile(db, org_id=org_id, product=product)
     _discard_db_transaction(db)
     search_queries = build_supplier_queries(product, keyword_profile=keyword_profile)
     queries = [item.query for item in search_queries]
@@ -523,6 +544,196 @@ def discover_1688_supplier_offers(
     }
 
 
+def _discover_with_supplier_api_provider(
+    db: Session,
+    *,
+    org_id: str,
+    asin: str,
+    run_id: str | None,
+    product: dict[str, Any],
+    candidate_id: str,
+    keyword_profile: dict[str, Any],
+    result_limit: int,
+    auto_calculate: bool,
+    exchange_rate_usd_cny: Decimal | None,
+    min_gross_margin: Decimal | None,
+    provider: SupplierApiProvider,
+) -> dict[str, object]:
+    search_id = str(uuid4())
+    base_query = str(
+        keyword_profile.get("product_type_zh")
+        or product.get("title_zh")
+        or product.get("title")
+        or asin
+    ).strip()
+    query = f"1688官方API同类商品：{base_query[:80]}"
+    offers_from_api = provider.search_offers(
+        product=product,
+        keyword_profile=keyword_profile,
+        limit=result_limit,
+    )
+    _insert_supplier_search(
+        db,
+        search_id=search_id,
+        org_id=org_id,
+        candidate_id=candidate_id,
+        asin=asin,
+        run_id=run_id,
+        query=query,
+        provider=provider.provider_name,
+        status="complete",
+        result_count=len(offers_from_api),
+        payload={
+            "provider": provider.provider_name,
+            "platform": "1688",
+            "platform_label": "1688",
+            "keyword_profile": keyword_profile,
+            "searched_at": datetime.now(UTC).isoformat(),
+            "mocked": provider.provider_name == "mock_1688_api",
+            "results": [
+                {
+                    "supplier_name": offer.supplier_name,
+                    "supplier_url": offer.supplier_url,
+                    "title": offer.title,
+                    "unit_price_cny": _decimal_number(offer.unit_price_cny),
+                    "domestic_shipping_cny": _decimal_number(offer.domestic_shipping_cny),
+                    "moq": offer.moq,
+                    "match_score": offer.match_score,
+                    "stock": offer.stock,
+                    "monthly_sales": offer.monthly_sales,
+                }
+                for offer in offers_from_api
+            ],
+        },
+    )
+    db.commit()
+
+    offers: list[dict[str, object]] = []
+    for offer in offers_from_api:
+        offer_id = _insert_supplier_offer(
+            db,
+            org_id=org_id,
+            search_id=search_id,
+            candidate_id=candidate_id,
+            asin=asin,
+            supplier_name=offer.supplier_name,
+            supplier_url=offer.supplier_url,
+            unit_price_cny=offer.unit_price_cny,
+            domestic_shipping_cny=offer.domestic_shipping_cny,
+            moq=offer.moq,
+            rating=offer.rating,
+            source=provider.provider_name,
+            match_score=offer.match_score,
+            offer_status="selected",
+            payload_extra={
+                "platform": offer.platform,
+                "platform_label": offer.platform_label,
+                "supplier_url_type": "detail",
+                "supplier_detail_url": offer.supplier_url,
+                "supplier_search_url": None,
+                "search_url": None,
+                "choice_page_url": None,
+                "crawler_status": provider.provider_name,
+                "crawler_warning": None,
+                "price_source": provider.provider_name,
+                "one_piece_hint": offer.one_piece_hint,
+                "stock": offer.stock,
+                "monthly_sales": offer.monthly_sales,
+                "keyword_profile": keyword_profile,
+                "supplier_alignment": {
+                    "match_status": "match",
+                    "match_score": offer.match_score,
+                    "match_reason": "1688 官方 API mock 返回同类商品候选，等待真实 API 后替换为官方结果。",
+                    "same_product_type": True,
+                    "brand_risk": False,
+                    "shape_conflict": False,
+                    "warnings": [],
+                },
+                "shipping_notice": (
+                    "1688 官方 API mock 返回供应商运费"
+                    if offer.domestic_shipping_cny is not None
+                    else None
+                ),
+                **(offer.payload or {}),
+            },
+        )
+        db.commit()
+        offers.append(
+            {
+                "offer_id": offer_id,
+                "search_id": search_id,
+                "supplier_name": offer.supplier_name,
+                "supplier_url": offer.supplier_url,
+                "supplier_platform": offer.platform,
+                "supplier_platform_label": offer.platform_label,
+                "supplier_url_type": "detail",
+                "supplier_detail_url": offer.supplier_url,
+                "supplier_search_url": None,
+                "unit_price_cny": _decimal_number(offer.unit_price_cny),
+                "domestic_shipping_cny": _decimal_number(offer.domestic_shipping_cny),
+                "moq": offer.moq,
+                "match_score": offer.match_score,
+                "one_piece_hint": offer.one_piece_hint,
+                "offer_status": "selected",
+                "crawler_status": provider.provider_name,
+                "warning": None,
+                "keyword_profile": keyword_profile,
+                "supplier_alignment": {
+                    "match_status": "match",
+                    "match_score": offer.match_score,
+                    "match_reason": "1688 官方 API mock 返回同类商品候选。",
+                },
+            }
+        )
+
+    priced_count = sum(1 for offer in offers if offer["unit_price_cny"] is not None)
+    profit_run: dict[str, object] | None = None
+    min_profit_suppliers = _min_profit_supplier_count()
+    warnings: list[str] = []
+    if auto_calculate and priced_count >= min_profit_suppliers:
+        profit_run = run_profit_for_existing_offers(
+            db,
+            org_id=org_id,
+            asin=asin,
+            candidate_id=candidate_id,
+            limit=result_limit,
+            exchange_rate_usd_cny=exchange_rate_usd_cny,
+            min_gross_margin=min_gross_margin,
+        )
+    elif auto_calculate:
+        warnings.append(
+            f"{asin}: 可靠可定价供应商仅 {priced_count} 条，不足 {min_profit_suppliers} 条，未生成正式利润结论。"
+        )
+        db.commit()
+
+    return {
+        "asin": asin,
+        "candidate_id": candidate_id,
+        "queries": [query],
+        "searches": [
+            {
+                "search_id": search_id,
+                "query": query,
+                "platform": "1688",
+                "platform_label": "1688",
+                "search_url": None,
+                "status": "complete",
+                "result_count": len(offers_from_api),
+                "provider": provider.provider_name,
+            }
+        ],
+        "offers": offers,
+        "profit_run": profit_run,
+        "keyword_profile": keyword_profile,
+        "counts": {
+            "searches": 1,
+            "candidate_offers": len(offers),
+            "priced_offers": priced_count,
+        },
+        "warnings": warnings,
+    }
+
+
 def build_1688_queries(product: dict[str, Any]) -> list[str]:
     return [item.query for item in build_supplier_queries(product) if item.platform == "1688"]
 
@@ -648,6 +859,7 @@ def _insert_supplier_search(
     status: str,
     result_count: int,
     payload: dict[str, Any],
+    provider: str = "serper",
 ) -> None:
     db.execute(
         text(
@@ -657,7 +869,7 @@ def _insert_supplier_search(
               result_count, run_id, payload
             )
             VALUES (
-              :id, :org_id, :candidate_id, :asin, :query, 'serper',
+              :id, :org_id, :candidate_id, :asin, :query, :provider,
               :status, :result_count, :run_id, {_json_bind(db, "payload")}
             )
             """
@@ -669,6 +881,7 @@ def _insert_supplier_search(
             "asin": asin,
             "run_id": run_id,
             "query": query,
+            "provider": provider,
             "status": status,
             "result_count": result_count,
             "payload": json.dumps(payload, ensure_ascii=False),

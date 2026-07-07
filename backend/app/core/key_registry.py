@@ -89,6 +89,20 @@ KEY_TYPE_REGISTRY: dict[str, dict[str, Any]] = {
         "adapter": "SerperAdapter",
         "module_ids": ["k.product_knowledge", "r.analysis"],
     },
+    "alibaba1688": {
+        "type": "alibaba1688",
+        "name": "1688 Official API",
+        "description": "1688 Open Platform AppKey, AppSecret, and access token payload",
+        "provider": "alibaba1688",
+        "auth_type": "api_key",
+        "enabled": True,
+        "scope": ["R-A"],
+        "validation_endpoint": None,
+        "default_url": "https://open.1688.com",
+        "default_alias": "alibaba1688",
+        "adapter": "Alibaba1688OpenApiAdapter",
+        "module_ids": ["r.analysis"],
+    },
     "n8n": {
         "type": "n8n",
         "name": "n8n Webhook",
@@ -126,6 +140,7 @@ KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
     "chatgpt": ("chatgpt", "4sapi"),
     "claude_opus": ("claude", "anthropic", "opus"),
     "serp": ("serp", "serper"),
+    "alibaba1688": ("1688", "alibaba1688", "open.1688.com", "阿里巴巴开放平台"),
     "n8n": ("n8n", "webhook"),
 }
 
@@ -136,6 +151,8 @@ def normalize_key_type(value: str | None) -> str:
         normalized = "claude_opus"
     if normalized == "serper":
         normalized = "serp"
+    if normalized in {"1688", "alibaba_1688", "alibaba"}:
+        normalized = "alibaba1688"
     if normalized not in KEY_TYPE_REGISTRY:
         raise ValueError("unknown_key_type")
     return normalized
@@ -150,6 +167,7 @@ def list_key_type_definitions() -> list[dict[str, Any]]:
         "deepseek",
         "openai",
         "keepa",
+        "alibaba1688",
         "chatgpt",
         "claude_opus",
         "serp",

@@ -8,7 +8,8 @@ export type ApiKeyType =
   | "claude_opus"
   | "deepseek"
   | "n8n"
-  | "keepa";
+  | "keepa"
+  | "alibaba1688";
 
 export type ApiKeyTypeOption = {
   type: ApiKeyType;
@@ -46,6 +47,13 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     description: "Amazon market intelligence data API",
     defaultUrl: "https://api.keepa.com",
     defaultAlias: "keepa",
+  },
+  {
+    type: "alibaba1688",
+    label: "1688 官方 API",
+    description: "1688 开放平台 AppKey / AppSecret / Access Token",
+    defaultUrl: "https://open.1688.com",
+    defaultAlias: "alibaba1688",
   },
   {
     type: "custom",

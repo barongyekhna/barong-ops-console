@@ -14,7 +14,7 @@ from r_system_v2.core.secret_event_bus import (
 )
 
 
-SUPPORTED_SERVICES = frozenset({"keepa", "deepseek", "openai", "serper"})
+SUPPORTED_SERVICES = frozenset({"keepa", "deepseek", "openai", "serper", "alibaba1688"})
 TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 
 R_WAREHOUSE_MODULE_ID = "r.warehouse"
@@ -46,6 +46,11 @@ SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
         (R_ANALYSIS_MODULE_ID, "serper"),
         (K_PRODUCT_KNOWLEDGE_MODULE_ID, "serp"),
         (K_PRODUCT_KNOWLEDGE_MODULE_ID, "serper"),
+    ),
+    "alibaba1688": (
+        (R_ANALYSIS_MODULE_ID, "alibaba1688"),
+        (R_ANALYSIS_MODULE_ID, "alibaba_1688"),
+        (R_ANALYSIS_MODULE_ID, "1688"),
     ),
 }
 
@@ -158,6 +163,8 @@ class SecretManager:
                 normalized_service = "serper"
             if normalized_service == "chatgpt":
                 normalized_service = "openai"
+            if normalized_service in {"1688", "alibaba_1688", "alibaba"}:
+                normalized_service = "alibaba1688"
 
         keys = list(cls._cache)
         removed = 0
@@ -256,6 +263,8 @@ class SecretManager:
             normalized = "openai"
         if normalized == "serp":
             normalized = "serper"
+        if normalized in {"1688", "alibaba_1688", "alibaba"}:
+            normalized = "alibaba1688"
         if normalized not in SUPPORTED_SERVICES:
             raise SecretManagerError(f"unsupported_service:{service}")
         return normalized

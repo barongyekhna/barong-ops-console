@@ -289,6 +289,49 @@ def test_deepseek_does_not_reject_bakery_coffee_shop_label_printer_as_food():
     )
 
 
+def test_deepseek_does_not_reject_baking_pan_as_edible_product():
+    product = NormalizedProduct(
+        asin="B0FCBF2X4H",
+        source_query="keepa_category:289668",
+        marketplace="US",
+        title=(
+            "Nonstick Baking Pan Set Cookie Sheet Bakeware Oven Tray for "
+            "Kitchen Bakery Cake Bread Roasting"
+        ),
+        brand="BakeMate",
+        category="Bakeware",
+        price=29.99,
+        bsr=2500,
+        reviews=140,
+        seller_count=5,
+        landed_cost=None,
+        est_net_margin=None,
+        brand_share=0.12,
+        price_trend="stable",
+        rating=4.5,
+        features={
+            "amazon_category_path": [
+                "Home & Kitchen",
+                "Kitchen & Dining",
+                "Bakeware",
+                "Baking Pans",
+            ],
+            "monthly_sales": 600,
+            "monthly_sales_estimate": 600,
+            "subcategory_name": "Baking Pans",
+            "parent_category_name": "Home & Kitchen",
+        },
+    )
+
+    screening = DeepSeekScreeningSkill().evaluate(product)
+
+    assert not (
+        screening.verdict == "cut"
+        and screening.score == 0
+        and "食品" in screening.top_reason
+    )
+
+
 def test_deepseek_still_rejects_real_coffee_product_as_edible():
     product = NormalizedProduct(
         asin="B0COFFEE01",

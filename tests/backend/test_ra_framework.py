@@ -23,6 +23,7 @@ def test_ra_skill_manifest_loads_product_selection_documents() -> None:
         "amazon",
         "dtc",
         "dtc_data",
+        "ra_supplier_keyword",
         "shared",
     }
     assert manifest["prompt_content_exposed"] is False
@@ -73,6 +74,7 @@ def test_ra_manifest_exposes_framework_api_without_execution_enablement() -> Non
         "chatgpt",
         "claude_opus",
         "serper",
+        "alibaba1688",
     ]
     assert set(manifest["data_boundary"]["writes"]) == {
         table_name for table_name, _label in RA_REQUIRED_TABLES
@@ -91,7 +93,14 @@ def test_ra_framework_stages_are_non_executing_skeleton() -> None:
 
 
 def test_ra_key_types_can_bind_to_analysis_module() -> None:
-    expected_key_types = ("deepseek", "openai", "chatgpt", "claude_opus", "serp")
+    expected_key_types = (
+        "deepseek",
+        "openai",
+        "chatgpt",
+        "claude_opus",
+        "serp",
+        "alibaba1688",
+    )
 
     for key_type in expected_key_types:
         definition = key_type_definition(key_type)
@@ -106,3 +115,7 @@ def test_ra_secret_manager_prefers_analysis_bindings_for_required_services() -> 
     assert (R_ANALYSIS_MODULE_ID, "serp") in SERVICE_BINDING_CANDIDATES["serper"]
     assert (R_ANALYSIS_MODULE_ID, "serper") in SERVICE_BINDING_CANDIDATES["serper"]
     assert (R_ANALYSIS_MODULE_ID, "4sapi") in SERVICE_BINDING_CANDIDATES["openai"]
+    assert (
+        R_ANALYSIS_MODULE_ID,
+        "alibaba1688",
+    ) in SERVICE_BINDING_CANDIDATES["alibaba1688"]

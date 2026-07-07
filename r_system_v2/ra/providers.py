@@ -8,7 +8,6 @@ not direct OpenAI/Anthropic SDK bindings; both are expected to route through the
 from __future__ import annotations
 
 from dataclasses import dataclass
-from importlib.util import find_spec
 import os
 from typing import Any
 
@@ -17,9 +16,10 @@ from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 
 @dataclass(frozen=True)
 class RAnalysisProviderKeys:
-    deepseek: str
-    foursapi: str
-    serper: str
+    deepseek: str = ""
+    foursapi: str = ""
+    serper: str = ""
+    alibaba1688: str = ""
 
     def configured(self) -> dict[str, bool]:
         foursapi_configured = bool(self.foursapi)
@@ -29,6 +29,7 @@ class RAnalysisProviderKeys:
             "opus": foursapi_configured,
             "foursapi": foursapi_configured,
             "serper": bool(self.serper),
+            "alibaba1688": bool(self.alibaba1688),
         }
 
 
@@ -88,11 +89,15 @@ class RAnalysisProviderBinding:
     def serper_key(self) -> str:
         return self.secret_manager.get_key("serper", self.org_id)
 
+    def alibaba1688_key(self) -> str:
+        return self.secret_manager.get_key("alibaba1688", self.org_id)
+
     def all_keys(self) -> RAnalysisProviderKeys:
         return RAnalysisProviderKeys(
             deepseek=self.deepseek_key(),
             foursapi=self.foursapi_key(),
             serper=self.serper_key(),
+            alibaba1688=self.alibaba1688_key(),
         )
 
     def status(self) -> dict[str, Any]:
@@ -100,6 +105,13 @@ class RAnalysisProviderBinding:
         serper_ready = any(
             item.role == "serper" and item.configured for item in role_statuses
         )
+        alibaba_ready = any(
+            item.role == "alibaba1688" and item.configured for item in role_statuses
+        )
+        supplier_source_mode = os.getenv(
+            "RA_SUPPLIER_SOURCE_MODE",
+            "mock_1688_api",
+        ).strip() or "mock_1688_api"
         return {
             "roles": [item.to_dict() for item in role_statuses],
             "routing": {
@@ -107,15 +119,19 @@ class RAnalysisProviderBinding:
                 "gpt": "4sapi",
                 "opus": "4sapi",
                 "serper": "serper",
-                "crawler_1688": "playwright",
+                "alibaba1688": supplier_source_mode,
             },
-            "external_calls_enabled": serper_ready,
+            "supplier_source_mode": supplier_source_mode,
+            "official_1688_configured": alibaba_ready,
+            "supplier_cost_provider_ready": supplier_source_mode == "mock_1688_api" or alibaba_ready,
+            "external_calls_enabled": serper_ready or alibaba_ready,
         }
 
     def role_statuses(self) -> list[RAnalysisProviderStatus]:
         deepseek = self._secret_status("deepseek")
         foursapi = self._secret_status("4sapi")
         serper = self._secret_status("serper")
+        alibaba1688 = self._secret_status("alibaba1688")
         return [
             RAnalysisProviderStatus(
                 role="deepseek",
@@ -153,16 +169,25 @@ class RAnalysisProviderBinding:
             RAnalysisProviderStatus(
                 role="serper",
                 service="serper",
-                label="Serper 手动搜索与 1688 发现",
+                label="Serper 手动 SEO / Google SERP 分析",
                 configured=serper["configured"],
                 source=serper["source"],
             ),
             RAnalysisProviderStatus(
-                role="crawler_1688",
-                service="playwright",
-                label="1688 Playwright 页面抓取",
-                configured=_playwright_runtime_available(),
-                source=_playwright_runtime_source(),
+                role="alibaba1688",
+                service="alibaba1688",
+                label="1688 官方 API 供应商与成本",
+                configured=alibaba1688["configured"],
+                source=alibaba1688["source"],
+                base_url_env="RA_1688_OPEN_API_BASE_URL",
+                base_url_configured=bool(os.getenv("RA_1688_OPEN_API_BASE_URL", "").strip()),
+            ),
+            RAnalysisProviderStatus(
+                role="mock_1688_api",
+                service="mock_1688_api",
+                label="1688 官方 API Mock",
+                configured=True,
+                source="local_mock_until_official_api_ready",
             ),
         ]
 
@@ -180,15 +205,3 @@ class RAnalysisProviderBinding:
             "configured": bool(status.get("configured")),
             "source": str(status.get("source") or "api_key_orchestration"),
         }
-
-
-def _playwright_runtime_available() -> bool:
-    return find_spec("playwright") is not None
-
-
-def _playwright_runtime_source() -> str:
-    if bool(os.getenv("RA_1688_COOKIE_PROFILE", "").strip()):
-        return "runtime_profile"
-    if _playwright_runtime_available():
-        return "python_runtime"
-    return "missing_runtime"
