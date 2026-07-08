@@ -196,6 +196,7 @@ def match_rw_products_for_query(
     query: str,
     limit: int,
     org_id: str | None = None,
+    exclude_asins: set[str] | list[str] | tuple[str, ...] | None = None,
 ) -> list[dict[str, Any]]:
     cleaned_query = _clean_user_query(query)
     terms = _query_terms(cleaned_query)
@@ -206,6 +207,18 @@ def match_rw_products_for_query(
     params: dict[str, object] = {"scan_limit": max(100, min(limit * 100, 1500))}
     if org_id:
         params["org_id"] = org_id
+    excluded = _normalized_asin_list(exclude_asins)
+    exclude_sql = ""
+    if excluded:
+        placeholders: list[str] = []
+        for index, asin in enumerate(excluded):
+            key = f"exclude_asin_{index}"
+            params[key] = asin
+            placeholders.append(f":{key}")
+        exclude_sql = (
+            "AND UPPER(COALESCE(CAST(asin AS TEXT), '')) "
+            f"NOT IN ({', '.join(placeholders)})"
+        )
     clauses: list[str] = []
     for index, value in enumerate(search_values):
         key = f"q{index}"
@@ -234,6 +247,7 @@ def match_rw_products_for_query(
             FROM products_rw
             WHERE COALESCE(LOWER(CAST(state AS TEXT)), '') NOT LIKE '%reject%'
               AND {_ra_profit_not_processed_sql(db)}
+              {exclude_sql}
               AND ({' OR '.join(f'({clause})' for clause in clauses)})
             ORDER BY last_profit_at ASC NULLS FIRST, updated_at DESC NULLS LAST, asin ASC
             LIMIT :scan_limit
@@ -271,6 +285,18 @@ def match_rw_products_for_query(
         reverse=True,
     )
     return scored[: max(1, min(int(limit), MAX_ASIN_LIMIT))]
+
+
+def _normalized_asin_list(values: set[str] | list[str] | tuple[str, ...] | None) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for value in values or []:
+        asin = str(value or "").strip().upper()
+        if not asin or asin in seen:
+            continue
+        seen.add(asin)
+        normalized.append(asin)
+    return normalized
 
 
 def _ra_profit_not_processed_sql(db: Session) -> str:

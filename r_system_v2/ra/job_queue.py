@@ -233,6 +233,7 @@ class RaProfitJobWorker:
                     {
                         "target_profit_pass": target_profit_pass,
                         "max_products_per_job": max_products_per_job,
+                        "worker_concurrency": self.concurrency,
                         "matched_products": 0,
                         "selected_products": 0,
                         "processed_products": 0,
@@ -269,6 +270,7 @@ class RaProfitJobWorker:
                         org_id=org_id,
                         query=query,
                         limit=asin_limit,
+                        exclude_asins=attempted_asins,
                     )
                     fresh_products = [
                         product
@@ -373,8 +375,7 @@ class RaProfitJobWorker:
                 if current_pass >= target_profit_pass and not pending:
                     break
 
-                remaining_pass_needed = max(1, target_profit_pass - current_pass)
-                max_pending = min(self.concurrency, remaining_pass_needed)
+                max_pending = self.concurrency
                 while (
                     len(pending) < max_pending
                     and product_index < len(products)
@@ -1967,6 +1968,7 @@ def _initial_counts(filters: dict[str, Any]) -> dict[str, object]:
         "supplier_limit": filters.get("supplier_limit"),
         "target_profit_pass": filters.get("target_profit_pass") or _target_profit_pass(),
         "max_products_per_job": filters.get("max_products_per_job") or _max_products_per_job(),
+        "worker_concurrency": _worker_concurrency(None),
         "matched_products": 0,
         "selected_products": 0,
         "processed_products": 0,
@@ -2053,7 +2055,7 @@ def _selection_channel(value: Any) -> str:
 
 def _worker_concurrency(value: int | None) -> int:
     configured = value or _int_env("RA_WORKER_PRODUCT_CONCURRENCY") or DEFAULT_WORKER_CONCURRENCY
-    return max(1, min(configured, 6))
+    return max(1, min(configured, 8))
 
 
 def _int_env(name: str) -> int | None:
