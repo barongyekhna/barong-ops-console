@@ -608,6 +608,43 @@ export function ImageSystemWorkspace() {
               loadedProduct.parent_sku ||
               "",
         );
+
+        // K -> I: if the product carries an art-direction brief, prefill the
+        // edit fields (real photo + AI scene) so the operator only uploads the
+        // product photo. Defensive: only sets keys the brief actually provides.
+        const brief = loadedProduct.image_instruction_json;
+        if (brief && typeof brief === "object") {
+          const b = brief as Record<string, unknown>;
+          setMode("edit");
+          const count = b.image_count;
+          if (typeof count === "number") {
+            setEditCount(String(count));
+          } else if (typeof count === "string" && count.trim()) {
+            setEditCount(count.trim());
+          }
+          const gs = b.global_style;
+          if (gs && typeof gs === "object") {
+            const style = gs as Record<string, unknown>;
+            setEditStyle({
+              background: String(style.background ?? ""),
+              composition: String(style.composition ?? ""),
+              lighting: String(style.lighting ?? ""),
+              style: String(style.style ?? ""),
+            });
+          }
+          if (typeof b.aspect_ratio === "string" && b.aspect_ratio.trim()) {
+            setEditAspect(b.aspect_ratio.trim());
+          }
+          const mainPrompt =
+            typeof b.main_prompt === "string" && b.main_prompt.trim()
+              ? b.main_prompt
+              : typeof b.style_block === "string"
+                ? b.style_block
+                : "";
+          if (mainPrompt) {
+            setEditPrompt((current) => (current.trim() ? current : mainPrompt));
+          }
+        }
       })
       .catch((loadError) => {
         if (!cancelled) {

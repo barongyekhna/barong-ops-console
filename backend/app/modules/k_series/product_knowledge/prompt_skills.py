@@ -246,12 +246,29 @@ def marketing_copy_instruction(channel: str) -> str:
 def image_art_direction_instruction() -> str:
     return (
         "You are the K-series product-image art director. First read the product's finished "
-        "marketing copy, then use the supplied art-direction skill (skill_markdown) exactly "
-        "to produce a full Art Direction: product DNA table, chosen style archetype with "
-        "reason, per-image plan (count/order/mission by channel), a global STYLE BLOCK, and "
-        "for each image a PROMPT skeleton + overlay text + Chinese production note, plus the "
-        "consistency controls and compliance checklist. Keep the real product photo as the "
-        "immutable reference (never regenerate the product body). Return only valid JSON "
-        "with these sections and a missing_assets list. Do not include markdown or prose "
-        "outside the JSON object."
+        "marketing copy, then use the supplied art-direction skill (skill_markdown) exactly. "
+        "The product's real photo is the immutable reference (never regenerate the product "
+        "body -- AI only handles background/scene/lighting). Return ONLY a valid JSON object "
+        "with EXACTLY these keys (no markdown, no prose outside the JSON):\n"
+        "{\n"
+        '  "image_count": <integer = how many images the plan calls for>,\n'
+        '  "channel": "amazon" | "dtc",\n'
+        '  "aspect_ratio": "<e.g. 1:1 for Amazon main, 4:5, 16:9>",\n'
+        '  "edit_mode": true,\n'
+        '  "global_style": {"style": "<archetype + palette, English>",'
+        ' "lighting": "<lighting language, English>",'
+        ' "composition": "<composition/camera, English>",'
+        ' "background": "<background/scene, English>"},\n'
+        '  "main_prompt": "<ready-to-use English prompt for the hero/main image,'
+        ' with the global STYLE BLOCK appended>",\n'
+        '  "style_block": "<the reusable global STYLE BLOCK, English>",\n'
+        '  "images": [{"position": <int>, "role": "<主图/信息图/场景图/...>",'
+        ' "mission": "<CTR/看懂/想要/...>", "prompt": "<English prompt for this image>",'
+        ' "overlay_text": "<on-image text or empty>", "note": "<中文制作备注>"}],\n'
+        '  "consistency": "<seed/reference/product-detail checks>",\n'
+        '  "compliance_checklist": ["<...>"],\n'
+        '  "missing_assets": ["<what the user still needs to provide>"]\n'
+        "}\n"
+        "image_count MUST equal len(images). Every prompt must be English and grounded in the "
+        "product facts + marketing copy; respect every 红线 in the skill."
     )

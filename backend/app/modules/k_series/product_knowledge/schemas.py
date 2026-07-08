@@ -261,6 +261,9 @@ class ProductKnowledgeRead(BaseModel):
     product_key: str
     product_status: str
     review_status: str
+    channel: str = "dtc"
+    marketing_copy_json: Any | None = None
+    image_instruction_json: Any | None = None
     canonical_language: str
     raw_input_text: str | None
     raw_input_language: str | None

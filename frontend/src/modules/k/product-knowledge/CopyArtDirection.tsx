@@ -1,6 +1,7 @@
 "use client";
 
-import { ClipboardList, LoaderCircle, Sparkles } from "lucide-react";
+import { ArrowUpRight, ClipboardList, LoaderCircle, Sparkles } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
@@ -40,6 +41,8 @@ export function CopyArtDirection({
   const [brief, setBrief] = useState<unknown>(initialImageBrief ?? null);
   const [briefBusy, setBriefBusy] = useState(false);
   const [briefError, setBriefError] = useState<string | null>(null);
+
+  const router = useRouter();
 
   const handleGenerateCopy = async () => {
     setCopyBusy(true);
@@ -127,6 +130,18 @@ export function CopyArtDirection({
                 <ClipboardList aria-hidden="true" size={16} />
               )}
               {brief ? "重新生成" : "生成作图指令"}
+            </button>
+            <button
+              className="secondary-button"
+              disabled={!brief}
+              onClick={() =>
+                router.push(`/image-system?product_id=${productId}`)
+              }
+              title={brief ? "带作图指令去 I 作图" : "请先生成作图指令"}
+              type="button"
+            >
+              <ArrowUpRight aria-hidden="true" size={16} />
+              去 I 作图
             </button>
           </div>
         </div>

@@ -40,6 +40,9 @@ export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
   attributes_count?: number | null;
   keywords_count?: number | null;
   risk_terms_count?: number | null;
+  channel?: string | null;
+  marketing_copy_json?: unknown;
+  image_instruction_json?: unknown;
 };
 
 export type ProductKnowledgeListResponse = {
