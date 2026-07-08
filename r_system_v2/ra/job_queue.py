@@ -1597,7 +1597,14 @@ def _live_counts(db: Session, *, org_id: str, run_id: str) -> dict[str, int]:
               COUNT(DISTINCT o.id) AS candidate_offers,
               COUNT(DISTINCT o.id) FILTER (WHERE o.unit_price_cny IS NOT NULL) AS priced_offers,
               COUNT(DISTINCT s.id) AS profit_snapshots,
-              COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_passed') AS profit_pass,
+              COUNT(DISTINCT c.source_asin) FILTER (
+                WHERE c.candidate_status IN (
+                  'profit_passed',
+                  'ai_mock_passed',
+                  'ai_mock_rejected',
+                  'ai_mock_review'
+                )
+              ) AS profit_pass,
               COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_rejected') AS profit_reject,
               COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_blocked') AS profit_blocked,
               COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_quantity_pending') AS profit_quantity_pending
