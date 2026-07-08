@@ -129,6 +129,34 @@ def get_auto_profit_job(
     )
 
 
+def get_latest_auto_profit_job(
+    db: Session,
+    *,
+    org_id: str,
+    item_page: int = 1,
+    item_page_size: int = 50,
+    item_search: str | None = None,
+    item_category: str | None = None,
+    item_verdict: str | None = None,
+    item_sort: str | None = None,
+    item_sort_direction: str | None = None,
+) -> dict[str, object] | None:
+    row = _load_latest_job_row(db, org_id=org_id)
+    if row is None:
+        return None
+    return _job_payload(
+        db,
+        row,
+        item_page=item_page,
+        item_page_size=item_page_size,
+        item_search=item_search,
+        item_category=item_category,
+        item_verdict=item_verdict,
+        item_sort=item_sort,
+        item_sort_direction=item_sort_direction,
+    )
+
+
 class RaProfitJobWorker:
     def __init__(
         self,
@@ -772,6 +800,23 @@ def _load_job_row(db: Session, *, org_id: str, run_id: str) -> dict[str, Any] | 
             """
         ),
         {"org_id": org_id, "run_id": run_id},
+    ).mappings().first()
+    return dict(row) if row is not None else None
+
+
+def _load_latest_job_row(db: Session, *, org_id: str) -> dict[str, Any] | None:
+    row = db.execute(
+        text(
+            """
+            SELECT run_id, org_id, channel, status, triggered_by, filters,
+                   counts, runtime_mode, started_at, finished_at, created_at, updated_at
+            FROM ra_selection_runs
+            WHERE org_id = :org_id AND channel = 'profit_auto'
+            ORDER BY created_at DESC
+            LIMIT 1
+            """
+        ),
+        {"org_id": org_id},
     ).mappings().first()
     return dict(row) if row is not None else None
 

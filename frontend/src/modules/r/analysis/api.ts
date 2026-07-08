@@ -84,3 +84,18 @@ export function getRaAutoProfitJob(runId: string, query?: RaAutoProfitJobItemsQu
     timeoutMs: 30_000,
   });
 }
+
+export function getLatestRaAutoProfitJob(query?: RaAutoProfitJobItemsQuery) {
+  const searchParams = new URLSearchParams();
+  Object.entries(query ?? {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+    searchParams.set(key, String(value));
+  });
+  const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
+  return apiRequest<RaAutoProfitJobResult>(`${RA_API_BASE}/profit/jobs/latest${suffix}`, {
+    bypassCache: true,
+    timeoutMs: 30_000,
+  });
+}

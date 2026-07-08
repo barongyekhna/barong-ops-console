@@ -14,6 +14,7 @@ from r_system_v2.ra.job_queue import (
     RAJobError,
     create_auto_profit_job,
     get_auto_profit_job,
+    get_latest_auto_profit_job,
 )
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.profit_service import (
@@ -208,6 +209,39 @@ def ra_profit_job_create(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(exc),
         ) from exc
+
+
+@router.get("/profit/jobs/latest")
+def ra_profit_job_latest(
+    item_page: int = Query(default=1, ge=1),
+    item_page_size: int = Query(default=50, ge=1, le=50),
+    item_search: str | None = Query(default=None, max_length=120),
+    item_category: str | None = Query(default=None, max_length=120),
+    item_verdict: str | None = Query(default=None, max_length=24),
+    item_sort: str | None = Query(default=None, max_length=32),
+    item_sort_direction: str | None = Query(default=None, max_length=8),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        payload = get_latest_auto_profit_job(
+            db,
+            org_id=target_org.org_id,
+            item_page=item_page,
+            item_page_size=item_page_size,
+            item_search=item_search,
+            item_category=item_category,
+            item_verdict=item_verdict,
+            item_sort=item_sort,
+            item_sort_direction=item_sort_direction,
+        )
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="暂无 R-A 自动利润任务。",
+        )
+    return payload
 
 
 @router.get("/profit/jobs/{run_id}")

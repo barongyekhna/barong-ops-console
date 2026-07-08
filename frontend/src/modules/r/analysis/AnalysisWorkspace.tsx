@@ -15,6 +15,7 @@ import {
   createRaAutoProfitJob,
   getRaAutoProfitJob,
   getRaFrameworkStatus,
+  getLatestRaAutoProfitJob,
   getRaProfitSnapshots,
 } from "@/modules/r/analysis/api";
 import type {
@@ -55,13 +56,21 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([getRaFrameworkStatus(), getRaProfitSnapshots()])
-      .then(([frameworkStatus, snapshotPayload]) => {
+    Promise.all([
+      getRaFrameworkStatus(),
+      getRaProfitSnapshots(),
+      getLatestRaAutoProfitJob(DEFAULT_ITEMS_QUERY).catch(() => null),
+    ])
+      .then(([frameworkStatus, snapshotPayload, latestJob]) => {
         if (cancelled) {
           return;
         }
         setStatus(frameworkStatus);
         setSnapshots(snapshotPayload.items);
+        if (latestJob) {
+          setResult(latestJob);
+          setRunning(!isTerminalStatus(latestJob.status));
+        }
         setError(null);
       })
       .catch((requestError: unknown) => {
