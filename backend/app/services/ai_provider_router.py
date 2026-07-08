@@ -60,7 +60,7 @@ DEFAULT_FALLBACK_PROVIDERS = {
     "deepseek": "chatgpt",
     "claude": "chatgpt",
 }
-DEFAULT_PROVIDER_TIMEOUT_SECONDS = 90.0
+DEFAULT_PROVIDER_TIMEOUT_SECONDS = 150.0
 DEFAULT_PROVIDER_MAX_ATTEMPTS = 1
 
 
@@ -239,6 +239,38 @@ class OpenAIAdapter(BaseProviderAdapter):
         "generate": "/v1/chat/completions",
         "selling_points": "/v1/chat/completions",
     }
+
+    # OpenAI-compatible chat APIs (incl. 4sapi) reject unknown top-level params
+    # (e.g. HTTP 400 "Unknown parameter: 'instruction'"), so send a clean body
+    # instead of spreading the whole payload. All caller context is preserved
+    # inside `messages` via _messages_from_payload.
+    _PASSTHROUGH_PARAMS = (
+        "temperature",
+        "top_p",
+        "max_tokens",
+        "max_completion_tokens",
+        "response_format",
+        "stop",
+        "seed",
+        "stream",
+    )
+
+    def request_builder(
+        self,
+        *,
+        task_type: str,
+        payload: dict[str, Any],
+        model: str | None,
+    ) -> dict[str, Any]:
+        del task_type
+        body: dict[str, Any] = {
+            "model": model,
+            "messages": _messages_from_payload(payload),
+        }
+        for key in self._PASSTHROUGH_PARAMS:
+            if payload.get(key) is not None:
+                body[key] = payload[key]
+        return body
 
 
 class ClaudeAdapter(BaseProviderAdapter):

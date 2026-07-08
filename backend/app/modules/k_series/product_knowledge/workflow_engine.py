@@ -3476,6 +3476,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "copy_skill": skill,
             "product": _product_snapshot(product),
         }
+        # Release the read transaction before the long (~80s) AI call so the DB
+        # does not drop the connection on idle-in-transaction timeout.
+        self.db.commit()
         result = self._execute_provider(
             provider="chatgpt",
             task_type="generate",
@@ -3483,6 +3486,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             gate_context=gate_context,
             payload=ai_input,
         )
+        product = self._require_product(product_id, scope_context)
         product.marketing_copy_json = result
         product.marketing_copy_skill_version = skill["version"]
         product.updated_by_user_id = _user_uuid(user)
@@ -3538,6 +3542,9 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "product": _product_snapshot(product),
             "marketing_copy": product.marketing_copy_json,
         }
+        # Release the read transaction before the long (~80s) AI call so the DB
+        # does not drop the connection on idle-in-transaction timeout.
+        self.db.commit()
         result = self._execute_provider(
             provider="chatgpt",
             task_type="generate",
@@ -3545,6 +3552,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             gate_context=gate_context,
             payload=ai_input,
         )
+        product = self._require_product(product_id, scope_context)
         product.image_instruction_json = result
         product.image_instruction_skill_version = skill["version"]
         product.updated_by_user_id = _user_uuid(user)
