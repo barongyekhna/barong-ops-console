@@ -14,7 +14,9 @@ from r_system_v2.core.secret_event_bus import (
 )
 
 
-SUPPORTED_SERVICES = frozenset({"keepa", "deepseek", "openai", "serper", "alibaba1688"})
+SUPPORTED_SERVICES = frozenset(
+    {"keepa", "deepseek", "openai", "serper", "alibaba1688", "rainforest"}
+)
 TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 
 R_WAREHOUSE_MODULE_ID = "r.warehouse"
@@ -52,6 +54,10 @@ SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
         (R_ANALYSIS_MODULE_ID, "alibaba_1688"),
         (R_ANALYSIS_MODULE_ID, "1688"),
     ),
+    "rainforest": (
+        (R_ANALYSIS_MODULE_ID, "rainforest"),
+        (R_ANALYSIS_MODULE_ID, "rainforestapi"),
+    ),
 }
 
 
@@ -78,6 +84,7 @@ class SecretStatus:
     module_id: str | None = None
     key_alias: str | None = None
     key_id: str | None = None
+    url: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -90,6 +97,7 @@ class SecretStatus:
             "module_id": self.module_id,
             "key_alias": self.key_alias,
             "key_id": self.key_id,
+            "url": self.url,
         }
 
 
@@ -100,6 +108,10 @@ class _SecretCacheEntry:
     module_id: str
     key_alias: str
     key_id: str
+    url: str | None = None
+    name: str | None = None
+    key_type: str | None = None
+    provider: str | None = None
 
 
 class SecretManager:
@@ -133,6 +145,36 @@ class SecretManager:
         self._cache[(org_id, service)] = entry
         return entry.value
 
+    def get_secret_config(self, service: str, org_id: str) -> dict[str, Any]:
+        service = self._normalize_service(service)
+        org_id = self._normalize_org_id(org_id)
+        db = self._session()
+        if db is None:
+            entry = self._cache.get((org_id, service))
+            if entry is None:
+                raise SecretNotFoundError(f"api_key_orchestration_unavailable:{org_id}:{service}")
+        else:
+            entry = self._resolve_from_api_key_orchestration(
+                db,
+                service=service,
+                org_id=org_id,
+            )
+            self._cache[(org_id, service)] = entry
+        return {
+            "service": service,
+            "org_id": org_id,
+            "value": entry.value,
+            "key": entry.value,
+            "url": entry.url,
+            "name": entry.name,
+            "key_type": entry.key_type,
+            "provider": entry.provider,
+            "module_id": entry.module_id,
+            "key_alias": entry.key_alias,
+            "key_id": entry.key_id,
+            "updated_at": entry.updated_at,
+        }
+
     def set_key(self, service: str, value: str, org_id: str) -> SecretStatus:
         del service, value, org_id
         raise SecretManagerError("secret_write_disabled_use_api_key_orchestration")
@@ -161,10 +203,14 @@ class SecretManager:
             normalized_service = service.strip().lower().replace("-", "_")
             if normalized_service == "serp":
                 normalized_service = "serper"
+            if normalized_service == "foursapi":
+                normalized_service = "openai"
             if normalized_service == "chatgpt":
                 normalized_service = "openai"
             if normalized_service in {"1688", "alibaba_1688", "alibaba"}:
                 normalized_service = "alibaba1688"
+            if normalized_service in {"rainforestapi", "api.rainforestapi.com"}:
+                normalized_service = "rainforest"
 
         keys = list(cls._cache)
         removed = 0
@@ -246,6 +292,7 @@ class SecretManager:
             module_id=entry.module_id,
             key_alias=entry.key_alias,
             key_id=entry.key_id,
+            url=entry.url,
         )
 
     def migrate_env_to_db(self, org_id: str) -> dict[str, Any]:
@@ -259,12 +306,14 @@ class SecretManager:
 
     def _normalize_service(self, service: str) -> str:
         normalized = service.strip().lower().replace("-", "_")
-        if normalized in {"chatgpt", "gpt", "gpt_image", "4sapi"}:
+        if normalized in {"chatgpt", "gpt", "gpt_image", "4sapi", "foursapi"}:
             normalized = "openai"
         if normalized == "serp":
             normalized = "serper"
         if normalized in {"1688", "alibaba_1688", "alibaba"}:
             normalized = "alibaba1688"
+        if normalized in {"rainforestapi", "api.rainforestapi.com"}:
+            normalized = "rainforest"
         if normalized not in SUPPORTED_SERVICES:
             raise SecretManagerError(f"unsupported_service:{service}")
         return normalized
@@ -327,6 +376,10 @@ class SecretManager:
                 module_id=str(context.module_id),
                 key_alias=str(context.key_alias),
                 key_id=str(context.key_id),
+                url=str(getattr(context, "url", "") or "").strip() or None,
+                name=str(getattr(context, "name", "") or "").strip() or None,
+                key_type=str(getattr(context, "key_type", "") or "").strip() or None,
+                provider=str(getattr(context, "provider", "") or "").strip() or None,
             )
         raise SecretNotFoundError(
             f"api_key_binding_not_found:{org_id}:{service}:{'|'.join(errors)}"

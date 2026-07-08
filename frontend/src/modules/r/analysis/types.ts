@@ -230,6 +230,7 @@ export type RaAutoProfitPayload = {
   asin_limit?: number;
   supplier_limit?: number;
   min_gross_margin?: number | null;
+  run_ai_chain?: boolean;
   run_ai_mock?: boolean;
   selection_channel?: string;
 };
@@ -259,6 +260,8 @@ export type RaAiSelectionResult = {
   layers: RaAiLayerResult[];
   report_id?: string | null;
   mock_pipeline_version?: string | null;
+  ai_pipeline_version?: string | null;
+  competition?: Record<string, unknown> | null;
   created_at?: string | null;
 };
 
@@ -496,7 +499,8 @@ export type RaAutoProfitJobResult = RaAutoProfitResult & {
     run_id: string;
     runtime_mode: string;
     mock: boolean;
-    mock_pipeline_version: string;
+    mock_pipeline_version?: string;
+    ai_pipeline_version?: string;
     items: RaAiSelectionResult[];
     counts: {
       ai_candidates: number;

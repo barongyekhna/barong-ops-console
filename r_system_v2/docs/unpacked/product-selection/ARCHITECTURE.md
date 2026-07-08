@@ -40,7 +40,7 @@
 | 广告数据 | Meta Ad Library API(免费)+ 可选 AdLibrary.com API | 广告子路(自动) |
 | 广告研究(人工) | Minea / PiPiADS UI | **无 API,人工研究→手动入库** |
 | AI-1 | DeepSeek(`DEEPSEEK_MODEL`) | 量化过滤 |
-| AI-2 | GPT(`OPENAI_MODEL`,如 gpt-4o) | 带上下文验证 |
+| AI-2 | GPT(`OPENAI_MODEL`,如 gpt-5.5) | 带上下文验证 |
 | AI-3 | Opus(`ANTHROPIC_MODEL`)⚠️CONFIRM 模型串 | 决策+方案 |
 | 推送 | Telegram Bot | 推 Top 候选 + 告警 |
 
@@ -79,7 +79,7 @@ ADLIBRARY_API_KEY=           # 可选,AdLibrary.com
 
 # AI
 DEEPSEEK_API_KEY= DEEPSEEK_MODEL=deepseek-chat DEEPSEEK_BASE_URL=
-OPENAI_API_KEY=  OPENAI_MODEL=gpt-4o
+OPENAI_API_KEY=  OPENAI_MODEL=gpt-5.5
 ANTHROPIC_API_KEY= ANTHROPIC_MODEL=          # ⚠️CONFIRM 当前 Opus 模型串
 
 # 漏斗阈值

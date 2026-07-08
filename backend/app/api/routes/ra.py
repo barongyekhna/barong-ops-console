@@ -71,7 +71,8 @@ class RAAutoProfitJobRequest(BaseModel):
     asin_limit: int = Field(default=20, ge=1, le=20)
     supplier_limit: int = Field(default=3, ge=3, le=5)
     min_gross_margin: float | None = Field(default=None, ge=0)
-    run_ai_mock: bool = True
+    run_ai_chain: bool = True
+    run_ai_mock: bool | None = None
     selection_channel: str = Field(default="amazon", max_length=32)
 
 
@@ -200,7 +201,7 @@ def ra_profit_job_create(
                 asin_limit=payload.asin_limit,
                 supplier_limit=payload.supplier_limit,
                 min_gross_margin=decimal_value(payload.min_gross_margin),
-                run_ai_mock=payload.run_ai_mock,
+                run_ai_mock=payload.run_ai_chain if payload.run_ai_mock is None else payload.run_ai_mock,
                 selection_channel=payload.selection_channel,
                 triggered_by=str(user.id),
             )

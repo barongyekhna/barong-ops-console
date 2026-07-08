@@ -1017,8 +1017,8 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         display_name="R-A 产品分析中心",
         description=(
             "R-series Analysis framework for candidate review, supplier cost, "
-            "profit snapshots, multi-AI mock review, and final product-selection "
-            "reports. Real provider calls remain disabled until API keys are connected."
+            "profit snapshots, Rainforest competition enrichment, real multi-AI review, and final product-selection "
+            "reports. Real provider calls are enabled through module key bindings."
         ),
         category="business",
         status="active",
@@ -1040,6 +1040,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             "claude_opus",
             "serper",
             "alibaba1688",
+            "rainforest",
         ),
         execution_provider_required=False,
         module_adapter_required=False,
@@ -1054,6 +1055,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
                 "ra_supplier_searches",
                 "ra_supplier_offers",
                 "ra_profit_snapshots",
+                "ra_competition_snapshots",
                 "ra_final_decisions",
                 "ra_reports",
                 "ra_alerts",
@@ -1066,7 +1068,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             required_checks=(
                 "r-a framework api present",
                 "r-a database boundary present",
-                "r-a mock e2e pipeline pass",
+                "r-a real ai e2e pipeline pass",
                 "r-a provider key binding audit pass",
             ),
         ),

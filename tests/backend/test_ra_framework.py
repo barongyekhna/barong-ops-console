@@ -66,6 +66,7 @@ def test_ra_provider_keys_route_gpt_and_opus_through_foursapi() -> None:
         deepseek="deepseek-key",
         foursapi="foursapi-key",
         serper="serper-key",
+        rainforest="rainforest-key",
     ).configured()
 
     assert configured["deepseek"] is True
@@ -73,6 +74,7 @@ def test_ra_provider_keys_route_gpt_and_opus_through_foursapi() -> None:
     assert configured["opus"] is True
     assert configured["foursapi"] is True
     assert configured["serper"] is True
+    assert configured["rainforest"] is True
     assert "openai" not in configured
 
 
@@ -90,30 +92,32 @@ def test_ra_manifest_exposes_framework_api_without_execution_enablement() -> Non
         "claude_opus",
         "serper",
         "alibaba1688",
+        "rainforest",
     ]
     assert set(manifest["data_boundary"]["writes"]) == {
         table_name for table_name, _label in RA_REQUIRED_TABLES
     }
     required_checks = manifest["release_requirements"]["required_checks"]
-    assert "r-a mock e2e pipeline pass" in required_checks
+    assert "r-a real ai e2e pipeline pass" in required_checks
     assert "r-a provider key binding audit pass" in required_checks
     assert "r-a execution workers inactive" not in required_checks
 
 
-def test_ra_framework_stages_expose_mock_ai_pipeline() -> None:
+def test_ra_framework_stages_expose_real_ai_pipeline() -> None:
     statuses = {stage["status"] for stage in RA_STAGES}
     ai_stages = {
         stage["id"]: stage["status"]
         for stage in RA_STAGES
-        if stage["id"] in {"deepseek", "gpt", "opus", "final_report"}
+        if stage["id"] in {"deepseek", "gpt", "opus", "rainforest_competition", "final_report"}
     }
 
     assert "framework_ready" in statuses
     assert ai_stages == {
-        "deepseek": "mock_ready",
-        "gpt": "mock_ready",
-        "opus": "mock_ready",
-        "final_report": "mock_ready",
+        "deepseek": "real_provider_ready",
+        "gpt": "real_provider_ready",
+        "opus": "real_provider_ready",
+        "rainforest_competition": "real_provider_ready",
+        "final_report": "real_provider_ready",
     }
     assert all("running" not in stage["status"] for stage in RA_STAGES)
 
@@ -126,6 +130,7 @@ def test_ra_key_types_can_bind_to_analysis_module() -> None:
         "claude_opus",
         "serp",
         "alibaba1688",
+        "rainforest",
     )
 
     for key_type in expected_key_types:
@@ -145,6 +150,7 @@ def test_ra_secret_manager_prefers_analysis_bindings_for_required_services() -> 
         R_ANALYSIS_MODULE_ID,
         "alibaba1688",
     ) in SERVICE_BINDING_CANDIDATES["alibaba1688"]
+    assert (R_ANALYSIS_MODULE_ID, "rainforest") in SERVICE_BINDING_CANDIDATES["rainforest"]
 
 
 def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatch) -> None:
@@ -164,6 +170,7 @@ def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatc
             (R_ANALYSIS_MODULE_ID, "4sapi"): "foursapi-secret",
             (R_ANALYSIS_MODULE_ID, "serper"): "serper-secret",
             (R_ANALYSIS_MODULE_ID, "alibaba1688"): "alibaba-secret",
+            (R_ANALYSIS_MODULE_ID, "rainforest"): "rainforest-secret",
         }
         value = values.get((module_id, key_alias))
         if value is None:
@@ -172,6 +179,7 @@ def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatc
             module_id=module_id,
             key_alias=key_alias,
             key_id=f"{key_alias}-id",
+            url="https://api.example.test",
             header_value=f"Bearer {value}",
             query_param_value=None,
         )
@@ -192,8 +200,11 @@ def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatc
     assert keys.foursapi == "foursapi-secret"
     assert keys.serper == "serper-secret"
     assert keys.alibaba1688 == "alibaba-secret"
+    assert keys.rainforest == "rainforest-secret"
     assert status["supplier_cost_provider_ready"] is True
+    assert status["competition_provider_ready"] is True
     role_configured = {item["role"]: item["configured"] for item in status["roles"]}
     assert role_configured["gpt"] is True
     assert role_configured["opus"] is True
+    assert role_configured["rainforest"] is True
     assert (R_ANALYSIS_MODULE_ID, "4sapi") in calls

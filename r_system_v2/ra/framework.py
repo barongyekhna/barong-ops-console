@@ -26,6 +26,7 @@ RA_REQUIRED_TABLES: tuple[tuple[str, str], ...] = (
     ("ra_supplier_searches", "1688 官方 API / Mock 搜索任务"),
     ("ra_supplier_offers", "供应商报价候选"),
     ("ra_profit_snapshots", "利润与成本快照"),
+    ("ra_competition_snapshots", "Rainforest 竞争快照"),
     ("ra_final_decisions", "最终选品决策"),
     ("ra_reports", "最终报告"),
     ("ra_alerts", "告警与通知记录"),
@@ -77,22 +78,29 @@ RA_STAGES: tuple[dict[str, object], ...] = (
         "id": "deepseek",
         "label": "DeepSeek 第一层",
         "owner": "R-A",
-        "status": "mock_ready",
-        "description": "本地 mock 结构化量化分析；不调用真实 DeepSeek key。",
+        "status": "real_provider_ready",
+        "description": "真实 DeepSeek 结构化量化分析，利润通过后自动运行。",
     },
     {
         "id": "gpt",
         "label": "GPT 第二层",
         "owner": "R-A",
-        "status": "mock_ready",
-        "description": "本地 mock 验证 listing、评论和差异化缺口；不调用真实 4sapi。",
+        "status": "real_provider_ready",
+        "description": "真实 GPT 通过 4sapi 验证 listing、竞争和供应商匹配。",
     },
     {
         "id": "opus",
         "label": "Opus 第三层",
         "owner": "R-A",
-        "status": "mock_ready",
-        "description": "本地 mock 做最终小卖家决策与路线判断；不调用真实 Opus。",
+        "status": "real_provider_ready",
+        "description": "真实 Opus 通过 4sapi 做最终小卖家选品决策。",
+    },
+    {
+        "id": "rainforest_competition",
+        "label": "Rainforest 竞争数据",
+        "owner": "R-A",
+        "status": "real_provider_ready",
+        "description": "利润通过后抓取 Amazon 页一搜索数据，计算评论墙、品牌集中度和新品占比。",
     },
     {
         "id": "supplier_cost",
@@ -112,15 +120,13 @@ RA_STAGES: tuple[dict[str, object], ...] = (
         "id": "final_report",
         "label": "最终报告",
         "owner": "R-A",
-        "status": "mock_ready",
-        "description": "mock 多 AI 流程会持久化最终选品判断与人工下一步动作。",
+        "status": "real_provider_ready",
+        "description": "真实多 AI 流程会持久化最终选品判断与人工下一步动作。",
     },
 )
 
 NEXT_STEPS: tuple[str, ...] = (
-    "将当前 DeepSeek / GPT / Opus mock 评分替换为真实 provider 调用。",
-    "接入真实 1688 官方 API provider，替换当前 mock 成本源。",
-    "接入人工确认队列与 R-A 到下一模块的交接动作。",
+    "继续接入人工确认队列与 R-A 到下一模块的交接动作。",
 )
 
 

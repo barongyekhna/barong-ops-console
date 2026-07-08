@@ -174,7 +174,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
       const payload = await createRaAutoProfitJob({
         asin_limit: DEFAULT_ASIN_LIMIT,
         query: cleaned,
-        run_ai_mock: true,
+        run_ai_chain: true,
         selection_channel: "amazon",
         supplier_limit: DEFAULT_SUPPLIER_LIMIT,
       });
@@ -194,12 +194,12 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
     <div className={styles.workspace}>
       <section className={styles.heroBand}>
         <div className={styles.heroText}>
-          <span className={styles.kicker}>R-A 利润 + 多 AI Mock</span>
+          <span className={styles.kicker}>R-A 利润 + 多 AI</span>
           <h2>{view === "dashboard" ? "选品候选总览" : "关键词/类目自动选品"}</h2>
           <p>
             输入模糊关键词或类目后，系统只从 R-W 产品库中匹配同关键词/同类目的
             ASIN，再自动用 1688 官方图搜寻找同款供应商、计算毛利润，并把利润通过的
-            产品送入 DeepSeek/GPT/Opus 三层 mock 选品链。
+            产品送入 Rainforest 竞争富化和 DeepSeek/GPT/Opus 三层选品链。
           </p>
         </div>
         <div className={styles.statusPill} data-state={error ? "error" : "ready"}>
@@ -254,7 +254,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
         <Metric label="供应商候选报价" value={formatCount(summary.offers)} />
         <Metric label="已抓到成本" value={formatCount(summary.priced)} />
         <Metric label="利润通过" value={formatCount(summary.passed)} />
-        <Metric label="AI Mock 通过" value={formatCount(summary.aiPassed)} />
+        <Metric label="AI 通过" value={formatCount(summary.aiPassed)} />
       </section>
 
       {result ? (
@@ -660,7 +660,7 @@ function RwEmptyResultNotice({ result }: { result: RaAutoProfitJobResult }) {
 
 function AiSelectionCell({ selection }: { selection?: RaAutoProfitItem["ai_selection"] }) {
   if (!selection) {
-    return <span className={styles.aiPending}>等待 AI mock</span>;
+    return <span className={styles.aiPending}>等待 AI</span>;
   }
   return (
     <div className={styles.aiCell}>

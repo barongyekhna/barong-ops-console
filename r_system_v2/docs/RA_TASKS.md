@@ -1,6 +1,6 @@
 # R-A 产品分析中心任务总文档
 
-更新时间：2026-07-07
+更新时间：2026-07-08
 
 本文档用于记录 R-A 系列的架构、任务范围、实施顺序和进度状态。R-W 已作为持续抓取与产品仓库层完成，后续利润、成本、供货商、二轮 AI 分析、DTC 判断和最终选品报告均归入 R-A。
 
@@ -21,6 +21,7 @@ R-A 负责：
 
 - 从 R-W 产品库读取候选产品。
 - 对通过产品进行 DeepSeek、GPT、Opus 三层深度分析。
+- 对利润通过产品进行 Rainforest Amazon 页一竞争数据富化。
 - 调用 1688 官方 API 获取真实供货商与成本；真实 API 到位前使用 mock 1688 API 跑通 R-A 闭环。
 - 计算真实利润、毛利、净利、ROI 和风险。
 - 判断 Amazon / DTC / Amazon+DTC / hold / reject 路由。
@@ -34,11 +35,12 @@ R-A 负责：
 R-W 产品库
   -> R-A 候选池
   -> Skill Loader
-  -> DeepSeek 第一层分析（当前为本地 mock）
-  -> GPT 第二层验证（当前为本地 mock）
-  -> Opus 第三层最终判断（当前为本地 mock）
   -> 1688 官方 API / mock 1688 API 成本与供应商分析
   -> 利润计算引擎
+  -> Rainforest 竞争富化
+  -> DeepSeek 第一层分析（真实 provider）
+  -> GPT 第二层验证（真实 4sapi）
+  -> Opus 第三层最终判断（真实 4sapi）
   -> 最终选品报告
   -> Telegram / 前台 UI / 持久化结果
 ```
@@ -68,6 +70,7 @@ DeepSeek provider
 4sapi GPT provider
 4sapi Claude/Opus provider
 Serper provider（仅用于 DTC SEO / Google SERP 弱点分析，不再用于利润成本主链路）
+Rainforest provider（Amazon 页一竞争富化）
 1688 official API provider
 1688 mock API provider
 Profit/cost engine
@@ -81,6 +84,9 @@ Profit/cost engine
 - `RA_GPT_MODEL`
 - `RA_OPUS_MODEL`
 - `SERPER_API_KEY`
+- `RAINFOREST_API_KEY` 或密钥管理中 `rainforest` 绑定
+- `RAINFOREST_MODE=cheap|deep`
+- `RAINFOREST_RECHECK_DAYS=30`
 - `ALIBABA1688_API_KEY` 或密钥管理中 `alibaba1688` 绑定（可保存 AppKey/AppSecret/AccessToken JSON）
 - `RA_1688_COOKIE_PROFILE`
 - `RA_SUPPLIER_CRAWLER_PROXY`
@@ -255,14 +261,12 @@ R-A 需要补齐供应链侧数据：
 - R-W 候选产品读取与候选池写入。
 - mock 1688 supplier discovery worker（真实 API 到位前默认启用）。
 - Profit calculation worker。
-- 本地三层 AI mock worker：DeepSeek mock -> GPT mock -> Opus mock。
+- Rainforest competition enrichment worker。
+- 真实三层 AI worker：DeepSeek -> GPT(4sapi) -> Opus(4sapi)。
 
 待实现或待替换 worker：
 
 - R-A run manager。
-- DeepSeek analysis worker（真实 4sapi/DeepSeek 调用）。
-- GPT validation worker（真实 4sapi GPT 调用）。
-- Opus final decision worker（真实 4sapi Claude/Opus 调用）。
 - 1688 official API supplier discovery worker。
 - Serper SEO/SERP enrichment worker（不参与利润成本主链路）。
 - Telegram notification worker。
@@ -309,31 +313,32 @@ R-A 前台必须全部中文化。
 | --- | --- | --- |
 | RA-0 | 审计 R 系列文档并确认 R-A 边界 | 已完成 |
 | RA-1 | 编写 R-A 任务总文档 | 已完成 |
-| RA-2 | 修正 R-A provider 架构，支持 4sapi GPT/Opus | 框架已完成，真实调用未接入 |
-| RA-3 | 建立 R-A 数据表与迁移 | 框架表已完成 |
-| RA-4 | 实现 skill_loader | 已完成，mock AI 使用真实 skill bundle/hash |
+| RA-2 | 修正 R-A provider 架构，支持 4sapi GPT/Opus | 已完成，真实调用已接入 |
+| RA-3 | 建立 R-A 数据表与迁移 | 框架表已完成，竞争快照表运行时确保 |
+| RA-4 | 实现 skill_loader | 已完成，真实 AI 使用真实 skill bundle/hash |
 | RA-5 | 实现 R-A 后端 API | 框架 API 与自动利润任务 API 已完成 |
-| RA-6 | 实现 R-A 中文前端 | 利润 + 多 AI Mock 工作台已完成 |
+| RA-6 | 实现 R-A 中文前端 | 利润 + 多 AI 工作台已完成 |
 | RA-7 | 实现 R-W 候选池导入 | 自动任务链路已完成 |
-| RA-8 | 实现 DeepSeek 第一层分析 | 本地 mock 已完成，真实调用未接入 |
-| RA-9 | 实现 GPT 第二层验证 | 本地 mock 已完成，真实调用未接入 |
-| RA-10 | 实现 Opus 最终判断 | 本地 mock 已完成，真实调用未接入 |
+| RA-8 | 实现 DeepSeek 第一层分析 | 已完成，真实 DeepSeek 调用 |
+| RA-9 | 实现 GPT 第二层验证 | 已完成，真实 4sapi 调用 |
+| RA-10 | 实现 Opus 最终判断 | 已完成，真实 4sapi 调用 |
 | RA-11 | 实现 Serper 1688 候选供应商发现 | 已废弃为主链路，保留为 SEO/SERP 辅助 |
 | RA-12 | 实现 Playwright 1688 页面抓取 | 暂停，等待官方 API；当前使用 mock 1688 API |
 | RA-13 | 实现供应商比价与 3-5 家候选输出 | mock 1688 API 已完成 |
 | RA-14 | 实现利润/成本计算引擎 | 已完成第一版确定性公式 |
-| RA-15 | 实现最终报告与人工确认 | mock AI 报告已写入，人工确认未完成 |
+| RA-15 | 实现最终报告与人工确认 | 真实 AI 报告已写入，人工确认未完成 |
+| RA-15.5 | 实现 Rainforest 竞争富化 | 已完成，cheap search + keyword 缓存 |
 | RA-16 | 实现 Telegram / 通知 | 未开始 |
-| RA-17 | E2E 全链路测试 | 本地 R-W -> mock 1688 -> 利润 -> 多 AI -> 报告链路已覆盖，生产实测仍需继续 |
+| RA-17 | E2E 全链路测试 | 本地 R-W -> mock/官方 1688 -> 利润 -> Rainforest -> 多 AI -> 报告链路已覆盖，生产实测仍需继续 |
 | RA-18 | 生产部署 | 未开始 |
 
 ## 12. 当前阻塞点
 
 - R-A 已从 placeholder 升级为可执行工作台。
-- R-A 自动利润任务可以读取 R-W 候选，写入 R-A 候选池、供应商 mock、利润快照、AI mock 评估、最终决策和报告。
-- Opus / GPT 角色已按 4sapi provider 框架定义，真实调用未接入。
-- DeepSeek / GPT / Opus 当前均为本地 deterministic mock，不消耗真实 key，不代表最终 AI 判断质量。
-- 1688 官方 API key 尚未到位，当前使用 mock 1688 API 跑通流程。
+- R-A 自动利润任务可以读取 R-W 候选，写入 R-A 候选池、供应商报价、利润快照、Rainforest 竞争快照、真实 AI 评估、最终决策和报告。
+- Opus / GPT 角色已按 4sapi provider 真实调用。
+- DeepSeek / GPT / Opus 已从本地 deterministic mock 切换为真实 provider；本地 mock 仅保留为无 key 回归测试。
+- 1688 官方 API 已预留并可调用；在官方 API 不可用时仍可通过 mock 1688 API 跑通流程。
 - Telegram、人工确认、最终进入下一模块的动作尚未完成。
 
 ## 13. 交付标准

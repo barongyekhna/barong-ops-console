@@ -195,6 +195,7 @@ def build_ra_worker_runtime() -> tuple[WorkerRuntimeStatus, RaProfitJobWorker]:
         ("deepseek", binding.deepseek_key),
         ("foursapi", binding.foursapi_key),
         ("serper", binding.serper_key),
+        ("rainforest", binding.rainforest_key),
     ):
         try:
             configured[name] = bool(loader())

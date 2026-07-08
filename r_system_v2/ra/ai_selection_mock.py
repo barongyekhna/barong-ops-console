@@ -491,7 +491,7 @@ def _gpt_layer(
 
     return _layer_decision(
         layer="gpt",
-        model_name="mock-gpt-5.5-xhigh",
+        model_name="mock-gpt-5.5",
         score=score,
         advantages=advantages,
         risks=risks,

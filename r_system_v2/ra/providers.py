@@ -20,6 +20,7 @@ class RAnalysisProviderKeys:
     foursapi: str = ""
     serper: str = ""
     alibaba1688: str = ""
+    rainforest: str = ""
 
     def configured(self) -> dict[str, bool]:
         foursapi_configured = bool(self.foursapi)
@@ -30,6 +31,7 @@ class RAnalysisProviderKeys:
             "foursapi": foursapi_configured,
             "serper": bool(self.serper),
             "alibaba1688": bool(self.alibaba1688),
+            "rainforest": bool(self.rainforest),
         }
 
 
@@ -81,10 +83,10 @@ class RAnalysisProviderBinding:
         return self.secret_manager.get_key("4sapi", self.org_id)
 
     def gpt_key(self) -> str:
-        return self.foursapi_key()
+        return str(self.gpt_config().get("value") or "")
 
     def opus_key(self) -> str:
-        return self.foursapi_key()
+        return str(self.opus_config().get("value") or "")
 
     def serper_key(self) -> str:
         return self.secret_manager.get_key("serper", self.org_id)
@@ -92,12 +94,37 @@ class RAnalysisProviderBinding:
     def alibaba1688_key(self) -> str:
         return self.secret_manager.get_key("alibaba1688", self.org_id)
 
+    def rainforest_key(self) -> str:
+        return self.secret_manager.get_key("rainforest", self.org_id)
+
+    def deepseek_config(self) -> dict[str, Any]:
+        return self.secret_manager.get_secret_config("deepseek", self.org_id)
+
+    def foursapi_config(self) -> dict[str, Any]:
+        return self.secret_manager.get_secret_config("4sapi", self.org_id)
+
+    def gpt_config(self) -> dict[str, Any]:
+        return self._foursapi_role_config(
+            role="gpt",
+            markers=("chatgpt", "chat gpt", "gpt", "openai"),
+        )
+
+    def opus_config(self) -> dict[str, Any]:
+        return self._foursapi_role_config(
+            role="opus",
+            markers=("opus", "claude", "anthropic", "claude_opus"),
+        )
+
+    def rainforest_config(self) -> dict[str, Any]:
+        return self.secret_manager.get_secret_config("rainforest", self.org_id)
+
     def all_keys(self) -> RAnalysisProviderKeys:
         return RAnalysisProviderKeys(
             deepseek=self.deepseek_key(),
             foursapi=self.foursapi_key(),
             serper=self.serper_key(),
             alibaba1688=self.alibaba1688_key(),
+            rainforest=self.rainforest_key(),
         )
 
     def status(self) -> dict[str, Any]:
@@ -107,6 +134,9 @@ class RAnalysisProviderBinding:
         )
         alibaba_ready = any(
             item.role == "alibaba1688" and item.configured for item in role_statuses
+        )
+        rainforest_ready = any(
+            item.role == "rainforest" and item.configured for item in role_statuses
         )
         supplier_source_mode = os.getenv(
             "RA_SUPPLIER_SOURCE_MODE",
@@ -120,6 +150,7 @@ class RAnalysisProviderBinding:
                 "opus": "4sapi",
                 "serper": "serper",
                 "alibaba1688": supplier_source_mode,
+                "rainforest": "rainforest",
             },
             "supplier_source_mode": supplier_source_mode,
             "official_1688_configured": alibaba_ready,
@@ -128,14 +159,17 @@ class RAnalysisProviderBinding:
                 "auto_1688_api",
             }
             or alibaba_ready,
-            "external_calls_enabled": serper_ready or alibaba_ready,
+            "competition_provider_ready": rainforest_ready,
+            "external_calls_enabled": serper_ready or alibaba_ready or rainforest_ready,
         }
 
     def role_statuses(self) -> list[RAnalysisProviderStatus]:
         deepseek = self._secret_status("deepseek")
-        foursapi = self._secret_status("4sapi")
+        gpt = self._role_secret_status("gpt")
+        opus = self._role_secret_status("opus")
         serper = self._secret_status("serper")
         alibaba1688 = self._secret_status("alibaba1688")
+        rainforest = self._secret_status("rainforest")
         return [
             RAnalysisProviderStatus(
                 role="deepseek",
@@ -152,23 +186,25 @@ class RAnalysisProviderBinding:
                 role="gpt",
                 service="4sapi",
                 label="GPT 第二层上下文验证",
-                configured=foursapi["configured"],
-                source=foursapi["source"],
+                configured=gpt["configured"],
+                source=gpt["source"],
                 model_env="RA_GPT_MODEL",
-                model_name=os.getenv("RA_GPT_MODEL", ""),
+                model_name=os.getenv("RA_GPT_MODEL", "gpt-5.5"),
                 base_url_env="FOURSAPI_BASE_URL",
-                base_url_configured=bool(os.getenv("FOURSAPI_BASE_URL", "").strip()),
+                base_url_configured=bool(os.getenv("FOURSAPI_BASE_URL", "").strip())
+                or bool(gpt.get("url")),
             ),
             RAnalysisProviderStatus(
                 role="opus",
                 service="4sapi",
                 label="Opus 第三层最终决策",
-                configured=foursapi["configured"],
-                source=foursapi["source"],
+                configured=opus["configured"],
+                source=opus["source"],
                 model_env="RA_OPUS_MODEL",
-                model_name=os.getenv("RA_OPUS_MODEL", ""),
+                model_name=os.getenv("RA_OPUS_MODEL", "claude-opus-4-8-thinking"),
                 base_url_env="FOURSAPI_BASE_URL",
-                base_url_configured=bool(os.getenv("FOURSAPI_BASE_URL", "").strip()),
+                base_url_configured=bool(os.getenv("FOURSAPI_BASE_URL", "").strip())
+                or bool(opus.get("url")),
             ),
             RAnalysisProviderStatus(
                 role="serper",
@@ -185,6 +221,16 @@ class RAnalysisProviderBinding:
                 source=alibaba1688["source"],
                 base_url_env="RA_1688_OPEN_API_BASE_URL",
                 base_url_configured=bool(os.getenv("RA_1688_OPEN_API_BASE_URL", "").strip()),
+            ),
+            RAnalysisProviderStatus(
+                role="rainforest",
+                service="rainforest",
+                label="Rainforest 亚马逊竞争页一数据",
+                configured=rainforest["configured"],
+                source=rainforest["source"],
+                base_url_env="RAINFOREST_BASE_URL",
+                base_url_configured=bool(os.getenv("RAINFOREST_BASE_URL", "").strip())
+                or bool(rainforest.get("url")),
             ),
             RAnalysisProviderStatus(
                 role="mock_1688_api",
@@ -208,4 +254,102 @@ class RAnalysisProviderBinding:
             "service": service,
             "configured": bool(status.get("configured")),
             "source": str(status.get("source") or "api_key_orchestration"),
+            "url": status.get("url"),
         }
+
+    def _role_secret_status(self, role: str) -> dict[str, Any]:
+        try:
+            config = self.gpt_config() if role == "gpt" else self.opus_config()
+        except SecretManagerError:
+            return {
+                "service": "4sapi",
+                "configured": False,
+                "source": "api_key_orchestration_missing",
+            }
+        return {
+            "service": "4sapi",
+            "configured": bool(config.get("value")),
+            "source": "api_key_orchestration_role_match",
+            "url": config.get("url"),
+        }
+
+    def _foursapi_role_config(
+        self,
+        *,
+        role: str,
+        markers: tuple[str, ...],
+    ) -> dict[str, Any]:
+        db = getattr(self.secret_manager, "db_session", None)
+        if db is None:
+            return self.foursapi_config()
+        try:
+            candidates = _resolve_r_analysis_key_candidates(db, self.org_id)
+        except Exception:
+            return self.foursapi_config()
+        fallback: dict[str, Any] | None = None
+        for candidate in candidates:
+            marker_text = " ".join(
+                str(candidate.get(name) or "").lower()
+                for name in ("name", "key_alias", "key_type", "provider")
+            )
+            if fallback is None:
+                fallback = candidate
+            if any(marker in marker_text for marker in markers):
+                return {**candidate, "role": role}
+        if fallback is not None:
+            return {**fallback, "role": role}
+        return self.foursapi_config()
+
+
+def _resolve_r_analysis_key_candidates(db: Any, org_id: str) -> list[dict[str, Any]]:
+    try:
+        from backend.app.services.api_key_orchestration import (
+            ApiKeyIsolationError,
+            ApiKeyOrchestrationError,
+            resolve_module_api_key_candidates_for_injection,
+        )
+    except ImportError:
+        from app.services.api_key_orchestration import (  # type: ignore[no-redef]
+            ApiKeyIsolationError,
+            ApiKeyOrchestrationError,
+            resolve_module_api_key_candidates_for_injection,
+        )
+    try:
+        contexts = resolve_module_api_key_candidates_for_injection(
+            db,
+            org_id=org_id,
+            module_id="r.analysis",
+            key_aliases=("4sapi", "chatgpt", "claude_opus", "openai"),
+        )
+    except (ApiKeyIsolationError, ApiKeyOrchestrationError) as exc:
+        raise SecretManagerError(str(exc)) from exc
+    output: list[dict[str, Any]] = []
+    for context in contexts:
+        raw_key = _raw_key_from_context(context)
+        if not raw_key:
+            continue
+        output.append(
+            {
+                "service": "openai",
+                "value": raw_key,
+                "key": raw_key,
+                "url": str(getattr(context, "url", "") or "").strip() or None,
+                "name": str(getattr(context, "name", "") or "").strip() or None,
+                "key_type": str(getattr(context, "key_type", "") or "").strip() or None,
+                "provider": str(getattr(context, "provider", "") or "").strip() or None,
+                "module_id": str(getattr(context, "module_id", "") or "").strip(),
+                "key_alias": str(getattr(context, "key_alias", "") or "").strip(),
+                "key_id": str(getattr(context, "key_id", "") or "").strip(),
+            }
+        )
+    return output
+
+
+def _raw_key_from_context(context: Any) -> str:
+    query_value = getattr(context, "query_param_value", None)
+    if isinstance(query_value, str) and query_value.strip():
+        return query_value.strip()
+    header_value = str(getattr(context, "header_value", "") or "").strip()
+    if header_value.lower().startswith("bearer "):
+        return header_value[7:].strip()
+    return header_value

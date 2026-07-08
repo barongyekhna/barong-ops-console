@@ -15,10 +15,10 @@ from uuid import uuid4
 from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from r_system_v2.ra.ai_selection_mock import (
-    load_mock_ai_selection_by_candidate,
-    load_mock_ai_selection_for_run,
-    run_mock_ai_selection_for_run,
+from r_system_v2.ra.ai_selection import (
+    load_ai_selection_by_candidate,
+    load_ai_selection_for_run,
+    run_ai_selection_for_run,
 )
 from r_system_v2.ra.auto_profit import (
     DEFAULT_SUPPLIER_LIMIT,
@@ -70,7 +70,8 @@ def create_auto_profit_job(
         "target_profit_pass": _target_profit_pass(),
         "max_products_per_job": _max_products_per_job(),
         "min_gross_margin": _number(min_gross_margin),
-        "run_ai_mock": bool(run_ai_mock),
+        "run_ai_chain": bool(run_ai_mock),
+        "run_ai_mock": False,
         "selection_channel": _selection_channel(selection_channel),
     }
     counts = _initial_counts(filters)
@@ -219,7 +220,7 @@ class RaProfitJobWorker:
             filters.get("supplier_limit") or DEFAULT_SUPPLIER_LIMIT
         )
         min_gross_margin = decimal_value(filters.get("min_gross_margin"))
-        run_ai_mock = filters.get("run_ai_mock") is not False
+        run_ai_chain = filters.get("run_ai_chain", filters.get("run_ai_mock")) is not False
         selection_channel = _selection_channel(filters.get("selection_channel") or "amazon")
         quote = get_usd_cny_quote()
         target_profit_pass = _target_profit_pass(filters.get("target_profit_pass"))
@@ -328,8 +329,8 @@ class RaProfitJobWorker:
                 row = _load_job_row(db, org_id=org_id, run_id=run_id)
                 counts = _dict_value(row.get("counts") if row else {})
                 counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
-                if run_ai_mock and int(counts.get("profit_pass") or 0) > 0:
-                    ai_result = run_mock_ai_selection_for_run(
+                if run_ai_chain and int(counts.get("profit_pass") or 0) > 0:
+                    ai_result = run_ai_selection_for_run(
                         db,
                         org_id=org_id,
                         run_id=run_id,
@@ -888,7 +889,7 @@ def _job_payload(
         sort=item_sort,
         sort_direction=item_sort_direction,
     )
-    ai_selection = load_mock_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
+    ai_selection = load_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
     db.rollback()
     quote = get_usd_cny_quote()
     return {
@@ -980,7 +981,7 @@ def _job_items(
         run_id=run_id,
         candidate_ids=candidate_ids,
     )
-    ai_by_candidate = load_mock_ai_selection_by_candidate(db, org_id=org_id, run_id=run_id)
+    ai_by_candidate = load_ai_selection_by_candidate(db, org_id=org_id, run_id=run_id)
     snapshot_statement = (
         text(
             """
@@ -1168,6 +1169,9 @@ def _job_candidate_page(
         clauses.append(
             """c.candidate_status IN (
               'profit_passed',
+              'ai_passed',
+              'ai_rejected',
+              'ai_review',
               'ai_mock_passed',
               'ai_mock_rejected',
               'ai_mock_review'
@@ -1180,6 +1184,9 @@ def _job_candidate_page(
             """c.candidate_status NOT IN (
               'profit_passed',
               'profit_rejected',
+              'ai_passed',
+              'ai_rejected',
+              'ai_review',
               'ai_mock_passed',
               'ai_mock_rejected',
               'ai_mock_review'
@@ -1934,6 +1941,9 @@ def _live_counts(db: Session, *, org_id: str, run_id: str) -> dict[str, int]:
               COUNT(DISTINCT c.source_asin) FILTER (
                 WHERE c.candidate_status IN (
                   'profit_passed',
+                  'ai_passed',
+                  'ai_rejected',
+                  'ai_review',
                   'ai_mock_passed',
                   'ai_mock_rejected',
                   'ai_mock_review'
@@ -1986,8 +1996,8 @@ def _initial_counts(filters: dict[str, Any]) -> dict[str, object]:
         "ai_review": 0,
         "final_decisions": 0,
         "reports": 0,
-        "mock_ai_enabled": bool(filters.get("run_ai_mock") is not False),
-        "mock_ai_version": None,
+        "real_ai_enabled": bool(filters.get("run_ai_chain", filters.get("run_ai_mock")) is not False),
+        "ai_pipeline_version": None,
         "rw_empty_result": False,
         "empty_reason": None,
         "empty_recommendation": None,
