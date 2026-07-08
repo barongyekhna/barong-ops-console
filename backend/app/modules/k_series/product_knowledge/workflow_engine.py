@@ -25,6 +25,12 @@ from ....services.module_execution_gate import (
     require_module_execution_ready,
 )
 from .constants import MODULE_KEY, TARGET_ORGANIZATION_NAME
+from .prompt_skills import (
+    copy_skill_context_for_channel,
+    image_art_direction_instruction,
+    image_art_direction_skill_context,
+    marketing_copy_instruction,
+)
 from .errors import KProductNotFoundError
 from .models import (
     KProductKnowledgeAIEvent,
@@ -3396,6 +3402,24 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             "UNIT_NORMALIZED",
             step="unit_conversion_normalization",
         )
+        if not product.marketing_copy_json:
+            execution.status = "blocked"
+            execution.current_step = "marketing_copy_generation"
+            execution.error_report_json = self._error_report(
+                execution,
+                code="MARKETING_COPY_REQUIRED",
+                message="Generate the product marketing copy before export.",
+                step="marketing_copy_generation",
+            )
+            self._append_trace(
+                execution,
+                "marketing_copy_generation",
+                "blocked",
+                error=execution.error_report_json,
+            )
+            self.db.add_all([product, execution])
+            self.db.flush()
+            return execution
         if not self._image_is_bound(product, execution):
             execution.status = "blocked"
             execution.current_step = "image_binding"
@@ -3419,6 +3443,123 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         self.db.add_all([product, execution])
         self.db.flush()
         return execution
+
+    def generate_marketing_copy(
+        self,
+        *,
+        product_id: UUID,
+        scope_context: KScopeContext,
+        request: Request,
+        user: User,
+    ) -> KProductKnowledgeProduct:
+        """On-demand: AI writes the channel-appropriate listing/page copy.
+
+        Machine does the work, operator reviews: the copy is stored on the
+        product but nothing is published; export still requires human approval.
+        """
+        product = self._require_product(product_id, scope_context)
+        channel = (product.channel or "dtc").strip().lower()
+        skill = copy_skill_context_for_channel(channel)
+        gate_context = self.gate_resolver(
+            self.db,
+            module_id=MODULE_KEY,
+            user=user,
+            request=request,
+            key_requirements={"marketing_copy_generation": "chatgpt"},
+        )
+        key = gate_context.key_for_step("marketing_copy_generation")
+        ai_input = {
+            "module_id": MODULE_KEY,
+            "task": "marketing_copy_generation",
+            "channel": channel,
+            "instruction": marketing_copy_instruction(channel),
+            "copy_skill": skill,
+            "product": _product_snapshot(product),
+        }
+        result = self._execute_provider(
+            provider="chatgpt",
+            task_type="generate",
+            key=key,
+            gate_context=gate_context,
+            payload=ai_input,
+        )
+        product.marketing_copy_json = result
+        product.marketing_copy_skill_version = skill["version"]
+        product.updated_by_user_id = _user_uuid(user)
+        self._add_ai_event(
+            product=product,
+            execution=self._latest_execution(product),
+            event_type="marketing_copy_generation",
+            provider_key=key,
+            ai_input=ai_input,
+            result=result,
+            user=user,
+        )
+        self.db.add(product)
+        self.db.flush()
+        return product
+
+    def generate_image_brief(
+        self,
+        *,
+        product_id: UUID,
+        scope_context: KScopeContext,
+        request: Request,
+        user: User,
+    ) -> KProductKnowledgeProduct:
+        """On-demand: AI turns the finished copy into an image art-direction brief.
+
+        Not a hard gate for export (only images are); this brief drives the
+        follow-up 'go to I to make images' handoff.
+        """
+        product = self._require_product(product_id, scope_context)
+        if not product.marketing_copy_json:
+            raise KWorkflowExecutionError(
+                "MARKETING_COPY_REQUIRED_FOR_IMAGE_BRIEF",
+                "Generate the marketing copy before the image art-direction brief.",
+                status_code=409,
+            )
+        channel = (product.channel or "dtc").strip().lower()
+        skill = image_art_direction_skill_context()
+        gate_context = self.gate_resolver(
+            self.db,
+            module_id=MODULE_KEY,
+            user=user,
+            request=request,
+            key_requirements={"image_brief_generation": "chatgpt"},
+        )
+        key = gate_context.key_for_step("image_brief_generation")
+        ai_input = {
+            "module_id": MODULE_KEY,
+            "task": "image_brief_generation",
+            "channel": channel,
+            "instruction": image_art_direction_instruction(),
+            "art_direction_skill": skill,
+            "product": _product_snapshot(product),
+            "marketing_copy": product.marketing_copy_json,
+        }
+        result = self._execute_provider(
+            provider="chatgpt",
+            task_type="generate",
+            key=key,
+            gate_context=gate_context,
+            payload=ai_input,
+        )
+        product.image_instruction_json = result
+        product.image_instruction_skill_version = skill["version"]
+        product.updated_by_user_id = _user_uuid(user)
+        self._add_ai_event(
+            product=product,
+            execution=self._latest_execution(product),
+            event_type="image_brief_generation",
+            provider_key=key,
+            ai_input=ai_input,
+            result=result,
+            user=user,
+        )
+        self.db.add(product)
+        self.db.flush()
+        return product
 
     def _bind_image(
         self,
