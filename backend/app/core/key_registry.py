@@ -131,6 +131,20 @@ KEY_TYPE_REGISTRY: dict[str, dict[str, Any]] = {
         "adapter": "KeepaAdapter",
         "module_ids": ["r.warehouse"],
     },
+    "rainforest": {
+        "type": "rainforest",
+        "name": "Rainforest API",
+        "description": "Real-time Amazon page-one search/product data for R-A competition metrics",
+        "provider": "rainforest",
+        "auth_type": "api_key",
+        "enabled": True,
+        "scope": ["R-A"],
+        "validation_endpoint": None,
+        "default_url": "https://api.rainforestapi.com",
+        "default_alias": "rainforest",
+        "adapter": None,
+        "module_ids": ["r.analysis"],
+    },
 }
 
 KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
@@ -142,6 +156,7 @@ KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
     "serp": ("serp", "serper"),
     "alibaba1688": ("1688", "alibaba1688", "open.1688.com", "阿里巴巴开放平台"),
     "n8n": ("n8n", "webhook"),
+    "rainforest": ("rainforest", "rainforestapi", "api.rainforestapi.com"),
 }
 
 
@@ -171,6 +186,7 @@ def list_key_type_definitions() -> list[dict[str, Any]]:
         "chatgpt",
         "claude_opus",
         "serp",
+        "rainforest",
         "n8n",
         "custom",
     ]

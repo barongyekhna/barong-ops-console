@@ -9,7 +9,8 @@ export type ApiKeyType =
   | "deepseek"
   | "n8n"
   | "keepa"
-  | "alibaba1688";
+  | "alibaba1688"
+  | "rainforest";
 
 export type ApiKeyTypeOption = {
   type: ApiKeyType;
@@ -54,6 +55,13 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     description: "1688 开放平台 AppKey / AppSecret / Access Token",
     defaultUrl: "https://open.1688.com",
     defaultAlias: "alibaba1688",
+  },
+  {
+    type: "rainforest",
+    label: "Rainforest API",
+    description: "亚马逊页一实时数据(R-A 竞争指标:评论墙 / 品牌份额 / 新品占比)",
+    defaultUrl: "https://api.rainforestapi.com",
+    defaultAlias: "rainforest",
   },
   {
     type: "custom",
