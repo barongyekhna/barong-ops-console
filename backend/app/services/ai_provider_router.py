@@ -45,9 +45,9 @@ MODEL_REGISTRY: dict[str, dict[str, str | None]] = {
         "selling_points": "deepseek-v4-pro",
     },
     "chatgpt": {
-        "default": "gpt-5.5-xhigh",
-        "chat": "gpt-5.5-xhigh",
-        "generate": "gpt-5.5-xhigh",
+        "default": "gpt-5.5",
+        "chat": "gpt-5.5",
+        "generate": "gpt-5.5",
     },
     "claude": {
         "default": "claude-opus-4-8-thinking",
