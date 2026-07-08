@@ -133,6 +133,7 @@ from .workflow_engine import (
     _user_uuid,
 )
 from ....services.module_execution_gate import ModuleExecutionGateError
+from .generation_jobs import enqueue_generation_jobs, jobs_status
 from .prompt_skills import (
     SELLING_POINTS_SKILL_VERSION,
     selling_points_instruction,
@@ -4020,147 +4021,109 @@ def bind_product_image(
     return ProductKnowledgeWorkflowExecutionRead.model_validate(execution)
 
 
-class ProductCopyGenerationResponse(BaseModel):
-    product_id: UUID
-    channel: str
+class GenerationJobItem(BaseModel):
+    job_id: str
+    product_id: str
+    job_type: str
+    status: str
+    error: str | None = None
     skill_version: str | None = None
-    marketing_copy: Any | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
 
 
-class ProductImageBriefResponse(BaseModel):
-    product_id: UUID
-    channel: str
-    skill_version: str | None = None
-    image_instruction: Any | None = None
+class GenerationEnqueueResponse(BaseModel):
+    batch_id: str
+    jobs: list[GenerationJobItem]
+
+
+class GenerationJobsStatusResponse(BaseModel):
+    jobs: list[GenerationJobItem]
 
 
 class ProductGenerateBatchRequest(BaseModel):
     product_ids: list[UUID]
 
 
-class ProductGenerateBatchItem(BaseModel):
-    product_id: UUID
-    status: str
-    skill_version: str | None = None
-    error: str | None = None
-
-
-class ProductGenerateBatchResponse(BaseModel):
-    requested: int
-    succeeded: int
-    failed: int
-    results: list[ProductGenerateBatchItem]
+def _enqueue_generation(
+    product_ids: list[UUID],
+    job_type: str,
+    request: Request,
+    db: Session,
+    user: User,
+) -> GenerationEnqueueResponse:
+    scope_context = _scope_context(request)
+    for product_id in product_ids:
+        try:
+            get_product(db, product_id=product_id, scope_context=scope_context)
+        except KProductKnowledgeError as exc:
+            _raise_k_error(exc)
+    batch_id, jobs = enqueue_generation_jobs(
+        db,
+        product_ids=product_ids,
+        job_type=job_type,
+        user=user,
+        scope_context=scope_context,
+    )
+    db.commit()
+    return GenerationEnqueueResponse(
+        batch_id=str(batch_id),
+        jobs=[GenerationJobItem(**job) for job in jobs],
+    )
 
 
 @router.post(
     "/products/{product_id}/generate-copy",
-    response_model=ProductCopyGenerationResponse,
+    response_model=GenerationEnqueueResponse,
 )
 def product_knowledge_generate_copy(
     product_id: UUID,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
-) -> ProductCopyGenerationResponse:
-    try:
-        product = KWorkflowOrchestratorV2(db).generate_marketing_copy(
-            product_id=product_id,
-            scope_context=_scope_context(request),
-            request=request,
-            user=user,
-        )
-        db.commit()
-    except KProductKnowledgeError as exc:
-        _raise_k_error(exc)
-    except KWorkflowExecutionError as exc:
-        raise _workflow_error(exc) from exc
-    except ModuleExecutionGateError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    return ProductCopyGenerationResponse(
-        product_id=product.id,
-        channel=product.channel,
-        skill_version=product.marketing_copy_skill_version,
-        marketing_copy=product.marketing_copy_json,
-    )
+) -> GenerationEnqueueResponse:
+    return _enqueue_generation([product_id], "marketing_copy", request, db, user)
 
 
 @router.post(
     "/products/{product_id}/generate-image-brief",
-    response_model=ProductImageBriefResponse,
+    response_model=GenerationEnqueueResponse,
 )
 def product_knowledge_generate_image_brief(
     product_id: UUID,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
-) -> ProductImageBriefResponse:
-    try:
-        product = KWorkflowOrchestratorV2(db).generate_image_brief(
-            product_id=product_id,
-            scope_context=_scope_context(request),
-            request=request,
-            user=user,
-        )
-        db.commit()
-    except KProductKnowledgeError as exc:
-        _raise_k_error(exc)
-    except KWorkflowExecutionError as exc:
-        raise _workflow_error(exc) from exc
-    except ModuleExecutionGateError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-    return ProductImageBriefResponse(
-        product_id=product.id,
-        channel=product.channel,
-        skill_version=product.image_instruction_skill_version,
-        image_instruction=product.image_instruction_json,
-    )
+) -> GenerationEnqueueResponse:
+    return _enqueue_generation([product_id], "image_brief", request, db, user)
 
 
 @router.post(
     "/products/generate-copy/batch",
-    response_model=ProductGenerateBatchResponse,
+    response_model=GenerationEnqueueResponse,
 )
 def product_knowledge_generate_copy_batch(
     payload: ProductGenerateBatchRequest,
     request: Request,
     db: Session = Depends(get_db),
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
-) -> ProductGenerateBatchResponse:
-    scope_context = _scope_context(request)
-    orchestrator = KWorkflowOrchestratorV2(db)
-    results: list[ProductGenerateBatchItem] = []
-    for product_id in payload.product_ids:
-        try:
-            product = orchestrator.generate_marketing_copy(
-                product_id=product_id,
-                scope_context=scope_context,
-                request=request,
-                user=user,
-            )
-            db.commit()
-            results.append(
-                ProductGenerateBatchItem(
-                    product_id=product_id,
-                    status="ok",
-                    skill_version=product.marketing_copy_skill_version,
-                )
-            )
-        except Exception as exc:  # noqa: BLE001 - batch isolates per-item failures
-            db.rollback()
-            results.append(
-                ProductGenerateBatchItem(
-                    product_id=product_id,
-                    status="error",
-                    error=str(exc)[:300],
-                )
-            )
-    succeeded = sum(1 for item in results if item.status == "ok")
-    return ProductGenerateBatchResponse(
-        requested=len(payload.product_ids),
-        succeeded=succeeded,
-        failed=len(results) - succeeded,
-        results=results,
-    )
+) -> GenerationEnqueueResponse:
+    return _enqueue_generation(payload.product_ids, "marketing_copy", request, db, user)
+
+
+@router.get(
+    "/products/{product_id}/generation-jobs",
+    response_model=GenerationJobsStatusResponse,
+)
+def product_knowledge_generation_jobs(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> GenerationJobsStatusResponse:
+    del request, user
+    rows = jobs_status(db, product_id=product_id)
+    return GenerationJobsStatusResponse(jobs=[GenerationJobItem(**row) for row in rows])
 
 
 @router.delete("/media/{asset_id}", response_model=MediaAssetRead)

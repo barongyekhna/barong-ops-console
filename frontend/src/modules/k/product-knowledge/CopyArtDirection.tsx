@@ -2,22 +2,25 @@
 
 import { ArrowUpRight, ClipboardList, LoaderCircle, Sparkles } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
   generateProductCopy,
   generateProductImageBrief,
-  type ProductCopyGenerationResult,
-  type ProductImageBriefResult,
+  getGenerationJobs,
+  getProduct,
+  type GenerationJob,
 } from "./api";
 import styles from "./ProductKnowledge.module.css";
 
 type CopyArtDirectionProps = {
   productId: string;
   channel?: string | null;
-  initialCopy?: unknown;
-  initialImageBrief?: unknown;
 };
+
+type SectionStatus = "idle" | "generating" | "done" | "failed";
+
+const POLL_MS = 4000;
 
 function channelLabel(channel?: string | null) {
   return channel === "amazon" ? "亚马逊" : "独立站";
@@ -27,49 +30,162 @@ function errorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-export function CopyArtDirection({
-  productId,
-  channel,
-  initialCopy,
-  initialImageBrief,
-}: CopyArtDirectionProps) {
-  const [copy, setCopy] = useState<unknown>(initialCopy ?? null);
-  const [copyChannel, setCopyChannel] = useState<string | null>(channel ?? null);
-  const [copyBusy, setCopyBusy] = useState(false);
-  const [copyError, setCopyError] = useState<string | null>(null);
+function latestJob(jobs: GenerationJob[], jobType: string): GenerationJob | undefined {
+  // backend returns newest-first
+  return jobs.find((job) => job.job_type === jobType);
+}
 
-  const [brief, setBrief] = useState<unknown>(initialImageBrief ?? null);
-  const [briefBusy, setBriefBusy] = useState(false);
-  const [briefError, setBriefError] = useState<string | null>(null);
-
+export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) {
   const router = useRouter();
 
+  const [copy, setCopy] = useState<unknown>(null);
+  const [copyChannel, setCopyChannel] = useState<string | null>(channel ?? null);
+  const [copyStatus, setCopyStatus] = useState<SectionStatus>("idle");
+  const [copyError, setCopyError] = useState<string | null>(null);
+
+  const [brief, setBrief] = useState<unknown>(null);
+  const [briefStatus, setBriefStatus] = useState<SectionStatus>("idle");
+  const [briefError, setBriefError] = useState<string | null>(null);
+
+  const timers = useRef<number[]>([]);
+  const mounted = useRef(true);
+
+  const clearTimers = useCallback(() => {
+    for (const id of timers.current) {
+      window.clearTimeout(id);
+    }
+    timers.current = [];
+  }, []);
+
+  const loadResult = useCallback(async (jobType: "marketing_copy" | "image_brief") => {
+    const product = await getProduct(productId);
+    if (!mounted.current) {
+      return;
+    }
+    if (jobType === "marketing_copy") {
+      setCopy((product as { marketing_copy_json?: unknown }).marketing_copy_json ?? null);
+      setCopyChannel((product as { channel?: string | null }).channel ?? channel ?? null);
+      setCopyStatus("done");
+    } else {
+      setBrief((product as { image_instruction_json?: unknown }).image_instruction_json ?? null);
+      setBriefStatus("done");
+    }
+  }, [productId, channel]);
+
+  const poll = useCallback(
+    async (jobType: "marketing_copy" | "image_brief") => {
+      if (!mounted.current) {
+        return;
+      }
+      try {
+        const jobs = await getGenerationJobs(productId);
+        const job = latestJob(jobs, jobType);
+        if (!mounted.current) {
+          return;
+        }
+        if (job && job.status === "completed") {
+          await loadResult(jobType);
+          return;
+        }
+        if (job && job.status === "failed") {
+          if (jobType === "marketing_copy") {
+            setCopyStatus("failed");
+            setCopyError(job.error || "生成失败，请重试。");
+          } else {
+            setBriefStatus("failed");
+            setBriefError(job.error || "生成失败（需先有文案）。");
+          }
+          return;
+        }
+        // pending / running / not-yet-visible -> keep polling
+        const id = window.setTimeout(() => void poll(jobType), POLL_MS);
+        timers.current.push(id);
+      } catch (error) {
+        if (!mounted.current) {
+          return;
+        }
+        if (jobType === "marketing_copy") {
+          setCopyStatus("failed");
+          setCopyError(errorMessage(error, "查询生成状态失败。"));
+        } else {
+          setBriefStatus("failed");
+          setBriefError(errorMessage(error, "查询生成状态失败。"));
+        }
+      }
+    },
+    [productId, loadResult],
+  );
+
+  // On mount: show any existing content + resume polling for in-flight jobs.
+  useEffect(() => {
+    mounted.current = true;
+    void (async () => {
+      try {
+        const product = await getProduct(productId);
+        if (!mounted.current) {
+          return;
+        }
+        const existingCopy = (product as { marketing_copy_json?: unknown }).marketing_copy_json;
+        const existingBrief = (product as { image_instruction_json?: unknown }).image_instruction_json;
+        if (existingCopy) {
+          setCopy(existingCopy);
+          setCopyStatus("done");
+        }
+        if (existingBrief) {
+          setBrief(existingBrief);
+          setBriefStatus("done");
+        }
+        setCopyChannel((product as { channel?: string | null }).channel ?? channel ?? null);
+        const jobs = await getGenerationJobs(productId);
+        if (!mounted.current) {
+          return;
+        }
+        const copyJob = latestJob(jobs, "marketing_copy");
+        if (copyJob && (copyJob.status === "pending" || copyJob.status === "running")) {
+          setCopyStatus("generating");
+          void poll("marketing_copy");
+        }
+        const briefJob = latestJob(jobs, "image_brief");
+        if (briefJob && (briefJob.status === "pending" || briefJob.status === "running")) {
+          setBriefStatus("generating");
+          void poll("image_brief");
+        }
+      } catch {
+        // best-effort hydrate; leave sections idle on error
+      }
+    })();
+    return () => {
+      mounted.current = false;
+      clearTimers();
+    };
+  }, [productId, channel, poll, clearTimers]);
+
   const handleGenerateCopy = async () => {
-    setCopyBusy(true);
+    setCopyStatus("generating");
     setCopyError(null);
     try {
-      const result: ProductCopyGenerationResult = await generateProductCopy(productId);
-      setCopy(result.marketing_copy ?? null);
-      setCopyChannel(result.channel);
+      await generateProductCopy(productId);
+      void poll("marketing_copy");
     } catch (error) {
-      setCopyError(errorMessage(error, "生成文案失败，请重试。"));
-    } finally {
-      setCopyBusy(false);
+      setCopyStatus("failed");
+      setCopyError(errorMessage(error, "提交生成任务失败，请重试。"));
     }
   };
 
   const handleGenerateBrief = async () => {
-    setBriefBusy(true);
+    setBriefStatus("generating");
     setBriefError(null);
     try {
-      const result: ProductImageBriefResult = await generateProductImageBrief(productId);
-      setBrief(result.image_instruction ?? null);
+      await generateProductImageBrief(productId);
+      void poll("image_brief");
     } catch (error) {
-      setBriefError(errorMessage(error, "生成作图指令失败（需先生成文案）。"));
-    } finally {
-      setBriefBusy(false);
+      setBriefStatus("failed");
+      setBriefError(errorMessage(error, "提交生成任务失败（需先有文案）。"));
     }
   };
+
+  const copyBusy = copyStatus === "generating";
+  const briefBusy = briefStatus === "generating";
 
   return (
     <>
@@ -91,12 +207,16 @@ export function CopyArtDirection({
               ) : (
                 <Sparkles aria-hidden="true" size={16} />
               )}
-              {copy ? "重新生成" : "生成文案"}
+              {copyBusy ? "后台生成中…" : copy ? "重新生成" : "生成文案"}
             </button>
           </div>
         </div>
         {copyError ? <p className={styles.sellingPointsError}>{copyError}</p> : null}
-        {copy ? (
+        {copyBusy ? (
+          <p className={styles.copyReviewHint}>
+            AI 正在后台生成完整文案（约 1–2 分钟）—— 你可以先去忙别的，完成后这里会自动显示。
+          </p>
+        ) : copy ? (
           <div className={styles.sellingPointsResult}>
             <p className={styles.copyReviewHint}>
               AI 已写好草稿 —— 机器干活，你把关。审核无误后再进入 P。
@@ -129,14 +249,12 @@ export function CopyArtDirection({
               ) : (
                 <ClipboardList aria-hidden="true" size={16} />
               )}
-              {brief ? "重新生成" : "生成作图指令"}
+              {briefBusy ? "后台生成中…" : brief ? "重新生成" : "生成作图指令"}
             </button>
             <button
               className="secondary-button"
               disabled={!brief}
-              onClick={() =>
-                router.push(`/image-system?product_id=${productId}`)
-              }
+              onClick={() => router.push(`/image-system?product_id=${productId}`)}
               title={brief ? "带作图指令去 I 作图" : "请先生成作图指令"}
               type="button"
             >
@@ -146,7 +264,9 @@ export function CopyArtDirection({
           </div>
         </div>
         {briefError ? <p className={styles.sellingPointsError}>{briefError}</p> : null}
-        {brief ? (
+        {briefBusy ? (
+          <p className={styles.copyReviewHint}>AI 正在后台生成整套作图指令（约 1–2 分钟）…</p>
+        ) : brief ? (
           <div className={styles.sellingPointsResult}>
             <p className={styles.copyReviewHint}>
               AI 出的整套作图要求 —— 之后一键「去 I 作图」带过去，你只需上传产品原图。

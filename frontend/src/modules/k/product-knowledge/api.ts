@@ -324,44 +324,52 @@ export async function getProductSellingPoints(
   return readJson<ProductSellingPoints>(response, path);
 }
 
-export type ProductCopyGenerationResult = {
+export type GenerationJob = {
+  job_id: string;
   product_id: string;
-  channel: string;
+  job_type: string;
+  status: string;
+  error: string | null;
   skill_version: string | null;
-  marketing_copy: unknown;
+  started_at?: string | null;
+  finished_at?: string | null;
 };
 
-export type ProductImageBriefResult = {
-  product_id: string;
-  channel: string;
-  skill_version: string | null;
-  image_instruction: unknown;
+export type GenerationEnqueueResult = {
+  batch_id: string;
+  jobs: GenerationJob[];
 };
 
-export async function generateProductCopy(
+async function enqueueGeneration(
   productId: string,
-): Promise<ProductCopyGenerationResult> {
-  const path = `${K_PRODUCTS_PATH}/${productId}/generate-copy`;
+  kind: "generate-copy" | "generate-image-brief",
+): Promise<GenerationEnqueueResult> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/${kind}`;
   const response = await fetch(`${API_PROXY_BASE}${path}`, {
     cache: "no-store",
     headers: buildHeaders(true),
     method: "POST",
   });
-
-  return readJson<ProductCopyGenerationResult>(response, path);
+  return readJson<GenerationEnqueueResult>(response, path);
 }
 
-export async function generateProductImageBrief(
-  productId: string,
-): Promise<ProductImageBriefResult> {
-  const path = `${K_PRODUCTS_PATH}/${productId}/generate-image-brief`;
+export function generateProductCopy(productId: string): Promise<GenerationEnqueueResult> {
+  return enqueueGeneration(productId, "generate-copy");
+}
+
+export function generateProductImageBrief(productId: string): Promise<GenerationEnqueueResult> {
+  return enqueueGeneration(productId, "generate-image-brief");
+}
+
+export async function getGenerationJobs(productId: string): Promise<GenerationJob[]> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/generation-jobs`;
   const response = await fetch(`${API_PROXY_BASE}${path}`, {
     cache: "no-store",
-    headers: buildHeaders(true),
-    method: "POST",
+    headers: buildHeaders(),
+    method: "GET",
   });
-
-  return readJson<ProductImageBriefResult>(response, path);
+  const data = await readJson<{ jobs: GenerationJob[] }>(response, path);
+  return data.jobs ?? [];
 }
 
 export async function getProductReadiness(
