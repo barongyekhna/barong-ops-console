@@ -30,6 +30,7 @@ import {
 import type { KeywordEntry } from "@/modules/k19/keywords/types";
 
 import { mediaAssetFileUrl, mediaAssetThumbnailUrl } from "./api";
+import { CopyArtDirection } from "./CopyArtDirection";
 import styles from "./ProductKnowledge.module.css";
 import {
   displayProductKey,
@@ -1864,6 +1865,13 @@ export function ProductDetail({
           </button>
         </div>
       </section>
+
+      {product ? (
+        <CopyArtDirection
+          productId={product.id}
+          channel={(product as { channel?: string | null }).channel ?? null}
+        />
+      ) : null}
 
       <section className={styles.workflowSection} aria-labelledby="k-p-readiness">
         <div className={styles.sellingPointsHeading}>

@@ -1741,3 +1741,26 @@
   color: var(--mm-ink, #d6e8f6);
   border-color: rgb(57 212 255 / 45%);
 }
+
+.copyReviewHint {
+  margin: 0.4rem 0 0;
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--mm-dim, #7d95ae);
+}
+
+.copyReviewPanel {
+  margin-top: 0.65rem;
+  max-height: 360px;
+  overflow: auto;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--mm-line, rgb(57 212 255 / 18%));
+  border-radius: 12px;
+  background: rgb(6 12 20 / 62%);
+  color: var(--mm-ink, #d6e8f6);
+  font-family: var(--mm-mono, ui-monospace, "SF Mono", Menlo, monospace);
+  font-size: 0.78rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}

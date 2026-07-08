@@ -324,6 +324,46 @@ export async function getProductSellingPoints(
   return readJson<ProductSellingPoints>(response, path);
 }
 
+export type ProductCopyGenerationResult = {
+  product_id: string;
+  channel: string;
+  skill_version: string | null;
+  marketing_copy: unknown;
+};
+
+export type ProductImageBriefResult = {
+  product_id: string;
+  channel: string;
+  skill_version: string | null;
+  image_instruction: unknown;
+};
+
+export async function generateProductCopy(
+  productId: string,
+): Promise<ProductCopyGenerationResult> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/generate-copy`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+
+  return readJson<ProductCopyGenerationResult>(response, path);
+}
+
+export async function generateProductImageBrief(
+  productId: string,
+): Promise<ProductImageBriefResult> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/generate-image-brief`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+
+  return readJson<ProductImageBriefResult>(response, path);
+}
+
 export async function getProductReadiness(
   productId: string,
 ): Promise<ProductReadinessState> {
