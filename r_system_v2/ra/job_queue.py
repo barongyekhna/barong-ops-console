@@ -12,7 +12,7 @@ import time
 from typing import Any, Callable
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from r_system_v2.ra.ai_selection_mock import (
@@ -105,11 +105,28 @@ def get_auto_profit_job(
     *,
     org_id: str,
     run_id: str,
+    item_page: int = 1,
+    item_page_size: int = 50,
+    item_search: str | None = None,
+    item_category: str | None = None,
+    item_verdict: str | None = None,
+    item_sort: str | None = None,
+    item_sort_direction: str | None = None,
 ) -> dict[str, object]:
     row = _load_job_row(db, org_id=org_id, run_id=run_id)
     if row is None:
         raise RAJobError("R-A 任务不存在。")
-    return _job_payload(db, row)
+    return _job_payload(
+        db,
+        row,
+        item_page=item_page,
+        item_page_size=item_page_size,
+        item_search=item_search,
+        item_category=item_category,
+        item_verdict=item_verdict,
+        item_sort=item_sort,
+        item_sort_direction=item_sort_direction,
+    )
 
 
 class RaProfitJobWorker:
@@ -794,14 +811,37 @@ def _update_job(
         db.commit()
 
 
-def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
+def _job_payload(
+    db: Session,
+    row: dict[str, Any],
+    *,
+    item_page: int = 1,
+    item_page_size: int = 50,
+    item_search: str | None = None,
+    item_category: str | None = None,
+    item_verdict: str | None = None,
+    item_sort: str | None = None,
+    item_sort_direction: str | None = None,
+) -> dict[str, object]:
     org_id = str(row["org_id"])
     run_id = str(row["run_id"])
     filters = _dict_value(row.get("filters"))
     counts = _dict_value(row.get("counts"))
     live_counts = _live_counts(db, org_id=org_id, run_id=run_id)
     counts.update({key: value for key, value in live_counts.items() if value is not None})
-    items = _job_items(db, org_id=org_id, run_id=run_id, query=str(filters.get("query") or ""))
+    items, items_page = _job_items(
+        db,
+        org_id=org_id,
+        run_id=run_id,
+        query=str(filters.get("query") or ""),
+        page=item_page,
+        page_size=item_page_size,
+        search=item_search,
+        category=item_category,
+        verdict=item_verdict,
+        sort=item_sort,
+        sort_direction=item_sort_direction,
+    )
     ai_selection = load_mock_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
     db.rollback()
     quote = get_usd_cny_quote()
@@ -822,6 +862,7 @@ def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
         "matched_products": [],
         "supplier_runs": [],
         "items": items,
+        "items_page": items_page,
         "counts": counts,
         "ai_selection": ai_selection,
         "formula": profit_formula_config(),
@@ -832,15 +873,69 @@ def _job_payload(db: Session, row: dict[str, Any]) -> dict[str, object]:
     }
 
 
-def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dict[str, object]]:
-    suppliers_by_candidate = _supplier_options_by_candidate(db, org_id=org_id, run_id=run_id)
+def _job_items(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+    query: str,
+    page: int = 1,
+    page_size: int = 50,
+    search: str | None = None,
+    category: str | None = None,
+    verdict: str | None = None,
+    sort: str | None = None,
+    sort_direction: str | None = None,
+) -> tuple[list[dict[str, object]], dict[str, object]]:
+    item_page = max(1, int(page or 1))
+    bounded_page_size = max(1, min(int(page_size or 50), 50))
+    offset = (item_page - 1) * bounded_page_size
+    candidate_page = _job_candidate_page(
+        db,
+        org_id=org_id,
+        run_id=run_id,
+        page=item_page,
+        page_size=bounded_page_size,
+        offset=offset,
+        search=search,
+        category=category,
+        verdict=verdict,
+        sort=sort,
+        sort_direction=sort_direction,
+    )
+    candidate_ids = [str(row["candidate_id"]) for row in candidate_page["rows"]]
+    total_items = int(candidate_page["total_items"])
+    total_pages = max(1, (total_items + bounded_page_size - 1) // bounded_page_size)
+    page_meta = {
+        "page": item_page,
+        "page_size": bounded_page_size,
+        "total_items": total_items,
+        "total_pages": total_pages,
+        "has_previous": item_page > 1,
+        "has_next": item_page < total_pages,
+        "search": candidate_page["search"],
+        "category": candidate_page["category"],
+        "verdict": candidate_page["verdict"],
+        "sort": candidate_page["sort"],
+        "sort_direction": candidate_page["sort_direction"],
+    }
+    if not candidate_ids:
+        return [], page_meta
+
+    suppliers_by_candidate = _supplier_options_by_candidate(
+        db,
+        org_id=org_id,
+        run_id=run_id,
+        candidate_ids=candidate_ids,
+    )
     search_pages_by_candidate = _supplier_search_pages_by_candidate(
         db,
         org_id=org_id,
         run_id=run_id,
+        candidate_ids=candidate_ids,
     )
     ai_by_candidate = load_mock_ai_selection_by_candidate(db, org_id=org_id, run_id=run_id)
-    snapshot_rows = list(db.execute(
+    snapshot_statement = (
         text(
             """
             SELECT c.id AS candidate_id,
@@ -854,12 +949,18 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
             JOIN ra_candidates c ON c.id = s.candidate_id
             LEFT JOIN products_rw p ON p.asin = s.asin
             WHERE c.org_id = :org_id AND c.run_id = :run_id
+              AND c.id IN :candidate_ids
             ORDER BY s.created_at DESC
-            LIMIT 500
             """
-        ),
-        {"org_id": org_id, "run_id": run_id},
-    ).mappings())
+        )
+        .bindparams(bindparam("candidate_ids", expanding=True))
+    )
+    snapshot_rows = list(
+        db.execute(
+            snapshot_statement,
+            {"org_id": org_id, "run_id": run_id, "candidate_ids": candidate_ids},
+        ).mappings()
+    )
     snapshot_items_by_candidate: dict[str, dict[str, object]] = {}
     for row in snapshot_rows:
         candidate_id = str(row["candidate_id"])
@@ -877,7 +978,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
         )
     items = list(snapshot_items_by_candidate.values())
 
-    pending_rows = db.execute(
+    pending_statement = (
         text(
             """
             SELECT c.id AS candidate_id,
@@ -893,15 +994,19 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
             LEFT JOIN products_rw p ON p.asin = COALESCE(o.asin, c.source_asin)
             WHERE c.org_id = :org_id
               AND c.run_id = :run_id
+              AND c.id IN :candidate_ids
               AND NOT EXISTS (
                 SELECT 1 FROM ra_profit_snapshots s
                 WHERE s.candidate_id = c.id
               )
             ORDER BY o.updated_at DESC
-            LIMIT 500
             """
-        ),
-        {"org_id": org_id, "run_id": run_id},
+        )
+        .bindparams(bindparam("candidate_ids", expanding=True))
+    )
+    pending_rows = db.execute(
+        pending_statement,
+        {"org_id": org_id, "run_id": run_id, "candidate_ids": candidate_ids},
     ).mappings()
     seen_pending_candidates: set[str] = set()
     for row in pending_rows:
@@ -918,7 +1023,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
                 ai_selection=ai_by_candidate.get(candidate_id),
             )
         )
-    empty_candidate_rows = db.execute(
+    empty_statement = (
         text(
             """
             SELECT c.id AS candidate_id, c.source_asin AS asin, c.snapshot,
@@ -930,6 +1035,7 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
             LEFT JOIN products_rw p ON p.asin = c.source_asin
             WHERE c.org_id = :org_id
               AND c.run_id = :run_id
+              AND c.id IN :candidate_ids
               AND NOT EXISTS (
                 SELECT 1 FROM ra_supplier_offers o
                 WHERE o.candidate_id = c.id
@@ -939,10 +1045,13 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
                 WHERE s.candidate_id = c.id
               )
             ORDER BY c.created_at DESC
-            LIMIT 500
             """
-        ),
-        {"org_id": org_id, "run_id": run_id},
+        )
+        .bindparams(bindparam("candidate_ids", expanding=True))
+    )
+    empty_candidate_rows = db.execute(
+        empty_statement,
+        {"org_id": org_id, "run_id": run_id, "candidate_ids": candidate_ids},
     ).mappings()
     for row in empty_candidate_rows:
         candidate_id = str(row["candidate_id"])
@@ -954,7 +1063,154 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
                 ai_selection=ai_by_candidate.get(candidate_id),
             )
         )
-    return items
+    order = {candidate_id: index for index, candidate_id in enumerate(candidate_ids)}
+    items.sort(key=lambda item: order.get(str(item.get("candidate_id") or ""), 999999))
+    return items, page_meta
+
+
+def _job_candidate_page(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+    page: int,
+    page_size: int,
+    offset: int,
+    search: str | None,
+    category: str | None,
+    verdict: str | None,
+    sort: str | None,
+    sort_direction: str | None,
+) -> dict[str, object]:
+    cleaned_search = _clean_item_filter(search)
+    cleaned_category = _clean_item_filter(category)
+    cleaned_verdict = _clean_verdict_filter(verdict)
+    cleaned_sort = "gross_margin" if sort == "gross_margin" else "created_at"
+    cleaned_direction = "asc" if sort_direction == "asc" else "desc"
+    clauses = ["c.org_id = :org_id", "c.run_id = :run_id"]
+    params: dict[str, object] = {
+        "org_id": org_id,
+        "run_id": run_id,
+        "limit": page_size,
+        "offset": offset,
+    }
+    if cleaned_search:
+        params["search"] = f"%{cleaned_search.lower()}%"
+        clauses.append(
+            """(
+              LOWER(COALESCE(c.source_asin, '')) LIKE :search OR
+              LOWER(COALESCE(c.title, '')) LIKE :search OR
+              LOWER(COALESCE(c.title_zh, '')) LIKE :search OR
+              LOWER(COALESCE(CAST(c.snapshot AS TEXT), '')) LIKE :search OR
+              LOWER(COALESCE(p.title, '')) LIKE :search OR
+              LOWER(COALESCE(p.title_zh, '')) LIKE :search OR
+              LOWER(COALESCE(p.source_query, '')) LIKE :search OR
+              LOWER(COALESCE(p.category, '')) LIKE :search OR
+              LOWER(COALESCE(p.category_path, '')) LIKE :search
+            )"""
+        )
+    if cleaned_category:
+        params["category"] = f"%{cleaned_category.lower()}%"
+        clauses.append(
+            """(
+              LOWER(COALESCE(p.category, '')) LIKE :category OR
+              LOWER(COALESCE(p.category_path, '')) LIKE :category OR
+              LOWER(COALESCE(CAST(c.snapshot AS TEXT), '')) LIKE :category
+            )"""
+        )
+    if cleaned_verdict == "pass":
+        clauses.append(
+            """c.candidate_status IN (
+              'profit_passed',
+              'ai_mock_passed',
+              'ai_mock_rejected',
+              'ai_mock_review'
+            )"""
+        )
+    elif cleaned_verdict == "reject":
+        clauses.append("c.candidate_status = 'profit_rejected'")
+    elif cleaned_verdict == "pending":
+        clauses.append(
+            """c.candidate_status NOT IN (
+              'profit_passed',
+              'profit_rejected',
+              'ai_mock_passed',
+              'ai_mock_rejected',
+              'ai_mock_review'
+            )"""
+        )
+
+    where_sql = " AND ".join(f"({clause})" for clause in clauses)
+    margin_direction = "ASC" if cleaned_direction == "asc" else "DESC"
+    created_direction = "ASC" if cleaned_direction == "asc" else "DESC"
+    if cleaned_sort == "gross_margin":
+        order_sql = (
+            f"gross_margin_value {margin_direction} NULLS LAST, "
+            "latest_activity_at DESC NULLS LAST, candidate_id ASC"
+        )
+    else:
+        order_sql = f"latest_activity_at {created_direction} NULLS LAST, candidate_id ASC"
+
+    rows = list(
+        db.execute(
+            text(
+                f"""
+                WITH candidate_base AS (
+                  SELECT c.id AS candidate_id,
+                         c.created_at,
+                         GREATEST(
+                           COALESCE(c.updated_at, c.created_at),
+                           COALESCE(MAX(o.updated_at), c.created_at),
+                           COALESCE(MAX(s.created_at), c.created_at)
+                         ) AS latest_activity_at,
+                         MAX(
+                           COALESCE(
+                             NULLIF(s.payload->>'gross_margin', '')::numeric,
+                             s.net_margin
+                           )
+                         ) AS gross_margin_value
+                  FROM ra_candidates c
+                  LEFT JOIN products_rw p ON p.asin = c.source_asin
+                  LEFT JOIN ra_supplier_offers o ON o.candidate_id = c.id
+                  LEFT JOIN ra_profit_snapshots s ON s.candidate_id = c.id
+                  WHERE {where_sql}
+                  GROUP BY c.id, c.created_at, c.updated_at
+                ),
+                counted AS (
+                  SELECT candidate_id, latest_activity_at, gross_margin_value,
+                         COUNT(*) OVER () AS total_items
+                  FROM candidate_base
+                )
+                SELECT candidate_id, latest_activity_at, gross_margin_value, total_items
+                FROM counted
+                ORDER BY {order_sql}
+                LIMIT :limit OFFSET :offset
+                """
+            ),
+            params,
+        ).mappings()
+    )
+    return {
+        "rows": rows,
+        "total_items": int(rows[0]["total_items"] or 0) if rows else 0,
+        "page": page,
+        "page_size": page_size,
+        "search": cleaned_search,
+        "category": cleaned_category,
+        "verdict": cleaned_verdict,
+        "sort": cleaned_sort,
+        "sort_direction": cleaned_direction,
+    }
+
+
+def _clean_item_filter(value: str | None) -> str:
+    cleaned = re.sub(r"\s+", " ", str(value or "")).strip()
+    return cleaned[:120]
+
+
+def _clean_verdict_filter(value: str | None) -> str:
+    cleaned = str(value or "").strip().lower()
+    return cleaned if cleaned in {"pass", "reject", "pending"} else "all"
 
 
 def _snapshot_item_from_row(
@@ -970,6 +1226,7 @@ def _snapshot_item_from_row(
     product = _dict_value(payload.get("product"))
     item = {
         "status": "profit_calculated",
+        "candidate_id": row.get("candidate_id"),
         "asin": row.get("asin"),
         "keyword": query,
         "matched_source_query": row.get("source_query"),
@@ -1134,6 +1391,7 @@ def _pending_item_from_row(
     )
     item = {
         "status": "cost_pending",
+        "candidate_id": row.get("candidate_id"),
         "asin": row.get("asin"),
         "keyword": query,
         "matched_source_query": row.get("source_query"),
@@ -1181,6 +1439,7 @@ def _supplier_not_found_item_from_row(
     product = _dict_value(row.get("snapshot"))
     item = {
         "status": "supplier_not_found",
+        "candidate_id": row.get("candidate_id"),
         "asin": row.get("asin"),
         "keyword": query,
         "matched_source_query": row.get("source_query") or product.get("source_query"),
@@ -1219,26 +1478,39 @@ def _supplier_options_by_candidate(
     *,
     org_id: str,
     run_id: str,
+    candidate_ids: list[str] | None = None,
 ) -> dict[str, list[dict[str, object]]]:
-    profit_by_offer = _profit_by_offer_id(db, org_id=org_id, run_id=run_id)
-    rows = db.execute(
-        text(
-            """
-            SELECT o.id AS offer_id, o.candidate_id, o.supplier_name, o.supplier_url,
-                   o.unit_price_cny, o.moq, o.rating, o.match_score,
-                   o.offer_status, o.payload
-            FROM ra_supplier_offers o
-            JOIN ra_candidates c ON c.id = o.candidate_id
-            WHERE c.org_id = :org_id AND c.run_id = :run_id
-            ORDER BY o.candidate_id ASC,
-                     o.unit_price_cny ASC NULLS LAST,
-                     o.match_score DESC NULLS LAST,
-                     o.created_at ASC
-            LIMIT 1000
-            """
-        ),
-        {"org_id": org_id, "run_id": run_id},
-    ).mappings()
+    if candidate_ids is not None and not candidate_ids:
+        return {}
+    profit_by_offer = _profit_by_offer_id(
+        db,
+        org_id=org_id,
+        run_id=run_id,
+        candidate_ids=candidate_ids,
+    )
+    candidate_filter = "AND c.id IN :candidate_ids" if candidate_ids is not None else ""
+    statement = text(
+        f"""
+        SELECT o.id AS offer_id, o.candidate_id, o.supplier_name, o.supplier_url,
+               o.unit_price_cny, o.moq, o.rating, o.match_score,
+               o.offer_status, o.payload
+        FROM ra_supplier_offers o
+        JOIN ra_candidates c ON c.id = o.candidate_id
+        WHERE c.org_id = :org_id AND c.run_id = :run_id
+          {candidate_filter}
+        ORDER BY o.candidate_id ASC,
+                 o.unit_price_cny ASC NULLS LAST,
+                 o.match_score DESC NULLS LAST,
+                 o.created_at ASC
+        LIMIT 1000
+        """
+    )
+    if candidate_ids is not None:
+        statement = statement.bindparams(bindparam("candidate_ids", expanding=True))
+    params: dict[str, object] = {"org_id": org_id, "run_id": run_id}
+    if candidate_ids is not None:
+        params["candidate_ids"] = candidate_ids
+    rows = db.execute(statement, params).mappings()
     output: dict[str, list[dict[str, object]]] = {}
     seen_links: dict[str, set[str]] = {}
     for row in rows:
@@ -1268,20 +1540,28 @@ def _profit_by_offer_id(
     *,
     org_id: str,
     run_id: str,
+    candidate_ids: list[str] | None = None,
 ) -> dict[str, dict[str, object]]:
-    rows = db.execute(
-        text(
-            """
-            SELECT s.id AS snapshot_id, s.payload, s.net_profit_usd, s.net_margin
-            FROM ra_profit_snapshots s
-            JOIN ra_candidates c ON c.id = s.candidate_id
-            WHERE c.org_id = :org_id AND c.run_id = :run_id
-            ORDER BY s.created_at DESC
-            LIMIT 1000
-            """
-        ),
-        {"org_id": org_id, "run_id": run_id},
-    ).mappings()
+    if candidate_ids is not None and not candidate_ids:
+        return {}
+    candidate_filter = "AND c.id IN :candidate_ids" if candidate_ids is not None else ""
+    statement = text(
+        f"""
+        SELECT s.id AS snapshot_id, s.payload, s.net_profit_usd, s.net_margin
+        FROM ra_profit_snapshots s
+        JOIN ra_candidates c ON c.id = s.candidate_id
+        WHERE c.org_id = :org_id AND c.run_id = :run_id
+          {candidate_filter}
+        ORDER BY s.created_at DESC
+        LIMIT 1000
+        """
+    )
+    if candidate_ids is not None:
+        statement = statement.bindparams(bindparam("candidate_ids", expanding=True))
+    params: dict[str, object] = {"org_id": org_id, "run_id": run_id}
+    if candidate_ids is not None:
+        params["candidate_ids"] = candidate_ids
+    rows = db.execute(statement, params).mappings()
     output: dict[str, dict[str, object]] = {}
     for row in rows:
         payload = _dict_value(row.get("payload"))
@@ -1321,20 +1601,28 @@ def _supplier_search_pages_by_candidate(
     *,
     org_id: str,
     run_id: str,
+    candidate_ids: list[str] | None = None,
 ) -> dict[str, list[dict[str, object]]]:
-    rows = db.execute(
-        text(
-            """
-            SELECT s.candidate_id, s.query, s.status, s.result_count, s.payload
-            FROM ra_supplier_searches s
-            JOIN ra_candidates c ON c.id = s.candidate_id
-            WHERE c.org_id = :org_id AND c.run_id = :run_id
-            ORDER BY s.created_at ASC
-            LIMIT 2000
-            """
-        ),
-        {"org_id": org_id, "run_id": run_id},
-    ).mappings()
+    if candidate_ids is not None and not candidate_ids:
+        return {}
+    candidate_filter = "AND c.id IN :candidate_ids" if candidate_ids is not None else ""
+    statement = text(
+        f"""
+        SELECT s.candidate_id, s.query, s.status, s.result_count, s.payload
+        FROM ra_supplier_searches s
+        JOIN ra_candidates c ON c.id = s.candidate_id
+        WHERE c.org_id = :org_id AND c.run_id = :run_id
+          {candidate_filter}
+        ORDER BY s.created_at ASC
+        LIMIT 2000
+        """
+    )
+    if candidate_ids is not None:
+        statement = statement.bindparams(bindparam("candidate_ids", expanding=True))
+    params: dict[str, object] = {"org_id": org_id, "run_id": run_id}
+    if candidate_ids is not None:
+        params["candidate_ids"] = candidate_ids
+    rows = db.execute(statement, params).mappings()
     output: dict[str, list[dict[str, object]]] = {}
     seen: dict[str, set[str]] = {}
     for row in rows:

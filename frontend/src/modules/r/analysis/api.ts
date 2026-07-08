@@ -5,6 +5,7 @@ import type {
   RaFrameworkStatus,
   RaAutoProfitPayload,
   RaAutoProfitJobPayload,
+  RaAutoProfitJobItemsQuery,
   RaAutoProfitJobResult,
   RaAutoProfitResult,
   RaManualProfitPayload,
@@ -69,8 +70,16 @@ export function createRaAutoProfitJob(payload: RaAutoProfitJobPayload) {
   });
 }
 
-export function getRaAutoProfitJob(runId: string) {
-  return apiRequest<RaAutoProfitJobResult>(`${RA_API_BASE}/profit/jobs/${runId}`, {
+export function getRaAutoProfitJob(runId: string, query?: RaAutoProfitJobItemsQuery) {
+  const searchParams = new URLSearchParams();
+  Object.entries(query ?? {}).forEach(([key, value]) => {
+    if (value === undefined || value === null || value === "") {
+      return;
+    }
+    searchParams.set(key, String(value));
+  });
+  const suffix = searchParams.size ? `?${searchParams.toString()}` : "";
+  return apiRequest<RaAutoProfitJobResult>(`${RA_API_BASE}/profit/jobs/${runId}${suffix}`, {
     bypassCache: true,
     timeoutMs: 30_000,
   });

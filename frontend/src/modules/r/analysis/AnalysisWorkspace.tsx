@@ -18,6 +18,7 @@ import {
   getRaProfitSnapshots,
 } from "@/modules/r/analysis/api";
 import type {
+  RaAutoProfitJobItemsQuery,
   RaAutoProfitItem,
   RaAutoProfitJobResult,
   RaFrameworkStatus,
@@ -28,7 +29,15 @@ import styles from "./AnalysisWorkspace.module.css";
 
 const DEFAULT_ASIN_LIMIT = 20;
 const DEFAULT_SUPPLIER_LIMIT = 5;
+const RESULT_PAGE_SIZE = 50;
 const POLL_INTERVAL_MS = 3_000;
+const DEFAULT_ITEMS_QUERY: RaAutoProfitJobItemsQuery = {
+  item_page: 1,
+  item_page_size: RESULT_PAGE_SIZE,
+  item_sort: "created_at",
+  item_sort_direction: "desc",
+  item_verdict: "all",
+};
 
 export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) {
   const [status, setStatus] = useState<RaFrameworkStatus | null>(null);
@@ -39,6 +48,9 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
+  const [itemsQuery, setItemsQuery] = useState<RaAutoProfitJobItemsQuery>(
+    DEFAULT_ITEMS_QUERY,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -73,14 +85,14 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
   }, []);
 
   useEffect(() => {
-    if (!result?.run_id || isTerminalStatus(result.status)) {
+    if (!result?.run_id) {
       return undefined;
     }
 
     let cancelled = false;
     const poll = async () => {
       try {
-        const payload = await getRaAutoProfitJob(result.run_id);
+        const payload = await getRaAutoProfitJob(result.run_id, itemsQuery);
         if (cancelled) {
           return;
         }
@@ -103,6 +115,13 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
       }
     };
 
+    if (isTerminalStatus(result.status)) {
+      void poll();
+      return () => {
+        cancelled = true;
+      };
+    }
+
     const timer = window.setInterval(() => {
       void poll();
     }, POLL_INTERVAL_MS);
@@ -111,7 +130,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [result?.run_id, result?.status]);
+  }, [itemsQuery, result?.run_id, result?.status]);
 
   const summary = useMemo(() => {
     if (!result) {
@@ -142,6 +161,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
     setRunning(true);
     setRunError(null);
     try {
+      setItemsQuery(DEFAULT_ITEMS_QUERY);
       const payload = await createRaAutoProfitJob({
         asin_limit: DEFAULT_ASIN_LIMIT,
         query: cleaned,
@@ -253,7 +273,11 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
           </span>
         </div>
         {result ? (
-          <AutoResultTable result={result} />
+          <AutoResultTable
+            itemsQuery={itemsQuery}
+            result={result}
+            onItemsQueryChange={setItemsQuery}
+          />
         ) : (
           <SnapshotPreview snapshots={snapshots} />
         )}
@@ -322,61 +346,66 @@ function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
   );
 }
 
-function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
+function AutoResultTable({
+  itemsQuery,
+  onItemsQueryChange,
+  result,
+}: {
+  itemsQuery: RaAutoProfitJobItemsQuery;
+  onItemsQueryChange: (query: RaAutoProfitJobItemsQuery) => void;
+  result: RaAutoProfitJobResult;
+}) {
   const items = result.items ?? [];
-  const [tableQuery, setTableQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [verdictFilter, setVerdictFilter] = useState("all");
-  const [marginSort, setMarginSort] = useState("desc");
+  const pageInfo = result.items_page ?? {
+    page: itemsQuery.item_page ?? 1,
+    page_size: RESULT_PAGE_SIZE,
+    total_items: items.length,
+    total_pages: 1,
+    has_previous: false,
+    has_next: false,
+    search: itemsQuery.item_search ?? "",
+    category: itemsQuery.item_category ?? "",
+    verdict: itemsQuery.item_verdict ?? "all",
+    sort: itemsQuery.item_sort ?? "created_at",
+    sort_direction: itemsQuery.item_sort_direction ?? "desc",
+  };
   const minMargin = result.formula.default_min_gross_margin;
-  const categories = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          items
-            .map((item) => item.category)
-            .filter((value): value is string => typeof value === "string" && value.length > 0),
-        ),
-      ).sort((left, right) => left.localeCompare(right, "zh-Hans-CN")),
-    [items],
-  );
-  const visibleItems = useMemo(() => {
-    const query = tableQuery.trim().toLowerCase();
-    const filtered = items.filter((item) => {
-      if (categoryFilter !== "all" && item.category !== categoryFilter) {
-        return false;
-      }
-      if (verdictFilter !== "all" && itemVerdictFilter(item) !== verdictFilter) {
-        return false;
-      }
-      if (!query) {
-        return true;
-      }
-      return [
-        item.asin,
-        item.keyword,
-        item.product_keyword,
-        item.title,
-        item.title_zh,
-        item.category,
-        item.matched_source_query,
-      ]
-        .filter(Boolean)
-        .some((value) => String(value).toLowerCase().includes(query));
+  const sortValue =
+    pageInfo.sort === "gross_margin"
+      ? pageInfo.sort_direction === "asc"
+        ? "margin_asc"
+        : "margin_desc"
+      : "created_desc";
+
+  function updateQuery(partial: RaAutoProfitJobItemsQuery) {
+    onItemsQueryChange({
+      ...itemsQuery,
+      item_page_size: RESULT_PAGE_SIZE,
+      ...partial,
     });
-    return filtered.sort((left, right) => {
-      const leftValue = itemMarginSortValue(left);
-      const rightValue = itemMarginSortValue(right);
-      if (marginSort === "asc") {
-        return leftValue - rightValue;
-      }
-      if (marginSort === "desc") {
-        return rightValue - leftValue;
-      }
-      return 0;
-    });
-  }, [categoryFilter, items, marginSort, tableQuery, verdictFilter]);
+  }
+
   if (items.length === 0) {
+    if (
+      pageInfo.total_items === 0 &&
+      (pageInfo.search || pageInfo.category || pageInfo.verdict !== "all") &&
+      (result.counts.candidate_products ?? 0) > 0
+    ) {
+      return (
+        <>
+          <ResultTableControls
+            itemCount={items.length}
+            pageInfo={pageInfo}
+            searchValue={itemsQuery.item_search ?? ""}
+            categoryValue={itemsQuery.item_category ?? ""}
+            verdictValue={itemsQuery.item_verdict ?? "all"}
+            sortValue={sortValue}
+            onUpdate={updateQuery}
+          />
+          <div className={styles.emptyLine}>没有找到符合当前筛选条件的利润测算结果。</div>
+        </>
+      );
+    }
     if (
       result.counts.rw_empty_result ||
       (isTerminalStatus(result.status) && result.counts.matched_products === 0)
@@ -388,44 +417,15 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
 
   return (
     <>
-      <div className={styles.tableControls}>
-        <label>
-          <span>关键词搜索</span>
-          <input
-            placeholder="ASIN / 关键词 / 标题"
-            value={tableQuery}
-            onChange={(event) => setTableQuery(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>类目</span>
-          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
-            <option value="all">全部类目</option>
-            {categories.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>利润状态</span>
-          <select value={verdictFilter} onChange={(event) => setVerdictFilter(event.target.value)}>
-            <option value="all">全部</option>
-            <option value="pass">利润通过</option>
-            <option value="reject">利润未通过</option>
-          </select>
-        </label>
-        <label>
-          <span>利润率排序</span>
-          <select value={marginSort} onChange={(event) => setMarginSort(event.target.value)}>
-            <option value="desc">从高到低</option>
-            <option value="asc">从低到高</option>
-            <option value="none">不排序</option>
-          </select>
-        </label>
-        <span className={styles.tableCount}>显示 {visibleItems.length} / {items.length}</span>
-      </div>
+      <ResultTableControls
+        categoryValue={itemsQuery.item_category ?? ""}
+        itemCount={items.length}
+        pageInfo={pageInfo}
+        searchValue={itemsQuery.item_search ?? ""}
+        sortValue={sortValue}
+        verdictValue={itemsQuery.item_verdict ?? "all"}
+        onUpdate={updateQuery}
+      />
       <div className={styles.tableWrap}>
         <table className={styles.resultTable}>
           <colgroup>
@@ -451,7 +451,7 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
             </tr>
           </thead>
           <tbody>
-            {visibleItems.map((item, index) => (
+            {items.map((item, index) => (
               <tr key={`${item.asin ?? "unknown"}-${item.snapshot_id ?? item.supplier_url ?? index}`}>
                 <td>
                   <ProductImage
@@ -479,7 +479,7 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
                   <ProductPackBadge item={item} />
                   <span className={styles.compactText}>{item.title || "未记录英文标题"}</span>
                   <span>{item.category || "未标注类目"}</span>
-                  <span>月销 {formatMonthlySales(item)}</span>
+                  <MonthlySalesBadge item={item} />
                   <span>BSR {formatKnownCount(item.bsr)} · 评 {formatKnownCount(item.reviews)} · 卖家 {formatKnownCount(item.seller_count)}</span>
                 </td>
                 <td>
@@ -515,7 +515,114 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
           </tbody>
         </table>
       </div>
+      <ResultPagination pageInfo={pageInfo} onUpdate={updateQuery} />
     </>
+  );
+}
+
+function ResultTableControls({
+  categoryValue,
+  itemCount,
+  onUpdate,
+  pageInfo,
+  searchValue,
+  sortValue,
+  verdictValue,
+}: {
+  categoryValue: string;
+  itemCount: number;
+  onUpdate: (partial: RaAutoProfitJobItemsQuery) => void;
+  pageInfo: NonNullable<RaAutoProfitJobResult["items_page"]>;
+  searchValue: string;
+  sortValue: string;
+  verdictValue: string;
+}) {
+  function handleSortChange(value: string) {
+    if (value === "margin_asc") {
+      onUpdate({ item_page: 1, item_sort: "gross_margin", item_sort_direction: "asc" });
+      return;
+    }
+    if (value === "margin_desc") {
+      onUpdate({ item_page: 1, item_sort: "gross_margin", item_sort_direction: "desc" });
+      return;
+    }
+    onUpdate({ item_page: 1, item_sort: "created_at", item_sort_direction: "desc" });
+  }
+
+  return (
+    <div className={styles.tableControls}>
+      <label>
+        <span>关键词 / ASIN</span>
+        <input
+          placeholder="模糊搜索 ASIN / 关键词 / 标题"
+          value={searchValue}
+          onChange={(event) => onUpdate({ item_page: 1, item_search: event.target.value })}
+        />
+      </label>
+      <label>
+        <span>类目搜索</span>
+        <input
+          placeholder="模糊搜索类目"
+          value={categoryValue}
+          onChange={(event) => onUpdate({ item_category: event.target.value, item_page: 1 })}
+        />
+      </label>
+      <label>
+        <span>利润状态</span>
+        <select
+          value={verdictValue}
+          onChange={(event) => onUpdate({ item_page: 1, item_verdict: event.target.value })}
+        >
+          <option value="all">全部</option>
+          <option value="pass">利润通过</option>
+          <option value="reject">利润未通过</option>
+          <option value="pending">待计算</option>
+        </select>
+      </label>
+      <label>
+        <span>利润率排序</span>
+        <select value={sortValue} onChange={(event) => handleSortChange(event.target.value)}>
+          <option value="created_desc">最新优先</option>
+          <option value="margin_desc">利润率从高到低</option>
+          <option value="margin_asc">利润率从低到高</option>
+        </select>
+      </label>
+      <span className={styles.tableCount}>
+        第 {formatCount(pageInfo.page)} / {formatCount(pageInfo.total_pages)} 页 · 本页{" "}
+        {formatCount(itemCount)} 条 · 共{" "}
+        {formatCount(pageInfo.total_items)} 条
+      </span>
+    </div>
+  );
+}
+
+function ResultPagination({
+  onUpdate,
+  pageInfo,
+}: {
+  onUpdate: (partial: RaAutoProfitJobItemsQuery) => void;
+  pageInfo: NonNullable<RaAutoProfitJobResult["items_page"]>;
+}) {
+  return (
+    <div className={styles.paginationBar}>
+      <button
+        disabled={!pageInfo.has_previous}
+        type="button"
+        onClick={() => onUpdate({ item_page: Math.max(1, pageInfo.page - 1) })}
+      >
+        上一页
+      </button>
+      <span>
+        每页 {formatCount(pageInfo.page_size)} 条，当前第 {formatCount(pageInfo.page)} 页
+      </span>
+      <button
+        disabled={!pageInfo.has_next}
+        type="button"
+        onClick={() => onUpdate({ item_page: pageInfo.page + 1 })}
+      >
+        下一页
+      </button>
+    </div>
   );
 }
 
@@ -807,8 +914,17 @@ function CopyToken({
     >
       <span>{label}</span>
       <Copy size={13} />
+      {copyState === "copied" ? <em>已复制</em> : null}
       {copyState === "manual" ? <em>手动复制</em> : null}
     </button>
+  );
+}
+
+function MonthlySalesBadge({ item }: { item: RaAutoProfitItem }) {
+  return (
+    <span className={styles.salesBadge} title={monthlySalesTitle(item)}>
+      月销 {formatMonthlySales(item)}
+    </span>
   );
 }
 
@@ -1268,6 +1384,25 @@ function formatMonthlySales(item: Pick<
     return `${formatKnownCount(item.monthly_sales_estimate)}（估算）`;
   }
   return "未记录";
+}
+
+function monthlySalesTitle(item: Pick<
+  RaAutoProfitItem,
+  | "monthly_sales"
+  | "monthly_sales_estimate"
+  | "monthly_sales_estimate_min"
+  | "monthly_sales_estimate_max"
+  | "monthly_sales_confidence"
+  | "monthly_sales_source"
+>) {
+  const parts = [`月销量：${formatMonthlySales(item)}`];
+  if (item.monthly_sales_source) {
+    parts.push(`来源：${item.monthly_sales_source}`);
+  }
+  if (item.monthly_sales_confidence) {
+    parts.push(`置信度：${item.monthly_sales_confidence}`);
+  }
+  return parts.join("；");
 }
 
 function itemMarginSortValue(item: RaAutoProfitItem) {

@@ -264,6 +264,7 @@ export type RaAiSelectionResult = {
 
 export type RaAutoProfitItem = {
   status: string;
+  candidate_id?: string | null;
   asin: string | null;
   image_url: string | null;
   image_candidates?: string[];
@@ -432,8 +433,22 @@ export type RaAutoProfitResult = {
     warnings?: string[];
   }>;
   items: RaAutoProfitItem[];
+  items_page?: {
+    page: number;
+    page_size: number;
+    total_items: number;
+    total_pages: number;
+    has_previous: boolean;
+    has_next: boolean;
+    search: string;
+    category: string;
+    verdict: string;
+    sort: string;
+    sort_direction: string;
+  };
   counts: {
     matched_products: number;
+    candidate_products?: number;
     selected_products?: number;
     processed_products: number;
     target_profit_pass?: number;
@@ -461,6 +476,16 @@ export type RaAutoProfitResult = {
   };
   formula: RaProfitFormula;
   warnings: string[];
+};
+
+export type RaAutoProfitJobItemsQuery = {
+  item_page?: number;
+  item_page_size?: number;
+  item_search?: string;
+  item_category?: string;
+  item_verdict?: string;
+  item_sort?: string;
+  item_sort_direction?: string;
 };
 
 export type RaAutoProfitJobResult = RaAutoProfitResult & {

@@ -454,6 +454,38 @@
   white-space: nowrap;
 }
 
+.paginationBar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 10px;
+}
+
+.paginationBar button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid #1d4ed8;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #1d4ed8;
+  font: inherit;
+  font-size: 0.78rem;
+  font-weight: 820;
+  cursor: pointer;
+}
+
+.paginationBar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.paginationBar span {
+  color: var(--color-muted);
+  font-size: 0.76rem;
+  font-weight: 760;
+}
+
 .resultTable {
   width: 100%;
   min-width: 0;
@@ -622,6 +654,19 @@
 
 .keywordCopyTag svg {
   color: #1d4ed8;
+}
+
+.salesBadge {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 6px;
+  padding: 4px 7px;
+  border: 1px solid rgb(22 163 74 / 24%);
+  border-radius: 5px;
+  color: #166534 !important;
+  background: #dcfce7;
+  font-size: 0.72rem;
+  font-weight: 880;
 }
 
 .compactText {

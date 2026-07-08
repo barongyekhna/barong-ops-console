@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -213,6 +213,13 @@ def ra_profit_job_create(
 @router.get("/profit/jobs/{run_id}")
 def ra_profit_job_get(
     run_id: str,
+    item_page: int = Query(default=1, ge=1),
+    item_page_size: int = Query(default=50, ge=1, le=50),
+    item_search: str | None = Query(default=None, max_length=120),
+    item_category: str | None = Query(default=None, max_length=120),
+    item_verdict: str | None = Query(default=None, max_length=24),
+    item_sort: str | None = Query(default=None, max_length=32),
+    item_sort_direction: str | None = Query(default=None, max_length=8),
     db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
@@ -223,6 +230,13 @@ def ra_profit_job_get(
                 db,
                 org_id=target_org.org_id,
                 run_id=run_id,
+                item_page=item_page,
+                item_page_size=item_page_size,
+                item_search=item_search,
+                item_category=item_category,
+                item_verdict=item_verdict,
+                item_sort=item_sort,
+                item_sort_direction=item_sort_direction,
             )
     except RAJobError as exc:
         raise HTTPException(
