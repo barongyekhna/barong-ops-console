@@ -863,7 +863,7 @@ function isAllowedRPath(method: string, path: string[]) {
       path.length === 5 &&
       path[2] === "profit" &&
       path[3] === "jobs" &&
-      isUuidPathSegment(path[4])
+      (isUuidPathSegment(path[4]) || path[4] === "latest")
     ) {
       return true;
     }
