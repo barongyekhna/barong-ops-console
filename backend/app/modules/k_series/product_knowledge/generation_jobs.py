@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from ....db.session import SessionLocal
 from ....models.user import User
 from .scope_shim import KScopeContext
-from .workflow_engine import KWorkflowOrchestratorV2, _user_uuid
+from .workflow_engine import KWorkflowOrchestratorV2
 
 JOB_TYPES = ("marketing_copy", "image_brief")
 _TABLE = "k_generation_jobs"
@@ -61,10 +61,10 @@ def enqueue_generation_jobs(
                 f"""
                 INSERT INTO {_TABLE}
                     (id, product_id, job_type, status, batch_id,
-                     requested_by_user_id, workspace_key, business_context, scope_mode)
+                     requested_by_username, workspace_key, business_context, scope_mode)
                 VALUES
                     (:id, :product_id, :job_type, 'pending', :batch_id,
-                     :user_id, :workspace_key, :business_context, :scope_mode)
+                     :username, :workspace_key, :business_context, :scope_mode)
                 """
             ),
             {
@@ -72,7 +72,7 @@ def enqueue_generation_jobs(
                 "product_id": product_id,
                 "job_type": job_type,
                 "batch_id": batch_id,
-                "user_id": _user_uuid(user),
+                "username": user.username if user is not None else None,
                 "workspace_key": scope_context.workspace_key,
                 "business_context": scope_context.business_context,
                 "scope_mode": scope_context.scope_mode,
@@ -132,7 +132,7 @@ def _claim_pending_jobs(db: Session, limit: int) -> list[dict[str, Any]]:
     rows = db.execute(
         text(
             f"""
-            SELECT id, product_id, job_type, requested_by_user_id,
+            SELECT id, product_id, job_type, requested_by_username,
                    workspace_key, business_context, scope_mode
             FROM {_TABLE}
             WHERE status = 'pending'
@@ -187,9 +187,10 @@ def _process_generation_job(job: dict[str, Any]) -> None:
     job_id = job["id"]
     try:
         with SessionLocal() as db:
+            username = job.get("requested_by_username")
             user = (
-                db.get(User, job["requested_by_user_id"])
-                if job.get("requested_by_user_id")
+                db.query(User).filter(User.username == username).first()
+                if username
                 else None
             )
             scope = KScopeContext(

@@ -39,7 +39,7 @@ def upgrade() -> None:
         sa.Column("batch_id", sa.Uuid(), nullable=True),
         sa.Column("attempts", sa.Integer(), nullable=False, server_default="0"),
         sa.Column("error", sa.Text(), nullable=True),
-        sa.Column("requested_by_user_id", sa.Uuid(), nullable=True),
+        sa.Column("requested_by_username", sa.String(length=150), nullable=True),
         sa.Column("workspace_key", sa.String(length=128), nullable=True),
         sa.Column("business_context", sa.String(length=64), nullable=True),
         sa.Column("scope_mode", sa.String(length=64), nullable=True),
