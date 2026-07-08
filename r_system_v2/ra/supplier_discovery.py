@@ -49,9 +49,6 @@ MAX_DISCOVERY_LIMIT = 5
 DEFAULT_CRAWLER_TIMEOUT_MS = 8_000
 SUPPLIER_PLATFORM_LABELS = {
     "1688": "1688",
-    "pdd": "拼多多",
-    "taobao": "淘宝/天猫",
-    "jd": "京东",
 }
 
 
@@ -622,6 +619,37 @@ def _discover_with_supplier_api_provider(
 
     offers: list[dict[str, object]] = []
     for offer in offers_from_api:
+        raw_excerpt = _supplier_api_offer_excerpt(offer)
+        alignment = evaluate_supplier_alignment(
+            db=db,
+            org_id=org_id,
+            product=product,
+            keyword_profile=keyword_profile,
+            supplier_title=offer.title or offer.supplier_name,
+            supplier_snippet=offer.supplier_name,
+            raw_excerpt=raw_excerpt,
+            unit_price_cny=offer.unit_price_cny,
+        )
+        alignment_status = str(alignment.get("match_status") or "review")
+        alignment_price = decimal_value(alignment.get("adjusted_unit_price_cny"))
+        unit_price_cny = offer.unit_price_cny
+        if alignment_status == "match" and alignment_price is not None:
+            unit_price_cny = alignment_price
+        elif alignment_status != "match":
+            unit_price_cny = None
+        match_score = min(
+            offer.match_score,
+            _int_value(alignment.get("match_score")) or 0,
+        )
+        offer_status = _offer_status(
+            unit_price_cny=unit_price_cny,
+            alignment_status=alignment_status,
+        )
+        warning = (
+            None
+            if alignment_status == "match"
+            else str(alignment.get("match_reason") or "供应商数量/尺寸/主体匹配待确认。")
+        )
         offer_id = _insert_supplier_offer(
             db,
             org_id=org_id,
@@ -630,13 +658,13 @@ def _discover_with_supplier_api_provider(
             asin=asin,
             supplier_name=offer.supplier_name,
             supplier_url=offer.supplier_url,
-            unit_price_cny=offer.unit_price_cny,
+            unit_price_cny=unit_price_cny,
             domestic_shipping_cny=offer.domestic_shipping_cny,
             moq=offer.moq,
             rating=offer.rating,
             source=provider.provider_name,
-            match_score=offer.match_score,
-            offer_status="selected",
+            match_score=match_score,
+            offer_status=offer_status,
             payload_extra={
                 "platform": offer.platform,
                 "platform_label": offer.platform_label,
@@ -646,25 +674,17 @@ def _discover_with_supplier_api_provider(
                 "search_url": None,
                 "choice_page_url": None,
                 "crawler_status": provider.provider_name,
-                "crawler_warning": None,
+                "crawler_warning": warning,
                 "price_source": provider.provider_name,
                 "one_piece_hint": offer.one_piece_hint,
                 "stock": offer.stock,
                 "monthly_sales": offer.monthly_sales,
+                "title": offer.title,
+                "raw_excerpt": raw_excerpt,
+                "raw_selected_price_cny": _decimal_number(offer.unit_price_cny),
+                "adjusted_unit_price_cny": _decimal_number(unit_price_cny),
                 "keyword_profile": keyword_profile,
-                "supplier_alignment": {
-                    "match_status": "match",
-                    "match_score": offer.match_score,
-                    "match_reason": (
-                        "1688 官方图搜返回同类商品候选。"
-                        if provider.provider_name != "mock_1688_api"
-                        else "1688 官方 API mock 返回同类商品候选，等待真实 API 后替换为官方结果。"
-                    ),
-                    "same_product_type": True,
-                    "brand_risk": False,
-                    "shape_conflict": False,
-                    "warnings": [],
-                },
+                "supplier_alignment": alignment,
                 "shipping_notice": (
                     (
                         "1688 官方图搜返回供应商运费"
@@ -689,24 +709,16 @@ def _discover_with_supplier_api_provider(
                 "supplier_url_type": "detail",
                 "supplier_detail_url": offer.supplier_url,
                 "supplier_search_url": None,
-                "unit_price_cny": _decimal_number(offer.unit_price_cny),
+                "unit_price_cny": _decimal_number(unit_price_cny),
                 "domestic_shipping_cny": _decimal_number(offer.domestic_shipping_cny),
                 "moq": offer.moq,
-                "match_score": offer.match_score,
+                "match_score": match_score,
                 "one_piece_hint": offer.one_piece_hint,
-                "offer_status": "selected",
+                "offer_status": offer_status,
                 "crawler_status": provider.provider_name,
-                "warning": None,
+                "warning": warning,
                 "keyword_profile": keyword_profile,
-                "supplier_alignment": {
-                    "match_status": "match",
-                    "match_score": offer.match_score,
-                    "match_reason": (
-                        "1688 官方图搜返回同类商品候选。"
-                        if provider.provider_name != "mock_1688_api"
-                        else "1688 官方 API mock 返回同类商品候选。"
-                    ),
-                },
+                "supplier_alignment": alignment,
             }
         )
 
@@ -789,6 +801,49 @@ def _supplier_api_provider(db: Session, *, org_id: str) -> SupplierApiProvider:
     return Mock1688OfficialApiProvider()
 
 
+def _supplier_api_offer_excerpt(offer: Any) -> str:
+    payload = _dict_value(getattr(offer, "payload", None))
+    detail = _dict_value(payload.get("detail_page_crawler"))
+    unit_count_hint = _unit_count_hint(payload.get("unit"))
+    parts = [
+        getattr(offer, "title", None),
+        getattr(offer, "supplier_name", None),
+        payload.get("title"),
+        unit_count_hint,
+        payload.get("unit"),
+        payload.get("sku_name"),
+        payload.get("supplier_pack_count"),
+        payload.get("raw_price"),
+        detail.get("title"),
+        detail.get("sku_name"),
+        detail.get("pack_count"),
+        detail.get("raw_excerpt"),
+    ]
+    return " ".join(str(part) for part in parts if part not in (None, ""))
+
+
+def _unit_count_hint(value: Any) -> str | None:
+    text_value = str(value or "").strip()
+    if not text_value:
+        return None
+    first_unit = re.split(r"[,，、/ ]+", text_value, maxsplit=1)[0].strip()
+    if first_unit in {"双", "对", "件", "只", "个", "片", "套", "卷", "支"}:
+        return f"1{first_unit}"
+    return None
+
+
+def _dict_value(value: Any) -> dict[str, Any]:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str):
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
+
+
 def build_1688_queries(product: dict[str, Any]) -> list[str]:
     return [item.query for item in build_supplier_queries(product) if item.platform == "1688"]
 
@@ -808,7 +863,7 @@ def build_supplier_queries(
     if not isinstance(search_queries, dict):
         search_queries = {}
     queries: list[SupplierSearchQuery] = []
-    for platform in ("1688", "pdd", "taobao", "jd"):
+    for platform in ("1688",):
         platform_queries = search_queries.get(platform)
         if not isinstance(platform_queries, list) or not platform_queries:
             platform_queries = _default_platform_queries(base, platform)
@@ -843,12 +898,6 @@ def _default_platform_queries(base: str, platform: str) -> list[str]:
             f"{base} 批发 厂家",
             f"{base} 现货",
         ]
-    if platform == "pdd":
-        return [f"拼多多 {base}", f"{base} 拼多多 现货"]
-    if platform == "taobao":
-        return [f"淘宝 {base}", f"{base} 淘宝 同款"]
-    if platform == "jd":
-        return [f"京东 {base}", f"{base} 京东 现货"]
     return [base]
 
 
@@ -856,13 +905,7 @@ def _platform_search_url(platform: str, keyword: str) -> str:
     encoded = quote_plus(keyword)
     if platform == "1688":
         return f"https://s.1688.com/selloffer/offer_search.htm?keywords={encoded}"
-    if platform == "pdd":
-        return f"https://mobile.yangkeduo.com/search_result.html?search_key={encoded}"
-    if platform == "taobao":
-        return f"https://s.taobao.com/search?q={encoded}"
-    if platform == "jd":
-        return f"https://search.jd.com/Search?keyword={encoded}&enc=utf-8"
-    return f"https://www.google.com/search?q={encoded}"
+    return f"https://s.1688.com/selloffer/offer_search.htm?keywords={encoded}"
 
 
 def _serper_client(db: Session, *, org_id: str) -> Serper1688Client:
@@ -1263,18 +1306,6 @@ def _supplier_detail_url(
     *,
     platform: str = "1688",
 ) -> str | None:
-    if platform == "pdd":
-        return _canonical_pdd_product_url(final_url) or _canonical_pdd_product_url(
-            normalized_link
-        )
-    if platform == "taobao":
-        return _canonical_taobao_product_url(final_url) or _canonical_taobao_product_url(
-            normalized_link
-        )
-    if platform == "jd":
-        return _canonical_jd_product_url(final_url) or _canonical_jd_product_url(
-            normalized_link
-        )
     canonical = _canonical_1688_offer_url(final_url) or _canonical_1688_offer_url(
         normalized_link
     )
@@ -1288,62 +1319,21 @@ def _supplier_detail_url(
 
 
 def _normalized_supplier_link(url: str, *, platform: str) -> str | None:
-    if platform == "1688":
-        return _normalized_1688_link(url)
-    if platform == "pdd":
-        return _canonical_pdd_product_url(url)
-    if platform == "taobao":
-        return _canonical_taobao_product_url(url)
-    if platform == "jd":
-        return _canonical_jd_product_url(url)
-    return None
+    return _normalized_1688_link(url) if platform == "1688" else None
 
 
 def _is_login_url(url: str) -> bool:
     host = urlparse(url).netloc.lower()
-    return host == "login.taobao.com" or host.endswith(".login.taobao.com") or "login.1688.com" in host
+    return "login.1688.com" in host
 
 
 def _is_platform_url(url: str, *, platform: str) -> bool:
-    if platform == "1688":
-        return _is_1688_url(url)
-    if platform == "pdd":
-        return _is_pdd_url(url)
-    if platform == "taobao":
-        return _is_taobao_url(url)
-    if platform == "jd":
-        return _is_jd_url(url)
-    return False
+    return _is_1688_url(url) if platform == "1688" else False
 
 
 def _is_1688_url(url: str) -> bool:
     host = urlparse(url).netloc.lower()
     return host == "1688.com" or host.endswith(".1688.com")
-
-
-def _is_pdd_url(url: str) -> bool:
-    host = urlparse(url).netloc.lower()
-    return (
-        host == "pinduoduo.com"
-        or host.endswith(".pinduoduo.com")
-        or host == "yangkeduo.com"
-        or host.endswith(".yangkeduo.com")
-    )
-
-
-def _is_taobao_url(url: str) -> bool:
-    host = urlparse(url).netloc.lower()
-    return (
-        host == "taobao.com"
-        or host.endswith(".taobao.com")
-        or host == "tmall.com"
-        or host.endswith(".tmall.com")
-    )
-
-
-def _is_jd_url(url: str) -> bool:
-    host = urlparse(url).netloc.lower()
-    return host == "jd.com" or host.endswith(".jd.com")
 
 
 def _normalized_1688_link(url: str) -> str | None:
@@ -1368,48 +1358,6 @@ def _canonical_1688_offer_url(url: str | None) -> str | None:
     if not match:
         return None
     return f"https://detail.1688.com/offer/{match.group(1)}.html"
-
-
-def _canonical_pdd_product_url(url: str | None) -> str | None:
-    if not url:
-        return None
-    parsed = urlparse(url.strip())
-    if not parsed.scheme or not _is_pdd_url(parsed.geturl()):
-        return None
-    match = re.search(r"(?:goods_id|goodsId)=([0-9]{6,})", parsed.query)
-    if not match:
-        match = re.search(r"/goods(?:/|_)([0-9]{6,})", parsed.path)
-    if not match and parsed.path.endswith("/goods.html"):
-        return parsed._replace(fragment="").geturl()
-    if not match:
-        return None
-    return f"https://mobile.yangkeduo.com/goods.html?goods_id={match.group(1)}"
-
-
-def _canonical_taobao_product_url(url: str | None) -> str | None:
-    if not url:
-        return None
-    parsed = urlparse(url.strip())
-    if not parsed.scheme or not _is_taobao_url(parsed.geturl()) or _is_login_url(parsed.geturl()):
-        return None
-    match = re.search(r"(?:^|&)id=([0-9]{6,})(?:&|$)", parsed.query)
-    if not match:
-        return None
-    return f"https://item.taobao.com/item.htm?id={match.group(1)}"
-
-
-def _canonical_jd_product_url(url: str | None) -> str | None:
-    if not url:
-        return None
-    parsed = urlparse(url.strip())
-    if not parsed.scheme or not _is_jd_url(parsed.geturl()):
-        return None
-    match = re.search(r"/([0-9]{6,})\.html", parsed.path)
-    if not match:
-        match = re.search(r"/product/([0-9]{6,})", parsed.path)
-    if not match:
-        return None
-    return f"https://item.jd.com/{match.group(1)}.html"
 
 
 def _bounded_limit(value: int) -> int:

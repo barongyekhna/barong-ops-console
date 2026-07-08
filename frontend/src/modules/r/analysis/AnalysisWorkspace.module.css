@@ -404,25 +404,104 @@
 }
 
 .tableWrap {
-  overflow-x: auto;
+  overflow-x: visible;
   border: 1px solid var(--color-line);
   border-radius: 8px;
 }
 
+.tableControls {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(3, minmax(130px, 0.8fr)) auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.tableControls label {
+  display: grid;
+  gap: 4px;
+}
+
+.tableControls label span,
+.tableCount {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+  font-weight: 820;
+}
+
+.tableControls input,
+.tableControls select {
+  width: 100%;
+  min-width: 0;
+  height: 32px;
+  border: 1px solid var(--color-line);
+  border-radius: 6px;
+  color: var(--color-text);
+  background: var(--color-surface);
+  font: inherit;
+  font-size: 0.78rem;
+}
+
+.tableControls input {
+  padding: 0 9px;
+}
+
+.tableControls select {
+  padding: 0 6px;
+}
+
+.tableCount {
+  padding-bottom: 8px;
+  white-space: nowrap;
+}
+
 .resultTable {
   width: 100%;
-  min-width: 1460px;
+  min-width: 0;
+  table-layout: fixed;
   border-collapse: collapse;
   background: var(--color-surface);
 }
 
+.colImage {
+  width: 5.5%;
+}
+
+.colAsin {
+  width: 10%;
+}
+
+.colKeyword {
+  width: 12%;
+}
+
+.colProduct {
+  width: 19%;
+}
+
+.colAmazon {
+  width: 12%;
+}
+
+.colProfit {
+  width: 13%;
+}
+
+.colMargin {
+  width: 11%;
+}
+
+.colSupplier {
+  width: 17.5%;
+}
+
 .resultTable th,
 .resultTable td {
-  padding: 12px;
+  padding: 8px;
   border-bottom: 1px solid var(--color-line);
   color: var(--color-text);
   text-align: left;
   vertical-align: top;
+  overflow-wrap: anywhere;
 }
 
 .resultTable th {
@@ -433,7 +512,7 @@
 }
 
 .resultTable td {
-  font-size: 0.83rem;
+  font-size: 0.74rem;
 }
 
 .resultTable td > strong,
@@ -444,14 +523,14 @@
 
 .resultTable td > strong {
   color: var(--color-text);
-  line-height: 1.45;
+  line-height: 1.35;
 }
 
 .resultTable td > span,
 .resultTable td > small {
-  margin-top: 4px;
+  margin-top: 3px;
   color: var(--color-muted);
-  line-height: 1.45;
+  line-height: 1.35;
 }
 
 .resultTable a {
@@ -465,8 +544,8 @@
 
 .productImage,
 .imagePlaceholder {
-  width: 58px;
-  height: 58px;
+  width: 48px;
+  height: 48px;
   border: 1px solid var(--color-line);
   border-radius: 7px;
   background: var(--color-surface-muted);
@@ -478,8 +557,8 @@
 
 .imageZoomWrap {
   display: grid;
-  width: 58px;
-  height: 58px;
+  width: 48px;
+  height: 48px;
   place-items: center;
 }
 
@@ -515,17 +594,42 @@
 .asinTag {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
   width: fit-content;
-  padding: 5px 8px;
+  max-width: 100%;
+  padding: 4px 6px;
   border: 1px solid rgb(22 163 74 / 28%);
   border-radius: 6px;
   color: #166534;
   background: #dcfce7;
   font: inherit;
-  font-size: 0.78rem;
+  font-size: 0.7rem;
   font-weight: 880;
   cursor: pointer;
+}
+
+.asinTag span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.keywordCopyTag {
+  color: #1d4ed8;
+  border-color: rgb(37 99 235 / 24%);
+  background: #dbeafe;
+}
+
+.keywordCopyTag svg {
+  color: #1d4ed8;
+}
+
+.compactText {
+  display: -webkit-box;
+  max-height: 2.8em;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .asinTag svg {
@@ -553,6 +657,7 @@
 .moqTag,
 .marginTag,
 .lithiumTag,
+.packTag,
 .relevanceTag {
   display: inline-flex;
   width: fit-content;
@@ -577,6 +682,18 @@
 .lithiumTag {
   color: #991b1b;
   background: #fee2e2;
+}
+
+.packTag {
+  color: #7c2d12;
+  background: #ffedd5;
+  border: 1px solid #fb923c;
+}
+
+.packTag[data-status="needs_review"] {
+  color: #92400e;
+  background: #fef3c7;
+  border-color: #f59e0b;
 }
 
 .relevanceTag {
@@ -616,8 +733,8 @@
 
 .aiCell {
   display: grid;
-  gap: 7px;
-  min-width: 150px;
+  gap: 5px;
+  min-width: 0;
 }
 
 .aiPending,
@@ -666,16 +783,27 @@
 
 .supplierList {
   display: grid;
-  gap: 7px;
+  gap: 5px;
 }
 
 .supplierOption {
   display: grid;
-  gap: 5px;
-  padding: 7px;
+  gap: 4px;
+  padding: 5px;
   border: 1px solid var(--color-line);
   border-radius: 7px;
   background: var(--color-surface-muted);
+}
+
+.supplierTitle {
+  display: -webkit-box;
+  max-height: 2.7em;
+  overflow: hidden;
+  color: var(--color-muted);
+  font-size: 0.7rem;
+  line-height: 1.35;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
 .searchPageList {
@@ -743,6 +871,14 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .tableControls {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tableCount {
+    padding-bottom: 0;
+  }
+
   .searchRow {
     grid-template-columns: auto minmax(0, 1fr);
   }
@@ -756,6 +892,10 @@
 @media (max-width: 560px) {
   .metricGrid,
   .resultMetaBand {
+    grid-template-columns: 1fr;
+  }
+
+  .tableControls {
     grid-template-columns: 1fr;
   }
 

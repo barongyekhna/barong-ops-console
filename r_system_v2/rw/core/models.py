@@ -81,6 +81,15 @@ class KeepaProductData:
     item_length_mm: int | None = None
     item_width_mm: int | None = None
     item_height_mm: int | None = None
+    amazon_pack_count: int | None = None
+    amazon_pack_label: str | None = None
+    amazon_pack_source: str | None = None
+    amazon_pack_confidence: str | None = None
+    amazon_pack_requires_alignment: bool = False
+    amazon_pack_evidence: list[dict[str, Any]] = field(default_factory=list)
+    amazon_variation_attributes: list[dict[str, str]] = field(default_factory=list)
+    amazon_parent_asin: str | None = None
+    amazon_variation_csv: str | None = None
     mock_generated: bool = True
     fetched_at: str = field(default_factory=utc_now_iso)
 

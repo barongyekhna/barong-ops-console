@@ -308,6 +308,9 @@ function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
         <span>供应商候选 {formatCount(result.counts.candidate_offers)}</span>
         <span>已抓到成本 {formatCount(result.counts.priced_offers)}</span>
         <span>利润快照 {formatCount(result.counts.profit_snapshots)}</span>
+        {result.counts.profit_quantity_pending ? (
+          <span>数量待确认 {formatCount(result.counts.profit_quantity_pending)}</span>
+        ) : null}
         <span>AI 决策 {formatCount(result.counts.final_decisions ?? result.ai_selection?.counts.final_decisions ?? 0)}</span>
         <span>AI 通过 {formatCount(result.counts.ai_pass ?? result.ai_selection?.counts.ai_pass ?? 0)}</span>
         <span>实时汇率 1 USD = {formatRate(result.exchange_rate.usd_cny)} CNY</span>
@@ -321,6 +324,58 @@ function JobProgressPanel({ result }: { result: RaAutoProfitJobResult }) {
 
 function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
   const items = result.items ?? [];
+  const [tableQuery, setTableQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [verdictFilter, setVerdictFilter] = useState("all");
+  const [marginSort, setMarginSort] = useState("desc");
+  const minMargin = result.formula.default_min_gross_margin;
+  const categories = useMemo(
+    () =>
+      Array.from(
+        new Set(
+          items
+            .map((item) => item.category)
+            .filter((value): value is string => typeof value === "string" && value.length > 0),
+        ),
+      ).sort((left, right) => left.localeCompare(right, "zh-Hans-CN")),
+    [items],
+  );
+  const visibleItems = useMemo(() => {
+    const query = tableQuery.trim().toLowerCase();
+    const filtered = items.filter((item) => {
+      if (categoryFilter !== "all" && item.category !== categoryFilter) {
+        return false;
+      }
+      if (verdictFilter !== "all" && itemVerdictFilter(item) !== verdictFilter) {
+        return false;
+      }
+      if (!query) {
+        return true;
+      }
+      return [
+        item.asin,
+        item.keyword,
+        item.product_keyword,
+        item.title,
+        item.title_zh,
+        item.category,
+        item.matched_source_query,
+      ]
+        .filter(Boolean)
+        .some((value) => String(value).toLowerCase().includes(query));
+    });
+    return filtered.sort((left, right) => {
+      const leftValue = itemMarginSortValue(left);
+      const rightValue = itemMarginSortValue(right);
+      if (marginSort === "asc") {
+        return leftValue - rightValue;
+      }
+      if (marginSort === "desc") {
+        return rightValue - leftValue;
+      }
+      return 0;
+    });
+  }, [categoryFilter, items, marginSort, tableQuery, verdictFilter]);
   if (items.length === 0) {
     if (
       result.counts.rw_empty_result ||
@@ -332,132 +387,135 @@ function AutoResultTable({ result }: { result: RaAutoProfitJobResult }) {
   }
 
   return (
-    <div className={styles.tableWrap}>
-      <table className={styles.resultTable}>
-        <thead>
-          <tr>
-            <th>图片</th>
-            <th>ASIN</th>
-            <th>关键词</th>
-            <th>中文产品名</th>
-            <th>亚马逊信息</th>
-            <th>供应商成本</th>
-            <th>毛利润</th>
-            <th>利润率</th>
-            <th>AI Mock</th>
-            <th>供应商链接</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((item, index) => (
-            <tr key={`${item.asin ?? "unknown"}-${item.supplier_url ?? index}`}>
-              <td>
-                <ProductImage
-                  asin={item.asin}
-                  candidates={item.image_candidates}
-                  src={item.image_url}
-                  title={item.title_zh || item.title}
-                />
-              </td>
-              <td>
-                <AsinTag asin={item.asin} />
-                <small>{statusLabel(item.status)}</small>
-              </td>
-              <td>
-                <strong>{item.product_keyword || item.keyword}</strong>
-                <span>{item.matched_source_query || item.category || "R-W 匹配"}</span>
-                <span className={styles.relevanceTag} data-status={item.relevance_status}>
-                  {relevanceLabel(item.relevance_status)}
-                  {typeof item.relevance_score === "number" ? ` · ${item.relevance_score}` : ""}
-                </span>
-                {item.relevance_reason ? <small>{item.relevance_reason}</small> : null}
-              </td>
-              <td>
-                <strong>{item.title_zh || "等待中文名"}</strong>
-                <span>{item.category || "未标注类目"}</span>
-              </td>
-              <td>
-                <strong>亚马逊售价 {formatUsd(amazonPriceUsd(item))}</strong>
-                <span>配送 {item.fulfillment_method || "未标注"}</span>
-                <span>FBA {formatUsd(item.fba_fee_usd)}</span>
-                <span>重量 {item.weight_label || formatWeight(item.package_weight_g)}</span>
-                <span>尺寸 {item.dimensions_label || formatDimensions(item)}</span>
-                {item.lithium_battery_warning ? (
-                  <em className={styles.lithiumTag}>锂电提示</em>
-                ) : null}
-              </td>
-              <td>
-                <strong>{formatCny(item.unit_price_cny)}</strong>
-                <span>运费 {formatCny(item.domestic_shipping_cny)}</span>
-                <span>合计 {formatCny(item.supplier_total_cny)}</span>
-                {item.one_piece_hint || item.moq === 1 ? (
-                  <em className={styles.onePieceTag}>一件优先</em>
-                ) : item.moq ? (
-                  <em className={styles.moqTag}>MOQ {item.moq}</em>
-                ) : null}
-              </td>
-              <td>
-                <strong>{formatUsd(item.gross_profit_usd)}</strong>
-                <span>{formatCny(item.gross_profit_cny)}</span>
-              </td>
-              <td>
-                <span className={styles.marginTag} data-verdict={item.verdict}>
-                  {formatPercent(item.gross_margin)}
-                </span>
-                {item.warnings[0] ? <small>{item.warnings[0]}</small> : null}
-                {item.blocked_reasons[0] ? (
-                  <small>{item.blocked_reasons[0]}</small>
-                ) : null}
-              </td>
-              <td>
-                <AiSelectionCell selection={item.ai_selection} />
-              </td>
-              <td>
-                {supplierOptions(item).length ? (
-                  <div className={styles.supplierList}>
-                    {supplierOptions(item).map((supplier, supplierIndex) => (
-                      <div
-                        className={styles.supplierOption}
-                        key={`${supplier.supplier_detail_url ?? supplier.supplier_url ?? "supplier"}-${supplierIndex}`}
-                      >
-                        <a
-                          href={supplier.supplier_detail_url ?? supplier.supplier_url ?? "#"}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          <ExternalLink size={15} />
-                          <span>
-                            {supplierPlatformLabel(supplier)} 详情页 {supplierIndex + 1}
-                            {supplier.supplier_total_cny
-                              ? ` · ${formatCny(supplier.supplier_total_cny)}`
-                              : ""}
-                            {supplier.one_piece_hint || supplier.moq === 1 ? " · 一件" : ""}
-                          </span>
-                        </a>
-                        {supplier.supplier_search_url ? (
-                          <a
-                            href={supplier.supplier_search_url}
-                            rel="noreferrer"
-                            target="_blank"
-                          >
-                            <Search size={15} />
-                            <span>{supplierPlatformLabel(supplier)} 平台搜索页</span>
-                          </a>
-                        ) : null}
-                        <SupplierRiskTags supplier={supplier} />
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <span>未找到详情页</span>
-                )}
-                <SupplierSearchPages pages={item.supplier_search_pages} />
-              </td>
+    <>
+      <div className={styles.tableControls}>
+        <label>
+          <span>关键词搜索</span>
+          <input
+            placeholder="ASIN / 关键词 / 标题"
+            value={tableQuery}
+            onChange={(event) => setTableQuery(event.target.value)}
+          />
+        </label>
+        <label>
+          <span>类目</span>
+          <select value={categoryFilter} onChange={(event) => setCategoryFilter(event.target.value)}>
+            <option value="all">全部类目</option>
+            {categories.map((category) => (
+              <option key={category} value={category}>
+                {category}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>利润状态</span>
+          <select value={verdictFilter} onChange={(event) => setVerdictFilter(event.target.value)}>
+            <option value="all">全部</option>
+            <option value="pass">利润通过</option>
+            <option value="reject">利润未通过</option>
+          </select>
+        </label>
+        <label>
+          <span>利润率排序</span>
+          <select value={marginSort} onChange={(event) => setMarginSort(event.target.value)}>
+            <option value="desc">从高到低</option>
+            <option value="asc">从低到高</option>
+            <option value="none">不排序</option>
+          </select>
+        </label>
+        <span className={styles.tableCount}>显示 {visibleItems.length} / {items.length}</span>
+      </div>
+      <div className={styles.tableWrap}>
+        <table className={styles.resultTable}>
+          <colgroup>
+            <col className={styles.colImage} />
+            <col className={styles.colAsin} />
+            <col className={styles.colKeyword} />
+            <col className={styles.colProduct} />
+            <col className={styles.colAmazon} />
+            <col className={styles.colProfit} />
+            <col className={styles.colMargin} />
+            <col className={styles.colSupplier} />
+          </colgroup>
+          <thead>
+            <tr>
+              <th>图</th>
+              <th>ASIN</th>
+              <th>关键词</th>
+              <th>产品 / 销量</th>
+              <th>亚马逊</th>
+              <th>成本 / 毛利</th>
+              <th>利润率 ≥ {formatPercent(minMargin)}</th>
+              <th>1688 供应商</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody>
+            {visibleItems.map((item, index) => (
+              <tr key={`${item.asin ?? "unknown"}-${item.snapshot_id ?? item.supplier_url ?? index}`}>
+                <td>
+                  <ProductImage
+                    asin={item.asin}
+                    candidates={item.image_candidates}
+                    src={item.image_url}
+                    title={item.title_zh || item.title}
+                  />
+                </td>
+                <td>
+                  <AsinTag asin={item.asin} />
+                  <small>{statusLabel(item.status)}</small>
+                  <small>{verdictLabel(item.verdict)}</small>
+                </td>
+                <td>
+                  <KeywordTag keyword={item.product_keyword || item.keyword} />
+                  <span>{item.matched_source_query || item.category || "R-W 匹配"}</span>
+                  <span className={styles.relevanceTag} data-status={item.relevance_status}>
+                    {relevanceLabel(item.relevance_status)}
+                    {typeof item.relevance_score === "number" ? ` · ${item.relevance_score}` : ""}
+                  </span>
+                </td>
+                <td>
+                  <strong>{item.title_zh || "等待中文名"}</strong>
+                  <ProductPackBadge item={item} />
+                  <span className={styles.compactText}>{item.title || "未记录英文标题"}</span>
+                  <span>{item.category || "未标注类目"}</span>
+                  <span>月销 {formatMonthlySales(item)}</span>
+                  <span>BSR {formatKnownCount(item.bsr)} · 评 {formatKnownCount(item.reviews)} · 卖家 {formatKnownCount(item.seller_count)}</span>
+                </td>
+                <td>
+                  <strong>{formatUsd(amazonPriceUsd(item))}</strong>
+                  <span>FBA {formatUsd(item.fba_fee_usd)}</span>
+                  <span>{item.fulfillment_method || "配送未标注"}</span>
+                  <span>{item.weight_label || formatWeight(item.package_weight_g)}</span>
+                  <span>{item.dimensions_label || formatDimensions(item)}</span>
+                  {item.lithium_battery_warning ? (
+                    <em className={styles.lithiumTag}>锂电提示</em>
+                  ) : null}
+                </td>
+                <td>
+                  <strong>{formatCnyRange(item.supplier_total_cny_min, item.supplier_total_cny_max, item.supplier_total_cny)}</strong>
+                  <span>产品 {formatCny(item.unit_price_cny)} · 运费 {formatCny(item.domestic_shipping_cny)}</span>
+                  <span>毛利 {formatUsdRange(item.gross_profit_usd_min, item.gross_profit_usd_max, item.gross_profit_usd)}</span>
+                  <span>{formatCnyRange(item.gross_profit_cny_min, item.gross_profit_cny_max, item.gross_profit_cny)}</span>
+                </td>
+                <td>
+                  <span className={styles.marginTag} data-verdict={item.verdict}>
+                    {formatPercentRange(item.gross_margin_min, item.gross_margin_max, item.gross_margin)}
+                  </span>
+                  {item.warnings[0] ? <small>{item.warnings[0]}</small> : null}
+                  {item.blocked_reasons[0] ? <small>{item.blocked_reasons[0]}</small> : null}
+                  <AiSelectionCell selection={item.ai_selection} />
+                </td>
+                <td>
+                  <SupplierLinks item={item} />
+                  <SupplierSearchPages pages={item.supplier_search_pages} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -689,28 +747,46 @@ function imagePreviewPosition(event: MouseEvent<HTMLElement>) {
 }
 
 function AsinTag({ asin }: { asin: string | null }) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "manual">("idle");
-
   if (!asin) {
     return <span className={styles.asinTag}>未记录</span>;
   }
-  const asinValue = asin;
+  return <CopyToken className={styles.asinTag} label={asin} title="复制 ASIN" value={asin} />;
+}
 
-  async function handleCopy() {
-    let copiedSuccessfully = false;
-    try {
-      if (window.isSecureContext && navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(asinValue);
-        copiedSuccessfully = true;
-      }
-    } catch {
-      copiedSuccessfully = fallbackCopyText(asinValue);
-    }
+function KeywordTag({ keyword }: { keyword: string | null | undefined }) {
+  const value = keyword?.trim();
+  if (!value) {
+    return <span>未记录关键词</span>;
+  }
+  return (
+    <CopyToken
+      className={`${styles.asinTag} ${styles.keywordCopyTag}`}
+      label={value}
+      title="复制关键词"
+      value={value}
+    />
+  );
+}
+
+function CopyToken({
+  className,
+  label,
+  title,
+  value,
+}: {
+  className: string;
+  label: string;
+  title: string;
+  value: string;
+}) {
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "manual">("idle");
+
+  async function handleCopy(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    event.stopPropagation();
+    const copiedSuccessfully = await copyText(value);
     if (!copiedSuccessfully) {
-      copiedSuccessfully = fallbackCopyText(asinValue);
-    }
-    if (!copiedSuccessfully) {
-      window.prompt("复制 ASIN", asinValue);
+      window.prompt(title, value);
       setCopyState("manual");
       window.setTimeout(() => setCopyState("idle"), 2200);
       return;
@@ -723,39 +799,185 @@ function AsinTag({ asin }: { asin: string | null }) {
 
   return (
     <button
-      className={styles.asinTag}
+      className={className}
       data-copied={copyState === "copied" ? "true" : "false"}
-      title={copyState === "copied" ? "ASIN 已复制" : "复制 ASIN"}
+      title={copyState === "copied" ? "已复制" : title}
       type="button"
-      onClick={() => void handleCopy()}
+      onClick={(event) => void handleCopy(event)}
     >
-      <span>{asinValue}</span>
+      <span>{label}</span>
       <Copy size={13} />
       {copyState === "manual" ? <em>手动复制</em> : null}
     </button>
   );
 }
 
+async function copyText(value: string) {
+  try {
+    await navigator.clipboard?.writeText(value);
+    return true;
+  } catch {
+    return fallbackCopyText(value);
+  }
+}
+
 function fallbackCopyText(value: string) {
   if (typeof document === "undefined") {
     return false;
   }
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("readonly", "true");
-  textarea.style.position = "fixed";
-  textarea.style.left = "-9999px";
-  textarea.style.top = "0";
-  document.body.appendChild(textarea);
-  textarea.focus();
-  textarea.select();
+  const input = document.createElement("input");
+  input.value = value;
+  input.setAttribute("readonly", "true");
+  input.style.position = "fixed";
+  input.style.left = "0";
+  input.style.top = "0";
+  input.style.width = "1px";
+  input.style.height = "1px";
+  input.style.opacity = "0";
+  input.style.pointerEvents = "none";
+  document.body.appendChild(input);
+  input.focus({ preventScroll: true });
+  input.select();
+  input.setSelectionRange(0, input.value.length);
   try {
     return document.execCommand("copy");
   } catch {
     return false;
   } finally {
-    document.body.removeChild(textarea);
+    document.body.removeChild(input);
   }
+}
+
+function SupplierLinks({ item }: { item: RaAutoProfitItem }) {
+  const options = supplierOptions(item);
+  if (!options.length) {
+    return <span>未找到详情页</span>;
+  }
+  return (
+    <div className={styles.supplierList}>
+      {options.map((supplier, supplierIndex) => (
+        <div
+          className={styles.supplierOption}
+          key={`${supplier.supplier_detail_url ?? supplier.supplier_url ?? "supplier"}-${supplierIndex}`}
+        >
+          <a
+            href={supplier.supplier_detail_url ?? supplier.supplier_url ?? "#"}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <ExternalLink size={14} />
+            <span>
+              {supplierPlatformLabel(supplier)} {supplierIndex + 1}
+              {supplier.is_lowest_price ? " · 最低价" : ""}
+              {supplier.supplier_total_cny ? ` · ${formatCny(supplier.supplier_total_cny)}` : ""}
+              {supplier.gross_margin !== null && supplier.gross_margin !== undefined
+                ? ` · ${formatPercent(supplier.gross_margin)}`
+                : ""}
+            </span>
+          </a>
+          <span className={styles.supplierTitle}>
+            {supplier.supplier_title || supplier.supplier_name || "1688 供应商"}
+          </span>
+          {supplier.one_piece_hint || supplier.moq === 1 ? (
+            <em className={styles.onePieceTag}>一件</em>
+          ) : supplier.moq ? (
+            <em className={styles.moqTag}>MOQ {supplier.moq}</em>
+          ) : null}
+          <SupplierRiskTags supplier={supplier} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProductPackBadge({ item }: { item: RaAutoProfitItem }) {
+  const pack = productPackInfo(item);
+  if (!pack) {
+    return null;
+  }
+  return (
+    <span
+      className={styles.packTag}
+      title={pack.reason || undefined}
+      data-status={pack.status || "aligned"}
+    >
+      {pack.label}
+      {pack.multiplier && pack.multiplier !== 1 ? ` · 成本x${formatMultiplier(pack.multiplier)}` : ""}
+    </span>
+  );
+}
+
+function productPackInfo(item: RaAutoProfitItem) {
+  const fromItem = normalizePackInfo({
+    label: item.pack_label,
+    count: item.pack_quantity,
+    supplierLabel: item.supplier_pack_label,
+    multiplier: item.quantity_cost_multiplier,
+    status: item.quantity_alignment_status,
+    reason: item.quantity_alignment_reason,
+  });
+  if (fromItem) {
+    return fromItem;
+  }
+  const alignments = [
+    item.supplier_alignment,
+    ...(item.suppliers ?? []).map((supplier) => supplier.supplier_alignment),
+  ];
+  for (const alignment of alignments) {
+    const quantity = alignment?.quantity;
+    const normalized = normalizePackInfo({
+      label: quantity?.amazon_pack_label,
+      count: quantity?.amazon_pack_count,
+      supplierLabel: quantity?.supplier_pack_label,
+      multiplier: quantity?.cost_multiplier ?? alignment?.cost_multiplier,
+      status: quantity?.status,
+      reason: quantity?.reason ?? alignment?.match_reason,
+    });
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+function normalizePackInfo({
+  label,
+  count,
+  supplierLabel,
+  multiplier,
+  status,
+  reason,
+}: {
+  label?: string | null;
+  count?: number | null;
+  supplierLabel?: string | null;
+  multiplier?: number | null;
+  status?: string | null;
+  reason?: string | null;
+}) {
+  const cleanedLabel = String(label || "").trim();
+  const numericCount = typeof count === "number" && Number.isFinite(count) ? count : null;
+  const isPendingMulti = cleanedLabel.includes("待确认") || status === "needs_review";
+  if ((!numericCount || numericCount <= 1) && !isPendingMulti) {
+    return null;
+  }
+  const displayLabel =
+    cleanedLabel || (numericCount && numericCount > 1 ? `${Math.round(numericCount)}件装` : "多件装待确认");
+  const supplierText = supplierLabel ? `供应商 ${supplierLabel}` : "";
+  const reasonText = [reason, supplierText].filter(Boolean).join("；");
+  return {
+    label: displayLabel,
+    multiplier: typeof multiplier === "number" && Number.isFinite(multiplier) ? multiplier : null,
+    status,
+    reason: reasonText,
+  };
+}
+
+function formatMultiplier(value: number) {
+  if (!Number.isFinite(value)) {
+    return "-";
+  }
+  return value.toFixed(2).replace(/\.?0+$/, "");
 }
 
 function supplierOptions(item: RaAutoProfitItem) {
@@ -763,7 +985,7 @@ function supplierOptions(item: RaAutoProfitItem) {
     (supplier) => typeof supplier.supplier_url === "string" && supplier.supplier_url.length > 0,
   );
   if (fromList.length) {
-    return fromList.slice(0, 5);
+    return fromList.slice(0, 3);
   }
   if (!item.supplier_url) {
     return [];
@@ -771,6 +993,7 @@ function supplierOptions(item: RaAutoProfitItem) {
   return [
     {
       supplier_name: item.supplier_name,
+      supplier_title: null,
       supplier_url: item.supplier_url,
       supplier_platform: item.supplier_platform,
       supplier_platform_label: item.supplier_platform_label,
@@ -783,6 +1006,11 @@ function supplierOptions(item: RaAutoProfitItem) {
       moq: item.moq,
       one_piece_hint: item.one_piece_hint,
       supplier_alignment: item.supplier_alignment,
+      gross_margin: item.gross_margin,
+      gross_profit_usd: item.gross_profit_usd,
+      gross_profit_cny: item.gross_profit_cny,
+      verdict: item.verdict,
+      is_lowest_price: true,
     },
   ];
 }
@@ -824,6 +1052,12 @@ function SupplierRiskTags({
   }
   const quantityStatus = alignment.quantity?.status;
   const dimensionStatus = alignment.dimensions?.status;
+  const quantityLabel = [
+    alignment.quantity?.amazon_pack_label,
+    alignment.quantity?.supplier_pack_label ? `供应商${alignment.quantity.supplier_pack_label}` : null,
+  ]
+    .filter(Boolean)
+    .join(" / ");
   return (
     <div className={styles.supplierTags}>
       <span data-status={alignment.match_status || "review"}>
@@ -833,6 +1067,7 @@ function SupplierRiskTags({
       {quantityStatus && quantityStatus !== "not_required" ? (
         <span data-status={quantityStatus === "aligned" ? "match" : "review"}>
           数量{quantityStatus === "aligned" ? "已对齐" : "待确认"}
+          {quantityLabel ? ` · ${quantityLabel}` : ""}
         </span>
       ) : null}
       {dimensionStatus && dimensionStatus !== "not_required" ? (
@@ -851,15 +1086,6 @@ function supplierPlatformLabel(supplier: {
 }) {
   if (supplier.supplier_platform_label) {
     return supplier.supplier_platform_label;
-  }
-  if (supplier.supplier_platform === "pdd") {
-    return "拼多多";
-  }
-  if (supplier.supplier_platform === "taobao") {
-    return "淘宝/天猫";
-  }
-  if (supplier.supplier_platform === "jd") {
-    return "京东";
   }
   return "1688";
 }
@@ -922,6 +1148,13 @@ function formatCount(value: number | null | undefined) {
   return new Intl.NumberFormat("zh-CN").format(value);
 }
 
+function formatKnownCount(value: number | null | undefined) {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "未记录";
+  }
+  return new Intl.NumberFormat("zh-CN").format(value);
+}
+
 function formatUsd(value: number | null | undefined) {
   if (typeof value !== "number" || !Number.isFinite(value)) {
     return "待计算";
@@ -941,6 +1174,34 @@ function formatCny(value: number | null | undefined) {
     return "待获取";
   }
   return `￥${value.toFixed(2)}`;
+}
+
+function formatCnyRange(
+  min: number | null | undefined,
+  max: number | null | undefined,
+  fallback: number | null | undefined,
+) {
+  if (typeof min === "number" && typeof max === "number" && Number.isFinite(min) && Number.isFinite(max)) {
+    if (Math.abs(min - max) < 0.005) {
+      return formatCny(min);
+    }
+    return `${formatCny(min)} - ${formatCny(max)}`;
+  }
+  return formatCny(fallback);
+}
+
+function formatUsdRange(
+  min: number | null | undefined,
+  max: number | null | undefined,
+  fallback: number | null | undefined,
+) {
+  if (typeof min === "number" && typeof max === "number" && Number.isFinite(min) && Number.isFinite(max)) {
+    if (Math.abs(min - max) < 0.005) {
+      return formatUsd(min);
+    }
+    return `${formatUsd(min)} - ${formatUsd(max)}`;
+  }
+  return formatUsd(fallback);
 }
 
 function formatWeight(value: number | null | undefined) {
@@ -970,6 +1231,58 @@ function formatPercent(value: number | null | undefined) {
     return "待计算";
   }
   return `${(value * 100).toFixed(1)}%`;
+}
+
+function formatPercentRange(
+  min: number | null | undefined,
+  max: number | null | undefined,
+  fallback: number | null | undefined,
+) {
+  if (typeof min === "number" && typeof max === "number" && Number.isFinite(min) && Number.isFinite(max)) {
+    if (Math.abs(min - max) < 0.0005) {
+      return formatPercent(min);
+    }
+    return `${formatPercent(min)} - ${formatPercent(max)}`;
+  }
+  return formatPercent(fallback);
+}
+
+function formatMonthlySales(item: Pick<
+  RaAutoProfitItem,
+  | "monthly_sales"
+  | "monthly_sales_estimate"
+  | "monthly_sales_estimate_min"
+  | "monthly_sales_estimate_max"
+  | "monthly_sales_confidence"
+>) {
+  if (typeof item.monthly_sales === "number" && Number.isFinite(item.monthly_sales)) {
+    return `${formatKnownCount(item.monthly_sales)}（Keepa）`;
+  }
+  if (
+    typeof item.monthly_sales_estimate_min === "number" &&
+    typeof item.monthly_sales_estimate_max === "number"
+  ) {
+    return `${formatKnownCount(item.monthly_sales_estimate_min)}-${formatKnownCount(item.monthly_sales_estimate_max)}（估算）`;
+  }
+  if (typeof item.monthly_sales_estimate === "number" && Number.isFinite(item.monthly_sales_estimate)) {
+    return `${formatKnownCount(item.monthly_sales_estimate)}（估算）`;
+  }
+  return "未记录";
+}
+
+function itemMarginSortValue(item: RaAutoProfitItem) {
+  const value = item.gross_margin_max ?? item.gross_margin ?? item.gross_margin_min;
+  return typeof value === "number" && Number.isFinite(value) ? value : -999;
+}
+
+function itemVerdictFilter(item: RaAutoProfitItem) {
+  if (item.verdict === "pass") {
+    return "pass";
+  }
+  if (item.verdict === "reject" || item.verdict === "blocked") {
+    return "reject";
+  }
+  return "pending";
 }
 
 function statusLabel(value: string | null | undefined) {

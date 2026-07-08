@@ -276,6 +276,15 @@ export type RaAutoProfitItem = {
   amazon_price_usd?: number | null;
   sell_price_usd?: number | null;
   fulfillment_method?: string | null;
+  monthly_sales?: number | null;
+  monthly_sales_estimate?: number | null;
+  monthly_sales_estimate_min?: number | null;
+  monthly_sales_estimate_max?: number | null;
+  monthly_sales_confidence?: string | null;
+  monthly_sales_source?: string | null;
+  bsr?: number | null;
+  reviews?: number | null;
+  seller_count?: number | null;
   lithium_battery_warning?: boolean | null;
   fba_fee_usd?: number | null;
   package_weight_g?: number | null;
@@ -303,8 +312,15 @@ export type RaAutoProfitItem = {
   supplier_total_cny: number | null;
   moq: number | null;
   one_piece_hint: boolean;
+  pack_label?: string | null;
+  pack_quantity?: number | null;
+  supplier_pack_label?: string | null;
+  quantity_cost_multiplier?: number | null;
+  quantity_alignment_status?: string | null;
+  quantity_alignment_reason?: string | null;
   suppliers?: Array<{
     supplier_name: string | null;
+    supplier_title?: string | null;
     supplier_url: string | null;
     supplier_platform?: string | null;
     supplier_platform_label?: string | null;
@@ -315,6 +331,12 @@ export type RaAutoProfitItem = {
     domestic_shipping_cny: number | null;
     supplier_total_cny: number | null;
     moq: number | null;
+    verdict?: string | null;
+    gross_margin?: number | null;
+    gross_profit_usd?: number | null;
+    gross_profit_cny?: number | null;
+    snapshot_id?: string | null;
+    is_lowest_price?: boolean | null;
     rating?: number | null;
     match_score?: number | null;
     offer_status?: string | null;
@@ -328,6 +350,14 @@ export type RaAutoProfitItem = {
   gross_profit_usd: number | null;
   gross_profit_cny: number | null;
   gross_margin: number | null;
+  supplier_total_cny_min?: number | null;
+  supplier_total_cny_max?: number | null;
+  gross_profit_usd_min?: number | null;
+  gross_profit_usd_max?: number | null;
+  gross_profit_cny_min?: number | null;
+  gross_profit_cny_max?: number | null;
+  gross_margin_min?: number | null;
+  gross_margin_max?: number | null;
   verdict: string | null;
   warnings: string[];
   blocked_reasons: string[];
@@ -355,8 +385,11 @@ export type RaSupplierAlignment = {
   adjusted_unit_price_cny?: number | null;
   quantity?: {
     status?: string | null;
+    pending_kind?: string | null;
     amazon_pack_count?: number | null;
+    amazon_pack_label?: string | null;
     supplier_pack_count?: number | null;
+    supplier_pack_label?: string | null;
     cost_multiplier?: number | null;
     reason?: string | null;
   };
@@ -411,6 +444,7 @@ export type RaAutoProfitResult = {
     profit_pass: number;
     profit_reject: number;
     profit_blocked: number;
+    profit_quantity_pending?: number;
     ai_candidates?: number;
     ai_evaluations?: number;
     ai_pass?: number;

@@ -281,11 +281,11 @@ def _ra_profit_not_processed_sql(db: Session) -> str:
     if dialect == "postgresql":
         return (
             "COALESCE(features->'ra_profit'->>'status', '') "
-            "NOT IN ('pass', 'reject', 'blocked', 'failed')"
+            "NOT IN ('pass', 'reject', 'blocked', 'failed', 'quantity_pending')"
         )
     return (
         "COALESCE(json_extract(features, '$.ra_profit.status'), '') "
-        "NOT IN ('pass', 'reject', 'blocked', 'failed')"
+        "NOT IN ('pass', 'reject', 'blocked', 'failed', 'quantity_pending')"
     )
 
 

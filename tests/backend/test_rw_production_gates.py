@@ -26,6 +26,7 @@ from r_system_v2.rw.providers.keepa_provider import (
     _parse_discovery_payload,
     _parse_product_payload,
 )
+from r_system_v2.rw.processor.feature_extractor import extract_product_features
 from r_system_v2.rw.product_images import product_image_candidates
 from r_system_v2.rw.scheduler.keepa_scheduler import KeepaScheduler
 from r_system_v2.rw.storage.repository import MockWarehouseRepository
@@ -198,6 +199,55 @@ def test_keepa_product_parser_extracts_fba_fee_and_fee_inputs():
     assert product.package_width_mm == 163
     assert product.package_height_mm == 61
     assert product.item_weight_g == 410
+
+
+def test_keepa_product_parser_extracts_amazon_pack_from_variation_data():
+    product = _parse_product_payload(
+        {
+            "products": [
+                {
+                    "asin": "B0DTB1511F",
+                    "title": "Smartwool Unisex Everyday Low Cut No Show Socks, Multipack - Natural - Small",
+                    "brand": "Smartwool",
+                    "newPrice": 5295,
+                    "salesRank": 21271,
+                    "reviewCount": 42,
+                    "sellerCount": 3,
+                    "numberOfItems": 3,
+                    "packageQuantity": 1,
+                    "parentAsin": "B0FP483PGG",
+                    "variations": [
+                        {
+                            "asin": "B0DTB1511F",
+                            "attributes": [
+                                {"dimension": "Size", "value": "Small"},
+                                {"dimension": "Color", "value": "Natural-3pk"},
+                            ],
+                        }
+                    ],
+                    "categoryTree": [{"name": "Sports & Outdoors", "catId": 3375251}],
+                }
+            ]
+        },
+        asin="B0DTB1511F",
+        source_query="test",
+    )
+
+    assert product.amazon_pack_count == 3
+    assert product.amazon_pack_label == "3双装"
+    assert product.amazon_pack_source == "keepa.numberOfItems"
+    assert product.amazon_pack_confidence == "high"
+    assert product.amazon_pack_requires_alignment is True
+    assert product.amazon_parent_asin == "B0FP483PGG"
+    assert product.amazon_variation_attributes == [
+        {"dimension": "Size", "value": "Small"},
+        {"dimension": "Color", "value": "Natural-3pk"},
+    ]
+
+    normalized = extract_product_features("test", product)
+    assert normalized.features["amazon_pack_count"] == 3
+    assert normalized.features["amazon_pack_label"] == "3双装"
+    assert normalized.features["amazon_pack_source"] == "keepa.numberOfItems"
 
 
 def test_keepa_product_parser_uses_avg90_and_bsr_features_when_current_missing():

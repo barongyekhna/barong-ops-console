@@ -18,6 +18,7 @@ from r_system_v2.rw.category.category_tree import (
     is_holiday_category_id,
 )
 from r_system_v2.rw.core.models import KeepaProductData
+from r_system_v2.rw.processor.amazon_pack_resolver import resolve_amazon_pack
 
 
 MOCK_MODE = False
@@ -875,6 +876,7 @@ def _parse_product_payload(
     monthly_sales = _monthly_sales_from_product(product)
     image_candidates = _image_candidates_from_product(product, asin=parsed_asin)
     fba_fee = _fba_fee_details(product)
+    amazon_pack = resolve_amazon_pack(product, asin=parsed_asin)
 
     return KeepaProductData(
         asin=parsed_asin,
@@ -918,8 +920,54 @@ def _parse_product_payload(
         item_length_mm=_positive_int_from_product(product, "itemLength"),
         item_width_mm=_positive_int_from_product(product, "itemWidth"),
         item_height_mm=_positive_int_from_product(product, "itemHeight"),
+        amazon_pack_count=_positive_int(amazon_pack.get("count")),
+        amazon_pack_label=_string_value(amazon_pack.get("label")),
+        amazon_pack_source=_string_value(amazon_pack.get("source")),
+        amazon_pack_confidence=_string_value(amazon_pack.get("confidence")),
+        amazon_pack_requires_alignment=bool(amazon_pack.get("requires_alignment")),
+        amazon_pack_evidence=_list_of_dicts(amazon_pack.get("evidence")),
+        amazon_variation_attributes=_list_of_string_dicts(
+            amazon_pack.get("variation_attributes")
+        ),
+        amazon_parent_asin=_string_value(amazon_pack.get("parent_asin")),
+        amazon_variation_csv=_string_value(amazon_pack.get("variation_csv")),
         mock_generated=False,
     )
+
+
+def _positive_int(value: Any) -> int | None:
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)) and value > 0:
+        return int(value)
+    if isinstance(value, str) and value.strip().isdigit():
+        parsed = int(value.strip())
+        return parsed if parsed > 0 else None
+    return None
+
+
+def _string_value(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    return [dict(item) for item in value if isinstance(item, dict)]
+
+
+def _list_of_string_dicts(value: Any) -> list[dict[str, str]]:
+    output: list[dict[str, str]] = []
+    if not isinstance(value, list):
+        return output
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        output.append({str(key): str(val) for key, val in item.items()})
+    return output
 
 
 def _fulfillment_method(product: dict[str, Any]) -> str | None:

@@ -197,6 +197,7 @@ class RaProfitJobWorker:
                         "profit_pass": 0,
                         "profit_reject": 0,
                         "profit_blocked": 0,
+                        "profit_quantity_pending": 0,
                         "warnings": [],
                     }
                 )
@@ -442,11 +443,14 @@ def _process_product_for_job(
                         reason=str(verdict.get("reason") or ""),
                         snapshot=verdict.get("snapshot"),
                     )
+        warnings = list(discovery.get("warnings") or [])
+        if verdict.get("status") == "quantity_pending" and verdict.get("reason"):
+            warnings.append(str(verdict.get("reason")))
         return {
             "asin": asin,
             "counts": discovery.get("counts"),
             "verdict": verdict.get("status"),
-            "warnings": discovery.get("warnings") or [],
+            "warnings": warnings,
         }
     except Exception as exc:  # pragma: no cover - external provider dependent.
         message = str(exc)
@@ -495,6 +499,13 @@ def _profit_verdict_from_discovery(discovery: dict[str, object]) -> dict[str, ob
             "reason": "1688 图搜未找到可用于利润计算的同款/同类供应商。",
             "snapshot": None,
         }
+    quantity_pending_reason = _quantity_pending_reason(discovery)
+    if quantity_pending_reason:
+        return {
+            "status": "quantity_pending",
+            "reason": quantity_pending_reason,
+            "snapshot": None,
+        }
     if priced_offers <= 0:
         return {
             "status": "reject",
@@ -519,6 +530,34 @@ def _best_profit_item(items: list[dict[str, Any]]) -> dict[str, Any]:
     )[0]
 
 
+def _quantity_pending_reason(discovery: dict[str, object]) -> str | None:
+    offers = discovery.get("offers")
+    if not isinstance(offers, list):
+        return None
+    reasons: list[str] = []
+    for offer in offers:
+        offer_dict = _dict_value(offer)
+        alignment = _dict_value(offer_dict.get("supplier_alignment"))
+        if str(alignment.get("match_status") or "").strip().lower() == "mismatch":
+            continue
+        quantity = _dict_value(alignment.get("quantity"))
+        if str(quantity.get("status") or "").strip().lower() != "needs_review":
+            continue
+        pending_kind = str(quantity.get("pending_kind") or "").strip().lower()
+        reason = str(quantity.get("reason") or alignment.get("match_reason") or "").strip()
+        quantity_missing = (
+            "数量" in reason
+            and any(marker in reason for marker in ("未明确", "未知", "待确认", "缺少"))
+            and not any(marker in reason for marker in ("不匹配", "不同", "错配", "无需"))
+        )
+        if pending_kind in {"amazon_quantity", "supplier_quantity"} or quantity_missing:
+            if reason and reason not in reasons:
+                reasons.append(reason)
+    if not reasons:
+        return None
+    return "；".join(reasons[:3])
+
+
 def _mark_rw_profit_status(
     db: Session,
     *,
@@ -529,7 +568,11 @@ def _mark_rw_profit_status(
     reason: str,
     snapshot: object,
 ) -> None:
-    normalized_status = status if status in {"pass", "reject", "blocked"} else "failed"
+    normalized_status = (
+        status
+        if status in {"pass", "reject", "blocked", "quantity_pending"}
+        else "failed"
+    )
     row = db.execute(
         text(
             """
@@ -561,7 +604,7 @@ def _mark_rw_profit_status(
         "features": json.dumps(features, ensure_ascii=False),
         "reason": f"R-A利润{_rw_profit_label(normalized_status)}：{reason}"[:500],
     }
-    if normalized_status == "pass":
+    if normalized_status in {"pass", "quantity_pending"}:
         db.execute(
             text(
                 f"""
@@ -597,6 +640,7 @@ def _mark_rw_profit_status(
             "pass": "profit_passed",
             "reject": "profit_rejected",
             "blocked": "profit_blocked",
+            "quantity_pending": "profit_quantity_pending",
         }.get(normalized_status, "profit_pending")
         db.execute(
             text(
@@ -615,6 +659,8 @@ def _mark_rw_profit_status(
 def _rw_profit_label(status: str) -> str:
     if status == "pass":
         return "通过"
+    if status == "quantity_pending":
+        return "数量待确认"
     if status == "blocked":
         return "阻塞"
     return "不通过"
@@ -794,14 +840,15 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
         run_id=run_id,
     )
     ai_by_candidate = load_mock_ai_selection_by_candidate(db, org_id=org_id, run_id=run_id)
-    snapshot_rows = db.execute(
+    snapshot_rows = list(db.execute(
         text(
             """
             SELECT c.id AS candidate_id,
                    s.id AS snapshot_id, s.asin, s.net_profit_usd, s.net_margin,
                    s.payload, s.created_at,
                    p.title, p.title_zh, p.image_url, p.category, p.source_query,
-                   p.price, p.fulfillment_method, p.lithium_battery_warning,
+                   p.price, p.bsr, p.reviews, p.seller_count,
+                   p.fulfillment_method, p.lithium_battery_warning,
                    p.features
             FROM ra_profit_snapshots s
             JOIN ra_candidates c ON c.id = s.candidate_id
@@ -812,17 +859,23 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
             """
         ),
         {"org_id": org_id, "run_id": run_id},
-    ).mappings()
-    items = [
-        _snapshot_item_from_row(
+    ).mappings())
+    snapshot_items_by_candidate: dict[str, dict[str, object]] = {}
+    for row in snapshot_rows:
+        candidate_id = str(row["candidate_id"])
+        item = _snapshot_item_from_row(
             dict(row),
             query=query,
-            suppliers=suppliers_by_candidate.get(str(row["candidate_id"]), []),
-            supplier_search_pages=search_pages_by_candidate.get(str(row["candidate_id"]), []),
-            ai_selection=ai_by_candidate.get(str(row["candidate_id"])),
+            suppliers=suppliers_by_candidate.get(candidate_id, []),
+            supplier_search_pages=search_pages_by_candidate.get(candidate_id, []),
+            ai_selection=ai_by_candidate.get(candidate_id),
         )
-        for row in snapshot_rows
-    ]
+        existing = snapshot_items_by_candidate.get(candidate_id)
+        snapshot_items_by_candidate[candidate_id] = _merge_candidate_snapshot_item(
+            existing,
+            item,
+        )
+    items = list(snapshot_items_by_candidate.values())
 
     pending_rows = db.execute(
         text(
@@ -832,7 +885,8 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
                    o.supplier_name, o.supplier_url,
                    o.unit_price_cny, o.moq, o.offer_status, o.payload,
                    p.title, p.title_zh, p.image_url, p.category, p.source_query,
-                   p.price, p.fulfillment_method, p.lithium_battery_warning,
+                   p.price, p.bsr, p.reviews, p.seller_count,
+                   p.fulfillment_method, p.lithium_battery_warning,
                    p.features
             FROM ra_supplier_offers o
             JOIN ra_candidates c ON c.id = o.candidate_id
@@ -869,7 +923,8 @@ def _job_items(db: Session, *, org_id: str, run_id: str, query: str) -> list[dic
             """
             SELECT c.id AS candidate_id, c.source_asin AS asin, c.snapshot,
                    p.title, p.title_zh, p.image_url, p.category, p.source_query,
-                   p.price, p.fulfillment_method, p.lithium_battery_warning,
+                   p.price, p.bsr, p.reviews, p.seller_count,
+                   p.fulfillment_method, p.lithium_battery_warning,
                    p.features
             FROM ra_candidates c
             LEFT JOIN products_rw p ON p.asin = c.source_asin
@@ -945,10 +1000,121 @@ def _snapshot_item_from_row(
         "snapshot_id": row.get("snapshot_id"),
         "suppliers": suppliers,
         "supplier_search_pages": supplier_search_pages,
+        "supplier_alignment": supplier.get("supplier_alignment"),
         "ai_selection": ai_selection,
     }
     item.update(_product_fields(row, product=product, query=query))
+    return _apply_supplier_profit_ranges(item)
+
+
+def _merge_candidate_snapshot_item(
+    existing: dict[str, object] | None,
+    incoming: dict[str, object],
+) -> dict[str, object]:
+    if existing is None:
+        return _apply_supplier_profit_ranges(incoming)
+    chosen = incoming if _job_item_rank(incoming) > _job_item_rank(existing) else existing
+    chosen["suppliers"] = existing.get("suppliers") or incoming.get("suppliers") or []
+    chosen["supplier_search_pages"] = (
+        existing.get("supplier_search_pages") or incoming.get("supplier_search_pages") or []
+    )
+    chosen["ai_selection"] = existing.get("ai_selection") or incoming.get("ai_selection")
+    return _apply_supplier_profit_ranges(chosen)
+
+
+def _job_item_rank(item: dict[str, object]) -> tuple[int, float, float]:
+    verdict_rank = {"pass": 3, "reject": 2, "blocked": 1}.get(
+        str(item.get("verdict") or ""),
+        0,
+    )
+    return (
+        verdict_rank,
+        _number(item.get("gross_margin")) or -999.0,
+        _number(item.get("gross_profit_usd")) or -999.0,
+    )
+
+
+def _apply_supplier_profit_ranges(item: dict[str, object]) -> dict[str, object]:
+    suppliers = [
+        supplier
+        for supplier in (item.get("suppliers") or [])
+        if isinstance(supplier, dict)
+    ]
+    _apply_pack_badge(item, suppliers=suppliers)
+    priced = [
+        supplier
+        for supplier in suppliers
+        if _number(supplier.get("gross_margin")) is not None
+    ]
+    if not priced:
+        return item
+    margins = [_number(supplier.get("gross_margin")) for supplier in priced]
+    profits_usd = [_number(supplier.get("gross_profit_usd")) for supplier in priced]
+    profits_cny = [_number(supplier.get("gross_profit_cny")) for supplier in priced]
+    totals = [_number(supplier.get("supplier_total_cny")) for supplier in priced]
+    margins = [value for value in margins if value is not None]
+    profits_usd = [value for value in profits_usd if value is not None]
+    profits_cny = [value for value in profits_cny if value is not None]
+    totals = [value for value in totals if value is not None]
+    if margins:
+        item["gross_margin_min"] = min(margins)
+        item["gross_margin_max"] = max(margins)
+    if profits_usd:
+        item["gross_profit_usd_min"] = min(profits_usd)
+        item["gross_profit_usd_max"] = max(profits_usd)
+    if profits_cny:
+        item["gross_profit_cny_min"] = min(profits_cny)
+        item["gross_profit_cny_max"] = max(profits_cny)
+    if totals:
+        item["supplier_total_cny_min"] = min(totals)
+        item["supplier_total_cny_max"] = max(totals)
+    supplier_verdicts = {str(supplier.get("verdict") or "") for supplier in priced}
+    if "pass" in supplier_verdicts:
+        item["verdict"] = "pass"
+    elif "reject" in supplier_verdicts:
+        item["verdict"] = "reject"
+    elif "blocked" in supplier_verdicts:
+        item["verdict"] = "blocked"
     return item
+
+
+def _apply_pack_badge(
+    item: dict[str, object],
+    *,
+    suppliers: list[dict[str, object]],
+) -> None:
+    alignments: list[dict[str, Any]] = []
+    item_alignment = _dict_value(item.get("supplier_alignment"))
+    if item_alignment:
+        alignments.append(item_alignment)
+    for supplier in suppliers:
+        alignment = _dict_value(supplier.get("supplier_alignment"))
+        if alignment:
+            alignments.append(alignment)
+    for alignment in alignments:
+        quantity = _dict_value(alignment.get("quantity"))
+        amazon_count = _number(quantity.get("amazon_pack_count"))
+        amazon_label = str(quantity.get("amazon_pack_label") or "").strip()
+        supplier_label = str(quantity.get("supplier_pack_label") or "").strip()
+        status = str(quantity.get("status") or "").strip().lower()
+        if amazon_count and amazon_count > 1:
+            item["pack_label"] = amazon_label or f"{int(amazon_count)}件装"
+            item["pack_quantity"] = amazon_count
+            item["supplier_pack_label"] = supplier_label or None
+            item["quantity_cost_multiplier"] = _number(
+                quantity.get("cost_multiplier") or alignment.get("cost_multiplier")
+            )
+            item["quantity_alignment_status"] = status or None
+            item["quantity_alignment_reason"] = quantity.get("reason") or alignment.get("match_reason")
+            return
+        if status == "needs_review" and quantity.get("pending_kind") == "amazon_quantity":
+            item["pack_label"] = str(quantity.get("amazon_pack_label") or "多件装待确认")
+            item["pack_quantity"] = None
+            item["supplier_pack_label"] = supplier_label or None
+            item["quantity_cost_multiplier"] = None
+            item["quantity_alignment_status"] = status
+            item["quantity_alignment_reason"] = quantity.get("reason") or alignment.get("match_reason")
+            return
 
 
 def _pending_item_from_row(
@@ -1001,6 +1167,7 @@ def _pending_item_from_row(
         "ai_selection": ai_selection,
     }
     item.update(_product_fields(row, product={}, query=query))
+    _apply_pack_badge(item, suppliers=suppliers)
     return item
 
 
@@ -1053,10 +1220,11 @@ def _supplier_options_by_candidate(
     org_id: str,
     run_id: str,
 ) -> dict[str, list[dict[str, object]]]:
+    profit_by_offer = _profit_by_offer_id(db, org_id=org_id, run_id=run_id)
     rows = db.execute(
         text(
             """
-            SELECT o.candidate_id, o.supplier_name, o.supplier_url,
+            SELECT o.id AS offer_id, o.candidate_id, o.supplier_name, o.supplier_url,
                    o.unit_price_cny, o.moq, o.rating, o.match_score,
                    o.offer_status, o.payload
             FROM ra_supplier_offers o
@@ -1078,7 +1246,11 @@ def _supplier_options_by_candidate(
         current = output.setdefault(candidate_id, [])
         if len(current) >= MAX_SUPPLIER_LIMIT:
             continue
-        supplier = _supplier_option_from_row(dict(row))
+        row_dict = dict(row)
+        supplier = _supplier_option_from_row(
+            row_dict,
+            profit=profit_by_offer.get(str(row_dict.get("offer_id"))),
+        )
         link = str(supplier.get("supplier_url") or "")
         seen = seen_links.setdefault(candidate_id, set())
         if link and link in seen:
@@ -1086,7 +1258,62 @@ def _supplier_options_by_candidate(
         if link:
             seen.add(link)
         current.append(supplier)
+    for suppliers in output.values():
+        _mark_lowest_supplier(suppliers)
     return output
+
+
+def _profit_by_offer_id(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+) -> dict[str, dict[str, object]]:
+    rows = db.execute(
+        text(
+            """
+            SELECT s.id AS snapshot_id, s.payload, s.net_profit_usd, s.net_margin
+            FROM ra_profit_snapshots s
+            JOIN ra_candidates c ON c.id = s.candidate_id
+            WHERE c.org_id = :org_id AND c.run_id = :run_id
+            ORDER BY s.created_at DESC
+            LIMIT 1000
+            """
+        ),
+        {"org_id": org_id, "run_id": run_id},
+    ).mappings()
+    output: dict[str, dict[str, object]] = {}
+    for row in rows:
+        payload = _dict_value(row.get("payload"))
+        supplier = _dict_value(payload.get("supplier"))
+        offer_id = str(supplier.get("offer_id") or "")
+        if not offer_id or offer_id in output:
+            continue
+        output[offer_id] = {
+            "snapshot_id": row.get("snapshot_id"),
+            "gross_margin": _number(payload.get("gross_margin") or row.get("net_margin")),
+            "gross_profit_usd": _number(
+                payload.get("gross_profit_usd") or row.get("net_profit_usd")
+            ),
+            "gross_profit_cny": _number(payload.get("gross_profit_cny")),
+            "verdict": payload.get("verdict"),
+            "warnings": payload.get("warnings") or [],
+            "blocked_reasons": payload.get("blocked_reasons") or [],
+        }
+    return output
+
+
+def _mark_lowest_supplier(suppliers: list[dict[str, object]]) -> None:
+    priced = [
+        (index, _number(supplier.get("supplier_total_cny")) or _number(supplier.get("unit_price_cny")))
+        for index, supplier in enumerate(suppliers)
+    ]
+    priced = [(index, value) for index, value in priced if value is not None]
+    if not priced:
+        return
+    lowest_index = min(priced, key=lambda item: item[1])[0]
+    for index, supplier in enumerate(suppliers):
+        supplier["is_lowest_price"] = index == lowest_index
 
 
 def _supplier_search_pages_by_candidate(
@@ -1137,7 +1364,11 @@ def _supplier_search_pages_by_candidate(
     return output
 
 
-def _supplier_option_from_row(row: dict[str, Any]) -> dict[str, object]:
+def _supplier_option_from_row(
+    row: dict[str, Any],
+    *,
+    profit: dict[str, object] | None = None,
+) -> dict[str, object]:
     payload = _dict_value(row.get("payload"))
     unit_price = _number(row.get("unit_price_cny"))
     shipping = _number(
@@ -1145,8 +1376,11 @@ def _supplier_option_from_row(row: dict[str, Any]) -> dict[str, object]:
         or payload.get("shipping_fee_cny")
         or payload.get("freight_cny")
     )
+    profit = profit or {}
     return {
+        "offer_id": row.get("offer_id"),
         "supplier_name": row.get("supplier_name"),
+        "supplier_title": payload.get("title"),
         "supplier_url": _canonical_supplier_url(
             row.get("supplier_url"),
             platform=str(payload.get("platform") or ""),
@@ -1168,6 +1402,14 @@ def _supplier_option_from_row(row: dict[str, Any]) -> dict[str, object]:
         "rating": _number(row.get("rating")),
         "match_score": row.get("match_score"),
         "offer_status": row.get("offer_status"),
+        "verdict": profit.get("verdict"),
+        "gross_margin": profit.get("gross_margin"),
+        "gross_profit_usd": profit.get("gross_profit_usd"),
+        "gross_profit_cny": profit.get("gross_profit_cny"),
+        "snapshot_id": profit.get("snapshot_id"),
+        "profit_warnings": profit.get("warnings") or [],
+        "profit_blocked_reasons": profit.get("blocked_reasons") or [],
+        "is_lowest_price": False,
         "crawler_status": payload.get("crawler_status"),
         "one_piece_hint": bool(payload.get("one_piece_hint")),
         "supplier_alignment": payload.get("supplier_alignment"),
@@ -1203,6 +1445,11 @@ def _product_fields(
         or product.get("amazon_price_usd")
         or product.get("sell_price_usd")
     )
+    monthly_sales = _number(features.get("monthly_sales"))
+    monthly_sales_estimate = _number(features.get("monthly_sales_estimate"))
+    amazon_pack_count = _number(features.get("amazon_pack_count"))
+    amazon_pack_label = str(features.get("amazon_pack_label") or "").strip() or None
+    amazon_pack_requires_alignment = bool(features.get("amazon_pack_requires_alignment"))
     return {
         "image_url": primary_product_image_url(
             asin=str(asin or ""),
@@ -1213,6 +1460,16 @@ def _product_fields(
         "product_keyword": _keyword_from_original_title(title),
         "amazon_price_usd": amazon_price,
         "sell_price_usd": amazon_price,
+        "monthly_sales": monthly_sales,
+        "monthly_sales_estimate": monthly_sales_estimate,
+        "monthly_sales_estimate_min": _number(features.get("monthly_sales_estimate_min")),
+        "monthly_sales_estimate_max": _number(features.get("monthly_sales_estimate_max")),
+        "monthly_sales_confidence": features.get("monthly_sales_confidence"),
+        "monthly_sales_source": features.get("monthly_sales_source")
+        or features.get("monthly_sales_estimate_source"),
+        "bsr": _number(row.get("bsr") or product.get("bsr")),
+        "reviews": _number(row.get("reviews") or product.get("reviews")),
+        "seller_count": _number(row.get("seller_count") or product.get("seller_count")),
         "fulfillment_method": row.get("fulfillment_method")
         or features.get("fulfillment_method"),
         "lithium_battery_warning": bool(lithium_value),
@@ -1231,6 +1488,18 @@ def _product_fields(
         ),
         "weight_label": _weight_label(features),
         "dimensions_label": _dimensions_label(features),
+        "pack_label": amazon_pack_label
+        if amazon_pack_count and amazon_pack_count > 1
+        else ("多件装待确认" if amazon_pack_requires_alignment else None),
+        "pack_quantity": amazon_pack_count if amazon_pack_count and amazon_pack_count > 1 else None,
+        "quantity_alignment_status": "amazon_pack_resolved"
+        if amazon_pack_count and amazon_pack_count > 1
+        else ("needs_review" if amazon_pack_requires_alignment else None),
+        "quantity_alignment_reason": (
+            f"亚马逊包装数量来自 {features.get('amazon_pack_source') or 'R-W Keepa 结构化字段'}。"
+            if amazon_pack_count and amazon_pack_count > 1
+            else None
+        ),
         **relevance.to_product_fields(),
     }
 
@@ -1242,7 +1511,7 @@ def _canonical_1688_url(value: Any) -> str | None:
     if not cleaned:
         return None
     lowered = cleaned.lower()
-    if "login.taobao.com" in lowered or "login.1688.com" in lowered:
+    if "login.1688.com" in lowered:
         return None
     match = re.search(r"/offer/([0-9]{6,})", cleaned)
     if not match:
@@ -1265,7 +1534,7 @@ def _canonical_supplier_url(value: Any, *, platform: str) -> str | None:
         if canonical_1688:
             return canonical_1688
     lowered = cleaned.lower()
-    if "login.taobao.com" in lowered or "login.1688.com" in lowered:
+    if "login.1688.com" in lowered:
         return None
     if not cleaned.startswith(("http://", "https://")):
         return None
@@ -1330,7 +1599,8 @@ def _live_counts(db: Session, *, org_id: str, run_id: str) -> dict[str, int]:
               COUNT(DISTINCT s.id) AS profit_snapshots,
               COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_passed') AS profit_pass,
               COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_rejected') AS profit_reject,
-              COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_blocked') AS profit_blocked
+              COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_blocked') AS profit_blocked,
+              COUNT(DISTINCT c.source_asin) FILTER (WHERE c.candidate_status = 'profit_quantity_pending') AS profit_quantity_pending
             FROM ra_candidates c
             LEFT JOIN ra_supplier_offers o ON o.candidate_id = c.id
             LEFT JOIN ra_profit_snapshots s ON s.candidate_id = c.id
@@ -1347,6 +1617,7 @@ def _live_counts(db: Session, *, org_id: str, run_id: str) -> dict[str, int]:
         "profit_pass": int(row["profit_pass"] or 0) if row else 0,
         "profit_reject": int(row["profit_reject"] or 0) if row else 0,
         "profit_blocked": int(row["profit_blocked"] or 0) if row else 0,
+        "profit_quantity_pending": int(row["profit_quantity_pending"] or 0) if row else 0,
     }
 
 
@@ -1365,6 +1636,7 @@ def _initial_counts(filters: dict[str, Any]) -> dict[str, object]:
         "profit_pass": 0,
         "profit_reject": 0,
         "profit_blocked": 0,
+        "profit_quantity_pending": 0,
         "ai_candidates": 0,
         "ai_evaluations": 0,
         "ai_pass": 0,

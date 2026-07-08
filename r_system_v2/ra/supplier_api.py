@@ -12,8 +12,10 @@ from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_UP
 from hashlib import sha1
+from html import unescape
 import hmac
 import json
+from math import ceil
 import os
 import re
 from typing import Any, Protocol
@@ -22,6 +24,7 @@ from urllib.parse import urlencode, urlparse
 from urllib.request import Request, urlopen
 
 from r_system_v2.ra.profit_engine import decimal_value
+from r_system_v2.ra.supplier_keyword_skill import extract_pack_count
 from r_system_v2.rw.product_images import primary_product_image_url, product_image_candidates
 
 
@@ -141,6 +144,27 @@ class SupplierApiOffer:
     payload: dict[str, Any] | None = None
 
 
+@dataclass(frozen=True)
+class DetailPageProbe:
+    final_url: str | None
+    title: str | None
+    unit_price_cny: Decimal | None
+    domestic_shipping_cny: Decimal | None
+    moq: int | None
+    sku_id: str | None
+    spec_id: str | None
+    sku_name: str | None
+    pack_count: int | None
+    actual_weight_kg: Decimal | None
+    length_cm: Decimal | None
+    width_cm: Decimal | None
+    height_cm: Decimal | None
+    one_piece_hint: bool
+    status: str
+    warning: str | None
+    raw_excerpt: str | None
+
+
 class SupplierApiProvider(Protocol):
     provider_name: str
 
@@ -232,7 +256,14 @@ class Alibaba1688OfficialApiProvider:
         offers = _normalize_image_search_offers(payload, limit=limit)
         if not offers:
             return []
-        return [self._enrich_offer(offer) for offer in offers]
+        return [
+            self._enrich_offer(
+                offer,
+                product=product,
+                keyword_profile=keyword_profile,
+            )
+            for offer in offers
+        ]
 
     def _call_image_search(
         self,
@@ -390,13 +421,54 @@ class Alibaba1688OfficialApiProvider:
             raise RASupplierApiError(str(message)[:500])
         return parsed
 
-    def _enrich_offer(self, offer: SupplierApiOffer) -> SupplierApiOffer:
+    def _enrich_offer(
+        self,
+        offer: SupplierApiOffer,
+        *,
+        product: dict[str, Any],
+        keyword_profile: dict[str, Any],
+    ) -> SupplierApiOffer:
         payload = dict(offer.payload or {})
         offer_id = _optional_string(payload.get("offer_id")) or _offer_id_from_url(
             offer.supplier_url
         )
+
+        detail_probe = _crawl_1688_detail_page(
+            offer.supplier_url,
+            product=product,
+            keyword_profile=keyword_profile,
+        )
+        detail_price = None
+        detail_moq = None
+        detail_sku_id = None
+        if detail_probe:
+            payload["detail_page_crawler"] = _detail_probe_payload(detail_probe)
+            detail_price = detail_probe.unit_price_cny
+            detail_moq = detail_probe.moq
+            detail_sku_id = detail_probe.sku_id
+            if detail_probe.spec_id:
+                payload["spec_id"] = detail_probe.spec_id
+            if detail_probe.sku_name:
+                payload["sku_name"] = detail_probe.sku_name
+            if detail_probe.pack_count:
+                payload["supplier_pack_count"] = detail_probe.pack_count
+            if detail_probe.actual_weight_kg is not None:
+                payload["supplier_actual_weight_kg"] = _decimal_number(
+                    detail_probe.actual_weight_kg
+                )
+            if detail_probe.length_cm is not None:
+                payload["supplier_length_cm"] = _decimal_number(detail_probe.length_cm)
+            if detail_probe.width_cm is not None:
+                payload["supplier_width_cm"] = _decimal_number(detail_probe.width_cm)
+            if detail_probe.height_cm is not None:
+                payload["supplier_height_cm"] = _decimal_number(detail_probe.height_cm)
+
+        if not offer_id and detail_probe and detail_probe.final_url:
+            offer_id = _offer_id_from_url(detail_probe.final_url)
+            if offer_id:
+                payload["offer_id"] = offer_id
         if not offer_id:
-            return offer
+            return replace(offer, payload=payload)
 
         detail_payload = self._call_product_info(offer_id)
         if detail_payload:
@@ -405,17 +477,35 @@ class Alibaba1688OfficialApiProvider:
             sku_id = _extract_sku_id(product_info)
             if sku_id:
                 payload["sku_id"] = sku_id
-            detail_price = _detail_unit_price(product_info)
-            if detail_price is not None:
-                payload["product_info_unit_price_cny"] = _decimal_number(detail_price)
-            detail_moq = _detail_moq(product_info)
-            if detail_moq is not None:
-                payload["product_info_moq"] = detail_moq
+            product_info_price = _detail_unit_price(product_info)
+            if product_info_price is not None:
+                payload["product_info_unit_price_cny"] = _decimal_number(product_info_price)
+            product_info_moq = _detail_moq(product_info)
+            if product_info_moq is not None:
+                payload["product_info_moq"] = product_info_moq
         else:
             sku_id = None
 
-        quantity = max(1, offer.moq or _optional_int(payload.get("product_info_moq")) or 1)
+        sku_id = sku_id or detail_sku_id
+        if sku_id:
+            payload["sku_id"] = sku_id
+        selected_moq = (
+            _optional_int(payload.get("product_info_moq"))
+            or detail_moq
+            or offer.moq
+            or 1
+        )
+        quantity = max(1, selected_moq)
         shipping = offer.domestic_shipping_cny
+        if (
+            detail_probe
+            and detail_probe.domestic_shipping_cny is not None
+            and not detail_probe.warning
+        ):
+            shipping = detail_probe.domestic_shipping_cny
+            payload["domestic_shipping_cny"] = _decimal_number(shipping)
+            payload["shipping_source"] = "1688_detail_page"
+
         if sku_id:
             freight_payload = self._call_freight_estimate(
                 offer_id=offer_id,
@@ -438,9 +528,43 @@ class Alibaba1688OfficialApiProvider:
         else:
             payload["freight_warning"] = "商品详情未返回 skuId，无法调用国内运费预估。"
 
+        if shipping is None:
+            estimate = _estimate_domestic_shipping_cny(
+                product=product,
+                detail_probe=detail_probe,
+                quantity=quantity,
+            )
+            if estimate is not None:
+                shipping = estimate
+                payload["domestic_shipping_cny"] = _decimal_number(estimate)
+                payload["shipping_source"] = "estimated_default_freight_table"
+                payload["freight_warning"] = (
+                    "未获取官方 sku 运费，已按默认国内快递价格表估算。"
+                )
+
+        unit_price = offer.unit_price_cny
+        if (
+            detail_price is not None
+            and detail_probe is not None
+            and detail_probe.warning is None
+            and _detail_price_can_override_official(detail_price, offer.unit_price_cny)
+        ):
+            unit_price = detail_price
+            payload["unit_price_source"] = "1688_detail_page"
+            payload["detail_page_unit_price_cny"] = _decimal_number(detail_price)
+        elif detail_price is not None:
+            payload["detail_page_unit_price_cny"] = _decimal_number(detail_price)
+            payload["detail_page_price_ignored_reason"] = (
+                detail_probe.warning
+                if detail_probe is not None and detail_probe.warning
+                else "详情页价格与官方图搜价格差距过大，疑似页面噪声，未覆盖官方价格。"
+            )
+
         return replace(
             offer,
+            unit_price_cny=unit_price,
             domestic_shipping_cny=shipping,
+            moq=selected_moq,
             payload=payload,
         )
 
@@ -610,6 +734,7 @@ def _normalize_image_search_offers(
                     "api_family": "1688_image_search",
                     "offer_id": offer_id,
                     "title": title,
+                    "unit": item.get("unit"),
                     "image_url": item.get("imageUrl")
                     or _dict_value(item.get("offerImage")).get("imageUrl"),
                     "province": item.get("province") or _dict_value(item.get("companyInfo")).get("province"),
@@ -631,6 +756,554 @@ def _min_official_unit_price_cny() -> Decimal:
     if parsed is None or parsed < 0:
         return Decimal("2")
     return parsed
+
+
+def _crawl_1688_detail_page(
+    url: str,
+    *,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+) -> DetailPageProbe | None:
+    if not _detail_crawler_enabled() or not _is_1688_url(url):
+        return None
+    try:
+        return _crawl_1688_detail_with_playwright(
+            url,
+            product=product,
+            keyword_profile=keyword_profile,
+        )
+    except ModuleNotFoundError:
+        return _crawl_1688_detail_with_html(
+            url,
+            status="html_fallback_playwright_unavailable",
+            product=product,
+            keyword_profile=keyword_profile,
+        )
+    except Exception as exc:
+        fallback = _crawl_1688_detail_with_html(
+            url,
+            status="html_fallback_playwright_failed",
+            product=product,
+            keyword_profile=keyword_profile,
+        )
+        if fallback is None:
+            return DetailPageProbe(
+                final_url=url,
+                title=None,
+                unit_price_cny=None,
+                domestic_shipping_cny=None,
+                moq=None,
+                sku_id=None,
+                spec_id=None,
+                sku_name=None,
+                pack_count=None,
+                actual_weight_kg=None,
+                length_cm=None,
+                width_cm=None,
+                height_cm=None,
+                one_piece_hint=False,
+                status="failed",
+                warning=f"1688 详情页补抓失败：{str(exc)[:180]}",
+                raw_excerpt=None,
+            )
+        return replace(
+            fallback,
+            warning=f"Playwright 补抓失败，已使用普通 HTML 兜底：{str(exc)[:180]}",
+        )
+
+
+def _crawl_1688_detail_with_playwright(
+    url: str,
+    *,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+) -> DetailPageProbe:
+    from playwright.sync_api import sync_playwright
+
+    timeout_ms = _detail_crawler_timeout_ms()
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-dev-shm-usage"],
+        )
+        try:
+            page = browser.new_page(
+                locale="zh-CN",
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/125.0.0.0 Safari/537.36"
+                ),
+            )
+            page.goto(url, wait_until="domcontentloaded", timeout=timeout_ms)
+            page.wait_for_timeout(_detail_crawler_settle_ms())
+            final_url = page.url
+            title = page.title()
+            html = page.content()
+        finally:
+            browser.close()
+    return _parse_1688_detail_html(
+        html,
+        title=title,
+        final_url=final_url,
+        status="playwright",
+        product=product,
+        keyword_profile=keyword_profile,
+    )
+
+
+def _crawl_1688_detail_with_html(
+    url: str,
+    *,
+    status: str,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+) -> DetailPageProbe | None:
+    request = Request(
+        url,
+        headers={
+            "Accept": "text/html,application/xhtml+xml",
+            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.7",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/125.0.0.0 Safari/537.36"
+            ),
+        },
+        method="GET",
+    )
+    try:
+        with urlopen(request, timeout=max(3, _detail_crawler_timeout_ms() / 1000)) as response:
+            final_url = response.geturl()
+            html = response.read(1_800_000).decode("utf-8", errors="replace")
+    except Exception:
+        return None
+    return _parse_1688_detail_html(
+        html,
+        title=None,
+        final_url=final_url,
+        status=status,
+        product=product,
+        keyword_profile=keyword_profile,
+    )
+
+
+def _parse_1688_detail_html(
+    html: str,
+    *,
+    title: str | None,
+    final_url: str | None,
+    status: str,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+) -> DetailPageProbe:
+    text = unescape(html)
+    page_title = _clean_detail_title(title or _extract_html_title(text))
+    searchable_text = " ".join(
+        value
+        for value in (
+            page_title,
+            _raw_detail_excerpt(text, limit=3_000),
+        )
+        if value
+    )
+    unit_price = _extract_detail_price_cny(text)
+    shipping = _extract_detail_shipping_cny(text)
+    moq = _extract_detail_moq(text)
+    length_cm, width_cm, height_cm = _extract_detail_dimensions_cm(searchable_text)
+    actual_weight_kg = _extract_detail_weight_kg(searchable_text)
+    sku_id = _extract_detail_identifier(
+        text,
+        keys=("skuId", "sku_id", "skuID", "skuMapId"),
+    )
+    spec_id = _extract_detail_identifier(
+        text,
+        keys=("specId", "spec_id", "specID"),
+    )
+    sku_name = _extract_detail_sku_name(text)
+    pack_count = _extract_pack_count(searchable_text)
+    one_piece_hint = bool(
+        re.search(r"(?:一件代发|一件起批|1\s*件\s*起批|一件可发)", searchable_text)
+    )
+    warning = None
+    if unit_price is None:
+        warning = "1688 详情页未抓到可信 SKU 价格。"
+    elif _detail_page_likely_mismatch(
+        searchable_text,
+        product=product,
+        keyword_profile=keyword_profile,
+    ):
+        warning = "1688 详情页标题与 R-W 产品关键词弱匹配，利润结果需人工复核。"
+    return DetailPageProbe(
+        final_url=final_url,
+        title=page_title,
+        unit_price_cny=unit_price,
+        domestic_shipping_cny=shipping,
+        moq=moq,
+        sku_id=sku_id,
+        spec_id=spec_id,
+        sku_name=sku_name,
+        pack_count=pack_count,
+        actual_weight_kg=actual_weight_kg,
+        length_cm=length_cm,
+        width_cm=width_cm,
+        height_cm=height_cm,
+        one_piece_hint=one_piece_hint,
+        status=status,
+        warning=warning,
+        raw_excerpt=_raw_detail_excerpt(text),
+    )
+
+
+def _detail_probe_payload(probe: DetailPageProbe) -> dict[str, Any]:
+    return {
+        "status": probe.status,
+        "final_url": probe.final_url,
+        "title": probe.title,
+        "unit_price_cny": _decimal_number(probe.unit_price_cny),
+        "domestic_shipping_cny": _decimal_number(probe.domestic_shipping_cny),
+        "moq": probe.moq,
+        "sku_id": probe.sku_id,
+        "spec_id": probe.spec_id,
+        "sku_name": probe.sku_name,
+        "pack_count": probe.pack_count,
+        "actual_weight_kg": _decimal_number(probe.actual_weight_kg),
+        "length_cm": _decimal_number(probe.length_cm),
+        "width_cm": _decimal_number(probe.width_cm),
+        "height_cm": _decimal_number(probe.height_cm),
+        "one_piece_hint": probe.one_piece_hint,
+        "warning": probe.warning,
+        "raw_excerpt": probe.raw_excerpt,
+        "captured_at": datetime.now(UTC).isoformat(),
+    }
+
+
+def _extract_detail_price_cny(text: str) -> Decimal | None:
+    values: list[Decimal] = []
+    patterns = (
+        r'"(?:skuPrice|offerPrice|discountPrice|salePrice|unitPrice|wholesalePrice|activityPrice)"\s*:\s*"?([0-9]+(?:\.[0-9]{1,2})?)',
+        r'"(?:priceRange|priceRangeOriginal|priceRangeStr)"\s*:\s*"?\s*([0-9]+(?:\.[0-9]{1,2})?)(?:\s*(?:-|~|—|至|到)\s*([0-9]+(?:\.[0-9]{1,2})?))?',
+        r'(?:价格|批发价|拿货价|现货价|活动价)[^0-9￥¥]{0,24}(?:￥|¥)?\s*([0-9]+(?:\.[0-9]{1,2})?)',
+    )
+    for pattern in patterns:
+        for match in re.finditer(pattern, text, flags=re.IGNORECASE):
+            for group in match.groups():
+                value = decimal_value(group)
+                if value is not None and Decimal("0.1") <= value <= Decimal("50000"):
+                    values.append(value)
+    minimum = _min_official_unit_price_cny()
+    credible = [value for value in values if minimum <= value <= Decimal("50000")]
+    if not credible:
+        return None
+    return _money(min(credible))
+
+
+def _detail_price_can_override_official(
+    detail_price: Decimal,
+    official_price: Decimal,
+) -> bool:
+    if detail_price < _min_official_unit_price_cny():
+        return False
+    lower_bound = max(_min_official_unit_price_cny(), official_price * Decimal("0.5"))
+    upper_bound = max(official_price * Decimal("3"), official_price + Decimal("20"))
+    return lower_bound <= detail_price <= upper_bound
+
+
+def _extract_detail_shipping_cny(text: str) -> Decimal | None:
+    if re.search(r"(?:包邮|免运费|免邮)", text):
+        return Decimal("0")
+    match = re.search(
+        r"(?:运费|邮费|快递|物流|配送)[^0-9￥¥]{0,30}(?:￥|¥)?\s*([0-9]+(?:\.[0-9]{1,2})?)",
+        text,
+    )
+    if not match:
+        return None
+    value = decimal_value(match.group(1))
+    if value is None or value < 0 or value > Decimal("5000"):
+        return None
+    return _money(value)
+
+
+def _extract_detail_moq(text: str) -> int | None:
+    patterns = (
+        r'"(?:minOrderQuantity|beginAmount|batchNumber|quantityBegin)"\s*:\s*"?([1-9][0-9]{0,5})',
+        r"(?:起批量|起订量|起批)[^0-9]{0,20}([1-9][0-9]{0,5})",
+        r"([1-9][0-9]{0,5})\s*(?:件|个|套|只|箱|把)\s*起批",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return _optional_int(match.group(1))
+    return None
+
+
+def _extract_detail_identifier(text: str, *, keys: tuple[str, ...]) -> str | None:
+    key_pattern = "|".join(re.escape(key) for key in keys)
+    patterns = (
+        rf'"(?:{key_pattern})"\s*:\s*"?([A-Za-z0-9_-]{{3,80}})"?',
+        rf"(?:{key_pattern})=([A-Za-z0-9_-]{{3,80}})",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            return match.group(1)
+    return None
+
+
+def _extract_detail_sku_name(text: str) -> str | None:
+    for key in ("skuName", "specName", "specValue", "name"):
+        match = re.search(
+            rf'"{key}"\s*:\s*"([^"]{{1,120}})"',
+            text,
+            flags=re.IGNORECASE,
+        )
+        if match:
+            cleaned = re.sub(r"\s+", " ", match.group(1)).strip()
+            if cleaned and not re.search(r"^\d+$", cleaned):
+                return cleaned[:120]
+    return None
+
+
+def _extract_detail_dimensions_cm(text: str) -> tuple[Decimal | None, Decimal | None, Decimal | None]:
+    match = re.search(
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:x|X|×|\*)\s*"
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:x|X|×|\*)\s*"
+        r"([0-9]+(?:\.[0-9]+)?)\s*(cm|厘米|mm|毫米|in|inch|英寸)?",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return (None, None, None)
+    values = [decimal_value(match.group(index)) for index in (1, 2, 3)]
+    if any(value is None or value <= 0 for value in values):
+        return (None, None, None)
+    unit = (match.group(4) or "cm").lower()
+    converted = [_dimension_to_cm(value, unit) for value in values if value is not None]
+    if len(converted) != 3 or any(value is None for value in converted):
+        return (None, None, None)
+    return (_q2(converted[0]), _q2(converted[1]), _q2(converted[2]))
+
+
+def _dimension_to_cm(value: Decimal, unit: str) -> Decimal | None:
+    if unit in {"mm", "毫米"}:
+        return value / Decimal("10")
+    if unit in {"in", "inch", "英寸"}:
+        return value * Decimal("2.54")
+    return value
+
+
+def _extract_detail_weight_kg(text: str) -> Decimal | None:
+    match = re.search(
+        r"([0-9]+(?:\.[0-9]+)?)\s*(kg|千克|公斤|g|克|lb|lbs|pound|oz|盎司)",
+        text,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    value = decimal_value(match.group(1))
+    if value is None or value <= 0:
+        return None
+    unit = match.group(2).lower()
+    if unit in {"g", "克"}:
+        value = value / Decimal("1000")
+    elif unit in {"lb", "lbs", "pound"}:
+        value = value * Decimal("0.45359237")
+    elif unit in {"oz", "盎司"}:
+        value = value * Decimal("0.0283495231")
+    if value <= 0 or value > Decimal("200"):
+        return None
+    return _q4(value)
+
+
+def _extract_pack_count(text: str) -> int | None:
+    return extract_pack_count(text)
+
+
+def _estimate_domestic_shipping_cny(
+    *,
+    product: dict[str, Any],
+    detail_probe: DetailPageProbe | None,
+    quantity: int,
+) -> Decimal | None:
+    actual_weight = (
+        detail_probe.actual_weight_kg
+        if detail_probe and detail_probe.actual_weight_kg is not None
+        else _product_weight_kg(product)
+    )
+    length = (
+        detail_probe.length_cm
+        if detail_probe and detail_probe.length_cm is not None
+        else _product_dimension_cm(product, "length")
+    )
+    width = (
+        detail_probe.width_cm
+        if detail_probe and detail_probe.width_cm is not None
+        else _product_dimension_cm(product, "width")
+    )
+    height = (
+        detail_probe.height_cm
+        if detail_probe and detail_probe.height_cm is not None
+        else _product_dimension_cm(product, "height")
+    )
+    volume_weight = _volume_weight_kg(length, width, height)
+    chargeable = _max_decimal(actual_weight, volume_weight)
+    if chargeable is None:
+        fallback = decimal_value(os.getenv("RA_1688_EST_FREIGHT_FALLBACK_CNY", "10"))
+        return _money(fallback) if fallback is not None and fallback >= 0 else None
+    total_weight = chargeable * Decimal(str(max(1, quantity)))
+    first_fee = decimal_value(os.getenv("RA_1688_EST_FREIGHT_FIRST_FEE_CNY", "8")) or Decimal("8")
+    first_unit = decimal_value(os.getenv("RA_1688_EST_FREIGHT_FIRST_UNIT_KG", "1")) or Decimal("1")
+    next_fee = decimal_value(os.getenv("RA_1688_EST_FREIGHT_NEXT_FEE_CNY", "4")) or Decimal("4")
+    next_unit = decimal_value(os.getenv("RA_1688_EST_FREIGHT_NEXT_UNIT_KG", "1")) or Decimal("1")
+    if first_unit <= 0 or next_unit <= 0:
+        return None
+    extra_weight = max(Decimal("0"), total_weight - first_unit)
+    steps = Decimal(ceil(extra_weight / next_unit)) if extra_weight > 0 else Decimal("0")
+    total = first_fee + steps * next_fee
+    return _money(total / Decimal(str(max(1, quantity))))
+
+
+def _detail_page_likely_mismatch(
+    text: str,
+    *,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+) -> bool:
+    lowered = text.lower()
+    product_title = str(product.get("title") or "")
+    terms = [
+        keyword_profile.get("product_type_zh"),
+        *(_list_value(keyword_profile.get("core_keywords_zh"))[:4]),
+        product.get("title_zh"),
+        product.get("brand"),
+        *_english_match_tokens(product_title),
+    ]
+    normalized_terms = [
+        str(term).strip().lower()
+        for term in terms
+        if isinstance(term, str) and len(str(term).strip()) >= 2
+    ]
+    if not normalized_terms:
+        return False
+    return not any(term in lowered for term in normalized_terms)
+
+
+def _english_match_tokens(text: str) -> list[str]:
+    generic = {
+        "for",
+        "with",
+        "and",
+        "the",
+        "outdoor",
+        "indoor",
+        "replacement",
+        "compatible",
+        "adjustable",
+        "display",
+        "size",
+    }
+    tokens = [
+        token.lower()
+        for token in re.findall(r"[A-Za-z][A-Za-z0-9-]{2,}", text or "")
+        if token.lower() not in generic
+    ]
+    return tokens[:8]
+
+
+def _product_weight_kg(product: dict[str, Any]) -> Decimal | None:
+    features = _dict_value(product.get("features"))
+    for key in ("package_weight_kg", "item_weight_kg"):
+        value = decimal_value(features.get(key))
+        if value is not None and value > 0:
+            return value
+    for key in ("package_weight_g", "item_weight_g"):
+        value = decimal_value(features.get(key))
+        if value is not None and value > 0:
+            return value / Decimal("1000")
+    return None
+
+
+def _product_dimension_cm(product: dict[str, Any], name: str) -> Decimal | None:
+    features = _dict_value(product.get("features"))
+    for key in (f"package_{name}_cm", f"item_{name}_cm"):
+        value = decimal_value(features.get(key))
+        if value is not None and value > 0:
+            return value
+    for key in (f"package_{name}_mm", f"item_{name}_mm"):
+        value = decimal_value(features.get(key))
+        if value is not None and value > 0:
+            return value / Decimal("10")
+    return None
+
+
+def _volume_weight_kg(
+    length_cm: Decimal | None,
+    width_cm: Decimal | None,
+    height_cm: Decimal | None,
+) -> Decimal | None:
+    if (
+        length_cm is None
+        or width_cm is None
+        or height_cm is None
+        or length_cm <= 0
+        or width_cm <= 0
+        or height_cm <= 0
+    ):
+        return None
+    return _q4((length_cm * width_cm * height_cm) / Decimal("6000"))
+
+
+def _max_decimal(*values: Decimal | None) -> Decimal | None:
+    present = [value for value in values if value is not None and value > 0]
+    return max(present) if present else None
+
+
+def _extract_html_title(text: str) -> str | None:
+    match = re.search(r"<title[^>]*>(.*?)</title>", text, flags=re.IGNORECASE | re.S)
+    if not match:
+        return None
+    return re.sub(r"\s+", " ", match.group(1)).strip()
+
+
+def _clean_detail_title(title: str | None) -> str | None:
+    if not title:
+        return None
+    cleaned = re.sub(r"\s+", " ", title).strip()
+    cleaned = re.sub(r"[-_ ]*阿里巴巴.*$", "", cleaned).strip()
+    return cleaned[:240] or None
+
+
+def _raw_detail_excerpt(text: str, *, limit: int = 500) -> str | None:
+    cleaned = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text)).strip()
+    return cleaned[:limit] or None
+
+
+def _is_1688_url(url: str) -> bool:
+    host = urlparse(str(url or "")).netloc.lower()
+    return host == "1688.com" or host.endswith(".1688.com")
+
+
+def _detail_crawler_enabled() -> bool:
+    value = os.getenv("RA_1688_DETAIL_CRAWLER_ENABLED", "1").strip().lower()
+    return value not in {"0", "false", "no", "off"}
+
+
+def _detail_crawler_timeout_ms() -> int:
+    value = _optional_int(os.getenv("RA_1688_DETAIL_CRAWLER_TIMEOUT_MS"))
+    return max(3_000, min(value or 8_000, 20_000))
+
+
+def _detail_crawler_settle_ms() -> int:
+    value = _optional_int(os.getenv("RA_1688_DETAIL_CRAWLER_SETTLE_MS"))
+    return max(300, min(value or 900, 5_000))
+
+
+def _q2(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def _q4(value: Decimal) -> Decimal:
+    return value.quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
 def _extract_offer_items(payload: dict[str, Any]) -> list[Any]:

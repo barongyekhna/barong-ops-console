@@ -142,6 +142,15 @@ def _merge_fee_features(features: dict[str, Any], keepa_data: KeepaProductData) 
             "item_length_mm": keepa_data.item_length_mm,
             "item_width_mm": keepa_data.item_width_mm,
             "item_height_mm": keepa_data.item_height_mm,
+            "amazon_pack_count": keepa_data.amazon_pack_count,
+            "amazon_pack_label": keepa_data.amazon_pack_label,
+            "amazon_pack_source": keepa_data.amazon_pack_source,
+            "amazon_pack_confidence": keepa_data.amazon_pack_confidence,
+            "amazon_pack_requires_alignment": keepa_data.amazon_pack_requires_alignment,
+            "amazon_pack_evidence": keepa_data.amazon_pack_evidence,
+            "amazon_variation_attributes": keepa_data.amazon_variation_attributes,
+            "amazon_parent_asin": keepa_data.amazon_parent_asin,
+            "amazon_variation_csv": keepa_data.amazon_variation_csv,
         }
     )
     if keepa_data.fulfillment_method:

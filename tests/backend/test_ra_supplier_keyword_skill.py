@@ -73,6 +73,38 @@ def test_supplier_alignment_applies_pack_count_multiplier() -> None:
     assert alignment["quantity"]["cost_multiplier"] == 2.0
 
 
+def test_supplier_alignment_uses_rw_amazon_pack_features_when_title_is_vague() -> None:
+    product = {
+        "title": "Smartwool Unisex Everyday Low Cut No Show Socks, Multipack - Natural - Small",
+        "title_zh": "日常低帮隐形袜 男女同款 多双装 自然色 小号",
+        "features": {
+            "amazon_pack_count": 3,
+            "amazon_pack_label": "3双装",
+            "amazon_pack_source": "keepa.numberOfItems",
+            "amazon_pack_confidence": "high",
+            "amazon_pack_requires_alignment": True,
+        },
+    }
+    profile = build_supplier_keyword_profile(None, org_id=None, product=product)
+
+    alignment = evaluate_supplier_alignment(
+        product=product,
+        keyword_profile=profile,
+        supplier_title="低帮隐形袜 1双装 一件代发",
+        supplier_snippet=None,
+        raw_excerpt=None,
+        unit_price_cny=Decimal("2.70"),
+    )
+
+    assert profile["pack_count"] == 3
+    assert profile["pack_label"] == "3双装"
+    assert alignment["match_status"] == "match"
+    assert alignment["quantity"]["amazon_pack_count"] == 3
+    assert alignment["quantity"]["supplier_pack_count"] == 1
+    assert alignment["quantity"]["cost_multiplier"] == 3.0
+    assert alignment["adjusted_unit_price_cny"] == 8.1
+
+
 def test_supplier_alignment_blocks_size_priced_product_without_supplier_size() -> None:
     product = {
         "title": "Sun Shade Sail 10 x 12 ft",

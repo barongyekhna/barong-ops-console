@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from decimal import Decimal, ROUND_HALF_UP
 import json
 import os
+import re
 from typing import Any
 from uuid import uuid4
 
@@ -502,7 +503,10 @@ def _calculate_from_product_and_offer(
     min_gross_margin: Decimal | None,
 ) -> ProfitResult:
     features = _dict_value(product.get("features"))
+    payload = _dict_value(offer.get("payload"))
     unit_price_cny = decimal_value(offer.get("unit_price_cny"))
+    if _supplier_payload_blocks_profit(product=product, payload=payload):
+        unit_price_cny = None
     domestic_shipping_cny = _offer_domestic_shipping(offer)
     return calculate_us_profit(
         ProfitInput(
@@ -518,6 +522,49 @@ def _calculate_from_product_and_offer(
             exchange_rate_usd_cny=exchange_rate_usd_cny or _exchange_rate(),
             min_gross_margin=min_gross_margin or _min_gross_margin(),
             marketplace=str(product.get("marketplace") or "US"),
+        )
+    )
+
+
+def _supplier_payload_blocks_profit(*, product: dict[str, Any], payload: dict[str, Any]) -> bool:
+    alignment = _dict_value(payload.get("supplier_alignment"))
+    alignment_status = str(alignment.get("match_status") or "").strip().lower()
+    if alignment_status and alignment_status != "match":
+        return True
+    quantity = _dict_value(alignment.get("quantity"))
+    if str(quantity.get("status") or "").strip().lower() == "needs_review":
+        return True
+    dimensions = _dict_value(alignment.get("dimensions"))
+    if str(dimensions.get("status") or "").strip().lower() == "needs_review":
+        return True
+
+    product_text = " ".join(
+        str(value)
+        for value in (product.get("title"), product.get("title_zh"))
+        if value
+    )
+    keyword_profile = _dict_value(payload.get("keyword_profile"))
+    profile_text = " ".join(
+        str(value)
+        for value in (
+            keyword_profile.get("product_type_zh"),
+            keyword_profile.get("pack_count"),
+        )
+        if value
+    )
+    if _requires_pack_alignment_text(f"{product_text} {profile_text}"):
+        quantity_status = str(quantity.get("status") or "").strip().lower()
+        if quantity_status != "aligned":
+            return True
+    return False
+
+
+def _requires_pack_alignment_text(text_value: str) -> bool:
+    return bool(
+        re.search(
+            r"(?:multipack|multi\s*pack|pack\s*of|set\s*of|多件装|多只装|多个装|多片装|多双装|多对装|套装|组合装|礼盒装)",
+            str(text_value or "").lower(),
+            flags=re.IGNORECASE,
         )
     )
 
@@ -618,6 +665,11 @@ def _product_snapshot(product: dict[str, Any]) -> dict[str, Any]:
         "package_length_mm": _decimal_number(_feature_decimal(features, "package_length_mm")),
         "package_width_mm": _decimal_number(_feature_decimal(features, "package_width_mm")),
         "package_height_mm": _decimal_number(_feature_decimal(features, "package_height_mm")),
+        "amazon_pack_count": _decimal_number(features.get("amazon_pack_count")),
+        "amazon_pack_label": features.get("amazon_pack_label"),
+        "amazon_pack_source": features.get("amazon_pack_source"),
+        "amazon_pack_confidence": features.get("amazon_pack_confidence"),
+        "amazon_pack_requires_alignment": bool(features.get("amazon_pack_requires_alignment")),
     }
 
 
@@ -644,6 +696,7 @@ def _supplier_payload(offer: dict[str, Any]) -> dict[str, Any]:
         or payload.get("choice_page_url"),
         "crawler_status": payload.get("crawler_status"),
         "one_piece_hint": bool(payload.get("one_piece_hint")),
+        "supplier_alignment": payload.get("supplier_alignment"),
         "shipping_notice": payload.get("shipping_notice")
         or payload.get("freight_notice")
         or payload.get("shipping_text"),

@@ -18,8 +18,38 @@ from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.providers import RAnalysisProviderBinding
 
 
-SKILL_VERSION = "ra-supplier-keyword-2026-07-06"
+SKILL_VERSION = "ra-supplier-keyword-2026-07-08"
 SKILL_DOC_PATH = Path(__file__).resolve().parents[1] / "docs" / "ra_supplier_keyword_skill.md"
+
+PACK_UNIT_LABELS = {
+    "pack": "件",
+    "packs": "件",
+    "pk": "件",
+    "pcs": "件",
+    "piece": "件",
+    "pieces": "件",
+    "count": "件",
+    "counts": "件",
+    "ct": "件",
+    "item": "件",
+    "items": "件",
+    "panel": "片",
+    "panels": "片",
+    "roll": "卷",
+    "rolls": "卷",
+    "pair": "双",
+    "pairs": "双",
+    "set": "套",
+    "sets": "套",
+    "件": "件",
+    "只": "只",
+    "个": "个",
+    "片": "片",
+    "套": "套",
+    "卷": "卷",
+    "双": "双",
+    "对": "对",
+}
 
 PRODUCT_TYPE_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("neck fan", "挂脖风扇", ("挂脖风扇", "挂脖扇", "neck fan", "neckband fan")),
@@ -40,6 +70,7 @@ PRODUCT_TYPE_RULES: tuple[tuple[str, str, tuple[str, ...]], ...] = (
     ("garden fence", "花园围栏", ("花园围栏", "动物围栏", "garden fence")),
     ("splash pad", "水上滑垫", ("水上滑垫", "水滑梯", "splash pad")),
     ("outdoor fan", "户外风扇", ("户外风扇", "吊扇", "outdoor fan")),
+    ("socks", "袜子", ("袜子", "隐形袜", "socks", "sock", "stocking", "stockings")),
 )
 
 SHAPE_CONFLICTS: tuple[tuple[str, str], ...] = (
@@ -132,6 +163,7 @@ def sanitize_keyword_profile(
     product: dict[str, Any],
 ) -> dict[str, Any]:
     fallback = _heuristic_profile(product)
+    rw_pack = _amazon_pack_from_product(product)
     brand = _clean_term(profile.get("brand") or fallback.get("brand"))
     forbidden = _dedupe_terms(
         [
@@ -164,12 +196,25 @@ def sanitize_keyword_profile(
     search_queries = _dict_value(profile.get("search_queries"))
     cleaned_queries = {
         "1688": _query_list(search_queries.get("1688"), base=base, platform="1688", forbidden=forbidden),
-        "pdd": _query_list(search_queries.get("pdd"), base=base, platform="pdd", forbidden=forbidden),
-        "taobao": _query_list(search_queries.get("taobao"), base=base, platform="taobao", forbidden=forbidden),
-        "jd": _query_list(search_queries.get("jd"), base=base, platform="jd", forbidden=forbidden),
     }
 
-    pack_count = _int_value(profile.get("pack_count")) or _int_value(fallback.get("pack_count"))
+    profile_text = _joined_text(product.get("title"), product.get("title_zh"), product_type_zh)
+    pack_info = extract_pack_info(profile_text)
+    pack_count = (
+        _int_value(profile.get("pack_count"))
+        or _int_value(fallback.get("pack_count"))
+        or _int_value(rw_pack.get("count"))
+        or pack_info.get("count")
+    )
+    pack_label = (
+        str(profile.get("pack_label") or fallback.get("pack_label") or "").strip()
+        or str(rw_pack.get("label") or "").strip()
+        or str(pack_info.get("label") or "").strip()
+        or None
+    )
+    pack_requires_alignment = bool(profile.get("pack_requires_alignment")) or bool(
+        fallback.get("pack_requires_alignment")
+    ) or bool(rw_pack.get("requires_alignment")) or _requires_pack_alignment(profile_text)
     dimensions = _dict_value(profile.get("dimensions")) or _dict_value(fallback.get("dimensions"))
     raw_dimensions = _list_value(dimensions.get("raw")) or _list_value(fallback.get("dimensions", {}).get("raw"))
     parsed_dimensions = extract_dimensions_cm(" ".join(str(item) for item in raw_dimensions))
@@ -189,6 +234,10 @@ def sanitize_keyword_profile(
         "core_keywords_zh": core_keywords,
         "search_queries": cleaned_queries,
         "pack_count": pack_count,
+        "pack_label": pack_label,
+        "pack_requires_alignment": pack_requires_alignment,
+        "amazon_pack_source": rw_pack.get("source"),
+        "amazon_pack_confidence": rw_pack.get("confidence"),
         "dimensions": {
             "raw": raw_dimensions,
             "parsed_cm": parsed_dimensions,
@@ -310,6 +359,12 @@ def sanitize_supplier_alignment(
         response.get("quantity"),
         fallback=_dict_value(heuristic.get("quantity")),
     )
+    heuristic_quantity = _dict_value(heuristic.get("quantity"))
+    if str(heuristic_quantity.get("status") or "").strip().lower() in {"aligned", "not_required"}:
+        quantity = {
+            **quantity,
+            **heuristic_quantity,
+        }
     dimensions = _sanitize_alignment_section(
         response.get("dimensions"),
         fallback=_dict_value(heuristic.get("dimensions")),
@@ -432,18 +487,37 @@ def _heuristic_supplier_alignment(
 
 
 def extract_pack_count(text: Any) -> int | None:
+    info = extract_pack_info(text)
+    count = info.get("count")
+    return count if isinstance(count, int) and count > 0 else None
+
+
+def extract_pack_info(text: Any) -> dict[str, Any]:
     source = str(text or "")
+    if not source.strip():
+        return {"count": None, "unit": None, "label": None}
     patterns = (
-        r"([1-9][0-9]{0,2})\s*(?:pack|packs|pcs|pieces|count|counts|panel|panels|roll|rolls|pair|pairs|set|sets)\b",
-        r"([1-9][0-9]{0,2})\s*(?:件装|只装|个装|片装|套装|卷装|双装)",
-        r"([1-9][0-9]{0,2})\s*(?:件|只|个|片|套|卷|双)\b",
+        r"(?:number\s+of\s+items|item\s+package\s+quantity|unit\s+count)\s*[:：]?\s*([0-9]{1,3}|[一二两俩三四五六七八九十百]+)\s*(pair|pairs|piece|pieces|pcs|set|sets|pack|packs|pk|count|counts|ct|item|items)?\b",
+        r"(?:pack\s*of|set\s*of)\s*([0-9]{1,3}|[一二两俩三四五六七八九十百]+)\s*(pair|pairs|piece|pieces|pcs|set|sets|pack|packs|pk|count|counts|ct|item|items)?\b",
+        r"([0-9]{1,3}|[一二两俩三四五六七八九十百]+)\s*[- ]?(pack|packs|pk|pcs|pieces|piece|count|counts|ct|panel|panels|roll|rolls|pair|pairs|set|sets|item|items)\b",
+        r"([0-9]{1,3}|[一二两俩三四五六七八九十百]+)\s*(件|只|个|片|套|卷|双|对)\s*装",
+        r"([0-9]{1,3}|[一二两俩三四五六七八九十百]+)\s*(件|只|个|片|套|卷|双|对)(?!代发|起批|起订|包邮|起售|起购)",
     )
     for pattern in patterns:
         match = re.search(pattern, source, flags=re.IGNORECASE)
-        if match:
-            parsed = _int_value(match.group(1))
-            return parsed if parsed and parsed > 1 else None
-    return None
+        if not match:
+            continue
+        count = _parse_pack_count_token(match.group(1))
+        if not count or count <= 0:
+            continue
+        raw_unit = match.group(2) if len(match.groups()) >= 2 else None
+        unit = _pack_unit_label(raw_unit)
+        return {
+            "count": count,
+            "unit": unit,
+            "label": f"{count}{unit}装",
+        }
+    return {"count": None, "unit": None, "label": None}
 
 
 def extract_dimensions_cm(text: Any) -> list[dict[str, Any]]:
@@ -472,7 +546,33 @@ def extract_dimensions_cm(text: Any) -> list[dict[str, Any]]:
     return output
 
 
+def _amazon_pack_from_product(product: dict[str, Any]) -> dict[str, Any]:
+    features = _dict_value(product.get("features"))
+    count = (
+        _int_value(product.get("amazon_pack_count"))
+        or _int_value(features.get("amazon_pack_count"))
+    )
+    label = (
+        str(product.get("amazon_pack_label") or "").strip()
+        or str(features.get("amazon_pack_label") or "").strip()
+        or (f"{count}件装" if count and count > 1 else None)
+    )
+    requires_alignment = bool(product.get("amazon_pack_requires_alignment")) or bool(
+        features.get("amazon_pack_requires_alignment")
+    ) or bool(count and count > 1)
+    return {
+        "count": count,
+        "label": label,
+        "source": product.get("amazon_pack_source") or features.get("amazon_pack_source"),
+        "confidence": product.get("amazon_pack_confidence") or features.get("amazon_pack_confidence"),
+        "requires_alignment": requires_alignment,
+        "evidence": features.get("amazon_pack_evidence") or [],
+        "variation_attributes": features.get("amazon_variation_attributes") or [],
+    }
+
+
 def _heuristic_profile(product: dict[str, Any]) -> dict[str, Any]:
+    rw_pack = _amazon_pack_from_product(product)
     text = _joined_text(product.get("title_zh"), product.get("title"), product.get("category"))
     brand = _clean_term(product.get("brand")) or _infer_brand(product.get("title"))
     product_type, product_type_zh, terms = _infer_product_type(text)
@@ -480,7 +580,9 @@ def _heuristic_profile(product: dict[str, Any]) -> dict[str, Any]:
         product_type_zh = _fallback_keyword(product)
     forbidden = _dedupe_terms([brand])
     base = _clean_keyword(product_type_zh, forbidden_terms=forbidden) or product_type_zh
-    pack_count = extract_pack_count(text)
+    pack_info = extract_pack_info(text)
+    pack_count = _int_value(rw_pack.get("count")) or pack_info.get("count")
+    pack_label = str(rw_pack.get("label") or "").strip() or pack_info.get("label")
     dimensions = extract_dimensions_cm(text)
     return {
         "skill_version": SKILL_VERSION,
@@ -492,11 +594,12 @@ def _heuristic_profile(product: dict[str, Any]) -> dict[str, Any]:
         "core_keywords_zh": _dedupe_terms([base, *terms])[:6],
         "search_queries": {
             "1688": _default_platform_queries(base, "1688"),
-            "pdd": _default_platform_queries(base, "pdd"),
-            "taobao": _default_platform_queries(base, "taobao"),
-            "jd": _default_platform_queries(base, "jd"),
         },
         "pack_count": pack_count,
+        "pack_label": pack_label,
+        "pack_requires_alignment": bool(rw_pack.get("requires_alignment")) or _requires_pack_alignment(text),
+        "amazon_pack_source": rw_pack.get("source"),
+        "amazon_pack_confidence": rw_pack.get("confidence"),
         "dimensions": {
             "raw": [item["raw"] for item in dimensions],
             "parsed_cm": dimensions,
@@ -514,6 +617,7 @@ def _call_deepseek_keyword_profile(*, api_key: str, product: dict[str, Any]) -> 
         "title_zh": product.get("title_zh"),
         "category": product.get("category"),
         "category_path": product.get("category_path"),
+        "amazon_pack": _amazon_pack_from_product(product),
         "price": str(product.get("price") or ""),
         "instruction": "按 skill 抽取无品牌供应商搜索关键词和变体对齐要素，返回严格 JSON。",
     }
@@ -668,12 +772,6 @@ def _default_platform_queries(base: str, platform: str) -> list[str]:
             f"{keyword} 批发 厂家",
             f"{keyword} 现货",
         ]
-    if platform == "pdd":
-        return [f"拼多多 {keyword}", f"{keyword} 拼多多 现货"]
-    if platform == "taobao":
-        return [f"淘宝 {keyword}", f"{keyword} 淘宝 同款"]
-    if platform == "jd":
-        return [f"京东 {keyword}", f"{keyword} 京东 现货"]
     return [keyword]
 
 
@@ -724,33 +822,72 @@ def _quantity_alignment(
     keyword_profile: dict[str, Any],
     supplier_text: str,
 ) -> dict[str, Any]:
-    amazon_count = _int_value(keyword_profile.get("pack_count")) or extract_pack_count(
-        _joined_text(product.get("title"), product.get("title_zh"))
+    product_text = _joined_text(product.get("title"), product.get("title_zh"))
+    rw_pack = _amazon_pack_from_product(product)
+    amazon_info = extract_pack_info(product_text)
+    supplier_info = extract_pack_info(supplier_text)
+    amazon_count = (
+        _int_value(keyword_profile.get("pack_count"))
+        or _int_value(rw_pack.get("count"))
+        or _int_value(amazon_info.get("count"))
     )
-    supplier_count = extract_pack_count(supplier_text)
-    if not amazon_count or amazon_count <= 1:
+    amazon_label = (
+        str(keyword_profile.get("pack_label") or "").strip()
+        or str(rw_pack.get("label") or "").strip()
+        or str(amazon_info.get("label") or "").strip()
+        or None
+    )
+    requires_alignment = bool(keyword_profile.get("pack_requires_alignment")) or _requires_pack_alignment(
+        product_text
+    ) or bool(rw_pack.get("requires_alignment"))
+    supplier_count = _int_value(supplier_info.get("count"))
+    supplier_label = str(supplier_info.get("label") or "").strip() or None
+    if (not amazon_count or amazon_count <= 1) and not requires_alignment:
         return {
             "status": "not_required",
             "amazon_pack_count": amazon_count or 1,
+            "amazon_pack_label": amazon_label,
             "supplier_pack_count": supplier_count,
+            "supplier_pack_label": supplier_label,
             "cost_multiplier": None,
             "reason": None,
+        }
+    if not amazon_count:
+        return {
+            "status": "needs_review",
+            "pending_kind": "amazon_quantity",
+            "amazon_pack_count": None,
+            "amazon_pack_label": "多件装待确认",
+            "supplier_pack_count": supplier_count,
+            "supplier_pack_label": supplier_label,
+            "cost_multiplier": None,
+            "reason": "亚马逊标题显示多件装/套装，但未明确数量；暂不计算利润，也不作为剔除处理。",
         }
     if not supplier_count:
         return {
             "status": "needs_review",
+            "pending_kind": "supplier_quantity",
             "amazon_pack_count": amazon_count,
+            "amazon_pack_label": amazon_label or f"{amazon_count}件装",
             "supplier_pack_count": None,
+            "supplier_pack_label": None,
             "cost_multiplier": None,
-            "reason": f"亚马逊为 {amazon_count} 件/套装，供应商未明确同等数量。",
+            "reason": f"亚马逊为 {amazon_label or f'{amazon_count}件装'}，供应商未明确同等数量；暂不计算该供应商利润。",
         }
     multiplier = Decimal(amazon_count) / Decimal(supplier_count)
+    multiplier_text = format(multiplier.quantize(Decimal("0.01")), "f").rstrip("0").rstrip(".")
     return {
         "status": "aligned",
+        "pending_kind": None,
         "amazon_pack_count": amazon_count,
+        "amazon_pack_label": amazon_label or f"{amazon_count}件装",
         "supplier_pack_count": supplier_count,
+        "supplier_pack_label": supplier_label or f"{supplier_count}件装",
         "cost_multiplier": _decimal_number(multiplier),
-        "reason": f"按 {amazon_count}:{supplier_count} 数量换算成本。",
+        "reason": (
+            f"按 {amazon_label or f'{amazon_count}件装'} / "
+            f"{supplier_label or f'{supplier_count}件装'} 换算成本，倍数 {multiplier_text}。"
+        ),
     }
 
 
@@ -855,6 +992,67 @@ def _hard_guard_blocks(
 def _requires_size_alignment(text: str) -> bool:
     lowered = text.lower()
     return any(term.lower() in lowered for term in SIZE_PRICED_TERMS)
+
+
+def _requires_pack_alignment(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return bool(
+        re.search(
+            r"(?:multipack|multi\s*pack|[0-9]{1,3}\s*pk\b|pack\s*of|set\s*of|多件装|多只装|多个装|多片装|多双装|多对装|套装|组合装|礼盒装)",
+            lowered,
+            flags=re.IGNORECASE,
+        )
+    )
+
+
+def _parse_pack_count_token(value: Any) -> int | None:
+    text = str(value or "").strip().lower()
+    if not text:
+        return None
+    parsed = _int_value(text)
+    if parsed is not None:
+        return parsed
+    normalized = text.replace("俩", "两")
+    chinese_digits = {
+        "零": 0,
+        "一": 1,
+        "二": 2,
+        "两": 2,
+        "三": 3,
+        "四": 4,
+        "五": 5,
+        "六": 6,
+        "七": 7,
+        "八": 8,
+        "九": 9,
+    }
+    if normalized == "十":
+        return 10
+    if "百" in normalized:
+        left, _, right = normalized.partition("百")
+        hundreds = chinese_digits.get(left, 1 if not left else 0)
+        remainder = _parse_pack_count_token(right) if right else 0
+        total = hundreds * 100 + (remainder or 0)
+        return total if total > 0 else None
+    if "十" in normalized:
+        left, _, right = normalized.partition("十")
+        tens = chinese_digits.get(left, 1 if not left else 0)
+        ones = chinese_digits.get(right, 0) if right else 0
+        total = tens * 10 + ones
+        return total if total > 0 else None
+    if len(normalized) == 1:
+        return chinese_digits.get(normalized)
+    total_text = "".join(str(chinese_digits.get(char, "")) for char in normalized)
+    if total_text.isdigit():
+        return _int_value(total_text)
+    return None
+
+
+def _pack_unit_label(value: Any) -> str:
+    normalized = str(value or "").strip().lower()
+    if not normalized:
+        return "件"
+    return PACK_UNIT_LABELS.get(normalized, "件")
 
 
 def _unit_to_cm(value: Decimal | None, unit: str) -> Decimal | None:
