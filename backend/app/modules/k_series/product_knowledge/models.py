@@ -258,6 +258,25 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
         nullable=True,
     )
     ai_warnings_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    # --- P-series: channel partition + skill-generated copy / image brief ---
+    channel: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="dtc",
+    )
+    marketing_copy_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    marketing_copy_skill_version: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+    image_instruction_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    image_instruction_skill_version: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
     review_status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,

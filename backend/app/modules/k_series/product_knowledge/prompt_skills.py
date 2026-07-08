@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
 from typing import Any
+
+_SKILLS_DIR = Path(__file__).parent / "skills"
 
 KEYWORD_RESEARCH_SKILL_VERSION = "k-keyword-research-independent-site-v1"
 SELLING_POINTS_SKILL_VERSION = "k-selling-points-conversion-v1"
@@ -166,4 +170,88 @@ def selling_points_instruction() -> str:
         "confidence_score. bullets must "
         "be ranked by importance_score and each bullet should include a concrete benefit "
         "or proof point. Do not include markdown or prose outside the JSON object."
+    )
+
+
+# --- P-series: file-backed copywriting + art-direction skills (Fable 5) -------
+# These skills live as authored Markdown packages under ./skills/<name>/SKILL.md
+# (+ references/). They are loaded verbatim and hashed so every generation can
+# persist the exact skill version + content hash for audit (same discipline as
+# the R/K inline skills above).
+
+AMAZON_COPY_SKILL_VERSION = "k-amazon-listing-copywriting-v1"
+DTC_COPY_SKILL_VERSION = "k-independent-site-seo-copywriting-v1"
+IMAGE_ART_DIRECTION_SKILL_VERSION = "k-product-image-art-direction-v1"
+
+
+def _load_skill_markdown(folder: str, filename: str = "SKILL.md") -> tuple[str, str]:
+    """Return (markdown_body, sha256) for a file-backed skill package."""
+    text = (_SKILLS_DIR / folder / filename).read_text(encoding="utf-8")
+    digest = hashlib.sha256(text.encode("utf-8")).hexdigest()
+    return text, digest
+
+
+def amazon_copy_skill_context() -> dict[str, Any]:
+    body, digest = _load_skill_markdown("amazon-listing-copywriting")
+    return {
+        "version": AMAZON_COPY_SKILL_VERSION,
+        "name": "Amazon listing copywriting skill (A10 / COSMO / Rufus)",
+        "channel": "amazon",
+        "content_sha256": digest,
+        "skill_markdown": body,
+    }
+
+
+def dtc_copy_skill_context() -> dict[str, Any]:
+    body, digest = _load_skill_markdown("independent-site-seo-copywriting")
+    return {
+        "version": DTC_COPY_SKILL_VERSION,
+        "name": "Independent-site SEO copywriting skill (Google 2025-2026 / AI Overviews)",
+        "channel": "dtc",
+        "content_sha256": digest,
+        "skill_markdown": body,
+    }
+
+
+def copy_skill_context_for_channel(channel: str) -> dict[str, Any]:
+    """Amazon products use the Amazon listing skill; everything else = DTC."""
+    return amazon_copy_skill_context() if channel == "amazon" else dtc_copy_skill_context()
+
+
+def image_art_direction_skill_context() -> dict[str, Any]:
+    body, digest = _load_skill_markdown("product-image-art-direction")
+    return {
+        "version": IMAGE_ART_DIRECTION_SKILL_VERSION,
+        "name": "Product image art-direction skill (copy -> image prompts)",
+        "content_sha256": digest,
+        "skill_markdown": body,
+    }
+
+
+def marketing_copy_instruction(channel: str) -> str:
+    surface = "Amazon listing" if channel == "amazon" else "independent-site (DTC) product page"
+    return (
+        f"You are the K-series {surface} copywriter. Use the supplied copy skill "
+        "(skill_markdown) exactly as the authoritative playbook, following its workflow "
+        "and its 交付格式 (delivery format). Base every claim only on the supplied product "
+        "facts, approved non-risk keywords, selling points, variant data, and manual "
+        "product information; never fabricate specs, numbers, certifications, or reviews. "
+        "Respect every 红线 (hard rule) in the skill. Return only valid JSON with the "
+        "channel-appropriate copy blocks, a machine-usable structure per field, a "
+        "compliance_self_check object, and a missing_inputs list for any claim you could "
+        "not support. Do not include markdown or prose outside the JSON object."
+    )
+
+
+def image_art_direction_instruction() -> str:
+    return (
+        "You are the K-series product-image art director. First read the product's finished "
+        "marketing copy, then use the supplied art-direction skill (skill_markdown) exactly "
+        "to produce a full Art Direction: product DNA table, chosen style archetype with "
+        "reason, per-image plan (count/order/mission by channel), a global STYLE BLOCK, and "
+        "for each image a PROMPT skeleton + overlay text + Chinese production note, plus the "
+        "consistency controls and compliance checklist. Keep the real product photo as the "
+        "immutable reference (never regenerate the product body). Return only valid JSON "
+        "with these sections and a missing_assets list. Do not include markdown or prose "
+        "outside the JSON object."
     )
