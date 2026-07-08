@@ -23,6 +23,20 @@ from r_system_v2.rw.core.models import KeepaProductData
 MOCK_MODE = False
 USE_REAL_KEEPA_API = True
 MAX_REQUESTS_PER_MINUTE = 20
+# --- Keepa token economics -------------------------------------------------
+# A /product fetch with rating=1 costs 2 tokens (base 1 + rating 1); the image
+# backfill re-fetches the same endpoint so it also costs 2. A Product Finder
+# /query costs ~10. The 45 EUR plan regenerates 20 tokens/min, so the true
+# sustainable *request* rate is 20 / 2 = 10 req/min -- NOT 20. Every budget and
+# the wall-clock rate limiter must count these real costs or the pool drains at
+# 2x the regen rate and collapses into 429 backoff.
+KEEPA_TOKENS_PER_PRODUCT = max(1, int(os.getenv("KEEPA_TOKENS_PER_PRODUCT", "2")))
+KEEPA_TOKENS_PER_DISCOVERY = max(1, int(os.getenv("KEEPA_TOKENS_PER_DISCOVERY", "10")))
+KEEPA_TOKEN_REGEN_PER_MIN = max(1, int(os.getenv("KEEPA_TOKENS_PER_MIN", "20")))
+KEEPA_TOKEN_RESERVE = max(0, int(os.getenv("KEEPA_TOKEN_RESERVE", "2")))
+KEEPA_SUSTAINABLE_REQUESTS_PER_MIN = max(
+    1, KEEPA_TOKEN_REGEN_PER_MIN // KEEPA_TOKENS_PER_PRODUCT
+)
 NO_BURST_MODE = True
 QUEUE_BASED_INGESTION_REQUIRED = True
 DEFAULT_KEEPA_BASE_URL = "https://api.keepa.com"

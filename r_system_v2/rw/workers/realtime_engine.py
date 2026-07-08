@@ -23,6 +23,9 @@ from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
 from r_system_v2.rw.core.models import IngestionRecord
 from r_system_v2.rw.core.pipeline_runner import PipelineRunner
 from r_system_v2.rw.providers.keepa_provider import (
+    KEEPA_TOKENS_PER_DISCOVERY,
+    KEEPA_TOKENS_PER_PRODUCT,
+    KEEPA_TOKEN_RESERVE,
     MAX_REQUESTS_PER_MINUTE,
     KeepaConfigurationError,
     KeepaProvider,
@@ -147,9 +150,19 @@ class RwRealtimeEngine:
             0,
             min(
                 MAX_REQUESTS_PER_MINUTE,
-                _int_env("RW_PRODUCT_IMAGE_BACKFILL_PER_CYCLE", 2),
+                _int_env("RW_PRODUCT_IMAGE_BACKFILL_PER_CYCLE", 12),
             ),
         )
+        # Image backfill is a hard requirement: ~12k legacy products still carry
+        # the broken /images/P/ ASIN-fallback and must be re-fetched to a real
+        # Keepa image. When priority is on and a backlog remains, hand most of
+        # the per-cycle token budget to backfill and keep only a small trickle
+        # of new-product fetches; once the backlog drains, flip to full-speed
+        # new ingestion but keep a floor so stragglers never stay image-less.
+        self.image_backfill_priority = _bool_env("RW_IMAGE_BACKFILL_PRIORITY", True)
+        self.image_backlog_active = True
+        self.new_fetch_floor = max(0, _int_env("RW_KEEPA_NEW_FETCH_FLOOR", 2))
+        self.image_min_floor = max(0, _int_env("RW_IMAGE_BACKFILL_MIN_FLOOR", 1))
         self.discovery_request_interval_seconds = max(
             0,
             _int_env("RW_KEEPA_DISCOVERY_REQUEST_INTERVAL_SECONDS", 3),
@@ -320,10 +333,24 @@ class RwRealtimeEngine:
             return report
 
         tokens_left = int(keepa_status.tokens_left)
+        # Budget the whole cycle in REAL tokens. Every /product fetch AND every
+        # image backfill costs KEEPA_TOKENS_PER_PRODUCT; a discovery /query costs
+        # KEEPA_TOKENS_PER_DISCOVERY. Counting each as 1 (the old bug) let the
+        # cycle claim ~2x what the pool could pay -> 429 -> adaptive collapse.
+        usable_tokens = max(0, tokens_left - KEEPA_TOKEN_RESERVE)
+        total_product_ops = usable_tokens // KEEPA_TOKENS_PER_PRODUCT
+        if self.image_backfill_priority and self.image_backlog_active:
+            # Backlog present: keep new fetches to a trickle, give the rest to
+            # image backfill (allocated further below).
+            new_fetch_target = min(self.new_fetch_floor, total_product_ops)
+        else:
+            # Backlog drained: full-speed new ingestion, but reserve a small
+            # floor so any straggler that landed on a fallback still gets fixed.
+            new_fetch_target = max(0, total_product_ops - self.image_min_floor)
         requested = min(
             self.keepa_batch_size,
             self.adaptive_fetch_cap,
-            _safe_fetch_budget(tokens_left),
+            new_fetch_target,
         )
         records, scheduler_report = self.scheduler.claim(
             db,
@@ -381,14 +408,16 @@ class RwRealtimeEngine:
         else:
             processed = 0
             failed = 0
-        discovery_token_budget = max(0, (tokens_left - len(records)) // 5)
+        tokens_after_fetch = max(
+            0,
+            usable_tokens - KEEPA_TOKENS_PER_PRODUCT * len(records),
+        )
+        discovery_token_budget = tokens_after_fetch // KEEPA_TOKENS_PER_DISCOVERY
         discovery_budget = max(
             0,
             min(
                 self.discovery_categories_per_cycle,
                 self.max_discovery_requests_per_cycle,
-                MAX_REQUESTS_PER_MINUTE - len(records),
-                tokens_left - len(records),
                 discovery_token_budget,
             ),
         )
@@ -404,15 +433,26 @@ class RwRealtimeEngine:
                 requested,
                 max_category_attempts=discovery_budget,
             )
+        tokens_after_discovery = max(
+            0,
+            tokens_after_fetch - KEEPA_TOKENS_PER_DISCOVERY * discovery_budget,
+        )
         image_backfill_budget = min(
             self.image_backfill_per_cycle,
-            max(0, tokens_left - len(records) - discovery_budget - 1),
+            tokens_after_discovery // KEEPA_TOKENS_PER_PRODUCT,
         )
         image_backfill = (
             self._backfill_missing_product_images(db, limit=image_backfill_budget)
             if image_backfill_budget > 0
             else {"requested": 0, "updated": 0, "skipped": 0, "failed": 0}
         )
+        if image_backfill_budget > 0:
+            # `requested` == rows still matching the missing-image query. A full
+            # page means the backlog persists; fewer rows than we asked for means
+            # it is essentially drained -> next cycle flips to full new ingestion.
+            self.image_backlog_active = (
+                int(image_backfill.get("requested", 0)) >= image_backfill_budget
+            )
         scheduler_payload = scheduler_report.to_dict()
         scheduler_payload["stale_released"] = stale_released
         scheduler_payload["processed_purged"] = processed_purged
@@ -702,14 +742,6 @@ def _bool_env(name: str, default: bool) -> bool:
     if not raw:
         return default
     return raw in {"1", "true", "yes", "on"}
-
-
-def _safe_fetch_budget(tokens_left: int) -> int:
-    if tokens_left <= 0:
-        return 0
-    if tokens_left <= 5:
-        return max(0, tokens_left - 1)
-    return max(0, tokens_left - 2)
 
 
 def _runnable_categories(category_ids: list[str]) -> list[str]:

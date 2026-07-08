@@ -10,7 +10,11 @@ from r_system_v2.rw.ai.deepseek_screening import DeepSeekScreeningSkill
 from r_system_v2.rw.core.keepa_buffer_queue import KeepaBufferQueue
 from r_system_v2.rw.core.models import IngestionRecord
 from r_system_v2.rw.core.rule_engine import RuleEngine
-from r_system_v2.rw.providers.keepa_provider import MAX_REQUESTS_PER_MINUTE, KeepaProvider
+from r_system_v2.rw.providers.keepa_provider import (
+    KEEPA_SUSTAINABLE_REQUESTS_PER_MIN,
+    MAX_REQUESTS_PER_MINUTE,
+    KeepaProvider,
+)
 from r_system_v2.rw.workers.keepa_worker import (
     AsyncKeepaRateLimiter,
     KeepaWorker,
@@ -62,8 +66,11 @@ class PipelineRunner:
         self.deepseek_inline = deepseek_inline
         self.enforce_wall_clock_rate = enforce_wall_clock_rate
         self.category_bestseller_cache: dict[str, dict[str, object]] = {}
+        # Pace at the token-true sustainable rate (regen / cost-per-request),
+        # not the raw 20/min request cap -- each /product fetch costs 2 tokens,
+        # so 20 req/min would demand 40 tokens/min against a 20/min regen.
         self.rate_limiter = AsyncKeepaRateLimiter(
-            MAX_REQUESTS_PER_MINUTE,
+            KEEPA_SUSTAINABLE_REQUESTS_PER_MIN,
             enforce_wall_clock=enforce_wall_clock_rate,
         )
 
