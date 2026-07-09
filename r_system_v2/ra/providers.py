@@ -14,6 +14,14 @@ from typing import Any
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 
 
+GOOGLE_ADS_BASIC_REVIEW_STATUS_ENV = "RA_GOOGLE_ADS_BASIC_REVIEW_STATUS"
+GOOGLE_ADS_ENABLE_REAL_CALLS_ENV = "RA_GOOGLE_ADS_ENABLE_REAL_CALLS"
+GOOGLE_ADS_PENDING_REVIEW_STATUS = "pending_basic_review"
+GOOGLE_ADS_APPROVED_REVIEW_STATUSES = frozenset(
+    {"approved", "basic_approved", "enabled", "ready"}
+)
+
+
 @dataclass(frozen=True)
 class RAnalysisProviderKeys:
     deepseek: str = ""
@@ -21,6 +29,7 @@ class RAnalysisProviderKeys:
     serper: str = ""
     alibaba1688: str = ""
     rainforest: str = ""
+    google_ads: str = ""
 
     def configured(self) -> dict[str, bool]:
         foursapi_configured = bool(self.foursapi)
@@ -32,6 +41,7 @@ class RAnalysisProviderKeys:
             "serper": bool(self.serper),
             "alibaba1688": bool(self.alibaba1688),
             "rainforest": bool(self.rainforest),
+            "google_ads": bool(self.google_ads),
         }
 
 
@@ -46,6 +56,10 @@ class RAnalysisProviderStatus:
     model_name: str | None = None
     base_url_env: str | None = None
     base_url_configured: bool = False
+    runtime_status: str | None = None
+    runtime_enabled: bool | None = None
+    review_status: str | None = None
+    detail: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return {
@@ -58,6 +72,10 @@ class RAnalysisProviderStatus:
             "model_name": self.model_name,
             "base_url_env": self.base_url_env,
             "base_url_configured": self.base_url_configured,
+            "runtime_status": self.runtime_status,
+            "runtime_enabled": self.runtime_enabled,
+            "review_status": self.review_status,
+            "detail": self.detail,
         }
 
 
@@ -97,6 +115,9 @@ class RAnalysisProviderBinding:
     def rainforest_key(self) -> str:
         return self.secret_manager.get_key("rainforest", self.org_id)
 
+    def google_ads_key(self) -> str:
+        return self.secret_manager.get_key("google_ads", self.org_id)
+
     def deepseek_config(self) -> dict[str, Any]:
         return self.secret_manager.get_secret_config("deepseek", self.org_id)
 
@@ -118,6 +139,14 @@ class RAnalysisProviderBinding:
     def rainforest_config(self) -> dict[str, Any]:
         return self.secret_manager.get_secret_config("rainforest", self.org_id)
 
+    def google_ads_config(self) -> dict[str, Any]:
+        return self.secret_manager.get_secret_config("google_ads", self.org_id)
+
+    def google_ads_runtime_gate(self, *, configured: bool | None = None) -> dict[str, Any]:
+        if configured is None:
+            configured = self._secret_status("google_ads")["configured"]
+        return google_ads_runtime_gate(configured=bool(configured))
+
     def all_keys(self) -> RAnalysisProviderKeys:
         return RAnalysisProviderKeys(
             deepseek=self.deepseek_key(),
@@ -125,6 +154,7 @@ class RAnalysisProviderBinding:
             serper=self.serper_key(),
             alibaba1688=self.alibaba1688_key(),
             rainforest=self.rainforest_key(),
+            google_ads=self._optional_key("google_ads"),
         )
 
     def status(self) -> dict[str, Any]:
@@ -138,10 +168,18 @@ class RAnalysisProviderBinding:
         rainforest_ready = any(
             item.role == "rainforest" and item.configured for item in role_statuses
         )
+        google_ads_configured = any(
+            item.role == "google_ads" and item.configured for item in role_statuses
+        )
+        google_ads_gate = self.google_ads_runtime_gate(configured=google_ads_configured)
         supplier_source_mode = os.getenv(
             "RA_SUPPLIER_SOURCE_MODE",
             "auto_1688_api",
         ).strip() or "auto_1688_api"
+        supplier_mock_ready = (not alibaba_ready) and supplier_source_mode in {
+            "mock_1688_api",
+            "auto_1688_api",
+        }
         return {
             "roles": [item.to_dict() for item in role_statuses],
             "routing": {
@@ -149,18 +187,20 @@ class RAnalysisProviderBinding:
                 "gpt": "4sapi",
                 "opus": "4sapi",
                 "serper": "serper",
-                "alibaba1688": supplier_source_mode,
+                "alibaba1688": "alibaba1688_official_api" if alibaba_ready else supplier_source_mode,
                 "rainforest": "rainforest",
+                "google_ads": google_ads_gate["routing"],
             },
             "supplier_source_mode": supplier_source_mode,
             "official_1688_configured": alibaba_ready,
-            "supplier_cost_provider_ready": supplier_source_mode in {
-                "mock_1688_api",
-                "auto_1688_api",
-            }
-            or alibaba_ready,
+            "supplier_cost_provider_ready": alibaba_ready or supplier_mock_ready,
             "competition_provider_ready": rainforest_ready,
-            "external_calls_enabled": serper_ready or alibaba_ready or rainforest_ready,
+            "google_ads_provider_ready": google_ads_gate["runtime_enabled"],
+            "google_ads_review": google_ads_gate,
+            "external_calls_enabled": serper_ready
+            or alibaba_ready
+            or rainforest_ready
+            or bool(google_ads_gate["runtime_enabled"]),
         }
 
     def role_statuses(self) -> list[RAnalysisProviderStatus]:
@@ -170,6 +210,18 @@ class RAnalysisProviderBinding:
         serper = self._secret_status("serper")
         alibaba1688 = self._secret_status("alibaba1688")
         rainforest = self._secret_status("rainforest")
+        google_ads = self._secret_status("google_ads")
+        google_ads_gate = self.google_ads_runtime_gate(
+            configured=google_ads["configured"],
+        )
+        supplier_source_mode = os.getenv(
+            "RA_SUPPLIER_SOURCE_MODE",
+            "auto_1688_api",
+        ).strip() or "auto_1688_api"
+        mock1688_enabled = (not alibaba1688["configured"]) and supplier_source_mode in {
+            "mock_1688_api",
+            "auto_1688_api",
+        }
         return [
             RAnalysisProviderStatus(
                 role="deepseek",
@@ -233,11 +285,29 @@ class RAnalysisProviderBinding:
                 or bool(rainforest.get("url")),
             ),
             RAnalysisProviderStatus(
+                role="google_ads",
+                service="google_ads",
+                label="Google Ads Keyword Planner 搜索量 / CPC / SEO 需求",
+                configured=google_ads["configured"],
+                source=google_ads["source"],
+                base_url_env="GOOGLE_ADS_BASE_URL",
+                base_url_configured=bool(os.getenv("GOOGLE_ADS_BASE_URL", "").strip())
+                or bool(google_ads.get("url")),
+                runtime_status=google_ads_gate["runtime_status"],
+                runtime_enabled=google_ads_gate["runtime_enabled"],
+                review_status=google_ads_gate["review_status"],
+                detail=google_ads_gate["detail"],
+            ),
+            RAnalysisProviderStatus(
                 role="mock_1688_api",
                 service="mock_1688_api",
                 label="1688 官方 API Mock",
-                configured=True,
-                source="local_mock_until_official_api_ready",
+                configured=mock1688_enabled,
+                source=(
+                    "local_mock_until_official_api_ready"
+                    if mock1688_enabled
+                    else "disabled_official_key_bound"
+                ),
             ),
         ]
 
@@ -256,6 +326,12 @@ class RAnalysisProviderBinding:
             "source": str(status.get("source") or "api_key_orchestration"),
             "url": status.get("url"),
         }
+
+    def _optional_key(self, service: str) -> str:
+        try:
+            return self.secret_manager.get_key(service, self.org_id)
+        except SecretManagerError:
+            return ""
 
     def _role_secret_status(self, role: str) -> dict[str, Any]:
         try:
@@ -299,6 +375,61 @@ class RAnalysisProviderBinding:
         if fallback is not None:
             return {**fallback, "role": role}
         return self.foursapi_config()
+
+
+def google_ads_runtime_gate(*, configured: bool) -> dict[str, Any]:
+    review_status = _normalized_google_ads_review_status()
+    real_calls_requested = _env_flag(GOOGLE_ADS_ENABLE_REAL_CALLS_ENV, default=False)
+    approved = review_status in GOOGLE_ADS_APPROVED_REVIEW_STATUSES
+    runtime_enabled = bool(configured and approved and real_calls_requested)
+    if not configured:
+        runtime_status = "missing_key"
+        routing = "mock_missing_provider"
+        detail = "Google Ads API key 尚未绑定到 R-A。"
+    elif not approved:
+        runtime_status = GOOGLE_ADS_PENDING_REVIEW_STATUS
+        routing = GOOGLE_ADS_PENDING_REVIEW_STATUS
+        detail = "Google Ads API 已绑定到 R-A，但 Basic 审核未完成，Keyword Planner 不会被调用。"
+    elif not real_calls_requested:
+        runtime_status = "approved_manual_enable_required"
+        routing = "manual_enable_required"
+        detail = (
+            "Google Ads API Basic 审核状态已标记通过，但真实调用仍需显式开启 "
+            f"{GOOGLE_ADS_ENABLE_REAL_CALLS_ENV}=true。"
+        )
+    else:
+        runtime_status = "enabled"
+        routing = "google_ads_keyword_planner"
+        detail = "Google Ads Keyword Planner 允许参与 DTC SEO 搜索量 / CPC 信号。"
+    return {
+        "configured": bool(configured),
+        "review_status": review_status,
+        "runtime_status": runtime_status,
+        "runtime_enabled": runtime_enabled,
+        "real_calls_requested": real_calls_requested,
+        "routing": routing,
+        "detail": detail,
+        "enablement_env": GOOGLE_ADS_ENABLE_REAL_CALLS_ENV,
+        "review_status_env": GOOGLE_ADS_BASIC_REVIEW_STATUS_ENV,
+    }
+
+
+def _normalized_google_ads_review_status() -> str:
+    raw = os.getenv(
+        GOOGLE_ADS_BASIC_REVIEW_STATUS_ENV,
+        GOOGLE_ADS_PENDING_REVIEW_STATUS,
+    )
+    normalized = raw.strip().lower().replace("-", "_").replace(" ", "_")
+    if normalized in {"", "pending", "in_review", "under_review", "basic_pending"}:
+        return GOOGLE_ADS_PENDING_REVIEW_STATUS
+    return normalized
+
+
+def _env_flag(name: str, *, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on", "enabled"}
 
 
 def _resolve_r_analysis_key_candidates(db: Any, org_id: str) -> list[dict[str, Any]]:

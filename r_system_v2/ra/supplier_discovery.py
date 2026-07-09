@@ -990,9 +990,6 @@ def _append_1688_keyword_fallback_offers(
 
 def _supplier_api_provider(db: Session, *, org_id: str) -> SupplierApiProvider:
     source_mode = supplier_source_mode()
-    if source_mode == "mock_1688_api":
-        return Mock1688OfficialApiProvider()
-
     try:
         _discard_db_transaction(db)
         secret_value = RAnalysisProviderBinding(
@@ -1007,16 +1004,14 @@ def _supplier_api_provider(db: Session, *, org_id: str) -> SupplierApiProvider:
         return Mock1688OfficialApiProvider()
     except Exception as exc:
         _discard_db_transaction(db)
-        if source_mode in {"official_1688_api", "alibaba1688_official_api", "1688_official"}:
-            raise RASupplierDiscoveryError(f"1688 官方 API key 读取失败：{str(exc)[:180]}")
-        return Mock1688OfficialApiProvider()
+        raise RASupplierDiscoveryError(
+            f"1688 官方 API key 读取失败，已禁止降级 mock：{str(exc)[:180]}"
+        ) from exc
 
     credentials = Alibaba1688Credentials.from_secret_value(secret_value)
     if credentials.ready:
         return Alibaba1688OfficialApiProvider(credentials=credentials)
-    if source_mode in {"official_1688_api", "alibaba1688_official_api", "1688_official"}:
-        raise RASupplierDiscoveryError("1688 官方 API 密钥 JSON 缺少 app_key/app_secret/access_token。")
-    return Mock1688OfficialApiProvider()
+    raise RASupplierDiscoveryError("1688 官方 API 密钥已绑定，但 JSON 缺少 app_key/app_secret/access_token，已禁止降级 mock。")
 
 
 def _supplier_api_offer_excerpt(offer: Any) -> str:

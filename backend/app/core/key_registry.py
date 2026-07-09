@@ -145,6 +145,22 @@ KEY_TYPE_REGISTRY: dict[str, dict[str, Any]] = {
         "adapter": None,
         "module_ids": ["r.analysis"],
     },
+    "google_ads": {
+        "type": "google_ads",
+        "name": "Google Ads API",
+        "description": "Google Ads Keyword Planner OAuth credential payload for R-A DTC SEO signals; runtime pending Basic review",
+        "provider": "google_ads",
+        "auth_type": "oauth_json",
+        "enabled": True,
+        "scope": ["R-A"],
+        "validation_endpoint": None,
+        "default_url": "https://googleads.googleapis.com",
+        "default_alias": "google_ads",
+        "adapter": "GoogleAdsKeywordPlannerAdapter",
+        "runtime_status": "pending_basic_review",
+        "runtime_enabled": False,
+        "module_ids": ["r.analysis"],
+    },
 }
 
 KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
@@ -157,6 +173,7 @@ KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
     "alibaba1688": ("1688", "alibaba1688", "open.1688.com", "阿里巴巴开放平台"),
     "n8n": ("n8n", "webhook"),
     "rainforest": ("rainforest", "rainforestapi", "api.rainforestapi.com"),
+    "google_ads": ("google_ads", "google ads", "googleads", "keyword planner"),
 }
 
 
@@ -168,6 +185,8 @@ def normalize_key_type(value: str | None) -> str:
         normalized = "serp"
     if normalized in {"1688", "alibaba_1688", "alibaba"}:
         normalized = "alibaba1688"
+    if normalized in {"googleads", "google_ads_api", "keyword_planner"}:
+        normalized = "google_ads"
     if normalized not in KEY_TYPE_REGISTRY:
         raise ValueError("unknown_key_type")
     return normalized
@@ -187,6 +206,7 @@ def list_key_type_definitions() -> list[dict[str, Any]]:
         "claude_opus",
         "serp",
         "rainforest",
+        "google_ads",
         "n8n",
         "custom",
     ]

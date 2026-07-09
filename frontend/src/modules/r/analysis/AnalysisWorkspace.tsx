@@ -182,7 +182,7 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
         asin_limit: DEFAULT_ASIN_LIMIT,
         query: cleaned,
         run_ai_chain: true,
-        selection_channel: "amazon",
+        selection_channel: "both",
         supplier_limit: DEFAULT_SUPPLIER_LIMIT,
       });
       setResult(payload);
@@ -761,6 +761,7 @@ function AiSelectionCell({ selection }: { selection?: RaAutoProfitItem["ai_selec
       <span className={styles.aiVerdict} data-verdict={selection.verdict}>
         {aiVerdictLabel(selection.verdict)} · {selection.final_score ?? "-"}分
       </span>
+      <ChannelRouteBadges selection={selection} />
       {selection.decision_reason ? <small>{selection.decision_reason}</small> : null}
       <div className={styles.aiLayerList}>
         {layers.map((layer) => (
@@ -794,6 +795,62 @@ function AiSelectionCell({ selection }: { selection?: RaAutoProfitItem["ai_selec
       </div>
     </div>
   );
+}
+
+function ChannelRouteBadges({ selection }: { selection: NonNullable<RaAutoProfitItem["ai_selection"]> }) {
+  const routes = selection.channel_routes?.routes ?? {};
+  const routeItems = ["amazon", "dtc_ad", "dtc_seo"]
+    .map((key) => ({ key, route: routes[key] }))
+    .filter((item) => item.route);
+  if (routeItems.length === 0) {
+    return null;
+  }
+  return (
+    <div className={styles.channelRoutes}>
+      {routeItems.map(({ key, route }) => (
+        <span
+          data-primary={selection.primary_channel?.channel === key ? "true" : "false"}
+          data-verdict={route?.verdict ?? "review"}
+          key={key}
+          title={channelRouteTitle(route)}
+        >
+          {route?.label || channelLabel(key)} · {route?.score ?? "-"}分
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function channelRouteTitle(
+  route:
+    | {
+        provider_mode?: string | null;
+        reasons?: string[];
+        risks?: string[];
+      }
+    | undefined,
+) {
+  if (!route) {
+    return "";
+  }
+  const reasons = (route.reasons ?? []).slice(0, 2).join("；");
+  const risks = (route.risks ?? []).slice(0, 2).join("；");
+  return [route.provider_mode ? `来源：${route.provider_mode}` : "", reasons, risks]
+    .filter(Boolean)
+    .join("；");
+}
+
+function channelLabel(value: string) {
+  if (value === "dtc_ad") {
+    return "独立站广告";
+  }
+  if (value === "dtc_seo") {
+    return "独立站 SEO";
+  }
+  if (value === "amazon") {
+    return "亚马逊";
+  }
+  return value;
 }
 
 function aiLayerTimeline(selection: NonNullable<RaAutoProfitItem["ai_selection"]>) {

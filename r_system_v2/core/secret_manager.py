@@ -15,7 +15,15 @@ from r_system_v2.core.secret_event_bus import (
 
 
 SUPPORTED_SERVICES = frozenset(
-    {"keepa", "deepseek", "openai", "serper", "alibaba1688", "rainforest"}
+    {
+        "keepa",
+        "deepseek",
+        "openai",
+        "serper",
+        "alibaba1688",
+        "rainforest",
+        "google_ads",
+    }
 )
 TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
 
@@ -57,6 +65,11 @@ SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
     "rainforest": (
         (R_ANALYSIS_MODULE_ID, "rainforest"),
         (R_ANALYSIS_MODULE_ID, "rainforestapi"),
+    ),
+    "google_ads": (
+        (R_ANALYSIS_MODULE_ID, "google_ads"),
+        (R_ANALYSIS_MODULE_ID, "googleads"),
+        (R_ANALYSIS_MODULE_ID, "keyword_planner"),
     ),
 }
 
@@ -211,6 +224,8 @@ class SecretManager:
                 normalized_service = "alibaba1688"
             if normalized_service in {"rainforestapi", "api.rainforestapi.com"}:
                 normalized_service = "rainforest"
+            if normalized_service in {"googleads", "google_ads_api", "keyword_planner"}:
+                normalized_service = "google_ads"
 
         keys = list(cls._cache)
         removed = 0
@@ -314,6 +329,8 @@ class SecretManager:
             normalized = "alibaba1688"
         if normalized in {"rainforestapi", "api.rainforestapi.com"}:
             normalized = "rainforest"
+        if normalized in {"googleads", "google_ads_api", "keyword_planner"}:
+            normalized = "google_ads"
         if normalized not in SUPPORTED_SERVICES:
             raise SecretManagerError(f"unsupported_service:{service}")
         return normalized

@@ -10,6 +10,7 @@ from r_system_v2.core.secret_manager import (
 from r_system_v2.ra.framework import RA_REQUIRED_TABLES, RA_STAGES
 from r_system_v2.ra.providers import RAnalysisProviderKeys
 from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.ra.providers import google_ads_runtime_gate
 from r_system_v2.ra.skill_loader import (
     load_ra_skill_bundle,
     load_ra_skill_manifest,
@@ -67,6 +68,7 @@ def test_ra_provider_keys_route_gpt_and_opus_through_foursapi() -> None:
         foursapi="foursapi-key",
         serper="serper-key",
         rainforest="rainforest-key",
+        google_ads="google-ads-key",
     ).configured()
 
     assert configured["deepseek"] is True
@@ -75,6 +77,7 @@ def test_ra_provider_keys_route_gpt_and_opus_through_foursapi() -> None:
     assert configured["foursapi"] is True
     assert configured["serper"] is True
     assert configured["rainforest"] is True
+    assert configured["google_ads"] is True
     assert "openai" not in configured
 
 
@@ -93,6 +96,7 @@ def test_ra_manifest_exposes_framework_api_without_execution_enablement() -> Non
         "serper",
         "alibaba1688",
         "rainforest",
+        "google_ads",
     ]
     assert set(manifest["data_boundary"]["writes"]) == {
         table_name for table_name, _label in RA_REQUIRED_TABLES
@@ -131,6 +135,7 @@ def test_ra_key_types_can_bind_to_analysis_module() -> None:
         "serp",
         "alibaba1688",
         "rainforest",
+        "google_ads",
     )
 
     for key_type in expected_key_types:
@@ -151,6 +156,7 @@ def test_ra_secret_manager_prefers_analysis_bindings_for_required_services() -> 
         "alibaba1688",
     ) in SERVICE_BINDING_CANDIDATES["alibaba1688"]
     assert (R_ANALYSIS_MODULE_ID, "rainforest") in SERVICE_BINDING_CANDIDATES["rainforest"]
+    assert (R_ANALYSIS_MODULE_ID, "google_ads") in SERVICE_BINDING_CANDIDATES["google_ads"]
 
 
 def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatch) -> None:
@@ -171,6 +177,7 @@ def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatc
             (R_ANALYSIS_MODULE_ID, "serper"): "serper-secret",
             (R_ANALYSIS_MODULE_ID, "alibaba1688"): "alibaba-secret",
             (R_ANALYSIS_MODULE_ID, "rainforest"): "rainforest-secret",
+            (R_ANALYSIS_MODULE_ID, "google_ads"): "google-ads-secret",
         }
         value = values.get((module_id, key_alias))
         if value is None:
@@ -201,10 +208,43 @@ def test_ra_provider_binding_resolves_keys_from_api_key_orchestration(monkeypatc
     assert keys.serper == "serper-secret"
     assert keys.alibaba1688 == "alibaba-secret"
     assert keys.rainforest == "rainforest-secret"
+    assert keys.google_ads == "google-ads-secret"
     assert status["supplier_cost_provider_ready"] is True
     assert status["competition_provider_ready"] is True
+    assert status["google_ads_provider_ready"] is False
+    assert status["routing"]["google_ads"] == "pending_basic_review"
+    assert status["google_ads_review"]["runtime_status"] == "pending_basic_review"
     role_configured = {item["role"]: item["configured"] for item in status["roles"]}
     assert role_configured["gpt"] is True
     assert role_configured["opus"] is True
     assert role_configured["rainforest"] is True
+    assert role_configured["google_ads"] is True
+    google_ads_role = next(item for item in status["roles"] if item["role"] == "google_ads")
+    assert google_ads_role["runtime_enabled"] is False
+    assert google_ads_role["review_status"] == "pending_basic_review"
     assert (R_ANALYSIS_MODULE_ID, "4sapi") in calls
+
+
+def test_google_ads_basic_review_gate_requires_manual_runtime_enable(monkeypatch) -> None:
+    monkeypatch.delenv("RA_GOOGLE_ADS_BASIC_REVIEW_STATUS", raising=False)
+    monkeypatch.delenv("RA_GOOGLE_ADS_ENABLE_REAL_CALLS", raising=False)
+
+    pending = google_ads_runtime_gate(configured=True)
+
+    assert pending["review_status"] == "pending_basic_review"
+    assert pending["runtime_enabled"] is False
+    assert pending["routing"] == "pending_basic_review"
+
+    monkeypatch.setenv("RA_GOOGLE_ADS_BASIC_REVIEW_STATUS", "approved")
+    approved_without_runtime = google_ads_runtime_gate(configured=True)
+
+    assert approved_without_runtime["runtime_status"] == "approved_manual_enable_required"
+    assert approved_without_runtime["runtime_enabled"] is False
+    assert approved_without_runtime["routing"] == "manual_enable_required"
+
+    monkeypatch.setenv("RA_GOOGLE_ADS_ENABLE_REAL_CALLS", "true")
+    enabled = google_ads_runtime_gate(configured=True)
+
+    assert enabled["runtime_status"] == "enabled"
+    assert enabled["runtime_enabled"] is True
+    assert enabled["routing"] == "google_ads_keyword_planner"

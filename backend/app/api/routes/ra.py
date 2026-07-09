@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from ...db.session import get_db, get_read_db
@@ -12,6 +13,7 @@ from r_system_v2.ra.framework import load_ra_framework_overview
 from r_system_v2.ra.auto_profit import run_auto_profit_analysis
 from r_system_v2.ra.job_queue import (
     RAJobError,
+    cancel_auto_profit_job,
     create_auto_profit_job,
     get_auto_profit_job,
     get_latest_auto_profit_job,
@@ -92,6 +94,18 @@ def ra_framework(
     return _framework_payload(db, user)
 
 
+@router.get("/overview")
+def ra_overview(
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        framework = load_ra_framework_overview(db, org_id=target_org.org_id)
+        latest = get_latest_auto_profit_job(db, org_id=target_org.org_id)
+    return {"framework": framework, "latest_job": latest}
+
+
 @router.get("/profit/config")
 def ra_profit_config(
     user: User = Depends(require_r_series_org),
@@ -100,9 +114,18 @@ def ra_profit_config(
     return profit_formula_config()
 
 
+@router.get("/profit")
+def ra_profit_list(
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    return ra_profit_snapshots(limit=limit, db=db, user=user)
+
+
 @router.get("/profit/snapshots")
 def ra_profit_snapshots(
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_read_db),
     user: User = Depends(require_r_series_org),
 ) -> dict[str, object]:
@@ -111,7 +134,7 @@ def ra_profit_snapshots(
         return list_profit_snapshots(
             db,
             org_id=target_org.org_id,
-            limit=max(1, min(limit, 200)),
+            limit=limit,
         )
 
 
@@ -212,6 +235,15 @@ def ra_profit_job_create(
         ) from exc
 
 
+@router.post("/runs")
+def ra_run_create(
+    payload: RAAutoProfitJobRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    return ra_profit_job_create(payload=payload, db=db, user=user)
+
+
 @router.get("/profit/jobs/latest")
 def ra_profit_job_latest(
     item_page: int = Query(default=1, ge=1),
@@ -243,6 +275,31 @@ def ra_profit_job_latest(
             detail="暂无 R-A 自动利润任务。",
         )
     return payload
+
+
+@router.get("/runs/latest")
+def ra_run_latest(
+    item_page: int = Query(default=1, ge=1),
+    item_page_size: int = Query(default=50, ge=1, le=50),
+    item_search: str | None = Query(default=None, max_length=120),
+    item_category: str | None = Query(default=None, max_length=120),
+    item_verdict: str | None = Query(default=None, max_length=24),
+    item_sort: str | None = Query(default=None, max_length=32),
+    item_sort_direction: str | None = Query(default=None, max_length=8),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    return ra_profit_job_latest(
+        item_page=item_page,
+        item_page_size=item_page_size,
+        item_search=item_search,
+        item_category=item_category,
+        item_verdict=item_verdict,
+        item_sort=item_sort,
+        item_sort_direction=item_sort_direction,
+        db=db,
+        user=user,
+    )
 
 
 @router.get("/profit/jobs/{run_id}")
@@ -280,6 +337,108 @@ def ra_profit_job_get(
         ) from exc
 
 
+@router.get("/runs/{run_id}")
+def ra_run_get(
+    run_id: str,
+    item_page: int = Query(default=1, ge=1),
+    item_page_size: int = Query(default=50, ge=1, le=50),
+    item_search: str | None = Query(default=None, max_length=120),
+    item_category: str | None = Query(default=None, max_length=120),
+    item_verdict: str | None = Query(default=None, max_length=24),
+    item_sort: str | None = Query(default=None, max_length=32),
+    item_sort_direction: str | None = Query(default=None, max_length=8),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    return ra_profit_job_get(
+        run_id=run_id,
+        item_page=item_page,
+        item_page_size=item_page_size,
+        item_search=item_search,
+        item_category=item_category,
+        item_verdict=item_verdict,
+        item_sort=item_sort,
+        item_sort_direction=item_sort_direction,
+        db=db,
+        user=user,
+    )
+
+
+@router.post("/runs/{run_id}/cancel")
+def ra_run_cancel(
+    run_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    try:
+        with without_org_data_isolation():
+            return cancel_auto_profit_job(db, org_id=target_org.org_id, run_id=run_id)
+    except RAJobError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get("/candidates")
+def ra_candidates(
+    run_id: str | None = Query(default=None, max_length=80),
+    item_page: int = Query(default=1, ge=1),
+    item_page_size: int = Query(default=50, ge=1, le=50),
+    item_search: str | None = Query(default=None, max_length=120),
+    item_category: str | None = Query(default=None, max_length=120),
+    item_verdict: str | None = Query(default=None, max_length=24),
+    item_sort: str | None = Query(default=None, max_length=32),
+    item_sort_direction: str | None = Query(default=None, max_length=8),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        payload = (
+            get_auto_profit_job(
+                db,
+                org_id=target_org.org_id,
+                run_id=run_id,
+                item_page=item_page,
+                item_page_size=item_page_size,
+                item_search=item_search,
+                item_category=item_category,
+                item_verdict=item_verdict,
+                item_sort=item_sort,
+                item_sort_direction=item_sort_direction,
+            )
+            if run_id
+            else get_latest_auto_profit_job(
+                db,
+                org_id=target_org.org_id,
+                item_page=item_page,
+                item_page_size=item_page_size,
+                item_search=item_search,
+                item_category=item_category,
+                item_verdict=item_verdict,
+                item_sort=item_sort,
+                item_sort_direction=item_sort_direction,
+            )
+        )
+    if payload is None:
+        return {"items": [], "items_page": None, "counts": {}, "run_id": run_id}
+    return {
+        "run_id": payload.get("run_id"),
+        "status": payload.get("status"),
+        "items": payload.get("items") or [],
+        "items_page": payload.get("items_page"),
+        "counts": payload.get("counts") or {},
+    }
+
+
+@router.post("/candidates/import-from-rw")
+def ra_candidates_import_from_rw(
+    payload: RAAutoProfitJobRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    return ra_profit_job_create(payload=payload, db=db, user=user)
+
+
 @router.post("/supplier-search")
 def ra_supplier_search(
     payload: RASupplierSearchRequest,
@@ -305,10 +464,197 @@ def ra_supplier_search(
         ) from exc
 
 
+@router.get("/suppliers")
+def ra_suppliers(
+    run_id: str | None = Query(default=None, max_length=80),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        return _list_ra_suppliers(db, org_id=target_org.org_id, run_id=run_id, limit=limit)
+
+
+@router.get("/reports")
+def ra_reports(
+    run_id: str | None = Query(default=None, max_length=80),
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        return _list_ra_reports(db, org_id=target_org.org_id, run_id=run_id, limit=limit)
+
+
+@router.post("/reports/{report_id}/approve")
+def ra_report_approve(
+    report_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    return _update_report_status(db, user=user, report_id=report_id, report_status="approved")
+
+
+@router.post("/reports/{report_id}/reject")
+def ra_report_reject(
+    report_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    return _update_report_status(db, user=user, report_id=report_id, report_status="rejected")
+
+
 def _framework_payload(db: Session, user: User) -> dict[str, object]:
     target_org = _required_target_org(db, user)
     with without_org_data_isolation():
         return load_ra_framework_overview(db, org_id=target_org.org_id)
+
+
+def _list_ra_suppliers(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str | None,
+    limit: int,
+) -> dict[str, object]:
+    filters = ["o.org_id = :org_id"]
+    params: dict[str, object] = {"org_id": org_id, "limit": limit}
+    if run_id:
+        filters.append("c.run_id = :run_id")
+        params["run_id"] = run_id
+    where_sql = " AND ".join(f"({item})" for item in filters)
+    rows = db.execute(
+        text(
+            f"""
+            SELECT o.id AS offer_id, o.candidate_id, c.run_id, o.asin,
+                   o.supplier_name, o.supplier_url, o.unit_price_cny,
+                   o.moq, o.rating, o.match_score, o.offer_status,
+                   o.payload, o.created_at, o.updated_at
+            FROM ra_supplier_offers o
+            LEFT JOIN ra_candidates c ON c.id = o.candidate_id
+            WHERE {where_sql}
+            ORDER BY o.updated_at DESC NULLS LAST, o.created_at DESC
+            LIMIT :limit
+            """
+        ),
+        params,
+    ).mappings()
+    items = []
+    for row in rows:
+        payload = row["payload"] if isinstance(row["payload"], dict) else {}
+        items.append(
+            {
+                "offer_id": row["offer_id"],
+                "candidate_id": row["candidate_id"],
+                "run_id": row["run_id"],
+                "asin": row["asin"],
+                "supplier_name": row["supplier_name"],
+                "supplier_url": row["supplier_url"],
+                "supplier_platform": payload.get("platform"),
+                "supplier_platform_label": payload.get("platform_label"),
+                "unit_price_cny": float(row["unit_price_cny"]) if row["unit_price_cny"] is not None else None,
+                "moq": row["moq"],
+                "rating": float(row["rating"]) if row["rating"] is not None else None,
+                "match_score": row["match_score"],
+                "offer_status": row["offer_status"],
+                "one_piece_hint": bool(payload.get("one_piece_hint")),
+                "created_at": str(row["created_at"]) if row["created_at"] else None,
+                "updated_at": str(row["updated_at"]) if row["updated_at"] else None,
+            }
+        )
+    return {"items": items, "count": len(items), "run_id": run_id}
+
+
+def _list_ra_reports(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str | None,
+    limit: int,
+) -> dict[str, object]:
+    filters = ["org_id = :org_id"]
+    params: dict[str, object] = {"org_id": org_id, "limit": limit}
+    if run_id:
+        filters.append("run_id = :run_id")
+        params["run_id"] = run_id
+    where_sql = " AND ".join(f"({item})" for item in filters)
+    rows = db.execute(
+        text(
+            f"""
+            SELECT report_id, run_id, candidate_id, asin, status,
+                   title, summary, payload, created_at, updated_at
+            FROM ra_reports
+            WHERE {where_sql}
+            ORDER BY updated_at DESC NULLS LAST, created_at DESC
+            LIMIT :limit
+            """
+        ),
+        params,
+    ).mappings()
+    items = []
+    for row in rows:
+        payload = row["payload"] if isinstance(row["payload"], dict) else {}
+        final = payload.get("final") if isinstance(payload.get("final"), dict) else {}
+        items.append(
+            {
+                "report_id": row["report_id"],
+                "run_id": row["run_id"],
+                "candidate_id": row["candidate_id"],
+                "asin": row["asin"],
+                "status": row["status"],
+                "title": row["title"],
+                "summary": row["summary"],
+                "final_score": final.get("final_score"),
+                "verdict": final.get("verdict"),
+                "channel": final.get("channel"),
+                "channel_routes": final.get("channel_routes"),
+                "primary_channel": final.get("primary_channel"),
+                "created_at": str(row["created_at"]) if row["created_at"] else None,
+                "updated_at": str(row["updated_at"]) if row["updated_at"] else None,
+            }
+        )
+    return {"items": items, "count": len(items), "run_id": run_id}
+
+
+def _update_report_status(
+    db: Session,
+    *,
+    user: User,
+    report_id: str,
+    report_status: str,
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        row = db.execute(
+            text(
+                """
+                UPDATE ra_reports
+                SET status = :status, updated_at = CURRENT_TIMESTAMP
+                WHERE report_id = :report_id AND org_id = :org_id
+                RETURNING report_id, run_id, candidate_id, asin, status,
+                          title, summary, updated_at
+                """
+            ),
+            {
+                "status": report_status,
+                "report_id": report_id,
+                "org_id": target_org.org_id,
+            },
+        ).mappings().first()
+        if row is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="R-A 报告不存在。")
+        return {
+            "report_id": row["report_id"],
+            "run_id": row["run_id"],
+            "candidate_id": row["candidate_id"],
+            "asin": row["asin"],
+            "status": row["status"],
+            "title": row["title"],
+            "summary": row["summary"],
+            "updated_at": str(row["updated_at"]) if row["updated_at"] else None,
+        }
 
 
 def _required_target_org(db: Session, user: User):

@@ -20,6 +20,9 @@ PROVIDER_ALIASES = {
     "anthropic": "claude",
     "deepseek": "deepseek",
     "keepa": "keepa",
+    "google_ads": "google_ads",
+    "googleads": "google_ads",
+    "keyword_planner": "google_ads",
 }
 
 PROVIDER_KEY_ALIASES = {
@@ -28,6 +31,7 @@ PROVIDER_KEY_ALIASES = {
     "claude": "claude_opus",
     "deepseek": "deepseek",
     "keepa": "keepa",
+    "google_ads": "google_ads",
 }
 
 
@@ -135,5 +139,10 @@ def provider_registry_mapping() -> dict[str, dict[str, str | None]]:
             "adapter": "KeepaAdapter",
             "default_key_alias": "keepa",
             "endpoint": "/token",
+        },
+        "google_ads": {
+            "adapter": "GoogleAdsKeywordPlannerAdapter",
+            "default_key_alias": "google_ads",
+            "endpoint": "/v*/customers/*:generateKeywordIdeas",
         },
     }

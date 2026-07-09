@@ -860,6 +860,41 @@
   background: #fee2e2;
 }
 
+.channelRoutes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.channelRoutes span {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 6px;
+  border: 1px solid #e2e8f0;
+  border-radius: 5px;
+  color: #475569;
+  background: #f8fafc;
+  font-size: 0.68rem;
+  font-weight: 760;
+}
+
+.channelRoutes span[data-verdict="pass"] {
+  color: #166534;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.channelRoutes span[data-verdict="reject"] {
+  color: #991b1b;
+  border-color: #fecaca;
+  background: #fef2f2;
+}
+
+.channelRoutes span[data-primary="true"] {
+  border-color: #0f172a;
+  box-shadow: inset 0 0 0 1px #0f172a;
+}
+
 .aiLayerList {
   display: grid;
   gap: 6px;

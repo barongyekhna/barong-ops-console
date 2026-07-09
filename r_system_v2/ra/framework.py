@@ -27,6 +27,7 @@ RA_REQUIRED_TABLES: tuple[tuple[str, str], ...] = (
     ("ra_supplier_offers", "供应商报价候选"),
     ("ra_profit_snapshots", "利润与成本快照"),
     ("ra_competition_snapshots", "Rainforest 竞争快照"),
+    ("ra_channel_signals", "Amazon / DTC广告 / DTC SEO 渠道信号"),
     ("ra_final_decisions", "最终选品决策"),
     ("ra_reports", "最终报告"),
     ("ra_alerts", "告警与通知记录"),
@@ -73,6 +74,20 @@ RA_STAGES: tuple[dict[str, object], ...] = (
         "owner": "R-A",
         "status": "framework_ready",
         "description": "按 Amazon / DTC / both 加载 R 系列选品手册。",
+    },
+    {
+        "id": "channel_routing",
+        "label": "三路选品分类",
+        "owner": "R-A",
+        "status": "framework_ready",
+        "description": "利润通过后按亚马逊、独立站广告、独立站 SEO 三条路径生成结构化信号；Google Ads 审核前只记录待审核状态。",
+    },
+    {
+        "id": "google_ads_keyword_planner",
+        "label": "Google Ads Keyword Planner",
+        "owner": "R-A",
+        "status": "pending_basic_review",
+        "description": "已接入 R-A 密钥解析与 DTC SEO 搜索量/CPC 证据位；Basic 审核完成前不发起真实调用。",
     },
     {
         "id": "deepseek",

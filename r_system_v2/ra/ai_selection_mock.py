@@ -18,6 +18,7 @@ from uuid import uuid4
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from r_system_v2.ra.channel_signals import ensure_channel_signals
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.profit_service import _json_bind
 from r_system_v2.ra.skill_loader import RASkillBundle, load_ra_skill_bundle
@@ -62,9 +63,18 @@ def run_mock_ai_selection_for_run(
         "reports": 0,
         "mock_ai_enabled": True,
         "mock_ai_version": MOCK_PIPELINE_VERSION,
+        "channel_signals": 0,
     }
 
     for context in candidates:
+        context["channel_signals"] = ensure_channel_signals(
+            db,
+            org_id=org_id,
+            run_id=run_id,
+            context=context,
+            competition={},
+        )
+        counts["channel_signals"] += 1
         layers = _evaluate_mock_layers(context, skill_bundle=skill_bundle)
         for layer in layers:
             _insert_ai_evaluation(db, org_id=org_id, run_id=run_id, context=context, layer=layer)
@@ -83,6 +93,74 @@ def run_mock_ai_selection_for_run(
         counts["final_decisions"] += 1
         counts["reports"] += 1
 
+    _merge_run_counts(db, run_id=run_id, counts=counts)
+    db.commit()
+    return load_mock_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
+
+
+def run_mock_ai_selection_for_candidate(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+    candidate_id: str,
+    channel: str = "amazon",
+) -> dict[str, object]:
+    normalized_candidate_id = str(candidate_id or "").strip()
+    if not normalized_candidate_id:
+        raise RuntimeError("缺少 R-A candidate_id，无法启动 mock AI 链。")
+    candidates = [
+        context
+        for context in _load_candidate_contexts(db, org_id=org_id, run_id=run_id)
+        if str(context.get("candidate_id") or "") == normalized_candidate_id
+    ]
+    if not candidates:
+        raise RuntimeError("利润通过候选不存在或尚未满足 mock AI 输入条件。")
+    skill_bundle = load_ra_skill_bundle(channel)
+    _clear_mock_outputs_for_candidate(
+        db,
+        org_id=org_id,
+        run_id=run_id,
+        candidate_id=normalized_candidate_id,
+    )
+    counts = {
+        "ai_candidates": len(candidates),
+        "ai_evaluations": 0,
+        "ai_pass": 0,
+        "ai_reject": 0,
+        "ai_review": 0,
+        "final_decisions": 0,
+        "reports": 0,
+        "mock_ai_enabled": True,
+        "mock_ai_version": MOCK_PIPELINE_VERSION,
+        "channel_signals": 0,
+    }
+    for context in candidates:
+        context["channel_signals"] = ensure_channel_signals(
+            db,
+            org_id=org_id,
+            run_id=run_id,
+            context=context,
+            competition={},
+        )
+        counts["channel_signals"] += 1
+        layers = _evaluate_mock_layers(context, skill_bundle=skill_bundle)
+        for layer in layers:
+            _insert_ai_evaluation(db, org_id=org_id, run_id=run_id, context=context, layer=layer)
+            counts["ai_evaluations"] += 1
+        final = _final_decision(context, layers, channel=channel, skill_bundle=skill_bundle)
+        final["report_id"] = str(uuid4())
+        _insert_final_decision(db, org_id=org_id, run_id=run_id, context=context, final=final)
+        _insert_report(db, org_id=org_id, run_id=run_id, context=context, final=final, layers=layers)
+        _update_candidate_status(db, candidate_id=str(context["candidate_id"]), verdict=str(final["verdict"]))
+        verdict_key = {
+            "pass": "ai_pass",
+            "reject": "ai_reject",
+            "review": "ai_review",
+        }.get(str(final["verdict"]), "ai_review")
+        counts[verdict_key] += 1
+        counts["final_decisions"] += 1
+        counts["reports"] += 1
     _merge_run_counts(db, run_id=run_id, counts=counts)
     db.commit()
     return load_mock_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
@@ -130,6 +208,8 @@ def load_mock_ai_selection_for_run(
                 "layers": layer_items,
                 "report_id": payload.get("report_id"),
                 "mock_pipeline_version": payload.get("mock_pipeline_version"),
+                "channel_routes": payload.get("channel_routes"),
+                "primary_channel": payload.get("primary_channel"),
                 "created_at": _iso(decision.get("created_at")),
             }
         )
@@ -563,6 +643,7 @@ def _layer_decision(
         "advantages": advantages[:6],
         "risks": risks[:6],
         "input_summary": _input_summary(context),
+        "channel_signals": _channel_signals_payload(context),
     }
     return MockLayerDecision(
         layer=layer,
@@ -611,6 +692,8 @@ def _final_decision(
         final_score = average_score
         barrier_type = "manual_review"
 
+    channel_routes = _channel_routes_from_context(context, requested_channel=channel)
+    primary_channel = _primary_channel(channel_routes, requested_channel=channel)
     leading_advantages = _dedupe(
         advantage
         for layer in layers
@@ -631,7 +714,9 @@ def _final_decision(
     return {
         "final_score": _bounded_score(final_score),
         "verdict": verdict,
-        "channel": channel,
+        "channel": primary_channel.get("channel") or channel,
+        "primary_channel": primary_channel,
+        "channel_routes": channel_routes,
         "barrier_type": barrier_type,
         "decision_reason": reason,
         "advantages": leading_advantages,
@@ -642,6 +727,7 @@ def _final_decision(
         "skill_version": bundle.version,
         "skill_hash": bundle.combined_hash,
         "skill": _skill_payload(bundle),
+        "channel_signals": _channel_signals_payload(context),
         "created_at": datetime.now(UTC).isoformat(),
     }
 
@@ -756,6 +842,9 @@ def _insert_report(
         "final": final,
         "layers": [layer.payload for layer in layers],
         "product": _input_summary(context),
+        "channel_routes": final.get("channel_routes"),
+        "primary_channel": final.get("primary_channel"),
+        "channel_signals": _channel_signals_payload(context),
     }
     db.execute(
         text(
@@ -830,6 +919,47 @@ def _clear_mock_outputs(db: Session, *, org_id: str, run_id: str) -> None:
             """
         ),
         {"org_id": org_id, "run_id": run_id},
+    )
+
+
+def _clear_mock_outputs_for_candidate(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+    candidate_id: str,
+) -> None:
+    params = {"org_id": org_id, "run_id": run_id, "candidate_id": candidate_id}
+    db.execute(
+        text(
+            """
+            DELETE FROM ra_ai_evaluations
+            WHERE org_id = :org_id AND run_id = :run_id
+              AND candidate_id = :candidate_id
+              AND layer IN ('deepseek', 'gpt', 'opus')
+            """
+        ),
+        params,
+    )
+    db.execute(
+        text(
+            """
+            DELETE FROM ra_final_decisions
+            WHERE org_id = :org_id AND run_id = :run_id
+              AND candidate_id = :candidate_id
+            """
+        ),
+        params,
+    )
+    db.execute(
+        text(
+            """
+            DELETE FROM ra_reports
+            WHERE org_id = :org_id AND run_id = :run_id
+              AND candidate_id = :candidate_id
+            """
+        ),
+        params,
     )
 
 
@@ -946,6 +1076,99 @@ def _skill_payload(skill_bundle: RASkillBundle) -> dict[str, Any]:
     }
 
 
+def _channel_signals_payload(context: dict[str, Any]) -> dict[str, Any]:
+    signals = _dict_value(context.get("channel_signals"))
+    if not signals:
+        return {}
+    return {
+        "version": signals.get("version"),
+        "keyword": signals.get("keyword"),
+        "amazon": _dict_value(signals.get("amazon")),
+        "dtc_ad": _dict_value(signals.get("dtc_ad")),
+        "dtc_seo": _dict_value(signals.get("dtc_seo")),
+        "primary_route": _dict_value(signals.get("primary_route")),
+        "provider_modes": _dict_value(signals.get("provider_modes")),
+        "generated_at": signals.get("generated_at"),
+    }
+
+
+def _channel_routes_from_context(
+    context: dict[str, Any],
+    *,
+    requested_channel: str,
+) -> dict[str, Any]:
+    signals = _channel_signals_payload(context)
+    routes: dict[str, Any] = {}
+    for key in ("amazon", "dtc_ad", "dtc_seo"):
+        route = _dict_value(signals.get(key))
+        if not route:
+            continue
+        routes[key] = {
+            "label": route.get("label"),
+            "score": route.get("score"),
+            "verdict": route.get("verdict"),
+            "reasons": route.get("reasons") or [],
+            "risks": route.get("risks") or [],
+            "provider_mode": route.get("provider_mode"),
+        }
+    return {
+        "requested_channel": _valid_channel(requested_channel) or "both",
+        "routes": routes,
+        "model_channel_guesses": [],
+        "provider_modes": _dict_value(signals.get("provider_modes")),
+    }
+
+
+def _primary_channel(
+    channel_routes: dict[str, Any],
+    *,
+    requested_channel: str,
+) -> dict[str, Any]:
+    routes = _dict_value(channel_routes.get("routes"))
+    candidates = []
+    requested = _valid_channel(requested_channel)
+    for key, route in routes.items():
+        if not isinstance(route, dict):
+            continue
+        score = _bounded_score(route.get("score") or 0)
+        if requested and requested != "both" and key == requested:
+            score += 4
+        candidates.append((score, key, route))
+    if candidates:
+        _score, key, route = max(candidates, key=lambda item: item[0])
+        return {
+            "channel": key,
+            "label": route.get("label") or _channel_label(key),
+            "score": route.get("score"),
+            "verdict": route.get("verdict"),
+            "source": "mock_channel_signals",
+        }
+    fallback = requested or "amazon"
+    return {
+        "channel": fallback,
+        "label": _channel_label(fallback),
+        "score": None,
+        "verdict": "review",
+        "source": "fallback",
+    }
+
+
+def _valid_channel(value: Any) -> str | None:
+    normalized = str(value or "").strip().lower().replace("-", "_")
+    if normalized in {"amazon", "dtc_ad", "dtc_seo", "both"}:
+        return normalized
+    return None
+
+
+def _channel_label(value: str) -> str:
+    return {
+        "amazon": "亚马逊",
+        "dtc_ad": "独立站广告",
+        "dtc_seo": "独立站 SEO",
+        "both": "双平台",
+    }.get(value, value)
+
+
 def _input_summary(context: dict[str, Any]) -> dict[str, Any]:
     product = _dict_value(context.get("product"))
     profit = _dict_value(context.get("profit"))
@@ -971,6 +1194,7 @@ def _input_summary(context: dict[str, Any]) -> dict[str, Any]:
         "gross_profit_usd": _number(profit.get("gross_profit_usd")),
         "supplier_name": supplier.get("supplier_name"),
         "supplier_match_score": _int_value(supplier.get("match_score")),
+        "primary_channel": _dict_value(_channel_signals_payload(context).get("primary_route")).get("channel"),
     }
 
 

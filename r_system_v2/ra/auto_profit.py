@@ -204,14 +204,15 @@ def match_rw_products_for_query(
         return []
 
     search_values = _dedupe_preserve_order([cleaned_query, *terms])
-    params: dict[str, object] = {"scan_limit": max(100, min(limit * 100, 1500))}
+    excluded = _normalized_asin_list(exclude_asins)
+    params: dict[str, object] = {"scan_limit": _rw_scan_limit(limit, len(excluded))}
     if org_id:
         params["org_id"] = org_id
-    excluded = _normalized_asin_list(exclude_asins)
+    excluded_set = set(excluded)
     exclude_sql = ""
     if excluded:
         placeholders: list[str] = []
-        for index, asin in enumerate(excluded):
+        for index, asin in enumerate(excluded[:50]):
             key = f"exclude_asin_{index}"
             params[key] = asin
             placeholders.append(f":{key}")
@@ -259,6 +260,9 @@ def match_rw_products_for_query(
     scored: list[dict[str, Any]] = []
     for row in rows:
         product = dict(row)
+        asin = str(product.get("asin") or "").strip().upper()
+        if asin in excluded_set:
+            continue
         features = _dict_value(product.get("features"))
         if not product_image_candidates(
             asin=str(product.get("asin") or ""),
@@ -297,6 +301,13 @@ def _normalized_asin_list(values: set[str] | list[str] | tuple[str, ...] | None)
         seen.add(asin)
         normalized.append(asin)
     return normalized
+
+
+def _rw_scan_limit(limit: int, excluded_count: int) -> int:
+    base = max(100, min(int(limit) * 30, 300))
+    if excluded_count <= 0:
+        return base
+    return max(base, min(base + excluded_count, 500))
 
 
 def _ra_profit_not_processed_sql(db: Session) -> str:
@@ -620,9 +631,5 @@ def _int_env(name: str) -> int | None:
 
 
 def _last_profit_sql(org_id: str | None) -> str:
-    if not org_id:
-        return "NULL AS last_profit_at"
-    return (
-        "(SELECT MAX(s.created_at) FROM ra_profit_snapshots s "
-        "WHERE s.org_id = :org_id AND s.asin = products_rw.asin) AS last_profit_at"
-    )
+    del org_id
+    return "NULL AS last_profit_at"

@@ -20,6 +20,7 @@ from r_system_v2.ra.ai_selection import (
     load_ai_selection_for_run,
     run_ai_selection_for_candidate,
 )
+from r_system_v2.ra.ai_selection_mock import run_mock_ai_selection_for_candidate
 from r_system_v2.ra.auto_profit import (
     DEFAULT_SUPPLIER_LIMIT,
     MAX_ASIN_LIMIT,
@@ -159,6 +160,25 @@ def get_latest_auto_profit_job(
     )
 
 
+def cancel_auto_profit_job(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+) -> dict[str, object]:
+    row = _load_job_row(db, org_id=org_id, run_id=run_id)
+    if row is None:
+        raise RAJobError("R-A 任务不存在。")
+    counts = _dict_value(row.get("counts"))
+    warnings = list(counts.get("warnings") or [])
+    if str(row.get("status") or "") not in {"completed", "partial", "failed", "cancelled"}:
+        warnings.append("用户已取消任务，worker 会停止继续拉取新候选。")
+        counts["warnings"] = warnings[-10:]
+        _update_job(db, run_id=run_id, status="cancelled", counts=counts, finish=True)
+        row = _load_job_row(db, org_id=org_id, run_id=run_id) or row
+    return _job_payload(db, row)
+
+
 class RaProfitJobWorker:
     def __init__(
         self,
@@ -256,6 +276,10 @@ class RaProfitJobWorker:
                 with _without_org_data_isolation():
                     row = _load_job_row(db, org_id=org_id, run_id=run_id)
                     counts = _dict_value(row.get("counts") if row else {})
+                    if row and str(row.get("status") or "") == "cancelled":
+                        counts["cancelled"] = True
+                        _update_job(db, run_id=run_id, status="cancelled", counts=counts, finish=True)
+                        return
                     live_counts = _live_counts(db, org_id=org_id, run_id=run_id)
                     counts.update(live_counts)
                     current_pass = int(counts.get("profit_pass") or 0)
@@ -385,6 +409,10 @@ class RaProfitJobWorker:
                         with _without_org_data_isolation():
                             row = _load_job_row(db, org_id=org_id, run_id=run_id)
                             counts = _dict_value(row.get("counts") if row else {})
+                            if row and str(row.get("status") or "") == "cancelled":
+                                counts["cancelled"] = True
+                                _update_job(db, run_id=run_id, status="cancelled", counts=counts, finish=True)
+                                return {"processed": processed}
                             counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
                             current_pass = int(counts.get("profit_pass") or 0)
                     if current_pass >= target_profit_pass and not pending:
@@ -624,6 +652,28 @@ def _process_candidate_ai_for_job(
         }
     except Exception as exc:  # pragma: no cover - external provider dependent.
         message = str(exc)
+        if _should_fallback_to_mock_ai(message):
+            try:
+                with session_factory() as db:
+                    with _without_org_data_isolation():
+                        result = run_mock_ai_selection_for_candidate(
+                            db,
+                            org_id=org_id,
+                            run_id=run_id,
+                            candidate_id=candidate_id,
+                            channel=selection_channel,
+                        )
+                counts = _dict_value(result.get("counts"))
+                warnings = list(counts.get("warnings") or [])
+                warnings.append(f"真实 AI 不可用，已对 {candidate_id} 使用 mock：{message[:180]}")
+                counts["warnings"] = warnings[-10:]
+                return {
+                    "candidate_id": candidate_id,
+                    "counts": counts,
+                    "mock_fallback": True,
+                }
+            except Exception as mock_exc:  # pragma: no cover - fallback guardrail.
+                message = f"{message}; mock fallback failed: {mock_exc}"
         return {
             "candidate_id": candidate_id,
             "error": message,
@@ -869,6 +919,20 @@ def _is_fatal_ai_error(message: str) -> bool:
         "403",
     )
     return any(marker in lowered for marker in fatal_markers)
+
+
+def _should_fallback_to_mock_ai(message: str) -> bool:
+    lowered = str(message or "").lower()
+    markers = (
+        "r-a ai key 未完整绑定",
+        "key 未完整绑定",
+        "key 未绑定",
+        "没有绑定",
+        "未绑定",
+        "missing api key",
+        "not configured",
+    )
+    return any(marker in lowered for marker in markers)
 
 
 def _is_idle_transaction_timeout(exc: Exception) -> bool:

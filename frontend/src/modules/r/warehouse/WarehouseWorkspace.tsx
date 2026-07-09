@@ -419,9 +419,23 @@ function categoryPathDisplay(product: RwProduct) {
 }
 
 function monthlySalesDisplay(product: RwProduct) {
+  const finalMonthlySales = numberFeature(product, "monthly_sales_value");
+  const valueSource = stringFeature(product, "monthly_sales_value_source");
+  const dataConflict = booleanFeature(product, "monthly_sales_data_conflict");
+  if (finalMonthlySales !== null) {
+    const sourceLabel =
+      valueSource === "keepa_monthly_sold"
+        ? "Keepa"
+        : valueSource
+          ? "BSR修正"
+          : "最终值";
+    return `月销量 ${finalMonthlySales.toLocaleString("zh-CN")}（${sourceLabel}${
+      dataConflict ? "·原始值冲突" : ""
+    }）`;
+  }
   const realMonthlySales = numberFeature(product, "monthly_sales");
   if (realMonthlySales !== null) {
-    return `月销量 ${realMonthlySales.toLocaleString("zh-CN")}`;
+    return `月销量 ${realMonthlySales.toLocaleString("zh-CN")}（Keepa原始）`;
   }
   const estimate = numberFeature(product, "monthly_sales_estimate");
   if (estimate === null) {
@@ -495,6 +509,23 @@ function stringFeature(product: RwProduct, key: string) {
     return value.trim();
   }
   return null;
+}
+
+function booleanFeature(product: RwProduct, key: string) {
+  const value = product.features[key];
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no"].includes(normalized)) {
+      return false;
+    }
+  }
+  return false;
 }
 
 function ViewTabs({ activeView }: { activeView: WarehouseView }) {

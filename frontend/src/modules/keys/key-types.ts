@@ -10,7 +10,8 @@ export type ApiKeyType =
   | "n8n"
   | "keepa"
   | "alibaba1688"
-  | "rainforest";
+  | "rainforest"
+  | "google_ads";
 
 export type ApiKeyTypeOption = {
   type: ApiKeyType;
@@ -18,6 +19,7 @@ export type ApiKeyTypeOption = {
   description: string;
   defaultUrl: string;
   defaultAlias: string;
+  runtimeStatus?: "pending_basic_review";
 };
 
 export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
@@ -62,6 +64,14 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     description: "亚马逊页一实时数据(R-A 竞争指标:评论墙 / 品牌份额 / 新品占比)",
     defaultUrl: "https://api.rainforestapi.com",
     defaultAlias: "rainforest",
+  },
+  {
+    type: "google_ads",
+    label: "Google Ads API",
+    description: "Google Ads Keyword Planner 搜索量 / CPC / SEO 需求信号；Basic 审核通过前仅绑定不启用",
+    defaultUrl: "https://googleads.googleapis.com",
+    defaultAlias: "google_ads",
+    runtimeStatus: "pending_basic_review",
   },
   {
     type: "custom",

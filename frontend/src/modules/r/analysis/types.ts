@@ -262,6 +262,30 @@ export type RaAiSelectionResult = {
   mock_pipeline_version?: string | null;
   ai_pipeline_version?: string | null;
   competition?: Record<string, unknown> | null;
+  channel_routes?: {
+    requested_channel?: string | null;
+    routes?: Record<
+      string,
+      {
+        label?: string | null;
+        score?: number | null;
+        verdict?: string | null;
+        reasons?: string[];
+        risks?: string[];
+        provider_mode?: string | null;
+        model_supported?: boolean | null;
+      }
+    >;
+    model_channel_guesses?: string[];
+    provider_modes?: Record<string, unknown>;
+  } | null;
+  primary_channel?: {
+    channel?: string | null;
+    label?: string | null;
+    score?: number | null;
+    verdict?: string | null;
+    source?: string | null;
+  } | null;
   created_at?: string | null;
 };
 

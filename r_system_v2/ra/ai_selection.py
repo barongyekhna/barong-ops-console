@@ -28,6 +28,7 @@ from r_system_v2.ra.ai_selection_mock import (
     _report_count,
     _skill_payload,
 )
+from r_system_v2.ra.channel_signals import ensure_channel_signals
 from r_system_v2.ra.competition import ensure_competition_snapshot
 from r_system_v2.ra.profit_service import _json_bind
 from r_system_v2.ra.providers import RAnalysisProviderBinding
@@ -192,6 +193,8 @@ def load_ai_selection_for_run(
                 "report_id": payload.get("report_id"),
                 "ai_pipeline_version": payload.get("ai_pipeline_version"),
                 "competition": payload.get("competition"),
+                "channel_routes": payload.get("channel_routes"),
+                "primary_channel": payload.get("primary_channel"),
                 "created_at": _iso(decision.get("created_at")),
             }
         )
@@ -238,6 +241,7 @@ def _initial_ai_counts(candidate_count: int) -> dict[str, Any]:
         "rainforest_snapshots": 0,
         "rainforest_credits_used": 0,
         "rainforest_cache_hits": 0,
+        "channel_signals": 0,
     }
 
 
@@ -254,8 +258,17 @@ def _evaluate_and_store_candidate(
 ) -> None:
     competition = ensure_competition_snapshot(db, org_id=org_id, context=context)
     context["competition"] = competition
+    channel_signals = ensure_channel_signals(
+        db,
+        org_id=org_id,
+        run_id=run_id,
+        context=context,
+        competition=competition,
+    )
+    context["channel_signals"] = channel_signals
     db.commit()
     counts["rainforest_snapshots"] += 1
+    counts["channel_signals"] += 1
     counts["rainforest_credits_used"] += int(competition.get("credits_used_this_call") or 0)
     if competition.get("cache_hit"):
         counts["rainforest_cache_hits"] += 1
@@ -533,6 +546,11 @@ def _layer_request_payload(
             "risks": ["Chinese bullet"],
             "barrier_type": "none|profit|demand|competition|supplier|listing|compliance|manual_review",
             "channel_guess": "amazon|dtc_seo|dtc_ad|both",
+            "route_recommendations": {
+                "amazon": "pass|review|reject plus short reason",
+                "dtc_ad": "pass|review|reject plus short reason",
+                "dtc_seo": "pass|review|reject plus short reason",
+            },
         },
         "gating_rule": _layer_gating_rule(layer),
         "skill": _skill_payload(skill_bundle),
@@ -542,6 +560,7 @@ def _layer_request_payload(
         "profit": _dict_value(context.get("profit")),
         "supplier": _dict_value(context.get("supplier")),
         "competition": _competition_payload(context),
+        "channel_signals": _channel_signals_payload(context),
         "previous_layers": [layer_decision.payload.get("model_output") for layer_decision in previous_layers],
     }
 
@@ -565,6 +584,11 @@ def _opus_layer_request_payload(
             "risks": ["Chinese bullet, <= 40 chars each"],
             "barrier_type": "none|profit|demand|competition|supplier|listing|compliance|manual_review",
             "channel_guess": "amazon|dtc_seo|dtc_ad|both",
+            "route_recommendations": {
+                "amazon": "pass|review|reject plus short reason",
+                "dtc_ad": "pass|review|reject plus short reason",
+                "dtc_seo": "pass|review|reject plus short reason",
+            },
         },
         "gating_rule": _layer_gating_rule("opus"),
         "instruction": (
@@ -577,6 +601,7 @@ def _opus_layer_request_payload(
         "profit": _compact_value(_dict_value(context.get("profit")), max_chars=2200),
         "supplier": _compact_value(_dict_value(context.get("supplier")), max_chars=2200),
         "competition": _competition_payload(context),
+        "channel_signals": _compact_value(_channel_signals_payload(context), max_chars=2200),
         "previous_layers": [
             _compact_value(layer_decision.payload.get("model_output"), max_chars=1400)
             for layer_decision in previous_layers
@@ -608,6 +633,9 @@ def _model_input_summary(context: dict[str, Any]) -> dict[str, Any]:
     summary["market_seller_count_est"] = competition.get("market_seller_count_est")
     summary["market_brand_count_est"] = competition.get("market_brand_count_est")
     summary["competition_data_valid"] = competition.get("competition_data_valid")
+    channel_signals = _channel_signals_payload(context)
+    summary["primary_channel"] = _dict_value(channel_signals.get("primary_route")).get("channel")
+    summary["channel_routes"] = _compact_channel_routes(channel_signals)
     return summary
 
 
@@ -768,6 +796,7 @@ def _normalize_layer_output(
         "channel_guess": output.get("channel_guess"),
         "input_summary": _model_input_summary(context),
         "competition": _competition_payload(context),
+        "channel_signals": _channel_signals_payload(context),
         "provider": {
             "service": provider.service,
             "role": provider.role,
@@ -827,6 +856,8 @@ def _final_decision(
         final_score = average_score
         barrier_type = _first_barrier(layers) or "manual_review"
 
+    channel_routes = _channel_routes(context, layers=layers, requested_channel=channel)
+    primary_channel = _primary_channel(channel_routes, layers=layers, requested_channel=channel)
     leading_advantages = _dedupe_text(
         advantage
         for layer in layers
@@ -843,7 +874,9 @@ def _final_decision(
     return {
         "final_score": _bounded_score(final_score),
         "verdict": verdict,
-        "channel": channel,
+        "channel": primary_channel.get("channel") or channel,
+        "primary_channel": primary_channel,
+        "channel_routes": channel_routes,
         "barrier_type": barrier_type,
         "decision_reason": reason,
         "advantages": leading_advantages,
@@ -855,6 +888,7 @@ def _final_decision(
         "skill_hash": skill_bundle.combined_hash,
         "skill": _skill_payload(skill_bundle),
         "competition": _competition_payload(context),
+        "channel_signals": _channel_signals_payload(context),
         "created_at": datetime.now(UTC).isoformat(),
     }
 
@@ -970,6 +1004,9 @@ def _insert_report(
         "layers": [layer.payload for layer in layers],
         "product": _model_input_summary(context),
         "competition": _competition_payload(context),
+        "channel_routes": final.get("channel_routes"),
+        "primary_channel": final.get("primary_channel"),
+        "channel_signals": _channel_signals_payload(context),
     }
     db.execute(
         text(
@@ -1353,6 +1390,121 @@ def _competition_payload(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _channel_signals_payload(context: dict[str, Any]) -> dict[str, Any]:
+    signals = _dict_value(context.get("channel_signals"))
+    if not signals:
+        return {}
+    return {
+        "version": signals.get("version"),
+        "keyword": signals.get("keyword"),
+        "amazon": _dict_value(signals.get("amazon")),
+        "dtc_ad": _dict_value(signals.get("dtc_ad")),
+        "dtc_seo": _dict_value(signals.get("dtc_seo")),
+        "primary_route": _dict_value(signals.get("primary_route")),
+        "provider_modes": _dict_value(signals.get("provider_modes")),
+        "generated_at": signals.get("generated_at"),
+    }
+
+
+def _compact_channel_routes(signals: dict[str, Any]) -> dict[str, Any]:
+    output: dict[str, Any] = {}
+    for key in ("amazon", "dtc_ad", "dtc_seo"):
+        route = _dict_value(signals.get(key))
+        if not route:
+            continue
+        output[key] = {
+            "label": route.get("label"),
+            "score": route.get("score"),
+            "verdict": route.get("verdict"),
+            "reasons": route.get("reasons") or [],
+            "risks": route.get("risks") or [],
+            "provider_mode": route.get("provider_mode"),
+        }
+    return output
+
+
+def _channel_routes(
+    context: dict[str, Any],
+    *,
+    layers: list[LayerDecision],
+    requested_channel: str,
+) -> dict[str, Any]:
+    signals = _channel_signals_payload(context)
+    routes = _compact_channel_routes(signals)
+    model_guesses = [
+        _valid_channel(_dict_value(layer.payload.get("model_output")).get("channel_guess"))
+        for layer in layers
+    ]
+    model_guesses = [value for value in model_guesses if value]
+    for key, route in routes.items():
+        route["model_supported"] = key in model_guesses or "both" in model_guesses
+    return {
+        "requested_channel": _valid_channel(requested_channel) or "both",
+        "routes": routes,
+        "model_channel_guesses": model_guesses,
+        "provider_modes": _dict_value(signals.get("provider_modes")),
+    }
+
+
+def _primary_channel(
+    channel_routes: dict[str, Any],
+    *,
+    layers: list[LayerDecision],
+    requested_channel: str,
+) -> dict[str, Any]:
+    routes = _dict_value(channel_routes.get("routes"))
+    requested = _valid_channel(requested_channel)
+    model_guess = None
+    for layer in reversed(layers):
+        model_guess = _valid_channel(_dict_value(layer.payload.get("model_output")).get("channel_guess"))
+        if model_guess:
+            break
+    if model_guess == "both":
+        model_guess = None
+    candidates = []
+    for key, route in routes.items():
+        if not isinstance(route, dict):
+            continue
+        score = _bounded_score(route.get("score"))
+        boost = 6 if key == model_guess else 0
+        if requested and requested != "both" and key == requested:
+            boost += 4
+        candidates.append((score + boost, key, route))
+    if candidates:
+        _score, key, route = max(candidates, key=lambda item: item[0])
+        return {
+            "channel": key,
+            "label": route.get("label") or _channel_label(key),
+            "score": route.get("score"),
+            "verdict": route.get("verdict"),
+            "source": "channel_signals_plus_ai_guess",
+        }
+    fallback = requested or model_guess or "amazon"
+    return {
+        "channel": fallback,
+        "label": _channel_label(fallback),
+        "score": None,
+        "verdict": "review",
+        "source": "fallback",
+    }
+
+
+def _valid_channel(value: Any) -> str | None:
+    normalized = str(value or "").strip().lower().replace("-", "_")
+    if normalized in {"amazon", "dtc_ad", "dtc_seo", "both"}:
+        return normalized
+    return None
+
+
+def _channel_label(value: str) -> str:
+    return {
+        "amazon": "亚马逊",
+        "dtc_ad": "独立站广告",
+        "dtc_seo": "独立站 SEO",
+        "both": "双平台",
+    }.get(value, value)
+
+
 def _audit_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
     return {
         "task": payload.get("task"),
@@ -1364,6 +1516,7 @@ def _audit_request_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "profit": payload.get("profit"),
         "supplier": payload.get("supplier"),
         "competition": payload.get("competition"),
+        "channel_signals": payload.get("channel_signals"),
         "previous_layers": payload.get("previous_layers"),
     }
 

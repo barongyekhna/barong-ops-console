@@ -139,18 +139,16 @@ def build_supplier_keyword_profile(
     except SecretManagerError:
         _discard_db_transaction(db)
         return fallback
-    except Exception:
+    except Exception as exc:
         _discard_db_transaction(db)
-        return fallback
+        raise RuntimeError(f"DeepSeek 关键词密钥读取失败，已禁止降级启发式：{str(exc)[:180]}") from exc
     if not api_key.strip():
         return fallback
 
     try:
         response = _call_deepseek_keyword_profile(api_key=api_key, product=product)
     except Exception as exc:
-        fallback["source"] = "heuristic_after_deepseek_error"
-        fallback["error"] = str(exc)[:240]
-        return fallback
+        raise RuntimeError(f"DeepSeek 关键词提取失败，已禁止降级启发式：{str(exc)[:180]}") from exc
 
     merged = {**fallback, **_dict_value(response)}
     merged["source"] = "deepseek"
@@ -280,9 +278,9 @@ def evaluate_supplier_alignment(
     except SecretManagerError:
         _discard_db_transaction(db)
         return heuristic
-    except Exception:
+    except Exception as exc:
         _discard_db_transaction(db)
-        return heuristic
+        raise RuntimeError(f"DeepSeek 供应商匹配密钥读取失败，已禁止降级启发式：{str(exc)[:180]}") from exc
     if not api_key.strip():
         return heuristic
 
@@ -297,9 +295,7 @@ def evaluate_supplier_alignment(
             unit_price_cny=unit_price_cny,
         )
     except Exception as exc:
-        heuristic["source"] = "heuristic_after_deepseek_match_error"
-        heuristic["error"] = str(exc)[:240]
-        return heuristic
+        raise RuntimeError(f"DeepSeek 供应商匹配失败，已禁止降级启发式：{str(exc)[:180]}") from exc
 
     return sanitize_supplier_alignment(
         response,
