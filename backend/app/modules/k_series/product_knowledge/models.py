@@ -246,6 +246,12 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
         nullable=False,
         server_default=false(),
     )
+    # Temporary 作图参考图 (R→K carries the product image here; I-system
+    # auto-loads it as a reference; cleared when the I output is saved back).
+    reference_image_url: Mapped[str | None] = mapped_column(
+        String(2048),
+        nullable=True,
+    )
     main_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     gallery_image_urls_json: Mapped[Any | None] = mapped_column(
         json_type(),

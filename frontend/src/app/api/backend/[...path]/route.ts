@@ -614,6 +614,11 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "GET";
   }
 
+  // R→K 搬运
+  if (path.length === 3 && path[1] === "products" && path[2] === "import-from-r") {
+    return method === "POST";
+  }
+
   if (path.length === 2 && path[1] === "products") {
     return method === "GET" || method === "POST";
   }

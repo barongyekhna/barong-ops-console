@@ -134,6 +134,7 @@ from .workflow_engine import (
 )
 from ....services.module_execution_gate import ModuleExecutionGateError
 from .generation_jobs import enqueue_generation_jobs, jobs_status
+from .r_to_k_transfer import transfer_from_rw
 from .prompt_skills import (
     SELLING_POINTS_SKILL_VERSION,
     selling_points_instruction,
@@ -4168,6 +4169,36 @@ def product_knowledge_category_search(
         tree=table.replace("k_category_", ""),
         items=[CategoryTreeItem(**dict(r)) for r in rows],
     )
+
+
+class ImportFromRRequest(BaseModel):
+    asins: list[str]
+    channel: str = "dtc"
+
+
+class ImportFromRResponse(BaseModel):
+    created: list[dict[str, Any]]
+    skipped: list[str]
+    errors: list[dict[str, str]]
+
+
+@router.post("/products/import-from-r", response_model=ImportFromRResponse)
+def product_knowledge_import_from_r(
+    payload: ImportFromRRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_CREATE)),
+) -> ImportFromRResponse:
+    """R→K 搬运：把 R-W 产品搬进 K，自动落类目 + 带参考图。"""
+    result = transfer_from_rw(
+        db,
+        asins=payload.asins,
+        channel=payload.channel,
+        user=user,
+        scope_context=_scope_context(request),
+    )
+    db.commit()
+    return ImportFromRResponse(**result)
 
 
 @router.get(
