@@ -580,6 +580,30 @@ function isAllowedApiKeyOrchestrationPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedNotificationsPath(method: string, path: string[]) {
+  if (path[0] !== "notifications") {
+    return false;
+  }
+  // GET /notifications  (list, with optional query string)
+  if (path.length === 1) {
+    return method === "GET";
+  }
+  // GET /notifications/unread-count
+  if (path.length === 2 && path[1] === "unread-count") {
+    return method === "GET";
+  }
+  // POST /notifications/read-all
+  if (path.length === 2 && path[1] === "read-all") {
+    return method === "POST";
+  }
+  // POST /notifications/{id}/read
+  if (path.length === 3 && path[2] === "read") {
+    return method === "POST";
+  }
+  // NB: /notifications/ingest is intentionally NOT proxied (server-to-server).
+  return false;
+}
+
 function isAllowedKPath(method: string, path: string[]) {
   if (path[0] !== "k") {
     return false;
@@ -982,7 +1006,8 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedKPath(method, path) ||
     isAllowedIPath(method, path) ||
     isAllowedRPath(method, path) ||
-    isAllowedRwPath(method, path)
+    isAllowedRwPath(method, path) ||
+    isAllowedNotificationsPath(method, path)
   ) {
     return withApiLayer("app", requestedPath);
   }

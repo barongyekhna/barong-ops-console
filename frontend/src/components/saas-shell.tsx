@@ -4,6 +4,7 @@ import { LogOut, Menu, RefreshCcw, Search, X } from "lucide-react";
 
 import { Logo } from "@/components/brand-logo";
 import { CapabilitySidebarEngine } from "@/components/capability-sidebar-engine";
+import { NotificationBell } from "@/modules/notifications/NotificationBell";
 import { RELEASE_STATUS, RELEASE_VERSION } from "@/lib/release-metadata";
 
 type SidebarProps = {
@@ -104,6 +105,8 @@ export function TopHeader({
           <Search aria-hidden="true" size={16} />
           <input aria-label="搜索工作台" placeholder="搜索模块" type="search" />
         </label>
+
+        <NotificationBell />
 
         <button className="secondary-button topbar-action" onClick={onRefresh} type="button">
           <RefreshCcw aria-hidden="true" size={16} />

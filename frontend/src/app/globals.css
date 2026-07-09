@@ -7140,3 +7140,28 @@ textarea:focus-visible {
   color: var(--mm-dim, #7d95ae);
   font-size: 12.5px;
 }
+
+/* 通知铃铛 + 未读角标（topbar） */
+.notif-bell {
+  position: relative;
+}
+
+.notif-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: var(--mm-red, #ff6b8a);
+  color: #1a0009;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+  box-shadow: 0 0 8px rgb(255 107 138 / 55%);
+  pointer-events: none;
+}
