@@ -424,17 +424,17 @@
   outline-offset: -3px;
 }
 
-.table td:first-child {
+.table td:nth-child(2) {
   min-width: 210px;
 }
 
-.table td:first-child strong,
-.table td:first-child span {
+.table td:nth-child(2) strong,
+.table td:nth-child(2) span {
   display: block;
   overflow-wrap: anywhere;
 }
 
-.table td:first-child span {
+.table td:nth-child(2) span {
   margin-top: 4px;
   color: var(--signal-dark);
   font-size: 0.68rem;
@@ -1443,8 +1443,8 @@
 .detailRow:hover td,
 .detailRow:focus-visible td { background: transparent; }
 .table tbody tr:focus-visible { outline-color: rgb(57 212 255 / 40%); }
-.table td:first-child strong { color: #eafaff; }
-.table td:first-child span { color: var(--mm-cyan, #39d4ff); }
+.table td:nth-child(2) strong { color: #eafaff; }
+.table td:nth-child(2) span { color: var(--mm-cyan, #39d4ff); }
 
 .dangerButton {
   color: var(--mm-red, #ff6b8a);
@@ -1819,4 +1819,62 @@
   .copyReviewSplit {
     grid-template-columns: 1fr;
   }
+}
+
+/* 名册批量选择 + 批量生成条 */
+.selectCell {
+  width: 42px;
+  text-align: center !important;
+  white-space: nowrap;
+}
+
+.selectCell input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: var(--mm-cyan, #39d4ff);
+  vertical-align: middle;
+}
+
+.batchNotice {
+  margin: 0.35rem 0 0;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--mm-line, rgb(57 212 255 / 18%));
+  border-radius: 10px;
+  background: rgb(57 212 255 / 8%);
+  color: var(--mm-ink, #d6e8f6);
+  font-size: 0.8rem;
+  line-height: 1.55;
+}
+
+.batchBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding: 0.7rem 0.95rem;
+  border: 1px solid var(--mm-cyan, rgb(57 212 255 / 45%));
+  border-radius: 12px;
+  background: linear-gradient(
+    180deg,
+    rgb(57 212 255 / 10%),
+    rgb(57 212 255 / 4%)
+  );
+  box-shadow: 0 0 18px rgb(57 212 255 / 12%) inset;
+}
+
+.batchCount {
+  color: #eafaff;
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.batchActions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
 }

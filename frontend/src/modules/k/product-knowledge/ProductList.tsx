@@ -4,6 +4,7 @@ import {
   AlertTriangle,
   ArrowLeft,
   ChevronRight,
+  ClipboardList,
   ExternalLink,
   ImagePlus,
   LoaderCircle,
@@ -11,6 +12,7 @@ import {
   Plus,
   RotateCcw,
   Search,
+  Sparkles,
   Trash2,
   X,
 } from "lucide-react";
@@ -33,6 +35,8 @@ import {
   deleteProduct,
   deleteMediaAsset,
   enrichProductWithDeepSeek,
+  generateProductCopyBatch,
+  generateProductImageBriefBatch,
   generateProductSellingPoints,
   getLatestWorkflow,
   getMediaAssets,
@@ -255,6 +259,10 @@ export function ProductListFull() {
   const [workflowBusyAction, setWorkflowBusyAction] = useState<string | null>(
     null,
   );
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [batchBusy, setBatchBusy] = useState<null | "copy" | "brief">(null);
+  const [batchNotice, setBatchNotice] = useState("");
+  const [batchError, setBatchError] = useState("");
 
   const openProduct = useMemo(
     () => products.find((product) => product.id === openProductId) ?? null,
@@ -502,6 +510,83 @@ export function ProductListFull() {
     setProductSaveError("");
     setSellingPointsError("");
     setWorkflowError("");
+  }
+
+  const pageItemIds = useMemo(
+    () => pageItems.map((item) => item.id),
+    [pageItems],
+  );
+  const allPageSelected =
+    pageItemIds.length > 0 && pageItemIds.every((id) => selectedIds.has(id));
+
+  function toggleSelect(productId: string) {
+    setBatchNotice("");
+    setBatchError("");
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (next.has(productId)) {
+        next.delete(productId);
+      } else {
+        next.add(productId);
+      }
+      return next;
+    });
+  }
+
+  function toggleSelectAllOnPage() {
+    setBatchNotice("");
+    setBatchError("");
+    setSelectedIds((current) => {
+      const next = new Set(current);
+      if (pageItemIds.every((id) => next.has(id))) {
+        for (const id of pageItemIds) {
+          next.delete(id);
+        }
+      } else {
+        for (const id of pageItemIds) {
+          next.add(id);
+        }
+      }
+      return next;
+    });
+  }
+
+  function clearSelection() {
+    setSelectedIds(new Set());
+    setBatchNotice("");
+    setBatchError("");
+  }
+
+  async function handleBatchGenerate(kind: "copy" | "brief") {
+    // Only enqueue products that still exist in the loaded roster.
+    const ids = [...selectedIds].filter((id) =>
+      products.some((product) => product.id === id),
+    );
+    if (ids.length === 0) {
+      return;
+    }
+    setBatchBusy(kind);
+    setBatchNotice("");
+    setBatchError("");
+    try {
+      const result =
+        kind === "copy"
+          ? await generateProductCopyBatch(ids)
+          : await generateProductImageBriefBatch(ids);
+      const label = kind === "copy" ? "文案" : "作图指令";
+      const hint =
+        kind === "copy"
+          ? "机器后台批量生成，进入各产品「文案」区可看进度并审核。"
+          : "作图指令需产品已有文案；缺文案的会自动跳过失败。进入各产品可查看。";
+      setBatchNotice(
+        `已提交 ${result.jobs.length} 个产品的${label}生成任务。${hint}`,
+      );
+      setSelectedIds(new Set());
+    } catch (error) {
+      setBatchError(formatError(error, "批量生成提交失败，请重试。"));
+    } finally {
+      setBatchBusy(null);
+    }
   }
 
   function closeDeleteModal() {
@@ -1078,6 +1163,64 @@ export function ProductListFull() {
             </p>
           ) : null}
 
+          {batchNotice ? (
+            <p className={styles.batchNotice} role="status">
+              {batchNotice}
+            </p>
+          ) : null}
+
+          {batchError ? (
+            <p className={styles.sellingPointsError} role="alert">
+              {batchError}
+            </p>
+          ) : null}
+
+          {selectedIds.size > 0 ? (
+            <div className={styles.batchBar}>
+              <span className={styles.batchCount}>
+                已选 {selectedIds.size} 个产品
+              </span>
+              <div className={styles.batchActions}>
+                <button
+                  className="primary-button"
+                  disabled={batchBusy !== null}
+                  onClick={() => void handleBatchGenerate("copy")}
+                  type="button"
+                >
+                  {batchBusy === "copy" ? (
+                    <LoaderCircle aria-hidden="true" className="spin" size={16} />
+                  ) : (
+                    <Sparkles aria-hidden="true" size={16} />
+                  )}
+                  批量生成文案
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={batchBusy !== null}
+                  onClick={() => void handleBatchGenerate("brief")}
+                  title="作图指令需产品先有文案，缺文案的会跳过失败"
+                  type="button"
+                >
+                  {batchBusy === "brief" ? (
+                    <LoaderCircle aria-hidden="true" className="spin" size={16} />
+                  ) : (
+                    <ClipboardList aria-hidden="true" size={16} />
+                  )}
+                  批量生成作图指令
+                </button>
+                <button
+                  className="secondary-button"
+                  disabled={batchBusy !== null}
+                  onClick={clearSelection}
+                  type="button"
+                >
+                  <X aria-hidden="true" size={16} />
+                  清空选择
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           {products.length > 0 ? (
             <div className={styles.listMeta}>
               <span>
@@ -1136,6 +1279,14 @@ export function ProductListFull() {
               <table className={styles.table}>
                 <thead>
                   <tr>
+                    <th className={styles.selectCell} scope="col">
+                      <input
+                        aria-label="全选本页产品"
+                        checked={allPageSelected}
+                        onChange={toggleSelectAllOnPage}
+                        type="checkbox"
+                      />
+                    </th>
                     <th scope="col">产品</th>
                     <th scope="col">内部编号</th>
                     <th scope="col">品牌</th>
@@ -1165,6 +1316,18 @@ export function ProductListFull() {
                           role="button"
                           tabIndex={0}
                         >
+                          <td
+                            className={styles.selectCell}
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <input
+                              aria-label="选择该产品"
+                              checked={selectedIds.has(product.id)}
+                              onChange={() => toggleSelect(product.id)}
+                              onClick={(event) => event.stopPropagation()}
+                              type="checkbox"
+                            />
+                          </td>
                           <td>
                             <strong>
                               {product.product_name_en ||

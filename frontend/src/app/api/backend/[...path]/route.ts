@@ -645,7 +645,7 @@ function isAllowedKPath(method: string, path: string[]) {
   if (
     path.length === 4 &&
     path[1] === "products" &&
-    path[2] === "generate-copy" &&
+    ["generate-copy", "generate-image-brief"].includes(path[2]) &&
     path[3] === "batch"
   ) {
     return method === "POST";

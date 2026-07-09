@@ -361,6 +361,32 @@ export function generateProductImageBrief(productId: string): Promise<Generation
   return enqueueGeneration(productId, "generate-image-brief");
 }
 
+async function enqueueGenerationBatch(
+  productIds: string[],
+  kind: "generate-copy" | "generate-image-brief",
+): Promise<GenerationEnqueueResult> {
+  const path = `${K_PRODUCTS_PATH}/${kind}/batch`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ product_ids: productIds }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<GenerationEnqueueResult>(response, path);
+}
+
+export function generateProductCopyBatch(
+  productIds: string[],
+): Promise<GenerationEnqueueResult> {
+  return enqueueGenerationBatch(productIds, "generate-copy");
+}
+
+export function generateProductImageBriefBatch(
+  productIds: string[],
+): Promise<GenerationEnqueueResult> {
+  return enqueueGenerationBatch(productIds, "generate-image-brief");
+}
+
 export async function getGenerationJobs(productId: string): Promise<GenerationJob[]> {
   const path = `${K_PRODUCTS_PATH}/${productId}/generation-jobs`;
   const response = await fetch(`${API_PROXY_BASE}${path}`, {

@@ -4111,6 +4111,19 @@ def product_knowledge_generate_copy_batch(
     return _enqueue_generation(payload.product_ids, "marketing_copy", request, db, user)
 
 
+@router.post(
+    "/products/generate-image-brief/batch",
+    response_model=GenerationEnqueueResponse,
+)
+def product_knowledge_generate_image_brief_batch(
+    payload: ProductGenerateBatchRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> GenerationEnqueueResponse:
+    return _enqueue_generation(payload.product_ids, "image_brief", request, db, user)
+
+
 @router.get(
     "/products/{product_id}/generation-jobs",
     response_model=GenerationJobsStatusResponse,
