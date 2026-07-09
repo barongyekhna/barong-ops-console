@@ -3945,6 +3945,8 @@ def import_i_system_images(
         "preview_url": f"/k/media/{first_asset.id}/preview",
         "thumbnail_url": f"/k/media/{first_asset.id}/thumbnail",
     }
+    # I 图已存回 K，临时作图参考图用完即删
+    product.reference_image_url = None
     db.add(product)
 
     submitted = False

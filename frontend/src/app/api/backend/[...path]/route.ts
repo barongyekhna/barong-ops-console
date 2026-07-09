@@ -619,6 +619,16 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "POST";
   }
 
+  // 临时作图参考图代理
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "reference-image"
+  ) {
+    return method === "GET";
+  }
+
   if (path.length === 2 && path[1] === "products") {
     return method === "GET" || method === "POST";
   }

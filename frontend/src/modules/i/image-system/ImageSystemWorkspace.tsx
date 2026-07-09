@@ -645,6 +645,35 @@ export function ImageSystemWorkspace() {
             setEditPrompt((current) => (current.trim() ? current : mainPrompt));
           }
         }
+
+        // K -> I: 自动把 R→K 带来的参考图拉进编辑器（用户不用手动上传，
+        // 进来就能直接点编辑作图）。走后端代理绕过跨域；图后端已存在 K 上。
+        const referenceUrl = (
+          loadedProduct as { reference_image_url?: string | null }
+        ).reference_image_url;
+        if (referenceUrl) {
+          setMode("edit");
+          const token =
+            typeof window !== "undefined"
+              ? window.localStorage.getItem("barong_ops_access_token")
+              : null;
+          fetch(`/api/backend/k/products/${productId}/reference-image`, {
+            cache: "no-store",
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          })
+            .then((response) => (response.ok ? response.blob() : null))
+            .then((blob) => {
+              if (blob && !cancelled) {
+                const file = new File([blob], "reference.jpg", {
+                  type: blob.type || "image/jpeg",
+                });
+                setEditFiles([file]);
+              }
+            })
+            .catch(() => {
+              /* 参考图自动填失败不阻断，用户仍可手动上传 */
+            });
+        }
       })
       .catch((loadError) => {
         if (!cancelled) {

@@ -45,6 +45,7 @@ export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
   image_instruction_json?: unknown;
   marketing_copy_zh?: string | null;
   image_instruction_zh?: string | null;
+  reference_image_url?: string | null;
 };
 
 export type ProductKnowledgeListResponse = {

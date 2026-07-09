@@ -280,6 +280,7 @@ class ProductKnowledgeRead(BaseModel):
     image_instruction_json: Any | None = None
     marketing_copy_zh: str | None = None
     image_instruction_zh: str | None = None
+    reference_image_url: str | None = None
     canonical_language: str
     raw_input_text: str | None
     raw_input_language: str | None
