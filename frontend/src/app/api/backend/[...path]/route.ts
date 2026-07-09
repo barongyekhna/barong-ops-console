@@ -625,6 +625,33 @@ function isAllowedKPath(method: string, path: string[]) {
   }
 
   if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    ["generate-copy", "generate-image-brief"].includes(path[3])
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "generation-jobs"
+  ) {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    path[2] === "generate-copy" &&
+    path[3] === "batch"
+  ) {
+    return method === "POST";
+  }
+
+  if (
     path.length === 2 &&
     ["keywords", "risks", "risk", "media"].includes(path[1])
   ) {

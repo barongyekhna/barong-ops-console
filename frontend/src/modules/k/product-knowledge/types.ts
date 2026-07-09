@@ -43,6 +43,8 @@ export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
   channel?: string | null;
   marketing_copy_json?: unknown;
   image_instruction_json?: unknown;
+  marketing_copy_zh?: string | null;
+  image_instruction_zh?: string | null;
 };
 
 export type ProductKnowledgeListResponse = {

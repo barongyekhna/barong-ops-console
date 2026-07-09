@@ -277,6 +277,8 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
         String(128),
         nullable=True,
     )
+    marketing_copy_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
+    image_instruction_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     review_status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,

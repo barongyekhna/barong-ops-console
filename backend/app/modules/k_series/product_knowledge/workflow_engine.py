@@ -30,6 +30,7 @@ from .prompt_skills import (
     image_art_direction_instruction,
     image_art_direction_skill_context,
     marketing_copy_instruction,
+    plain_chinese_instruction,
 )
 from .errors import KProductNotFoundError
 from .models import (
@@ -3444,6 +3445,52 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         self.db.flush()
         return execution
 
+    def _plain_chinese(self, original, label, *, user, request):
+        """Best-effort DeepSeek translation of the generated JSON into plain
+        Chinese for operator review. Resolves its OWN gate and swallows every
+        error: the English original is the ONLY thing sent to P-series / into
+        I-series, so a missing/failed translation must never block it.
+        """
+        try:
+            gate_context = self.gate_resolver(
+                self.db,
+                module_id=MODULE_KEY,
+                user=user,
+                request=request,
+                key_requirements={"translate_zh": "deepseek"},
+            )
+            key = gate_context.key_for_step("translate_zh")
+            ai_input = {
+                "module_id": MODULE_KEY,
+                "task": "translate_zh",
+                "messages": [
+                    {"role": "system", "content": plain_chinese_instruction(label)},
+                    {
+                        "role": "user",
+                        "content": json.dumps(original, ensure_ascii=False),
+                    },
+                ],
+            }
+            # Release the txn opened by the gate query before the long AI call.
+            self.db.commit()
+            translated = self._execute_provider(
+                provider="deepseek",
+                task_type="generate",
+                key=key,
+                gate_context=gate_context,
+                payload=ai_input,
+            )
+            if isinstance(translated, dict):
+                return str(
+                    translated.get("content")
+                    or translated.get("text")
+                    or json.dumps(translated, ensure_ascii=False)
+                )
+            return str(translated) if translated is not None else None
+        except Exception:  # noqa: BLE001 - translation is display-only
+            self.db.rollback()
+            return None
+
     def generate_marketing_copy(
         self,
         *,
@@ -3486,8 +3533,10 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             gate_context=gate_context,
             payload=ai_input,
         )
+        zh = self._plain_chinese(result, "文案", user=user, request=request)
         product = self._require_product(product_id, scope_context)
         product.marketing_copy_json = result
+        product.marketing_copy_zh = zh
         product.marketing_copy_skill_version = skill["version"]
         product.updated_by_user_id = _user_uuid(user)
         self._add_ai_event(
@@ -3552,8 +3601,10 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             gate_context=gate_context,
             payload=ai_input,
         )
+        zh = self._plain_chinese(result, "作图指令", user=user, request=request)
         product = self._require_product(product_id, scope_context)
         product.image_instruction_json = result
+        product.image_instruction_zh = zh
         product.image_instruction_skill_version = skill["version"]
         product.updated_by_user_id = _user_uuid(user)
         self._add_ai_event(

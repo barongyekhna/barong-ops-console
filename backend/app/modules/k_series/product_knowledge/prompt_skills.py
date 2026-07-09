@@ -272,3 +272,14 @@ def image_art_direction_instruction() -> str:
         "image_count MUST equal len(images). Every prompt must be English and grounded in the "
         "product facts + marketing copy; respect every 红线 in the skill."
     )
+
+
+def plain_chinese_instruction(label: str) -> str:
+    return (
+        f"把下面这份产品{label}(结构化 JSON)转述成通俗易懂的\u4eba\u8bdd\u4e2d\u6587\uff0c"
+        "\u8ba9\u4e0d\u61c2\u82f1\u6587\u548c\u6280\u672f\u672f\u8bed\u7684\u4eba\u4e5f\u80fd\u770b\u61c2\u3002"
+        "\u5206\u6bb5\u8bb2\u6e05\u695a\u6bcf\u4e00\u5757\u7684\u8981\u70b9\uff08\u6807\u9898/\u5356\u70b9/"
+        "\u63cf\u8ff0/\u89c4\u683c/FAQ/\u56fe\u7247\u8ba1\u5212\u7b49\uff09\uff0c\u4fdd\u7559\u6240\u6709\u5173\u952e"
+        "\u4fe1\u606f\u548c\u6570\u5b57\uff0c\u5e76\u5355\u72ec\u6307\u51fa\u8fd8\u7f3a\u54ea\u4e9b\u4fe1\u606f\u3002"
+        "\u53ea\u8f93\u51fa\u4e2d\u6587\u6b63\u6587\uff0c\u4e0d\u8981\u8f93\u51fa JSON \u6216\u4ee3\u7801\u3002"
+    )

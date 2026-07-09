@@ -1764,3 +1764,59 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+/* 三七分：原文 30% / 人话中文 70% */
+.copyReviewSplit {
+  display: grid;
+  grid-template-columns: 3fr 7fr;
+  gap: 0.75rem;
+  margin-top: 0.65rem;
+  align-items: stretch;
+}
+
+.copyReviewCol {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.copyReviewColLabel {
+  margin: 0 0 0.35rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--mm-dim, #7d95ae);
+}
+
+.copyReviewSplit .copyReviewPanel {
+  margin-top: 0;
+  flex: 1;
+}
+
+.copyReviewZh {
+  margin-top: 0;
+  max-height: 360px;
+  overflow: auto;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--mm-line, rgb(57 212 255 / 18%));
+  border-radius: 12px;
+  background: rgb(8 16 26 / 46%);
+  color: var(--mm-ink, #d6e8f6);
+  font-size: 0.86rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  flex: 1;
+}
+
+.copyReviewZhPending {
+  color: var(--mm-dim, #7d95ae);
+  font-style: italic;
+}
+
+@media (max-width: 720px) {
+  .copyReviewSplit {
+    grid-template-columns: 1fr;
+  }
+}

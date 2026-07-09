@@ -39,11 +39,13 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
   const router = useRouter();
 
   const [copy, setCopy] = useState<unknown>(null);
+  const [copyZh, setCopyZh] = useState<string | null>(null);
   const [copyChannel, setCopyChannel] = useState<string | null>(channel ?? null);
   const [copyStatus, setCopyStatus] = useState<SectionStatus>("idle");
   const [copyError, setCopyError] = useState<string | null>(null);
 
   const [brief, setBrief] = useState<unknown>(null);
+  const [briefZh, setBriefZh] = useState<string | null>(null);
   const [briefStatus, setBriefStatus] = useState<SectionStatus>("idle");
   const [briefError, setBriefError] = useState<string | null>(null);
 
@@ -64,10 +66,12 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
     }
     if (jobType === "marketing_copy") {
       setCopy((product as { marketing_copy_json?: unknown }).marketing_copy_json ?? null);
+      setCopyZh((product as { marketing_copy_zh?: string | null }).marketing_copy_zh ?? null);
       setCopyChannel((product as { channel?: string | null }).channel ?? channel ?? null);
       setCopyStatus("done");
     } else {
       setBrief((product as { image_instruction_json?: unknown }).image_instruction_json ?? null);
+      setBriefZh((product as { image_instruction_zh?: string | null }).image_instruction_zh ?? null);
       setBriefStatus("done");
     }
   }, [productId, channel]);
@@ -129,10 +133,12 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
         const existingBrief = (product as { image_instruction_json?: unknown }).image_instruction_json;
         if (existingCopy) {
           setCopy(existingCopy);
+          setCopyZh((product as { marketing_copy_zh?: string | null }).marketing_copy_zh ?? null);
           setCopyStatus("done");
         }
         if (existingBrief) {
           setBrief(existingBrief);
+          setBriefZh((product as { image_instruction_zh?: string | null }).image_instruction_zh ?? null);
           setBriefStatus("done");
         }
         setCopyChannel((product as { channel?: string | null }).channel ?? channel ?? null);
@@ -219,9 +225,22 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
         ) : copy ? (
           <div className={styles.sellingPointsResult}>
             <p className={styles.copyReviewHint}>
-              AI 已写好草稿 —— 机器干活，你把关。审核无误后再进入 P。
+              左侧原文（发送给 P / I 的唯一版本），右侧 DeepSeek 翻的人话中文，仅供你审核。
             </p>
-            <pre className={styles.copyReviewPanel}>{JSON.stringify(copy, null, 2)}</pre>
+            <div className={styles.copyReviewSplit}>
+              <div className={styles.copyReviewCol}>
+                <p className={styles.copyReviewColLabel}>原文 · 原始版本</p>
+                <pre className={styles.copyReviewPanel}>{JSON.stringify(copy, null, 2)}</pre>
+              </div>
+              <div className={styles.copyReviewCol}>
+                <p className={styles.copyReviewColLabel}>人话中文 · 仅供审核</p>
+                <div
+                  className={`${styles.copyReviewZh}${copyZh ? "" : ` ${styles.copyReviewZhPending}`}`}
+                >
+                  {copyZh ?? "中文翻译暂未生成（不影响原文，可点「重新生成」补上）。"}
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <p className={styles.copyReviewHint}>
@@ -269,9 +288,22 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
         ) : brief ? (
           <div className={styles.sellingPointsResult}>
             <p className={styles.copyReviewHint}>
-              AI 出的整套作图要求 —— 之后一键「去 I 作图」带过去，你只需上传产品原图。
+              左侧原文（一键「去 I 作图」带过去的唯一版本），右侧人话中文仅供你审核。
             </p>
-            <pre className={styles.copyReviewPanel}>{JSON.stringify(brief, null, 2)}</pre>
+            <div className={styles.copyReviewSplit}>
+              <div className={styles.copyReviewCol}>
+                <p className={styles.copyReviewColLabel}>原文 · 原始版本</p>
+                <pre className={styles.copyReviewPanel}>{JSON.stringify(brief, null, 2)}</pre>
+              </div>
+              <div className={styles.copyReviewCol}>
+                <p className={styles.copyReviewColLabel}>人话中文 · 仅供审核</p>
+                <div
+                  className={`${styles.copyReviewZh}${briefZh ? "" : ` ${styles.copyReviewZhPending}`}`}
+                >
+                  {briefZh ?? "中文翻译暂未生成（不影响原文，可点「重新生成」补上）。"}
+                </div>
+              </div>
+            </div>
           </div>
         ) : (
           <p className={styles.copyReviewHint}>
