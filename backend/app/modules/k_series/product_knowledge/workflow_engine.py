@@ -32,6 +32,7 @@ from .prompt_skills import (
     marketing_copy_instruction,
     plain_chinese_instruction,
 )
+from .category_resolver import category_is_bound
 from .errors import KProductNotFoundError
 from .models import (
     KProductKnowledgeAIEvent,
@@ -1622,6 +1623,9 @@ class KProductKnowledgeWorkflowEngine:
             blockers.append("manual or I-system image not bound")
         if execution.status not in {"ready_for_export", "exported"}:
             blockers.append(f"workflow status is {execution.status}")
+        if not category_is_bound(product):
+            channel = (product.channel or "dtc").strip().lower()
+            blockers.append(f"category not bound for {channel} channel")
         return blockers
 
     def _risk_review_is_approved(

@@ -237,6 +237,15 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
         Numeric(5, 4),
         nullable=True,
     )
+    # Amazon-group binding = Keepa leaf node id; DTC binding uses
+    # google_product_category above (via the alignment map).
+    amazon_category_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # DTC auto-alignment was low-confidence / missing -> operator should check.
+    category_review_needed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
+    )
     main_image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
     gallery_image_urls_json: Mapped[Any | None] = mapped_column(
         json_type(),
