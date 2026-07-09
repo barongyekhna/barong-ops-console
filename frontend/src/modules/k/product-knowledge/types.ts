@@ -99,6 +99,8 @@ export type ProductKnowledgeCreatePayload = {
   manual_notes?: string | null;
   variants?: ProductVariantInput[];
   attributes?: ProductKnowledgeAttributeInput[];
+  channel?: string;
+  category_id?: string | null;
 };
 
 export type ProductKnowledgeUpdatePayload = Partial<{
@@ -189,6 +191,9 @@ export type ProductFormValues = {
   weight_input: ProductWeightInput;
   raw_input_text: string;
   variants: ProductVariantFormInput[];
+  channel: string;
+  category_id: string;
+  category_label: string;
 };
 
 export type KWorkflowStatus =

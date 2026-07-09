@@ -146,6 +146,8 @@ class ProductKnowledgeCreate(BaseModel):
     brand_name: str | None = Field(default=None, max_length=255)
     manufacturer: str | None = Field(default=None, max_length=255)
     product_type: ProductType = "simple_product"
+    channel: str = "dtc"
+    category_id: str | None = Field(default=None, max_length=32)
     regular_price: Decimal | None = Field(default=None, ge=0)
     price_currency: str | None = Field(default=None, max_length=3)
     dimensions_json: dict[str, Any] | list[Any] | None = None
@@ -164,6 +166,18 @@ class ProductKnowledgeCreate(BaseModel):
     @classmethod
     def validate_physical_json(cls, value: Any) -> Any:
         return reject_sensitive_data(value)
+
+    @field_validator("channel")
+    @classmethod
+    def _normalize_channel(cls, value: str) -> str:
+        v = (value or "dtc").strip().lower()
+        return v if v in ("amazon", "dtc") else "dtc"
+
+    @field_validator("category_id")
+    @classmethod
+    def _normalize_category_id(cls, value: str | None) -> str | None:
+        v = (value or "").strip()
+        return v or None
 
     @model_validator(mode="after")
     def normalize_required_strings(self) -> "ProductKnowledgeCreate":

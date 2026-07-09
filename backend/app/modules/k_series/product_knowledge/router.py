@@ -28,7 +28,7 @@ from fastapi import (
 )
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, defer
 
@@ -4122,6 +4122,52 @@ def product_knowledge_generate_image_brief_batch(
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
 ) -> GenerationEnqueueResponse:
     return _enqueue_generation(payload.product_ids, "image_brief", request, db, user)
+
+
+class CategoryTreeItem(BaseModel):
+    id: str
+    name: str
+    full_path: str
+    level: int
+    is_leaf: bool
+
+
+class CategorySearchResponse(BaseModel):
+    tree: str
+    items: list[CategoryTreeItem]
+
+
+_CATEGORY_TABLES = {"google": "k_category_google", "amazon": "k_category_amazon"}
+
+
+@router.get("/categories/search", response_model=CategorySearchResponse)
+def product_knowledge_category_search(
+    tree: str,
+    request: Request,
+    q: str = "",
+    limit: int = 30,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> CategorySearchResponse:
+    """类目下拉搜索：tree=google(独立站) 或 amazon；按 full_path/name 模糊匹配。"""
+    del request, user
+    table = _CATEGORY_TABLES.get((tree or "").strip().lower())
+    if table is None:
+        raise HTTPException(status_code=422, detail="tree must be 'google' or 'amazon'")
+    q = (q or "").strip()
+    limit = max(1, min(limit, 100))
+    rows = db.execute(
+        text(
+            f"SELECT id,name,full_path,level,is_leaf FROM {table} "
+            "WHERE (:q = '' OR full_path ILIKE :like OR name ILIKE :like) "
+            "ORDER BY is_leaf DESC, level ASC, full_path ASC LIMIT :limit"
+        ),
+        {"q": q, "like": f"%{q}%", "limit": limit},
+    ).mappings().all()
+    return CategorySearchResponse(
+        tree=table.replace("k_category_", ""),
+        items=[CategoryTreeItem(**dict(r)) for r in rows],
+    )
 
 
 @router.get(

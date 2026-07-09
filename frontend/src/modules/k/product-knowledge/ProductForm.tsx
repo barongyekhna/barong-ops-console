@@ -1,7 +1,9 @@
 "use client";
 
 import { Globe2, LoaderCircle, Plus, Ruler, Scale } from "lucide-react";
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+
+import { searchCategories, type CategoryTreeItem } from "./api";
 
 import styles from "./ProductKnowledge.module.css";
 import {
@@ -384,6 +386,9 @@ const initialValues: ProductFormValues = {
   raw_input_text: "",
   parent_sku: "",
   target_market: "US",
+  channel: "dtc",
+  category_id: "",
+  category_label: "",
   variants: [
     {
       price_override: "",
@@ -769,6 +774,46 @@ export function ProductForm({
 }: ProductFormProps) {
   const labels = PRODUCT_FORM_LABELS[ACTIVE_FORM_LOCALE];
   const [values, setValues] = useState<ProductFormValues>(initialValues);
+  const [catQuery, setCatQuery] = useState("");
+  const [catResults, setCatResults] = useState<CategoryTreeItem[]>([]);
+
+  useEffect(() => {
+    const term = catQuery.trim();
+    if (!term) {
+      setCatResults([]);
+      return;
+    }
+    const tree = values.channel === "amazon" ? "amazon" : "google";
+    const handle = window.setTimeout(() => {
+      void searchCategories(tree, term)
+        .then(setCatResults)
+        .catch(() => setCatResults([]));
+    }, 300);
+    return () => window.clearTimeout(handle);
+  }, [catQuery, values.channel]);
+
+  function selectChannel(nextChannel: string) {
+    setValues((current) => ({
+      ...current,
+      channel: nextChannel,
+      category_id: "",
+      category_label: "",
+    }));
+    setCatQuery("");
+    setCatResults([]);
+  }
+  function pickCategory(item: CategoryTreeItem) {
+    setValues((current) => ({
+      ...current,
+      category_id: item.id,
+      category_label: item.full_path,
+    }));
+    setCatQuery("");
+    setCatResults([]);
+  }
+  function clearCategory() {
+    setValues((current) => ({ ...current, category_id: "", category_label: "" }));
+  }
   const submitLockRef = useRef(false);
   const [isLocallySubmitting, setIsLocallySubmitting] = useState(false);
   const [validationError, setValidationError] = useState("");
@@ -1073,6 +1118,8 @@ export function ProductForm({
         product_name_en: optionalText(values.product_name_en),
         product_status: "draft",
         product_type: values.product_type,
+        channel: values.channel,
+        category_id: values.category_id || null,
         regular_price: price.value?.value ?? null,
         raw_input_text: rawInputText,
         review_status: "draft",
@@ -1225,6 +1272,113 @@ export function ProductForm({
               </select>
             </label>
           </div>
+        </div>
+      </section>
+
+      <section className={styles.formSection} aria-labelledby="k-channel-category">
+        <div className={styles.formSectionHeading}>
+          <h4 id="k-channel-category">渠道与类目</h4>
+        </div>
+        <div className={styles.formGrid}>
+          <div className={styles.field}>
+            <span>产品分组</span>
+            <div className={styles.inlineFields}>
+              <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                <input
+                  checked={values.channel === "dtc"}
+                  name="k-channel"
+                  onChange={() => selectChannel("dtc")}
+                  type="radio"
+                />
+                独立站
+              </label>
+              <label style={{ display: "inline-flex", gap: 6, alignItems: "center" }}>
+                <input
+                  checked={values.channel === "amazon"}
+                  name="k-channel"
+                  onChange={() => selectChannel("amazon")}
+                  type="radio"
+                />
+                亚马逊
+              </label>
+            </div>
+          </div>
+          <label className={styles.field}>
+            <span>
+              类目（{values.channel === "amazon" ? "亚马逊" : "Google 独立站"}树）
+            </span>
+            {values.category_label ? (
+              <span
+                style={{
+                  display: "inline-flex",
+                  gap: 8,
+                  alignItems: "center",
+                  fontSize: "0.82rem",
+                  color: "var(--mm-cyan, #39d4ff)",
+                  marginBottom: 6,
+                }}
+              >
+                已选：{values.category_label}
+                <button
+                  onClick={clearCategory}
+                  style={{
+                    background: "transparent",
+                    border: "1px solid currentColor",
+                    borderRadius: 6,
+                    color: "inherit",
+                    cursor: "pointer",
+                    fontSize: "0.72rem",
+                    padding: "1px 7px",
+                  }}
+                  type="button"
+                >
+                  清除
+                </button>
+              </span>
+            ) : null}
+            <input
+              onChange={(event) => setCatQuery(event.target.value)}
+              placeholder={`搜索${values.channel === "amazon" ? "亚马逊" : "独立站"}类目…`}
+              type="search"
+              value={catQuery}
+            />
+            {catResults.length > 0 ? (
+              <ul
+                style={{
+                  listStyle: "none",
+                  margin: "6px 0 0",
+                  padding: 0,
+                  maxHeight: 220,
+                  overflowY: "auto",
+                  border: "1px solid var(--mm-line, rgba(120,200,255,0.18))",
+                  borderRadius: 8,
+                  background: "rgba(6,12,20,0.6)",
+                }}
+              >
+                {catResults.map((item) => (
+                  <li key={item.id}>
+                    <button
+                      onClick={() => pickCategory(item)}
+                      style={{
+                        display: "block",
+                        width: "100%",
+                        textAlign: "left",
+                        padding: "6px 10px",
+                        background: "transparent",
+                        border: "none",
+                        color: "inherit",
+                        cursor: "pointer",
+                        fontSize: "0.82rem",
+                      }}
+                      type="button"
+                    >
+                      {item.full_path}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </label>
         </div>
       </section>
 

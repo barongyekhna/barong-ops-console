@@ -651,3 +651,28 @@ export async function importISystemImagesToProduct(
 
   return readJson<KImportISystemImageResponse>(response, path);
 }
+
+
+export type CategoryTreeItem = {
+  id: string;
+  name: string;
+  full_path: string;
+  level: number;
+  is_leaf: boolean;
+};
+
+export async function searchCategories(
+  tree: "google" | "amazon",
+  q: string,
+  limit = 30,
+): Promise<CategoryTreeItem[]> {
+  const params = new URLSearchParams({ tree, q, limit: String(limit) });
+  const path = `/k/categories/search?${params.toString()}`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  const data = await readJson<{ items: CategoryTreeItem[] }>(response, path);
+  return data.items ?? [];
+}

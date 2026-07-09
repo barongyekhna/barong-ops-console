@@ -609,6 +609,11 @@ function isAllowedKPath(method: string, path: string[]) {
     return false;
   }
 
+  // 类目下拉搜索
+  if (path.length === 3 && path[1] === "categories" && path[2] === "search") {
+    return method === "GET";
+  }
+
   if (path.length === 2 && path[1] === "products") {
     return method === "GET" || method === "POST";
   }

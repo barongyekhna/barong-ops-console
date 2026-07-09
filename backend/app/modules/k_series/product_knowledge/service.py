@@ -134,6 +134,18 @@ def list_products(
     return list(db.scalars(query.limit(limit).offset(offset)))
 
 
+def _apply_manual_category(product: KProductKnowledgeProduct, category_id: str | None) -> None:
+    """手动上传：用户为该 channel 选的类目直接落（下拉来自对应类目树，可信）。"""
+    if not category_id:
+        return
+    channel = (product.channel or "dtc").strip().lower()
+    if channel == "amazon":
+        product.amazon_category_id = category_id
+    else:
+        product.google_product_category = category_id
+    product.category_review_needed = False
+
+
 def create_product(
     db: Session,
     *,
@@ -178,6 +190,8 @@ def create_product(
             scope_mode=context.scope_mode,
             organization_name=TARGET_ORGANIZATION_NAME,
         )
+        product.channel = (payload.channel or "dtc").strip().lower()
+        _apply_manual_category(product, payload.category_id)
         variants = _variant_rows_for_payload(
             db=db,
             product=product,
