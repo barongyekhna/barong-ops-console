@@ -543,6 +543,52 @@
   font-weight: 820;
 }
 
+.resultSectionRow td {
+  padding: 7px 8px !important;
+  background: #f8fafc;
+  border-top: 1px solid var(--color-line);
+  border-bottom: 1px solid var(--color-line);
+}
+
+.resultSectionRow[data-section="profit-pass"] td {
+  background: #ecfdf5;
+}
+
+.resultSectionRow[data-section="profit-reject"] td,
+.resultSectionRow[data-section="ai-reject"] td {
+  background: #fef2f2;
+}
+
+.resultSectionRow[data-section="ai-pass"] td {
+  background: #eff6ff;
+}
+
+.resultSectionTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.resultSectionTitle strong {
+  color: var(--color-text);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.resultSectionTitle span {
+  color: var(--color-muted);
+  font-size: 0.72rem;
+}
+
+.resultSectionTitle em {
+  margin-left: auto;
+  color: var(--color-text);
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 860;
+}
+
 .resultTable td {
   font-size: 0.74rem;
 }
@@ -783,8 +829,7 @@
 }
 
 .aiPending,
-.aiVerdict,
-.aiLayerTag {
+.aiVerdict {
   display: inline-flex;
   width: fit-content;
   padding: 4px 7px;
@@ -804,26 +849,84 @@
 }
 
 .aiVerdict[data-verdict="pass"],
-.aiLayerTag[data-verdict="pass"] {
+.aiLayerCard[data-verdict="pass"] .aiLayerCardHead span {
   color: #166534;
   background: #dcfce7;
 }
 
 .aiVerdict[data-verdict="reject"],
-.aiLayerTag[data-verdict="reject"] {
+.aiLayerCard[data-verdict="reject"] .aiLayerCardHead span {
   color: #991b1b;
   background: #fee2e2;
 }
 
 .aiLayerList {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
+  display: grid;
+  gap: 6px;
 }
 
-.aiLayerTag {
+.aiLayerCard {
+  display: grid;
+  gap: 4px;
+  padding: 6px;
+  border: 1px solid var(--color-line);
+  border-radius: 7px;
+  background: var(--color-surface-muted);
+}
+
+.aiLayerCard[data-verdict="skipped"] {
+  opacity: 0.78;
+}
+
+.aiLayerCardHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.aiLayerCardHead strong {
+  color: var(--color-text);
+  font-size: 0.72rem;
+  font-weight: 880;
+}
+
+.aiLayerCardHead span {
+  display: inline-flex;
+  width: fit-content;
+  padding: 3px 6px;
+  border-radius: 5px;
   color: #1d4ed8;
   background: #dbeafe;
+  font-size: 0.68rem;
+  font-weight: 840;
+}
+
+.aiLayerCard[data-verdict="skipped"] .aiLayerCardHead span {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.aiLayerCard small,
+.aiLayerCard p,
+.aiLayerCard li {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.69rem;
+  line-height: 1.35;
+}
+
+.aiLayerCard p {
+  color: var(--color-text);
+}
+
+.aiLayerCard ul {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 
 .supplierList {

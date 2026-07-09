@@ -9,7 +9,14 @@ import {
   Loader2,
   Search,
 } from "lucide-react";
-import { type FormEvent, useEffect, useMemo, useState, type MouseEvent } from "react";
+import {
+  Fragment,
+  type FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+  type MouseEvent,
+} from "react";
 
 import {
   createRaAutoProfitJob,
@@ -385,6 +392,7 @@ function AutoResultTable({
         ? "margin_asc"
         : "margin_desc"
       : "created_desc";
+  const itemSections = useMemo(() => groupAutoProfitItems(items), [items]);
 
   function updateQuery(partial: RaAutoProfitJobItemsQuery) {
     onItemsQueryChange({
@@ -460,66 +468,24 @@ function AutoResultTable({
             </tr>
           </thead>
           <tbody>
-            {items.map((item, index) => (
-              <tr key={`${item.asin ?? "unknown"}-${item.snapshot_id ?? item.supplier_url ?? index}`}>
-                <td>
-                  <ProductImage
-                    asin={item.asin}
-                    candidates={item.image_candidates}
-                    src={item.image_url}
-                    title={item.title_zh || item.title}
+            {itemSections.map((section) => (
+              <Fragment key={section.key}>
+                <tr className={styles.resultSectionRow} data-section={section.key}>
+                  <td colSpan={8}>
+                    <div className={styles.resultSectionTitle}>
+                      <strong>{section.title}</strong>
+                      <span>{section.description}</span>
+                      <em>{formatCount(section.items.length)} 条</em>
+                    </div>
+                  </td>
+                </tr>
+                {section.items.map(({ item, index }) => (
+                  <AutoResultRow
+                    item={item}
+                    key={`${item.asin ?? "unknown"}-${item.snapshot_id ?? item.supplier_url ?? index}`}
                   />
-                </td>
-                <td>
-                  <AsinTag asin={item.asin} />
-                  <small>{statusLabel(item.status)}</small>
-                  <small>{verdictLabel(item.verdict)}</small>
-                </td>
-                <td>
-                  <KeywordTag keyword={item.product_keyword || item.keyword} />
-                  <span>{item.matched_source_query || item.category || "R-W 匹配"}</span>
-                  <span className={styles.relevanceTag} data-status={item.relevance_status}>
-                    {relevanceLabel(item.relevance_status)}
-                    {typeof item.relevance_score === "number" ? ` · ${item.relevance_score}` : ""}
-                  </span>
-                </td>
-                <td>
-                  <strong>{item.title_zh || "等待中文名"}</strong>
-                  <ProductPackBadge item={item} />
-                  <span className={styles.compactText}>{item.title || "未记录英文标题"}</span>
-                  <span>{item.category || "未标注类目"}</span>
-                  <MonthlySalesBadge item={item} />
-                  <span>BSR {formatKnownCount(item.bsr)} · 评 {formatKnownCount(item.reviews)} · 卖家 {formatKnownCount(item.seller_count)}</span>
-                </td>
-                <td>
-                  <strong>{formatUsd(amazonPriceUsd(item))}</strong>
-                  <span>FBA {formatUsd(item.fba_fee_usd)}</span>
-                  <span>{item.fulfillment_method || "配送未标注"}</span>
-                  <span>{item.weight_label || formatWeight(item.package_weight_g)}</span>
-                  <span>{item.dimensions_label || formatDimensions(item)}</span>
-                  {item.lithium_battery_warning ? (
-                    <em className={styles.lithiumTag}>锂电提示</em>
-                  ) : null}
-                </td>
-                <td>
-                  <strong>{formatCnyRange(item.supplier_total_cny_min, item.supplier_total_cny_max, item.supplier_total_cny)}</strong>
-                  <span>产品 {formatCny(item.unit_price_cny)} · 运费 {formatCny(item.domestic_shipping_cny)}</span>
-                  <span>毛利 {formatUsdRange(item.gross_profit_usd_min, item.gross_profit_usd_max, item.gross_profit_usd)}</span>
-                  <span>{formatCnyRange(item.gross_profit_cny_min, item.gross_profit_cny_max, item.gross_profit_cny)}</span>
-                </td>
-                <td>
-                  <span className={styles.marginTag} data-verdict={item.verdict}>
-                    {formatPercentRange(item.gross_margin_min, item.gross_margin_max, item.gross_margin)}
-                  </span>
-                  {item.warnings[0] ? <small>{item.warnings[0]}</small> : null}
-                  {item.blocked_reasons[0] ? <small>{item.blocked_reasons[0]}</small> : null}
-                  <AiSelectionCell selection={item.ai_selection} />
-                </td>
-                <td>
-                  <SupplierLinks item={item} />
-                  <SupplierSearchPages pages={item.supplier_search_pages} />
-                </td>
-              </tr>
+                ))}
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -527,6 +493,131 @@ function AutoResultTable({
       <ResultPagination pageInfo={pageInfo} onUpdate={updateQuery} />
     </>
   );
+}
+
+function AutoResultRow({ item }: { item: RaAutoProfitItem }) {
+  return (
+    <tr>
+      <td>
+        <ProductImage
+          asin={item.asin}
+          candidates={item.image_candidates}
+          src={item.image_url}
+          title={item.title_zh || item.title}
+        />
+      </td>
+      <td>
+        <AsinTag asin={item.asin} />
+        <small>{statusLabel(item.status)}</small>
+        <small>{verdictLabel(item.verdict)}</small>
+      </td>
+      <td>
+        <KeywordTag keyword={item.product_keyword || item.keyword} />
+        <span>{item.matched_source_query || item.category || "R-W 匹配"}</span>
+        <span className={styles.relevanceTag} data-status={item.relevance_status}>
+          {relevanceLabel(item.relevance_status)}
+          {typeof item.relevance_score === "number" ? ` · ${item.relevance_score}` : ""}
+        </span>
+      </td>
+      <td>
+        <strong>{item.title_zh || "等待中文名"}</strong>
+        <ProductPackBadge item={item} />
+        <span className={styles.compactText}>{item.title || "未记录英文标题"}</span>
+        <span>{item.category || "未标注类目"}</span>
+        <MonthlySalesBadge item={item} />
+        <span>
+          BSR {formatKnownCount(item.bsr)} · 评 {formatKnownCount(item.reviews)} · 卖家{" "}
+          {formatKnownCount(item.seller_count)}
+        </span>
+      </td>
+      <td>
+        <strong>{formatUsd(amazonPriceUsd(item))}</strong>
+        <span>FBA {formatUsd(item.fba_fee_usd)}</span>
+        <span>{item.fulfillment_method || "配送未标注"}</span>
+        <span>{item.weight_label || formatWeight(item.package_weight_g)}</span>
+        <span>{item.dimensions_label || formatDimensions(item)}</span>
+        {item.lithium_battery_warning ? <em className={styles.lithiumTag}>锂电提示</em> : null}
+      </td>
+      <td>
+        <strong>
+          {formatCnyRange(
+            item.supplier_total_cny_min,
+            item.supplier_total_cny_max,
+            item.supplier_total_cny,
+          )}
+        </strong>
+        <span>
+          产品 {formatCny(item.unit_price_cny)} · 运费 {formatCny(item.domestic_shipping_cny)}
+        </span>
+        <span>
+          毛利{" "}
+          {formatUsdRange(item.gross_profit_usd_min, item.gross_profit_usd_max, item.gross_profit_usd)}
+        </span>
+        <span>
+          {formatCnyRange(item.gross_profit_cny_min, item.gross_profit_cny_max, item.gross_profit_cny)}
+        </span>
+      </td>
+      <td>
+        <span className={styles.marginTag} data-verdict={item.verdict}>
+          {formatPercentRange(item.gross_margin_min, item.gross_margin_max, item.gross_margin)}
+        </span>
+        {item.warnings[0] ? <small>{item.warnings[0]}</small> : null}
+        {item.blocked_reasons[0] ? <small>{item.blocked_reasons[0]}</small> : null}
+        <AiSelectionCell selection={item.ai_selection} />
+      </td>
+      <td>
+        <SupplierLinks item={item} />
+        <SupplierSearchPages pages={item.supplier_search_pages} />
+      </td>
+    </tr>
+  );
+}
+
+function groupAutoProfitItems(items: RaAutoProfitItem[]) {
+  const sections = [
+    {
+      key: "profit-pass",
+      title: "利润通过，等待 AI",
+      description: "利润计算已达标，正在或即将进入 AI 选品链。",
+      items: [] as Array<{ item: RaAutoProfitItem; index: number }>,
+    },
+    {
+      key: "profit-reject",
+      title: "利润不通过",
+      description: "利润、供应商、数量或成本字段未达到 R-A 当前要求。",
+      items: [] as Array<{ item: RaAutoProfitItem; index: number }>,
+    },
+    {
+      key: "ai-pass",
+      title: "AI 通过",
+      description: "已通过 DeepSeek/GPT/Opus 选品链，可进入下一阶段。",
+      items: [] as Array<{ item: RaAutoProfitItem; index: number }>,
+    },
+    {
+      key: "ai-reject",
+      title: "AI 不通过 / 复核",
+      description: "AI 链判断不适合继续推进，或需要人工复核。",
+      items: [] as Array<{ item: RaAutoProfitItem; index: number }>,
+    },
+  ];
+  const byKey = new Map(sections.map((section) => [section.key, section]));
+  items.forEach((item, index) => {
+    const aiVerdict = String(item.ai_selection?.verdict ?? "").toLowerCase();
+    if (aiVerdict === "pass") {
+      byKey.get("ai-pass")?.items.push({ item, index });
+      return;
+    }
+    if (aiVerdict === "reject" || aiVerdict === "review") {
+      byKey.get("ai-reject")?.items.push({ item, index });
+      return;
+    }
+    if (item.verdict === "pass") {
+      byKey.get("profit-pass")?.items.push({ item, index });
+      return;
+    }
+    byKey.get("profit-reject")?.items.push({ item, index });
+  });
+  return sections.filter((section) => section.items.length > 0);
 }
 
 function ResultTableControls({
@@ -583,8 +674,10 @@ function ResultTableControls({
           onChange={(event) => onUpdate({ item_page: 1, item_verdict: event.target.value })}
         >
           <option value="all">全部</option>
-          <option value="pass">利润通过</option>
-          <option value="reject">利润未通过</option>
+          <option value="profit_pass">利润通过</option>
+          <option value="profit_reject">利润不通过</option>
+          <option value="ai_pass">AI 通过</option>
+          <option value="ai_reject">AI 不通过/复核</option>
           <option value="pending">待计算</option>
         </select>
       </label>
@@ -662,28 +755,82 @@ function AiSelectionCell({ selection }: { selection?: RaAutoProfitItem["ai_selec
   if (!selection) {
     return <span className={styles.aiPending}>等待 AI</span>;
   }
+  const layers = aiLayerTimeline(selection);
   return (
     <div className={styles.aiCell}>
       <span className={styles.aiVerdict} data-verdict={selection.verdict}>
         {aiVerdictLabel(selection.verdict)} · {selection.final_score ?? "-"}分
       </span>
       {selection.decision_reason ? <small>{selection.decision_reason}</small> : null}
-      {selection.layers?.length ? (
-        <div className={styles.aiLayerList}>
-          {selection.layers.map((layer) => (
-            <span
-              className={styles.aiLayerTag}
-              data-verdict={layer.verdict}
-              key={`${selection.candidate_id}-${layer.layer}`}
-              title={layer.reason || undefined}
-            >
-              {aiLayerLabel(layer.layer)} {layer.score ?? "-"}
-            </span>
-          ))}
-        </div>
-      ) : null}
+      <div className={styles.aiLayerList}>
+        {layers.map((layer) => (
+          <section
+            className={styles.aiLayerCard}
+            data-verdict={layer.verdict}
+            key={`${selection.candidate_id}-${layer.layer}`}
+          >
+            <div className={styles.aiLayerCardHead}>
+              <strong>{aiLayerLabel(layer.layer)}</strong>
+              <span>{aiVerdictLabel(layer.verdict)} · {layer.score ?? "-"}分</span>
+            </div>
+            {layer.model_name ? <small>模型：{layer.model_name}</small> : null}
+            <p>{layer.reason || "该层未返回明确理由。"}</p>
+            {layer.advantages.length ? (
+              <ul>
+                {layer.advantages.slice(0, 2).map((item) => (
+                  <li key={`adv-${layer.layer}-${item}`}>优势：{item}</li>
+                ))}
+              </ul>
+            ) : null}
+            {layer.risks.length ? (
+              <ul>
+                {layer.risks.slice(0, 2).map((item) => (
+                  <li key={`risk-${layer.layer}-${item}`}>风险：{item}</li>
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        ))}
+      </div>
     </div>
   );
+}
+
+function aiLayerTimeline(selection: NonNullable<RaAutoProfitItem["ai_selection"]>) {
+  const existing = new Map((selection.layers ?? []).map((layer) => [layer.layer, layer]));
+  const deepseek = existing.get("deepseek");
+  const gpt = existing.get("gpt");
+  const output = [];
+  for (const layerName of ["deepseek", "gpt", "opus"]) {
+    const layer = existing.get(layerName);
+    if (layer) {
+      output.push(layer);
+      continue;
+    }
+    let reason = "上一层未放行，本层按 R-A 漏斗规则未执行。";
+    if (layerName === "gpt" && deepseek?.verdict === "reject") {
+      reason = "DeepSeek 第一层已淘汰，GPT 第二层未执行。";
+    }
+    if (layerName === "opus") {
+      if (deepseek?.verdict === "reject") {
+        reason = "DeepSeek 第一层已淘汰，Opus 最终层未执行。";
+      } else if (gpt?.verdict === "reject") {
+        reason = "GPT 第二层已淘汰，Opus 最终层未执行。";
+      }
+    }
+    output.push({
+      layer: layerName,
+      model_role: layerName,
+      model_name: "",
+      score: null,
+      verdict: "skipped",
+      reason,
+      advantages: [],
+      risks: [],
+      created_at: null,
+    });
+  }
+  return output;
 }
 
 function SnapshotPreview({ snapshots }: { snapshots: RaProfitSnapshot[] }) {
@@ -1507,12 +1654,15 @@ function aiVerdictLabel(value: string | null | undefined) {
   if (value === "review") {
     return "AI复核";
   }
+  if (value === "skipped") {
+    return "未执行";
+  }
   return "AI等待";
 }
 
 function aiLayerLabel(value: string | null | undefined) {
   if (value === "deepseek") {
-    return "DS";
+    return "DeepSeek";
   }
   if (value === "gpt") {
     return "GPT";

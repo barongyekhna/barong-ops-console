@@ -79,60 +79,74 @@ def run_ai_selection_for_run(
     providers = _load_provider_configs(db, org_id=org_id)
     _clear_ai_outputs(db, org_id=org_id, run_id=run_id)
     db.commit()
-    counts: dict[str, Any] = {
-        "ai_candidates": len(candidates),
-        "ai_evaluations": 0,
-        "ai_pass": 0,
-        "ai_reject": 0,
-        "ai_review": 0,
-        "final_decisions": 0,
-        "reports": 0,
-        "real_ai_enabled": True,
-        "ai_pipeline_version": RA_AI_PIPELINE_VERSION,
-        "rainforest_snapshots": 0,
-        "rainforest_credits_used": 0,
-        "rainforest_cache_hits": 0,
-    }
+    counts = _initial_ai_counts(len(candidates))
 
     for context in candidates:
-        competition = ensure_competition_snapshot(db, org_id=org_id, context=context)
-        context["competition"] = competition
-        db.commit()
-        counts["rainforest_snapshots"] += 1
-        counts["rainforest_credits_used"] += int(competition.get("credits_used_this_call") or 0)
-        if competition.get("cache_hit"):
-            counts["rainforest_cache_hits"] += 1
-        layers = _evaluate_real_layers(
-            context,
+        _evaluate_and_store_candidate(
+            db,
+            org_id=org_id,
+            run_id=run_id,
+            context=context,
             skill_bundle=skill_bundle,
             providers=providers,
             channel=channel,
+            counts=counts,
         )
-        for layer in layers:
-            _insert_ai_evaluation(db, org_id=org_id, run_id=run_id, context=context, layer=layer)
-            counts["ai_evaluations"] += 1
-        final = _final_decision(context, layers, channel=channel, skill_bundle=skill_bundle)
-        final["report_id"] = str(uuid4())
-        _insert_final_decision(db, org_id=org_id, run_id=run_id, context=context, final=final)
-        _insert_report(db, org_id=org_id, run_id=run_id, context=context, final=final, layers=layers)
-        _update_candidate_status(
-            db,
-            candidate_id=str(context["candidate_id"]),
-            verdict=str(final["verdict"]),
-        )
-        verdict_key = {
-            "pass": "ai_pass",
-            "reject": "ai_reject",
-            "review": "ai_review",
-        }.get(str(final["verdict"]), "ai_review")
-        counts[verdict_key] += 1
-        counts["final_decisions"] += 1
-        counts["reports"] += 1
-        db.commit()
 
     _merge_run_counts(db, run_id=run_id, counts=counts)
     db.commit()
     return load_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
+
+
+def run_ai_selection_for_candidate(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+    candidate_id: str,
+    channel: str = "amazon",
+) -> dict[str, object]:
+    """Run the real AI chain for one profit-passed candidate without touching siblings."""
+    normalized_candidate_id = str(candidate_id or "").strip()
+    if not normalized_candidate_id:
+        raise RAAISelectionError("缺少 R-A candidate_id，无法启动 AI 链。")
+    candidates = [
+        context
+        for context in _load_candidate_contexts(db, org_id=org_id, run_id=run_id)
+        if str(context.get("candidate_id") or "") == normalized_candidate_id
+    ]
+    if not candidates:
+        raise RAAISelectionError("利润通过候选不存在或尚未满足 AI 输入条件。")
+
+    skill_bundle = load_ra_skill_bundle(channel)
+    providers = _load_provider_configs(db, org_id=org_id)
+    _clear_ai_outputs_for_candidate(
+        db,
+        org_id=org_id,
+        run_id=run_id,
+        candidate_id=normalized_candidate_id,
+    )
+    db.commit()
+
+    counts = _initial_ai_counts(len(candidates))
+    for context in candidates:
+        _evaluate_and_store_candidate(
+            db,
+            org_id=org_id,
+            run_id=run_id,
+            context=context,
+            skill_bundle=skill_bundle,
+            providers=providers,
+            channel=channel,
+            counts=counts,
+        )
+
+    _merge_run_counts(db, run_id=run_id, counts=counts)
+    db.commit()
+    summary = load_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
+    _merge_run_counts(db, run_id=run_id, counts=_dict_value(summary.get("counts")))
+    db.commit()
+    return summary
 
 
 def load_ai_selection_for_run(
@@ -208,6 +222,70 @@ def load_ai_selection_by_candidate(
         if candidate_id:
             output[candidate_id] = item
     return output
+
+
+def _initial_ai_counts(candidate_count: int) -> dict[str, Any]:
+    return {
+        "ai_candidates": candidate_count,
+        "ai_evaluations": 0,
+        "ai_pass": 0,
+        "ai_reject": 0,
+        "ai_review": 0,
+        "final_decisions": 0,
+        "reports": 0,
+        "real_ai_enabled": True,
+        "ai_pipeline_version": RA_AI_PIPELINE_VERSION,
+        "rainforest_snapshots": 0,
+        "rainforest_credits_used": 0,
+        "rainforest_cache_hits": 0,
+    }
+
+
+def _evaluate_and_store_candidate(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+    context: dict[str, Any],
+    skill_bundle: RASkillBundle,
+    providers: dict[str, ProviderConfig],
+    channel: str,
+    counts: dict[str, Any],
+) -> None:
+    competition = ensure_competition_snapshot(db, org_id=org_id, context=context)
+    context["competition"] = competition
+    db.commit()
+    counts["rainforest_snapshots"] += 1
+    counts["rainforest_credits_used"] += int(competition.get("credits_used_this_call") or 0)
+    if competition.get("cache_hit"):
+        counts["rainforest_cache_hits"] += 1
+    layers = _evaluate_real_layers(
+        context,
+        skill_bundle=skill_bundle,
+        providers=providers,
+        channel=channel,
+    )
+    for layer in layers:
+        _insert_ai_evaluation(db, org_id=org_id, run_id=run_id, context=context, layer=layer)
+        counts["ai_evaluations"] += 1
+    final = _final_decision(context, layers, channel=channel, skill_bundle=skill_bundle)
+    final["report_id"] = str(uuid4())
+    _insert_final_decision(db, org_id=org_id, run_id=run_id, context=context, final=final)
+    _insert_report(db, org_id=org_id, run_id=run_id, context=context, final=final, layers=layers)
+    _update_candidate_status(
+        db,
+        candidate_id=str(context["candidate_id"]),
+        verdict=str(final["verdict"]),
+    )
+    verdict_key = {
+        "pass": "ai_pass",
+        "reject": "ai_reject",
+        "review": "ai_review",
+    }.get(str(final["verdict"]), "ai_review")
+    counts[verdict_key] += 1
+    counts["final_decisions"] += 1
+    counts["reports"] += 1
+    db.commit()
 
 
 def _evaluate_real_layers(
@@ -735,6 +813,47 @@ def _clear_ai_outputs(db: Session, *, org_id: str, run_id: str) -> None:
             """
         ),
         {"org_id": org_id, "run_id": run_id},
+    )
+
+
+def _clear_ai_outputs_for_candidate(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+    candidate_id: str,
+) -> None:
+    params = {"org_id": org_id, "run_id": run_id, "candidate_id": candidate_id}
+    db.execute(
+        text(
+            """
+            DELETE FROM ra_ai_evaluations
+            WHERE org_id = :org_id AND run_id = :run_id
+              AND candidate_id = :candidate_id
+              AND layer IN ('deepseek', 'gpt', 'opus')
+            """
+        ),
+        params,
+    )
+    db.execute(
+        text(
+            """
+            DELETE FROM ra_final_decisions
+            WHERE org_id = :org_id AND run_id = :run_id
+              AND candidate_id = :candidate_id
+            """
+        ),
+        params,
+    )
+    db.execute(
+        text(
+            """
+            DELETE FROM ra_reports
+            WHERE org_id = :org_id AND run_id = :run_id
+              AND candidate_id = :candidate_id
+            """
+        ),
+        params,
     )
 
 

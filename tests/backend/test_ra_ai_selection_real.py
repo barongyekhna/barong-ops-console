@@ -9,7 +9,7 @@ from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import R_ANALYSIS_MODULE_ID, SecretManager
-from r_system_v2.ra.ai_selection import run_ai_selection_for_run
+from r_system_v2.ra.ai_selection import run_ai_selection_for_candidate, run_ai_selection_for_run
 
 
 class _FakeResponse:
@@ -246,6 +246,216 @@ def test_real_ra_ai_chain_writes_competition_and_three_layers(monkeypatch) -> No
         assert final["verdict"] == "pass"
         assert int(final["final_score"]) == 82
         assert json.loads(final["payload"])["competition"]["review_wall_max"] == 500
+
+
+def test_real_ra_ai_chain_can_run_one_candidate_without_touching_siblings(monkeypatch) -> None:
+    sqlite3.register_adapter(Decimal, lambda value: float(value))
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        for ddl in _schema():
+            connection.execute(text(ddl))
+        for index, asin in enumerate(("B0REALAI101", "B0REALAI102"), start=1):
+            features = {
+                "monthly_sales": 500 + index,
+                "fba_fee_usd": 5.0,
+                "image_candidates": [f"https://example.test/{asin}.jpg"],
+            }
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO products_rw (
+                      asin, marketplace, source_query, title, title_zh, image_url,
+                      brand, category, category_id, category_path, price, state,
+                      skill_score, features, bsr, reviews, seller_count, rating,
+                      fulfillment_method, lithium_battery_warning, updated_at
+                    )
+                    VALUES (
+                      :asin, 'US', '收纳架', :title, :title_zh, :image_url,
+                      'Generic', 'Home & Kitchen', '1000',
+                      'Home & Kitchen > Storage', 35.99, 'rule_passed',
+                      84, :features, 1800, 120, 5, 4.4,
+                      'FBA', 0, CURRENT_TIMESTAMP
+                    )
+                    """
+                ),
+                {
+                    "asin": asin,
+                    "title": f"Storage Rack {index}",
+                    "title_zh": f"收纳架 {index}",
+                    "image_url": f"https://example.test/{asin}.jpg",
+                    "features": json.dumps(features, ensure_ascii=False),
+                },
+            )
+        connection.execute(
+            text(
+                """
+                INSERT INTO ra_selection_runs (
+                  run_id, org_id, channel, status, filters, counts, runtime_mode,
+                  created_at, updated_at
+                )
+                VALUES (
+                  'run-real-ai-one', 'org-real-ai', 'profit_auto', 'running',
+                  '{}', '{}', 'background_profit_queue',
+                  CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
+        for index, asin in enumerate(("B0REALAI101", "B0REALAI102"), start=1):
+            candidate_id = f"candidate-real-ai-{index}"
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO ra_candidates (
+                      id, org_id, run_id, source_asin, marketplace, title, title_zh,
+                      candidate_status, snapshot
+                    )
+                    VALUES (
+                      :candidate_id, 'org-real-ai', 'run-real-ai-one', :asin,
+                      'US', :title, :title_zh, 'profit_passed', '{}'
+                    )
+                    """
+                ),
+                {
+                    "candidate_id": candidate_id,
+                    "asin": asin,
+                    "title": f"Storage Rack {index}",
+                    "title_zh": f"收纳架 {index}",
+                },
+            )
+            connection.execute(
+                text(
+                    """
+                    INSERT INTO ra_profit_snapshots (
+                      id, org_id, candidate_id, asin, sell_price_usd,
+                      net_profit_usd, net_margin, roi, confidence, payload
+                    )
+                    VALUES (
+                      :snapshot_id, 'org-real-ai', :candidate_id, :asin,
+                      35.99, 9.50, 0.27, 0.60, 'high', :payload
+                    )
+                    """
+                ),
+                {
+                    "snapshot_id": f"profit-real-ai-{index}",
+                    "candidate_id": candidate_id,
+                    "asin": asin,
+                    "payload": json.dumps(
+                        {
+                            "verdict": "pass",
+                            "gross_profit_usd": 9.5,
+                            "gross_margin": 0.27,
+                            "supplier": {
+                                "supplier_name": "源头工厂",
+                                "supplier_url": "https://detail.1688.com/offer/123.html",
+                                "unit_price_cny": 38.0,
+                                "moq": 1,
+                                "match_score": 90,
+                                "one_piece_hint": True,
+                            },
+                        },
+                        ensure_ascii=False,
+                    ),
+                },
+            )
+
+    def fake_resolver(_db, *, org_id: str, module_id: str, key_alias: str):
+        assert org_id == "org-real-ai"
+        values = {
+            (R_ANALYSIS_MODULE_ID, "deepseek"): ("deepseek-secret", "https://deepseek.test"),
+            (R_ANALYSIS_MODULE_ID, "4sapi"): ("foursapi-secret", "https://foursapi.test/v1"),
+            (R_ANALYSIS_MODULE_ID, "rainforest"): ("rainforest-secret", "https://rainforest.test"),
+        }
+        value = values.get((module_id, key_alias))
+        if value is None:
+            raise RuntimeError("missing")
+        return SimpleNamespace(
+            module_id=module_id,
+            key_alias=key_alias,
+            key_id=f"{key_alias}-id",
+            url=value[1],
+            header_value=f"Bearer {value[0]}",
+            query_param_value=None,
+        )
+
+    monkeypatch.setattr(
+        "r_system_v2.core.secret_manager._backend_resolver",
+        lambda: (fake_resolver, RuntimeError, RuntimeError),
+    )
+    SecretManager.invalidate_cache()
+
+    def fake_rainforest_urlopen(_request, timeout: int = 40):
+        return _FakeResponse(
+            {
+                "request_info": {"credits_used": 1, "credits_remaining": 999},
+                "search_results": [{"position": 1, "asin": "B0TOP101", "ratings_total": 300}],
+            }
+        )
+
+    def fake_ai_urlopen(request, timeout: int = 75):
+        payload = json.loads(request.data.decode("utf-8"))
+        user_payload = json.loads(payload["messages"][-1]["content"])
+        content = json.dumps(
+            {
+                "score": 86,
+                "verdict": "pass",
+                "reason": f"{user_payload['layer']} 单候选实时审核通过。",
+                "advantages": ["利润和需求达标"],
+                "risks": [],
+                "barrier_type": "none",
+                "channel_guess": "amazon",
+            },
+            ensure_ascii=False,
+        )
+        if "/v1/messages" in request.full_url:
+            return _FakeResponse(
+                {
+                    "content": [{"type": "text", "text": content}],
+                    "usage": {"input_tokens": 80, "output_tokens": 40},
+                }
+            )
+        return _FakeResponse(
+            {
+                "choices": [{"message": {"content": content}}],
+                "usage": {"prompt_tokens": 80, "completion_tokens": 40},
+            }
+        )
+
+    monkeypatch.setattr("r_system_v2.ra.competition.urlopen", fake_rainforest_urlopen)
+    monkeypatch.setattr("r_system_v2.ra.ai_selection.urlopen", fake_ai_urlopen)
+
+    with Session(engine) as session:
+        result = run_ai_selection_for_candidate(
+            session,
+            org_id="org-real-ai",
+            run_id="run-real-ai-one",
+            candidate_id="candidate-real-ai-1",
+            channel="amazon",
+        )
+
+        assert result["counts"]["ai_candidates"] == 1
+        assert result["counts"]["ai_pass"] == 1
+        decision_rows = session.execute(
+            text(
+                """
+                SELECT candidate_id, verdict
+                FROM ra_final_decisions
+                WHERE run_id = 'run-real-ai-one'
+                """
+            )
+        ).mappings().all()
+        assert [row["candidate_id"] for row in decision_rows] == ["candidate-real-ai-1"]
+        status_rows = session.execute(
+            text(
+                """
+                SELECT id, candidate_status
+                FROM ra_candidates
+                ORDER BY id ASC
+                """
+            )
+        ).mappings().all()
+        assert status_rows[0]["candidate_status"] == "ai_passed"
+        assert status_rows[1]["candidate_status"] == "profit_passed"
 
 
 def _schema() -> list[str]:

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session, sessionmaker
 from r_system_v2.ra.ai_selection import (
     load_ai_selection_by_candidate,
     load_ai_selection_for_run,
-    run_ai_selection_for_run,
+    run_ai_selection_for_candidate,
 )
 from r_system_v2.ra.auto_profit import (
     DEFAULT_SUPPLIER_LIMIT,
@@ -39,6 +39,7 @@ DEFAULT_JOB_ASIN_LIMIT = 20
 DEFAULT_TARGET_PROFIT_PASS = 10
 DEFAULT_MAX_PRODUCTS_PER_JOB = 240
 DEFAULT_WORKER_CONCURRENCY = 3
+DEFAULT_AI_WORKER_CONCURRENCY = 2
 DEFAULT_POLL_SECONDS = 3.0
 
 
@@ -319,6 +320,8 @@ class RaProfitJobWorker:
                 exchange_rate=quote.rate,
                 min_gross_margin=min_gross_margin,
                 target_profit_pass=target_profit_pass,
+                run_ai_chain=run_ai_chain,
+                selection_channel=selection_channel,
                 log=log,
             )
             if not batch_result["processed"]:
@@ -329,12 +332,11 @@ class RaProfitJobWorker:
                 row = _load_job_row(db, org_id=org_id, run_id=run_id)
                 counts = _dict_value(row.get("counts") if row else {})
                 counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
-                if run_ai_chain and int(counts.get("profit_pass") or 0) > 0:
-                    ai_result = run_ai_selection_for_run(
+                if run_ai_chain:
+                    ai_result = load_ai_selection_for_run(
                         db,
                         org_id=org_id,
                         run_id=run_id,
-                        channel=selection_channel,
                     )
                     counts.update(_dict_value(ai_result.get("counts")))
                 if counts.get("fatal_provider_error"):
@@ -360,73 +362,112 @@ class RaProfitJobWorker:
         exchange_rate: Decimal,
         min_gross_margin: Decimal | None,
         target_profit_pass: int,
+        run_ai_chain: bool,
+        selection_channel: str,
         log: Callable[[str], None] | None,
     ) -> dict[str, int]:
         processed = 0
         product_index = 0
+        ai_workers = _ai_worker_concurrency(None) if run_ai_chain else 0
         with ThreadPoolExecutor(max_workers=self.concurrency) as executor:
+            ai_executor = ThreadPoolExecutor(max_workers=ai_workers) if ai_workers > 0 else None
             pending: set[Any] = set()
-            while product_index < len(products) or pending:
-                with self.session_factory() as db:
-                    with _without_org_data_isolation():
-                        row = _load_job_row(db, org_id=org_id, run_id=run_id)
-                        counts = _dict_value(row.get("counts") if row else {})
-                        counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
-                        current_pass = int(counts.get("profit_pass") or 0)
-                if current_pass >= target_profit_pass and not pending:
-                    break
-
-                max_pending = self.concurrency
-                while (
-                    len(pending) < max_pending
-                    and product_index < len(products)
-                    and current_pass < target_profit_pass
-                ):
-                    product = products[product_index]
-                    product_index += 1
-                    asin = str(product.get("asin") or "").upper()
-                    if not asin or asin in attempted_asins:
-                        continue
-                    attempted_asins.add(asin)
-                    pending.add(
-                        executor.submit(
-                            _process_product_for_job,
-                            self.session_factory,
-                            org_id,
-                            run_id,
-                            asin,
-                            supplier_limit,
-                            exchange_rate,
-                            min_gross_margin,
-                        )
+            pending_ai: set[Any] = set()
+            try:
+                while product_index < len(products) or pending:
+                    self._record_finished_ai_jobs(
+                        org_id=org_id,
+                        run_id=run_id,
+                        pending_ai=pending_ai,
+                        log=log,
                     )
                     with self.session_factory() as db:
                         with _without_org_data_isolation():
                             row = _load_job_row(db, org_id=org_id, run_id=run_id)
                             counts = _dict_value(row.get("counts") if row else {})
-                            counts["selected_products"] = int(
-                                counts.get("selected_products") or 0
-                            ) + 1
-                            _update_job(db, run_id=run_id, status="running", counts=counts)
+                            counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
+                            current_pass = int(counts.get("profit_pass") or 0)
+                    if current_pass >= target_profit_pass and not pending:
+                        break
 
-                if not pending:
-                    break
-                done, pending = wait(pending, return_when=FIRST_COMPLETED)
-                for future in done:
-                    result = future.result()
-                    processed += 1
-                    self._record_product_result(
+                    max_pending = self.concurrency
+                    while (
+                        len(pending) < max_pending
+                        and product_index < len(products)
+                        and current_pass < target_profit_pass
+                    ):
+                        product = products[product_index]
+                        product_index += 1
+                        asin = str(product.get("asin") or "").upper()
+                        if not asin or asin in attempted_asins:
+                            continue
+                        attempted_asins.add(asin)
+                        pending.add(
+                            executor.submit(
+                                _process_product_for_job,
+                                self.session_factory,
+                                org_id,
+                                run_id,
+                                asin,
+                                supplier_limit,
+                                exchange_rate,
+                                min_gross_margin,
+                            )
+                        )
+                        with self.session_factory() as db:
+                            with _without_org_data_isolation():
+                                row = _load_job_row(db, org_id=org_id, run_id=run_id)
+                                counts = _dict_value(row.get("counts") if row else {})
+                                counts["selected_products"] = int(
+                                    counts.get("selected_products") or 0
+                                ) + 1
+                                _update_job(db, run_id=run_id, status="running", counts=counts)
+
+                    if not pending:
+                        break
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    for future in done:
+                        result = future.result()
+                        processed += 1
+                        self._record_product_result(
+                            org_id=org_id,
+                            run_id=run_id,
+                            result=result,
+                        )
+                        if (
+                            ai_executor is not None
+                            and result.get("verdict") == "pass"
+                            and result.get("candidate_id")
+                        ):
+                            pending_ai.add(
+                                ai_executor.submit(
+                                    _process_candidate_ai_for_job,
+                                    self.session_factory,
+                                    org_id,
+                                    run_id,
+                                    str(result["candidate_id"]),
+                                    selection_channel,
+                                )
+                            )
+                        if log:
+                            log(
+                                "R-A job progress "
+                                f"run_id={run_id} asin={result.get('asin')} "
+                                f"verdict={result.get('verdict') or ''} "
+                                f"candidate_id={result.get('candidate_id') or ''} "
+                                f"error={result.get('error') or ''}"
+                            )
+                while pending_ai:
+                    self._record_finished_ai_jobs(
                         org_id=org_id,
                         run_id=run_id,
-                        result=result,
+                        pending_ai=pending_ai,
+                        log=log,
+                        block=True,
                     )
-                    if log:
-                        log(
-                            "R-A job progress "
-                            f"run_id={run_id} asin={result.get('asin')} "
-                            f"verdict={result.get('verdict') or ''} "
-                            f"error={result.get('error') or ''}"
-                        )
+            finally:
+                if ai_executor is not None:
+                    ai_executor.shutdown(wait=True)
         return {"processed": processed}
 
     def _record_product_result(
@@ -454,6 +495,61 @@ class RaProfitJobWorker:
                     counts["warnings"] = warnings[-10:]
                 live_counts = _live_counts(db, org_id=org_id, run_id=run_id)
                 counts.update(live_counts)
+                _update_job(db, run_id=run_id, status="running", counts=counts)
+
+    def _record_finished_ai_jobs(
+        self,
+        *,
+        org_id: str,
+        run_id: str,
+        pending_ai: set[Any],
+        log: Callable[[str], None] | None,
+        block: bool = False,
+    ) -> None:
+        if not pending_ai:
+            return
+        timeout = None if block else 0
+        done, remaining = wait(
+            pending_ai,
+            timeout=timeout,
+            return_when=FIRST_COMPLETED,
+        )
+        if not done:
+            return
+        pending_ai.clear()
+        pending_ai.update(remaining)
+        for future in done:
+            result = future.result()
+            self._record_ai_result(org_id=org_id, run_id=run_id, result=result)
+            if log:
+                log(
+                    "R-A AI progress "
+                    f"run_id={run_id} candidate_id={result.get('candidate_id') or ''} "
+                    f"error={result.get('error') or ''}"
+                )
+
+    def _record_ai_result(
+        self,
+        *,
+        org_id: str,
+        run_id: str,
+        result: dict[str, object],
+    ) -> None:
+        with self.session_factory() as db:
+            with _without_org_data_isolation():
+                row = _load_job_row(db, org_id=org_id, run_id=run_id)
+                counts = _dict_value(row.get("counts") if row else {})
+                if result.get("error"):
+                    warnings = list(counts.get("warnings") or [])
+                    warnings.append(
+                        f"AI {result.get('candidate_id') or ''}: {result.get('error')}"
+                    )
+                    counts["warnings"] = warnings[-10:]
+                    if result.get("fatal"):
+                        counts["fatal_provider_error"] = True
+                else:
+                    counts.update(_dict_value(result.get("counts")))
+                counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
                 _update_job(db, run_id=run_id, status="running", counts=counts)
 
 
@@ -495,6 +591,7 @@ def _process_product_for_job(
             warnings.append(str(verdict.get("reason")))
         return {
             "asin": asin,
+            "candidate_id": str(discovery.get("candidate_id") or ""),
             "counts": discovery.get("counts"),
             "verdict": verdict.get("status"),
             "warnings": warnings,
@@ -502,6 +599,36 @@ def _process_product_for_job(
     except Exception as exc:  # pragma: no cover - external provider dependent.
         message = str(exc)
         return {"asin": asin, "error": message, "fatal": _is_fatal_supplier_error(message)}
+
+
+def _process_candidate_ai_for_job(
+    session_factory: sessionmaker[Session],
+    org_id: str,
+    run_id: str,
+    candidate_id: str,
+    selection_channel: str,
+) -> dict[str, object]:
+    try:
+        with session_factory() as db:
+            with _without_org_data_isolation():
+                result = run_ai_selection_for_candidate(
+                    db,
+                    org_id=org_id,
+                    run_id=run_id,
+                    candidate_id=candidate_id,
+                    channel=selection_channel,
+                )
+        return {
+            "candidate_id": candidate_id,
+            "counts": result.get("counts"),
+        }
+    except Exception as exc:  # pragma: no cover - external provider dependent.
+        message = str(exc)
+        return {
+            "candidate_id": candidate_id,
+            "error": message,
+            "fatal": _is_fatal_ai_error(message),
+        }
 
 
 def _profit_verdict_from_discovery(discovery: dict[str, object]) -> dict[str, object]:
@@ -724,6 +851,22 @@ def _is_fatal_supplier_error(message: str) -> bool:
         "缺少 app_key",
         "缺少 app_secret",
         "access_token",
+    )
+    return any(marker in lowered for marker in fatal_markers)
+
+
+def _is_fatal_ai_error(message: str) -> bool:
+    lowered = str(message or "").lower()
+    fatal_markers = (
+        "r-a ai key 未完整绑定",
+        "key 未完整绑定",
+        "密钥",
+        "api key",
+        "unauthorized",
+        "forbidden",
+        "signature",
+        "401",
+        "403",
     )
     return any(marker in lowered for marker in fatal_markers)
 
@@ -1177,6 +1320,23 @@ def _job_candidate_page(
               'ai_mock_review'
             )"""
         )
+    elif cleaned_verdict == "profit_pass":
+        clauses.append("c.candidate_status = 'profit_passed'")
+    elif cleaned_verdict == "profit_reject":
+        clauses.append(
+            "c.candidate_status IN ('profit_rejected', 'profit_blocked', 'profit_quantity_pending')"
+        )
+    elif cleaned_verdict == "ai_pass":
+        clauses.append("c.candidate_status IN ('ai_passed', 'ai_mock_passed')")
+    elif cleaned_verdict == "ai_reject":
+        clauses.append(
+            """c.candidate_status IN (
+              'ai_rejected',
+              'ai_review',
+              'ai_mock_rejected',
+              'ai_mock_review'
+            )"""
+        )
     elif cleaned_verdict == "reject":
         clauses.append("c.candidate_status = 'profit_rejected'")
     elif cleaned_verdict == "pending":
@@ -1263,7 +1423,16 @@ def _clean_item_filter(value: str | None) -> str:
 
 def _clean_verdict_filter(value: str | None) -> str:
     cleaned = str(value or "").strip().lower()
-    return cleaned if cleaned in {"pass", "reject", "pending"} else "all"
+    valid = {
+        "pass",
+        "reject",
+        "pending",
+        "profit_pass",
+        "profit_reject",
+        "ai_pass",
+        "ai_reject",
+    }
+    return cleaned if cleaned in valid else "all"
 
 
 def _snapshot_item_from_row(
@@ -2066,6 +2235,11 @@ def _selection_channel(value: Any) -> str:
 def _worker_concurrency(value: int | None) -> int:
     configured = value or _int_env("RA_WORKER_PRODUCT_CONCURRENCY") or DEFAULT_WORKER_CONCURRENCY
     return max(1, min(configured, 8))
+
+
+def _ai_worker_concurrency(value: int | None) -> int:
+    configured = value or _int_env("RA_WORKER_AI_CONCURRENCY") or DEFAULT_AI_WORKER_CONCURRENCY
+    return max(1, min(configured, 4))
 
 
 def _int_env(name: str) -> int | None:
