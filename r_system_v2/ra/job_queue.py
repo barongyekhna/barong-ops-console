@@ -1483,6 +1483,7 @@ def _snapshot_item_from_row(
         "ai_selection": ai_selection,
     }
     item.update(_product_fields(row, product=product, query=query))
+    _apply_ai_market_fields(item, ai_selection=ai_selection)
     return _apply_supplier_profit_ranges(item)
 
 
@@ -1647,6 +1648,7 @@ def _pending_item_from_row(
         "ai_selection": ai_selection,
     }
     item.update(_product_fields(row, product={}, query=query))
+    _apply_ai_market_fields(item, ai_selection=ai_selection)
     _apply_pack_badge(item, suppliers=suppliers)
     return item
 
@@ -1692,6 +1694,7 @@ def _supplier_not_found_item_from_row(
         "ai_selection": ai_selection,
     }
     item.update(_product_fields(row, product=product, query=query))
+    _apply_ai_market_fields(item, ai_selection=ai_selection)
     return item
 
 
@@ -1955,7 +1958,7 @@ def _product_fields(
         or product.get("amazon_price_usd")
         or product.get("sell_price_usd")
     )
-    monthly_sales = _number(features.get("monthly_sales"))
+    monthly_sales = _number(features.get("monthly_sales_value") or features.get("monthly_sales"))
     monthly_sales_estimate = _number(features.get("monthly_sales_estimate"))
     amazon_pack_count = _number(features.get("amazon_pack_count"))
     amazon_pack_label = str(features.get("amazon_pack_label") or "").strip() or None
@@ -1975,11 +1978,16 @@ def _product_fields(
         "monthly_sales_estimate_min": _number(features.get("monthly_sales_estimate_min")),
         "monthly_sales_estimate_max": _number(features.get("monthly_sales_estimate_max")),
         "monthly_sales_confidence": features.get("monthly_sales_confidence"),
-        "monthly_sales_source": features.get("monthly_sales_source")
+        "monthly_sales_source": features.get("monthly_sales_value_source")
+        or features.get("monthly_sales_source")
         or features.get("monthly_sales_estimate_source"),
+        "monthly_sales_raw": _number(features.get("monthly_sales_raw") or features.get("monthly_sales")),
+        "monthly_sales_data_conflict": bool(features.get("monthly_sales_data_conflict")),
         "bsr": _number(row.get("bsr") or product.get("bsr")),
         "reviews": _number(row.get("reviews") or product.get("reviews")),
-        "seller_count": _number(row.get("seller_count") or product.get("seller_count")),
+        "seller_count": None,
+        "market_seller_count_est": None,
+        "market_brand_count_est": None,
         "fulfillment_method": row.get("fulfillment_method")
         or features.get("fulfillment_method"),
         "lithium_battery_warning": bool(lithium_value),
@@ -2012,6 +2020,32 @@ def _product_fields(
         ),
         **relevance.to_product_fields(),
     }
+
+
+def _apply_ai_market_fields(
+    item: dict[str, object],
+    *,
+    ai_selection: dict[str, object] | None,
+) -> None:
+    """Expose Rainforest market-level competition fields; never use ASIN offer count."""
+    if not ai_selection:
+        return
+    competition = _dict_value(ai_selection.get("competition"))
+    market_seller_count = _number(competition.get("market_seller_count_est"))
+    market_brand_count = _number(competition.get("market_brand_count_est"))
+    if market_seller_count is not None:
+        item["market_seller_count_est"] = market_seller_count
+        item["seller_count"] = market_seller_count
+    if market_brand_count is not None:
+        item["market_brand_count_est"] = market_brand_count
+    if "competition_data_valid" in competition:
+        item["competition_data_valid"] = bool(competition.get("competition_data_valid"))
+    if competition.get("competition_invalid_reason"):
+        item["competition_invalid_reason"] = competition.get("competition_invalid_reason")
+    if competition.get("keyword"):
+        item["competition_keyword"] = competition.get("keyword")
+    if competition.get("keyword_source"):
+        item["competition_keyword_source"] = competition.get("keyword_source")
 
 
 def _canonical_1688_url(value: Any) -> str | None:

@@ -32,6 +32,8 @@ DEFAULT_SUPPLIER_SOURCE_MODE = "auto_1688_api"
 DEFAULT_1688_OPEN_API_BASE_URL = "https://gw.open.1688.com/openapi/param2"
 DEFAULT_1688_IMAGE_SEARCH_NAMESPACE = "com.alibaba.linkplus"
 DEFAULT_1688_IMAGE_SEARCH_API_NAME = "alibaba.cross.similar.offer.search"
+DEFAULT_1688_KEYWORD_SEARCH_NAMESPACE = "com.alibaba.product"
+DEFAULT_1688_KEYWORD_SEARCH_API_NAME = "product.search.keywordQuery"
 DEFAULT_1688_PRODUCT_INFO_NAMESPACE = "com.alibaba.product"
 DEFAULT_1688_PRODUCT_INFO_API_NAME = "alibaba.cross.productInfo"
 DEFAULT_1688_FREIGHT_NAMESPACE = "com.alibaba.fenxiao.crossborder"
@@ -254,6 +256,24 @@ class Alibaba1688OfficialApiProvider:
             limit=limit,
         )
         offers = _normalize_image_search_offers(payload, limit=limit)
+        if _keyword_search_enabled():
+            try:
+                keyword_payload = self._call_keyword_search(
+                    product=product,
+                    keyword_profile=keyword_profile,
+                    limit=limit,
+                )
+                offers.extend(
+                    _normalize_image_search_offers(
+                        keyword_payload,
+                        limit=limit,
+                        source="alibaba1688_official_keyword_search",
+                        api_family="1688_keyword_search",
+                    )
+                )
+            except RASupplierApiError:
+                pass
+        offers = _dedupe_offers(offers, limit=max(limit, limit * 2))
         if not offers:
             return []
         return [
@@ -292,6 +312,45 @@ class Alibaba1688OfficialApiProvider:
             params=request_payload,
             error_label="1688 图搜",
             endpoint=endpoint,
+        )
+
+    def _call_keyword_search(
+        self,
+        *,
+        product: dict[str, Any],
+        keyword_profile: dict[str, Any],
+        limit: int,
+    ) -> dict[str, Any]:
+        api_name = os.getenv(
+            "RA_1688_KEYWORD_SEARCH_API_NAME",
+            DEFAULT_1688_KEYWORD_SEARCH_API_NAME,
+        ).strip()
+        namespace = os.getenv(
+            "RA_1688_KEYWORD_SEARCH_NAMESPACE",
+            DEFAULT_1688_KEYWORD_SEARCH_NAMESPACE,
+        ).strip()
+        keyword = _keyword_search_term(product=product, keyword_profile=keyword_profile)
+        if not api_name or not keyword:
+            raise RASupplierApiError("1688 关键词搜索 API 未配置或关键词为空。")
+        params = {
+            "param": {
+                "keywords": keyword,
+                "pageNum": 1,
+                "pageSize": max(10, min(limit * 4, 20)),
+                "priceStart": os.getenv("RA_1688_KEYWORD_PRICE_START", "0").strip(),
+                "priceEnd": os.getenv("RA_1688_KEYWORD_PRICE_END", "999999").strip(),
+                "quantityBegin": os.getenv("RA_1688_KEYWORD_QUANTITY_BEGIN", "1").strip(),
+            }
+        }
+        category_ids = os.getenv("RA_1688_KEYWORD_CATEGORY_IDS", "").strip()
+        if category_ids:
+            params["param"]["categoryIds"] = category_ids
+        return self._call_openapi(
+            namespace=namespace,
+            api_name=api_name,
+            params=params,
+            error_label="1688 关键词搜货",
+            allow_business_error=True,
         )
 
     def _call_product_info(self, offer_id: str) -> dict[str, Any] | None:
@@ -674,6 +733,8 @@ def _normalize_image_search_offers(
     payload: dict[str, Any],
     *,
     limit: int,
+    source: str = "alibaba1688_official_image_search",
+    api_family: str = "1688_image_search",
 ) -> list[SupplierApiOffer]:
     raw_items = _extract_offer_items(payload)
     output: list[SupplierApiOffer] = []
@@ -728,10 +789,10 @@ def _normalize_image_search_offers(
                 one_piece_hint=moq <= 1,
                 platform="1688",
                 platform_label="1688",
-                source="alibaba1688_official_image_search",
+                source=source,
                 payload={
                     "official_api": True,
-                    "api_family": "1688_image_search",
+                    "api_family": api_family,
                     "offer_id": offer_id,
                     "title": title,
                     "unit": item.get("unit"),
@@ -748,6 +809,49 @@ def _normalize_image_search_offers(
             )
         )
     return output
+
+
+def _dedupe_offers(offers: list[SupplierApiOffer], *, limit: int) -> list[SupplierApiOffer]:
+    output: list[SupplierApiOffer] = []
+    seen: set[str] = set()
+    for offer in offers:
+        payload = _dict_value(offer.payload)
+        key = (
+            _optional_string(payload.get("offer_id"))
+            or _offer_id_from_url(offer.supplier_url)
+            or offer.supplier_url
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append(offer)
+        if len(output) >= max(1, limit):
+            break
+    return output
+
+
+def _keyword_search_enabled() -> bool:
+    return os.getenv("RA_1688_KEYWORD_SEARCH_ENABLED", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
+
+
+def _keyword_search_term(*, product: dict[str, Any], keyword_profile: dict[str, Any]) -> str | None:
+    for value in (
+        keyword_profile.get("product_type_zh"),
+        *(_list_value(keyword_profile.get("core_keywords_zh"))[:3]),
+        product.get("title_zh"),
+    ):
+        text = _optional_string(value)
+        if text:
+            return text[:80]
+    title = _optional_string(product.get("title"))
+    if title:
+        return re.sub(r"[^A-Za-z0-9\u4e00-\u9fff ]+", " ", title).strip()[:80]
+    return None
 
 
 def _min_official_unit_price_cny() -> Decimal:

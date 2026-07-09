@@ -90,7 +90,8 @@ def ensure_competition_snapshot(
     keyword: str | None = None,
 ) -> dict[str, Any]:
     ensure_ra_competition_schema(db)
-    cleaned_keyword = _competition_keyword(context, keyword=keyword)
+    keyword_info = _competition_keyword(context, keyword=keyword)
+    cleaned_keyword = keyword_info["keyword"]
     mode = _rainforest_mode()
     cached = _load_cached_snapshot(
         db,
@@ -111,13 +112,16 @@ def ensure_competition_snapshot(
             org_id=org_id,
             asin=str(context.get("asin") or ""),
             keyword=cleaned_keyword,
+            keyword_source=keyword_info["source"],
             mode=mode,
+            context=context,
         )
     except Exception as exc:
         snapshot = _failure_snapshot(
             org_id=org_id,
             asin=str(context.get("asin") or ""),
             keyword=cleaned_keyword,
+            keyword_source=keyword_info["source"],
             mode=mode,
             error=str(exc),
         )
@@ -266,7 +270,9 @@ def _snapshot_from_rainforest(
     org_id: str,
     asin: str,
     keyword: str,
+    keyword_source: str,
     mode: str,
+    context: dict[str, Any],
 ) -> dict[str, Any]:
     rows = raw.get("search_results")
     if not isinstance(rows, list):
@@ -277,26 +283,52 @@ def _snapshot_from_rainforest(
         if isinstance(item, dict) and not bool(item.get("sponsored"))
     ]
     organic = [item for item in organic if item]
-    top3_reviews = [int(item.get("ratings_total") or 0) for item in organic[:3]]
+    expected_tokens = _expected_product_tokens(context=context, keyword=keyword)
+    organic = [
+        {
+            **item,
+            "relevance_score": _title_relevance_score(
+                title=str(item.get("title") or ""),
+                expected_tokens=expected_tokens,
+            ),
+        }
+        for item in organic
+    ]
+    relevant_organic = [
+        item
+        for item in organic
+        if int(item.get("relevance_score") or 0) >= _min_relevance_score(expected_tokens)
+    ]
+    organic_for_metrics = relevant_organic or organic
+    top3_reviews = [int(item.get("ratings_total") or 0) for item in organic_for_metrics[:3]]
     brand_counts: dict[str, int] = {}
-    for item in organic[:20]:
+    for item in organic_for_metrics[:20]:
         brand = _infer_brand(str(item.get("title") or ""))
         brand_counts[brand] = brand_counts.get(brand, 0) + 1
     dominant_brand = None
     single_brand_share = None
-    if brand_counts and organic:
+    if brand_counts and organic_for_metrics:
         dominant_brand, dominant_count = sorted(
             brand_counts.items(),
             key=lambda value: value[1],
             reverse=True,
         )[0]
-        single_brand_share = round(dominant_count / max(1, len(organic[:20])), 4)
+        single_brand_share = round(dominant_count / max(1, len(organic_for_metrics[:20])), 4)
         if dominant_brand == "generic":
             dominant_brand = None
     threshold = _new_review_threshold()
-    new_count = sum(1 for item in organic[:20] if int(item.get("ratings_total") or 0) < threshold)
-    new_ratio = round(new_count / max(1, len(organic[:20])), 4) if organic else None
+    new_count = sum(
+        1 for item in organic_for_metrics[:20] if int(item.get("ratings_total") or 0) < threshold
+    )
+    new_ratio = round(new_count / max(1, len(organic_for_metrics[:20])), 4) if organic_for_metrics else None
     request_info = raw.get("request_info") if isinstance(raw.get("request_info"), dict) else {}
+    valid = _competition_result_valid(
+        expected_tokens=expected_tokens,
+        organic=organic,
+        relevant_organic=relevant_organic,
+    )
+    invalid_reason = None if valid else "Rainforest 返回结果与产品核心关键词弱相关，竞品数据不可直接用于淘汰。"
+    non_generic_brands = {brand for brand in brand_counts if brand and brand != "generic"}
     return {
         "id": str(uuid4()),
         "org_id": org_id,
@@ -307,16 +339,28 @@ def _snapshot_from_rainforest(
         "single_brand_share": single_brand_share,
         "dominant_brand": dominant_brand,
         "new_entrant_ratio_est": new_ratio,
-        "page_one_sample": organic[:10],
+        "page_one_sample": organic_for_metrics[:10],
         "mode": mode,
         "credits_used": _int_or_none(request_info.get("credits_used")),
-        "source": "rainforest_search",
+        "source": "rainforest_search" if valid else "rainforest_search_invalid",
         "payload": {
             "request_info": request_info,
             "total_results": raw.get("total_results"),
             "organic_count": len(organic),
+            "relevant_organic_count": len(relevant_organic),
+            "valid": valid,
+            "invalid_reason": invalid_reason,
+            "keyword_source": keyword_source,
+            "expected_tokens": expected_tokens,
+            "market_seller_count_est": len(organic_for_metrics[:20]),
+            "market_brand_count_est": len(non_generic_brands),
             "new_review_threshold": threshold,
         },
+        "competition_data_valid": valid,
+        "competition_invalid_reason": invalid_reason,
+        "market_seller_count_est": len(organic_for_metrics[:20]),
+        "market_brand_count_est": len(non_generic_brands),
+        "keyword_source": keyword_source,
         "fetched_at": datetime.now(UTC),
     }
 
@@ -326,6 +370,7 @@ def _failure_snapshot(
     org_id: str,
     asin: str,
     keyword: str,
+    keyword_source: str,
     mode: str,
     error: str,
 ) -> dict[str, Any]:
@@ -343,7 +388,16 @@ def _failure_snapshot(
         "mode": mode,
         "credits_used": 0,
         "source": "rainforest_error",
-        "payload": {"error": error[:500]},
+        "payload": {
+            "error": error[:500],
+            "valid": False,
+            "keyword_source": keyword_source,
+        },
+        "competition_data_valid": False,
+        "competition_invalid_reason": error[:500],
+        "market_seller_count_est": None,
+        "market_brand_count_est": None,
+        "keyword_source": keyword_source,
         "fetched_at": datetime.now(UTC),
     }
 
@@ -365,38 +419,179 @@ def _snapshot_from_row(row: dict[str, Any]) -> dict[str, Any]:
         "credits_used": row.get("credits_used"),
         "source": row.get("source"),
         "payload": payload,
+        "competition_data_valid": bool(payload.get("valid", row.get("source") == "rainforest_search")),
+        "competition_invalid_reason": payload.get("invalid_reason") or payload.get("error"),
+        "market_seller_count_est": _int_or_none(payload.get("market_seller_count_est")),
+        "market_brand_count_est": _int_or_none(payload.get("market_brand_count_est")),
+        "keyword_source": payload.get("keyword_source"),
         "fetched_at": _iso(row.get("fetched_at")),
     }
 
 
-def _competition_keyword(context: dict[str, Any], *, keyword: str | None) -> str:
-    if keyword and str(keyword).strip():
-        return str(keyword).strip()[:120]
+def _competition_keyword(context: dict[str, Any], *, keyword: str | None) -> dict[str, str]:
+    explicit = _clean_competition_keyword(keyword)
+    if explicit:
+        return {"keyword": explicit, "source": "explicit"}
     product = context.get("product") if isinstance(context.get("product"), dict) else {}
     supplier = context.get("supplier") if isinstance(context.get("supplier"), dict) else {}
+    title_keyword = _keyword_from_product_title(product)
+    if title_keyword:
+        return {"keyword": title_keyword, "source": "product_title_non_brand"}
     for value in (
         supplier.get("product_keyword"),
         supplier.get("base_keyword"),
-        product.get("source_query"),
         product.get("title_zh"),
-        product.get("title"),
-        context.get("asin"),
+        product.get("source_query"),
+        product.get("category"),
     ):
-        cleaned = re.sub(r"\s+", " ", str(value or "")).strip()
+        cleaned = _clean_competition_keyword(value)
         if cleaned:
-            return cleaned[:120]
-    return "generic product"
+            return {"keyword": cleaned, "source": "fallback"}
+    return {"keyword": "generic product", "source": "fallback_generic"}
 
 
 def _organic_sample(item: dict[str, Any]) -> dict[str, Any]:
+    title = item.get("title")
     return {
         "position": _int_or_none(item.get("position")),
         "asin": item.get("asin"),
-        "title": item.get("title"),
+        "title": title,
+        "brand": _infer_brand(str(title or "")),
         "rating": _float_or_none(item.get("rating")),
         "ratings_total": _int_or_none(item.get("ratings_total")) or 0,
         "sponsored": bool(item.get("sponsored")),
     }
+
+
+def _clean_competition_keyword(value: Any) -> str | None:
+    cleaned = re.sub(r"\s+", " ", str(value or "")).strip()
+    if not cleaned:
+        return None
+    lowered = cleaned.lower()
+    if lowered.startswith("keepa_category:"):
+        return None
+    if re.fullmatch(r"B0[A-Z0-9]{8}|[A-Z0-9]{10}", cleaned.upper()):
+        return None
+    if re.search(r"[\u4e00-\u9fff]", cleaned):
+        return cleaned[:80]
+    cleaned = re.sub(r"[^A-Za-z0-9 +&/-]+", " ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -_/")
+    return cleaned[:120] or None
+
+
+def _keyword_from_product_title(product: dict[str, Any]) -> str | None:
+    title = str(product.get("title") or "").strip()
+    if not title:
+        return None
+    brand = str(product.get("brand") or "").strip()
+    text = re.sub(r"[®™©]", " ", title)
+    if brand:
+        text = re.sub(re.escape(brand), " ", text, flags=re.IGNORECASE)
+    text = re.split(r"[,|:;\\(\\[]", text, maxsplit=1)[0]
+    tokens = [
+        token.lower()
+        for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9-]{1,}", text)
+    ]
+    brand_tokens = {
+        token.lower()
+        for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9-]{1,}", brand)
+    }
+    generic = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "new",
+        "best",
+        "seller",
+        "amazon",
+        "series",
+        "eco",
+        "pink",
+        "black",
+        "white",
+        "blue",
+        "red",
+        "green",
+        "small",
+        "medium",
+        "large",
+        "xl",
+        "xxl",
+        "pack",
+        "set",
+    }
+    kept: list[str] = []
+    for token in tokens:
+        normalized = token.strip("-").lower()
+        if not normalized or normalized in generic or normalized in brand_tokens:
+            continue
+        if normalized.isdigit():
+            continue
+        kept.append(normalized)
+        if len(kept) >= 6:
+            break
+    if len(kept) < 2:
+        return None
+    return " ".join(kept)[:120]
+
+
+def _expected_product_tokens(context: dict[str, Any], *, keyword: str) -> list[str]:
+    product = context.get("product") if isinstance(context.get("product"), dict) else {}
+    text = " ".join(
+        str(value or "")
+        for value in (
+            keyword,
+            product.get("title"),
+            product.get("category"),
+        )
+    )
+    generic = {
+        "the",
+        "and",
+        "for",
+        "with",
+        "from",
+        "new",
+        "amazon",
+        "pack",
+        "set",
+        "small",
+        "medium",
+        "large",
+    }
+    tokens = []
+    for token in re.findall(r"[A-Za-z0-9][A-Za-z0-9-]{2,}", text.lower()):
+        if token in generic or token.isdigit():
+            continue
+        if token not in tokens:
+            tokens.append(token)
+    return tokens[:10]
+
+
+def _title_relevance_score(*, title: str, expected_tokens: list[str]) -> int:
+    lowered = title.lower()
+    return sum(1 for token in expected_tokens if token and token in lowered)
+
+
+def _min_relevance_score(expected_tokens: list[str]) -> int:
+    if len(expected_tokens) <= 2:
+        return 1
+    return 2
+
+
+def _competition_result_valid(
+    *,
+    expected_tokens: list[str],
+    organic: list[dict[str, Any]],
+    relevant_organic: list[dict[str, Any]],
+) -> bool:
+    if not organic:
+        return False
+    if not expected_tokens:
+        return True
+    return len(relevant_organic) >= max(2, min(5, len(organic[:10]) // 2))
 
 
 def _infer_brand(title: str) -> str:

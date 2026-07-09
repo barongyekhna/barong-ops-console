@@ -1220,14 +1220,6 @@ def _score_demand_quality(product: NormalizedProduct) -> int:
 
 def _score_competition_attackability(product: NormalizedProduct) -> int:
     score = 60
-    if product.seller_count > 10:
-        score -= 20
-    elif product.seller_count >= 6:
-        score -= 8
-    elif 2 <= product.seller_count <= 5:
-        score += 14
-    elif product.seller_count <= 1:
-        score -= 22
     if product.reviews > 500:
         score -= 30
     elif product.reviews > 300:
@@ -1276,25 +1268,39 @@ def _top_reason(product: NormalizedProduct, score: int) -> str:
     )
     if score >= 82:
         return (
-            f"通过：BSR {product.bsr}、月销量 {monthly_sales_label}、卖家 {product.seller_count}、"
-            f"评论 {product.reviews}，需求和竞争同时达标，{margin_label}。"
+            f"通过：BSR {product.bsr}、月销量 {monthly_sales_label}、"
+            f"评论 {product.reviews}，需求和评论壁垒达标，市场卖家数待 R-A 竞品层确认，{margin_label}。"
         )
     if score >= DEEPSEEK_PASS_SCORE:
         return (
-            f"暂通过：BSR {product.bsr}、月销量 {monthly_sales_label}、卖家 {product.seller_count}、"
-            f"评论 {product.reviews}，满足最低初筛线，但仍需人工复核，{margin_label}。"
+            f"暂通过：BSR {product.bsr}、月销量 {monthly_sales_label}、"
+            f"评论 {product.reviews}，满足最低初筛线，市场卖家数待 R-A 竞品层确认，{margin_label}。"
         )
     return (
-        f"低分待复核：BSR {product.bsr}、月销量 {monthly_sales_label}、卖家 {product.seller_count}、"
-        f"评论 {product.reviews} 的组合存在中小卖家切入风险，{margin_label}。"
+        f"低分待复核：BSR {product.bsr}、月销量 {monthly_sales_label}、"
+        f"评论 {product.reviews} 的组合存在中小卖家切入风险，市场卖家数待 R-A 竞品层确认，{margin_label}。"
     )
 
 
 def _monthly_sales_label(product: NormalizedProduct) -> str:
-    value = product.features.get("monthly_sales")
+    value = product.features.get("monthly_sales_value")
     parsed_value = _positive_int(value)
     if parsed_value is not None:
-        return str(parsed_value)
+        confidence = str(product.features.get("monthly_sales_confidence") or "").strip()
+        source = str(product.features.get("monthly_sales_source") or "").strip()
+        conflict = bool(product.features.get("monthly_sales_data_conflict"))
+        confidence_label = {
+            "high": "高",
+            "medium": "中",
+            "low": "低",
+        }.get(confidence, "低")
+        conflict_label = "，与 Keepa 原始月销冲突" if conflict else ""
+        source_label = f"，来源 {source}" if source else ""
+        return f"{parsed_value}（置信度{confidence_label}{source_label}{conflict_label}）"
+    raw_value = product.features.get("monthly_sales")
+    parsed_raw_value = _positive_int(raw_value)
+    if parsed_raw_value is not None:
+        return str(parsed_raw_value)
     estimate = _positive_int(product.features.get("monthly_sales_estimate"))
     minimum = _positive_int(product.features.get("monthly_sales_estimate_min"))
     maximum = _positive_int(product.features.get("monthly_sales_estimate_max"))
@@ -1312,9 +1318,12 @@ def _monthly_sales_label(product: NormalizedProduct) -> str:
 
 
 def _monthly_sales_for_scoring(product: NormalizedProduct) -> int:
-    return _positive_int(product.features.get("monthly_sales")) or _positive_int(
-        product.features.get("monthly_sales_estimate")
-    ) or 0
+    return (
+        _positive_int(product.features.get("monthly_sales_value"))
+        or _positive_int(product.features.get("monthly_sales_estimate"))
+        or _positive_int(product.features.get("monthly_sales"))
+        or 0
+    )
 
 
 def _positive_int(value: object) -> int | None:

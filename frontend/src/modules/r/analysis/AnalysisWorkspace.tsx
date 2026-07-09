@@ -526,8 +526,8 @@ function AutoResultRow({ item }: { item: RaAutoProfitItem }) {
         <span>{item.category || "未标注类目"}</span>
         <MonthlySalesBadge item={item} />
         <span>
-          BSR {formatKnownCount(item.bsr)} · 评 {formatKnownCount(item.reviews)} · 卖家{" "}
-          {formatKnownCount(item.seller_count)}
+          BSR {formatKnownCount(item.bsr)} · 评 {formatKnownCount(item.reviews)} · 市场卖家{" "}
+          {formatKnownCount(item.market_seller_count_est ?? item.seller_count)}
         </span>
       </td>
       <td>

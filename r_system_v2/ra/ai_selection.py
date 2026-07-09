@@ -355,8 +355,18 @@ def _call_layer(
             "content": _json_dumps(request_payload),
         },
     ]
-    response = _chat_completion(provider, messages=messages)
-    output = _parse_model_json(response.get("content"))
+    try:
+        response = _chat_completion(provider, messages=messages)
+        output = _parse_model_json(response.get("content"))
+    except RAAISelectionError as exc:
+        return _error_layer_decision(
+            layer=layer,
+            context=context,
+            skill_bundle=skill_bundle,
+            provider=provider,
+            request_payload=request_payload,
+            error=str(exc),
+        )
     decision = _normalize_layer_output(
         output,
         layer=layer,
@@ -374,31 +384,70 @@ def _chat_completion(
     *,
     messages: list[dict[str, str]],
 ) -> dict[str, Any]:
+    last_error: str | None = None
+    for spec in _chat_request_specs(provider, messages=messages):
+        try:
+            return _execute_chat_request(provider, spec=spec)
+        except RAAISelectionError as exc:
+            last_error = str(exc)
+            if provider.role != "opus" or not _empty_content_error(last_error):
+                raise
+    raise RAAISelectionError(last_error or f"{provider.role} 返回内容为空。")
+
+
+def _chat_request_specs(
+    provider: ProviderConfig,
+    *,
+    messages: list[dict[str, str]],
+) -> list[dict[str, Any]]:
     payload = {
         "model": provider.model,
         "messages": messages,
         "temperature": _float_env("RA_AI_TEMPERATURE", 0.15),
         "response_format": {"type": "json_object"},
     }
-    endpoint = "/v1/chat/completions"
-    if provider.role == "opus":
-        system_text = "\n".join(
-            message["content"]
-            for message in messages
-            if message.get("role") == "system" and message.get("content")
-        )
-        payload = {
-            "model": provider.model,
-            "system": system_text,
-            "messages": [
-                message
-                for message in messages
-                if message.get("role") != "system"
-            ],
-            "temperature": _float_env("RA_AI_TEMPERATURE", 0.15),
-            "max_tokens": _bounded_int(os.getenv("RA_OPUS_MAX_TOKENS"), 1200, 256, 4096),
-        }
-        endpoint = "/v1/messages"
+    if provider.role != "opus":
+        return [{"endpoint": "/v1/chat/completions", "payload": payload, "label": "chat"}]
+    system_text = "\n".join(
+        message["content"]
+        for message in messages
+        if message.get("role") == "system" and message.get("content")
+    )
+    user_messages = [message for message in messages if message.get("role") != "system"]
+    max_tokens = _bounded_int(os.getenv("RA_OPUS_MAX_TOKENS"), 1600, 512, 2800)
+    return [
+        {
+            "endpoint": "/v1/messages",
+            "label": "messages",
+            "payload": {
+                "model": provider.model,
+                "system": system_text,
+                "messages": user_messages,
+                "temperature": _float_env("RA_AI_TEMPERATURE", 0.15),
+                "max_tokens": max_tokens,
+            },
+        },
+        {
+            "endpoint": "/v1/chat/completions",
+            "label": "chat_fallback",
+            "payload": {
+                "model": provider.model,
+                "messages": messages,
+                "temperature": _float_env("RA_AI_TEMPERATURE", 0.15),
+                "response_format": {"type": "json_object"},
+                "max_tokens": max_tokens,
+            },
+        },
+    ]
+
+
+def _execute_chat_request(
+    provider: ProviderConfig,
+    *,
+    spec: dict[str, Any],
+) -> dict[str, Any]:
+    payload = _dict_value(spec.get("payload"))
+    endpoint = str(spec.get("endpoint") or "/v1/chat/completions")
     body = _json_dumps(payload).encode("utf-8")
     request = Request(
         _provider_url(provider.base_url, endpoint),
@@ -429,12 +478,27 @@ def _chat_completion(
         raise RAAISelectionError(f"{provider.role} 返回结构异常。")
     content = _response_content(parsed)
     if not isinstance(content, str) or not content.strip():
-        raise RAAISelectionError(f"{provider.role} 返回内容为空。")
+        raise RAAISelectionError(
+            _empty_response_message(provider=provider, parsed=parsed, spec=spec)
+        )
+    if provider.role == "opus":
+        parsed_output = _try_parse_model_json(content)
+        if not _structured_model_output(parsed_output):
+            raise RAAISelectionError(
+                _invalid_json_response_message(
+                    provider=provider,
+                    content=content,
+                    parsed=parsed,
+                    spec=spec,
+                )
+            )
     usage = parsed.get("usage") if isinstance(parsed.get("usage"), dict) else {}
     return {
         "content": content,
         "raw": parsed,
         "usage": usage,
+        "request_endpoint": endpoint,
+        "request_label": spec.get("label"),
         "prompt_tokens": _int_value(usage.get("prompt_tokens") or usage.get("input_tokens")),
         "completion_tokens": _int_value(
             usage.get("completion_tokens") or usage.get("output_tokens")
@@ -450,6 +514,13 @@ def _layer_request_payload(
     channel: str,
     previous_layers: list[LayerDecision],
 ) -> dict[str, Any]:
+    if layer == "opus":
+        return _opus_layer_request_payload(
+            context=context,
+            skill_bundle=skill_bundle,
+            channel=channel,
+            previous_layers=previous_layers,
+        )
     return {
         "task": f"R-A {layer} product selection review",
         "channel": channel,
@@ -466,13 +537,170 @@ def _layer_request_payload(
         "gating_rule": _layer_gating_rule(layer),
         "skill": _skill_payload(skill_bundle),
         "skill_text": skill_bundle.prompt_text,
-        "product": _input_summary(context),
-        "raw_product": _dict_value(context.get("product")),
+        "product": _model_input_summary(context),
+        "raw_product": _model_product_payload(context),
         "profit": _dict_value(context.get("profit")),
         "supplier": _dict_value(context.get("supplier")),
         "competition": _competition_payload(context),
         "previous_layers": [layer_decision.payload.get("model_output") for layer_decision in previous_layers],
     }
+
+
+def _opus_layer_request_payload(
+    *,
+    context: dict[str, Any],
+    skill_bundle: RASkillBundle,
+    channel: str,
+    previous_layers: list[LayerDecision],
+) -> dict[str, Any]:
+    return {
+        "task": "R-A opus final product selection review",
+        "channel": channel,
+        "layer": "opus",
+        "required_json_schema": {
+            "score": "0-100 integer",
+            "verdict": "pass|reject|review",
+            "reason": "short Chinese reason, <= 120 Chinese chars",
+            "advantages": ["Chinese bullet, <= 40 chars each"],
+            "risks": ["Chinese bullet, <= 40 chars each"],
+            "barrier_type": "none|profit|demand|competition|supplier|listing|compliance|manual_review",
+            "channel_guess": "amazon|dtc_seo|dtc_ad|both",
+        },
+        "gating_rule": _layer_gating_rule("opus"),
+        "instruction": (
+            "只做最终结论，不展开推理过程。必须只输出一个 JSON 对象。"
+            "如果 Rainforest/销量/供应商数据无效或冲突，优先 review，不要强行通过或淘汰。"
+        ),
+        "skill": _skill_payload(skill_bundle),
+        "skill_rules_summary": _opus_skill_summary(skill_bundle),
+        "product": _model_input_summary(context),
+        "profit": _compact_value(_dict_value(context.get("profit")), max_chars=2200),
+        "supplier": _compact_value(_dict_value(context.get("supplier")), max_chars=2200),
+        "competition": _competition_payload(context),
+        "previous_layers": [
+            _compact_value(layer_decision.payload.get("model_output"), max_chars=1400)
+            for layer_decision in previous_layers
+        ],
+    }
+
+
+def _model_input_summary(context: dict[str, Any]) -> dict[str, Any]:
+    product = _dict_value(context.get("product"))
+    features = _dict_value(product.get("features"))
+    summary = _input_summary(context)
+    summary.pop("seller_count", None)
+    summary["monthly_sales"] = (
+        _int_value(features.get("monthly_sales_value"))
+        or _int_value(features.get("monthly_sales_estimate"))
+        or _int_value(features.get("monthly_sales"))
+    )
+    summary["monthly_sales_source"] = (
+        features.get("monthly_sales_value_source")
+        or features.get("monthly_sales_source")
+        or features.get("monthly_sales_estimate_source")
+    )
+    summary["monthly_sales_confidence"] = features.get("monthly_sales_confidence")
+    summary["monthly_sales_data_conflict"] = bool(features.get("monthly_sales_data_conflict"))
+    summary["raw_keepa_monthly_sales"] = _int_value(
+        features.get("monthly_sales_raw") or features.get("monthly_sales")
+    )
+    competition = _competition_payload(context)
+    summary["market_seller_count_est"] = competition.get("market_seller_count_est")
+    summary["market_brand_count_est"] = competition.get("market_brand_count_est")
+    summary["competition_data_valid"] = competition.get("competition_data_valid")
+    return summary
+
+
+def _model_product_payload(context: dict[str, Any]) -> dict[str, Any]:
+    product = dict(_dict_value(context.get("product")))
+    product.pop("seller_count", None)
+    features = dict(_dict_value(product.get("features")))
+    product["features"] = {
+        key: value
+        for key, value in features.items()
+        if key
+        in {
+            "monthly_sales",
+            "monthly_sales_raw",
+            "monthly_sales_value",
+            "monthly_sales_value_source",
+            "monthly_sales_source",
+            "monthly_sales_confidence",
+            "monthly_sales_data_conflict",
+            "monthly_sales_estimate",
+            "monthly_sales_estimate_min",
+            "monthly_sales_estimate_max",
+            "monthly_sales_estimate_source",
+            "fba_fee_usd",
+            "amazon_pack_count",
+            "amazon_pack_label",
+            "subcategory_name",
+            "subcategory_rank",
+            "parent_category_name",
+            "parent_category_rank",
+        }
+    }
+    return product
+
+
+def _opus_skill_summary(skill_bundle: RASkillBundle) -> str:
+    text_value = re.sub(r"\s+", " ", skill_bundle.prompt_text or "").strip()
+    if len(text_value) <= 3600:
+        return text_value
+    return text_value[:1800] + " ... " + text_value[-1400:]
+
+
+def _compact_value(value: Any, *, max_chars: int) -> Any:
+    if isinstance(value, dict):
+        compact: dict[str, Any] = {}
+        for key, item in value.items():
+            if len(_json_dumps(compact)) >= max_chars:
+                break
+            if key in {"raw", "raw_response", "request", "raw_excerpt"}:
+                continue
+            compact[str(key)] = _compact_value(item, max_chars=max(200, max_chars // 3))
+        return compact
+    if isinstance(value, list):
+        return [_compact_value(item, max_chars=max(200, max_chars // 4)) for item in value[:6]]
+    if isinstance(value, str):
+        return value[:max_chars]
+    return value
+
+
+def _error_layer_decision(
+    *,
+    layer: str,
+    context: dict[str, Any],
+    skill_bundle: RASkillBundle,
+    provider: ProviderConfig,
+    request_payload: dict[str, Any],
+    error: str,
+) -> LayerDecision:
+    reason = f"{layer} 调用失败，已转人工复核：{error[:180]}"
+    output = {
+        "score": 50,
+        "verdict": "review",
+        "reason": reason,
+        "advantages": [],
+        "risks": [error[:240]],
+        "barrier_type": "manual_review",
+        "channel_guess": "amazon",
+    }
+    return _normalize_layer_output(
+        output,
+        layer=layer,
+        context=context,
+        skill_bundle=skill_bundle,
+        provider=provider,
+        request_payload=request_payload,
+        raw_response={
+            "content": _json_dumps(output),
+            "usage": {},
+            "prompt_tokens": None,
+            "completion_tokens": None,
+            "error": error,
+        },
+    )
 
 
 def _system_prompt(*, layer: str, skill_bundle: RASkillBundle) -> str:
@@ -538,7 +766,7 @@ def _normalize_layer_output(
         "risks": risks,
         "barrier_type": output.get("barrier_type"),
         "channel_guess": output.get("channel_guess"),
-        "input_summary": _input_summary(context),
+        "input_summary": _model_input_summary(context),
         "competition": _competition_payload(context),
         "provider": {
             "service": provider.service,
@@ -550,6 +778,8 @@ def _normalize_layer_output(
         "model_output": output,
         "raw_usage": raw_response.get("usage") or {},
     }
+    if raw_response.get("error"):
+        payload["provider_error"] = raw_response.get("error")
     return LayerDecision(
         layer=layer,
         model_role=provider.role,
@@ -738,7 +968,7 @@ def _insert_report(
         "skill": final.get("skill"),
         "final": final,
         "layers": [layer.payload for layer in layers],
-        "product": _input_summary(context),
+        "product": _model_input_summary(context),
         "competition": _competition_payload(context),
     }
     db.execute(
@@ -969,20 +1199,47 @@ def _provider_config(
 
 
 def _parse_model_json(content: Any) -> dict[str, Any]:
+    parsed = _try_parse_model_json(content)
+    if parsed is not None:
+        return parsed
     text_value = str(content or "").strip()
     if not text_value:
         return {}
+    return {"reason": text_value[:500], "score": 50, "verdict": "review"}
+
+
+def _try_parse_model_json(content: Any) -> dict[str, Any] | None:
+    text_value = str(content or "").strip()
+    if not text_value:
+        return None
     try:
         parsed = json.loads(text_value)
     except json.JSONDecodeError:
         match = re.search(r"\{.*\}", text_value, flags=re.DOTALL)
         if not match:
-            return {"reason": text_value[:500], "score": 50, "verdict": "review"}
+            return None
         try:
             parsed = json.loads(match.group(0))
         except json.JSONDecodeError:
-            return {"reason": text_value[:500], "score": 50, "verdict": "review"}
-    return parsed if isinstance(parsed, dict) else {}
+            return None
+    return parsed if isinstance(parsed, dict) else None
+
+
+def _structured_model_output(output: dict[str, Any] | None) -> bool:
+    if not isinstance(output, dict):
+        return False
+    score = output.get("score")
+    verdict = str(output.get("verdict") or "").strip().lower()
+    reason = str(output.get("reason") or "").strip()
+    if verdict not in {"pass", "reject", "review"}:
+        return False
+    if not reason or reason.startswith("{"):
+        return False
+    try:
+        int(score)
+    except (TypeError, ValueError):
+        return False
+    return True
 
 
 def _response_content(parsed: dict[str, Any]) -> str | None:
@@ -1015,6 +1272,58 @@ def _response_content(parsed: dict[str, Any]) -> str | None:
     return None
 
 
+def _empty_response_message(
+    *,
+    provider: ProviderConfig,
+    parsed: dict[str, Any],
+    spec: dict[str, Any],
+) -> str:
+    usage = parsed.get("usage") if isinstance(parsed.get("usage"), dict) else {}
+    output_tokens = _int_value(usage.get("output_tokens") or usage.get("completion_tokens"))
+    thinking_tokens = _int_value(
+        _dict_value(usage.get("output_tokens_details")).get("thinking_tokens")
+    )
+    stop_reason = parsed.get("stop_reason") or parsed.get("finish_reason")
+    label = str(spec.get("label") or "")
+    detail = (
+        f"{provider.role} 返回内容为空"
+        f"（endpoint={label or spec.get('endpoint')}, stop_reason={stop_reason}, "
+        f"output_tokens={output_tokens}, thinking_tokens={thinking_tokens}）。"
+    )
+    if thinking_tokens and output_tokens and thinking_tokens >= output_tokens:
+        detail += "疑似 thinking 模型消耗完输出预算，未生成最终 JSON。"
+    return detail
+
+
+def _invalid_json_response_message(
+    *,
+    provider: ProviderConfig,
+    content: str,
+    parsed: dict[str, Any],
+    spec: dict[str, Any],
+) -> str:
+    usage = parsed.get("usage") if isinstance(parsed.get("usage"), dict) else {}
+    output_tokens = _int_value(usage.get("output_tokens") or usage.get("completion_tokens"))
+    stop_reason = parsed.get("stop_reason") or parsed.get("finish_reason")
+    label = str(spec.get("label") or spec.get("endpoint") or "")
+    excerpt = re.sub(r"\s+", " ", content).strip()[:220]
+    return (
+        f"{provider.role} 返回 JSON 不完整或结构不合格"
+        f"（endpoint={label}, stop_reason={stop_reason}, output_tokens={output_tokens}）："
+        f"{excerpt}"
+    )
+
+
+def _empty_content_error(message: str | None) -> bool:
+    text_value = str(message or "")
+    return (
+        "返回内容为空" in text_value
+        or "未生成最终 JSON" in text_value
+        or "JSON 不完整" in text_value
+        or "结构不合格" in text_value
+    )
+
+
 def _json_dumps(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, default=str)
 
@@ -1031,6 +1340,11 @@ def _competition_payload(context: dict[str, Any]) -> dict[str, Any]:
         "dominant_brand": competition.get("dominant_brand"),
         "new_entrant_ratio_est": competition.get("new_entrant_ratio_est"),
         "page_one_sample": competition.get("page_one_sample") or [],
+        "market_seller_count_est": competition.get("market_seller_count_est"),
+        "market_brand_count_est": competition.get("market_brand_count_est"),
+        "competition_data_valid": competition.get("competition_data_valid"),
+        "competition_invalid_reason": competition.get("competition_invalid_reason"),
+        "keyword_source": competition.get("keyword_source"),
         "source": competition.get("source"),
         "cache_hit": bool(competition.get("cache_hit")),
         "credits_used": competition.get("credits_used"),

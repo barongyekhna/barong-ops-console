@@ -202,7 +202,6 @@ def _load_candidate_contexts(db: Session, *, org_id: str, run_id: str) -> list[d
             "price": data.get("price") or snapshot.get("price"),
             "bsr": data.get("bsr") or snapshot.get("bsr"),
             "reviews": data.get("reviews") or snapshot.get("reviews"),
-            "seller_count": data.get("seller_count") or snapshot.get("seller_count"),
             "rating": data.get("rating") or snapshot.get("rating"),
             "skill_score": data.get("skill_score") or snapshot.get("skill_score"),
             "fulfillment_method": data.get("fulfillment_method") or snapshot.get("fulfillment_method"),
@@ -351,7 +350,8 @@ def _deepseek_layer(
     risks: list[str] = []
 
     monthly_sales = _int_value(
-        features.get("monthly_sales")
+        features.get("monthly_sales_value")
+        or features.get("monthly_sales")
         or features.get("monthly_sales_estimate")
         or features.get("sales_estimate_30d")
     )
@@ -378,17 +378,6 @@ def _deepseek_layer(
     elif bsr > 0:
         score -= 5
         risks.append(f"BSR {bsr} 偏后，需求需要复核。")
-
-    seller_count = _int_value(product.get("seller_count"))
-    if 3 <= seller_count <= 12:
-        score += 8
-        advantages.append(f"卖家数 {seller_count}，竞争可攻。")
-    elif seller_count > 20:
-        score -= 8
-        risks.append(f"卖家数 {seller_count} 偏高，竞争拥挤。")
-    elif seller_count <= 1:
-        score -= 4
-        risks.append("卖家数过低，可能是需求不足或私模。")
 
     reviews = _int_value(product.get("reviews"))
     if 30 <= reviews <= 1200:
@@ -970,10 +959,10 @@ def _input_summary(context: dict[str, Any]) -> dict[str, Any]:
         "price": _number(product.get("price")),
         "bsr": _int_value(product.get("bsr")),
         "reviews": _int_value(product.get("reviews")),
-        "seller_count": _int_value(product.get("seller_count")),
         "rating": _number(product.get("rating")),
         "monthly_sales": _int_value(
-            features.get("monthly_sales")
+            features.get("monthly_sales_value")
+            or features.get("monthly_sales")
             or features.get("monthly_sales_estimate")
             or features.get("sales_estimate_30d")
         ),

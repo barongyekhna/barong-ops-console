@@ -289,6 +289,12 @@ export type RaAutoProfitItem = {
   bsr?: number | null;
   reviews?: number | null;
   seller_count?: number | null;
+  market_seller_count_est?: number | null;
+  market_brand_count_est?: number | null;
+  competition_data_valid?: boolean | null;
+  competition_invalid_reason?: string | null;
+  competition_keyword?: string | null;
+  competition_keyword_source?: string | null;
   lithium_battery_warning?: boolean | null;
   fba_fee_usd?: number | null;
   package_weight_g?: number | null;

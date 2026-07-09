@@ -198,9 +198,9 @@ function rejectReasonLabel(value: string | null, features: Record<string, unknow
     price_trend_declining: "价格趋势持续下行",
     review_wall_filter: "评论壁垒过高",
     review_wall_too_high: "评论壁垒过高",
-    seller_count_filter: "卖家数量过多",
-    competition_filter: "卖家数量过多",
-    too_many_sellers: "卖家数量过多",
+    seller_count_filter: "历史报价数规则",
+    competition_filter: "历史报价数规则",
+    too_many_sellers: "历史报价数规则",
     brand_dominance: "品牌垄断风险过高",
     deepseek_edible_product: "DeepSeek 剔除：食品/保健品/药品/可食用品",
     deepseek_liquid_powder_spray_product: "DeepSeek 剔除：液体/粉末/喷雾内容物",
@@ -545,7 +545,7 @@ function ProductsTable({
             <th>FBA费</th>
             <th>BSR</th>
             <th>评论</th>
-            <th>卖家</th>
+            <th>ASIN 报价数</th>
             <th>利润率</th>
             <th>分数</th>
             <th>状态</th>
@@ -592,7 +592,7 @@ function ProductsTable({
                   <BsrCell product={product} />
                 </td>
                 <td>{product.reviews.toLocaleString("zh-CN")}</td>
-                <td>{product.seller_count}</td>
+                <td>{product.seller_count ?? "未记录"}</td>
                 <td>
                   {product.margin === null ? "未计算" : percent(product.margin)}
                   {product.margin_confidence === "unknown" ? (

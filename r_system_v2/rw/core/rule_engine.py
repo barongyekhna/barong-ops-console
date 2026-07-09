@@ -13,7 +13,6 @@ class RuleConfig:
     price_min: float = 25.0
     price_max: float = 70.0
     min_net_margin: float = 0.15
-    max_seller_count: int = 15
     max_brand_share: float = 0.50
     max_top3_reviews: int = 500
     max_weight_lb: float = 2.0
@@ -48,7 +47,6 @@ class RuleEngine:
                 product.est_net_margin is None
                 or product.est_net_margin >= self.config.min_net_margin
             ),
-            "competition_filter": product.seller_count <= self.config.max_seller_count,
             "brand_dominance_filter": product.brand_share <= self.config.max_brand_share,
             "price_trend_filter": product.price_trend not in self.config.blocked_price_trends,
             "review_wall_filter": (
@@ -66,7 +64,6 @@ class RuleEngine:
         reason_map = {
             "price_band_filter": "price_out_of_band",
             "margin_check": "margin_too_low",
-            "competition_filter": "too_many_sellers",
             "brand_dominance_filter": "brand_dominance",
             "price_trend_filter": "price_trend_declining",
             "review_wall_filter": "review_wall_too_high",

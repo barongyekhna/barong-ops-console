@@ -618,6 +618,19 @@ def _discover_with_supplier_api_provider(
     db.commit()
 
     offers: list[dict[str, object]] = []
+    warnings: list[str] = []
+    searches: list[dict[str, object]] = [
+        {
+            "search_id": search_id,
+            "query": query,
+            "platform": "1688",
+            "platform_label": "1688",
+            "search_url": None,
+            "status": "complete",
+            "result_count": len(offers_from_api),
+            "provider": provider.provider_name,
+        }
+    ]
     for offer in offers_from_api:
         raw_excerpt = _supplier_api_offer_excerpt(offer)
         alignment = evaluate_supplier_alignment(
@@ -722,10 +735,32 @@ def _discover_with_supplier_api_provider(
             }
         )
 
-    priced_count = sum(1 for offer in offers if offer["unit_price_cny"] is not None)
-    profit_run: dict[str, object] | None = None
     min_profit_suppliers = _min_profit_supplier_count()
-    warnings: list[str] = []
+    priced_count = sum(1 for offer in offers if offer["unit_price_cny"] is not None)
+    if (
+        auto_calculate
+        and priced_count < min_profit_suppliers
+        and _supplier_keyword_fallback_enabled()
+        and provider.provider_name != "mock_1688_api"
+    ):
+        fallback = _append_1688_keyword_fallback_offers(
+            db,
+            org_id=org_id,
+            asin=asin,
+            run_id=run_id,
+            product=product,
+            candidate_id=candidate_id,
+            keyword_profile=keyword_profile,
+            existing_offers=offers,
+            exchange_rate_usd_cny=exchange_rate_usd_cny,
+            result_limit=result_limit,
+        )
+        searches.extend(fallback["searches"])
+        offers.extend(fallback["offers"])
+        warnings.extend(fallback["warnings"])
+        priced_count = sum(1 for offer in offers if offer["unit_price_cny"] is not None)
+
+    profit_run: dict[str, object] | None = None
     if auto_calculate and priced_count >= min_profit_suppliers:
         profit_run = run_profit_for_existing_offers(
             db,
@@ -746,28 +781,211 @@ def _discover_with_supplier_api_provider(
         "asin": asin,
         "candidate_id": candidate_id,
         "queries": [query],
-        "searches": [
-            {
-                "search_id": search_id,
-                "query": query,
-                "platform": "1688",
-                "platform_label": "1688",
-                "search_url": None,
-                "status": "complete",
-                "result_count": len(offers_from_api),
-                "provider": provider.provider_name,
-            }
-        ],
+        "searches": searches,
         "offers": offers,
         "profit_run": profit_run,
         "keyword_profile": keyword_profile,
         "counts": {
-            "searches": 1,
+            "searches": len(searches),
             "candidate_offers": len(offers),
             "priced_offers": priced_count,
         },
         "warnings": warnings,
     }
+
+
+def _append_1688_keyword_fallback_offers(
+    db: Session,
+    *,
+    org_id: str,
+    asin: str,
+    run_id: str | None,
+    product: dict[str, Any],
+    candidate_id: str,
+    keyword_profile: dict[str, Any],
+    existing_offers: list[dict[str, object]],
+    exchange_rate_usd_cny: Decimal | None,
+    result_limit: int,
+) -> dict[str, list[Any]]:
+    warnings: list[str] = []
+    searches: list[dict[str, object]] = []
+    offers: list[dict[str, object]] = []
+    try:
+        client = _serper_client(db, org_id=org_id)
+    except RASupplierDiscoveryError as exc:
+        return {
+            "searches": [],
+            "offers": [],
+            "warnings": [f"{asin}: 1688 关键词兜底未运行：{exc}"],
+        }
+    crawler = Playwright1688Crawler()
+    seen_links = {
+        str(offer.get("supplier_url") or offer.get("supplier_detail_url") or "")
+        for offer in existing_offers
+    }
+    for search_query in build_supplier_queries(product, keyword_profile=keyword_profile):
+        if len(offers) + len(existing_offers) >= result_limit * 2:
+            break
+        query = search_query.query
+        search_id = str(uuid4())
+        _discard_db_transaction(db)
+        try:
+            results = client.search(query, num=max(10, result_limit * 4))
+            status = "complete"
+        except RASupplierDiscoveryError as exc:
+            results = []
+            status = "failed"
+            warnings.append(f"{asin}: 1688 关键词兜底失败：{exc}")
+        _insert_supplier_search(
+            db,
+            search_id=search_id,
+            org_id=org_id,
+            candidate_id=candidate_id,
+            asin=asin,
+            run_id=run_id,
+            query=query,
+            provider="serper_1688_keyword_fallback",
+            status=status,
+            result_count=len(results),
+            payload={
+                "platform": "1688",
+                "platform_label": "1688",
+                "search_url": search_query.search_url,
+                "keyword_profile": keyword_profile,
+                "fallback_reason": "official_image_search_priced_offers_below_threshold",
+                "results": [result.__dict__ for result in results],
+                "searched_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        db.commit()
+        searches.append(
+            {
+                "search_id": search_id,
+                "query": query,
+                "platform": "1688",
+                "platform_label": "1688",
+                "search_url": search_query.search_url,
+                "status": status,
+                "result_count": len(results),
+                "provider": "serper_1688_keyword_fallback",
+            }
+        )
+        if status == "failed":
+            continue
+        for result in _ranked_supplier_results(results, platform="1688"):
+            if len(offers) + len(existing_offers) >= result_limit * 2:
+                break
+            normalized_link = _normalized_supplier_link(result.link, platform="1688")
+            if normalized_link is None or normalized_link in seen_links:
+                continue
+            seen_links.add(normalized_link)
+            crawled = crawler.crawl(normalized_link)
+            result_price = _result_price_cny(result)
+            result_shipping = _result_shipping_cny(result)
+            unit_price_cny, price_source, price_warning = _select_supplier_price(
+                crawled.unit_price_cny,
+                result_price,
+                product=product,
+                exchange_rate_usd_cny=exchange_rate_usd_cny,
+                platform="1688",
+            )
+            supplier_name = crawled.title or result.title or "1688关键词供应商"
+            alignment = evaluate_supplier_alignment(
+                db=db,
+                org_id=org_id,
+                product=product,
+                keyword_profile=keyword_profile,
+                supplier_title=supplier_name,
+                supplier_snippet=result.snippet,
+                raw_excerpt=crawled.raw_excerpt,
+                unit_price_cny=unit_price_cny,
+            )
+            alignment_status = str(alignment.get("match_status") or "review")
+            alignment_price = decimal_value(alignment.get("adjusted_unit_price_cny"))
+            if alignment_status == "match" and alignment_price is not None:
+                unit_price_cny = alignment_price
+            elif alignment_status != "match":
+                unit_price_cny = None
+            domestic_shipping_cny = crawled.domestic_shipping_cny if crawled.domestic_shipping_cny is not None else result_shipping
+            supplier_url = _supplier_detail_url(crawled.final_url, normalized_link, platform="1688")
+            if supplier_url is None:
+                continue
+            warning = (
+                None
+                if alignment_status == "match"
+                else str(alignment.get("match_reason") or "关键词兜底供应商匹配待确认。")
+            )
+            crawler_warning = warning or price_warning or (None if unit_price_cny is not None else crawled.warning)
+            match_score = min(_match_score(result, crawled), _int_value(alignment.get("match_score")) or 0)
+            offer_status = _offer_status(
+                unit_price_cny=unit_price_cny,
+                alignment_status=alignment_status,
+            )
+            offer_id = _insert_supplier_offer(
+                db,
+                org_id=org_id,
+                search_id=search_id,
+                candidate_id=candidate_id,
+                asin=asin,
+                supplier_name=supplier_name,
+                supplier_url=supplier_url,
+                unit_price_cny=unit_price_cny,
+                domestic_shipping_cny=domestic_shipping_cny,
+                moq=crawled.moq,
+                source="serper_1688_keyword_fallback",
+                match_score=match_score,
+                offer_status=offer_status,
+                payload_extra={
+                    "platform": "1688",
+                    "platform_label": "1688",
+                    "supplier_url_type": "detail",
+                    "supplier_detail_url": supplier_url,
+                    "supplier_search_url": search_query.search_url,
+                    "search_url": search_query.search_url,
+                    "choice_page_url": search_query.search_url,
+                    "result_url": result.link,
+                    "serper_title": result.title,
+                    "serper_snippet": result.snippet,
+                    "serper_position": result.position,
+                    "crawler_status": crawled.crawler_status,
+                    "crawler_warning": crawler_warning,
+                    "price_source": price_source or "keyword_fallback",
+                    "raw_crawled_price_cny": _decimal_number(crawled.unit_price_cny),
+                    "raw_serper_price_cny": _decimal_number(result_price),
+                    "raw_selected_price_cny": _decimal_number(alignment.get("raw_unit_price_cny")),
+                    "adjusted_unit_price_cny": _decimal_number(unit_price_cny),
+                    "raw_excerpt": crawled.raw_excerpt,
+                    "one_piece_hint": _one_piece_hint(result, crawled),
+                    "keyword_profile": keyword_profile,
+                    "supplier_alignment": alignment,
+                    "fallback_source": "official_image_search_to_1688_keyword",
+                },
+            )
+            db.commit()
+            offers.append(
+                {
+                    "offer_id": offer_id,
+                    "search_id": search_id,
+                    "supplier_name": supplier_name,
+                    "supplier_url": supplier_url,
+                    "supplier_platform": "1688",
+                    "supplier_platform_label": "1688",
+                    "supplier_url_type": "detail",
+                    "supplier_detail_url": supplier_url,
+                    "supplier_search_url": search_query.search_url,
+                    "unit_price_cny": _decimal_number(unit_price_cny),
+                    "domestic_shipping_cny": _decimal_number(domestic_shipping_cny),
+                    "moq": crawled.moq,
+                    "match_score": match_score,
+                    "one_piece_hint": _one_piece_hint(result, crawled),
+                    "offer_status": offer_status,
+                    "crawler_status": crawled.crawler_status,
+                    "warning": crawler_warning,
+                    "keyword_profile": keyword_profile,
+                    "supplier_alignment": alignment,
+                }
+            )
+    return {"searches": searches, "offers": offers, "warnings": warnings}
 
 
 def _supplier_api_provider(db: Session, *, org_id: str) -> SupplierApiProvider:
@@ -1385,6 +1603,15 @@ def _min_profit_supplier_count() -> int:
     except ValueError:
         return MIN_DISCOVERY_LIMIT
     return max(1, min(parsed, MAX_DISCOVERY_LIMIT))
+
+
+def _supplier_keyword_fallback_enabled() -> bool:
+    return os.getenv("RA_1688_KEYWORD_FALLBACK_ENABLED", "1").strip().lower() not in {
+        "0",
+        "false",
+        "no",
+        "off",
+    }
 
 
 def _crawler_timeout_ms() -> int:

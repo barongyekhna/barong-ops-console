@@ -79,7 +79,8 @@ def extract_product_features(source_query: str, keepa_data: KeepaProductData) ->
             "margin_source": margin_source,
             "margin_confidence": margin_confidence,
             "monthly_sales": keepa_data.monthly_sales,
-            "monthly_sales_source": "keepa_monthly_sold"
+            "monthly_sales_source": monthly_sales_estimate.value_source,
+            "monthly_sales_raw_source": "keepa_monthly_sold"
             if keepa_data.monthly_sales is not None
             else "unknown",
             "fba_fee_usd": keepa_data.fba_fee_usd,
