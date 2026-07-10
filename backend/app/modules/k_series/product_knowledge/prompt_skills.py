@@ -262,15 +262,33 @@ def image_art_direction_instruction() -> str:
         '  "main_prompt": "<ready-to-use English prompt for the hero/main image,'
         ' with the global STYLE BLOCK appended>",\n'
         '  "style_block": "<the reusable global STYLE BLOCK, English>",\n'
-        '  "images": [{"position": <int>, "role": "<主图/信息图/场景图/...>",'
+        '  "images": [{"position": <int>, "role": "<主图/白底副图/细节图/场景图/信息图/...>",'
+        ' "placement": "gallery" | "description",'
         ' "mission": "<CTR/看懂/想要/...>", "prompt": "<English prompt for this image>",'
-        ' "overlay_text": "<on-image text or empty>", "note": "<中文制作备注>"}],\n'
+        ' "overlay_text": "<on-image text or empty>",'
+        ' "title": "<image title for WordPress media, English>",'
+        ' "alt": "<alt text: descriptive, SEO + accessibility, English, weave the'
+        " product's real keywords in naturally, no stuffing>\","
+        ' "caption": "<short on-page caption, English>",'
+        ' "description": "<fuller image description for WordPress media, English>",'
+        ' "note": "<中文制作备注>"}],\n'
         '  "consistency": "<seed/reference/product-detail checks>",\n'
         '  "compliance_checklist": ["<...>"],\n'
         '  "missing_assets": ["<what the user still needs to provide>"]\n'
         "}\n"
         "image_count MUST equal len(images). Every prompt must be English and grounded in the "
-        "product facts + marketing copy; respect every 红线 in the skill."
+        "product facts + marketing copy; respect every 红线 in the skill.\n"
+        "COVERAGE (do NOT be stingy on main/gallery images): plan GENEROUS gallery coverage "
+        "with placement=gallery — a hero image + a clean white-background main + several "
+        "detail/feature close-ups + lifestyle/scene shots (aim for 6-8 gallery images total, "
+        "more for richer products). THEN add placement=description images (infographics / "
+        "spec visuals / usage / size-in-context) as the copy sections need. "
+        "gallery images go into the store's product image gallery; description images get "
+        "embedded inside the product description at their position.\n"
+        "SEO METADATA (mandatory, YOU write it — this is what goes on the live store): for "
+        "EVERY image fill title + alt + caption + description in the target-market language "
+        "(English for US). alt must describe the image accurately with the product's real "
+        "keywords woven in naturally; never keyword-stuff; never fabricate features."
     )
 
 
