@@ -154,6 +154,10 @@ services:
       DB_IDLE_IN_TRANSACTION_SESSION_TIMEOUT_MS: "8000"
       K_GENERATION_CONCURRENCY: "5"
       K_GENERATION_POLL_SECONDS: "3"
+      K_IMAGE_RENDER_CONCURRENCY: "3"
+      K_IMAGE_RENDER_POLL_SECONDS: "3"
+    volumes:
+      - console_k_media_data:/var/lib/barong/k-media
     command:
       - python
       - -m

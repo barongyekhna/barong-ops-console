@@ -264,6 +264,7 @@ def image_art_direction_instruction() -> str:
         '  "style_block": "<the reusable global STYLE BLOCK, English>",\n'
         '  "images": [{"position": <int>, "role": "<主图/白底副图/细节图/场景图/信息图/...>",'
         ' "placement": "gallery" | "description",'
+        ' "aspect_ratio": "<THIS image\'s ratio, machine-readable like 1:1 / 4:5 / 16:9>",'
         ' "mission": "<CTR/看懂/想要/...>", "prompt": "<English prompt for this image>",'
         ' "overlay_text": "<on-image text or empty>",'
         ' "title": "<image title for WordPress media, English>",'

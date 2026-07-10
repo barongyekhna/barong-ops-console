@@ -711,6 +711,35 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "GET";
   }
 
+  // 一次性作图：批量渲染 + 进度 + 失败重试
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "render-images"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "render-jobs"
+  ) {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "render-images" &&
+    path[4] === "retry"
+  ) {
+    return method === "POST";
+  }
+
   if (
     path.length === 4 &&
     path[1] === "products" &&

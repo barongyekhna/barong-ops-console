@@ -398,6 +398,81 @@ export async function getGenerationJobs(productId: string): Promise<GenerationJo
   return data.jobs ?? [];
 }
 
+export type RenderJob = {
+  job_id: string;
+  batch_id: string;
+  position: number;
+  placement: string;
+  role_label: string | null;
+  asset_role: string;
+  status: string;
+  error: string | null;
+  asset_id: string | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+};
+
+export type RenderJobsSummary = {
+  total: number;
+  pending: number;
+  running: number;
+  completed: number;
+  failed: number;
+};
+
+export type RenderJobsResult = {
+  batch_id: string | null;
+  jobs: RenderJob[];
+  summary: RenderJobsSummary;
+};
+
+export type RenderEnqueueResult = {
+  batch_id: string;
+  jobs: RenderJob[];
+};
+
+export async function renderProductImages(
+  productId: string,
+  positions?: number[],
+): Promise<RenderEnqueueResult> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/render-images`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(positions && positions.length ? { positions } : {}),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<RenderEnqueueResult>(response, path);
+}
+
+export async function getRenderJobs(
+  productId: string,
+  batchId?: string,
+): Promise<RenderJobsResult> {
+  const query = batchId ? `?batch_id=${encodeURIComponent(batchId)}` : "";
+  const path = `${K_PRODUCTS_PATH}/${productId}/render-jobs${query}`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  return readJson<RenderJobsResult>(response, path);
+}
+
+export async function retryRenderJobs(
+  productId: string,
+  batchId: string,
+): Promise<RenderJobsResult> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/render-images/retry`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ batch_id: batchId }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<RenderJobsResult>(response, path);
+}
+
 export async function getProductReadiness(
   productId: string,
 ): Promise<ProductReadinessState> {

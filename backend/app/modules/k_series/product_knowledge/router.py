@@ -134,6 +134,13 @@ from .workflow_engine import (
 )
 from ....services.module_execution_gate import ModuleExecutionGateError
 from .generation_jobs import enqueue_generation_jobs, jobs_status
+from .image_render_jobs import (
+    KImageRenderError,
+    download_reference_image,
+    enqueue_image_render_jobs,
+    render_jobs_status,
+    retry_failed_render_jobs,
+)
 from .r_to_k_transfer import transfer_from_rw
 from .prompt_skills import (
     SELLING_POINTS_SKILL_VERSION,
@@ -4125,6 +4132,183 @@ def product_knowledge_generate_image_brief_batch(
     user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
 ) -> GenerationEnqueueResponse:
     return _enqueue_generation(payload.product_ids, "image_brief", request, db, user)
+
+
+# --- 一次性作图 (P 图片体系阶段 2+3) -----------------------------------------
+
+
+class RenderImagesRequest(BaseModel):
+    positions: list[int] | None = None
+
+
+class RenderRetryRequest(BaseModel):
+    batch_id: UUID
+
+
+class RenderJobItem(BaseModel):
+    job_id: str
+    batch_id: str
+    position: int
+    placement: str
+    role_label: str | None = None
+    asset_role: str
+    status: str
+    error: str | None = None
+    asset_id: str | None = None
+    started_at: str | None = None
+    finished_at: str | None = None
+
+
+class RenderEnqueueResponse(BaseModel):
+    batch_id: str
+    jobs: list[RenderJobItem]
+
+
+class RenderJobsResponse(BaseModel):
+    batch_id: str | None
+    jobs: list[RenderJobItem]
+    summary: dict[str, int]
+
+
+def _raise_render_error(exc: KImageRenderError) -> None:
+    raise HTTPException(
+        status_code=exc.status_code,
+        detail={"code": exc.code, "message": exc.message},
+    )
+
+
+@router.post(
+    "/products/{product_id}/render-images",
+    response_model=RenderEnqueueResponse,
+)
+def product_knowledge_render_images(
+    product_id: UUID,
+    request: Request,
+    payload: RenderImagesRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> RenderEnqueueResponse:
+    """按作图指令一次性渲染全部（或指定 position 的）产品图。"""
+    scope_context = _scope_context(request)
+    try:
+        product = get_product(db, product_id=product_id, scope_context=scope_context)
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    try:
+        batch_id, jobs = enqueue_image_render_jobs(
+            db,
+            product=product,
+            user=user,
+            scope_context=scope_context,
+            positions=payload.positions if payload is not None else None,
+        )
+    except KImageRenderError as exc:
+        _raise_render_error(exc)
+    db.commit()
+    return RenderEnqueueResponse(
+        batch_id=str(batch_id),
+        jobs=[RenderJobItem(**job) for job in jobs],
+    )
+
+
+@router.get(
+    "/products/{product_id}/render-jobs",
+    response_model=RenderJobsResponse,
+)
+def product_knowledge_render_jobs(
+    product_id: UUID,
+    request: Request,
+    batch_id: UUID | None = Query(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> RenderJobsResponse:
+    del user
+    try:
+        get_product(db, product_id=product_id, scope_context=_scope_context(request))
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    result = render_jobs_status(db, product_id=product_id, batch_id=batch_id)
+    return RenderJobsResponse(
+        batch_id=result["batch_id"],
+        jobs=[RenderJobItem(**job) for job in result["jobs"]],
+        summary=result["summary"],
+    )
+
+
+@router.post(
+    "/products/{product_id}/render-images/retry",
+    response_model=RenderJobsResponse,
+)
+def product_knowledge_render_images_retry(
+    product_id: UUID,
+    payload: RenderRetryRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> RenderJobsResponse:
+    del user
+    try:
+        get_product(db, product_id=product_id, scope_context=_scope_context(request))
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    retried = retry_failed_render_jobs(
+        db,
+        product_id=product_id,
+        batch_id=payload.batch_id,
+    )
+    if retried == 0:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "NO_FAILED_JOBS",
+                "message": "这个批次没有失败的图可以重试。",
+            },
+        )
+    db.commit()
+    result = render_jobs_status(db, product_id=product_id, batch_id=payload.batch_id)
+    return RenderJobsResponse(
+        batch_id=result["batch_id"],
+        jobs=[RenderJobItem(**job) for job in result["jobs"]],
+        summary=result["summary"],
+    )
+
+
+@router.get("/products/{product_id}/reference-image")
+def product_knowledge_reference_image(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> Response:
+    """参考图代理：后端拉取外链原图（绕过浏览器跨域，SSRF 域名白名单）。"""
+    del user
+    try:
+        product = get_product(
+            db,
+            product_id=product_id,
+            scope_context=_scope_context(request),
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    if not product.reference_image_url:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="产品没有参考图外链。",
+        )
+    try:
+        _filename, contents, mime = download_reference_image(
+            product.reference_image_url
+        )
+    except KImageRenderError as exc:
+        _raise_render_error(exc)
+    except Exception as exc:  # noqa: BLE001 - upstream CDN failure
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="参考图下载失败，请稍后再试。",
+        ) from exc
+    response = Response(content=contents, media_type=mime)
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 class CategoryTreeItem(BaseModel):

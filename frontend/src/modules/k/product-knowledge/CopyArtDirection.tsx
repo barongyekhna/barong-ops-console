@@ -12,6 +12,7 @@ import {
   type GenerationJob,
 } from "./api";
 import styles from "./ProductKnowledge.module.css";
+import { RenderImagesPanel } from "./RenderImagesPanel";
 
 type CopyArtDirectionProps = {
   productId: string;
@@ -311,6 +312,8 @@ export function CopyArtDirection({ productId, channel }: CopyArtDirectionProps) 
           </p>
         )}
       </section>
+
+      <RenderImagesPanel hasBrief={Boolean(brief)} productId={productId} />
     </>
   );
 }
