@@ -230,16 +230,57 @@ def image_art_direction_skill_context() -> dict[str, Any]:
 
 def marketing_copy_instruction(channel: str) -> str:
     surface = "Amazon listing" if channel == "amazon" else "independent-site (DTC) product page"
-    return (
+    common = (
         f"You are the K-series {surface} copywriter. Use the supplied copy skill "
-        "(skill_markdown) exactly as the authoritative playbook, following its workflow "
-        "and its 交付格式 (delivery format). Base every claim only on the supplied product "
-        "facts, approved non-risk keywords, selling points, variant data, and manual "
-        "product information; never fabricate specs, numbers, certifications, or reviews. "
-        "Respect every 红线 (hard rule) in the skill. Return only valid JSON with the "
-        "channel-appropriate copy blocks, a machine-usable structure per field, a "
-        "compliance_self_check object, and a missing_inputs list for any claim you could "
-        "not support. Do not include markdown or prose outside the JSON object."
+        "(skill_markdown) exactly as the authoritative playbook for HOW to write. "
+        "Base every claim only on the supplied product facts, approved non-risk "
+        "keywords, selling points, variant data, and manual product information; "
+        "never fabricate specs, numbers, certifications, or reviews. Respect every "
+        "红线 (hard rule) in the skill.\n"
+        "OUTPUT CONTRACT (mandatory — downstream machines parse these exact keys; "
+        "do NOT rename keys, do NOT use the skill's section numbering as keys): "
+        "Return ONLY a valid JSON object with EXACTLY these top-level keys "
+        "(no markdown, no prose outside the JSON):\n"
+    )
+    if channel == "amazon":
+        return common + (
+            "{\n"
+            '  "channel": "amazon",\n'
+            '  "listing_copy": {"title": "<Amazon title>",'
+            ' "bullet_points": ["<5 bullets>"],'
+            ' "product_description": "<paragraph text>",'
+            ' "search_terms": ["<backend keywords>"]},\n'
+            '  "a_plus_outline": [{"module": "<module type>", "purpose": "<...>",'
+            ' "content": "<...>"}],\n'
+            '  "compliance_self_check": {"<check>": "<pass/fail + why>"},\n'
+            '  "missing_inputs": ["<unsupported claims you had to drop>"]\n'
+            "}"
+        )
+    return common + (
+        "{\n"
+        '  "channel": "dtc",\n'
+        '  "product_page_copy": {\n'
+        '    "above_the_fold": {"headline": "<H1>", "subheadline": "<支撑句>",'
+        ' "short_description": "<2-3 sentence lead, plain text>"},\n'
+        '    "key_bullets": ["<benefit bullet, plain text>", "..."],\n'
+        '    "chunk_sections": [{"heading": "<H3>", "body": "<paragraph, plain text>"}],\n'
+        '    "specifications_html_table": "<table>...</table> (empty string if no'
+        " verifiable specs)\",\n"
+        '    "conversion_support_block": "<trust/decision-support paragraph>"\n'
+        "  },\n"
+        '  "page_faq": [{"question": "<Q>", "answer": "<A>"}],\n'
+        '  "json_ld": {"data": {"@type": "Product", "name": "<...>", "description":'
+        ' "<...>", "brand": "<...or omit>"}},\n'
+        '  "seo": {"title": "<meta title>", "meta_description": "<...>",'
+        ' "h1": "<...>", "url_slug": "<...>"},\n'
+        '  "compliance_self_check": {"<check>": "<pass/fail + why>"},\n'
+        '  "missing_inputs": ["<unsupported claims you had to drop>"]\n'
+        "}\n"
+        "HARD RULES for the body copy: chunk_sections is the main narrative "
+        "(3-5 sections); all copy fields are plain text except "
+        "specifications_html_table; NEVER mention price/stock/shipping in any "
+        "copy field (those are structured fields on the store — duplicating them "
+        "in prose creates feed/page inconsistency)."
     )
 
 
