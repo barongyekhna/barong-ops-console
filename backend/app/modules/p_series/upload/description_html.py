@@ -175,6 +175,11 @@ def build_schema_jsonld(
     if isinstance(data, dict):
         prod = dict(data)
         prod.setdefault("@context", "https://schema.org")
+        # 死命令：独立站结构化数据的品牌永远只有 SITE_BRAND，无条件覆盖
+        # AI 写的任何 brand（第三方品牌进 Product schema = 商标+GMC 双重雷）。
+        from ...k_series.product_knowledge.brand_guard import SITE_BRAND
+
+        prod["brand"] = {"@type": "Brand", "name": SITE_BRAND}
         offers = dict(prod.get("offers") or {})
         offers["@type"] = "Offer"
         offers["priceCurrency"] = currency

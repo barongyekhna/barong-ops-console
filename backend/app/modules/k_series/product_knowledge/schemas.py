@@ -281,6 +281,8 @@ class ProductKnowledgeRead(BaseModel):
     marketing_copy_zh: str | None = None
     image_instruction_zh: str | None = None
     reference_image_url: str | None = None
+    detected_brand_terms: Any | None = None
+    brand_audit_json: Any | None = None
     canonical_language: str
     raw_input_text: str | None
     raw_input_language: str | None

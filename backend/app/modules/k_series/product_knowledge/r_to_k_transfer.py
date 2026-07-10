@@ -29,6 +29,35 @@ _RW_COLUMNS = (
 )
 
 
+def _ra_keywords_for_asin(db: Session, asin: str) -> dict[str, Any]:
+    """R-A 选品报告里的关键词块（Rainforest+Serper+Google Ads 汇总）。
+
+    有报告就用报告的词；没有（比如直接从 R-W 手动搬运）返回空 dict，
+    调用方回退到 source_query/title。
+    """
+    try:
+        row = db.execute(
+            text(
+                """
+                SELECT payload
+                FROM ra_reports
+                WHERE UPPER(asin) = :asin
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"asin": asin.strip().upper()},
+        ).mappings().first()
+    except Exception:
+        db.rollback()
+        return {}
+    if row is None:
+        return {}
+    payload = row["payload"] if isinstance(row["payload"], dict) else {}
+    keywords = payload.get("keywords")
+    return keywords if isinstance(keywords, dict) else {}
+
+
 def transfer_from_rw(
     db: Session,
     *,
@@ -72,6 +101,34 @@ def transfer_from_rw(
         if already is not None:
             skipped.append(asin)
             continue
+        ra_keywords = _ra_keywords_for_asin(db, asin)
+        primary_keyword = (
+            str(ra_keywords.get("primary") or "").strip()
+            or rw["source_query"]
+            or rw["title"]
+            or ""
+        )
+        secondary_keywords = [
+            str(item)
+            for item in (ra_keywords.get("secondary") or [])
+            if str(item or "").strip()
+        ][:20] or None
+        long_tail_keywords = [
+            str(item)
+            for item in (ra_keywords.get("long_tail") or [])
+            if str(item or "").strip()
+        ][:20] or None
+        # 品牌硬门源头清洗：第三方品牌不进 K 档案（brand_name 置空），
+        # 品牌词落 detected_brand_terms 黑名单，标题/关键词确定性剥品牌。
+        from .brand_guard import strip_brand_terms
+
+        brand_terms = [
+            term.strip()
+            for term in [str(rw["brand"] or "")]
+            if term and term.strip() and len(term.strip()) >= 2
+        ]
+        title_clean = strip_brand_terms(rw["title"] or "", brand_terms)
+        primary_keyword_clean = strip_brand_terms(primary_keyword, brand_terms)
         try:
             # savepoint：单产品失败只回滚它自己，不影响整批已成功的
             with db.begin_nested():
@@ -82,11 +139,12 @@ def transfer_from_rw(
                     business_context=scope_context.business_context,
                     scope_mode=scope_context.scope_mode,
                     organization_name=TARGET_ORGANIZATION_NAME,
-                    product_name_en=((rw["title"] or "")[:512] or None),
-                    primary_keyword=(
-                        (rw["source_query"] or rw["title"] or "")[:512] or None
-                    ),
-                    brand_name=rw["brand"],
+                    product_name_en=(title_clean[:512] or None),
+                    primary_keyword=(primary_keyword_clean[:512] or None),
+                    secondary_keywords_json=secondary_keywords,
+                    long_tail_keywords_json=long_tail_keywords,
+                    brand_name=None,
+                    detected_brand_terms=(brand_terms or None),
                     sku=asin,
                     parent_sku=asin,
                     target_market="US",
@@ -118,6 +176,7 @@ def transfer_from_rw(
                     "google_product_category": product.google_product_category,
                     "category_review_needed": product.category_review_needed,
                     "has_reference_image": bool(product.reference_image_url),
+                    "keywords_from_ra": bool(ra_keywords),
                 }
             )
         except Exception as exc:  # noqa: BLE001 - 单产品失败不阻断整批

@@ -3519,13 +3519,24 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             key_requirements={"marketing_copy_generation": "chatgpt"},
         )
         key = gate_context.key_for_step("marketing_copy_generation")
+        from .brand_guard import (
+            SITE_BRAND,
+            normalized_brand_terms,
+            sanitize_snapshot_for_generation,
+        )
+
         ai_input = {
             "module_id": MODULE_KEY,
             "task": "marketing_copy_generation",
             "channel": channel,
             "instruction": marketing_copy_instruction(channel),
             "copy_skill": skill,
-            "product": _product_snapshot(product),
+            # 品牌红线：快照先消毒（AI 看不到第三方品牌），黑名单显式下发
+            "product": sanitize_snapshot_for_generation(
+                _product_snapshot(product), product
+            ),
+            "site_brand": SITE_BRAND,
+            "forbidden_brand_terms": normalized_brand_terms(product),
         }
         # Release the read transaction before the long (~80s) AI call so the DB
         # does not drop the connection on idle-in-transaction timeout.
@@ -3586,14 +3597,24 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
             key_requirements={"image_brief_generation": "chatgpt"},
         )
         key = gate_context.key_for_step("image_brief_generation")
+        from .brand_guard import (
+            SITE_BRAND,
+            normalized_brand_terms,
+            sanitize_snapshot_for_generation,
+        )
+
         ai_input = {
             "module_id": MODULE_KEY,
             "task": "image_brief_generation",
             "channel": channel,
             "instruction": image_art_direction_instruction(),
             "art_direction_skill": skill,
-            "product": _product_snapshot(product),
+            "product": sanitize_snapshot_for_generation(
+                _product_snapshot(product), product
+            ),
             "marketing_copy": product.marketing_copy_json,
+            "site_brand": SITE_BRAND,
+            "forbidden_brand_terms": normalized_brand_terms(product),
         }
         # Release the read transaction before the long (~80s) AI call so the DB
         # does not drop the connection on idle-in-transaction timeout.

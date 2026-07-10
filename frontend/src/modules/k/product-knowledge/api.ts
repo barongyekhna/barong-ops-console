@@ -473,6 +473,13 @@ export async function retryRenderJobs(
   return readJson<RenderJobsResult>(response, path);
 }
 
+export function runBrandAudit(productId: string): Promise<GenerationEnqueueResult> {
+  return enqueueGeneration(
+    productId,
+    "brand-audit" as "generate-copy" | "generate-image-brief",
+  );
+}
+
 export type DispatchUploadResult = {
   job_id: string;
   status: string;

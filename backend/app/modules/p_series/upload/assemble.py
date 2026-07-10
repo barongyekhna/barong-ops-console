@@ -28,6 +28,10 @@ from ..contract.upload_package import (
     UploadPackage,
     Variant,
 )
+from ...k_series.product_knowledge.brand_guard import (
+    SITE_BRAND,
+    audit_gate_blockers,
+)
 from ...k_series.product_knowledge.category_resolver import category_is_bound
 from .description_html import (
     build_description_html,
@@ -51,6 +55,8 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
         blockers.append("未绑定类目")
     if getattr(product, "regular_price", None) is None:
         blockers.append("价格缺失")
+    # 品牌硬门（fail-closed）：审查必须存在、通过、且内容未变
+    blockers.extend(audit_gate_blockers(db, product))
     return blockers
 
 
@@ -273,7 +279,8 @@ def assemble_upload_package(
         product=Product(
             sku=product.sku,
             title=(product.product_name_en or product.product_key),
-            brand=product.brand_name,
+            # 死命令：上架包/GMC feed 的品牌永远是站点自有品牌
+            brand=SITE_BRAND,
             product_type=product.product_type,
             gtin=getattr(product, "gtin", None),
             mpn=getattr(product, "mpn", None),

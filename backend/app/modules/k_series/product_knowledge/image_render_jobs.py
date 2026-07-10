@@ -328,6 +328,7 @@ def enqueue_image_render_jobs(
     user: User | None,
     scope_context: KScopeContext,
     positions: Sequence[int] | None = None,
+    brand_removal_hints: dict[int, str] | None = None,
 ) -> tuple[UUID, list[dict[str, Any]]]:
     instruction = product.image_instruction_json
     images = _instruction_images(product)
@@ -379,6 +380,10 @@ def enqueue_image_render_jobs(
     main_position = min(gallery_positions) if gallery_positions else None
     channel = (product.channel or "dtc").strip().lower()
 
+    # 品牌红线：每张图都带移除指令；已知品牌词/审查检出位置追加强化提示
+    from .brand_guard import BRAND_REMOVAL_PROMPT_BLOCK, normalized_brand_terms
+
+    brand_terms = normalized_brand_terms(product)
     batch_id = uuid4()
     created: list[dict[str, Any]] = []
     for position, spec in sorted(specs, key=lambda item: item[0]):
@@ -390,6 +395,18 @@ def enqueue_image_render_jobs(
                 "IMAGE_PROMPT_MISSING",
                 f"第 {position} 张图缺 prompt，请重新生成作图指令。",
                 status_code=422,
+            )
+        prompt += BRAND_REMOVAL_PROMPT_BLOCK
+        if brand_terms:
+            prompt += (
+                " Known brand marks that may appear on the reference product "
+                f"and MUST be removed: {', '.join(brand_terms)}."
+            )
+        hint = (brand_removal_hints or {}).get(position)
+        if hint:
+            prompt += (
+                f" A previous render of this image FAILED brand review: {hint}"
+                " — make absolutely sure that mark is gone this time."
             )
         placement = _spec_placement(spec)
         if placement == PLACEMENT_DESCRIPTION:
@@ -877,7 +894,8 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
             text(
                 f"""
                 SELECT id, product_id, position, placement, asset_role, status,
-                       asset_id, finalized, requested_by_username
+                       asset_id, finalized, requested_by_username,
+                       workspace_key, business_context, scope_mode
                 FROM {_TABLE}
                 WHERE batch_id = :batch_id
                 ORDER BY position ASC
@@ -962,6 +980,34 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
             )
         except Exception:  # noqa: BLE001 - notification must not sink the batch
             _LOGGER.exception("render notification failed for %s", batch_id)
+
+        # 品牌硬门闭环：成品图有更新 -> 自动入队一次品牌审查（k_generation_jobs）。
+        if completed and product.marketing_copy_json:
+            try:
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO k_generation_jobs
+                            (id, product_id, job_type, status, batch_id,
+                             requested_by_username, workspace_key,
+                             business_context, scope_mode)
+                        VALUES
+                            (:id, :product_id, 'brand_audit', 'pending', :batch_id,
+                             :username, :workspace_key, :business_context, :scope_mode)
+                        """
+                    ),
+                    {
+                        "id": uuid4(),
+                        "product_id": product.id,
+                        "batch_id": uuid4(),
+                        "username": rows[0]["requested_by_username"],
+                        "workspace_key": rows[0]["workspace_key"],
+                        "business_context": rows[0]["business_context"],
+                        "scope_mode": rows[0]["scope_mode"],
+                    },
+                )
+            except Exception:  # noqa: BLE001
+                _LOGGER.exception("brand audit enqueue failed for %s", batch_id)
         db.commit()
 
 

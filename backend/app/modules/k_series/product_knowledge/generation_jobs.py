@@ -25,7 +25,7 @@ from ....models.user import User
 from .scope_shim import KScopeContext
 from .workflow_engine import KWorkflowOrchestratorV2
 
-JOB_TYPES = ("marketing_copy", "image_brief")
+JOB_TYPES = ("marketing_copy", "image_brief", "brand_audit")
 _TABLE = "k_generation_jobs"
 
 
@@ -198,6 +198,11 @@ def _process_generation_job(job: dict[str, Any]) -> None:
                 business_context=job["business_context"],
                 scope_mode=job["scope_mode"],
             )
+            if job["job_type"] == "brand_audit":
+                skill_version = _run_brand_audit_job(db, job=job, user=user, scope=scope)
+                db.commit()
+                _set_job_status(job_id, "completed", skill_version=skill_version)
+                return
             orchestrator = KWorkflowOrchestratorV2(db)
             if job["job_type"] == "marketing_copy":
                 product = orchestrator.generate_marketing_copy(
@@ -213,6 +218,104 @@ def _process_generation_job(job: dict[str, Any]) -> None:
         _set_job_status(job_id, "completed", skill_version=skill_version)
     except Exception as exc:  # noqa: BLE001 - isolate one job's failure
         _set_job_status(job_id, "failed", error=str(exc)[:1000])
+
+
+def _run_brand_audit_job(
+    db: Session,
+    *,
+    job: dict[str, Any],
+    user: User | None,
+    scope: KScopeContext,
+) -> str:
+    """品牌审查 + 自动闭环：检出图像违规（且无文本违规、轮数未耗尽）时自动
+    重渲染违规图（带检出位置强化提示），渲染批次收尾会再次入队审查。"""
+    from ....modules.notifications.service import create_notification
+    from .brand_guard import run_brand_audit
+    from .image_render_jobs import enqueue_image_render_jobs
+    from .models import KProductKnowledgeProduct
+
+    product = db.get(KProductKnowledgeProduct, job["product_id"])
+    if product is None:
+        raise RuntimeError("product not found for brand audit")
+    prev = product.brand_audit_json if isinstance(product.brand_audit_json, dict) else {}
+    attempt = int(prev.get("attempt") or 0)
+    audit = run_brand_audit(db, product=product, user=user, attempt=attempt)
+
+    image_violations = audit.get("image_violations") or []
+    text_violations = audit.get("text_violations") or []
+    rerender_started = False
+    if (
+        not audit["clean"]
+        and image_violations
+        and not text_violations
+        and not audit.get("errors")
+        and attempt < 2
+    ):
+        hints = {
+            int(violation["position"]): str(violation.get("finding") or "")
+            for violation in image_violations
+            if violation.get("position") is not None
+        }
+        try:
+            enqueue_image_render_jobs(
+                db,
+                product=product,
+                user=user,
+                scope_context=scope,
+                positions=sorted(hints.keys()),
+                brand_removal_hints=hints,
+            )
+            audit["attempt"] = attempt + 1
+            product.brand_audit_json = dict(audit)
+            db.add(product)
+            rerender_started = True
+        except Exception:  # noqa: BLE001 - 渲染在跑等场景；审查结果照常落库
+            pass
+
+    if audit["clean"]:
+        title = f"品牌审查通过：{product.sku or product.product_key}"
+        level = "success"
+        body = None
+    elif rerender_started:
+        title = f"品牌审查检出图像品牌标识，已自动重渲染 {len(image_violations)} 张图"
+        level = "warning"
+        body = "; ".join(
+            f"第{violation.get('position')}张: {str(violation.get('finding'))[:80]}"
+            for violation in image_violations
+        )
+    else:
+        title = f"品牌审查未通过：{product.sku or product.product_key}"
+        level = "error"
+        body = "; ".join(
+            [
+                f"{violation.get('term')}({violation.get('surface')})"
+                for violation in text_violations[:6]
+            ]
+            + [
+                f"第{violation.get('position')}张图有品牌标识"
+                for violation in image_violations[:6]
+            ]
+            + ([f"{len(audit['errors'])} 步审查失败(fail-closed)"] if audit.get("errors") else [])
+        )
+    try:
+        create_notification(
+            db,
+            event_type="k.brand_audit.finished",
+            title=title,
+            body=body,
+            level=level,
+            source="k.brand_guard",
+            product_id=product.id,
+            payload={
+                "clean": audit["clean"],
+                "text_violations": len(text_violations),
+                "image_violations": len(image_violations),
+                "attempt": audit.get("attempt"),
+            },
+        )
+    except Exception:  # noqa: BLE001
+        pass
+    return "brand-guard-v1"
 
 
 class KGenerationJobWorker:

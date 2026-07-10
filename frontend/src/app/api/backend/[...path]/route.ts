@@ -707,7 +707,7 @@ function isAllowedKPath(method: string, path: string[]) {
     path.length === 4 &&
     path[1] === "products" &&
     isUuidPathSegment(path[2]) &&
-    ["generate-copy", "generate-image-brief"].includes(path[3])
+    ["generate-copy", "generate-image-brief", "brand-audit"].includes(path[3])
   ) {
     return method === "POST";
   }

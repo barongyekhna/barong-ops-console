@@ -4109,6 +4109,20 @@ def product_knowledge_generate_image_brief(
 
 
 @router.post(
+    "/products/{product_id}/brand-audit",
+    response_model=GenerationEnqueueResponse,
+)
+def product_knowledge_brand_audit(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> GenerationEnqueueResponse:
+    """品牌硬门审查：黑名单+AI 全文字面 + 每张成品图视觉审（k-worker 异步）。"""
+    return _enqueue_generation([product_id], "brand_audit", request, db, user)
+
+
+@router.post(
     "/products/generate-copy/batch",
     response_model=GenerationEnqueueResponse,
 )

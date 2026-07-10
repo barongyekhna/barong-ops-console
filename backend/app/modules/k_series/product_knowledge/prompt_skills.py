@@ -237,6 +237,13 @@ def marketing_copy_instruction(channel: str) -> str:
         "keywords, selling points, variant data, and manual product information; "
         "never fabricate specs, numbers, certifications, or reviews. Respect every "
         "红线 (hard rule) in the skill.\n"
+        "BRAND RULE (absolute, overrides everything): the ONLY brand that may "
+        "ever appear in ANY output field is the site's own brand given in "
+        "`site_brand`. NEVER mention any third-party brand, manufacturer, or "
+        "trademark — including anything in `forbidden_brand_terms` and any "
+        "brand-looking token you infer from the product data. Write all copy "
+        "brand-neutrally (e.g. 'this foldable yoga mat', never '<Brand> yoga "
+        "mat'). In json_ld, brand is ALWAYS `site_brand`.\n"
         "OUTPUT CONTRACT (mandatory — downstream machines parse these exact keys; "
         "do NOT rename keys, do NOT use the skill's section numbering as keys): "
         "Return ONLY a valid JSON object with EXACTLY these top-level keys "
@@ -270,7 +277,8 @@ def marketing_copy_instruction(channel: str) -> str:
         "  },\n"
         '  "page_faq": [{"question": "<Q>", "answer": "<A>"}],\n'
         '  "json_ld": {"data": {"@type": "Product", "name": "<...>", "description":'
-        ' "<...>", "brand": "<...or omit>"}},\n'
+        ' "<...>", "brand": {"@type": "Brand", "name": "<site_brand, NEVER any'
+        ' other brand>"}}},\n'
         '  "seo": {"title": "<meta title>", "meta_description": "<...>",'
         ' "h1": "<...>", "url_slug": "<...>"},\n'
         '  "compliance_self_check": {"<check>": "<pass/fail + why>"},\n'
@@ -330,7 +338,13 @@ def image_art_direction_instruction() -> str:
         "SEO METADATA (mandatory, YOU write it — this is what goes on the live store): for "
         "EVERY image fill title + alt + caption + description in the target-market language "
         "(English for US). alt must describe the image accurately with the product's real "
-        "keywords woven in naturally; never keyword-stuff; never fabricate features."
+        "keywords woven in naturally; never keyword-stuff; never fabricate features.\n"
+        "BRAND RULE (absolute): NEVER put any third-party brand name, manufacturer, or "
+        "trademark into ANY field (prompt / overlay_text / title / alt / caption / "
+        "description) — including anything in `forbidden_brand_terms`. Refer to the product "
+        "generically. Every image prompt MUST instruct the renderer to remove any brand "
+        "logo or brand text visible on the reference product (replace with clean unbranded "
+        "surface, keeping shape/color/structure). overlay_text must never contain a brand."
     )
 
 

@@ -294,6 +294,9 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     )
     marketing_copy_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
     image_instruction_zh: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 品牌硬门：第三方品牌词黑名单（内部审查用，永不进上架包）+ 审查快照
+    detected_brand_terms: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    brand_audit_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
     review_status: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
