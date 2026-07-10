@@ -1,13 +1,22 @@
 import json
+import logging
 
 import httpx
 
+from backend.app.modules.key_health.worker_main import _configure_logging
 from backend.app.modules.key_health.probes import (
     ProbeTarget,
     adapter_for_target,
     probe_target,
     safe_probe_target,
 )
+
+
+def test_worker_suppresses_request_urls_from_http_client_logs() -> None:
+    _configure_logging()
+
+    assert logging.getLogger("httpx").getEffectiveLevel() == logging.WARNING
+    assert logging.getLogger("httpcore").getEffectiveLevel() == logging.WARNING
 
 
 def _target(

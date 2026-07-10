@@ -15,6 +15,17 @@ logger = logging.getLogger(__name__)
 stop_event = Event()
 
 
+def _configure_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s %(message)s",
+    )
+    # httpx logs the complete request URL at INFO, including provider API keys
+    # passed as query parameters by APIs such as Keepa and Rainforest.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
+
+
 def _request_stop(signum: int, frame: object) -> None:
     del signum, frame
     stop_event.set()
@@ -48,10 +59,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run hourly API key health checks")
     parser.add_argument("--once", action="store_true")
     args = parser.parse_args()
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    _configure_logging()
     signal.signal(signal.SIGTERM, _request_stop)
     signal.signal(signal.SIGINT, _request_stop)
 
