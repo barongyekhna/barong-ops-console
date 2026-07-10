@@ -580,6 +580,22 @@ function isAllowedApiKeyOrchestrationPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedPPath(method: string, path: string[]) {
+  if (path[0] !== "p") {
+    return false;
+  }
+  // GET /p/products/{id}/upload-package  (取数)
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "upload-package"
+  ) {
+    return method === "GET";
+  }
+  return false;
+}
+
 function isAllowedNotificationsPath(method: string, path: string[]) {
   if (path[0] !== "notifications") {
     return false;
@@ -1027,7 +1043,8 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedIPath(method, path) ||
     isAllowedRPath(method, path) ||
     isAllowedRwPath(method, path) ||
-    isAllowedNotificationsPath(method, path)
+    isAllowedNotificationsPath(method, path) ||
+    isAllowedPPath(method, path)
   ) {
     return withApiLayer("app", requestedPath);
   }

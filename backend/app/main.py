@@ -49,6 +49,9 @@ from .modules.i_series.image_system.router import (
 from .modules.notifications.router import (
     router as notifications_router,
 )
+from .modules.p_series.router import (
+    router as p_upload_router,
+)
 from .api.routes.live_gate import router as live_gate_router
 from .api.routes.memory import router as memory_router
 from .api.routes.messages import router as messages_router
@@ -944,6 +947,8 @@ app.include_router(k_product_knowledge_router)
 app.include_router(i_image_system_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(notifications_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(notifications_router)
+app.include_router(p_upload_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(p_upload_router)
 app.include_router(rw_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(ra_router, prefix=APPLICATION_API_PREFIX)
 
