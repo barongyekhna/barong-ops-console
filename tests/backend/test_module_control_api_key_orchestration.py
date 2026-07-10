@@ -489,17 +489,17 @@ def test_keepa_key_type_binds_to_r_warehouse_ingestion(
     assert binding_item["key_type"] == "keepa"
     assert binding_item["provider"] == "keepa"
 
-    blocked_scope = owner_client.post(
+    invalid_rw_alias = owner_client.post(
         "/api/control-plane/api-key-orchestration/organizations/"
         f"{target_org_id}/bindings",
         json={
-            "module_id": "core.dashboard",
+            "module_id": "r.warehouse",
             "key_id": created_item["key_id"],
-            "key_alias": "keepa",
+            "key_alias": "wrong-alias",
         },
     )
-    assert blocked_scope.status_code == 400
-    assert blocked_scope.json()["detail"] == "api_key_scope_mismatch"
+    assert invalid_rw_alias.status_code == 400
+    assert invalid_rw_alias.json()["detail"] == "keepa_key_alias_required"
 
     with SessionLocal() as db:
         context = resolve_keepa_context_for_asin_ingestion(
@@ -528,6 +528,43 @@ def test_keepa_key_type_binds_to_r_warehouse_ingestion(
     assert rw_payload["keepa_key_bound"] is True
     assert rw_payload["ingestion_service_ready"] is True
     assert rw_payload["adapter"] == "KeepaAdapter"
+
+
+def test_key_type_scope_does_not_restrict_multi_module_binding(
+    owner_client: TestClient,
+) -> None:
+    created = owner_client.post(
+        "/api/control-plane/api-key-orchestration/organizations/"
+        f"{DEFAULT_ORG_ID}/keys",
+        json={
+            "name": "multi-module Keepa",
+            "url": "https://api.keepa.com",
+            "key_value": "multi-module-keepa-secret",
+            "key_type": "keepa",
+        },
+    )
+    assert created.status_code == 201, created.text
+    key_id = created.json()["item"]["key_id"]
+
+    for module_id in ("r.warehouse", "core.dashboard"):
+        response = owner_client.post(
+            "/api/control-plane/api-key-orchestration/organizations/"
+            f"{DEFAULT_ORG_ID}/bindings",
+            json={
+                "module_id": module_id,
+                "key_id": key_id,
+                "key_alias": "keepa",
+            },
+        )
+        assert response.status_code == 201, response.text
+
+    bindings = owner_client.get("/api/control-plane/api-key-orchestration/bindings")
+    assert bindings.status_code == 200, bindings.text
+    assert {
+        item["module_id"]
+        for item in bindings.json()["items"]
+        if item["key_id"] == key_id
+    } == {"r.warehouse", "core.dashboard"}
 
 
 def test_openai_key_type_binds_to_i_image_system(

@@ -28,6 +28,10 @@ const C_SYSTEM_MODULE_ORDER = [
     module_key: "admin.key_management",
   },
   {
+    label: "密钥检测",
+    module_key: "admin.key_health",
+  },
+  {
     label: "权限管理",
     module_key: "admin.permissions",
   },

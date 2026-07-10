@@ -89,12 +89,23 @@ test("backend proxy maps C14 C15 and execution paths to control-plane only", () 
       "/api/control-plane/live-gate/production-readiness",
     ],
     [["live-gate", "policies"], "/api/control-plane/live-gate/policies"],
+    [["key-health", "summary"], "/api/control-plane/key-health/summary"],
+    [["key-health", "runs"], "/api/control-plane/key-health/runs"],
   ];
 
   for (const [path, expectedBackendPath] of controlPlanePaths) {
     assert.equal(isAllowedBackendProxyPath("GET", path), true);
     assert.equal(getBackendApiPath("GET", path), expectedBackendPath);
   }
+});
+
+test("backend proxy exposes only the key health read and trigger endpoints", () => {
+  assert.equal(
+    getBackendApiPath("POST", ["key-health", "run"]),
+    "/api/control-plane/key-health/run",
+  );
+  assert.equal(getBackendApiPath("DELETE", ["key-health", "run"]), null);
+  assert.equal(getBackendApiPath("GET", ["key-health", "unknown"]), null);
 });
 
 test("backend proxy denies direct control-plane namespace and unsafe callbacks", () => {

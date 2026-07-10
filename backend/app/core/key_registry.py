@@ -253,9 +253,3 @@ def infer_key_type_from_record(
         if any(marker in haystack for marker in markers):
             return key_type
     return "custom"
-
-
-def key_type_allows_module(key_type: str | None, module_id: str) -> bool:
-    definition = key_type_definition(key_type)
-    module_ids = definition.get("module_ids") or []
-    return not module_ids or module_id in module_ids

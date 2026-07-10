@@ -17,6 +17,7 @@ class NotificationRead(BaseModel):
 
     id: int
     org_id: str | None = None
+    recipient_user_id: str | None = None
     source: str
     event_type: str
     level: str

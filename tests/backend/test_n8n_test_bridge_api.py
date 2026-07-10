@@ -22,6 +22,7 @@ from backend.app.models.registry import (
     WorkflowRegistry,
 )
 from backend.app.models.review import ReviewItem
+from backend.app.services.api_key_usage_tracker import flush_api_key_usage_now
 
 pytestmark = pytest.mark.integration
 
@@ -139,6 +140,8 @@ def test_unconfigured_webhook_returns_mock_only_result_without_external_request(
     assert payload["memory_event"]["event_type"] == "n8n_test_mock_completed"
 
     with SessionLocal() as db:
+        flush_api_key_usage_now(db)
+        db.commit()
         job_count = db.scalar(
             select(func.count()).select_from(AutomationJob).where(
                 AutomationJob.module_id == "n8n_test_bridge"

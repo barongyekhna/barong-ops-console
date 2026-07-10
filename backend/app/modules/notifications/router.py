@@ -38,9 +38,13 @@ def list_notifications_endpoint(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> NotificationListResponse:
-    del user
     rows, total, unread = service.list_notifications(
-        db, status=status, level=level, limit=limit, offset=offset
+        db,
+        status=status,
+        level=level,
+        limit=limit,
+        offset=offset,
+        user_id=str(user.id),
     )
     return NotificationListResponse(
         items=[NotificationRead.model_validate(row) for row in rows],
@@ -56,8 +60,9 @@ def unread_count_endpoint(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> UnreadCountResponse:
-    del user
-    return UnreadCountResponse(unread=service.unread_count(db))
+    return UnreadCountResponse(
+        unread=service.unread_count(db, user_id=str(user.id))
+    )
 
 
 @router.post("/{notification_id}/read", response_model=MarkReadResponse)
@@ -66,8 +71,7 @@ def mark_read_endpoint(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MarkReadResponse:
-    del user
-    updated = service.mark_read(db, notification_id)
+    updated = service.mark_read(db, notification_id, user_id=str(user.id))
     db.commit()
     return MarkReadResponse(updated=updated)
 
@@ -77,8 +81,7 @@ def mark_all_read_endpoint(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> MarkReadResponse:
-    del user
-    updated = service.mark_all_read(db)
+    updated = service.mark_all_read(db, user_id=str(user.id))
     db.commit()
     return MarkReadResponse(updated=updated)
 

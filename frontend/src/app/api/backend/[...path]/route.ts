@@ -580,6 +580,16 @@ function isAllowedApiKeyOrchestrationPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedKeyHealthPath(method: string, path: string[]) {
+  if (path[0] !== "key-health" || path.length !== 2) {
+    return false;
+  }
+  if (path[1] === "summary" || path[1] === "runs") {
+    return method === "GET";
+  }
+  return path[1] === "run" && method === "POST";
+}
+
 function isAllowedPPath(method: string, path: string[]) {
   if (path[0] !== "p") {
     return false;
@@ -1103,6 +1113,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     (method === "GET" && ALLOWED_MODULE_REGISTRY_PATHS.has(requestedPath)) ||
     isAllowedModuleControlPath(method, path) ||
     isAllowedApiKeyOrchestrationPath(method, path) ||
+    isAllowedKeyHealthPath(method, path) ||
     (method === "GET" &&
       ALLOWED_MODULE_ADAPTER_REGISTRY_PATHS.has(requestedPath)) ||
     (method === "GET" &&

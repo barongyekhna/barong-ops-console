@@ -49,6 +49,7 @@ from .modules.i_series.image_system.router import (
 from .modules.notifications.router import (
     router as notifications_router,
 )
+from .modules.key_health.router import router as key_health_router
 from .modules.p_series.router import (
     router as p_upload_router,
 )
@@ -962,6 +963,7 @@ app.include_router(module_control_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_workflow_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(execution_providers_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(api_key_orchestration_router, prefix=CONTROL_PLANE_API_PREFIX)
+app.include_router(key_health_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(execution_prompts_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(external_dependencies_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(ai_execution_bindings_router, prefix=CONTROL_PLANE_API_PREFIX)

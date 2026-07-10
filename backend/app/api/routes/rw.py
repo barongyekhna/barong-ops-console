@@ -285,15 +285,16 @@ def rw_status(
             db,
             org_id=target_org.org_id,
         )
+        settings = load_runtime_settings(db)
+        runtime = runtime_overview(db, event_limit=10)
+        deepseek_batch = _deepseek_batch_status(db)
     keepa_bound = ingestion_status["keepa_key_bound"] is True
-    settings = load_runtime_settings(db)
     category_tree = apply_selected_categories(
         load_category_tree(),
         settings.selected_categories,
     )
     selected_categories = selected_category_ids(category_tree)
     runnable_categories = runnable_selected_category_ids(category_tree)
-    runtime = runtime_overview(db, event_limit=10)
     return {
         "module": "R-W",
         "active": True,
@@ -342,7 +343,7 @@ def rw_status(
             "Keepa API -> ingestion service -> product DB",
         ),
         "skill": load_deepseek_skill_metadata(),
-        "deepseek_batch": _deepseek_batch_status(db),
+        "deepseek_batch": deepseek_batch,
         "runtime": runtime,
         "category_tree": {
             "selected_count": len(selected_categories),

@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from ..core.config import get_settings
 from ..core.key_registry import (
     infer_key_type_from_record,
-    key_type_allows_module,
     key_type_definition,
     list_key_type_definitions,
     metadata_for_key_type,
@@ -685,8 +684,6 @@ def create_api_key_binding(
     if key.org_id != org_id:
         raise ApiKeyIsolationError("api_key_org_mismatch")
     key_type = _key_type_for_record(key)
-    if not key_type_allows_module(key_type, payload.module_id):
-        raise ApiKeyOrchestrationError("api_key_scope_mismatch")
     binding_alias = payload.key_alias
     if key_type == KEEPA_KEY_TYPE and payload.module_id == R_WAREHOUSE_MODULE_ID:
         if binding_alias in {"default", KEEPA_KEY_ALIAS}:

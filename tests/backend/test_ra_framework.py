@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from backend.app.core.key_registry import key_type_allows_module, key_type_definition
+from backend.app.core.key_registry import key_type_definition
 from backend.app.core.modules import MODULE_MANIFESTS_V1
 from r_system_v2.core.secret_manager import (
     R_ANALYSIS_MODULE_ID,
@@ -126,7 +126,7 @@ def test_ra_framework_stages_expose_real_ai_pipeline() -> None:
     assert all("running" not in stage["status"] for stage in RA_STAGES)
 
 
-def test_ra_key_types_can_bind_to_analysis_module() -> None:
+def test_ra_key_types_describe_recommended_analysis_scope() -> None:
     expected_key_types = (
         "deepseek",
         "openai",
@@ -141,9 +141,6 @@ def test_ra_key_types_can_bind_to_analysis_module() -> None:
     for key_type in expected_key_types:
         definition = key_type_definition(key_type)
         assert "R-A" in definition["scope"]
-        assert key_type_allows_module(key_type, R_ANALYSIS_MODULE_ID)
-
-    assert not key_type_allows_module("keepa", R_ANALYSIS_MODULE_ID)
 
 
 def test_ra_secret_manager_prefers_analysis_bindings_for_required_services() -> None:

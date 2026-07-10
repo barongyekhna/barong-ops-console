@@ -287,6 +287,14 @@ const registryItems = [
   manifest({
     category: "admin",
     denied_behavior: "hide_when_denied",
+    module_key: "admin.key_health",
+    required_permissions: ["modules.read"],
+    route_namespace: "/key-health",
+    status: "sealed",
+  }),
+  manifest({
+    category: "admin",
+    denied_behavior: "hide_when_denied",
     module_key: "admin.settings",
     required_permissions: ["settings.read"],
     route_namespace: "/settings",
@@ -513,7 +521,7 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.match(sidebarSource, /const C_SYSTEM_MODULE_ORDER = \[/);
   assert.match(
     sidebarSource,
-    /admin\.modules[\s\S]*admin\.key_management[\s\S]*admin\.permissions[\s\S]*admin\.users[\s\S]*core\.dashboard/,
+    /admin\.modules[\s\S]*admin\.key_management[\s\S]*admin\.key_health[\s\S]*admin\.permissions[\s\S]*admin\.users[\s\S]*core\.dashboard/,
   );
   assert.match(sidebarSource, /const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set/);
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
@@ -1151,6 +1159,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "core.dashboard",
     "admin.modules",
     "admin.key_management",
+    "admin.key_health",
     "admin.settings",
     "system.errors",
     "system.memory_events",
@@ -1179,6 +1188,11 @@ test("sidebar navigation exposes the full productized capability structure", () 
   assert.equal(moduleControl.label, "模块控制");
   assert.equal(moduleControl.href, "/module-control");
   assert.equal(moduleControl.route_namespace, "/module-control");
+  const keyHealth = item("admin.key_health");
+  assert.equal(keyHealth.label, "密钥检测");
+  assert.equal(keyHealth.href, "/key-health");
+  assert.equal(keyHealth.owner_only, true);
+  assert.equal(keyHealth.required_permission, "modules.read");
   assert.equal(moduleKeys.some((key) => key.startsWith("k01")), false);
   assert.equal(
     navigationItems.some((entry) => /P0[1-8]|K01|WooCommerce/i.test(entry.label)),

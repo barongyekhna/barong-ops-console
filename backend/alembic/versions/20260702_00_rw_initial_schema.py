@@ -104,7 +104,10 @@ def upgrade() -> None:
         sa.Column("reasons", postgresql.JSONB(), nullable=False, server_default=sa.text("'[]'::jsonb")),
         sa.Column("checks", postgresql.JSONB(), nullable=False, server_default=sa.text("'{}'::jsonb")),
         sa.Column("evaluated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.CheckConstraint("decision IN ('rule_passed', 'rule_rejected')"),
+        sa.CheckConstraint(
+            "decision IN ('rule_passed', 'rule_rejected')",
+            name=op.f("ck_rule_results_valid_decision"),
+        ),
         sa.ForeignKeyConstraint(["asin"], ["products_rw.asin"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,
@@ -119,9 +122,18 @@ def upgrade() -> None:
         sa.Column("verdict", sa.Text(), nullable=False),
         sa.Column("payload", postgresql.JSONB(), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()),
-        sa.CheckConstraint("layer IN ('deepseek')"),
-        sa.CheckConstraint("score >= 0 AND score <= 100"),
-        sa.CheckConstraint("verdict IN ('keep', 'cut', 'hold')"),
+        sa.CheckConstraint(
+            "layer IN ('deepseek')",
+            name=op.f("ck_ai_evaluations_valid_layer"),
+        ),
+        sa.CheckConstraint(
+            "score >= 0 AND score <= 100",
+            name=op.f("ck_ai_evaluations_valid_score"),
+        ),
+        sa.CheckConstraint(
+            "verdict IN ('keep', 'cut', 'hold')",
+            name=op.f("ck_ai_evaluations_valid_verdict"),
+        ),
         sa.ForeignKeyConstraint(["asin"], ["products_rw.asin"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         if_not_exists=True,

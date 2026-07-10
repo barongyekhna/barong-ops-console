@@ -12,6 +12,7 @@ import {
   LockKeyhole,
   PackageSearch,
   Settings,
+  ShieldCheck,
   UserRoundCog,
   type LucideIcon,
 } from "lucide-react";
@@ -183,6 +184,18 @@ export const navigationGroups: NavigationGroup[] = [
         owner_only: true,
         required_permission: "modules.read",
         route_namespace: "/api-key-management",
+        status: "sealed",
+      },
+      {
+        category: "admin",
+        denied_behavior: "hide_when_denied",
+        href: "/key-health",
+        icon: ShieldCheck,
+        label: "密钥检测",
+        module_key: "admin.key_health",
+        owner_only: true,
+        required_permission: "modules.read",
+        route_namespace: "/key-health",
         status: "sealed",
       },
       {

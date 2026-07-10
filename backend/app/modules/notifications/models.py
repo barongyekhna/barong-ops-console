@@ -18,11 +18,19 @@ class PNotification(PrimaryKeyMixin, CreatedAtMixin, Base):
     __tablename__ = "p_notifications"
     __table_args__ = (
         Index("ix_p_notifications_status_created", "status", "created_at"),
+        Index(
+            "ix_p_notifications_recipient_status_created",
+            "recipient_user_id",
+            "status",
+            "created_at",
+        ),
         Index("ix_p_notifications_org", "org_id"),
         Index("ix_p_notifications_product", "product_id"),
     )
 
     org_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    # Null means a legacy/global notification; targeted alerts are private.
+    recipient_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     # Emitter: e.g. "p.woocommerce", "n8n", "k.product_knowledge".
     source: Mapped[str] = mapped_column(
         String(128),

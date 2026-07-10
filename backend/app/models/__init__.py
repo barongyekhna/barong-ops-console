@@ -18,6 +18,7 @@ from .execution_state import (
     ExecutionResultRecord,
 )
 from .job import AutomationJob, JobEvent
+from .key_health import KeyHealthCheck, KeyHealthRun, KeyHealthState
 from .memory import AgentMemoryAccessLog, MemoryEvent, MemorySummary
 from .module_binding import ModuleBindingRecord
 from .module_control import ModuleControlStateRecord
@@ -86,6 +87,9 @@ __all__ = [
     "ExecutionResultRecord",
     "EventStreamRecord",
     "JobEvent",
+    "KeyHealthCheck",
+    "KeyHealthRun",
+    "KeyHealthState",
     "KProductKnowledgeAIEvent",
     "KProductKnowledgeAttribute",
     "KProductKnowledgeKeyword",
