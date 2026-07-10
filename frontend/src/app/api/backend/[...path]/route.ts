@@ -593,6 +593,15 @@ function isAllowedPPath(method: string, path: string[]) {
   ) {
     return method === "GET";
   }
+  // POST /p/products/{id}/dispatch  (派单)
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "dispatch"
+  ) {
+    return method === "POST";
+  }
   return false;
 }
 
@@ -951,6 +960,16 @@ function isAllowedRPath(method: string, path: string[]) {
       path[2] === "profit" &&
       path[3] === "jobs" &&
       (isUuidPathSegment(path[4]) || path[4] === "latest")
+    ) {
+      return true;
+    }
+
+    if (
+      method === "GET" &&
+      path.length === 5 &&
+      path[2] === "runs" &&
+      (isUuidPathSegment(path[3]) || path[3] === "latest") &&
+      ["status", "events"].includes(path[4])
     ) {
       return true;
     }
