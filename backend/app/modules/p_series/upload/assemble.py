@@ -28,7 +28,11 @@ from ..contract.upload_package import (
     Variant,
 )
 from ...k_series.product_knowledge.category_resolver import category_is_bound
-from .description_html import build_description_html, plain_text_from_copy
+from .description_html import (
+    build_description_html,
+    build_schema_jsonld,
+    plain_text_from_copy,
+)
 
 LAYOUT_SKILL_VERSION = "p-product-page-layout-v1"
 
@@ -127,6 +131,12 @@ def assemble_upload_package(
     """门禁必须已通过（调用方先查 gate_blockers）。"""
     mcj = product.marketing_copy_json or {}
     desc = build_description_html(mcj)
+    schema_jsonld = build_schema_jsonld(
+        mcj,
+        price=product.regular_price,
+        currency=(product.price_currency or "USD")[:3],
+        availability=_availability(product.stock_status),
+    )
     bullets = [
         str(b).strip()
         for b in (
@@ -154,7 +164,7 @@ def assemble_upload_package(
             mpn=getattr(product, "mpn", None),
             condition="new",
             description=Description(
-                html=desc["html"],
+                html=desc["html"] + schema_jsonld,
                 text=plain_text_from_copy(mcj),
                 bullets=bullets,
                 layout_skill_version=LAYOUT_SKILL_VERSION,
