@@ -8,6 +8,7 @@ import type {
   ISaveMediaResponse,
   ISourceType,
 } from "./types";
+import { apiRequest } from "@/lib/api";
 
 const API_PROXY_BASE = "/api/backend";
 const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
@@ -147,8 +148,8 @@ export async function saveToMediaLibrary(payload: {
   variant_id?: string | null;
   images: IImageCandidate[];
 }): Promise<ISaveMediaResponse> {
-  const response = await fetch(`${API_PROXY_BASE}/i/media-library`, {
-    body: JSON.stringify({
+  return apiRequest<ISaveMediaResponse>("/i/media-library", {
+    body: {
       ...payload,
       origin_context: "i_direct",
       images: payload.images.map((candidate) => ({
@@ -160,13 +161,10 @@ export async function saveToMediaLibrary(payload: {
         mime_type: candidate.mime_type,
         width: candidate.width,
       })),
-    }),
-    cache: "no-store",
-    headers: buildHeaders(true),
+    },
     method: "POST",
+    timeoutMs: 60_000,
   });
-
-  return readJson<ISaveMediaResponse>(response);
 }
 
 export async function getMediaLibrary(options?: {
@@ -194,13 +192,9 @@ export async function getMediaLibrary(options?: {
   }
 
   const suffix = params.toString() ? `?${params.toString()}` : "";
-  const response = await fetch(`${API_PROXY_BASE}/i/media-library${suffix}`, {
-    cache: "no-store",
-    headers: buildHeaders(),
-    method: "GET",
+  return apiRequest<IMediaListResponse>(`/i/media-library${suffix}`, {
+    timeoutMs: 20_000,
   });
-
-  return readJson<IMediaListResponse>(response);
 }
 
 export function iMediaFileUrl(assetId: string) {
@@ -216,14 +210,8 @@ export function iMediaPreviewUrl(assetId: string) {
 }
 
 export async function deleteMediaAsset(assetId: string): Promise<void> {
-  const response = await fetch(
-    `${API_PROXY_BASE}/i/media-library/${encodeURIComponent(assetId)}`,
-    {
-      cache: "no-store",
-      headers: buildHeaders(),
-      method: "DELETE",
-    },
-  );
-
-  await readJson<unknown>(response);
+  await apiRequest<unknown>(`/i/media-library/${encodeURIComponent(assetId)}`, {
+    method: "DELETE",
+    timeoutMs: 20_000,
+  });
 }

@@ -211,6 +211,15 @@ function activeCandidates(batch: CandidateBatch | null) {
   return batch.candidates.filter((candidate) => !removed.has(candidate.candidate_id));
 }
 
+function CandidateImage({ candidate }: { candidate: IImageCandidate }) {
+  const src = useMemo(
+    () => imageDataUrl(candidate),
+    [candidate.image_base64, candidate.mime_type],
+  );
+
+  return <img alt="" src={src} />;
+}
+
 function CandidateGrid({
   batch,
   isKContext,
@@ -263,7 +272,7 @@ function CandidateGrid({
                 onClick={() => setPreviewCandidateId(candidate.candidate_id)}
                 type="button"
               >
-                <img alt="" src={imageDataUrl(candidate)} />
+                <CandidateImage candidate={candidate} />
                 <span>
                   <Maximize2 aria-hidden="true" size={15} />
                   放大
@@ -319,7 +328,7 @@ function CandidateGrid({
               </button>
             </div>
             <div className={styles.lightboxImageWrap}>
-              <img alt="" src={imageDataUrl(previewCandidate)} />
+              <CandidateImage candidate={previewCandidate} />
             </div>
             <div className={styles.lightboxActions}>
               <button
@@ -1273,7 +1282,7 @@ export function ImageSystemWorkspace() {
                   </span>
                   <div className={styles.mediaOverlay}>
                     <button
-                      aria-label="放大查看"
+                      aria-label="放大查看媒体库图片"
                       className={styles.mediaIcon}
                       onClick={() => setPreviewMediaAsset(asset)}
                       title="放大"

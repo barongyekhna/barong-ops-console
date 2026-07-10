@@ -73,7 +73,7 @@ test("frontend request cache keeps covered endpoint success values for 60s", asy
   assert.deepEqual(second, first);
 });
 
-test("frontend request cache caps concurrent requests at three", async () => {
+test("frontend request cache caps concurrent requests at six", async () => {
   clearFrontendRequestCache();
 
   let active = 0;
@@ -97,22 +97,14 @@ test("frontend request cache caps concurrent requests at three", async () => {
 
   await waitForScheduler();
 
-  assert.equal(MAX_CONCURRENT_FRONTEND_REQUESTS, 3);
-  assert.equal(getFrontendRequestCacheStats().active, 3);
-  assert.equal(getFrontendRequestCacheStats().queued, 5);
-  assert.equal(maxActive, 3);
+  assert.equal(MAX_CONCURRENT_FRONTEND_REQUESTS, 6);
+  assert.equal(getFrontendRequestCacheStats().active, 6);
+  assert.equal(getFrontendRequestCacheStats().queued, 2);
+  assert.equal(maxActive, 6);
 
-  for (let index = 0; index < 3; index += 1) {
+  for (let index = 0; index < 6; index += 1) {
     releaseRequests[index]();
   }
-
-  while (!releaseRequests[3] || !releaseRequests[4] || !releaseRequests[5]) {
-    await waitForScheduler();
-  }
-
-  releaseRequests[3]();
-  releaseRequests[4]();
-  releaseRequests[5]();
 
   while (!releaseRequests[6] || !releaseRequests[7]) {
     await waitForScheduler();
@@ -122,7 +114,7 @@ test("frontend request cache caps concurrent requests at three", async () => {
   releaseRequests[7]();
 
   assert.deepEqual(await Promise.all(requests), [0, 1, 2, 3, 4, 5, 6, 7]);
-  assert.equal(maxActive, 3);
+  assert.equal(maxActive, 6);
 });
 
 test("dashboard consumes capability state without triggering capability refresh", () => {

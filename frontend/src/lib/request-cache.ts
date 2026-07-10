@@ -3,7 +3,8 @@
 export const DEFAULT_CACHE_TTL_MS = 60_000;
 const AUTH_ME_CACHE_TTL_MS = 30_000;
 const CAPABILITY_BOOTSTRAP_CACHE_TTL_MS = 60_000;
-export const MAX_CONCURRENT_FRONTEND_REQUESTS = 3;
+const I_MEDIA_LIBRARY_CACHE_TTL_MS = 15_000;
+export const MAX_CONCURRENT_FRONTEND_REQUESTS = 6;
 
 type CacheEntry<T> = {
   expiresAt: number;
@@ -83,6 +84,13 @@ function cacheTtlForPath(path: string) {
     normalizedPath.startsWith("/live-gate/")
   ) {
     return DEFAULT_CACHE_TTL_MS;
+  }
+
+  if (
+    normalizedPath === "/i/media-library" ||
+    normalizedPath.startsWith("/i/media-library?")
+  ) {
+    return I_MEDIA_LIBRARY_CACHE_TTL_MS;
   }
 
   return 0;

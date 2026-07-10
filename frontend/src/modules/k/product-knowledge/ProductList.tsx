@@ -69,7 +69,7 @@ import type {
 } from "./types";
 
 const PRODUCT_LIST_PAGE_SIZE = 25;
-const PRODUCT_LIST_FETCH_LIMIT = 100;
+const K_ROSTER_READINESS_CONCURRENCY = 6;
 
 function formatDate(value: string) {
   const date = new Date(value);
@@ -185,6 +185,28 @@ function nextOpenProductId(
   return null;
 }
 
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+  const workerCount = Math.min(Math.max(1, limit), items.length);
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (nextIndex < items.length) {
+        const index = nextIndex;
+        nextIndex += 1;
+        results[index] = await worker(items[index]);
+      }
+    }),
+  );
+
+  return results;
+}
+
 export function ProductList() {
   function openFullProductList() {
     const openedWindow = window.open(
@@ -219,6 +241,7 @@ export function ProductList() {
 
 export function ProductListFull() {
   const [products, setProducts] = useState<ProductKnowledgeListItem[]>([]);
+  const [totalProducts, setTotalProducts] = useState(0);
   const [openProductId, setOpenProductId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchInput, setSearchInput] = useState("");
@@ -270,17 +293,16 @@ export function ProductListFull() {
   );
   const pageCount = Math.max(
     1,
-    Math.ceil(products.length / PRODUCT_LIST_PAGE_SIZE),
+    Math.ceil(totalProducts / PRODUCT_LIST_PAGE_SIZE),
   );
-  const pageItems = useMemo(() => {
-    const start = (currentPage - 1) * PRODUCT_LIST_PAGE_SIZE;
-    return products.slice(start, start + PRODUCT_LIST_PAGE_SIZE);
-  }, [currentPage, products]);
+  const pageItems = products;
   const pageStart =
-    products.length === 0 ? 0 : (currentPage - 1) * PRODUCT_LIST_PAGE_SIZE + 1;
+    totalProducts === 0 || products.length === 0
+      ? 0
+      : (currentPage - 1) * PRODUCT_LIST_PAGE_SIZE + 1;
   const pageEnd = Math.min(
-    currentPage * PRODUCT_LIST_PAGE_SIZE,
-    products.length,
+    (currentPage - 1) * PRODUCT_LIST_PAGE_SIZE + products.length,
+    totalProducts,
   );
   const deleteConfirmationKey = deleteCandidate
     ? displayProductKey(deleteCandidate.product_key)
@@ -314,7 +336,7 @@ export function ProductListFull() {
   }
 
   const loadProducts = useCallback(
-    async (preferredOpenId?: string, query?: string) => {
+    async (preferredOpenId?: string, query?: string, page = 1) => {
       setIsLoading(true);
       setLoadError("");
       attemptedReadinessRef.current = new Set();
@@ -322,51 +344,34 @@ export function ProductListFull() {
 
       try {
         const trimmedQuery = query?.trim() ?? "";
-        const firstPage = await getProducts({
-          limit: PRODUCT_LIST_FETCH_LIMIT,
-          offset: 0,
+        const response = await getProducts({
+          limit: PRODUCT_LIST_PAGE_SIZE,
+          offset: (page - 1) * PRODUCT_LIST_PAGE_SIZE,
           q: trimmedQuery || undefined,
         });
-        const allItems = [...firstPage.items];
-        for (
-          let offset = firstPage.items.length;
-          offset < firstPage.count;
-          offset += PRODUCT_LIST_FETCH_LIMIT
-        ) {
-          const nextPage = await getProducts({
-            limit: PRODUCT_LIST_FETCH_LIMIT,
-            offset,
-            q: trimmedQuery || undefined,
-          });
-          allItems.push(...nextPage.items);
-          if (nextPage.items.length === 0) {
-            break;
-          }
+        const nextPageCount = Math.max(
+          1,
+          Math.ceil(response.count / PRODUCT_LIST_PAGE_SIZE),
+        );
+        if (page > nextPageCount) {
+          setProducts([]);
+          setTotalProducts(response.count);
+          setOpenProductId(null);
+          setCurrentPage(nextPageCount);
+          return;
         }
-        const response = {
-          ...firstPage,
-          count: Math.max(firstPage.count, allItems.length),
-          items: allItems,
-        };
-        const preferredIndex = preferredOpenId
-          ? response.items.findIndex((item) => item.id === preferredOpenId)
-          : -1;
         setProducts(response.items);
+        setTotalProducts(response.count);
         setOpenProductId((currentId) =>
           nextOpenProductId(response, currentId, preferredOpenId),
         );
-        setCurrentPage((current) => {
-          if (preferredIndex >= 0) {
-            return Math.floor(preferredIndex / PRODUCT_LIST_PAGE_SIZE) + 1;
-          }
-          const nextPageCount = Math.max(
-            1,
-            Math.ceil(response.items.length / PRODUCT_LIST_PAGE_SIZE),
-          );
-          return Math.min(Math.max(current, 1), nextPageCount);
+        setSelectedIds((current) => {
+          const pageIds = new Set(response.items.map((item) => item.id));
+          return new Set([...current].filter((id) => pageIds.has(id)));
         });
       } catch (error) {
         setProducts([]);
+        setTotalProducts(0);
         setOpenProductId(null);
         setLoadError(
           formatError(error, "产品知识库接口暂不可用。"),
@@ -379,8 +384,8 @@ export function ProductListFull() {
   );
 
   useEffect(() => {
-    void loadProducts(undefined, activeSearch);
-  }, [activeSearch, loadProducts]);
+    void loadProducts(undefined, activeSearch, currentPage);
+  }, [activeSearch, currentPage, loadProducts]);
 
   const loadWorkflowRuntime = useCallback(async (productId: string) => {
     setWorkflowError("");
@@ -446,14 +451,16 @@ export function ProductListFull() {
     }
     let cancelled = false;
     void (async () => {
-      const results = await Promise.all(
-        missing.map(async (item) => {
+      const results = await mapWithConcurrency(
+        missing,
+        K_ROSTER_READINESS_CONCURRENCY,
+        async (item) => {
           try {
             return [item.id, await getProductReadiness(item.id)] as const;
           } catch {
             return null;
           }
-        }),
+        },
       );
       if (cancelled) {
         return;
@@ -492,7 +499,8 @@ export function ProductListFull() {
         }
       }
 
-      await loadProducts(createdProduct.id, activeSearch);
+      setCurrentPage(1);
+      await loadProducts(createdProduct.id, activeSearch, 1);
       setShowCreate(false);
       if (deepSeekError) {
         setCreateError(deepSeekError);
@@ -639,7 +647,7 @@ export function ProductListFull() {
       });
       setDeleteCandidate(null);
       setDeleteConfirmation("");
-      await loadProducts(undefined, activeSearch);
+      await loadProducts(undefined, activeSearch, currentPage);
     } catch (error) {
       setDeleteError(formatError(error, "产品删除失败。"));
     } finally {
@@ -649,6 +657,7 @@ export function ProductListFull() {
 
   function goToPage(page: number) {
     setOpenProductId(null);
+    setSelectedIds(new Set());
     setCurrentPage(Math.min(Math.max(page, 1), pageCount));
   }
 
@@ -656,8 +665,9 @@ export function ProductListFull() {
     const query = searchInput.trim();
     setCurrentPage(1);
     setOpenProductId(null);
+    setSelectedIds(new Set());
     if (query === activeSearch) {
-      void loadProducts(undefined, query);
+      void loadProducts(undefined, query, 1);
       return;
     }
     setActiveSearch(query);
@@ -667,6 +677,7 @@ export function ProductListFull() {
     setSearchInput("");
     setCurrentPage(1);
     setOpenProductId(null);
+    setSelectedIds(new Set());
     setActiveSearch("");
   }
 
@@ -981,7 +992,7 @@ export function ProductListFull() {
           <button
             className="secondary-button"
             disabled={isLoading}
-            onClick={() => void loadProducts(undefined, activeSearch)}
+            onClick={() => void loadProducts(undefined, activeSearch, currentPage)}
             type="button"
           >
             {isLoading ? (
@@ -1221,10 +1232,10 @@ export function ProductListFull() {
             </div>
           ) : null}
 
-          {products.length > 0 ? (
+          {totalProducts > 0 ? (
             <div className={styles.listMeta}>
               <span>
-                显示 {pageStart}-{pageEnd} / 共 {products.length} 条
+                显示 {pageStart}-{pageEnd} / 共 {totalProducts} 条
               </span>
               <div className={styles.pagination}>
                 <button
@@ -1267,7 +1278,7 @@ export function ProductListFull() {
             </div>
           ) : null}
 
-          {!isLoading && !loadError && products.length === 0 ? (
+          {!isLoading && !loadError && totalProducts === 0 ? (
             <div className={styles.state}>
               <PackageOpen aria-hidden="true" size={22} />
               <span>暂无产品。</span>
