@@ -25,10 +25,11 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v1"
+UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v2"
 
 Availability = Literal["in_stock", "out_of_stock", "preorder"]
 Channel = Literal["woocommerce"]  # Amazon/GMC/SEO get their own channels later.
+Placement = Literal["gallery", "description"]
 
 
 class Price(BaseModel):
@@ -75,6 +76,35 @@ class Variant(BaseModel):
     gtin: str | None = None
 
 
+class ImageAsset(BaseModel):
+    """One publishable image with its store destination and media SEO fields.
+
+    ``placement`` splits the set: gallery images go into the store's product
+    image gallery; description images are embedded inside ``description.html``
+    at the ``embed_token`` placeholder (the uploader replaces the token with
+    the store-hosted media URL after uploading). title/alt/caption/description
+    are the WordPress media SEO fields, written by gpt-5.5 at art-direction
+    time.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    asset_id: str
+    url: str                       # fetchable by the uploader (job-token auth)
+    placement: Placement = "gallery"
+    position: int = 0              # global order from the art-direction brief
+    is_main: bool = False          # exactly one gallery image is the main/hero
+    role: str | None = None        # e.g. "Hero lifestyle image"
+    filename: str | None = None
+    mime_type: str | None = None
+    title: str | None = None
+    alt: str | None = None
+    caption: str | None = None
+    description: str | None = None
+    # description-placement only: the exact placeholder inside description.html
+    # (e.g. "{{KP_IMG_8}}") that must be replaced with the uploaded media URL.
+    embed_token: str | None = None
+
+
 class Description(BaseModel):
     """Marketing body. NOTE: never carries price / availability — those are
     structured fields, and duplicating them in prose is what breaks feed↔page
@@ -101,8 +131,9 @@ class Product(BaseModel):
     price: Price
     stock: Stock
     category: Category
-    # First image = main/hero; rest = additional images. Absolute URLs.
-    images: list[str] = Field(default_factory=list)
+    # v2: rich image objects. Gallery images first (main/hero leads), then
+    # description-embedded images; see ImageAsset.placement.
+    images: list[ImageAsset] = Field(default_factory=list)
     keywords: Keywords = Field(default_factory=Keywords)
     seo: Seo = Field(default_factory=Seo)
     variants: list[Variant] = Field(default_factory=list)
@@ -138,8 +169,8 @@ GMC_ATTRIBUTE_MAP: dict[str, str] = {
     "id": "sku",
     "title": "title",
     "description": "description.text",
-    "image_link": "images[0]",
-    "additional_image_link": "images[1:]",
+    "image_link": "images[placement=gallery][main].url",
+    "additional_image_link": "images[placement=gallery][rest].url",
     "availability": "stock.status",
     "price": "price.regular+price.currency",
     "sale_price": "price.sale+price.currency",
@@ -161,12 +192,14 @@ def gmc_feed_view(package: UploadPackage) -> dict[str, Any]:
     p = package.product
     price = f"{p.price.regular} {p.price.currency}"
     sale = f"{p.price.sale} {p.price.currency}" if p.price.sale is not None else None
+    gallery = [img for img in p.images if img.placement == "gallery"]
+    gallery.sort(key=lambda img: (not img.is_main, img.position))
     return {
         "id": p.sku,
         "title": p.title,
         "description": p.description.text,
-        "image_link": p.images[0] if p.images else None,
-        "additional_image_link": p.images[1:],
+        "image_link": gallery[0].url if gallery else None,
+        "additional_image_link": [img.url for img in gallery[1:]],
         "availability": p.stock.status,
         "price": price,
         "sale_price": sale,

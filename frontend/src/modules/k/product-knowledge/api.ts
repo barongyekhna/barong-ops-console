@@ -473,6 +473,24 @@ export async function retryRenderJobs(
   return readJson<RenderJobsResult>(response, path);
 }
 
+export type DispatchUploadResult = {
+  job_id: string;
+  status: string;
+  dispatched: boolean;
+};
+
+export async function dispatchUpload(
+  productId: string,
+): Promise<DispatchUploadResult> {
+  const path = `/p/products/${encodeURIComponent(productId)}/dispatch`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<DispatchUploadResult>(response, path);
+}
+
 export async function getProductReadiness(
   productId: string,
 ): Promise<ProductReadinessState> {

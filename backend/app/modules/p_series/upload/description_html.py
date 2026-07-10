@@ -49,11 +49,39 @@ def _faq_items(marketing_copy_json: dict[str, Any] | None) -> list[tuple[str, st
     return out
 
 
-def build_description_html(marketing_copy_json: dict[str, Any] | None) -> dict[str, Any]:
+def _figure_html(image: dict[str, Any]) -> str:
+    """描述内嵌图：src 是占位符（如 {{KP_IMG_8}}），上传方传完 WP media 后
+    把它替换成站内媒体 URL —— 控制台拼 HTML 时还不知道最终图片地址。"""
+    alt = escape(_s(image.get("alt")))
+    title = escape(_s(image.get("title")))
+    caption = _s(image.get("caption"))
+    token = _s(image.get("embed_token"))
+    img = f'<img src="{token}" alt="{alt}"'
+    if title:
+        img += f' title="{title}"'
+    img += ' loading="lazy">'
+    caption_html = (
+        f"<figcaption>{escape(caption)}</figcaption>" if caption else ""
+    )
+    return f'<figure class="kp-figure">{img}{caption_html}</figure>'
+
+
+def build_description_html(
+    marketing_copy_json: dict[str, Any] | None,
+    description_images: list[dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """description_images（可选）= placement=description 的图，按 position 升序。
+    穿插规则：kp-detail 每个 chunk（h3+p）后放一张，图多出来的排在 kp-detail
+    末尾；没有 kp-detail 段就放在 kp-benefits 之后 —— 图文并茂但位置确定性。"""
     ppc = _ppc(marketing_copy_json)
+    images = sorted(
+        description_images or [],
+        key=lambda item: int(item.get("position") or 0),
+    )
     parts: list[str] = ['<div class="kp-desc">']
     emitted: list[str] = []
     omitted: list[str] = []
+    embedded: list[str] = []
 
     atf = ppc.get("above_the_fold")
     atf = atf if isinstance(atf, dict) else {}
@@ -73,6 +101,7 @@ def build_description_html(marketing_copy_json: dict[str, Any] | None) -> dict[s
     else:
         omitted.append("kp-benefits")
 
+    image_queue = list(images)
     detail: list[str] = []
     for chunk in ppc.get("chunk_sections") or []:
         if not isinstance(chunk, dict):
@@ -82,6 +111,15 @@ def build_description_html(marketing_copy_json: dict[str, Any] | None) -> dict[s
             detail.append(f"<h3>{escape(heading)}</h3>")
         if body:
             detail.append(f"<p>{escape(body)}</p>")
+        if (heading or body) and image_queue:
+            image = image_queue.pop(0)
+            detail.append(_figure_html(image))
+            embedded.append(_s(image.get("embed_token")))
+    # 图比 chunk 多：剩余的排在 detail 末尾
+    for image in image_queue:
+        detail.append(_figure_html(image))
+        embedded.append(_s(image.get("embed_token")))
+    image_queue = []
     if detail:
         parts.append('<section class="kp-detail">' + "".join(detail) + "</section>")
         emitted.append("kp-detail")
@@ -115,6 +153,7 @@ def build_description_html(marketing_copy_json: dict[str, Any] | None) -> dict[s
         "html": "".join(parts),
         "sections_emitted": emitted,
         "omitted_for_missing_data": omitted,
+        "images_embedded": [token for token in embedded if token],
     }
 
 

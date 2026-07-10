@@ -1,0 +1,263 @@
+[
+  {
+    "id": "barongPupload001",
+    "versionId": "b4000000-0000-4000-8000-000000000004",
+    "name": "barong控制台-P系列-上架WooCommerce",
+    "active": true,
+    "settings": {},
+    "nodes": [
+      {
+        "parameters": {
+          "httpMethod": "POST",
+          "path": "barong-p-upload",
+          "responseMode": "onReceived",
+          "options": {}
+        },
+        "id": "a1111111-1111-4111-8111-111111111111",
+        "name": "Webhook 触发",
+        "type": "n8n-nodes-base.webhook",
+        "typeVersion": 2,
+        "position": [0, 300],
+        "webhookId": "barong-p-upload-webhook"
+      },
+      {
+        "parameters": {
+          "url": "={{ $json.body.package_url }}",
+          "options": {}
+        },
+        "id": "a2222222-2222-4222-8222-222222222222",
+        "name": "取数-上架包",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [200, 300]
+      },
+      {
+        "parameters": {
+          "jsCode": "const pkg = $input.first().json;\nconst images = ((pkg.product || {}).images) || [];\nif (!images.length) throw new Error('上架包里没有图片（v2 契约 images 为空）');\nreturn images.map((img) => ({ json: img }));"
+        },
+        "id": "a6666666-6666-4666-8666-666666666666",
+        "name": "拆图",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [400, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ $json.url }}",
+          "options": {
+            "response": {
+              "response": {
+                "responseFormat": "file",
+                "outputPropertyName": "data"
+              }
+            }
+          }
+        },
+        "id": "a7777777-7777-4777-8777-777777777777",
+        "name": "下载图",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [600, 300]
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "https://barongyekhna.com/wp-json/wp/v2/media",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "wordpressApi",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "Content-Disposition",
+                "value": "={{ 'attachment; filename=\"' + (($('拆图').item.json.filename) || 'image.png') + '\"' }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "contentType": "binaryData",
+          "inputDataFieldName": "data",
+          "options": {
+            "batching": {
+              "batch": {
+                "batchSize": 1,
+                "batchInterval": 2000
+              }
+            }
+          }
+        },
+        "id": "a8888888-8888-4888-8888-888888888888",
+        "name": "传WP媒体库",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000,
+        "position": [800, 300],
+        "credentials": {
+          "wordpressApi": {
+            "id": "kaIcXMDT4cNA0GXm",
+            "name": "Wordpress account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ 'https://barongyekhna.com/wp-json/wp/v2/media/' + $json.id }}",
+          "authentication": "predefinedCredentialType",
+          "nodeCredentialType": "wordpressApi",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ title: $('拆图').item.json.title || '', alt_text: $('拆图').item.json.alt || '', caption: $('拆图').item.json.caption || '', description: $('拆图').item.json.description || '' }) }}",
+          "options": {
+            "batching": {
+              "batch": {
+                "batchSize": 1,
+                "batchInterval": 2000
+              }
+            }
+          }
+        },
+        "id": "a9999999-9999-4999-8999-999999999999",
+        "name": "写图SEO",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "retryOnFail": true,
+        "maxTries": 3,
+        "waitBetweenTries": 5000,
+        "position": [1000, 300],
+        "credentials": {
+          "wordpressApi": {
+            "id": "kaIcXMDT4cNA0GXm",
+            "name": "Wordpress account"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const pkg = $('取数-上架包').first().json;\nconst metas = $('拆图').all().map((i) => i.json);\nconst medias = $input.all().map((i) => i.json);\nconst p = pkg.product || {};\nconst price = p.price || {};\nconst stock = p.stock || {};\nconst desc = p.description || {};\nlet html = desc.html || '';\nconst gallery = [];\nmetas.forEach((m, idx) => {\n  const media = medias[idx] || {};\n  if (m.placement === 'description' && m.embed_token) {\n    if (media.source_url) {\n      html = html.split(m.embed_token).join(media.source_url);\n    }\n  } else if (media.id != null) {\n    gallery.push({ id: media.id });\n  }\n});\nconst leftover = (html.match(/\\{\\{KP_IMG_\\d+\\}\\}/g) || []);\nif (leftover.length) throw new Error('描述图占位符未替换: ' + leftover.join(','));\nconst body = {\n  name: p.title || '',\n  type: 'simple',\n  status: 'draft',\n  sku: p.sku || '',\n  regular_price: price.regular != null ? String(price.regular) : '',\n  description: html,\n  short_description: '',\n  manage_stock: false,\n  stock_status: stock.status === 'out_of_stock' ? 'outofstock' : 'instock',\n  images: gallery,\n};\nif (price.sale != null) body.sale_price = String(price.sale);\nreturn [{ json: { woo_body: body } }];"
+        },
+        "id": "a3333333-3333-4333-8333-333333333333",
+        "name": "转 Woo 格式",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1200, 300]
+      },
+      {
+        "parameters": {
+          "url": "={{ 'https://barongyekhna.com/wp-json/wc/v3/products?sku=' + encodeURIComponent($json.woo_body.sku || '') }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpBasicAuth",
+          "options": {
+            "response": {
+              "response": {
+                "fullResponse": true
+              }
+            }
+          }
+        },
+        "id": "ab111111-b111-4b11-8b11-b11111111111",
+        "name": "查已有SKU",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1350, 300],
+        "credentials": {
+          "httpBasicAuth": {
+            "id": "aPB82hXe9Rxdvyfo",
+            "name": "WooCommerce"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "jsCode": "const woo_body = $('转 Woo 格式').first().json.woo_body;\nconst body = $input.first().json.body;\nconst found = (Array.isArray(body) ? body : []).filter((j) => j && j.id != null);\nconst base = 'https://barongyekhna.com/wp-json/wc/v3/products';\nif (found.length && String(found[0].sku || '') === String(woo_body.sku || '')) {\n  // SKU 已存在 -> 更新（重复上架 = 覆盖式更新）\n  return [{ json: { woo_body, method: 'PUT', url: base + '/' + found[0].id } }];\n}\nreturn [{ json: { woo_body, method: 'POST', url: base } }];"
+        },
+        "id": "ab222222-b222-4b22-8b22-b22222222222",
+        "name": "定上架方式",
+        "type": "n8n-nodes-base.code",
+        "typeVersion": 2,
+        "position": [1500, 300]
+      },
+      {
+        "parameters": {
+          "method": "={{ $json.method }}",
+          "url": "={{ $json.url }}",
+          "authentication": "genericCredentialType",
+          "genericAuthType": "httpBasicAuth",
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify($json.woo_body) }}",
+          "options": {}
+        },
+        "id": "a4444444-4444-4444-8444-444444444444",
+        "name": "上架 WooCommerce",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1650, 300],
+        "credentials": {
+          "httpBasicAuth": {
+            "id": "aPB82hXe9Rxdvyfo",
+            "name": "WooCommerce"
+          }
+        }
+      },
+      {
+        "parameters": {
+          "method": "POST",
+          "url": "={{ $('Webhook 触发').item.json.body.callback_url }}",
+          "sendHeaders": true,
+          "headerParameters": {
+            "parameters": [
+              {
+                "name": "X-Job-Token",
+                "value": "={{ $('Webhook 触发').item.json.body.token }}"
+              }
+            ]
+          },
+          "sendBody": true,
+          "specifyBody": "json",
+          "jsonBody": "={{ JSON.stringify({ status: 'success', external_product_id: String($json.id), external_url: $json.permalink }) }}",
+          "options": {}
+        },
+        "id": "a5555555-5555-4555-8555-555555555555",
+        "name": "回报控制台",
+        "type": "n8n-nodes-base.httpRequest",
+        "typeVersion": 4.2,
+        "position": [1600, 300]
+      }
+    ],
+    "connections": {
+      "Webhook 触发": {
+        "main": [[{ "node": "取数-上架包", "type": "main", "index": 0 }]]
+      },
+      "取数-上架包": {
+        "main": [[{ "node": "拆图", "type": "main", "index": 0 }]]
+      },
+      "拆图": {
+        "main": [[{ "node": "下载图", "type": "main", "index": 0 }]]
+      },
+      "下载图": {
+        "main": [[{ "node": "传WP媒体库", "type": "main", "index": 0 }]]
+      },
+      "传WP媒体库": {
+        "main": [[{ "node": "写图SEO", "type": "main", "index": 0 }]]
+      },
+      "写图SEO": {
+        "main": [[{ "node": "转 Woo 格式", "type": "main", "index": 0 }]]
+      },
+      "转 Woo 格式": {
+        "main": [[{ "node": "查已有SKU", "type": "main", "index": 0 }]]
+      },
+      "查已有SKU": {
+        "main": [[{ "node": "定上架方式", "type": "main", "index": 0 }]]
+      },
+      "定上架方式": {
+        "main": [[{ "node": "上架 WooCommerce", "type": "main", "index": 0 }]]
+      },
+      "上架 WooCommerce": {
+        "main": [[{ "node": "回报控制台", "type": "main", "index": 0 }]]
+      }
+    }
+  }
+]

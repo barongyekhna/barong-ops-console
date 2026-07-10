@@ -14,6 +14,7 @@ import {
   Search,
   Sparkles,
   Trash2,
+  UploadCloud,
   X,
 } from "lucide-react";
 import {
@@ -34,6 +35,7 @@ import {
   createProduct,
   deleteProduct,
   deleteMediaAsset,
+  dispatchUpload,
   enrichProductWithDeepSeek,
   generateProductCopyBatch,
   generateProductImageBriefBatch,
@@ -286,6 +288,7 @@ export function ProductListFull() {
   const [batchBusy, setBatchBusy] = useState<null | "copy" | "brief">(null);
   const [batchNotice, setBatchNotice] = useState("");
   const [batchError, setBatchError] = useState("");
+  const [dispatchingId, setDispatchingId] = useState<string | null>(null);
 
   const openProduct = useMemo(
     () => products.find((product) => product.id === openProductId) ?? null,
@@ -614,6 +617,37 @@ export function ProductListFull() {
     setDeleteCandidate(product);
     setDeleteConfirmation("");
     setDeleteError("");
+  }
+
+  async function handleDispatchUpload(
+    product: ProductKnowledgeListItem,
+    event: MouseEvent<HTMLButtonElement>,
+  ) {
+    event.stopPropagation();
+    const label =
+      product.product_name_en || displayProductKey(product.product_key);
+    setDispatchingId(product.id);
+    setBatchNotice("");
+    setBatchError("");
+    try {
+      const result = await dispatchUpload(product.id);
+      setBatchNotice(
+        `「${label}」已派单上架独立站（任务 ${result.job_id.slice(0, 8)}…）。` +
+          "上架结果会进右上角通知铃铛。",
+      );
+    } catch (error) {
+      let message = formatError(error, "上架派单失败，请重试。");
+      if (error instanceof ProductKnowledgeApiError) {
+        const blockers = (error.detail as { blockers?: unknown } | null)
+          ?.blockers;
+        if (Array.isArray(blockers) && blockers.length > 0) {
+          message = `「${label}」未过上架门禁：${blockers.join("；")}`;
+        }
+      }
+      setBatchError(message);
+    } finally {
+      setDispatchingId(null);
+    }
   }
 
   async function confirmDelete() {
@@ -1383,6 +1417,26 @@ export function ProductListFull() {
                               >
                                 <ImagePlus aria-hidden="true" size={15} />
                                 Create Image
+                              </button>
+                              <button
+                                className="secondary-button"
+                                disabled={dispatchingId === product.id}
+                                onClick={(event) =>
+                                  void handleDispatchUpload(product, event)
+                                }
+                                title="过了门禁（文案/图/类目/价格）才能上架独立站"
+                                type="button"
+                              >
+                                {dispatchingId === product.id ? (
+                                  <LoaderCircle
+                                    aria-hidden="true"
+                                    className="spin"
+                                    size={15}
+                                  />
+                                ) : (
+                                  <UploadCloud aria-hidden="true" size={15} />
+                                )}
+                                上架
                               </button>
                               <button
                                 className={`secondary-button ${styles.dangerButton}`}

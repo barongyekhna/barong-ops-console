@@ -19,6 +19,7 @@ from ..contract.upload_package import (
     Category,
     Description,
     Gate,
+    ImageAsset,
     Keywords,
     Price,
     Product,
@@ -77,17 +78,116 @@ def _availability(stock_status: str | None) -> str:
     return "in_stock"
 
 
-def _images(db: Session, product: Any, base_url: str) -> list[str]:
+def _media_fetch_url(
+    base_url: str,
+    *,
+    job_id: str | None,
+    job_token: str | None,
+    asset_id: str,
+) -> str:
+    base = base_url.rstrip("/")
+    if job_id and job_token:
+        # n8n 抓图走 P 的裸路径 + 一单一钥（与取数/回报同一 token）
+        return f"{base}/p/jobs/{job_id}/media/{asset_id}/file?token={job_token}"
+    return f"{base}/api/app/k/media/{asset_id}/file"
+
+
+def _image_assets(
+    db: Session,
+    product: Any,
+    base_url: str,
+    *,
+    job_id: str | None,
+    job_token: str | None,
+) -> list[ImageAsset]:
+    """一次性作图的成品图（带 placement/SEO 四字段）；没有渲染图的老产品
+    回退到 bound 媒资（纯 gallery，无 SEO 字段）。"""
     rows = db.execute(
         text(
-            "SELECT id FROM k_product_knowledge_media_assets "
+            "SELECT id, asset_role, mime_type, metadata_json "
+            "FROM k_product_knowledge_media_assets "
+            "WHERE product_id = :p AND status = 'available' "
+            "  AND asset_type = 'image' "
+            "  AND metadata_json->>'render_pipeline' = 'k_auto_render' "
+            "ORDER BY (metadata_json->>'position')::int ASC"
+        ),
+        {"p": str(product.id)},
+    ).mappings().all()
+
+    out: list[ImageAsset] = []
+    if rows:
+        for r in rows:
+            meta = r["metadata_json"] if isinstance(r["metadata_json"], dict) else {}
+            placement = (
+                "description"
+                if (meta.get("placement") == "description")
+                else "gallery"
+            )
+            position = int(meta.get("position") or 0)
+            asset_id = str(r["id"])
+            out.append(
+                ImageAsset(
+                    asset_id=asset_id,
+                    url=_media_fetch_url(
+                        base_url,
+                        job_id=job_id,
+                        job_token=job_token,
+                        asset_id=asset_id,
+                    ),
+                    placement=placement,
+                    position=position,
+                    is_main=(r["asset_role"] == "main"),
+                    role=str(meta.get("role_label") or "") or None,
+                    filename=str(meta.get("filename") or "") or None,
+                    mime_type=r["mime_type"],
+                    title=str(meta.get("title") or "") or None,
+                    alt=str(meta.get("alt") or "") or None,
+                    caption=str(meta.get("caption") or "") or None,
+                    description=str(meta.get("description") or "") or None,
+                    embed_token=(
+                        f"{{{{KP_IMG_{position}}}}}"
+                        if placement == "description"
+                        else None
+                    ),
+                )
+            )
+        # gallery 在前（main 最前），description 图跟在后面
+        out.sort(
+            key=lambda img: (
+                img.placement != "gallery",
+                not img.is_main,
+                img.position,
+            )
+        )
+        return out
+
+    # 回退：老产品只有 bound 媒资
+    legacy = db.execute(
+        text(
+            "SELECT id, mime_type FROM k_product_knowledge_media_assets "
             "WHERE product_id = :p AND status = 'bound' "
             "ORDER BY updated_at DESC"
         ),
         {"p": str(product.id)},
-    ).fetchall()
-    base = base_url.rstrip("/")
-    return [f"{base}/api/app/k/media/{r[0]}/file" for r in rows]
+    ).mappings().all()
+    for index, r in enumerate(legacy, start=1):
+        asset_id = str(r["id"])
+        out.append(
+            ImageAsset(
+                asset_id=asset_id,
+                url=_media_fetch_url(
+                    base_url,
+                    job_id=job_id,
+                    job_token=job_token,
+                    asset_id=asset_id,
+                ),
+                placement="gallery",
+                position=index,
+                is_main=(index == 1),
+                mime_type=r["mime_type"],
+            )
+        )
+    return out
 
 
 def _variants(db: Session, product: Any) -> list[Variant]:
@@ -126,11 +226,26 @@ def assemble_upload_package(
     channel: str = "woocommerce",
     base_url: str,
     job_id: str | None = None,
+    job_token: str | None = None,
     workflow_trace_id: str | None = None,
 ) -> UploadPackage:
     """门禁必须已通过（调用方先查 gate_blockers）。"""
     mcj = product.marketing_copy_json or {}
-    desc = build_description_html(mcj)
+    images = _image_assets(
+        db, product, base_url, job_id=job_id, job_token=job_token
+    )
+    description_images = [
+        {
+            "position": img.position,
+            "embed_token": img.embed_token,
+            "alt": img.alt,
+            "title": img.title,
+            "caption": img.caption,
+        }
+        for img in images
+        if img.placement == "description" and img.embed_token
+    ]
+    desc = build_description_html(mcj, description_images)
     schema_jsonld = build_schema_jsonld(
         mcj,
         price=product.regular_price,
@@ -190,7 +305,7 @@ def assemble_upload_package(
                 google_product_category=product.google_product_category,
                 merchant_product_type=product.merchant_product_type,
             ),
-            images=_images(db, product, base_url),
+            images=images,
             keywords=Keywords(
                 primary=[product.primary_keyword] if product.primary_keyword else [],
             ),

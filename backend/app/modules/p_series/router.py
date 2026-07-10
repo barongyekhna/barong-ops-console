@@ -12,6 +12,7 @@ import os
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -19,7 +20,10 @@ from sqlalchemy.orm import Session
 from ...api.deps import get_current_user
 from ...db.session import get_db
 from ...models.user import User
-from ..k_series.product_knowledge.models import KProductKnowledgeProduct
+from ..k_series.product_knowledge.models import (
+    KProductKnowledgeMediaAsset,
+    KProductKnowledgeProduct,
+)
 from ..notifications.service import create_notification
 from .contract.upload_package import UploadPackage
 from .upload.assemble import assemble_upload_package, gate_blockers
@@ -31,6 +35,11 @@ router = APIRouter(prefix="/p", tags=["p-upload"])
 
 def _public_base() -> str:
     return os.getenv("PUBLIC_BASE_URL", "https://ops.barongyekhna.com").rstrip("/")
+
+
+def _callback_base() -> str:
+    """n8n 侧访问控制台用的 base（内网直连优先，与派单/回调同源）。"""
+    return (os.getenv("P_CALLBACK_BASE") or _public_base()).rstrip("/")
 
 
 class DispatchResponse(BaseModel):
@@ -83,7 +92,54 @@ def p_upload_package(
             status_code=409, detail={"ready": False, "blockers": blockers}
         )
     return assemble_upload_package(
-        db, product, channel=channel, base_url=_public_base(), job_id=job.job_id
+        db,
+        product,
+        channel=channel,
+        base_url=_callback_base(),
+        job_id=job.job_id,
+        job_token=job.token,
+    )
+
+
+@router.get("/jobs/{job_id}/media/{asset_id}/file")
+def p_job_media_file(
+    job_id: str,
+    asset_id: UUID,
+    token: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """n8n 图片中转的取图口：一单一钥 token 鉴权，只放行该 job 产品自己的图。"""
+    if not token:
+        raise HTTPException(status_code=401, detail="缺少 token。")
+    job = db.scalar(
+        select(PUploadJob).where(
+            PUploadJob.job_id == job_id, PUploadJob.token == token
+        )
+    )
+    if job is None:
+        raise HTTPException(status_code=401, detail="token 无效。")
+    asset = db.get(KProductKnowledgeMediaAsset, asset_id)
+    if (
+        asset is None
+        or asset.status == "removed"
+        or str(asset.product_id) != str(job.product_id)
+    ):
+        raise HTTPException(status_code=404, detail="图片不存在。")
+    from ..k_series.product_knowledge.router import _ensure_media_asset_file
+
+    try:
+        path = _ensure_media_asset_file(asset)
+    except HTTPException:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=404, detail="图片文件不可读。") from exc
+    metadata = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
+    filename = str(metadata.get("filename") or "") or f"{asset_id}.png"
+    return FileResponse(
+        path=path,
+        media_type=asset.mime_type or "image/png",
+        filename=filename,
+        content_disposition_type="inline",
     )
 
 
