@@ -126,10 +126,19 @@ const KNOWN_UNPROXIED = new Set([
   "POST /api/control-plane/live-gate/rollback/restore",
 ]);
 
+// The drift check needs the backend source tree plus a Python runtime; the
+// frontend Docker build gate copies only frontend/ + tests/frontend/, so the
+// ratchet runs on the host / CI checkout and skips inside the image build.
+const venvPython = path.join(repoRoot, ".venv", "bin", "python");
+const backendAvailable =
+  existsSync(path.join(repoRoot, "backend", "app", "main.py")) &&
+  existsSync(venvPython);
+const skipReason = backendAvailable
+  ? false
+  : "backend source tree + .venv python not available in this environment";
+
 function loadBackendRoutes() {
-  const python = existsSync(path.join(repoRoot, ".venv", "bin", "python"))
-    ? path.join(repoRoot, ".venv", "bin", "python")
-    : "python3";
+  const python = venvPython;
   const script = [
     "import json",
     "from backend.app.main import app",
@@ -214,13 +223,13 @@ function isProxied(method, routePath) {
   );
 }
 
-const backendRoutes = loadBackendRoutes();
+const backendRoutes = backendAvailable ? loadBackendRoutes() : [];
 
-test("backend API route table is non-trivial", () => {
+test("backend API route table is non-trivial", { skip: skipReason }, () => {
   assert.ok(backendRoutes.length > 50);
 });
 
-test("every backend API endpoint is either proxied or explicitly exempted", () => {
+test("every backend API endpoint is either proxied or explicitly exempted", { skip: skipReason }, () => {
   const missing = [];
   const staleExemptions = [];
   for (const route of backendRoutes) {
@@ -250,7 +259,7 @@ test("every backend API endpoint is either proxied or explicitly exempted", () =
   );
 });
 
-test("known-unproxied exemptions still exist on the backend", () => {
+test("known-unproxied exemptions still exist on the backend", { skip: skipReason }, () => {
   const routeKeys = new Set(
     backendRoutes.flatMap((route) =>
       route.methods.map((method) => `${method} ${route.path}`),
