@@ -244,6 +244,19 @@ def marketing_copy_instruction(channel: str) -> str:
         "brand-looking token you infer from the product data. Write all copy "
         "brand-neutrally (e.g. 'this foldable yoga mat', never '<Brand> yoga "
         "mat'). In json_ld, brand is ALWAYS `site_brand`.\n"
+        "CUSTOMER-FACING VOICE (this is SALES copy a shopper reads, not an "
+        "internal report): write confident, benefit-first copy in second person "
+        "('you'). Lead every section with what the buyer gets or feels, then "
+        "support it with the facts you have. Paint concrete usage scenes. "
+        "STRICTLY FORBIDDEN in any customer-facing field: meta-language and "
+        "disclaimers such as 'not supplied', 'not provided', 'was not specified', "
+        "'should be confirmed', 'must be verified', 'the product is described "
+        "as', 'according to the supplied information', 'data was not available'. "
+        "If a spec is missing, simply DON'T mention it on the page — report it "
+        "ONLY in missing_inputs. Never turn a data gap into an FAQ or a caveat; "
+        "FAQ answers must be confident and helpful, written from what you DO "
+        "know. Still never fabricate: work only with supplied facts, but present "
+        "them like a great salesperson, not a compliance auditor.\n"
         "OUTPUT CONTRACT (mandatory — downstream machines parse these exact keys; "
         "do NOT rename keys, do NOT use the skill's section numbering as keys): "
         "Return ONLY a valid JSON object with EXACTLY these top-level keys "
@@ -267,15 +280,25 @@ def marketing_copy_instruction(channel: str) -> str:
         "{\n"
         '  "channel": "dtc",\n'
         '  "product_page_copy": {\n'
-        '    "above_the_fold": {"headline": "<H1>", "subheadline": "<支撑句>",'
-        ' "short_description": "<2-3 sentence lead, plain text>"},\n'
-        '    "key_bullets": ["<benefit bullet, plain text>", "..."],\n'
-        '    "chunk_sections": [{"heading": "<H3>", "body": "<paragraph, plain text>"}],\n'
-        '    "specifications_html_table": "<table>...</table> (empty string if no'
-        " verifiable specs)\",\n"
-        '    "conversion_support_block": "<trust/decision-support paragraph>"\n'
+        '    "above_the_fold": {"headline": "<a HOOK about the buyer\'s outcome,'
+        " NOT the product name repeated>\", \"subheadline\": \"<支撑句>\","
+        ' "short_description": "<2-3 sentence lead selling the core benefit,'
+        ' plain text>"},\n'
+        '    "key_bullets": ["<benefit bullet: outcome first, fact second;'
+        ' punchy, <=14 words>", "... 4-6 bullets"],\n'
+        '    "chunk_sections": [{"heading": "<H3: a buyer-desire theme, e.g.'
+        " 'Practice anywhere, store it in seconds' — NEVER questionnaire-style"
+        " headings like 'Who is it for?'>\", \"body\": \"<2-4 sentence"
+        ' paragraph: concrete scene + benefit + supporting fact, plain text>"}],\n'
+        '    "specifications_html_table": "<table>...</table> ONLY with real'
+        ' supplied specs (empty string if none — never fill with placeholders)",\n'
+        '    "conversion_support_block": "<a short trust/decision paragraph: who'
+        " this is perfect for + what makes buying easy — NO price/shipping"
+        ' promises>"\n'
         "  },\n"
-        '  "page_faq": [{"question": "<Q>", "answer": "<A>"}],\n'
+        '  "page_faq": [{"question": "<a question a real shopper would ask>",'
+        ' "answer": "<confident, helpful, 1-3 sentences — never mention missing'
+        ' data>"}],\n'
         '  "json_ld": {"data": {"@type": "Product", "name": "<...>", "description":'
         ' "<...>", "brand": {"@type": "Brand", "name": "<site_brand, NEVER any'
         ' other brand>"}}},\n'
@@ -285,10 +308,11 @@ def marketing_copy_instruction(channel: str) -> str:
         '  "missing_inputs": ["<unsupported claims you had to drop>"]\n'
         "}\n"
         "HARD RULES for the body copy: chunk_sections is the main narrative "
-        "(3-5 sections); all copy fields are plain text except "
-        "specifications_html_table; NEVER mention price/stock/shipping in any "
-        "copy field (those are structured fields on the store — duplicating them "
-        "in prose creates feed/page inconsistency)."
+        "(3-5 sections, each a distinct buyer desire: quality/durability, "
+        "use scenarios, convenience, fit/size confidence, care...); all copy "
+        "fields are plain text except specifications_html_table; NEVER mention "
+        "price/stock/shipping in any copy field (those are structured fields on "
+        "the store — duplicating them in prose creates feed/page inconsistency)."
     )
 
 
@@ -329,12 +353,16 @@ def image_art_direction_instruction() -> str:
         "image_count MUST equal len(images). Every prompt must be English and grounded in the "
         "product facts + marketing copy; respect every 红线 in the skill.\n"
         "COVERAGE (do NOT be stingy on main/gallery images): plan GENEROUS gallery coverage "
-        "with placement=gallery — a hero image + a clean white-background main + several "
-        "detail/feature close-ups + lifestyle/scene shots (aim for 6-8 gallery images total, "
-        "more for richer products). THEN add placement=description images (infographics / "
+        "with placement=gallery — aim for 6-8 gallery images total, more for richer "
+        "products. HARD RULE — position 1 MUST be the MAIN image: the product alone, "
+        "centered, on a clean pure-white background, no props, no people, no overlay text, "
+        "filling ~85% of the frame (this becomes the store's main image and the feed "
+        "image). Lifestyle/hero scene shots come at position 2+, then detail/feature "
+        "close-ups and scale shots. THEN add placement=description images (infographics / "
         "spec visuals / usage / size-in-context) as the copy sections need. "
         "gallery images go into the store's product image gallery; description images get "
-        "embedded inside the product description at their position.\n"
+        "embedded inside the product description at their position. All gallery images "
+        "are square 1:1.\n"
         "SEO METADATA (mandatory, YOU write it — this is what goes on the live store): for "
         "EVERY image fill title + alt + caption + description in the target-market language "
         "(English for US). alt must describe the image accurately with the product's real "

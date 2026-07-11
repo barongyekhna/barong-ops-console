@@ -1,7 +1,7 @@
 [
   {
     "id": "barongPupload001",
-    "versionId": "b4000000-0000-4000-8000-000000000004",
+    "versionId": "b5000000-0000-4000-8000-000000000005",
     "name": "barong控制台-P系列-上架WooCommerce",
     "active": true,
     "settings": {},
@@ -17,7 +17,10 @@
         "name": "Webhook 触发",
         "type": "n8n-nodes-base.webhook",
         "typeVersion": 2,
-        "position": [0, 300],
+        "position": [
+          0,
+          300
+        ],
         "webhookId": "barong-p-upload-webhook"
       },
       {
@@ -29,7 +32,10 @@
         "name": "取数-上架包",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [200, 300]
+        "position": [
+          200,
+          300
+        ]
       },
       {
         "parameters": {
@@ -39,7 +45,10 @@
         "name": "拆图",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [400, 300]
+        "position": [
+          400,
+          300
+        ]
       },
       {
         "parameters": {
@@ -57,7 +66,10 @@
         "name": "下载图",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [600, 300]
+        "position": [
+          600,
+          300
+        ]
       },
       {
         "parameters": {
@@ -93,7 +105,10 @@
         "retryOnFail": true,
         "maxTries": 3,
         "waitBetweenTries": 5000,
-        "position": [800, 300],
+        "position": [
+          800,
+          300
+        ],
         "credentials": {
           "wordpressApi": {
             "id": "kaIcXMDT4cNA0GXm",
@@ -126,7 +141,10 @@
         "retryOnFail": true,
         "maxTries": 3,
         "waitBetweenTries": 5000,
-        "position": [1000, 300],
+        "position": [
+          1000,
+          300
+        ],
         "credentials": {
           "wordpressApi": {
             "id": "kaIcXMDT4cNA0GXm",
@@ -136,13 +154,16 @@
       },
       {
         "parameters": {
-          "jsCode": "const pkg = $('取数-上架包').first().json;\nconst metas = $('拆图').all().map((i) => i.json);\nconst medias = $input.all().map((i) => i.json);\nconst p = pkg.product || {};\nconst price = p.price || {};\nconst stock = p.stock || {};\nconst desc = p.description || {};\nlet html = desc.html || '';\nconst gallery = [];\nmetas.forEach((m, idx) => {\n  const media = medias[idx] || {};\n  if (m.placement === 'description' && m.embed_token) {\n    if (media.source_url) {\n      html = html.split(m.embed_token).join(media.source_url);\n    }\n  } else if (media.id != null) {\n    gallery.push({ id: media.id });\n  }\n});\nconst leftover = (html.match(/\\{\\{KP_IMG_\\d+\\}\\}/g) || []);\nif (leftover.length) throw new Error('描述图占位符未替换: ' + leftover.join(','));\nconst body = {\n  name: p.title || '',\n  type: 'simple',\n  status: 'draft',\n  sku: p.sku || '',\n  regular_price: price.regular != null ? String(price.regular) : '',\n  description: html,\n  short_description: '',\n  manage_stock: false,\n  stock_status: stock.status === 'out_of_stock' ? 'outofstock' : 'instock',\n  images: gallery,\n};\nif (price.sale != null) body.sale_price = String(price.sale);\nreturn [{ json: { woo_body: body } }];"
+          "jsCode": "const pkg = $('取数-上架包').first().json;\nconst metas = $('拆图').all().map((i) => i.json);\nconst medias = $input.all().map((i) => i.json);\nconst p = pkg.product || {};\nconst price = p.price || {};\nconst stock = p.stock || {};\nconst desc = p.description || {};\nlet html = desc.html || '';\nconst gallery = [];\nmetas.forEach((m, idx) => {\n  const media = medias[idx] || {};\n  if (m.placement === 'description' && m.embed_token) {\n    if (media.source_url) {\n      html = html.split(m.embed_token).join(media.source_url);\n    }\n  } else if (media.id != null) {\n    gallery.push({ id: media.id });\n  }\n});\nconst leftover = (html.match(/\\{\\{KP_IMG_\\d+\\}\\}/g) || []);\nif (leftover.length) throw new Error('描述图占位符未替换: ' + leftover.join(','));\nconst body = {\n  name: p.title || '',\n  type: 'simple',\n  status: 'draft',\n  sku: p.sku || '',\n  regular_price: price.regular != null ? String(price.regular) : '',\n  description: html,\n  short_description: '',\n  manage_stock: false,\n  stock_status: stock.status === 'out_of_stock' ? 'outofstock' : 'instock',\n  images: gallery,\n  meta_data: [],\n};\nif (price.sale != null) body.sale_price = String(price.sale);\n// FAQ 存产品 meta —— 站点侧 functions.php 读它输出 FAQPage schema\n// (description 里不能放 <script>，WP 会剥标签泄漏 JSON 文本)。\nconst faq = Array.isArray(desc.faq) ? desc.faq : [];\nif (faq.length) {\n  body.meta_data.push({ key: '_kp_faq', value: JSON.stringify(faq) });\n}\nreturn [{ json: { woo_body: body } }];"
         },
         "id": "a3333333-3333-4333-8333-333333333333",
         "name": "转 Woo 格式",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1200, 300]
+        "position": [
+          1200,
+          300
+        ]
       },
       {
         "parameters": {
@@ -161,7 +182,10 @@
         "name": "查已有SKU",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1350, 300],
+        "position": [
+          1350,
+          300
+        ],
         "credentials": {
           "httpBasicAuth": {
             "id": "aPB82hXe9Rxdvyfo",
@@ -177,7 +201,10 @@
         "name": "定上架方式",
         "type": "n8n-nodes-base.code",
         "typeVersion": 2,
-        "position": [1500, 300]
+        "position": [
+          1500,
+          300
+        ]
       },
       {
         "parameters": {
@@ -194,7 +221,10 @@
         "name": "上架 WooCommerce",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1650, 300],
+        "position": [
+          1650,
+          300
+        ],
         "credentials": {
           "httpBasicAuth": {
             "id": "aPB82hXe9Rxdvyfo",
@@ -224,39 +254,122 @@
         "name": "回报控制台",
         "type": "n8n-nodes-base.httpRequest",
         "typeVersion": 4.2,
-        "position": [1600, 300]
+        "position": [
+          1600,
+          300
+        ]
       }
     ],
     "connections": {
       "Webhook 触发": {
-        "main": [[{ "node": "取数-上架包", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "取数-上架包",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "取数-上架包": {
-        "main": [[{ "node": "拆图", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "拆图",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "拆图": {
-        "main": [[{ "node": "下载图", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "下载图",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "下载图": {
-        "main": [[{ "node": "传WP媒体库", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "传WP媒体库",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "传WP媒体库": {
-        "main": [[{ "node": "写图SEO", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "写图SEO",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "写图SEO": {
-        "main": [[{ "node": "转 Woo 格式", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "转 Woo 格式",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "转 Woo 格式": {
-        "main": [[{ "node": "查已有SKU", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "查已有SKU",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "查已有SKU": {
-        "main": [[{ "node": "定上架方式", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "定上架方式",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "定上架方式": {
-        "main": [[{ "node": "上架 WooCommerce", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "上架 WooCommerce",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       },
       "上架 WooCommerce": {
-        "main": [[{ "node": "回报控制台", "type": "main", "index": 0 }]]
+        "main": [
+          [
+            {
+              "node": "回报控制台",
+              "type": "main",
+              "index": 0
+            }
+          ]
+        ]
       }
     }
   }

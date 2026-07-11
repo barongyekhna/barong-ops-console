@@ -234,6 +234,8 @@ def _run_brand_audit_job(
     from .image_render_jobs import enqueue_image_render_jobs
     from .models import KProductKnowledgeProduct
 
+    from .models import KProductKnowledgeMediaAsset
+
     product = db.get(KProductKnowledgeProduct, job["product_id"])
     if product is None:
         raise RuntimeError("product not found for brand audit")
@@ -251,26 +253,62 @@ def _run_brand_audit_job(
         and not audit.get("errors")
         and attempt < 2
     ):
-        hints = {
-            int(violation["position"]): str(violation.get("finding") or "")
-            for violation in image_violations
-            if violation.get("position") is not None
-        }
+        # 违规图分两类：position 还在当前作图指令里的 → 重渲染；
+        # 不在的（指令改小后残留的孤儿旧图）→ 直接归档，渲染不了它。
+        instruction = product.image_instruction_json
+        images = (
+            instruction.get("images")
+            if isinstance(instruction, dict)
+            else None
+        ) or []
+        brief_positions = set()
+        for index, spec in enumerate(images, start=1):
+            if isinstance(spec, dict):
+                try:
+                    brief_positions.add(int(spec.get("position") or index))
+                except (TypeError, ValueError):
+                    brief_positions.add(index)
+        hints: dict[int, str] = {}
+        orphans_archived = 0
+        for violation in image_violations:
+            if violation.get("position") is None:
+                continue
+            position = int(violation["position"])
+            if position in brief_positions:
+                hints[position] = str(violation.get("finding") or "")
+                continue
+            asset = db.get(KProductKnowledgeMediaAsset, violation.get("asset_id"))
+            if asset is not None:
+                asset.status = "removed"
+                db.add(asset)
+                orphans_archived += 1
         try:
-            enqueue_image_render_jobs(
-                db,
-                product=product,
-                user=user,
-                scope_context=scope,
-                positions=sorted(hints.keys()),
-                brand_removal_hints=hints,
-            )
-            audit["attempt"] = attempt + 1
-            product.brand_audit_json = dict(audit)
-            db.add(product)
-            rerender_started = True
+            if hints:
+                enqueue_image_render_jobs(
+                    db,
+                    product=product,
+                    user=user,
+                    scope_context=scope,
+                    positions=sorted(hints.keys()),
+                    brand_removal_hints=hints,
+                )
+                rerender_started = True
+            elif orphans_archived:
+                # 只清了孤儿没有可渲染的 → 直接补一轮审查（内容已变）
+                enqueue_generation_jobs(
+                    db,
+                    product_ids=[product.id],
+                    job_type="brand_audit",
+                    user=user,
+                    scope_context=scope,
+                )
+                rerender_started = True
+            if rerender_started:
+                audit["attempt"] = attempt + 1
+                product.brand_audit_json = dict(audit)
+                db.add(product)
         except Exception:  # noqa: BLE001 - 渲染在跑等场景；审查结果照常落库
-            pass
+            rerender_started = False
 
     if audit["clean"]:
         title = f"品牌审查通过：{product.sku or product.product_key}"

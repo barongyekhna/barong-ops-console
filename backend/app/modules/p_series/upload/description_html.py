@@ -85,17 +85,26 @@ def build_description_html(
 
     atf = ppc.get("above_the_fold")
     atf = atf if isinstance(atf, dict) else {}
-    lead = _s(atf.get("short_description")) or _s(atf.get("subheadline"))
-    if lead:
-        parts.append(f'<p class="kp-lead">{escape(lead)}</p>')
+    headline = _s(atf.get("headline"))
+    subheadline = _s(atf.get("subheadline"))
+    lead = _s(atf.get("short_description"))
+    if headline or subheadline or lead:
+        hero_parts = ['<header class="kp-hero">']
+        if headline:
+            hero_parts.append(f'<h2 class="kp-headline">{escape(headline)}</h2>')
+        if subheadline:
+            hero_parts.append(f'<p class="kp-subheadline">{escape(subheadline)}</p>')
+        if lead:
+            hero_parts.append(f'<p class="kp-lead">{escape(lead)}</p>')
+        hero_parts.append("</header>")
+        parts.append("".join(hero_parts))
         emitted.append("kp-lead")
 
     bullets = [_s(b) for b in (ppc.get("key_bullets") or []) if _s(b)]
     if bullets:
         items = "".join(f"<li>{escape(b)}</li>" for b in bullets)
         parts.append(
-            '<section class="kp-benefits"><h3>Highlights</h3>'
-            f"<ul>{items}</ul></section>"
+            f'<section class="kp-benefits"><ul>{items}</ul></section>'
         )
         emitted.append("kp-benefits")
     else:
@@ -124,6 +133,12 @@ def build_description_html(
         parts.append('<section class="kp-detail">' + "".join(detail) + "</section>")
         emitted.append("kp-detail")
 
+    # kp-trust —— 信任/决策支持块（转化文案的收口）
+    trust = _s(ppc.get("conversion_support_block"))
+    if trust:
+        parts.append(f'<aside class="kp-trust"><p>{escape(trust)}</p></aside>')
+        emitted.append("kp-trust")
+
     spec_table = _s(ppc.get("specifications_html_table"))
     if spec_table:
         parts.append(
@@ -134,17 +149,17 @@ def build_description_html(
     else:
         omitted.append("kp-specs")
 
-    # kp-faq —— 可见 FAQ（和 FAQPage schema 同源）
+    # kp-faq —— 可见 FAQ，原生 <details> 折叠（零 JS，wp_kses 白名单实测放行）
     faqs = _faq_items(marketing_copy_json)
     if faqs:
         rows = "".join(
-            f'<div class="kp-faq-item"><dt class="kp-faq-q">{escape(q)}</dt>'
-            f'<dd class="kp-faq-a">{escape(a)}</dd></div>'
+            f'<details class="kp-faq-item"><summary>{escape(q)}</summary>'
+            f'<div class="kp-faq-a"><p>{escape(a)}</p></div></details>'
             for q, a in faqs
         )
         parts.append(
             '<section class="kp-faq"><h3>Frequently Asked Questions</h3>'
-            f"<dl>{rows}</dl></section>"
+            f"{rows}</section>"
         )
         emitted.append("kp-faq")
 

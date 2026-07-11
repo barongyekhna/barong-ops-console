@@ -147,14 +147,17 @@ def brand_fingerprint(db: Session, product: KProductKnowledgeProduct) -> str:
 
 # --- 生成侧红线工具 -----------------------------------------------------------
 
-# 渲染 prompt 追加块：保形状/颜色/结构，但必须抹掉品牌标识。
+# 渲染 prompt 追加块：产品表面的文字/图案标识一律无差别清除 —— 不判断
+# 是不是品牌（判断会漏），只要是印在产品上的文字就删。保形状/颜色/结构。
 BRAND_REMOVAL_PROMPT_BLOCK = (
-    "\n\nBRAND REMOVAL (MANDATORY): if the reference product carries any brand "
-    "name, logo, wordmark, or branded label, REMOVE it completely — replace it "
-    "with a clean unbranded surface matching the product's material and color. "
-    "Keep the product's shape, structure, and colors otherwise unchanged. The "
-    "final image must contain NO third-party brand text or logo anywhere (on "
-    "the product, packaging, labels, or background)."
+    "\n\nTEXT & LOGO REMOVAL (MANDATORY, do not skip): remove ALL text, "
+    "lettering, wordmarks, logos, symbols, and printed labels from the product "
+    "surface itself — every character, no matter what it says. Replace each "
+    "removed mark with a clean blank surface matching the product's material, "
+    "color, and texture. Do NOT alter the product's shape, structure, "
+    "proportions, or colors in any other way. Packaging, tags, and background "
+    "props must also carry no readable text or logos. The ONLY text allowed in "
+    "the final image is overlay text explicitly requested in this prompt."
 )
 
 

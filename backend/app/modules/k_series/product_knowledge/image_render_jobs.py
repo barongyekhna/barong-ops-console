@@ -132,8 +132,10 @@ def _resolve_aspect_ratio(
     channel: str,
     placement: str,
 ) -> str:
-    # Per-image field wins (newer briefs carry it); older briefs only have a
-    # prose global like "4:5 for product gallery; 16:9 for description".
+    # 硬规则：主副图（gallery）一律 1:1 —— 存储时统一放大到 1800×1800。
+    if placement == PLACEMENT_GALLERY:
+        return "1:1"
+    # 描述图：每图字段优先，退回全局说明里的横版比例，默认 16:9。
     for raw in (spec.get("aspect_ratio"), spec.get("ratio")):
         if isinstance(raw, str):
             match = _RATIO_RE.search(raw)
@@ -141,17 +143,10 @@ def _resolve_aspect_ratio(
                 return f"{match.group(1)}:{match.group(2)}"
     global_raw = instruction.get("aspect_ratio")
     ratios = _RATIO_RE.findall(global_raw) if isinstance(global_raw, str) else []
-    if placement == PLACEMENT_DESCRIPTION:
-        for width, height in ratios:
-            if int(width) > int(height):
-                return f"{width}:{height}"
-        return "16:9"
-    if channel == "amazon":
-        return "1:1"
     for width, height in ratios:
-        if int(width) <= int(height):
+        if int(width) > int(height):
             return f"{width}:{height}"
-    return "4:5"
+    return "16:9"
 
 
 def _compose_prompt(spec: dict[str, Any], instruction: dict[str, Any]) -> str:
@@ -697,6 +692,32 @@ def _archive_previous_render(
     )
 
 
+# 主副图硬规格：1800×1800；所有成品图硬规格：webp。
+GALLERY_TARGET_SIDE = 1800
+_WEBP_QUALITY = 92
+
+
+def _postprocess_rendered_image(
+    contents: bytes,
+    placement: str,
+) -> tuple[bytes, str, int, int]:
+    """渲染成品统一后处理：gallery 放大到 1800×1800，全部转 webp。"""
+    from io import BytesIO
+
+    from PIL import Image
+
+    with Image.open(BytesIO(contents)) as img:
+        img = img.convert("RGB")
+        if placement == PLACEMENT_GALLERY:
+            img = img.resize(
+                (GALLERY_TARGET_SIDE, GALLERY_TARGET_SIDE),
+                Image.LANCZOS,
+            )
+        buffer = BytesIO()
+        img.save(buffer, format="WEBP", quality=_WEBP_QUALITY, method=6)
+        return buffer.getvalue(), "image/webp", img.width, img.height
+
+
 def _store_render_asset(
     db: Session,
     *,
@@ -710,16 +731,15 @@ def _store_render_asset(
     prompt_used: str,
     user: User | None,
 ) -> KProductKnowledgeMediaAsset:
+    del mime_type, width, height  # superseded by the mandatory post-process
+    contents, mime_type, width, height = _postprocess_rendered_image(
+        contents, str(job["placement"])
+    )
+    content_sha256 = hashlib.sha256(contents).hexdigest()
     variant = _first_variant(db, product)
     product_part = product.product_key or str(product.id)
     variant_part = variant.variant_sku if variant is not None else "default"
-    extension = {
-        "image/png": "png",
-        "image/jpeg": "jpg",
-        "image/webp": "webp",
-        "image/gif": "gif",
-    }.get(mime_type, "img")
-    filename = f"{uuid4()}-render-p{int(job['position']):02d}.{extension}"
+    filename = f"{uuid4()}-render-p{int(job['position']):02d}.webp"
     object_key = f"images/{product_part}/{variant_part}/k-render/{filename}"
     root = _media_storage_root_path()
     storage_file = write_media_file(root, object_key, contents)
@@ -927,6 +947,33 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
             return
         completed = [row for row in rows if row["status"] == "completed"]
         failed = [row for row in rows if row["status"] == "failed"]
+
+        # 全量批次（覆盖当前作图指令的全部 position）意味着“这就是产品的
+        # 全套成品图”——归档不属于本批的旧渲染资产，防止指令张数变少时
+        # 超出范围的旧图残留（它们会混进上架包、也会被品牌审查抓）。
+        batch_positions = {int(row["position"]) for row in rows}
+        brief_positions = {
+            _spec_position(spec, index)
+            for index, spec in enumerate(_instruction_images(product), start=1)
+        }
+        if brief_positions and batch_positions >= brief_positions:
+            db.execute(
+                text(
+                    """
+                    UPDATE k_product_knowledge_media_assets
+                    SET status = 'removed', updated_at = now()
+                    WHERE product_id = :product_id
+                      AND status = 'available'
+                      AND metadata_json->>'render_pipeline' = :tag
+                      AND metadata_json->>'render_batch_id' != :batch_id
+                    """
+                ),
+                {
+                    "product_id": product.id,
+                    "tag": RENDER_PIPELINE_TAG,
+                    "batch_id": str(batch_id),
+                },
+            )
 
         main_row = next(
             (row for row in completed if row["asset_role"] == ASSET_ROLE_MAIN),

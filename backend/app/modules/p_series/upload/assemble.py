@@ -18,6 +18,7 @@ from ..contract.upload_package import (
     UPLOAD_PACKAGE_SCHEMA_VERSION,
     Category,
     Description,
+    FaqItem,
     Gate,
     ImageAsset,
     Keywords,
@@ -35,7 +36,6 @@ from ...k_series.product_knowledge.brand_guard import (
 from ...k_series.product_knowledge.category_resolver import category_is_bound
 from .description_html import (
     build_description_html,
-    build_schema_jsonld,
     plain_text_from_copy,
 )
 
@@ -252,12 +252,13 @@ def assemble_upload_package(
         if img.placement == "description" and img.embed_token
     ]
     desc = build_description_html(mcj, description_images)
-    schema_jsonld = build_schema_jsonld(
-        mcj,
-        price=product.regular_price,
-        currency=(product.price_currency or "USD")[:3],
-        availability=_availability(product.stock_status),
-    )
+    faq_items = [
+        FaqItem(question=str(f.get("question")), answer=str(f.get("answer")))
+        for f in (mcj.get("page_faq") or [])
+        if isinstance(f, dict)
+        and str(f.get("question") or "").strip()
+        and str(f.get("answer") or "").strip()
+    ]
     bullets = [
         str(b).strip()
         for b in (
@@ -286,9 +287,12 @@ def assemble_upload_package(
             mpn=getattr(product, "mpn", None),
             condition="new",
             description=Description(
-                html=desc["html"] + schema_jsonld,
+                # NO <script> in html — WP strips the tag and leaks the JSON as
+                # visible text. Schema is injected site-side (Woo filter + meta).
+                html=desc["html"],
                 text=plain_text_from_copy(mcj),
                 bullets=bullets,
+                faq=faq_items,
                 layout_skill_version=LAYOUT_SKILL_VERSION,
                 category_block=desc["sections_emitted"][-1]
                 if desc["sections_emitted"]

@@ -105,15 +105,25 @@ class ImageAsset(BaseModel):
     embed_token: str | None = None
 
 
+class FaqItem(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    question: str
+    answer: str
+
+
 class Description(BaseModel):
     """Marketing body. NOTE: never carries price / availability — those are
     structured fields, and duplicating them in prose is what breaks feed↔page
-    consistency (GMC misrepresentation)."""
+    consistency (GMC misrepresentation). NOTE: html carries NO <script> —
+    WordPress strips the tag and leaks the JSON as visible text; structured
+    data is injected site-side (Woo filter + _kp_faq meta)."""
 
     model_config = ConfigDict(extra="forbid")
     html: str                       # from the product-page-layout skill
     text: str | None = None         # plain-text fallback
     bullets: list[str] = Field(default_factory=list)
+    # visible FAQ, also shipped as Woo meta `_kp_faq` for site-side FAQPage schema
+    faq: list[FaqItem] = Field(default_factory=list)
     layout_skill_version: str | None = None
     category_block: str | None = None
 
