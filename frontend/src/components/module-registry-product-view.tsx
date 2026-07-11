@@ -57,6 +57,7 @@ import {
   runN8nWebhookTest,
   type N8nWebhookTestRunResponse,
 } from "@/lib/n8n-webhook-test-api";
+import { WebhookRegistryPanel } from "@/components/webhook-registry-panel";
 import {
   listOrganizations,
   type OrganizationOption,
@@ -1594,6 +1595,8 @@ function OwnerModuleControlCenter() {
         ) : null}
 
         {activeTab === "hook" ? (
+        <>
+        <WebhookRegistryPanel />
         <div className="webhook-test-band">
           <div className="ops-panel-heading">
             <div>
@@ -1676,6 +1679,7 @@ function OwnerModuleControlCenter() {
             </div>
           ) : null}
         </div>
+        </>
         ) : null}
 
         {activeTab === "bind" && bindings.length > 0 ? (

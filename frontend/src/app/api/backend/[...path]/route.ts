@@ -616,6 +616,22 @@ function isAllowedPPath(method: string, path: string[]) {
   if (path.length === 2 && path[1] === "uploads") {
     return method === "GET";
   }
+  // GET /p/products/board  (待上传/已上传分组)
+  if (
+    path.length === 3 &&
+    path[1] === "products" &&
+    path[2] === "board"
+  ) {
+    return method === "GET";
+  }
+  // POST /p/dispatch/batch  (批量上传，串行队列)
+  if (
+    path.length === 3 &&
+    path[1] === "dispatch" &&
+    path[2] === "batch"
+  ) {
+    return method === "POST";
+  }
   return false;
 }
 
@@ -1145,7 +1161,13 @@ export function getBackendApiPath(method: string, path: string[]) {
     (method === "POST" &&
       ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath)) ||
     (method === "POST" &&
-      ALLOWED_N8N_WEBHOOK_TEST_POST_PATHS.has(requestedPath))
+      ALLOWED_N8N_WEBHOOK_TEST_POST_PATHS.has(requestedPath)) ||
+    // Webhook 登记簿（模块控制页 Webhook 标签，只记录不调用）
+    (requestedPath === "webhook-registry" &&
+      (method === "GET" || method === "POST")) ||
+    (path.length === 2 &&
+      path[0] === "webhook-registry" &&
+      method === "DELETE")
   ) {
     return withApiLayer("control-plane", requestedPath);
   }

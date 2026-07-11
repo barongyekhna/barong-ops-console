@@ -27,7 +27,12 @@ from ..k_series.product_knowledge.models import (
 from ..notifications.service import create_notification
 from .contract.upload_package import UploadPackage
 from .upload.assemble import assemble_upload_package, gate_blockers
-from .upload.jobs import create_dispatch_job, record_result
+from .upload.jobs import (
+    create_dispatch_job,
+    enqueue_dispatch_job,
+    kick_queue,
+    record_result,
+)
 from .upload.models import PUploadJob
 
 router = APIRouter(prefix="/p", tags=["p-upload"])
@@ -127,8 +132,16 @@ def p_upload_jobs_list(
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> UploadJobListResponse:
-    """上架台账：驾驶舱页面的数据源（会话鉴权）。"""
+    """上架台账：驾驶舱页面的数据源（会话鉴权）。
+
+    顺带踢一次队列 —— 这是 in-flight 超时收尸的惰性触发点（页面在轮询）。
+    """
     del request, user
+    try:
+        kick_queue(db, public_base=_callback_base())
+        db.commit()
+    except Exception:  # noqa: BLE001 - 踢队失败不影响读台账
+        db.rollback()
     rows = db.execute(
         select(PUploadJob, KProductKnowledgeProduct.product_name_en, KProductKnowledgeProduct.sku)
         .join(
@@ -234,6 +247,108 @@ def p_dispatch(
     )
 
 
+class DispatchBatchRequest(BaseModel):
+    product_ids: list[UUID]
+
+
+class DispatchBatchResponse(BaseModel):
+    queued: list[str]
+    blocked: list[dict[str, object]]
+
+
+@router.post("/dispatch/batch", response_model=DispatchBatchResponse)
+def p_dispatch_batch(
+    payload: DispatchBatchRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> DispatchBatchResponse:
+    """批量上架：全部入队，由串行队列一单一单发 n8n（防 Woo 429）。"""
+    del request, user
+    queued: list[str] = []
+    blocked: list[dict[str, object]] = []
+    for product_id in payload.product_ids:
+        product = db.get(KProductKnowledgeProduct, product_id)
+        if product is None:
+            blocked.append({"product_id": str(product_id), "blockers": ["产品不存在"]})
+            continue
+        blockers = gate_blockers(db, product)
+        if blockers:
+            blocked.append({"product_id": str(product_id), "blockers": blockers})
+            continue
+        job = enqueue_dispatch_job(
+            db, product_id=product_id, channel="woocommerce"
+        )
+        queued.append(job.job_id)
+    kick_queue(db, public_base=_callback_base())
+    db.commit()
+    return DispatchBatchResponse(queued=queued, blocked=blocked)
+
+
+class BoardProduct(BaseModel):
+    product_id: str
+    product_name: str | None = None
+    sku: str | None = None
+    price: str | None = None
+    gate_ready: bool
+    blockers: list[str]
+    exported: bool
+    last_job_status: str | None = None
+    last_external_url: str | None = None
+
+
+class BoardResponse(BaseModel):
+    pending: list[BoardProduct]
+    uploaded: list[BoardProduct]
+
+
+@router.get("/products/board", response_model=BoardResponse)
+def p_products_board(
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> BoardResponse:
+    """待上传 / 已上传分组：K 链路走完（有文案）的产品全景。"""
+    del request, user
+    products = db.scalars(
+        select(KProductKnowledgeProduct)
+        .where(KProductKnowledgeProduct.marketing_copy_json.isnot(None))
+        .order_by(KProductKnowledgeProduct.updated_at.desc())
+        .limit(100)
+    ).all()
+    latest_jobs: dict[str, PUploadJob] = {}
+    for job in db.scalars(
+        select(PUploadJob).order_by(PUploadJob.created_at.asc())
+    ).all():
+        latest_jobs[str(job.product_id)] = job
+
+    pending: list[BoardProduct] = []
+    uploaded: list[BoardProduct] = []
+    for product in products:
+        blockers = gate_blockers(db, product)
+        job = latest_jobs.get(str(product.id))
+        exported = (product.product_status == "exported") or bool(
+            job and job.status == "success"
+        )
+        entry = BoardProduct(
+            product_id=str(product.id),
+            product_name=product.product_name_en,
+            sku=product.sku,
+            price=(
+                f"{product.regular_price} {(product.price_currency or 'USD')[:3]}"
+                if product.regular_price is not None
+                else None
+            ),
+            gate_ready=not blockers,
+            blockers=blockers,
+            exported=exported,
+            last_job_status=job.status if job else None,
+            last_external_url=job.external_url if job else None,
+        )
+        (uploaded if exported else pending).append(entry)
+    return BoardResponse(pending=pending, uploaded=uploaded)
+
+
 @router.post("/uploads/{job_id}/result", response_model=UploadResultResponse)
 def p_upload_result(
     job_id: str,
@@ -250,6 +365,8 @@ def p_upload_result(
             external_product_id=payload.external_product_id,
             external_url=payload.external_url,
             error=payload.error,
+            # 串行队列：本单落地后自动放行下一单
+            public_base=_callback_base(),
         )
     except PermissionError:
         raise HTTPException(status_code=401, detail="job token 无效。")

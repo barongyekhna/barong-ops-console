@@ -231,3 +231,19 @@
 .emptyHint strong {
   color: #d9f3ff;
 }
+
+.notice {
+  margin: 0;
+  padding: 12px 16px;
+  border: 1px solid rgb(61 220 151 / 40%);
+  border-radius: 12px;
+  background: rgb(61 220 151 / 8%);
+  color: rgb(147 240 197);
+  font-size: 0.86rem;
+}
+
+.statusBadge[data-status="queued"] {
+  color: rgb(140 190 255);
+  border-color: rgb(120 170 255 / 45%);
+  background: rgb(120 170 255 / 10%);
+}
