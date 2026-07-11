@@ -489,6 +489,11 @@ def render_jobs_status(
     product_id: UUID,
     batch_id: UUID | None = None,
 ) -> dict[str, Any]:
+    # 惰性清理：staged 超 24h 未保存的挂载图（页面在轮询，这里是天然触发点）
+    try:
+        cleanup_stale_staged(db, product_id)
+    except Exception:  # noqa: BLE001
+        pass
     if batch_id is None:
         batch_id = db.execute(
             text(
@@ -587,7 +592,8 @@ def _claim_pending_jobs(db: Session, limit: int) -> list[dict[str, Any]]:
             SELECT id, product_id, batch_id, position, placement, role_label,
                    asset_role, mission, prompt, overlay_text, aspect_ratio,
                    seo_json, requested_by_username,
-                   workspace_key, business_context, scope_mode
+                   workspace_key, business_context, scope_mode,
+                   reference_asset_id
             FROM {_TABLE}
             WHERE status = 'pending'
             ORDER BY created_at ASC, position ASC
@@ -662,34 +668,6 @@ def _first_variant(
         .order_by(KProductKnowledgeVariant.created_at.asc())
         .limit(1)
     ).first()
-
-
-def _archive_previous_render(
-    db: Session,
-    *,
-    product_id: UUID,
-    position: int,
-    keep_asset_id: UUID,
-) -> None:
-    db.execute(
-        text(
-            """
-            UPDATE k_product_knowledge_media_assets
-            SET status = 'removed', updated_at = now()
-            WHERE product_id = :product_id
-              AND status = 'available'
-              AND id != :keep_asset_id
-              AND metadata_json->>'render_pipeline' = :tag
-              AND (metadata_json->>'position')::int = :position
-            """
-        ),
-        {
-            "product_id": product_id,
-            "keep_asset_id": keep_asset_id,
-            "tag": RENDER_PIPELINE_TAG,
-            "position": position,
-        },
-    )
 
 
 # 主副图硬规格：1800×1800；所有成品图硬规格：webp。
@@ -779,7 +757,9 @@ def _store_render_asset(
         variant_sku=variant.variant_sku if variant is not None else None,
         asset_type="image",
         asset_role=str(job["asset_role"]),
-        status="available",
+        # 暂存态：用户点「保存」才转 available（入硬门/审查/上架包）；
+        # 24 小时未保存自动清除。
+        status="staged",
         review_status="i_system_managed",
         storage_provider="local_filesystem",
         object_key=object_key,
@@ -804,6 +784,7 @@ def _store_render_asset(
             "render_pipeline": RENDER_PIPELINE_TAG,
             "render_job_id": str(job["id"]),
             "render_batch_id": str(job["batch_id"]),
+            "staged_at": datetime.now(UTC).isoformat(),
             "aspect_ratio": job.get("aspect_ratio"),
             "image_prompt_enhanced": prompt_used,
             "source_type": IMAGE_SOURCE_I_SYSTEM,
@@ -829,12 +810,8 @@ def _store_render_asset(
     )
     db.add(row)
     db.flush()
-    _archive_previous_render(
-        db,
-        product_id=product.id,
-        position=int(job["position"]),
-        keep_asset_id=row.id,
-    )
+    # 注意：同 position 旧图的归档发生在「保存」时（save_render_assets），
+    # 暂存阶段新旧并存，用户看图后决定保存哪张。
     return row
 
 
@@ -852,7 +829,16 @@ def _process_render_job(job: dict[str, Any]) -> None:
             product = db.get(KProductKnowledgeProduct, job["product_id"])
             if product is None:
                 raise KImageRenderError("PRODUCT_NOT_FOUND", "产品不存在或已删除。")
-            reference = _resolve_reference_image(db, product)
+            # 单张重做可指定“以某张已生成图为参考”（在其基础上修改）
+            reference = None
+            if job.get("reference_asset_id"):
+                ref_asset = db.get(
+                    KProductKnowledgeMediaAsset, job["reference_asset_id"]
+                )
+                if ref_asset is not None:
+                    reference = _asset_file_bytes(ref_asset)
+            if reference is None:
+                reference = _resolve_reference_image(db, product)
             prompt = str(job["prompt"])
             engine = IImageModelEngine(db)
             # request=None: key resolution goes through the module execution
@@ -948,59 +934,13 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
         completed = [row for row in rows if row["status"] == "completed"]
         failed = [row for row in rows if row["status"] == "failed"]
 
-        # 全量批次（覆盖当前作图指令的全部 position）意味着“这就是产品的
-        # 全套成品图”——归档不属于本批的旧渲染资产，防止指令张数变少时
-        # 超出范围的旧图残留（它们会混进上架包、也会被品牌审查抓）。
-        batch_positions = {int(row["position"]) for row in rows}
-        brief_positions = {
-            _spec_position(spec, index)
-            for index, spec in enumerate(_instruction_images(product), start=1)
-        }
-        if brief_positions and batch_positions >= brief_positions:
-            db.execute(
-                text(
-                    """
-                    UPDATE k_product_knowledge_media_assets
-                    SET status = 'removed', updated_at = now()
-                    WHERE product_id = :product_id
-                      AND status = 'available'
-                      AND metadata_json->>'render_pipeline' = :tag
-                      AND metadata_json->>'render_batch_id' != :batch_id
-                    """
-                ),
-                {
-                    "product_id": product.id,
-                    "tag": RENDER_PIPELINE_TAG,
-                    "batch_id": str(batch_id),
-                },
-            )
-
-        main_row = next(
-            (row for row in completed if row["asset_role"] == ASSET_ROLE_MAIN),
-            None,
-        )
-        username = rows[0]["requested_by_username"]
-        user = (
-            db.query(User).filter(User.username == username).first()
-            if username
-            else None
-        )
-        if main_row is not None and main_row["asset_id"] is not None:
-            asset = db.get(KProductKnowledgeMediaAsset, main_row["asset_id"])
-            if asset is not None:
-                _bind_rendered_main(db, product=product, asset=asset)
-        if completed and user is not None:
-            try:
-                from .router import _store_image_review_snapshot
-
-                _store_image_review_snapshot(db, product=product, user=user)
-            except Exception:  # noqa: BLE001 - <5 images etc.; not fatal
-                pass
+        # 成品先进「暂存区」：绑定主图 / 归档旧图 / 品牌审查全部推迟到
+        # 用户点「保存」（save_render_assets）—— 没保存的图对系统不存在。
 
         level = "info" if not failed else ("warning" if completed else "error")
         title = (
             f"一次性作图完成：{product.sku or product.product_key or product.id} "
-            f"{len(completed)}/{len(rows)} 张"
+            f"{len(completed)}/{len(rows)} 张待保存"
         )
         body = None
         if failed:
@@ -1009,6 +949,8 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
                 + ", ".join(str(row["position"]) for row in failed)
                 + " —— 可在 K 产品页对失败图重试。"
             )
+        elif completed:
+            body = "去 K 产品页预览，满意的图点「保存」才会正式入库（24 小时未保存自动清除）。"
         try:
             create_notification(
                 db,
@@ -1027,34 +969,6 @@ def _maybe_finalize_batch(batch_id: UUID) -> None:
             )
         except Exception:  # noqa: BLE001 - notification must not sink the batch
             _LOGGER.exception("render notification failed for %s", batch_id)
-
-        # 品牌硬门闭环：成品图有更新 -> 自动入队一次品牌审查（k_generation_jobs）。
-        if completed and product.marketing_copy_json:
-            try:
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO k_generation_jobs
-                            (id, product_id, job_type, status, batch_id,
-                             requested_by_username, workspace_key,
-                             business_context, scope_mode)
-                        VALUES
-                            (:id, :product_id, 'brand_audit', 'pending', :batch_id,
-                             :username, :workspace_key, :business_context, :scope_mode)
-                        """
-                    ),
-                    {
-                        "id": uuid4(),
-                        "product_id": product.id,
-                        "batch_id": uuid4(),
-                        "username": rows[0]["requested_by_username"],
-                        "workspace_key": rows[0]["workspace_key"],
-                        "business_context": rows[0]["business_context"],
-                        "scope_mode": rows[0]["scope_mode"],
-                    },
-                )
-            except Exception:  # noqa: BLE001
-                _LOGGER.exception("brand audit enqueue failed for %s", batch_id)
         db.commit()
 
 
@@ -1080,6 +994,260 @@ def _bind_rendered_main(
         "thumbnail_url": f"/k/media/{asset.id}/thumbnail",
     }
     db.add(product)
+
+
+# --- 暂存 / 保存 / 单张重做 -------------------------------------------------
+
+STAGED_TTL_HOURS = 24
+
+
+def cleanup_stale_staged(db: Session, product_id: UUID | None = None) -> int:
+    """惰性清理：staged 超过 24 小时未保存的成品图删除（防意外刷新丢失
+    的挂载期结束）。在查询/入队等触发点顺手调用。"""
+    clause = "AND product_id = :product_id" if product_id is not None else ""
+    params: dict[str, Any] = {"tag": RENDER_PIPELINE_TAG}
+    if product_id is not None:
+        params["product_id"] = product_id
+    result = db.execute(
+        text(
+            f"""
+            UPDATE k_product_knowledge_media_assets
+            SET status = 'removed', updated_at = now()
+            WHERE status = 'staged'
+              AND metadata_json->>'render_pipeline' = :tag
+              AND (metadata_json->>'staged_at')::timestamptz
+                  < now() - interval '{STAGED_TTL_HOURS} hours'
+              {clause}
+            """
+        ),
+        params,
+    )
+    return result.rowcount or 0
+
+
+def list_render_assets(
+    db: Session,
+    product: KProductKnowledgeProduct,
+) -> list[dict[str, Any]]:
+    """渲染面板的资产视图：staged + available 并存（按 position）。"""
+    rows = db.scalars(
+        select(KProductKnowledgeMediaAsset)
+        .where(
+            KProductKnowledgeMediaAsset.product_id == product.id,
+            KProductKnowledgeMediaAsset.asset_type == "image",
+            KProductKnowledgeMediaAsset.status.in_(("staged", "available")),
+        )
+        .order_by(KProductKnowledgeMediaAsset.created_at.asc())
+    ).all()
+    out = []
+    for row in rows:
+        meta = row.metadata_json if isinstance(row.metadata_json, dict) else {}
+        if meta.get("render_pipeline") != RENDER_PIPELINE_TAG:
+            continue
+        out.append(
+            {
+                "asset_id": str(row.id),
+                "position": int(meta.get("position") or 0),
+                "placement": meta.get("placement") or "gallery",
+                "asset_role": row.asset_role,
+                "status": row.status,
+                "role_label": meta.get("role_label") or "",
+                "staged_at": meta.get("staged_at"),
+            }
+        )
+    out.sort(key=lambda item: (item["position"], item["status"]))
+    return out
+
+
+def save_render_assets(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    user: User | None,
+    scope_context: KScopeContext,
+    asset_ids: Sequence[UUID] | None = None,
+) -> dict[str, Any]:
+    """把暂存图正式入库：staged→available、归档同 position 其它渲染图、
+    绑定主图、入队品牌审查。asset_ids=None 表示全部保存。"""
+    query = select(KProductKnowledgeMediaAsset).where(
+        KProductKnowledgeMediaAsset.product_id == product.id,
+        KProductKnowledgeMediaAsset.status == "staged",
+    )
+    if asset_ids:
+        query = query.where(KProductKnowledgeMediaAsset.id.in_(list(asset_ids)))
+    staged = [
+        row
+        for row in db.scalars(query).all()
+        if isinstance(row.metadata_json, dict)
+        and row.metadata_json.get("render_pipeline") == RENDER_PIPELINE_TAG
+    ]
+    if not staged:
+        raise KImageRenderError(
+            "NOTHING_TO_SAVE", "没有待保存的暂存图。", status_code=409
+        )
+
+    saved: list[dict[str, Any]] = []
+    main_asset: KProductKnowledgeMediaAsset | None = None
+    for row in staged:
+        meta = dict(row.metadata_json)
+        position = int(meta.get("position") or 0)
+        row.status = "available"
+        meta.pop("staged_at", None)
+        row.metadata_json = meta
+        db.add(row)
+        db.flush()
+        # 同 position 的其它渲染图（旧 available + 其它 staged 候选）归档
+        db.execute(
+            text(
+                """
+                UPDATE k_product_knowledge_media_assets
+                SET status = 'removed', updated_at = now()
+                WHERE product_id = :product_id
+                  AND status IN ('available', 'staged')
+                  AND id != :keep_id
+                  AND metadata_json->>'render_pipeline' = :tag
+                  AND (metadata_json->>'position')::int = :position
+                """
+            ),
+            {
+                "product_id": product.id,
+                "keep_id": row.id,
+                "tag": RENDER_PIPELINE_TAG,
+                "position": position,
+            },
+        )
+        if row.asset_role == ASSET_ROLE_MAIN:
+            main_asset = row
+        saved.append({"asset_id": str(row.id), "position": position})
+
+    if main_asset is not None:
+        _bind_rendered_main(db, product=product, asset=main_asset)
+    if user is not None:
+        try:
+            from .router import _store_image_review_snapshot
+
+            _store_image_review_snapshot(db, product=product, user=user)
+        except Exception:  # noqa: BLE001 - <5 images etc.; not fatal
+            pass
+
+    # 内容正式变化 -> 品牌审查（老审查指纹随之失效）
+    if product.marketing_copy_json:
+        db.execute(
+            text(
+                """
+                INSERT INTO k_generation_jobs
+                    (id, product_id, job_type, status, batch_id,
+                     requested_by_username, workspace_key,
+                     business_context, scope_mode)
+                VALUES
+                    (:id, :product_id, 'brand_audit', 'pending', :batch_id,
+                     :username, :workspace_key, :business_context, :scope_mode)
+                """
+            ),
+            {
+                "id": uuid4(),
+                "product_id": product.id,
+                "batch_id": uuid4(),
+                "username": user.username if user is not None else None,
+                "workspace_key": scope_context.workspace_key,
+                "business_context": scope_context.business_context,
+                "scope_mode": scope_context.scope_mode,
+            },
+        )
+    return {"saved": saved, "audit_enqueued": bool(product.marketing_copy_json)}
+
+
+def enqueue_rework_job(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    user: User | None,
+    scope_context: KScopeContext,
+    asset_id: UUID,
+    extra_prompt: str,
+    use_current_as_reference: bool,
+) -> tuple[UUID, dict[str, Any]]:
+    """单张图重做：原 prompt + 临时 REVISION 指令（冲突以新指令为准，不写回
+    作图指令）。参考图二选一：这版图本身（在其基础上改）或产品原始参考图。"""
+    asset = db.get(KProductKnowledgeMediaAsset, asset_id)
+    if (
+        asset is None
+        or str(asset.product_id) != str(product.id)
+        or asset.status not in ("staged", "available")
+        or not isinstance(asset.metadata_json, dict)
+        or asset.metadata_json.get("render_pipeline") != RENDER_PIPELINE_TAG
+    ):
+        raise KImageRenderError(
+            "REWORK_ASSET_NOT_FOUND", "要重做的图不存在或不可重做。", status_code=404
+        )
+    extra = (extra_prompt or "").strip()
+    if not extra:
+        raise KImageRenderError(
+            "REWORK_PROMPT_REQUIRED", "请填写这张图的修改要求。", status_code=422
+        )
+    meta = asset.metadata_json
+    base_prompt = str(meta.get("image_prompt_enhanced") or "").strip()
+    if not base_prompt:
+        raise KImageRenderError(
+            "REWORK_PROMPT_MISSING", "原图缺少 prompt 快照，无法重做。", status_code=409
+        )
+    prompt = base_prompt + (
+        "\n\nREVISION (temporary instruction for THIS regeneration only; if it "
+        "conflicts with anything above, THIS revision wins): "
+        + extra
+    )
+    if use_current_as_reference:
+        prompt += (
+            "\nThe attached reference image IS the previous accepted version of "
+            "this exact image — keep its composition, style, and content, and "
+            "apply ONLY the revision above."
+        )
+
+    position = int(meta.get("position") or 0)
+    seo = {
+        key: str(meta.get(key) or "")
+        for key in ("title", "alt", "caption", "description")
+    }
+    batch_id = uuid4()
+    job_id = uuid4()
+    db.execute(
+        text(
+            f"""
+            INSERT INTO {_TABLE}
+                (id, product_id, batch_id, position, placement, role_label,
+                 asset_role, mission, prompt, overlay_text, aspect_ratio,
+                 seo_json, status, requested_by_username,
+                 workspace_key, business_context, scope_mode,
+                 reference_asset_id)
+            VALUES
+                (:id, :product_id, :batch_id, :position, :placement, :role_label,
+                 :asset_role, :mission, :prompt, :overlay_text, :aspect_ratio,
+                 CAST(:seo_json AS jsonb), 'pending', :username,
+                 :workspace_key, :business_context, :scope_mode,
+                 :reference_asset_id)
+            """
+        ),
+        {
+            "id": job_id,
+            "product_id": product.id,
+            "batch_id": batch_id,
+            "position": position,
+            "placement": meta.get("placement") or PLACEMENT_GALLERY,
+            "role_label": str(meta.get("role_label") or "")[:128] or None,
+            "asset_role": asset.asset_role,
+            "mission": str(meta.get("mission") or "") or None,
+            "prompt": prompt,
+            "overlay_text": str(meta.get("overlay_text") or "") or None,
+            "aspect_ratio": str(meta.get("aspect_ratio") or "1:1"),
+            "seo_json": _json_dumps(seo),
+            "username": user.username if user is not None else None,
+            "workspace_key": scope_context.workspace_key,
+            "business_context": scope_context.business_context,
+            "scope_mode": scope_context.scope_mode,
+            "reference_asset_id": asset.id if use_current_as_reference else None,
+        },
+    )
+    return batch_id, _job_dict(job_id, batch_id, position, str(meta.get("placement") or PLACEMENT_GALLERY), asset.asset_role)
 
 
 class KImageRenderWorker:

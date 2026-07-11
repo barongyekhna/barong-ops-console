@@ -480,6 +480,60 @@ export function runBrandAudit(productId: string): Promise<GenerationEnqueueResul
   );
 }
 
+export type RenderAsset = {
+  asset_id: string;
+  position: number;
+  placement: string;
+  asset_role: string;
+  status: string; // staged | available
+  role_label: string | null;
+  staged_at: string | null;
+};
+
+export async function getRenderAssets(productId: string): Promise<RenderAsset[]> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/render-assets`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+  const data = await readJson<{ assets: RenderAsset[] }>(response, path);
+  return data.assets ?? [];
+}
+
+export async function saveRenderAssets(
+  productId: string,
+  assetIds?: string[],
+): Promise<RenderAsset[]> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/render-assets/save`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(assetIds && assetIds.length ? { asset_ids: assetIds } : {}),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  const data = await readJson<{ assets: RenderAsset[] }>(response, path);
+  return data.assets ?? [];
+}
+
+export async function reworkRenderAsset(
+  productId: string,
+  payload: {
+    asset_id: string;
+    extra_prompt: string;
+    use_current_as_reference: boolean;
+  },
+): Promise<RenderEnqueueResult> {
+  const path = `${K_PRODUCTS_PATH}/${productId}/render-rework`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+  return readJson<RenderEnqueueResult>(response, path);
+}
+
 export type DispatchUploadResult = {
   job_id: string;
   status: string;

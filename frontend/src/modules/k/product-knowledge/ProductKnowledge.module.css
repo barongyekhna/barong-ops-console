@@ -2078,3 +2078,121 @@
   font-size: 0.82rem;
   color: var(--muted);
 }
+
+/* ===== 渲染面板 · 暂存/预览/重做 ===== */
+
+.renderCardStaged {
+  border-color: rgb(255 177 59 / 55%);
+  background: rgb(255 177 59 / 5%);
+}
+
+.renderThumbButton {
+  width: 56px;
+  aspect-ratio: 1;
+  flex: none;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: rgb(255 255 255 / 4%);
+  padding: 0;
+  cursor: zoom-in;
+}
+
+.renderThumbButton img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.renderStateBadge {
+  display: inline-flex;
+  width: fit-content;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 750;
+  border: 1px solid transparent;
+}
+
+.renderStateBadge[data-state="staged"] {
+  color: #b26b00;
+  border-color: rgb(255 177 59 / 55%);
+  background: rgb(255 177 59 / 12%);
+}
+
+.renderStateBadge[data-state="available"] {
+  color: #0e7a5f;
+  border-color: rgb(14 122 95 / 40%);
+  background: rgb(14 122 95 / 10%);
+}
+
+.renderLightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(4 10 18 / 78%);
+  backdrop-filter: blur(4px);
+}
+
+.renderLightboxInner,
+.renderReworkModal {
+  width: min(860px, 94vw);
+  max-height: 92vh;
+  overflow: auto;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--surface, #0b1420);
+  padding: 16px 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.renderReworkModal { width: min(560px, 94vw); }
+
+.renderLightboxHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.renderLightboxImg {
+  width: 100%;
+  height: auto;
+  max-height: 68vh;
+  object-fit: contain;
+  border-radius: 10px;
+  background: #06101a;
+}
+
+.renderLightboxActions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.renderReworkChoices {
+  display: grid;
+  gap: 8px;
+}
+
+.renderReworkChoices label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+
+.renderReworkChoices input { margin-top: 3px; }

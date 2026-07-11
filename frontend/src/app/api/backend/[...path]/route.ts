@@ -757,6 +757,35 @@ function isAllowedKPath(method: string, path: string[]) {
     return method === "GET";
   }
 
+  // 渲染资产（暂存/已保存）+ 保存 + 单张重做
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "render-assets"
+  ) {
+    return method === "GET";
+  }
+
+  if (
+    path.length === 5 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "render-assets" &&
+    path[4] === "save"
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    path.length === 4 &&
+    path[1] === "products" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "render-rework"
+  ) {
+    return method === "POST";
+  }
+
   if (
     path.length === 5 &&
     path[1] === "products" &&

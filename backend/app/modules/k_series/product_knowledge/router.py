@@ -138,8 +138,11 @@ from .image_render_jobs import (
     KImageRenderError,
     download_reference_image,
     enqueue_image_render_jobs,
+    enqueue_rework_job,
+    list_render_assets,
     render_jobs_status,
     retry_failed_render_jobs,
+    save_render_assets,
 )
 from .r_to_k_transfer import transfer_from_rw
 from .prompt_skills import (
@@ -4284,6 +4287,122 @@ def product_knowledge_render_images_retry(
         batch_id=result["batch_id"],
         jobs=[RenderJobItem(**job) for job in result["jobs"]],
         summary=result["summary"],
+    )
+
+
+class RenderAssetItem(BaseModel):
+    asset_id: str
+    position: int
+    placement: str
+    asset_role: str
+    status: str
+    role_label: str | None = None
+    staged_at: str | None = None
+
+
+class RenderAssetsResponse(BaseModel):
+    assets: list[RenderAssetItem]
+
+
+@router.get(
+    "/products/{product_id}/render-assets",
+    response_model=RenderAssetsResponse,
+)
+def product_knowledge_render_assets(
+    product_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_READ)),
+) -> RenderAssetsResponse:
+    """渲染成品资产视图：暂存（staged）+ 已保存（available）并存。"""
+    del user
+    try:
+        product = get_product(
+            db, product_id=product_id, scope_context=_scope_context(request)
+        )
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    return RenderAssetsResponse(
+        assets=[RenderAssetItem(**item) for item in list_render_assets(db, product)]
+    )
+
+
+class RenderSaveRequest(BaseModel):
+    asset_ids: list[UUID] | None = None  # None = 全部保存
+
+
+@router.post(
+    "/products/{product_id}/render-assets/save",
+    response_model=RenderAssetsResponse,
+)
+def product_knowledge_render_assets_save(
+    product_id: UUID,
+    request: Request,
+    payload: RenderSaveRequest | None = Body(default=None),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> RenderAssetsResponse:
+    """保存暂存图：staged→正式入库（归档旧图/绑主图/触发品牌审查）。"""
+    scope_context = _scope_context(request)
+    try:
+        product = get_product(db, product_id=product_id, scope_context=scope_context)
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    try:
+        save_render_assets(
+            db,
+            product=product,
+            user=user,
+            scope_context=scope_context,
+            asset_ids=payload.asset_ids if payload is not None else None,
+        )
+    except KImageRenderError as exc:
+        _raise_render_error(exc)
+    db.commit()
+    return RenderAssetsResponse(
+        assets=[RenderAssetItem(**item) for item in list_render_assets(db, product)]
+    )
+
+
+class RenderReworkRequest(BaseModel):
+    asset_id: UUID
+    extra_prompt: str
+    use_current_as_reference: bool = False
+
+
+@router.post(
+    "/products/{product_id}/render-rework",
+    response_model=RenderEnqueueResponse,
+)
+def product_knowledge_render_rework(
+    product_id: UUID,
+    payload: RenderReworkRequest,
+    request: Request,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_k_permission(PERMISSION_UPDATE)),
+) -> RenderEnqueueResponse:
+    """单张重做：原 prompt + 临时修改要求；参考图 = 这版图或原始参考图。"""
+    scope_context = _scope_context(request)
+    try:
+        product = get_product(db, product_id=product_id, scope_context=scope_context)
+    except KProductKnowledgeError as exc:
+        _raise_k_error(exc)
+    try:
+        batch_id, job = enqueue_rework_job(
+            db,
+            product=product,
+            user=user,
+            scope_context=scope_context,
+            asset_id=payload.asset_id,
+            extra_prompt=payload.extra_prompt,
+            use_current_as_reference=payload.use_current_as_reference,
+        )
+    except KImageRenderError as exc:
+        _raise_render_error(exc)
+    db.commit()
+    return RenderEnqueueResponse(
+        batch_id=str(batch_id),
+        jobs=[RenderJobItem(**job)],
     )
 
 
