@@ -164,9 +164,6 @@ const ALLOWED_RESULT_NORMALIZATION_GET_PATHS = new Set([
 const ALLOWED_RESULT_NORMALIZATION_POST_PATHS = new Set([
   "result-normalization/normalize",
 ]);
-const ALLOWED_N8N_WEBHOOK_TEST_POST_PATHS = new Set([
-  "n8n-webhook-test/run",
-]);
 const API_KEY_ID_PATTERN = /^(?:key|akb)_[0-9a-f]{32}$/;
 const BLOCKED_SECURITY_ISOLATION_FIRST_SEGMENTS = new Set([
   "webhook",
@@ -1160,8 +1157,6 @@ export function getBackendApiPath(method: string, path: string[]) {
       ALLOWED_RESULT_NORMALIZATION_GET_PATHS.has(requestedPath)) ||
     (method === "POST" &&
       ALLOWED_RESULT_NORMALIZATION_POST_PATHS.has(requestedPath)) ||
-    (method === "POST" &&
-      ALLOWED_N8N_WEBHOOK_TEST_POST_PATHS.has(requestedPath)) ||
     // Webhook 登记簿（模块控制页 Webhook 标签，只记录不调用）
     (requestedPath === "webhook-registry" &&
       (method === "GET" || method === "POST")) ||

@@ -65,7 +65,6 @@ from .api.routes.module_workflow_bindings import (
     router as module_workflow_bindings_router,
 )
 from .api.routes.n8n_test import router as n8n_test_router
-from .api.routes.n8n_webhook_test import router as n8n_webhook_test_router
 from .api.routes.webhook_registry import router as webhook_registry_router
 from .api.routes.operation_logs import router as operation_logs_router
 from .api.routes.organizations import router as organizations_router
@@ -958,7 +957,6 @@ app.include_router(modules_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(agents_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(foundation_demo_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(n8n_test_router, prefix=CONTROL_PLANE_API_PREFIX)
-app.include_router(n8n_webhook_test_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(webhook_registry_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_adapters_router, prefix=CONTROL_PLANE_API_PREFIX)
 app.include_router(module_control_router, prefix=CONTROL_PLANE_API_PREFIX)

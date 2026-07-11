@@ -58,6 +58,9 @@ export function UploadDeck() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<"pending" | "uploaded" | "ledger">(
+    "pending",
+  );
 
   const mounted = useRef(true);
   const timer = useRef<number | null>(null);
@@ -166,7 +169,36 @@ export function UploadDeck() {
       ) : null}
       {notice ? <p className={styles.notice}>{notice}</p> : null}
 
+      {/* ---- 横向分区 tab ---- */}
+      <div className={styles.tabs} role="tablist">
+        <button
+          className={`${styles.tab} ${activeTab === "pending" ? styles.tabOn : ""}`}
+          onClick={() => setActiveTab("pending")}
+          role="tab"
+          type="button"
+        >
+          待上传 <span className={styles.tabCount}>{pending.length}</span>
+        </button>
+        <button
+          className={`${styles.tab} ${activeTab === "uploaded" ? styles.tabOn : ""}`}
+          onClick={() => setActiveTab("uploaded")}
+          role="tab"
+          type="button"
+        >
+          已上传 <span className={styles.tabCount}>{uploaded.length}</span>
+        </button>
+        <button
+          className={`${styles.tab} ${activeTab === "ledger" ? styles.tabOn : ""}`}
+          onClick={() => setActiveTab("ledger")}
+          role="tab"
+          type="button"
+        >
+          队列与台账 <span className={styles.tabCount}>{jobs.length}</span>
+        </button>
+      </div>
+
       {/* ---- 待上传 ---- */}
+      {activeTab === "pending" ? (
       <section className={styles.ledger} aria-label="待上传产品">
         <div className={styles.ledgerHead}>
           <span className={styles.ledgerTitle}>
@@ -285,8 +317,10 @@ export function UploadDeck() {
           </div>
         )}
       </section>
+      ) : null}
 
       {/* ---- 已上传 ---- */}
+      {activeTab === "uploaded" ? (
       <section className={styles.ledger} aria-label="已上传产品">
         <div className={styles.ledgerHead}>
           <span className={styles.ledgerTitle}>
@@ -360,8 +394,10 @@ export function UploadDeck() {
           </div>
         )}
       </section>
+      ) : null}
 
       {/* ---- 台账 ---- */}
+      {activeTab === "ledger" ? (
       <section className={styles.ledger} aria-label="上架台账">
         <div className={styles.ledgerHead}>
           <span className={styles.ledgerTitle}>
@@ -444,6 +480,7 @@ export function UploadDeck() {
           </div>
         )}
       </section>
+      ) : null}
     </div>
   );
 }

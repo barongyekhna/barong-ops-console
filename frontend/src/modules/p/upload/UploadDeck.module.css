@@ -247,3 +247,47 @@
   border-color: rgb(120 170 255 / 45%);
   background: rgb(120 170 255 / 10%);
 }
+
+/* 横向分区 tab（同模块管理视觉语言） */
+.tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgb(6 12 22 / 65%);
+  border: 1px solid rgb(57 212 255 / 22%);
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 9px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 650;
+  color: rgb(157 199 219 / 85%);
+  background: none;
+  border: 0;
+  transition: 0.15s;
+}
+
+.tab:hover { color: #eafaff; }
+
+.tabOn {
+  color: #03121a;
+  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
+  box-shadow: 0 6px 18px -8px rgb(57 212 255 / 55%);
+}
+
+.tabCount {
+  font-size: 0.72rem;
+  font-weight: 800;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 14%);
+}
+
+.tabOn .tabCount { background: rgb(3 18 26 / 18%); }

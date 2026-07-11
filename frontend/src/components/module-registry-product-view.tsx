@@ -52,11 +52,6 @@ import {
   optimisticModuleControlState,
   replaceModuleControlCenterItem,
 } from "@/lib/module-control-state";
-import {
-  N8N_WEBHOOK_TEST_MODULE_ID,
-  runN8nWebhookTest,
-  type N8nWebhookTestRunResponse,
-} from "@/lib/n8n-webhook-test-api";
 import { WebhookRegistryPanel } from "@/components/webhook-registry-panel";
 import {
   listOrganizations,
@@ -491,7 +486,6 @@ function OwnerModuleControlCenter() {
   const [isOrganizationsLoading, setIsOrganizationsLoading] = useState(true);
   const [isControlDataLoading, setIsControlDataLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isWebhookRunning, setIsWebhookRunning] = useState(false);
   const [pendingModuleToggleIds, setPendingModuleToggleIds] = useState<
     Set<string>
   >(new Set());
@@ -510,12 +504,6 @@ function OwnerModuleControlCenter() {
     module_id: "",
     org_id: "",
   });
-  const [webhookForm, setWebhookForm] = useState({
-    key_alias: "n8n",
-    org_id: "",
-  });
-  const [webhookResult, setWebhookResult] =
-    useState<N8nWebhookTestRunResponse | null>(null);
   const [editingKeyId, setEditingKeyId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     key_value: "",
@@ -539,7 +527,6 @@ function OwnerModuleControlCenter() {
 
     if (force) {
       setNotice("");
-      setWebhookResult(null);
       setEditingKeyId(null);
       setBindingForm({
         key_alias: "default",
@@ -580,10 +567,6 @@ function OwnerModuleControlCenter() {
         org_id: validOrganizationId(hydratedOrganizations, current.org_id),
       }));
       setBindingForm((current) => ({
-        ...current,
-        org_id: validOrganizationId(hydratedOrganizations, current.org_id),
-      }));
-      setWebhookForm((current) => ({
         ...current,
         org_id: validOrganizationId(hydratedOrganizations, current.org_id),
       }));
@@ -729,17 +712,6 @@ function OwnerModuleControlCenter() {
     () => apiKeys.filter((key) => key.org_id === bindingForm.org_id),
     [apiKeys, bindingForm.org_id],
   );
-  const webhookBinding = useMemo(
-    () =>
-      bindings.find(
-        (binding) =>
-          binding.org_id === webhookForm.org_id &&
-          binding.module_id === N8N_WEBHOOK_TEST_MODULE_ID &&
-          binding.key_alias === webhookForm.key_alias,
-      ) ?? null,
-    [bindings, webhookForm.key_alias, webhookForm.org_id],
-  );
-
   const moduleGroups = useMemo(
     () =>
       organizations.map((organization) => {
@@ -961,36 +933,6 @@ function OwnerModuleControlCenter() {
     }
   }
 
-  function handleWebhookOrganizationChange(orgId: string) {
-    setWebhookForm((current) => ({
-      ...current,
-      org_id: orgId,
-    }));
-    setWebhookResult(null);
-  }
-
-  async function triggerWebhookTest() {
-    setIsWebhookRunning(true);
-    setNotice("");
-    setError("");
-    setWebhookResult(null);
-    try {
-      const result = await runN8nWebhookTest({
-        key_alias: webhookForm.key_alias,
-        org_id: webhookForm.org_id,
-        payload: {
-          source: "module_control_center",
-          triggered_at: new Date().toISOString(),
-        },
-      });
-      setWebhookResult(result);
-      setNotice(result.success ? "n8n webhook 测试成功。" : "n8n webhook 测试失败。");
-    } catch (webhookError) {
-      setError(messageFromError(webhookError, "n8n webhook 测试失败。"));
-    } finally {
-      setIsWebhookRunning(false);
-    }
-  }
 
   const isLoading = isOrganizationsLoading || isControlDataLoading;
   const hasOrganizations = organizations.length > 0;
@@ -1597,88 +1539,6 @@ function OwnerModuleControlCenter() {
         {activeTab === "hook" ? (
         <>
         <WebhookRegistryPanel />
-        <div className="webhook-test-band">
-          <div className="ops-panel-heading">
-            <div>
-              <h3>n8n Webhook Test</h3>
-              <p>通过后端执行门触发真实 webhook 并保存结果。</p>
-            </div>
-            <Webhook aria-hidden="true" size={18} />
-          </div>
-          <div className="api-key-binding-form">
-            <label className="field-group">
-              <span>组织</span>
-              <span className="input-shell">
-                <select
-                  disabled={organizationSelectDisabled || isWebhookRunning}
-                  onChange={(event) =>
-                    handleWebhookOrganizationChange(event.target.value)
-                  }
-                  required
-                  value={webhookForm.org_id}
-                >
-                  {!hasOrganizations ? (
-                    <option value="">
-                      {isOrganizationsLoading ? "组织加载中" : "暂无组织"}
-                    </option>
-                  ) : null}
-                  {organizations.map((organization) => (
-                    <option key={organization.org_id} value={organization.org_id}>
-                      {organizationLabel(organization)}
-                    </option>
-                  ))}
-                </select>
-              </span>
-            </label>
-            <label className="field-group">
-              <span>用途名称</span>
-              <span className="input-shell">
-                <input
-                  disabled={isWebhookRunning}
-                  onChange={(event) => {
-                    setWebhookForm((current) => ({
-                      ...current,
-                      key_alias: event.target.value,
-                    }));
-                    setWebhookResult(null);
-                  }}
-                  required
-                  value={webhookForm.key_alias}
-                />
-              </span>
-            </label>
-            <div className="field-group">
-              <span>绑定状态</span>
-              <strong>
-                {webhookBinding
-                  ? `${webhookBinding.key_name} / ${webhookBinding.key_alias}`
-                  : "未找到匹配绑定"}
-              </strong>
-            </div>
-            <button
-              className="primary-button"
-              disabled={isWebhookRunning || !webhookForm.org_id}
-              onClick={() => void triggerWebhookTest()}
-              type="button"
-            >
-              <Play aria-hidden="true" size={17} />
-              {isWebhookRunning ? "执行中" : "执行测试"}
-            </button>
-          </div>
-          {webhookResult ? (
-            <div className="ops-empty-state" role="status">
-              <strong>
-                {webhookResult.success ? "Webhook 成功" : "Webhook 失败"}
-              </strong>
-              <span>
-                HTTP {webhookResult.status_code ?? "-"} ·{" "}
-                {Math.round(webhookResult.duration_ms)}ms ·{" "}
-                {webhookResult.injected_key.key_alias}
-              </span>
-              <small>{webhookResult.operation_log_id ?? "日志写入完成"}</small>
-            </div>
-          ) : null}
-        </div>
         </>
         ) : null}
 

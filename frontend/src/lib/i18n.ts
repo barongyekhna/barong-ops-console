@@ -36,7 +36,6 @@ const MODULE_DISPLAY_LABELS: Record<string, string> = {
   "experimental.foundation_demo": "内部演示",
   "i.image_system": "I系列图片系统",
   "integration.n8n_test_bridge": "外部流程测试桥",
-  "integration.n8n_webhook_test_bridge": "Webhook测试桥",
   "k.product_knowledge": "K系列产品知识库",
   "p.upload": "P系列自动化上传",
   "r.analysis": "R-A 产品分析中心",
