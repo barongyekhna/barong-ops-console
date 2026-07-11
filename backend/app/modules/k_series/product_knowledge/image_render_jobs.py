@@ -1059,6 +1059,116 @@ def list_render_assets(
     return out
 
 
+def mirror_saved_to_i_library(
+    db: Session,
+    *,
+    product: KProductKnowledgeProduct,
+    asset: KProductKnowledgeMediaAsset,
+    user: User | None,
+) -> None:
+    """K 里保存的渲染图镜像进 I 系列媒体库——图本来就是 I 引擎生成的，
+    资产归属上理应在 I 媒体库可见。字节复制到 I 存储（backend 同时挂
+    k-media 和 i-media 两个卷），image_id 确定性（k-render-{K资产id}）
+    保证幂等。仅在「保存」时调用——暂存图不进任何媒体库。"""
+    from ...i_series.image_system.constants import (
+        DEFAULT_BUSINESS_CONTEXT as I_BUSINESS_CONTEXT,
+        DEFAULT_SCOPE_MODE as I_SCOPE_MODE,
+        MEDIA_BUCKET_EDITED,
+        ORIGIN_K_HANDOFF,
+        SOURCE_EDIT as I_SOURCE_EDIT,
+        TARGET_ORGANIZATION_NAME as I_ORGANIZATION_NAME,
+    )
+    from ...i_series.image_system.models import IImageAsset
+    from ...i_series.image_system.service import (
+        image_storage_root,
+        target_organization,
+        write_media_cache,
+    )
+
+    # I 媒体库列表按请求组织过滤（workspace_key=org_id）——镜像必须挂
+    # I 的目标组织，否则在媒体库里不可见。
+    i_workspace_key = target_organization(db).org_id
+
+    image_id = f"k-render-{asset.id}"
+    existing = db.scalar(
+        select(IImageAsset).where(IImageAsset.image_id == image_id)
+    )
+    if existing is not None:
+        if existing.status == "REMOVED":
+            existing.status = "STORED"
+            existing.removed_at = None
+            db.add(existing)
+        return
+
+    loaded = _asset_file_bytes(asset)
+    if loaded is None:
+        _LOGGER.warning("I-library mirror skipped, file missing: %s", asset.id)
+        return
+    _filename, contents, mime = loaded
+    meta = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
+    filename = str(meta.get("filename") or f"{image_id}.webp")
+    object_key = (
+        f"I_MEDIA_LIBRARY/{MEDIA_BUCKET_EDITED}/"
+        f"{i_workspace_key}/{image_id}/{filename}"
+    )
+    write_media_cache(object_key, contents)
+    ensure_image_derivative(
+        root=image_storage_root(),
+        object_key=object_key,
+        kind="thumbnail",
+        max_side=320,
+        contents=contents,
+    )
+    ensure_image_derivative(
+        root=image_storage_root(),
+        object_key=object_key,
+        kind="preview",
+        max_side=1280,
+        contents=contents,
+    )
+    db.add(
+        IImageAsset(
+            image_id=image_id,
+            workspace_key=i_workspace_key,
+            business_context=I_BUSINESS_CONTEXT,
+            scope_mode=I_SCOPE_MODE,
+            organization_name=I_ORGANIZATION_NAME,
+            product_id=product.id,
+            variant_id=asset.variant_id,
+            source_type=I_SOURCE_EDIT,
+            origin_context=ORIGIN_K_HANDOFF,
+            status="STORED",
+            media_bucket=MEDIA_BUCKET_EDITED,
+            prompt_original=None,
+            image_prompt_enhanced=str(
+                meta.get("image_prompt_enhanced") or "K 一次性作图渲染成品"
+            ),
+            aspect_ratio=str(meta.get("aspect_ratio") or "") or None,
+            filename=filename,
+            object_key=object_key,
+            storage_provider="local_filesystem",
+            mime_type=mime,
+            width=asset.width,
+            height=asset.height,
+            file_size=len(contents),
+            content_sha256=hashlib.sha256(contents).hexdigest(),
+            metadata_json={
+                "k_render_mirror": True,
+                "k_asset_id": str(asset.id),
+                "k_product_id": str(product.id),
+                "position": meta.get("position"),
+                "placement": meta.get("placement"),
+                "title": meta.get("title"),
+                "alt": meta.get("alt"),
+                "caption": meta.get("caption"),
+                "description": meta.get("description"),
+                "sku": product.sku,
+            },
+            created_by_user_id=_user_uuid(user) if user is not None else None,
+        )
+    )
+
+
 def save_render_assets(
     db: Session,
     *,
@@ -1097,7 +1207,7 @@ def save_render_assets(
         db.add(row)
         db.flush()
         # 同 position 的其它渲染图（旧 available + 其它 staged 候选）归档
-        db.execute(
+        replaced = db.execute(
             text(
                 """
                 UPDATE k_product_knowledge_media_assets
@@ -1107,6 +1217,7 @@ def save_render_assets(
                   AND id != :keep_id
                   AND metadata_json->>'render_pipeline' = :tag
                   AND (metadata_json->>'position')::int = :position
+                RETURNING id
                 """
             ),
             {
@@ -1115,9 +1226,26 @@ def save_render_assets(
                 "tag": RENDER_PIPELINE_TAG,
                 "position": position,
             },
-        )
+        ).scalars().all()
+        # 被替换旧图的 I 媒体库镜像同步下架
+        if replaced:
+            db.execute(
+                text(
+                    """
+                    UPDATE i_image_system_assets
+                    SET status = 'REMOVED', removed_at = now(), updated_at = now()
+                    WHERE image_id = ANY(:image_ids)
+                    """
+                ),
+                {"image_ids": [f"k-render-{rid}" for rid in replaced]},
+            )
         if row.asset_role == ASSET_ROLE_MAIN:
             main_asset = row
+        # 资产归属：图是 I 引擎生成的，保存时镜像进 I 媒体库
+        try:
+            mirror_saved_to_i_library(db, product=product, asset=row, user=user)
+        except Exception:  # noqa: BLE001 - 镜像失败不阻塞保存主流程
+            _LOGGER.exception("I-library mirror failed for %s", row.id)
         saved.append({"asset_id": str(row.id), "position": position})
 
     if main_asset is not None:
