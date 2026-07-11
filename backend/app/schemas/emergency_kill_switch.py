@@ -14,6 +14,7 @@ EmergencyKillSwitchIntegrationPoint = Literal[
     "c12_approval_request",
     "c13b_runtime_gate",
     "c13c_policy_engine",
+    "c14_external_dependency_gate",
 ]
 EmergencyKillSwitchResult = Literal["ALLOWED", "BLOCKED"]
 

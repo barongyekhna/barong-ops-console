@@ -85,7 +85,7 @@ def test_c15g_backend_firewall_blocks_direct_webhook_and_n8n_paths(
 
 
 def test_c15g_gateway_enforces_c15f_before_hidden_ref_resolution() -> None:
-    payload = gateway_payload(module="business.products")
+    payload = gateway_payload(module="k.product_knowledge")
     signature = sign_webhook_gateway_payload(
         payload,
         secret=TEST_GATEWAY_SECRET,

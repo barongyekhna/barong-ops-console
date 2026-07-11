@@ -14,9 +14,9 @@ def execution_request(
     return ExecutionRequestContractV1(
         execution_id=execution_id,
         request_id=request_id,
-        module_key="business.products",
-        adapter_key="business.products.placeholder.adapter",
-        action_key="business.products.placeholder.prepare",
+        module_key="k.product_knowledge",
+        adapter_key="k.product_knowledge.placeholder.adapter",
+        action_key="k.product_knowledge.placeholder.prepare",
         actor_user_id=1001,
         target_scope={"product_ref": "demo-only"},
         input_payload={"redacted": True},

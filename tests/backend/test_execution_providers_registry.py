@@ -515,7 +515,7 @@ def test_execution_provider_contract_rejects_invalid_shapes_and_drifts() -> None
         validate_execution_provider_contracts([invalid_adapter])
 
     invalid_action = copy.deepcopy(valid)
-    invalid_action["action_key"] = "business.products.missing"
+    invalid_action["action_key"] = "k.product_knowledge.missing"
     with pytest.raises(ValueError, match="action_key is not in C08"):
         validate_execution_provider_contracts([invalid_action])
 
@@ -530,7 +530,7 @@ def test_execution_provider_contract_rejects_invalid_shapes_and_drifts() -> None
         validate_execution_provider_contracts([risk_drift])
 
     log_drift = copy.deepcopy(valid)
-    log_drift["operation_log_action"] = "business.products.other"
+    log_drift["operation_log_action"] = "k.product_knowledge.other"
     with pytest.raises(ValueError, match="operation_log_action"):
         validate_execution_provider_contracts([log_drift])
 
@@ -569,7 +569,7 @@ def test_c09d_contract_rejects_permission_approval_secret_and_live_regressions()
 
     operation_policy_drift = raw_provider_by_key("core.no_op_provider")
     operation_policy_drift["operation_log_policy"]["operation_log_action"] = (
-        "business.products.placeholder.drift"
+        "k.product_knowledge.placeholder.drift"
     )
     with pytest.raises(ValueError, match="operation_log_policy"):
         validate_execution_provider_contracts([operation_policy_drift])

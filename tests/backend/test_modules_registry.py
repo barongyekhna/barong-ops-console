@@ -255,7 +255,7 @@ def test_static_module_registry_validation_rules() -> None:
     required_manifest_fields = set(ModuleManifestV1.model_fields)
 
     assert len(module_keys) == len(set(module_keys))
-    assert {"admin.users", "admin.permissions", "business.products"}.issubset(
+    assert {"admin.users", "admin.permissions", "k.product_knowledge"}.issubset(
         set(module_keys)
     )
     assert "k.product_knowledge" in module_keys
@@ -526,10 +526,22 @@ def test_module_registry_dependency_and_runtime_safety_metadata() -> None:
         "ai_provider",
         "n8n",
     }
+    # The pre-launch P-series placeholder terms must stay dead; the shipped
+    # p.upload module itself is asserted explicitly below.
     assert not re.search(
-        r"\bp0[1-8]\b|p_series|product_page_automation|woocommerce",
+        r"\bp0[1-8]\b|p_series|product_page_automation",
         serialized,
     )
+
+    p_upload = next(
+        manifest
+        for manifest in manifests
+        if manifest.module_key == "p.upload"
+    )
+    assert p_upload.status == "active"
+    assert p_upload.category == "business"
+    assert p_upload.api_namespace == "/p"
+    assert set(p_upload.external_dependencies) == {"n8n", "woocommerce"}
 
     n8n_bridge = next(
         manifest

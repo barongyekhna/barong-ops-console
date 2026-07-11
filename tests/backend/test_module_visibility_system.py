@@ -72,7 +72,7 @@ def c18e_state(monkeypatch: pytest.MonkeyPatch) -> None:
         "backend.app.services.module_visibility_service.list_module_manifests",
         lambda: [
             SimpleNamespace(
-                module_key="business.products",
+                module_key="k.product_knowledge",
                 display_name="Products",
             ),
         ],
@@ -132,7 +132,7 @@ def test_c18e_get_visible_modules_filters_single_multi_global_and_disabled() -> 
             mode="multi",
         ),
         ModuleBinding(
-            module_id="business.products",
+            module_id="k.product_knowledge",
             bound_orgs=[GLOBAL_MODULE_BOUND_ORG],
             mode="global",
         ),
@@ -167,7 +167,7 @@ def test_c18e_get_visible_modules_filters_single_multi_global_and_disabled() -> 
                 "mode": "multi",
             },
             {
-                "module_id": "business.products",
+                "module_id": "k.product_knowledge",
                 "module_name": "Products",
                 "mode": "global",
             },
@@ -183,7 +183,7 @@ def test_c18e_get_visible_modules_filters_single_multi_global_and_disabled() -> 
                 "mode": "multi",
             },
             {
-                "module_id": "business.products",
+                "module_id": "k.product_knowledge",
                 "module_name": "Products",
                 "mode": "global",
             },
@@ -204,7 +204,7 @@ def test_c18e_multi_org_user_requires_active_org_context() -> None:
 def test_c18e_requested_org_must_be_active_c18c_membership() -> None:
     _set_c18d_bindings(
         ModuleBinding(
-            module_id="business.products",
+            module_id="k.product_knowledge",
             bound_orgs=[GLOBAL_MODULE_BOUND_ORG],
             mode="global",
         )

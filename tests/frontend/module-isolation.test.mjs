@@ -248,6 +248,15 @@ const registryItems = [
   manifest({
     category: "business",
     denied_behavior: "show_locked",
+    external_dependencies: ["n8n", "woocommerce"],
+    module_key: "p.upload",
+    required_permissions: ["p.upload.read"],
+    route_namespace: "/p-upload",
+    status: "active",
+  }),
+  manifest({
+    category: "business",
+    denied_behavior: "show_locked",
     external_dependencies: ["keepa", "deepseek", "ai_provider"],
     module_key: "r.warehouse",
     route_namespace: "/r-w",
@@ -1181,6 +1190,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "admin.permissions",
     "k.product_knowledge",
     "i.image_system",
+    "p.upload",
     "r.warehouse",
     "r.analysis",
     "business.approvals",

@@ -7,7 +7,15 @@ from pydantic import BaseModel, ConfigDict, Field
 from .external_dependency import ExternalServiceStatus, ExternalTrustLevel
 
 
-DependencyCapability = Literal["serp", "reasoning", "writing", "embedding"]
+DependencyCapability = Literal[
+    "serp",
+    "reasoning",
+    "writing",
+    "embedding",
+    "data_acquisition",
+    "commerce_publish",
+    "record_storage",
+]
 DependencyBindingStatus = Literal["active", "restricted", "disabled"]
 DependencyBindingValidationSeverity = Literal["info", "warning", "error"]
 DependencyGraphEdgeStatus = Literal["valid", "restricted", "blocked"]

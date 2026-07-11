@@ -85,7 +85,7 @@ def registered_service(**updates: Any) -> dict[str, Any]:
         "trust_level": "high",
         "metadata": {
             "registration_source": "c14d_contract_test",
-            "owner_module": "business.products",
+            "owner_module": "k.product_knowledge",
         },
     }
     service.update(updates)
@@ -94,10 +94,10 @@ def registered_service(**updates: Any) -> dict[str, Any]:
 
 def allow_policy(**updates: Any) -> dict[str, Any]:
     policy = {
-        "policy_id": "business.products.dynamic_ai.allow",
+        "policy_id": "k.product_knowledge.dynamic_ai.allow",
         "description": "Allow a dynamically registered AI service for one action.",
-        "module": "business.products",
-        "action": "business.products.placeholder.prepare",
+        "module": "k.product_knowledge",
+        "action": "k.product_knowledge.placeholder.prepare",
         "service_id": "dynamic.ai_service",
         "service_type": None,
         "min_trust_level": "medium",
@@ -110,18 +110,20 @@ def allow_policy(**updates: Any) -> dict[str, Any]:
 
 
 def no_op_request() -> ExecutionRequestContractV1:
+    # admin.users declares no external dependency, so the C14D gate must
+    # allow this request without consulting the service registry.
     return ExecutionRequestContractV1(
         execution_id="exec_c14d_no_external",
         request_id="req_c14d_no_external",
-        module_key="business.products",
-        adapter_key="business.products.placeholder.adapter",
-        action_key="business.products.placeholder.prepare",
+        module_key="admin.users",
+        adapter_key="admin.users.adapter",
+        action_key="admin.users.read",
         actor_user_id=1001,
-        provider_key="core.no_op_provider",
-        provider_type="no_op_provider",
+        provider_key="core.mock_provider",
+        provider_type="mock_provider",
         status="requested",
         risk_level="medium",
-        required_permission="products.read",
+        required_permission="users.read",
     )
 
 
@@ -194,9 +196,27 @@ def test_c14d_read_only_registry_api_requires_login(
         assert marker not in serialized
 
 
-def test_c14d_external_service_registry_is_dynamic_and_empty_by_default() -> None:
+def test_c14d_external_service_registry_lists_declared_services_only() -> None:
+    # Since 2026-06 the registry deliberately seeds the declared production
+    # services; every entry must validate and stay within the declared set.
     services = list_external_services()
-    assert services == []
+    assert {service.service_id for service in services} == {
+        "serp",
+        "deepseek",
+        "chatgpt",
+        "claude_opus",
+        "ai_provider",
+        "n8n",
+        "woocommerce",
+        "keepa",
+        "alibaba1688",
+        "rainforest",
+        "serper",
+        "google_ads",
+        "chat_record_store",
+        "chat_asset_store",
+    }
+    assert all(service.status == "active" for service in services)
     assert set(ALLOWED_EXTERNAL_SERVICE_TYPES) == set(get_args(ExternalServiceType))
     assert set(ALLOWED_EXTERNAL_SERVICE_STATUSES) == set(
         get_args(ExternalServiceStatus)
@@ -279,24 +299,24 @@ def test_c14d_policy_engine_defaults_deny_and_allows_only_explicit_policy() -> N
     services = [registered_service()]
     decision_without_policy = decide_external_dependency_policy(
         service_id="dynamic.ai_service",
-        module="business.products",
-        action="business.products.placeholder.prepare",
+        module="k.product_knowledge",
+        action="k.product_knowledge.placeholder.prepare",
         context={"risk_level": "medium"},
         raw_services=services,
         raw_policies=[],
     )
     decision_with_policy = decide_external_dependency_policy(
         service_id="dynamic.ai_service",
-        module="business.products",
-        action="business.products.placeholder.prepare",
+        module="k.product_knowledge",
+        action="k.product_knowledge.placeholder.prepare",
         context={"risk_level": "low", "module_sensitivity": "low"},
         raw_services=services,
         raw_policies=[allow_policy()],
     )
     decision_high_risk = decide_external_dependency_policy(
         service_id="dynamic.ai_service",
-        module="business.products",
-        action="business.products.placeholder.prepare",
+        module="k.product_knowledge",
+        action="k.product_knowledge.placeholder.prepare",
         context={"risk_level": "critical", "module_sensitivity": "critical"},
         raw_services=services,
         raw_policies=[allow_policy()],
@@ -336,27 +356,44 @@ def test_c14d_unknown_service_quarantines_and_generates_registration_proposal() 
 
 
 def test_c14d_dependency_bindings_require_declared_intent_and_policy() -> None:
+    # With the registry emptied, declared intent without registration must
+    # quarantine fail-closed.
     bindings = build_dependency_binding_decisions(raw_services=[], raw_policies=[])
     n8n_binding = next(
         binding
         for binding in bindings
         if binding.adapter == "integration.n8n_test_bridge.adapter"
     )
-    proposals = list_registration_proposals()
 
     assert n8n_binding.dependency_intent_declared is True
     assert n8n_binding.service_id == "n8n"
     assert n8n_binding.service_registered is False
     assert n8n_binding.binding_status == "quarantined"
     assert n8n_binding.policy_decision.decision == "quarantine"
-    assert any(proposal.service_id == "n8n" for proposal in proposals)
+
+    # Against the live registry every adapter-declared dependency is
+    # registered, so no pending registration proposals may remain.
+    assert list_registration_proposals() == []
 
 
-def test_c14d_gate_allows_no_external_dependency_and_blocks_unknown_service() -> None:
+def test_c14d_gate_allows_no_external_dependency_and_blocks_unknown_service(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     allowed = C14D_GATE.check(no_op_request())
 
     assert allowed.decision == "allow"
     assert allowed.reason == "c14d_no_external_dependency_declared"
+
+    # Simulate the unknown-service condition by emptying the registry: the
+    # n8n bridge's declared dependency then has no registration and the gate
+    # must quarantine fail-closed.
+    import backend.app.core.external_dependencies as external_dependencies_core
+    import backend.app.services.external_dependency_governance as governance
+
+    monkeypatch.setattr(
+        external_dependencies_core, "EXTERNAL_SERVICE_REGISTRY_V1", ()
+    )
+    monkeypatch.setattr(governance, "EXTERNAL_SERVICE_REGISTRY_V1", ())
 
     with pytest.raises(
         ExternalDependencyGateBlockedError,

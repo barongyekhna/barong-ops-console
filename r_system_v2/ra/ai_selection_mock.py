@@ -15,7 +15,7 @@ import json
 from typing import Any
 from uuid import uuid4
 
-from sqlalchemy import text
+from sqlalchemy import bindparam, text
 from sqlalchemy.orm import Session
 
 from r_system_v2.ra.channel_signals import ensure_channel_signals
@@ -273,10 +273,10 @@ def _load_candidate_contexts(
             FROM ra_candidates c
             LEFT JOIN products_rw p ON p.asin = c.source_asin
             WHERE c.org_id = :org_id AND c.run_id = :run_id
-              AND c.candidate_status = ANY(:statuses)
+              AND c.candidate_status IN :statuses
             ORDER BY c.created_at ASC
             """
-        ),
+        ).bindparams(bindparam("statuses", expanding=True)),
         {"org_id": org_id, "run_id": run_id, "statuses": list(statuses)},
     ).mappings()
     contexts: list[dict[str, Any]] = []

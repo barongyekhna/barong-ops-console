@@ -187,7 +187,7 @@ def test_c15b_rejects_stale_signed_payload() -> None:
             },
             "unregistered",
         ),
-        ({"module": "business.products"}, "active"),
+        ({"module": "k.product_knowledge"}, "active"),
     ],
 )
 def test_c15b_blocks_non_active_or_unbound_registry_decisions(

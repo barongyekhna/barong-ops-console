@@ -14,6 +14,10 @@ from r_system_v2.ra.supplier_discovery import discover_1688_supplier_offers
 def test_ra_e2e_mock_pipeline_from_rw_to_report(monkeypatch) -> None:
     sqlite3.register_adapter(Decimal, lambda value: float(value))
     monkeypatch.setenv("RA_SUPPLIER_SOURCE_MODE", "mock_1688_api")
+    # The DeepSeek keyword profile is fail-closed against the key store; the
+    # mock pipeline runs with it disabled and uses the heuristic profile.
+    monkeypatch.setenv("RA_DEEPSEEK_KEYWORD_ENABLED", "0")
+    monkeypatch.setenv("RA_DEEPSEEK_SUPPLIER_MATCH_ENABLED", "0")
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as connection:
         for ddl in _schema():
@@ -291,6 +295,34 @@ def _schema() -> list[str]:
           payload TEXT NOT NULL DEFAULT '{}',
           acknowledged_at TEXT,
           created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE api_key_module_bindings (
+          id INTEGER PRIMARY KEY,
+          binding_id TEXT,
+          org_id TEXT,
+          module_id TEXT,
+          key_id TEXT,
+          key_alias TEXT,
+          status TEXT,
+          created_by_user_id INTEGER,
+          updated_by_user_id INTEGER,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE api_keys (
+          id INTEGER PRIMARY KEY,
+          key_id TEXT,
+          org_id TEXT,
+          provider TEXT,
+          key_alias TEXT,
+          encrypted_value TEXT,
+          status TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+          updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """,
     ]

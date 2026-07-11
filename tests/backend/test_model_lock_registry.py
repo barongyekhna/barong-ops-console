@@ -25,7 +25,7 @@ def c14x_a_binding(**updates: Any) -> dict[str, Any]:
         "key": "ai.binding.reasoning.primary",
         "model": "model.reasoning.primary_v1",
         "capability": "reasoning",
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "status": "active",
         "reason": "Explicit C14X-A route declaration for contract inspection only.",
     }

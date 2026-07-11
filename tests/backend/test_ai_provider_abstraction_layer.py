@@ -139,7 +139,12 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
         )
         assert request.url == expected_url
         assert request.body["model"] == model
-        assert request.body["task_type"] == task_type
+        if isinstance(adapter, OpenAIAdapter):
+            # OpenAI-compatible bodies are cleaned: unknown fields such as
+            # task_type are rejected by real providers and must stay out.
+            assert "task_type" not in request.body
+        else:
+            assert request.body["task_type"] == task_type
         assert request.body["messages"] == [{"role": "user", "content": "hello"}]
 
 
@@ -190,7 +195,8 @@ def test_execution_router_syncs_provider_config_and_injects_model(
     assert result == {"keywords": ["steel pump"]}
     assert captured[0].url == "https://4sapi.example/v1/chat/completions"
     assert captured[0].body["model"] == "gpt-5.6-luna"
-    assert captured[0].body["task_type"] == "generate"
+    # OpenAI-compatible bodies are cleaned; task_type must not leak upstream.
+    assert "task_type" not in captured[0].body
     assert captured[0].headers["Authorization"] == "Bearer chatgpt"
     provider_config = db.scalar(
         select(ProviderConfigRecord).where(

@@ -120,7 +120,7 @@ def test_c15f_enforcement_allows_only_active_whitelisted_workflows() -> None:
 
 def test_c15f_blocks_cross_module_workflow_calls() -> None:
     cross_module = evaluate_module_workflow_access(
-        module_id="business.products",
+        module_id="k.product_knowledge",
         workflow_id="n8n.workflow.integration.n8n_test_bridge.dispatch.v1",
     )
 
@@ -139,10 +139,10 @@ def test_c15f_custom_registry_keeps_module_workflows_isolated() -> None:
     raw_workflows = [
         c15a_workflow(),
         c15a_workflow(
-            workflow_id="n8n.workflow.business.products.enrich.v1",
-            module="business.products",
+            workflow_id="n8n.workflow.k.product_knowledge.enrich.v1",
+            module="k.product_knowledge",
             n8n_webhook=(
-                "n8n-webhook-ref://c15a/business.products/enrich/v1"
+                "n8n-webhook-ref://c15a/k.product_knowledge/enrich/v1"
             ),
         ),
     ]
@@ -152,22 +152,22 @@ def test_c15f_custom_registry_keeps_module_workflows_isolated() -> None:
     )
     model = build_module_workflow_binding_model(raw_workflows)
     product_access = evaluate_module_workflow_access(
-        module_id="business.products",
-        workflow_id="n8n.workflow.business.products.enrich.v1",
+        module_id="k.product_knowledge",
+        workflow_id="n8n.workflow.k.product_knowledge.enrich.v1",
         raw_workflows=raw_workflows,
     )
     cross_access = evaluate_module_workflow_access(
         module_id="integration.n8n_test_bridge",
-        workflow_id="n8n.workflow.business.products.enrich.v1",
+        workflow_id="n8n.workflow.k.product_knowledge.enrich.v1",
         raw_workflows=raw_workflows,
     )
     product_binding = next(
-        item for item in model.items if item.module_id == "business.products"
+        item for item in model.items if item.module_id == "k.product_knowledge"
     )
 
     assert len(workflows) == 2
     assert product_binding.allowed_workflows == (
-        "n8n.workflow.business.products.enrich.v1",
+        "n8n.workflow.k.product_knowledge.enrich.v1",
     )
     assert len([binding for binding in bindings if binding.allowed_workflows]) == 2
     assert product_access.workflow_access_allowed is True

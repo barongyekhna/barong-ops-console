@@ -46,6 +46,62 @@ EXTERNAL_SERVICE_REGISTRY_V1: tuple[dict[str, Any], ...] = (
         "trust_level": "medium",
         "metadata": {"scope": "k_product_handoff"},
     },
+    {
+        "service_id": "woocommerce",
+        "service_type": "custom",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {"scope": "p_upload_publishing"},
+    },
+    {
+        "service_id": "keepa",
+        "service_type": "custom",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {"scope": "r_warehouse_ingestion"},
+    },
+    {
+        "service_id": "alibaba1688",
+        "service_type": "custom",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {"scope": "r_analysis_supplier_search"},
+    },
+    {
+        "service_id": "rainforest",
+        "service_type": "custom",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {"scope": "r_analysis_competition"},
+    },
+    {
+        "service_id": "serper",
+        "service_type": "custom",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {"scope": "r_analysis_channel_signals"},
+    },
+    {
+        "service_id": "google_ads",
+        "service_type": "custom",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {"scope": "r_analysis_keyword_volume"},
+    },
+    {
+        "service_id": "chat_record_store",
+        "service_type": "storage",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {"scope": "c19_conversation_records"},
+    },
+    {
+        "service_id": "chat_asset_store",
+        "service_type": "storage",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {"scope": "c19_chat_assets"},
+    },
 )
 EXTERNAL_DEPENDENCY_POLICIES_V1: tuple[dict[str, Any], ...] = (
     {

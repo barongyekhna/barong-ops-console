@@ -149,7 +149,7 @@ def test_module_adapter_registry_api_requires_login_and_owner_can_read(
         "admin.users.adapter",
         "admin.permissions.adapter",
         "k.product_knowledge.adapter",
-        "business.products.placeholder.adapter",
+        "k.product_knowledge.placeholder.adapter",
         "integration.n8n_test_bridge.adapter",
         "i.image_system.adapter",
     } == adapter_keys
@@ -181,7 +181,7 @@ def test_static_adapter_registry_contract_rules() -> None:
         "admin.users.adapter",
         "admin.permissions.adapter",
         "k.product_knowledge.adapter",
-        "business.products.placeholder.adapter",
+        "k.product_knowledge.placeholder.adapter",
         "integration.n8n_test_bridge.adapter",
         "i.image_system.adapter",
     } == set(adapter_keys)
@@ -305,12 +305,12 @@ def test_adapter_contract_rejects_invalid_shapes_and_escapes() -> None:
     with pytest.raises(ValueError, match="operation log binding drift"):
         validate_adapter_contracts([action_drift])
 
-    executable_action = raw_adapter_by_key("business.products.placeholder.adapter")
+    executable_action = raw_adapter_by_key("k.product_knowledge.placeholder.adapter")
     executable_action["actions"][0]["executable_before_c09"] = True
     with pytest.raises(ValueError, match="action is executable"):
         validate_adapter_contracts([executable_action])
 
-    execution_drift = raw_adapter_by_key("business.products.placeholder.adapter")
+    execution_drift = raw_adapter_by_key("k.product_knowledge.placeholder.adapter")
     execution_drift["execution_requirements"]["requires_execution_provider"] = False
     with pytest.raises(ValueError, match="execution action lacks requirement"):
         validate_adapter_contracts([execution_drift])
@@ -341,7 +341,7 @@ def test_adapter_contract_rejects_c08d_runtime_regressions() -> None:
     with pytest.raises(Exception):
         validate_adapter_contracts([missing_contract_operation_log])
 
-    approval_drift = raw_adapter_by_key("business.products.placeholder.adapter")
+    approval_drift = raw_adapter_by_key("k.product_knowledge.placeholder.adapter")
     approval_drift["actions"][0]["requires_approval"] = True
     with pytest.raises(ValueError, match="approval action lacks requirement"):
         validate_adapter_contracts([approval_drift])
@@ -644,12 +644,12 @@ def test_owner_and_non_owner_adapter_access_states(
     assert viewer_items["admin.permissions.adapter"]["adapter_access_state"] == (
         "hidden"
     )
-    assert viewer_items["business.products.placeholder.adapter"]["visible"] is True
-    assert viewer_items["business.products.placeholder.adapter"]["locked"] is True
-    assert viewer_items["business.products.placeholder.adapter"][
+    assert viewer_items["k.product_knowledge.placeholder.adapter"]["visible"] is True
+    assert viewer_items["k.product_knowledge.placeholder.adapter"]["locked"] is True
+    assert viewer_items["k.product_knowledge.placeholder.adapter"][
         "adapter_access_state"
     ] == "locked"
-    assert "products.read" in viewer_items["business.products.placeholder.adapter"][
+    assert "products.read" in viewer_items["k.product_knowledge.placeholder.adapter"][
         "missing_permissions"
     ]
     assert viewer_items["core.dashboard.adapter"]["adapter_access_state"] == (
@@ -703,7 +703,7 @@ def test_role_defaults_viewer_locked_super_admin_inherits_admin_adapters(
     assert super_admin_response.status_code == 200
     viewer_items = adapter_items_by_key(viewer_response.json())
     super_admin_items = adapter_items_by_key(super_admin_response.json())
-    assert viewer_items["business.products.placeholder.adapter"][
+    assert viewer_items["k.product_knowledge.placeholder.adapter"][
         "adapter_access_state"
     ] == "locked"
     assert viewer_items["integration.n8n_test_bridge.adapter"][
@@ -721,7 +721,7 @@ def test_role_defaults_viewer_locked_super_admin_inherits_admin_adapters(
     pending_adapter = next(
         adapter
         for adapter in list_adapter_contracts()
-        if adapter.adapter_key == "business.products.placeholder.adapter"
+        if adapter.adapter_key == "k.product_knowledge.placeholder.adapter"
     )
     pending_access = build_adapter_access_state(
         pending_adapter,
@@ -731,7 +731,7 @@ def test_role_defaults_viewer_locked_super_admin_inherits_admin_adapters(
     assert pending_access.unavailable is True
     assert pending_access.available_actions == []
     assert pending_access.unavailable_actions == [
-        "business.products.placeholder.prepare"
+        "k.product_knowledge.placeholder.prepare"
     ]
     assert pending_access.execution_provider_state == "adapter_pending"
 
@@ -749,7 +749,7 @@ def test_role_defaults_viewer_locked_super_admin_inherits_admin_adapters(
 
 
 def test_execution_action_contracts_are_unavailable_before_c09() -> None:
-    execution_raw = raw_adapter_by_key("business.products.placeholder.adapter")
+    execution_raw = raw_adapter_by_key("k.product_knowledge.placeholder.adapter")
     execution_raw["adapter_status"] = "contract_ready"
     execution_raw["lifecycle"] = "contract_ready"
     execution_adapter = validate_adapter_contracts([execution_raw])[0]
@@ -764,7 +764,7 @@ def test_execution_action_contracts_are_unavailable_before_c09() -> None:
     assert access.execution_provider_state == "required_not_implemented_c08b"
     assert access.available_actions == []
     assert access.unavailable_actions == [
-        "business.products.placeholder.prepare"
+        "k.product_knowledge.placeholder.prepare"
     ]
     assert all(
         contract.executable_before_c09 is False

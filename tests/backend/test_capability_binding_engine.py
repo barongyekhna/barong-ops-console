@@ -28,7 +28,7 @@ def c14x_a_binding(**updates: Any) -> dict[str, Any]:
         "key": "ai.binding.reasoning.primary",
         "model": "model.reasoning.primary_v1",
         "capability": "reasoning",
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "status": "active",
         "reason": "Explicit C14X-A route declaration for contract inspection only.",
     }
@@ -53,7 +53,7 @@ def c14x_c_capability_binding(**updates: Any) -> dict[str, Any]:
         "capability": "reasoning",
         "key": "ai.binding.reasoning.primary",
         "model": "model.reasoning.primary_v1",
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "status": "active",
         "reason": "Explicit C14X-C capability binding for inspection only.",
     }
@@ -63,7 +63,7 @@ def c14x_c_capability_binding(**updates: Any) -> dict[str, Any]:
 
 def c14x_c_module_binding(**updates: Any) -> dict[str, Any]:
     binding = {
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "allowed_capabilities": ("reasoning",),
         "status": "active",
         "reason": "Explicit C14X-C module capability allow binding.",
@@ -150,7 +150,7 @@ def test_c14x_c_explicit_capability_route_maps_to_locked_model_and_module() -> N
         "reasoning",
         "ai.binding.reasoning.primary",
         "model.reasoning.primary_v1",
-        "business.products",
+        "k.product_knowledge",
     )
     assert route.c14x_b_locked_model_id == "model.reasoning.primary_v1"
     assert route.model_lock_respected is True
@@ -162,7 +162,7 @@ def test_c14x_c_explicit_capability_route_maps_to_locked_model_and_module() -> N
         "reasoning",
         "model.reasoning.primary_v1",
         "ai.binding.reasoning.primary",
-        "business.products",
+        "k.product_knowledge",
     )
     assert model_mapping.locked_model_id == "model.reasoning.primary_v1"
     assert model_mapping.runtime_execution_allowed is False
@@ -239,7 +239,7 @@ def test_c14x_c_request_validation_rejects_without_fallback() -> None:
         capability="reasoning",
         key="ai.binding.reasoning.primary",
         requested_model_id="model.reasoning.primary_v1",
-        module="business.products",
+        module="k.product_knowledge",
         raw_capability_bindings=raw_capability_bindings,
         raw_module_bindings=raw_module_bindings,
         raw_ai_bindings=raw_ai_bindings,
@@ -249,7 +249,7 @@ def test_c14x_c_request_validation_rejects_without_fallback() -> None:
         capability="reasoning",
         key="ai.binding.reasoning.primary",
         requested_model_id="model.reasoning.secondary_v1",
-        module="business.products",
+        module="k.product_knowledge",
         raw_capability_bindings=raw_capability_bindings,
         raw_module_bindings=raw_module_bindings,
         raw_ai_bindings=raw_ai_bindings,
@@ -259,7 +259,7 @@ def test_c14x_c_request_validation_rejects_without_fallback() -> None:
         capability="writing",
         key="ai.binding.reasoning.primary",
         requested_model_id="model.reasoning.primary_v1",
-        module="business.products",
+        module="k.product_knowledge",
         raw_capability_bindings=raw_capability_bindings,
         raw_module_bindings=raw_module_bindings,
         raw_ai_bindings=raw_ai_bindings,

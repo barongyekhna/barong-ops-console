@@ -426,7 +426,13 @@ def test_deepseek_does_not_reject_non_insect_animal_repellent_as_pest_control():
 
 
 def test_deepseek_rejects_liquid_powder_and_spray_content_before_ra_review():
+    from r_system_v2.rw.ai.deepseek_screening import _restricted_form_reject_reason
+
+    # Ambiguous categories route to a real DeepSeek form confirmation; the
+    # offline strong-phrase classifier stands in for the confirmed verdict.
     skill = DeepSeekScreeningSkill()
+    offline_skill = DeepSeekScreeningSkill()
+    skill._deepseek_form_reject = _restricted_form_reject_reason
     products = [
         NormalizedProduct(
             asin="B0LIQUID01",
@@ -491,6 +497,10 @@ def test_deepseek_rejects_liquid_powder_and_spray_content_before_ra_review():
         assert deepseek_reject_code(screening.top_reason) == (
             "deepseek_liquid_powder_spray_product"
         )
+        # Without a DeepSeek confirmation (offline / no key), ambiguous
+        # products must be kept for review — never blind keyword-cut.
+        offline = offline_skill.evaluate(product)
+        assert offline.verdict != "cut"
 
 
 def test_rule_engine_leaves_liquid_form_policy_to_deepseek():
@@ -588,7 +598,7 @@ def test_monthly_sales_estimator_prefers_keepa_truth_and_estimates_missing_value
     assert real.confidence == "high"
     assert estimated.estimate > 0
     assert estimated.minimum <= estimated.estimate <= estimated.maximum
-    assert estimated.source == "bsr_estimate_v1"
+    assert estimated.source == "bsr_estimate_v2"
     assert estimated.confidence in {"medium", "low"}
 
 
@@ -624,9 +634,9 @@ def test_feature_extractor_adds_monthly_sales_estimate_for_missing_keepa_sales()
     )
 
     assert product.features["monthly_sales"] is None
-    assert product.features["monthly_sales_source"] == "unknown"
+    assert product.features["monthly_sales_source"] == "bsr_estimate_v2"
     assert product.features["monthly_sales_estimate"] > 0
-    assert product.features["monthly_sales_estimate_source"] == "bsr_estimate_v1"
+    assert product.features["monthly_sales_estimate_source"] == "bsr_estimate_v2"
     assert product.features["monthly_sales_confidence"] == "medium"
     assert product.features["fba_fee_usd"] == 4.76
     assert product.features["fba_fee_source"] == "keepa_fbaFees.pickAndPackFee"

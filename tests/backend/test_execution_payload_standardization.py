@@ -24,12 +24,12 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 
 def c15c_workflow(**updates: Any) -> dict[str, Any]:
     workflow = {
-        "workflow_id": "n8n.workflow.business.products.dispatch.v1",
-        "module": "business.products",
+        "workflow_id": "n8n.workflow.k.product_knowledge.dispatch.v1",
+        "module": "k.product_knowledge",
         "trigger": "webhook",
         "status": "active",
         "n8n_webhook": (
-            "n8n-webhook-ref://c15a/business.products/dispatch/v1"
+            "n8n-webhook-ref://c15a/k.product_knowledge/dispatch/v1"
         ),
         "version": "1.0.0",
         "created_at": "2026-06-15T00:00:00Z",
@@ -44,7 +44,7 @@ def c14x_a_binding(**updates: Any) -> dict[str, Any]:
         "key": "ai.binding.reasoning.primary",
         "model": "model.reasoning.primary_v1",
         "capability": "reasoning",
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "status": "active",
         "reason": "Explicit C14X-A route declaration for contract inspection.",
     }
@@ -69,7 +69,7 @@ def c14x_c_capability_binding(**updates: Any) -> dict[str, Any]:
         "capability": "reasoning",
         "key": "ai.binding.reasoning.primary",
         "model": "model.reasoning.primary_v1",
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "status": "active",
         "reason": "Explicit C14X-C capability binding for inspection.",
     }
@@ -79,7 +79,7 @@ def c14x_c_capability_binding(**updates: Any) -> dict[str, Any]:
 
 def c14x_c_module_binding(**updates: Any) -> dict[str, Any]:
     binding = {
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "allowed_capabilities": ("reasoning",),
         "status": "active",
         "reason": "Explicit C14X-C module capability allow binding.",
@@ -139,8 +139,8 @@ def test_c15c_standard_request_schema_matches_required_shape() -> None:
 def test_c15c_normalizes_module_request_with_c15a_and_c14x_metadata() -> None:
     result = normalize_execution_payload_request(
         {
-            "module_key": "business.products",
-            "action": "business.products.placeholder.prepare",
+            "module_key": "k.product_knowledge",
+            "action": "k.product_knowledge.placeholder.prepare",
             "context": {"legacy_product_context": "product-42"},
             "payload": {"draft": {"title": "Static test"}},
             "timestamp": "2026-06-15T00:00:00Z",
@@ -158,12 +158,12 @@ def test_c15c_normalizes_module_request_with_c15a_and_c14x_metadata() -> None:
     assert result.context_standardized is True
     assert result.standardized_request_schema_valid is True
     assert result.standardized_request is not None
-    assert result.standardized_request.module == "business.products"
+    assert result.standardized_request.module == "k.product_knowledge"
     assert result.standardized_request.task == (
-        "business.products.placeholder.prepare"
+        "k.product_knowledge.placeholder.prepare"
     )
     assert result.standardized_request.workflow_id == (
-        "n8n.workflow.business.products.dispatch.v1"
+        "n8n.workflow.k.product_knowledge.dispatch.v1"
     )
     assert CONTEXT_ID_PATTERN.fullmatch(result.standardized_request.context_id)
     assert result.standardized_request.execution.capability == "reasoning"
@@ -216,8 +216,8 @@ def test_c15c_rejects_invalid_workflow_mapping_and_caller_execution_metadata() -
     )
     invalid_mapping = normalize_execution_payload_request(
         {
-            "module": "business.products",
-            "task": "business.products.placeholder.prepare",
+            "module": "k.product_knowledge",
+            "task": "k.product_knowledge.placeholder.prepare",
             "context_id": "products:legacy:1",
             "workflow_id": "n8n.workflow.integration.n8n_test_bridge.dispatch.v1",
             "payload": {"draft": True},
@@ -227,8 +227,8 @@ def test_c15c_rejects_invalid_workflow_mapping_and_caller_execution_metadata() -
     )
     caller_execution = normalize_execution_payload_request(
         {
-            "module": "business.products",
-            "task": "business.products.placeholder.prepare",
+            "module": "k.product_knowledge",
+            "task": "k.product_knowledge.placeholder.prepare",
             "context_id": "products:legacy:1",
             "execution": {"model": "model.reasoning.primary_v1"},
             "payload": {"draft": True},

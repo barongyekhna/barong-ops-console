@@ -53,6 +53,97 @@ MODULE_SERVICE_BINDINGS_V1: tuple[dict[str, Any], ...] = (
         "allowed_capabilities": [],
         "reason": "n8n is explicitly declared but no C14E capability is enabled.",
     },
+    {
+        "module_key": "p.upload",
+        "service_id": "n8n",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["writing"],
+        "reason": "P upload dispatches gate-checked upload packages to the n8n upload workflow.",
+    },
+    {
+        "module_key": "p.upload",
+        "service_id": "woocommerce",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["commerce_publish"],
+        "reason": "WooCommerce create/update runs only inside the n8n workflow via SKU upsert.",
+    },
+    {
+        "module_key": "r.warehouse",
+        "service_id": "keepa",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["data_acquisition"],
+        "reason": "R warehouse ingests Amazon product data through the Keepa API after key binding.",
+    },
+    {
+        "module_key": "r.warehouse",
+        "service_id": "deepseek",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["reasoning"],
+        "reason": "R warehouse uses DeepSeek category-authoritative screening after key binding.",
+    },
+    {
+        "module_key": "r.analysis",
+        "service_id": "alibaba1688",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["data_acquisition"],
+        "reason": "R analysis sources supplier candidates from 1688 keyword and image search.",
+    },
+    {
+        "module_key": "r.analysis",
+        "service_id": "rainforest",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["data_acquisition"],
+        "reason": "R analysis pulls Amazon competition signals through the Rainforest API.",
+    },
+    {
+        "module_key": "r.analysis",
+        "service_id": "serper",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["data_acquisition"],
+        "reason": "R analysis pulls channel SERP signals through the Serper API.",
+    },
+    {
+        "module_key": "r.analysis",
+        "service_id": "google_ads",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["data_acquisition"],
+        "reason": "R analysis pulls keyword volume from the Google Ads keyword planner.",
+    },
+    {
+        "module_key": "r.analysis",
+        "service_id": "deepseek",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["reasoning"],
+        "reason": "R analysis uses DeepSeek as the first-pass funnel filter after key binding.",
+    },
+    {
+        "module_key": "r.analysis",
+        "service_id": "chatgpt",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["reasoning"],
+        "reason": "R analysis uses GPT vision/terminal review in the selection funnel.",
+    },
+    {
+        "module_key": "r.analysis",
+        "service_id": "claude_opus",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["reasoning"],
+        "reason": "R analysis uses Claude Opus for on-demand deep report review.",
+    },
+    {
+        "module_key": "communication.im",
+        "service_id": "chat_record_store",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["record_storage"],
+        "reason": "C19 persists conversation records only in the configured record store.",
+    },
+    {
+        "module_key": "communication.im",
+        "service_id": "chat_asset_store",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["record_storage"],
+        "reason": "C19 persists chat media assets only in the configured asset store.",
+    },
 )
 
 MODULE_CAPABILITY_BINDINGS_V1: tuple[dict[str, Any], ...] = (
@@ -70,6 +161,30 @@ MODULE_CAPABILITY_BINDINGS_V1: tuple[dict[str, Any], ...] = (
             "The test bridge has no serp, reasoning, writing, or "
             "embedding grant."
         ),
+    },
+    {
+        "module_key": "p.upload",
+        "allowed_capabilities": ["writing", "commerce_publish"],
+        "binding_status": "restricted",
+        "reason": "P upload is restricted to n8n dispatch and WooCommerce publishing.",
+    },
+    {
+        "module_key": "r.warehouse",
+        "allowed_capabilities": ["data_acquisition", "reasoning"],
+        "binding_status": "restricted",
+        "reason": "R warehouse is restricted to Keepa ingestion and DeepSeek screening.",
+    },
+    {
+        "module_key": "r.analysis",
+        "allowed_capabilities": ["data_acquisition", "reasoning"],
+        "binding_status": "restricted",
+        "reason": "R analysis is restricted to market data acquisition and AI funnel reasoning.",
+    },
+    {
+        "module_key": "communication.im",
+        "allowed_capabilities": ["record_storage"],
+        "binding_status": "restricted",
+        "reason": "C19 communication is restricted to configured record/asset storage.",
     },
 )
 
@@ -109,5 +224,53 @@ SERVICE_CAPABILITY_MAPPINGS_V1: tuple[dict[str, Any], ...] = (
         "capabilities": ["writing"],
         "binding_status": "restricted",
         "reason": "n8n service is restricted to declared downstream handoff tasks.",
+    },
+    {
+        "service_id": "woocommerce",
+        "capabilities": ["commerce_publish"],
+        "binding_status": "restricted",
+        "reason": "WooCommerce is restricted to listing create/update via the n8n workflow.",
+    },
+    {
+        "service_id": "keepa",
+        "capabilities": ["data_acquisition"],
+        "binding_status": "restricted",
+        "reason": "Keepa is restricted to Amazon product data acquisition.",
+    },
+    {
+        "service_id": "alibaba1688",
+        "capabilities": ["data_acquisition"],
+        "binding_status": "restricted",
+        "reason": "1688 open platform is restricted to supplier keyword/image search.",
+    },
+    {
+        "service_id": "rainforest",
+        "capabilities": ["data_acquisition"],
+        "binding_status": "restricted",
+        "reason": "Rainforest is restricted to Amazon competition data acquisition.",
+    },
+    {
+        "service_id": "serper",
+        "capabilities": ["data_acquisition"],
+        "binding_status": "restricted",
+        "reason": "Serper is restricted to channel SERP signal acquisition.",
+    },
+    {
+        "service_id": "google_ads",
+        "capabilities": ["data_acquisition"],
+        "binding_status": "restricted",
+        "reason": "Google Ads keyword planner is restricted to keyword volume acquisition.",
+    },
+    {
+        "service_id": "chat_record_store",
+        "capabilities": ["record_storage"],
+        "binding_status": "restricted",
+        "reason": "The chat record store only persists C19 conversation records.",
+    },
+    {
+        "service_id": "chat_asset_store",
+        "capabilities": ["record_storage"],
+        "binding_status": "restricted",
+        "reason": "The chat asset store only persists C19 chat media assets.",
     },
 )

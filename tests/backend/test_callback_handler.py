@@ -63,10 +63,10 @@ def callback_settings() -> Settings:
 
 def c15c_request(**updates: object) -> ExecutionPayloadStandardRequest:
     data = {
-        "module": "business.products",
-        "task": "business.products.placeholder.prepare",
+        "module": "k.product_knowledge",
+        "task": "k.product_knowledge.placeholder.prepare",
         "context_id": "ctx.c15c.0123456789abcdef",
-        "workflow_id": "n8n.workflow.business.products.dispatch.v1",
+        "workflow_id": "n8n.workflow.k.product_knowledge.dispatch.v1",
         "execution": {
             "capability": "reasoning",
             "model": "model.reasoning.primary_v1",
@@ -81,8 +81,8 @@ def c15c_request(**updates: object) -> ExecutionPayloadStandardRequest:
 
 def callback_payload(**updates: object) -> CallbackHandlerPayload:
     data = {
-        "module": "business.products",
-        "workflow_id": "n8n.workflow.business.products.dispatch.v1",
+        "module": "k.product_knowledge",
+        "workflow_id": "n8n.workflow.k.product_knowledge.dispatch.v1",
         "context_id": "ctx.c15c.0123456789abcdef",
         "status": "success",
         "output": {"summary": "stored local result"},

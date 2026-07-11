@@ -24,8 +24,8 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 def c15d_storage_result(**updates: Any) -> dict[str, Any]:
     result = {
         "context_id": "ctx.c15c.0123456789abcdef",
-        "module": "business.products",
-        "workflow_id": "n8n.workflow.business.products.dispatch.v1",
+        "module": "k.product_knowledge",
+        "workflow_id": "n8n.workflow.k.product_knowledge.dispatch.v1",
         "status": "success",
         "workflow_output": {
             "summary": "Product draft prepared.",
@@ -85,9 +85,9 @@ def test_c15e_normalizes_c15d_storage_to_frontend_shape() -> None:
         "metadata",
     }
     assert normalized.context_id == "ctx.c15c.0123456789abcdef"
-    assert normalized.module == "business.products"
+    assert normalized.module == "k.product_knowledge"
     assert normalized.workflow_id == (
-        "n8n.workflow.business.products.dispatch.v1"
+        "n8n.workflow.k.product_knowledge.dispatch.v1"
     )
     assert normalized.status == "success"
     assert normalized.metadata.module_family == "P"

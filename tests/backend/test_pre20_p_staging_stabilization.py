@@ -38,9 +38,20 @@ def test_fix042_migration_manifest_locks_head_order_and_hashes() -> None:
     validation = staging.validate_migration_manifest(manifest)
 
     assert validation["status"] == "passed"
-    assert manifest["alembic_head"] == "media_storage_perf_001"
+    assert manifest["alembic_head"] == staging.EXPECTED_ALEMBIC_HEAD
     assert manifest["head_locked"] is True
-    assert manifest["migration_order"] == [
+    # The pre-2026-07 migration chain is immutable history: later releases may
+    # append migrations (and move EXPECTED_ALEMBIC_HEAD) but never reorder or
+    # rewrite this locked prefix.
+    assert manifest["migration_order"][: len(LOCKED_MIGRATION_PREFIX)] == LOCKED_MIGRATION_PREFIX
+    assert manifest["migration_order"][-1] == staging.EXPECTED_ALEMBIC_HEAD
+    assert all(
+        entry["version"] and entry["checksum"] and entry["applied_at"]
+        for entry in manifest["migrations"]
+    )
+
+
+LOCKED_MIGRATION_PREFIX = [
         "f07_core_001",
         "c05b_permissions_001",
         "c12d_approval_001",
@@ -68,10 +79,6 @@ def test_fix042_migration_manifest_locks_head_order_and_hashes() -> None:
         "i_image_system_001",
         "media_storage_perf_001",
     ]
-    assert all(
-        entry["version"] and entry["checksum"] and entry["applied_at"]
-        for entry in manifest["migrations"]
-    )
 
 
 def test_fix043_fix044_contract_and_integration_reports_are_clean() -> None:

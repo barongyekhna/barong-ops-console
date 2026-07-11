@@ -27,11 +27,29 @@ class _FakeResponse:
 
 
 def test_real_ra_ai_chain_writes_competition_and_three_layers(monkeypatch) -> None:
+    # Opus per-candidate is cost-gated off by default; enable it so the full
+    # prescreen → GPT → Opus chain is exercised.
+    monkeypatch.setenv("RA_OPUS_PER_CANDIDATE", "1")
     sqlite3.register_adapter(Decimal, lambda value: float(value))
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as connection:
         for ddl in _schema():
             connection.execute(text(ddl))
+        connection.execute(
+            text(
+                """
+                INSERT INTO ra_prescreen (
+                  id, org_id, asin, score, verdict, channel_guess, reason,
+                  evidence, model, mode, created_at
+                )
+                VALUES (
+                  'prescreen-real-ai', 'org-real-ai', 'B0REALAI001', 78, 'keep',
+                  'amazon', 'DeepSeek 初筛：竞争可攻，需求稳定。', '{}',
+                  'deepseek-v4-pro', 'enforce', CURRENT_TIMESTAMP
+                )
+                """
+            )
+        )
         product_features = {
             "monthly_sales": 720,
             "fba_fee_usd": 6.2,
@@ -236,9 +254,15 @@ def test_real_ra_ai_chain_writes_competition_and_three_layers(monkeypatch) -> No
                 """
             )
         ).mappings().all()
-        assert [row["layer"] for row in eval_rows] == ["deepseek", "gpt", "opus"]
+        assert [row["layer"] for row in eval_rows] == ["prescreen", "gpt", "opus"]
         assert all(not str(row["model_name"]).startswith("mock-") for row in eval_rows)
-        assert all(json.loads(row["payload"])["competition"]["review_wall_max"] == 500 for row in eval_rows)
+        # The stored prescreen surfaces as a context layer without competition
+        # data; the judge layers must embed the Rainforest snapshot.
+        assert all(
+            json.loads(row["payload"])["competition"]["review_wall_max"] == 500
+            for row in eval_rows
+            if row["layer"] in {"gpt", "opus"}
+        )
 
         final = session.execute(
             text("SELECT verdict, final_score, payload FROM ra_final_decisions LIMIT 1")
@@ -606,6 +630,21 @@ def _schema() -> list[str]:
           payload TEXT NOT NULL DEFAULT '{}',
           created_at TEXT DEFAULT CURRENT_TIMESTAMP,
           updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+        """
+        CREATE TABLE ra_prescreen (
+          id TEXT PRIMARY KEY,
+          org_id TEXT NOT NULL,
+          asin TEXT NOT NULL,
+          score INTEGER,
+          verdict TEXT,
+          channel_guess TEXT,
+          reason TEXT,
+          evidence TEXT NOT NULL DEFAULT '{}',
+          model TEXT,
+          mode TEXT,
+          created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
         """,
     ]

@@ -86,7 +86,7 @@ def test_c14e_default_rules_explicitly_disable_n8n_capabilities() -> None:
     assert n8n_binding.allowed_capabilities == []
     assert validation.valid is True
     assert graph.validation.valid is True
-    assert len(graph.edges) == 10
+    assert len(graph.edges) == 23
     assert {
         (edge.module_key, edge.service_id, edge.capability)
         for edge in graph.edges
@@ -101,6 +101,19 @@ def test_c14e_default_rules_explicitly_disable_n8n_capabilities() -> None:
         ("k.product_knowledge", "ai_provider", "reasoning"),
         ("k.product_knowledge", "ai_provider", "writing"),
         ("k.product_knowledge", "n8n", "writing"),
+        ("p.upload", "n8n", "writing"),
+        ("p.upload", "woocommerce", "commerce_publish"),
+        ("r.warehouse", "keepa", "data_acquisition"),
+        ("r.warehouse", "deepseek", "reasoning"),
+        ("r.analysis", "alibaba1688", "data_acquisition"),
+        ("r.analysis", "rainforest", "data_acquisition"),
+        ("r.analysis", "serper", "data_acquisition"),
+        ("r.analysis", "google_ads", "data_acquisition"),
+        ("r.analysis", "deepseek", "reasoning"),
+        ("r.analysis", "chatgpt", "reasoning"),
+        ("r.analysis", "claude_opus", "reasoning"),
+        ("communication.im", "chat_record_store", "record_storage"),
+        ("communication.im", "chat_asset_store", "record_storage"),
     }
     assert all(edge.no_runtime_execution is True for edge in graph.edges)
     assert all(edge.no_external_api_call is True for edge in graph.edges)
@@ -119,15 +132,17 @@ def test_c14e_default_rules_explicitly_disable_n8n_capabilities() -> None:
 
 
 def test_c14e_dependency_graph_builds_restricted_explicit_edge() -> None:
+    # Keep every default declaration except the disabled n8n test-bridge
+    # entries, which this test replaces with an explicit restricted grant.
     module_service_bindings = [
         binding
         for binding in MODULE_SERVICE_BINDINGS_V1
-        if binding["module_key"] == "k.product_knowledge"
+        if binding["module_key"] != "integration.n8n_test_bridge"
     ]
     module_capability_bindings = [
         binding
         for binding in MODULE_CAPABILITY_BINDINGS_V1
-        if binding["module_key"] == "k.product_knowledge"
+        if binding["module_key"] != "integration.n8n_test_bridge"
     ]
     validation = validate_dependency_binding_rules(
         raw_module_service_bindings=[
@@ -197,12 +212,14 @@ def test_c14e_validation_rejects_missing_explicit_module_service_binding() -> No
 
 
 def test_c14e_validation_blocks_cross_module_binding_leakage() -> None:
+    # admin.users declares no external dependency, so an n8n binding on it is
+    # cross-module leakage and must be rejected.
     validation = validate_dependency_binding_rules(
         raw_module_service_bindings=[
-            c14e_module_service_binding(module_key="business.products"),
+            c14e_module_service_binding(module_key="admin.users"),
         ],
         raw_module_capability_bindings=[
-            c14e_module_capability_binding(module_key="business.products"),
+            c14e_module_capability_binding(module_key="admin.users"),
         ],
         raw_service_capability_mappings=[c14e_service_capability_mapping()],
         raw_services=[c14e_registered_service()],

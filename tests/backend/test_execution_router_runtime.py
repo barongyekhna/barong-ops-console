@@ -34,14 +34,17 @@ def router_context(permission_key: str = "products.read") -> dict[str, object]:
 def test_provider_resolver_selects_mock_staging_and_future_live_metadata() -> None:
     resolver = ProviderResolver(list_execution_provider_contracts())
 
+    # The business.products placeholder contracts (core.no_op_provider /
+    # future.queue_provider) were removed with the module; the resolver
+    # contract is now exercised through the surviving admin.users providers.
     mock = resolver.resolve(
-        module_id="business.products",
-        action="business.products.placeholder.prepare",
+        module_id="admin.users",
+        action="admin.users.read",
         requested_mode="mock",
     )
     staging = resolver.resolve(
-        module_id="business.products",
-        action="business.products.placeholder.prepare",
+        module_id="admin.users",
+        action="admin.users.read",
         requested_mode="staging",
     )
     live = resolver.resolve(
@@ -50,9 +53,9 @@ def test_provider_resolver_selects_mock_staging_and_future_live_metadata() -> No
         requested_mode="live",
     )
 
-    assert mock.provider.provider_key == "core.no_op_provider"
+    assert mock.provider.provider_key == "core.mock_provider"
     assert mock.selected_mode == "mock"
-    assert staging.provider.provider_key == "future.queue_provider"
+    assert staging.provider.provider_key == "future.local_backend_provider"
     assert staging.selected_mode == "staging"
     assert live.provider.provider_key == "future.live_provider"
     assert live.selected_mode == "live"
@@ -61,17 +64,17 @@ def test_provider_resolver_selects_mock_staging_and_future_live_metadata() -> No
 def test_execution_router_returns_staging_plan_without_external_dispatch() -> None:
     response = EXECUTION_ROUTER.receive_request(
         org_id=ORG_ID,
-        module_id="business.products",
-        action="business.products.placeholder.prepare",
+        module_id="admin.users",
+        action="admin.users.read",
         payload={"execution_mode": "staging"},
-        context=router_context(),
+        context=router_context("users.read"),
     )
 
     assert response.accepted is True
     assert response.dispatch_ready is True
     assert response.execution_plan.execution_mode == "staging"
     assert response.execution_plan.adapter_executes_logic is False
-    assert response.selected_provider.provider_key == "future.queue_provider"
+    assert response.selected_provider.provider_key == "future.local_backend_provider"
     assert response.gate_decision.decision == "allow"
     assert response.production_external_call_performed is False
     assert response.live_provider_dispatched is False
@@ -96,10 +99,10 @@ def test_execution_router_future_live_is_selected_but_gated() -> None:
 def test_staging_sandbox_prepares_isolated_context_only() -> None:
     response = EXECUTION_ROUTER.receive_request(
         org_id=ORG_ID,
-        module_id="business.products",
-        action="business.products.placeholder.prepare",
+        module_id="admin.users",
+        action="admin.users.read",
         payload={"execution_mode": "staging"},
-        context=router_context(),
+        context=router_context("users.read"),
     )
     staging = StagingSandbox().prepare(response, payload={"title": "redacted"})
 

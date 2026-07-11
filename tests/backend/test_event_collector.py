@@ -76,7 +76,7 @@ def test_failure_handler_emits_failure_and_retry_events() -> None:
     clear_event_buffer()
 
     request = FailureHandlingRequest(
-        module="business.products",
+        module="k.product_knowledge",
         workflow_id="workflow.products.sync",
         context_id="ctx.c15c.1234567890abcdef",
         failure_type="webhook_timeout",

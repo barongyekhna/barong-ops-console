@@ -1,12 +1,12 @@
 {
-  "alembic_head": "media_storage_perf_001",
+  "alembic_head": "20260711_03_render_staging",
   "environment": "staging",
-  "expected_alembic_head": "media_storage_perf_001",
+  "expected_alembic_head": "20260711_03_render_staging",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 26,
-  "migration_hash": "be7f3d6797d2a35a8ee9e37bab976153a4b4363344d718b4df3af55a50e59570",
+  "migration_count": 49,
+  "migration_hash": "da081f1e5fda58db2b90152358228d840da8305131f7eba254e207e6d1c97085",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -33,9 +33,32 @@
     "ai_provider_layer_001",
     "k_sku_variant_001",
     "i_image_system_001",
-    "media_storage_perf_001"
+    "media_storage_perf_001",
+    "20260702_00_rw_initial_schema",
+    "20260702_02_rw_category_fields",
+    "20260702_03_rw_keepa_concurrency_indexes",
+    "20260702_04_rw_realtime_engine",
+    "20260702_05_rw_runtime_settings",
+    "20260703_01_rw_throughput_signals",
+    "20260703_02_rw_realtime_deepseek",
+    "20260705_01_ra_framework_schema",
+    "20260708_01_k_pk_p_series_fields",
+    "20260708_02_k_generation_jobs",
+    "20260708_03_k_plain_chinese",
+    "20260709_01_p_notifications",
+    "20260709_02_k_category_trees",
+    "20260709_03_k_product_category_binding",
+    "20260709_04_k_reference_image",
+    "20260710_01_p_upload_jobs",
+    "20260710_02_rw_product_query_perf",
+    "20260710_03_k_image_render_jobs",
+    "20260710_04_key_health",
+    "20260710_05_k_brand_guard",
+    "20260711_01_c19_control_core",
+    "20260711_02_webhook_registry",
+    "20260711_03_render_staging"
   ],
-  "migration_order_checksum": "a3dfabc1c2162de414b5458cfb5af817e958490ebbaff06932317412b4aba8c6",
+  "migration_order_checksum": "944531eb256361bb5a232fadf461782ba40ef1c184d526720d06280f6dacc579",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -218,6 +241,167 @@
       "down_revision": "i_image_system_001",
       "path": "backend/alembic/versions/20260628_01_media_storage_performance.py",
       "version": "media_storage_perf_001"
+    },
+    {
+      "applied_at": "2026-07-02T03:05:00.000000Z",
+      "checksum": "69f9961710d122b4986ec0fd96551542a469d1f93defa3d5df876dda6c28d04c",
+      "down_revision": "media_storage_perf_001",
+      "path": "backend/alembic/versions/20260702_00_rw_initial_schema.py",
+      "version": "20260702_00_rw_initial_schema"
+    },
+    {
+      "applied_at": "2026-07-02T00:10:00.000000Z",
+      "checksum": "dd3300c9b3d178919600531b4b4190a08694fbfdbe7fb20b44bba11431d0acac",
+      "down_revision": "20260702_00_rw_initial_schema",
+      "path": "backend/alembic/versions/20260702_02_rw_category_fields.py",
+      "version": "20260702_02_rw_category_fields"
+    },
+    {
+      "applied_at": "2026-07-02T10:45:00.000000Z",
+      "checksum": "b884991bb33e0f0503f60342fa04b9903f8bd7b012a1cadba78cafa6ab0e7414",
+      "down_revision": "20260702_02_rw_category_fields",
+      "path": "backend/alembic/versions/20260702_03_rw_keepa_concurrency_indexes.py",
+      "version": "20260702_03_rw_keepa_concurrency_indexes"
+    },
+    {
+      "applied_at": "2026-07-02T12:30:00.000000Z",
+      "checksum": "8ad58ad518691ffd50a9d73b6f50776567ba8e1064baa91e75593f42b3efaef2",
+      "down_revision": "20260702_03_rw_keepa_concurrency_indexes",
+      "path": "backend/alembic/versions/20260702_04_rw_realtime_engine.py",
+      "version": "20260702_04_rw_realtime_engine"
+    },
+    {
+      "applied_at": "2026-07-02T18:20:00.000000Z",
+      "checksum": "24b053c4e70b4663a86e11816cb730dfab0fba0379e6aeb3b986f875d715f6af",
+      "down_revision": "20260702_04_rw_realtime_engine",
+      "path": "backend/alembic/versions/20260702_05_rw_runtime_settings.py",
+      "version": "20260702_05_rw_runtime_settings"
+    },
+    {
+      "applied_at": "2026-07-03T06:20:00.000000Z",
+      "checksum": "5e4c4af744530112905fdc94a60ed09cd9cf6603ec91cb25b498da59f568c04a",
+      "down_revision": "20260702_05_rw_runtime_settings",
+      "path": "backend/alembic/versions/20260703_01_rw_throughput_and_product_signals.py",
+      "version": "20260703_01_rw_throughput_signals"
+    },
+    {
+      "applied_at": "2026-07-03T13:40:00.000000Z",
+      "checksum": "b337919bd2aa2db043f851022c194acf470a90dcacc600db93fa4bf338f69a1d",
+      "down_revision": "20260703_01_rw_throughput_signals",
+      "path": "backend/alembic/versions/20260703_02_rw_realtime_deepseek_subcategories.py",
+      "version": "20260703_02_rw_realtime_deepseek"
+    },
+    {
+      "applied_at": "2026-07-05T00:00:00.000000Z",
+      "checksum": "52918254456273267005589040ff61630fb4a7423ae99e405c445334e2f03739",
+      "down_revision": "20260703_02_rw_realtime_deepseek",
+      "path": "backend/alembic/versions/20260705_01_ra_framework_schema.py",
+      "version": "20260705_01_ra_framework_schema"
+    },
+    {
+      "applied_at": "2026-07-08T00:00:00Z",
+      "checksum": "c7f8bb7c9bc8d0c7b990113d0266524fc5d8839e999670b3346c23b97230fe91",
+      "down_revision": "20260705_01_ra_framework_schema",
+      "path": "backend/alembic/versions/20260708_01_k_pk_p_series_fields.py",
+      "version": "20260708_01_k_pk_p_series_fields"
+    },
+    {
+      "applied_at": "2026-07-08T00:00:00Z",
+      "checksum": "e7e5513ad643d5fc2bfa8c7d06fac6d8809d6773a37fc39f1568f05d358bcc0e",
+      "down_revision": "20260708_01_k_pk_p_series_fields",
+      "path": "backend/alembic/versions/20260708_02_k_generation_jobs.py",
+      "version": "20260708_02_k_generation_jobs"
+    },
+    {
+      "applied_at": "2026-07-08T00:00:00Z",
+      "checksum": "af8e2e92ba218c7bd5bd48f738d9c44ca821b72d8dd898826e24bc31e24a4a5f",
+      "down_revision": "20260708_02_k_generation_jobs",
+      "path": "backend/alembic/versions/20260708_03_k_plain_chinese.py",
+      "version": "20260708_03_k_plain_chinese"
+    },
+    {
+      "applied_at": "2026-07-09T00:00:00Z",
+      "checksum": "a6163650b142025667671b272c97306d7a2739617f06179e8ae7daeccc2f91ab",
+      "down_revision": "20260708_03_k_plain_chinese",
+      "path": "backend/alembic/versions/20260709_01_p_notifications.py",
+      "version": "20260709_01_p_notifications"
+    },
+    {
+      "applied_at": "2026-07-09T00:00:00Z",
+      "checksum": "748a21906ba635bc6689802a1d374f5215c2c638d13e40ebbe27d1bc39dcea9b",
+      "down_revision": "20260709_01_p_notifications",
+      "path": "backend/alembic/versions/20260709_02_k_category_trees.py",
+      "version": "20260709_02_k_category_trees"
+    },
+    {
+      "applied_at": "2026-07-09T00:00:00Z",
+      "checksum": "9d493b81fce7817944beb8e1968fcd38b986a548458dfb80b0128afc482dd8bf",
+      "down_revision": "20260709_02_k_category_trees",
+      "path": "backend/alembic/versions/20260709_03_k_product_category_binding.py",
+      "version": "20260709_03_k_product_category_binding"
+    },
+    {
+      "applied_at": "2026-07-09T00:00:00Z",
+      "checksum": "cfc478e3d5f3f2150d7bbd6ebca004c1a9c1315adecbfa08f6fbe0bbe52d0889",
+      "down_revision": "20260709_03_k_product_category_binding",
+      "path": "backend/alembic/versions/20260709_04_k_reference_image.py",
+      "version": "20260709_04_k_reference_image"
+    },
+    {
+      "applied_at": "2026-07-10T00:00:00Z",
+      "checksum": "b755eae8b8703d42ea5e3a702f141ce8e390a94b2286dba163f3f3fba57b6487",
+      "down_revision": "20260709_04_k_reference_image",
+      "path": "backend/alembic/versions/20260710_01_p_upload_jobs.py",
+      "version": "20260710_01_p_upload_jobs"
+    },
+    {
+      "applied_at": "2026-07-10T00:00:00Z",
+      "checksum": "0d8428294df6ba46cf5bca6613f2def351b1cd22241eb33cf831f3609ea57bbf",
+      "down_revision": "20260710_01_p_upload_jobs",
+      "path": "backend/alembic/versions/20260710_02_rw_product_query_performance.py",
+      "version": "20260710_02_rw_product_query_perf"
+    },
+    {
+      "applied_at": "2026-07-10T00:00:00Z",
+      "checksum": "9a76b4a26394ab2461c4889f65d9dbd03aa8c2d67cd8d1ea973e299eeeca6663",
+      "down_revision": "20260710_02_rw_product_query_perf",
+      "path": "backend/alembic/versions/20260710_03_k_image_render_jobs.py",
+      "version": "20260710_03_k_image_render_jobs"
+    },
+    {
+      "applied_at": "2026-07-10T00:00:00Z",
+      "checksum": "644537b55eeec82c276c8f3b2d99c5637d3e54b7eeabd98dcaf228410a54010f",
+      "down_revision": "20260710_03_k_image_render_jobs",
+      "path": "backend/alembic/versions/20260710_04_key_health.py",
+      "version": "20260710_04_key_health"
+    },
+    {
+      "applied_at": "2026-07-10T00:00:00Z",
+      "checksum": "69556d9e4bd8d0cee68d3c80f9edc0afa105d2ca8dd0ca7f0d6551ced3b5f2e6",
+      "down_revision": "20260710_04_key_health",
+      "path": "backend/alembic/versions/20260710_05_k_brand_guard.py",
+      "version": "20260710_05_k_brand_guard"
+    },
+    {
+      "applied_at": "2026-07-11T00:00:00Z",
+      "checksum": "c5314af4245aa7aaf279e01fa23195a180a3b99510590858c5f41bc22287553b",
+      "down_revision": "20260710_05_k_brand_guard",
+      "path": "backend/alembic/versions/20260711_01_c19_control_metadata_core.py",
+      "version": "20260711_01_c19_control_core"
+    },
+    {
+      "applied_at": "2026-07-11T00:00:00Z",
+      "checksum": "9f3b35b82621d1eb43a5c89652411bc2a0b47a910c27f1467045cfa772522649",
+      "down_revision": "20260711_01_c19_control_core",
+      "path": "backend/alembic/versions/20260711_02_webhook_registry.py",
+      "version": "20260711_02_webhook_registry"
+    },
+    {
+      "applied_at": "2026-07-11T00:00:00Z",
+      "checksum": "95bbfcd29994e2a353d1f407b9ac038cfaa9a83eb93b69b25fd2393a3eb77241",
+      "down_revision": "20260711_02_webhook_registry",
+      "path": "backend/alembic/versions/20260711_03_render_staging.py",
+      "version": "20260711_03_render_staging"
     }
   ]
 }

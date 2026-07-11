@@ -34,7 +34,9 @@ def test_ra_supplier_queries_prefer_chinese_product_title() -> None:
     assert all("FrothPro" not in query for query in queries)
 
 
-def test_ra_supplier_queries_include_multi_platform_choice_pages() -> None:
+def test_ra_supplier_queries_are_1688_only() -> None:
+    # The multi-platform crawl strategy (pdd/taobao/jd) was retired in favor
+    # of the official 1688 API funnel; supplier queries must stay 1688-only.
     queries = build_supplier_queries(
         {
             "asin": "B0SUPPLY01",
@@ -45,7 +47,7 @@ def test_ra_supplier_queries_include_multi_platform_choice_pages() -> None:
     )
 
     platforms = {query.platform for query in queries}
-    assert {"1688", "pdd", "taobao", "jd"}.issubset(platforms)
+    assert platforms == {"1688"}
     assert all(query.search_url.startswith("https://") for query in queries)
     assert any("猫爬架" in query.query for query in queries)
 
@@ -122,26 +124,35 @@ def test_ra_1688_link_normalization_keeps_only_1688_hosts() -> None:
     assert _normalized_1688_link("https://example.com/offer/123.html") is None
 
 
-def test_ra_multi_platform_link_normalization_keeps_detail_pages() -> None:
+def test_ra_supplier_link_normalization_rejects_non_1688_platforms() -> None:
+    # Retired platforms must normalize to None so no pdd/taobao/jd link can
+    # re-enter the supplier funnel.
     assert (
         _normalized_supplier_link(
             "https://mobile.yangkeduo.com/goods.html?goods_id=123456789&refer=search",
             platform="pdd",
         )
-        == "https://mobile.yangkeduo.com/goods.html?goods_id=123456789"
+        is None
     )
     assert (
         _normalized_supplier_link(
             "https://item.taobao.com/item.htm?id=987654321&spm=a21n57",
             platform="taobao",
         )
-        == "https://item.taobao.com/item.htm?id=987654321"
+        is None
     )
     assert (
-        _normalized_supplier_link("https://item.jd.com/100012345678.html?cu=true", platform="jd")
-        == "https://item.jd.com/100012345678.html"
+        _normalized_supplier_link(
+            "https://item.jd.com/100012345678.html?cu=true", platform="jd"
+        )
+        is None
     )
-    assert _normalized_supplier_link("https://search.jd.com/Search?keyword=猫爬架", platform="jd") is None
+    assert (
+        _normalized_supplier_link(
+            "https://detail.1688.com/offer/123456789.html?x=1#top", platform="1688"
+        )
+        == "https://detail.1688.com/offer/123456789.html"
+    )
 
 
 def test_ra_serper_result_can_supply_explicit_1688_price() -> None:

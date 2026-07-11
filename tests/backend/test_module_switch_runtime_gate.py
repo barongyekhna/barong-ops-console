@@ -145,13 +145,13 @@ def test_module_switch_policy_engine_group_switch_batches_members() -> None:
     engine = ModuleSwitchPolicyEngine(
         registry=[
             on_switch("business.reviews"),
-            on_switch("business.products"),
+            on_switch("k.product_knowledge"),
         ],
         dependency_rules=[],
         group_policies=[
             {
                 "group_key": "business.ops",
-                "module_keys": ("business.reviews", "business.products"),
+                "module_keys": ("business.reviews", "k.product_knowledge"),
                 "default_state": "ON",
                 "disabled_reason": None,
                 "batch_control_supported": True,
@@ -176,8 +176,8 @@ def test_module_switch_policy_engine_group_switch_batches_members() -> None:
     assert decisions["business.reviews"].state == "OFF"
     assert decisions["business.reviews"].policy_source == "group_switch"
     assert decisions["business.reviews"].group_keys == ("business.ops",)
-    assert decisions["business.products"].state == "OFF"
-    assert decisions["business.products"].policy_source == "group_switch"
+    assert decisions["k.product_knowledge"].state == "OFF"
+    assert decisions["k.product_knowledge"].policy_source == "group_switch"
 
 
 def test_module_switch_policy_engine_inheritance_override_vs_inherit() -> None:

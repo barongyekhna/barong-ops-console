@@ -187,6 +187,16 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
         "RISK_PENDING_REVIEW"
     )
 
+    # The marketing-copy gate joined the chain after risk review; simulate
+    # already-generated copy so the flow proceeds to the image gate.
+    product.marketing_copy_json = {
+        "channel": "dtc",
+        "title": "Steel Pump Wholesale",
+        "body_html": "<p>Generated marketing copy.</p>",
+    }
+    db.add(product)
+    db.commit()
+
     reviewed = engine.review_risk_terms(
         product_id=product.id,
         payload=ProductKnowledgeRiskReviewRequest(
@@ -228,6 +238,8 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
         **(product.ai_warnings_json or {}),
         "selling_points": {"review_status": "approved"},
     }
+    # The K→P hard gate requires a bound category for the product channel.
+    product.google_product_category = "Hardware > Pumps"
     db.add(product)
     db.commit()
 

@@ -192,7 +192,7 @@ def test_c15a_decision_requires_registration_and_explicit_module_binding() -> No
         workflow_id="n8n.workflow.integration.n8n_test_bridge.unknown.v1",
     )
     wrong_module = evaluate_workflow_invocation(
-        module="business.products",
+        module="k.product_knowledge",
         workflow_id="n8n.workflow.integration.n8n_test_bridge.dispatch.v1",
     )
     deprecated = evaluate_workflow_invocation(

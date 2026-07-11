@@ -30,7 +30,7 @@ def c14x_a_binding(**updates: Any) -> dict[str, Any]:
         "key": "ai.binding.reasoning.primary",
         "model": "model.reasoning.primary_v1",
         "capability": "reasoning",
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "status": "active",
         "reason": "Explicit C14X-A route declaration for contract inspection only.",
     }
@@ -78,13 +78,13 @@ def test_c14x_a_explicit_binding_maps_fixed_one_to_one_route() -> None:
     assert registry.items[0].key == "ai.binding.reasoning.primary"
     assert registry.items[0].model == "model.reasoning.primary_v1"
     assert registry.items[0].capability == "reasoning"
-    assert registry.items[0].module == "business.products"
+    assert registry.items[0].module == "k.product_knowledge"
     assert registry.items[0].status == "active"
     assert route.routing_path == (
         "ai.binding.reasoning.primary",
         "model.reasoning.primary_v1",
         "reasoning",
-        "business.products",
+        "k.product_knowledge",
     )
     assert route.registry_only_defines_routing_path is True
     assert route.registry_executes_ai is False
@@ -128,7 +128,7 @@ def test_c14x_a_binding_rules_reject_duplicate_one_to_one_dimensions() -> None:
             key="ai.binding.writing.primary",
             model="model.writing.primary_v1",
             capability="writing",
-            module="business.products",
+            module="k.product_knowledge",
         ),
     ]
 

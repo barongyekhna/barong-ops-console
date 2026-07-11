@@ -21,7 +21,7 @@ def c14x_a_binding(**updates: Any) -> dict[str, Any]:
         "key": "ai.binding.reasoning.primary",
         "model": "model.reasoning.primary_v1",
         "capability": "reasoning",
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "status": "active",
         "reason": "Explicit C14X-A route declaration for contract inspection only.",
     }
@@ -46,7 +46,7 @@ def c14x_c_capability_binding(**updates: Any) -> dict[str, Any]:
         "capability": "reasoning",
         "key": "ai.binding.reasoning.primary",
         "model": "model.reasoning.primary_v1",
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "status": "active",
         "reason": "Explicit C14X-C capability binding for inspection only.",
     }
@@ -56,7 +56,7 @@ def c14x_c_capability_binding(**updates: Any) -> dict[str, Any]:
 
 def c14x_c_module_binding(**updates: Any) -> dict[str, Any]:
     binding = {
-        "module": "business.products",
+        "module": "k.product_knowledge",
         "allowed_capabilities": ("reasoning",),
         "status": "active",
         "reason": "Explicit C14X-C module capability allow binding.",
@@ -175,13 +175,13 @@ def test_c14x_e_explicit_bindings_generate_prompt_context_and_c09_payload() -> N
     prompt = result.ai_execution_prompt
     c09_payload = result.c09_compatible_payload
     assert context.module_context.module_id == "SEO"
-    assert context.module_context.routed_module == "business.products"
+    assert context.module_context.routed_module == "k.product_knowledge"
     assert context.module_context.budget_remaining_units == 70
     assert context.capability_context.routing_path == (
         "reasoning",
         "ai.binding.reasoning.primary",
         "model.reasoning.primary_v1",
-        "business.products",
+        "k.product_knowledge",
     )
     assert context.model_context.locked_model_id == "model.reasoning.primary_v1"
     assert context.security_constraints.secret_in_prompt_allowed is False
@@ -189,7 +189,7 @@ def test_c14x_e_explicit_bindings_generate_prompt_context_and_c09_payload() -> N
     assert "C14X-A key binding: ai.binding.reasoning.primary" in prompt.prompt_text
     assert prompt.prompt_executes_ai is False
     assert prompt.runtime_execution_allowed is False
-    assert c09_payload.module_key == "business.products"
+    assert c09_payload.module_key == "k.product_knowledge"
     assert c09_payload.c09_contract_shape == (
         "ExecutionRequestContractV1_compatible_draft"
     )
