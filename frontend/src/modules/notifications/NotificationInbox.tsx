@@ -8,9 +8,13 @@ import {
   ExternalLink,
   Inbox,
   LoaderCircle,
+  Radio,
   RotateCcw,
+  X,
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+
+import { DashboardScene } from "@/components/dashboard-scene";
 
 import {
   getNotifications,
@@ -30,6 +34,21 @@ const LEVEL_LABEL: Record<string, string> = {
 };
 
 const POLL_MS = 30000;
+const RETURN_PATH_STORAGE_KEY = "barong.notifications.return-path";
+
+function safeReturnPath(value: string | null) {
+  if (
+    !value ||
+    !value.startsWith("/") ||
+    value.startsWith("//") ||
+    value === "/notifications" ||
+    value.startsWith("/notifications?") ||
+    value.startsWith("/notifications#")
+  ) {
+    return null;
+  }
+  return value;
+}
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -127,93 +146,129 @@ export function NotificationInbox() {
     }
   }
 
+  function handleClose() {
+    let returnPath: string | null = null;
+    try {
+      returnPath = safeReturnPath(
+        window.sessionStorage.getItem(RETURN_PATH_STORAGE_KEY),
+      );
+      window.sessionStorage.removeItem(RETURN_PATH_STORAGE_KEY);
+    } catch {
+      // Fall through to a deterministic in-console destination.
+    }
+    window.location.replace(returnPath ?? "/dashboard");
+  }
+
   return (
-    <section className={`${styles.inbox} mm-page`} aria-label="通知收件箱">
-      <header className={styles.header}>
-        <div className={styles.heading}>
-          <span className={styles.eyebrow}>通知</span>
-          <h2>
-            <BellRing aria-hidden="true" size={20} />
-            通知收件箱
-            {unread > 0 ? (
-              <span className={styles.unreadBadge}>{unread}</span>
-            ) : null}
-          </h2>
-          <p>上传结果 / n8n 回调 / K·I 事件都汇聚到这里，机器汇报、你把关。</p>
-        </div>
-        <div className={styles.headerActions}>
-          <button
-            className="secondary-button"
-            disabled={loading}
-            onClick={() => void load(filter)}
-            type="button"
-          >
-            {loading ? (
-              <LoaderCircle aria-hidden="true" className="spin" size={16} />
-            ) : (
-              <RotateCcw aria-hidden="true" size={16} />
-            )}
-            刷新
-          </button>
-          <button
-            className="primary-button"
-            disabled={markingAll || unread === 0}
-            onClick={() => void handleMarkAll()}
-            type="button"
-          >
-            {markingAll ? (
-              <LoaderCircle aria-hidden="true" className="spin" size={16} />
-            ) : (
-              <CheckCheck aria-hidden="true" size={16} />
-            )}
-            全部已读
-          </button>
-        </div>
-      </header>
-
-      <div className={styles.filters} role="tablist">
+    <section className={`${styles.inbox} cc-dash`} aria-label="通知收件箱">
+      <DashboardScene />
+      <div className={styles.content}>
         <button
-          aria-selected={filter === "all"}
-          className={filter === "all" ? styles.filterActive : styles.filter}
-          onClick={() => setFilter("all")}
-          role="tab"
+          aria-label="关闭通知并返回"
+          className={styles.closeButton}
+          onClick={handleClose}
+          title="关闭通知并返回"
           type="button"
         >
-          全部
+          <X aria-hidden="true" size={19} />
         </button>
-        <button
-          aria-selected={filter === "unread"}
-          className={filter === "unread" ? styles.filterActive : styles.filter}
-          onClick={() => setFilter("unread")}
-          role="tab"
-          type="button"
-        >
-          未读{unread > 0 ? ` · ${unread}` : ""}
-        </button>
-      </div>
 
-      {error ? (
-        <p className={styles.error} role="alert">
-          <AlertTriangle aria-hidden="true" size={16} />
-          {error}
-        </p>
-      ) : null}
+        <header className={styles.header}>
+          <div className={styles.heading}>
+            <span className={styles.eyebrow}>
+              <Radio aria-hidden="true" size={14} />
+              PHOENIX SIGNAL DECK / LIVE
+            </span>
+            <h2>
+              <BellRing aria-hidden="true" size={21} />
+              通知驾驶舱
+              {unread > 0 ? (
+                <span className={styles.unreadBadge}>{unread}</span>
+              ) : null}
+            </h2>
+            <p>系统信号 · {unread} 条未读 · 30 秒同步</p>
+          </div>
+          <div className={styles.headerActions}>
+            <button
+              className={styles.secondaryAction}
+              disabled={loading}
+              onClick={() => void load(filter)}
+              type="button"
+            >
+              {loading ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              ) : (
+                <RotateCcw aria-hidden="true" size={16} />
+              )}
+              刷新
+            </button>
+            <button
+              className={styles.primaryAction}
+              disabled={markingAll || unread === 0}
+              onClick={() => void handleMarkAll()}
+              type="button"
+            >
+              {markingAll ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              ) : (
+                <CheckCheck aria-hidden="true" size={16} />
+              )}
+              全部已读
+            </button>
+          </div>
+        </header>
 
-      {loading && items.length === 0 ? (
-        <div className={styles.state}>
-          <LoaderCircle aria-hidden="true" className="spin" size={22} />
-          <span>正在加载通知…</span>
+        <div className={styles.commandBar}>
+          <div className={styles.filters} role="tablist" aria-label="通知筛选">
+            <button
+              aria-selected={filter === "all"}
+              className={filter === "all" ? styles.filterActive : styles.filter}
+              onClick={() => setFilter("all")}
+              role="tab"
+              type="button"
+            >
+              <Inbox aria-hidden="true" size={14} />
+              全部
+            </button>
+            <button
+              aria-selected={filter === "unread"}
+              className={filter === "unread" ? styles.filterActive : styles.filter}
+              onClick={() => setFilter("unread")}
+              role="tab"
+              type="button"
+            >
+              <Radio aria-hidden="true" size={14} />
+              未读{unread > 0 ? ` · ${unread}` : ""}
+            </button>
+          </div>
+          <span className={styles.channelStatus}>
+            <span aria-hidden="true" className={styles.liveDot} />
+            SIGNAL CHANNEL ONLINE
+          </span>
         </div>
-      ) : null}
 
-      {!loading && items.length === 0 && !error ? (
-        <div className={styles.state}>
-          <Inbox aria-hidden="true" size={22} />
-          <span>{filter === "unread" ? "没有未读通知。" : "暂无通知。"}</span>
-        </div>
-      ) : null}
+        {error ? (
+          <p className={styles.error} role="alert">
+            <AlertTriangle aria-hidden="true" size={16} />
+            {error}
+          </p>
+        ) : null}
 
-      <ul className={styles.list}>
+        {loading && items.length === 0 ? (
+          <div className={styles.state}>
+            <LoaderCircle aria-hidden="true" className="spin" size={22} />
+            <span>正在加载通知…</span>
+          </div>
+        ) : null}
+
+        {!loading && items.length === 0 && !error ? (
+          <div className={styles.state}>
+            <Inbox aria-hidden="true" size={22} />
+            <span>{filter === "unread" ? "没有未读通知。" : "暂无通知。"}</span>
+          </div>
+        ) : null}
+
+        <ul className={styles.list}>
         {items.map((item) => {
           const links = externalLinks(item.external_refs);
           const isUnread = item.status === "unread";
@@ -279,7 +334,8 @@ export function NotificationInbox() {
             </li>
           );
         })}
-      </ul>
+        </ul>
+      </div>
     </section>
   );
 }

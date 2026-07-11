@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { getUnreadCount } from "./api";
 
 const POLL_MS = 30000;
+const RETURN_PATH_STORAGE_KEY = "barong.notifications.return-path";
 
 export function NotificationBell() {
   const router = useRouter();
@@ -32,11 +33,24 @@ export function NotificationBell() {
     // re-fetch when navigating (e.g. after marking read on the inbox page)
   }, [pathname]);
 
+  function handleOpen() {
+    if (pathname === "/notifications") {
+      return;
+    }
+    try {
+      const returnPath = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+      window.sessionStorage.setItem(RETURN_PATH_STORAGE_KEY, returnPath);
+    } catch {
+      // Browser history remains the fallback when session storage is unavailable.
+    }
+    router.push("/notifications");
+  }
+
   return (
     <button
       aria-label={unread > 0 ? `通知收件箱，${unread} 条未读` : "通知收件箱"}
       className="secondary-button topbar-action notif-bell"
-      onClick={() => router.push("/notifications")}
+      onClick={handleOpen}
       title="通知收件箱"
       type="button"
     >

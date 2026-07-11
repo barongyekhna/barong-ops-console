@@ -7165,3 +7165,18 @@ textarea:focus-visible {
   box-shadow: 0 0 8px rgb(255 107 138 / 55%);
   pointer-events: none;
 }
+
+@media (max-width: 640px) {
+  .topbar .topbar-search {
+    display: none;
+  }
+
+  .topbar .notif-bell.topbar-action {
+    display: inline-flex;
+    width: 40px;
+    min-width: 40px;
+    padding: 0;
+    gap: 0;
+    font-size: 0;
+  }
+}
