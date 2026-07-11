@@ -323,13 +323,18 @@ def ai_text_violations(
 
 
 _IMAGE_AUDIT_INSTRUCTION = (
-    "You are a trademark-compliance image auditor. Look at this e-commerce "
-    "product image. Does it contain ANY visible brand name, logo, trademark, "
-    "wordmark, or brand-identifying text ANYWHERE (on the product itself, "
-    "packaging, labels, overlays, background props)? Generic descriptive "
-    f'overlay text without a brand is fine. "{SITE_BRAND}" is the site\'s own '
-    "brand and is allowed. Return ONLY JSON: "
-    '{"has_brand": true|false, "findings": ["<what and where>"]}'
+    "You are a publish-readiness image auditor for an e-commerce product page. "
+    "Inspect this image and flag it if EITHER check fails:\n"
+    "1. BRAND: any visible brand name, logo, trademark, wordmark, or "
+    "brand-identifying text ANYWHERE (product, packaging, labels, overlays, "
+    f'background props). Generic descriptive overlay text is fine. "{SITE_BRAND}" '
+    "is the site's own brand and is allowed.\n"
+    "2. UNFINISHED DESIGN: empty text boxes, blank label rows, placeholder "
+    "frames waiting for text, icons with no caption beside them, garbled or "
+    "misspelled overlay text, or any obviously incomplete infographic element — "
+    "this image goes live exactly as-is, so unfinished design is a defect.\n"
+    "Return ONLY JSON: "
+    '{"flagged": true|false, "findings": ["<what and where>"]}'
 )
 
 
@@ -353,13 +358,13 @@ def ai_image_violation(key, image_bytes: bytes, mime_type: str) -> list[str]:
         ],
     )
     parsed = _json_from_reply(reply)
-    if not parsed.get("has_brand"):
+    if not (parsed.get("flagged") or parsed.get("has_brand")):
         return []
     findings = parsed.get("findings")
     out = [str(f)[:300] for f in findings if str(f).strip()] if isinstance(
         findings, list
     ) else []
-    return out or ["brand mark detected (no detail returned)"]
+    return out or ["image flagged (no detail returned)"]
 
 
 def _asset_preview_bytes(

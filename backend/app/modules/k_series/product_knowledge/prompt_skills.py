@@ -372,7 +372,16 @@ def image_art_direction_instruction() -> str:
         "description) — including anything in `forbidden_brand_terms`. Refer to the product "
         "generically. Every image prompt MUST instruct the renderer to remove any brand "
         "logo or brand text visible on the reference product (replace with clean unbranded "
-        "surface, keeping shape/color/structure). overlay_text must never contain a brand."
+        "surface, keeping shape/color/structure). overlay_text must never contain a brand.\n"
+        "FINISHED-IMAGE RULE (absolute): every image is published EXACTLY as rendered — "
+        "there is NO post-production step, no human will add text later. NEVER design "
+        "blank text boxes, empty rows, placeholder frames, or 'space reserved for later "
+        "text'. If an infographic needs labels, the COMPLETE final wording of every label "
+        "must be written in overlay_text (verified facts only); an icon may only appear "
+        "with its finished text beside it. If you lack verified facts for a spec-style "
+        "infographic, do NOT design one — plan a purely visual image instead (detail "
+        "close-up, usage scene, texture shot). Prompts must never contain phrases like "
+        "'blank', 'empty placeholder', or 'for post-production text'."
     )
 
 
