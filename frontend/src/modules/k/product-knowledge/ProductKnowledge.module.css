@@ -2196,3 +2196,141 @@
 }
 
 .renderReworkChoices input { margin-top: 3px; }
+
+/* ===== 关键词板块压缩：chip 云 + 风险词紧凑行 ===== */
+
+.kwChipCloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  max-height: 380px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.kwChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border: 1px solid rgb(14 122 95 / 32%);
+  background: rgb(14 122 95 / 8%);
+  color: inherit;
+  line-height: 1.3;
+}
+
+.kwChip[data-removing="true"] { opacity: 0.45; }
+
+.kwChip button {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 0;
+  cursor: pointer;
+  background: rgb(14 122 95 / 14%);
+  color: inherit;
+  padding: 0;
+}
+
+.kwChip button:hover { background: rgb(255 107 107 / 25%); }
+
+.riskBatchBar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.riskCompactList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 380px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+
+.riskCompactList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.84rem;
+}
+
+.riskCompactList li:last-child { border-bottom: 0; }
+
+.riskCompactList li[data-decision="approve"] {
+  background: rgb(14 122 95 / 7%);
+}
+
+.riskCompactList li[data-decision="reject"] {
+  background: rgb(255 107 107 / 7%);
+  text-decoration: line-through;
+  text-decoration-color: rgb(255 107 107 / 55%);
+}
+
+.riskCompactList li[data-decision="none"] {
+  background: rgb(255 177 59 / 6%);
+}
+
+.riskTermText {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.riskTermText strong {
+  white-space: nowrap;
+}
+
+.riskTermText em {
+  font-style: normal;
+  font-size: 0.76rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.riskActions {
+  display: inline-flex;
+  gap: 4px;
+  flex: none;
+}
+
+.riskActions button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0;
+  transition: 0.12s;
+}
+
+.riskActions button[data-kind="approve"][aria-pressed="true"] {
+  color: #fff;
+  background: #0e7a5f;
+  border-color: #0e7a5f;
+}
+
+.riskActions button[data-kind="reject"][aria-pressed="true"] {
+  color: #fff;
+  background: #c73b3b;
+  border-color: #c73b3b;
+}
+
+.riskActions button:hover { color: inherit; }

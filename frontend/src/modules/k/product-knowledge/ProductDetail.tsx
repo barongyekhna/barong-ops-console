@@ -18,6 +18,7 @@ import {
   ShieldCheck,
   Sparkles,
   Trash2,
+  X,
   XCircle,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
@@ -1309,22 +1310,21 @@ export function ProductDetail({
                 Claude 终筛后会在这里显示优质关键词。
               </p>
             ) : (
-              <ul className={styles.keywordList}>
+              <div className={styles.kwChipCloud}>
                 {nonRiskKeywords.map((item) => {
                   const keywordKey = normalizeKeywordKey(item.keyword);
                   const isRemoving = pendingKeywordRemovalKeys.includes(keywordKey);
 
                   return (
-                    <li
+                    <span
+                      className={styles.kwChip}
                       data-removing={isRemoving}
                       key={`${item.source}-${item.id ?? item.keyword}`}
+                      title={item.detail || item.keyword}
                     >
-                      <div>
-                        <strong>{item.keyword}</strong>
-                        <span>{item.detail}</span>
-                      </div>
+                      {item.keyword}
                       <button
-                        className="secondary-button"
+                        aria-label={`移除 ${item.keyword}`}
                         disabled={isRemoving}
                         onClick={() => void removeKeyword(item)}
                         type="button"
@@ -1333,71 +1333,114 @@ export function ProductDetail({
                           <LoaderCircle
                             aria-hidden="true"
                             className="spin"
-                            size={15}
+                            size={11}
                           />
                         ) : (
-                          <Trash2 aria-hidden="true" size={15} />
+                          <X aria-hidden="true" size={11} />
                         )}
-                        移除
                       </button>
-                    </li>
+                    </span>
                   );
                 })}
-              </ul>
+              </div>
             )}
           </div>
 
           <div className={styles.keywordColumn}>
             <div className={styles.columnHeading}>
               <strong>风险词</strong>
-              <span>{riskKeywords.length} 个</span>
+              <span>
+                已决策 {
+                  riskKeywords.filter((item) => riskDecisions[item.term]).length
+                }/{riskKeywords.length}
+              </span>
             </div>
+            {riskKeywords.length > 0 ? (
+              <div className={styles.riskBatchBar}>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setKeywordSectionTouched(true);
+                    setRiskDecisions(
+                      Object.fromEntries(
+                        riskKeywords.map((item) => [item.term, "approve" as const]),
+                      ),
+                    );
+                  }}
+                  type="button"
+                >
+                  <CheckCircle2 aria-hidden="true" size={14} />
+                  全部通过
+                </button>
+                <button
+                  className="secondary-button"
+                  onClick={() => {
+                    setKeywordSectionTouched(true);
+                    setRiskDecisions(
+                      Object.fromEntries(
+                        riskKeywords.map((item) => [item.term, "reject" as const]),
+                      ),
+                    );
+                  }}
+                  type="button"
+                >
+                  <XCircle aria-hidden="true" size={14} />
+                  全部拒绝
+                </button>
+              </div>
+            ) : null}
             {riskKeywords.length === 0 ? (
               <p className={styles.sellingPointsEmpty}>
                 暂无风险词。Claude 终筛完成后仍需提交关键词审核。
               </p>
             ) : (
-              <ul className={styles.riskDecisionList}>
-                {riskKeywords.map((item) => (
-                  <li key={item.term}>
-                    <div>
-                      <strong>{item.term}</strong>
-                      {item.reason ? <span>{item.reason}</span> : null}
-                    </div>
-                    <div>
-                      <button
-                        aria-pressed={riskDecisions[item.term] === "approve"}
-                        className="secondary-button"
-                        onClick={() => {
-                          setKeywordSectionTouched(true);
-                          setRiskDecisions((current) => ({
-                            ...current,
-                            [item.term]: "approve",
-                          }));
-                        }}
-                        type="button"
+              <ul className={styles.riskCompactList}>
+                {riskKeywords.map((item) => {
+                  const decision = riskDecisions[item.term];
+                  return (
+                    <li data-decision={decision ?? "none"} key={item.term}>
+                      <span
+                        className={styles.riskTermText}
+                        title={item.reason || item.term}
                       >
-                        <CheckCircle2 aria-hidden="true" size={15} />
-                        通过
-                      </button>
-                      <button
-                        aria-pressed={riskDecisions[item.term] === "reject"}
-                        className="secondary-button"
-                        onClick={() => {
-                          setKeywordSectionTouched(true);
-                          setRiskDecisions((current) => ({
-                            ...current,
-                            [item.term]: "reject",
-                          }));
-                        }}
-                        type="button"
-                      >
-                        <XCircle aria-hidden="true" size={15} />
-                        拒绝
-                      </button>
-                    </div>
-                  </li>
-                ))}
+                        <strong>{item.term}</strong>
+                        {item.reason ? <em>{item.reason}</em> : null}
+                      </span>
+                      <span className={styles.riskActions}>
+                        <button
+                          aria-label={`通过 ${item.term}`}
+                          aria-pressed={decision === "approve"}
+                          data-kind="approve"
+                          onClick={() => {
+                            setKeywordSectionTouched(true);
+                            setRiskDecisions((current) => ({
+                              ...current,
+                              [item.term]: "approve",
+                            }));
+                          }}
+                          type="button"
+                        >
+                          <CheckCircle2 aria-hidden="true" size={15} />
+                        </button>
+                        <button
+                          aria-label={`拒绝 ${item.term}`}
+                          aria-pressed={decision === "reject"}
+                          data-kind="reject"
+                          onClick={() => {
+                            setKeywordSectionTouched(true);
+                            setRiskDecisions((current) => ({
+                              ...current,
+                              [item.term]: "reject",
+                            }));
+                          }}
+                          type="button"
+                        >
+                          <XCircle aria-hidden="true" size={15} />
+                        </button>
+                      </span>
+                    </li>
+                  );
+                })}
               </ul>
             )}
           </div>
