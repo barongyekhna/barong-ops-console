@@ -1,3 +1,23 @@
+"""K workflow engines: V1 gate engine + V2 orchestrator (one file by design).
+
+导航索引(行号会漂移,按类名/方法名搜索):
+  1. KWorkflowStateMachineV2       状态机定义 + 状态迁移合法性       (~L130)
+  2. KWorkflowExecutionError       错误类型 + 错误报告构造            (~L240)
+  3. KProductKnowledgeWorkflowEngine (V1)
+     - start_pipeline / review_risk_terms / bind_image_asset
+     - export_payloads(出口硬门: keywords+selling points+image+
+       risk review+category 绑定, 见 _export_blockers)              (~L280-620)
+     - provider 调用层 _run_deepseek_* / _fetch_serp_* /
+       _run_chatgpt_filter / _run_claude_filter                     (~L780-1220)
+     - _continue_after_risk_review / _optimize_keywords /
+       _normalize_units / 图片绑定 helper                            (~L1220-2060)
+  4. KWorkflowOrchestratorV2       V2 闭环编排(run/review/bind/export,
+     含 marketing copy 门 + generate_marketing_copy)                (~L2300-EOF)
+
+拆分计划: provider 调用层抽独立模块。因 feature/k-series-product-knowledge
+分支(K21)尚有 100+ 未合并提交,拆分推迟到该分支合并后。(2026-07-11 批次3)
+"""
+
 from __future__ import annotations
 
 import hashlib

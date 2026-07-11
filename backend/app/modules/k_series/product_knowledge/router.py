@@ -1,3 +1,22 @@
+"""K product-knowledge API router (single flat file by design for now).
+
+导航索引(行号会漂移,按小节标题/装饰器搜索):
+  1. 请求/响应模型          class *Payload / *Response          (~L160-450)
+  2. 权限/作用域/幂等 helper _require_k_permission / _scope_*    (~L450-600)
+  3. 产品读写 helper         _product_* / _variant_* / _count_*  (~L600-2000)
+  4. 产品 CRUD 端点          @router "/products*"                (~L2020-2710)
+  5. 关键词/风险词端点        "/keywords*" "/risks*"              (~L2710-3000)
+  6. AI 执行端点             "/serp" "/enrich" "/translate"
+                             "/selling-points" "/generate-*"     (~L3000-4030)
+  7. 渲染/工作流/图片端点     "/render-*" "/workflow/*" "/images/*"(~L4030-4450)
+  8. 类目/R搬运/媒体端点      "/categories" "/import-from-r"
+                             "/media*"                           (~L4450-EOF)
+
+拆分计划: 按上述小节拆为子模块 + 聚合 router。因 feature/k-series-
+product-knowledge 分支(K21 操作日志系统)尚有 100+ 未合并提交且改动本文件,
+拆分推迟到该分支合并后执行,避免制造合并冲突。(2026-07-11 批次3 决定)
+"""
+
 from __future__ import annotations
 
 import hashlib
