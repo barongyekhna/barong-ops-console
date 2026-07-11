@@ -351,15 +351,15 @@ def test_c19g_design_outputs_match_attachment_contract() -> None:
     assert "C18G applies org_id scoped storage boundary" in ATTACHMENT_DATA_FLOW_DIAGRAM
 
 
-def test_c19g_attachment_routes_are_registered_as_internal_app_routes() -> None:
+def test_c19g_attachment_runtime_remains_unmounted_until_asset_store_exists() -> None:
     routes = {
         (route.path, tuple(sorted(route.methods)))
         for route in app.routes
         if "/attachments" in route.path
     }
 
-    assert ("/api/app/attachments/upload", ("POST",)) in routes
-    assert ("/api/app/attachments/{message_id}", ("GET",)) in routes
+    assert not any(path.startswith("/api/app/attachments") for path, _ in routes)
+    assert not any("/api/app/c19/attachments" in path for path, _ in routes)
     assert not any(path.startswith("/api/public/attachments") for path, _ in routes)
     assert not any(
         path.startswith("/api/control-plane/attachments") for path, _ in routes

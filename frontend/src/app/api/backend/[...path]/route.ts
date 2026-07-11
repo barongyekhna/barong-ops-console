@@ -172,6 +172,27 @@ const BLOCKED_SECURITY_ISOLATION_FIRST_SEGMENTS = new Set([
 const BLOCKED_SECURITY_ISOLATION_PATHS = new Set([
   "webhook-gateway/ingress",
 ]);
+const BLOCKED_C19_INFRASTRUCTURE_SEGMENTS = new Set([
+  "adapter",
+  "adapters",
+  "asset-store",
+  "chat-asset-store",
+  "chat-record-store",
+  "config",
+  "configuration",
+  "credential",
+  "credentials",
+  "endpoint",
+  "endpoints",
+  "provider",
+  "providers",
+  "record-store",
+  "secret",
+  "secrets",
+  "storage",
+  "storages",
+  "vps",
+]);
 
 type RouteContext = {
   params: Promise<{ path: string[] }>;
@@ -312,8 +333,24 @@ export function isBlockedSecurityIsolationPath(path: string[]) {
     return true;
   }
 
+  if (isBlockedC19InfrastructurePath(path)) {
+    return true;
+  }
+
   return path.some((segment) =>
     /^(?:https?:|n8n-webhook-ref:)/i.test(decodePathSegment(segment)),
+  );
+}
+
+export function isBlockedC19InfrastructurePath(path: string[]) {
+  if (path[0]?.toLowerCase() !== "c19") {
+    return false;
+  }
+
+  return path.slice(1).some((segment) =>
+    BLOCKED_C19_INFRASTRUCTURE_SEGMENTS.has(
+      decodePathSegment(segment).trim().toLowerCase(),
+    ),
   );
 }
 
@@ -469,6 +506,174 @@ function isAllowedOrgPath(method: string, path: string[]) {
   }
 
   return false;
+}
+
+function isC19FriendRequestId(segment: string | undefined) {
+  return Boolean(segment && /^c19frq_[0-9a-f]{32}$/.test(segment));
+}
+
+function isC19ConversationId(segment: string | undefined) {
+  return Boolean(segment && /^conv_[0-9a-f]{32}$/.test(segment));
+}
+
+export function isAllowedC19Path(method: string, path: string[]) {
+  if (
+    path[0] !== "c19" ||
+    path.length < 2 ||
+    isBlockedC19InfrastructurePath(path)
+  ) {
+    return false;
+  }
+
+  const resource = path[1];
+
+  if (method === "GET" && path.length === 2 && resource === "events") {
+    return true;
+  }
+
+  if (
+    method === "GET" &&
+    path.length === 3 &&
+    resource === "events" &&
+    path[2] === "tail"
+  ) {
+    return true;
+  }
+
+  if (
+    method === "GET" &&
+    path.length === 2 &&
+    ["blocks", "conversations", "directory", "friend-requests", "friends"].includes(
+      resource,
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    method === "GET" &&
+    path.length === 3 &&
+    resource === "profiles" &&
+    isIntegerPathSegment(path[2])
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST" &&
+    path.length === 2 &&
+    (resource === "friend-requests" || resource === "groups")
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST" &&
+    path.length === 4 &&
+    resource === "friend-requests" &&
+    isC19FriendRequestId(path[2]) &&
+    ["accept", "cancel", "reject"].includes(path[3])
+  ) {
+    return true;
+  }
+
+  if (
+    path.length === 3 &&
+    resource === "friends" &&
+    isIntegerPathSegment(path[2])
+  ) {
+    return method === "DELETE";
+  }
+
+  if (
+    path.length === 3 &&
+    resource === "blocks" &&
+    isIntegerPathSegment(path[2])
+  ) {
+    return method === "POST" || method === "DELETE";
+  }
+
+  if (
+    method === "POST" &&
+    path.length === 3 &&
+    resource === "conversations" &&
+    path[2] === "direct"
+  ) {
+    return true;
+  }
+
+  if (
+    method === "GET" &&
+    path.length === 3 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2])
+  ) {
+    return true;
+  }
+
+  if (
+    path.length === 4 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    path[3] === "settings"
+  ) {
+    return method === "GET" || method === "PATCH";
+  }
+
+  if (
+    path.length === 4 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    path[3] === "messages"
+  ) {
+    return method === "GET" || method === "POST";
+  }
+
+  if (
+    path.length === 4 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    ["delivered", "read"].includes(path[3])
+  ) {
+    return method === "POST";
+  }
+
+  if (
+    method === "GET" &&
+    path.length === 4 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    ["resume", "unread"].includes(path[3])
+  ) {
+    return true;
+  }
+
+  if (
+    path.length === 3 &&
+    resource === "groups" &&
+    isC19ConversationId(path[2])
+  ) {
+    return method === "PATCH" || method === "DELETE";
+  }
+
+  if (
+    method === "POST" &&
+    path.length === 4 &&
+    resource === "groups" &&
+    isC19ConversationId(path[2]) &&
+    ["leave", "members", "transfer-owner"].includes(path[3])
+  ) {
+    return true;
+  }
+
+  return (
+    method === "DELETE" &&
+    path.length === 5 &&
+    resource === "groups" &&
+    isC19ConversationId(path[2]) &&
+    path[3] === "members" &&
+    isIntegerPathSegment(path[4])
+  );
 }
 
 function isAllowedControlPlaneResourcePath(method: string, path: string[]) {
@@ -1058,6 +1263,34 @@ function isAllowedRPath(method: string, path: string[]) {
     ) {
       return true;
     }
+
+    if (
+      method === "GET" &&
+      path.length === 3 &&
+      ["groups", "quota", "reports"].includes(path[2])
+    ) {
+      return true;
+    }
+
+    if (
+      method === "POST" &&
+      path.length === 5 &&
+      path[2] === "reports" &&
+      isUuidPathSegment(path[3]) &&
+      ["approve", "reject", "opus-review", "expand"].includes(path[4])
+    ) {
+      return true;
+    }
+
+    if (
+      method === "GET" &&
+      path.length === 5 &&
+      path[2] === "reports" &&
+      isUuidPathSegment(path[3]) &&
+      ["detail", "expansion"].includes(path[4])
+    ) {
+      return true;
+    }
   }
 
   if (path.length === 3 && path[1] === "commerce") {
@@ -1141,6 +1374,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedAppResourcePath(method, path) ||
     isAllowedApprovalPath(method, path) ||
     isAllowedOrgPath(method, path) ||
+    isAllowedC19Path(method, path) ||
     isAllowedPermissionPath(method, path) ||
     isAllowedUsersPath(method, path) ||
     isAllowedKPath(method, path) ||
@@ -1213,6 +1447,62 @@ function getSetCookieHeaders(headers: Headers) {
   return setCookie ? [setCookie] : [];
 }
 
+const C19_MESSAGE_BODY_MAX_BYTES = 16 * 1024;
+
+class ProxyPayloadTooLargeError extends Error {}
+
+function isC19MessageSend(method: string, path: string[]) {
+  return (
+    method === "POST" &&
+    path.length === 4 &&
+    path[0] === "c19" &&
+    path[1] === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    path[3] === "messages"
+  );
+}
+
+async function readBodyWithLimit(request: NextRequest, maximumBytes: number) {
+  const declaredLength = request.headers.get("content-length");
+  if (declaredLength !== null) {
+    const parsedLength = Number(declaredLength);
+    if (
+      !Number.isSafeInteger(parsedLength) ||
+      parsedLength < 0 ||
+      parsedLength > maximumBytes
+    ) {
+      throw new ProxyPayloadTooLargeError();
+    }
+  }
+  if (!request.body) return new Uint8Array();
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maximumBytes) {
+        await reader.cancel();
+        throw new ProxyPayloadTooLargeError();
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const body = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
 async function proxyRequest(
   request: NextRequest,
   context: RouteContext,
@@ -1253,7 +1543,11 @@ async function proxyRequest(
     }
 
     const requestBody =
-      request.method === "GET" ? undefined : await request.arrayBuffer();
+      request.method === "GET"
+        ? undefined
+        : isC19MessageSend(request.method, path)
+          ? await readBodyWithLimit(request, C19_MESSAGE_BODY_MAX_BYTES)
+          : await request.arrayBuffer();
     const backendResponse = await fetch(targetUrl, {
       body:
         requestBody && requestBody.byteLength > 0
@@ -1279,6 +1573,7 @@ async function proxyRequest(
       "content-length",
       "etag",
       "last-modified",
+      "x-accel-buffering",
     ]) {
       const headerValue = backendResponse.headers.get(headerName);
       if (headerValue) {
@@ -1296,7 +1591,13 @@ async function proxyRequest(
       headers: responseHeaders,
       status: backendResponse.status,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof ProxyPayloadTooLargeError) {
+      return Response.json(
+        { detail: "消息请求体过大。" },
+        { status: 413 },
+      );
+    }
     return Response.json(
       { detail: "服务暂时不可用，请稍后再试。" },
       { status: 503 },

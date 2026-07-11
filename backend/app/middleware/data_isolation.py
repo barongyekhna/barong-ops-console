@@ -49,6 +49,9 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
         "/api/app/module/shared/list",
     )
 )
+# C19 is global communication metadata, not tenant business data. Its services
+# enter a narrow bypass only after session and authoritative affiliation checks.
+ORG_CONTEXT_EXEMPT_PREFIXES = ("/api/app/c19",)
 ORG_PATH_PATTERN = re.compile(r"/org/(?P<org_id>org_[0-9a-f]{32})(?:/|$)")
 MUTATING_METHODS = frozenset(("POST", "PUT", "PATCH", "DELETE"))
 C18D_TARGET_ORG_PAYLOAD_PATHS = frozenset(("/api/app/module/bind",))
@@ -57,6 +60,7 @@ DATA_ISOLATION_EXEMPT_PATHS = frozenset(
         "/api/app/permissions/me",
     )
 )
+DATA_ISOLATION_EXEMPT_PREFIXES = ("/api/app/c19",)
 
 
 def _security_response(status_code: int, detail: str) -> JSONResponse:
@@ -176,9 +180,20 @@ def _is_api_path(request: Request) -> bool:
 
 def _requires_org_context(request: Request) -> bool:
     path = request.url.path
+    is_exempt = path in ORG_CONTEXT_EXEMPT_PATHS or any(
+        path == prefix or path.startswith(f"{prefix}/")
+        for prefix in ORG_CONTEXT_EXEMPT_PREFIXES
+    )
     return (
         path.startswith(TENANT_API_PATH_PREFIXES)
-        and path not in ORG_CONTEXT_EXEMPT_PATHS
+        and not is_exempt
+    )
+
+
+def _is_data_isolation_exempt_path(path: str) -> bool:
+    return path in DATA_ISOLATION_EXEMPT_PATHS or any(
+        path == prefix or path.startswith(f"{prefix}/")
+        for prefix in DATA_ISOLATION_EXEMPT_PREFIXES
     )
 
 
@@ -201,7 +216,7 @@ async def enforce_org_data_isolation(request: Request, call_next):
         return await call_next(request)
 
     if (
-        request.url.path in DATA_ISOLATION_EXEMPT_PATHS
+        _is_data_isolation_exempt_path(request.url.path)
         or is_lightweight_control_plane_path(request.url.path)
     ):
         return await call_next(request)

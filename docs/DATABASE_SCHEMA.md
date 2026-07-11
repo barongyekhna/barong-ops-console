@@ -154,15 +154,17 @@ PostgreSQL 是 Barong Ops Console 的状态真相源。本文定义逻辑设计�
 
 **空地基必需：** 预留，Agent 实际获得 Memory 读取能力前必须落表。
 
-## 16. `contact_identities`
+## 16. C19 通讯控制元数据
 
-**用途：** 保存企业内部通讯的不可变联系人身份快照。身份用于目录和消息显示，不等于认证账号。
+**用途：** 保存企业内部通讯的全局身份、多组织归属、好友/拉黑关系、会话、会话成员与个人会话设置。C19 控制元数据不等于认证账号，也不包含聊天正文或文件内容。
 
-**关键字段草案：** `user_id`、`name`、`org_id`、`org_name`、`title`、`role`、`created_at`、`updated_at`。
+**受管表：** `c19_profiles`、`c19_affiliations`、`c19_friend_requests`、`c19_relationships`、`c19_user_blocks`、`c19_conversations`、`c19_conversation_members`、`c19_conversation_user_settings`。
 
-**最低约束：** `user_id` 主键；`role` 仅允许 `owner`、`org_admin`、`member`；`name`、`org_name`、`title` 仅允许 owner 或同 org 的 org_admin 通过受控服务更新；普通 member 不能修改任何身份字段。
+**最低约束：** 每个内部用户只有一个全局 profile；每个有效 C18 membership 对应一条 affiliation；好友和直接会话使用规范用户对保证唯一；拉黑是 blocker 私有的有向状态；会话访问以 conversation member 为边界；设置表只保存置顶、免打扰、归档和通知偏好。
 
-**空地基必需：** C19A 设计已定义；本阶段不执行 migration。
+**存储边界：** Alembic revision `20260711_01_c19_control_core` 管理上述八张表。消息正文、消息历史、送达/已读位置、图片/文件、朋友圈和内容 Outbox 均不落当前主库；未来分别通过未绑定的 `ChatRecordStore` 与 `ChatAssetStore` 接入独立 VPS。权威决策见 `docs/C19_IMPLEMENTATION_MEMORY.md`。
+
+**运行边界：** `/api/app/c19` 只读写上述控制元数据，并实时复核 User、源 C18 membership 与 Organization 的 active 状态。旧的进程内 C19 路由不再挂载；消息、附件和朋友圈 API 仍保持不存在/关闭状态。
 
 ## 17. 关系与一致性底线
 

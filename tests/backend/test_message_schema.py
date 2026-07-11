@@ -273,15 +273,14 @@ def test_c19c_design_outputs_match_required_contract() -> None:
     assert "active C18C membership exists" in MESSAGE_DATA_FLOW_DIAGRAM
 
 
-def test_c19c_message_routes_are_registered_as_internal_app_routes() -> None:
+def test_c19c_message_runtime_remains_unmounted_until_record_store_exists() -> None:
     routes = {
         (route.path, tuple(sorted(route.methods)))
         for route in app.routes
         if "/messages" in route.path
     }
 
-    assert ("/api/app/messages/send", ("POST",)) in routes
-    assert ("/api/app/messages/{conversation_id}", ("GET",)) in routes
-    assert ("/api/app/messages/read", ("POST",)) in routes
+    assert not any(path.startswith("/api/app/messages") for path, _ in routes)
+    assert not any("/api/app/c19/messages" in path for path, _ in routes)
     assert not any(path.startswith("/api/public/messages") for path, _ in routes)
     assert not any(path.startswith("/api/control-plane/messages") for path, _ in routes)

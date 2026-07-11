@@ -7,6 +7,10 @@ from sqlalchemy.orm import Session
 from ..core.security import hash_password
 from ..core.roles import is_org_admin_like_role, is_owner_role, normalize_role
 from ..models.user import User
+from ..modules.c19.identity_sync_service import (
+    sync_profile_for_user,
+    sync_user_identity,
+)
 from ..repositories.auth_sessions import invalidate_active_sessions_for_user
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.organizations import get_organization
@@ -224,6 +228,7 @@ def create_managed_user(
             must_change_password=initial_must_change_password_for_role(role),
             is_active=payload.is_active,
         )
+        sync_profile_for_user(db, user=user)
         _log_user_operation(
             db,
             actor=actor,
@@ -291,6 +296,8 @@ def update_managed_user(
         must_change_password=must_change_password,
         is_active=payload.is_active,
     )
+    if payload.is_active is not None:
+        sync_user_identity(db, user=user)
     after = {
         "role": user.role,
         "must_change_password": user.must_change_password,
@@ -366,6 +373,7 @@ def disable_managed_user(
         raise SelfDisableNotAllowedError("Current owner cannot be disabled.")
 
     user = update_user_record(db, user, is_active=False)
+    sync_user_identity(db, user=user)
     _log_user_operation(
         db,
         actor=actor,
@@ -389,6 +397,7 @@ def enable_managed_user(
     user = get_managed_user(db, user_id)
     _ensure_actor_can_manage_user(actor, user)
     user = update_user_record(db, user, is_active=True)
+    sync_user_identity(db, user=user)
     _log_user_operation(
         db,
         actor=actor,

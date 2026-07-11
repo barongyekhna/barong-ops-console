@@ -52,6 +52,9 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
         "/api/app/permissions/me",
     )
 )
+# C19 authorizes a global member directory and participant-scoped conversations;
+# it validates authoritative affiliations inside its own application services.
+ORG_CONTEXT_EXEMPT_PREFIXES = ("/api/app/c19",)
 FRONTEND_ORG_QUERY_KEYS = ("org_id", "active_org_id")
 FRONTEND_ORG_HEADER_KEYS = ("x-org-id", "x-active-org-id")
 ORG_CONTEXT_ROLE = Literal["owner", "admin", "member"]
@@ -107,7 +110,11 @@ def _is_api_path(request: Request) -> bool:
 
 def _requires_org_context(request: Request) -> bool:
     path = request.url.path
-    return path.startswith(TENANT_API_PATH_PREFIXES) and path not in ORG_CONTEXT_EXEMPT_PATHS
+    is_exempt = path in ORG_CONTEXT_EXEMPT_PATHS or any(
+        path == prefix or path.startswith(f"{prefix}/")
+        for prefix in ORG_CONTEXT_EXEMPT_PREFIXES
+    )
+    return path.startswith(TENANT_API_PATH_PREFIXES) and not is_exempt
 
 
 def _security_response(status_code: int, detail: str) -> JSONResponse:

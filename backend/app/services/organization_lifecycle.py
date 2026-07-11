@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..core.roles import is_owner_role
 from ..models.organization import OrganizationRecord
 from ..models.user import User
+from ..modules.c19.identity_sync_service import sync_affiliation_from_membership
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.org_memberships import create_org_membership_record
 from ..repositories.organizations import (
@@ -251,7 +252,7 @@ def create_organization(
             owner_user_id=payload.owner_user_id,
             metadata=_metadata_dict(payload.metadata),
         )
-        create_org_membership_record(
+        owner_membership = create_org_membership_record(
             db,
             membership_id=generate_membership_id(),
             user_id=organization.owner_user_id,
@@ -259,6 +260,11 @@ def create_organization(
             role="owner",
             status="active",
             joined_at=organization.created_at,
+        )
+        sync_affiliation_from_membership(
+            db,
+            membership=owner_membership,
+            user=actor,
         )
         _log_org_operation(
             db,

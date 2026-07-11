@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     )
     webhook_gateway_signing_secret: SecretStr | None = None
     api_key_encryption_secret: SecretStr | None = None
+    c19_record_store_url: str | None = Field(default=None, max_length=2048)
+    c19_record_store_token: SecretStr | None = Field(
+        default=None,
+        min_length=32,
+    )
+    c19_record_store_timeout_seconds: float = Field(default=5.0, ge=0.5, le=30.0)
+    c19_record_event_poll_seconds: float = Field(default=1.0, ge=0.25, le=10.0)
+    c19_event_stream_lifetime_seconds: int = Field(default=20, ge=10, le=60)
     webhook_gateway_signature_tolerance_seconds: int = Field(
         default=300,
         gt=0,
@@ -137,6 +145,8 @@ class Settings(BaseSettings):
         "ops_alert_webhook_url",
         "auth_session_cookie_domain",
         "api_key_encryption_secret",
+        "c19_record_store_url",
+        "c19_record_store_token",
         mode="before",
     )
     @classmethod
@@ -171,6 +181,9 @@ class Settings(BaseSettings):
         "db_pool_recycle_seconds",
         "db_statement_timeout_ms",
         "db_idle_in_transaction_session_timeout_ms",
+        "c19_record_store_timeout_seconds",
+        "c19_record_event_poll_seconds",
+        "c19_event_stream_lifetime_seconds",
         mode="before",
     )
     @classmethod
@@ -197,6 +210,9 @@ class Settings(BaseSettings):
             "db_pool_recycle_seconds": 1200,
             "db_statement_timeout_ms": 8000,
             "db_idle_in_transaction_session_timeout_ms": 10000,
+            "c19_record_store_timeout_seconds": 5.0,
+            "c19_record_event_poll_seconds": 1.0,
+            "c19_event_stream_lifetime_seconds": 20,
         }
         return defaults[info.field_name]
 

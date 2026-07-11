@@ -46,6 +46,8 @@ ALEMBIC_ROOT = REPOSITORY_ROOT / "backend" / "alembic"
 VERSIONS_ROOT = ALEMBIC_ROOT / "versions"
 MIGRATIONS_WITH_DATA_BACKFILLS = {
     "20260617_01_c18_tenant_consistency.py",
+    "20260625_01_k_series_sku_variant_upgrade.py",
+    "20260711_01_c19_control_metadata_core.py",
 }
 
 

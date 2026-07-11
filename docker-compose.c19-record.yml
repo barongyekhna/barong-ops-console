@@ -1,0 +1,73 @@
+services:
+  c19-record-postgres:
+    image: postgres:17.5-alpine
+    restart: unless-stopped
+    env_file:
+      - ${C19_RECORD_ENV_FILE:-.env.c19-record.production}
+    environment:
+      C19_RECORD_DATABASE_URL: ""
+      C19_RECORD_SERVICE_TOKEN: ""
+      C19_RECORD_CURSOR_SIGNING_SECRET: ""
+      C19_RECORD_CURSOR_TTL_SECONDS: ""
+      C19_RECORD_MAX_MESSAGE_CHARS: ""
+    volumes:
+      - c19_record_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - c19-record-private
+
+  c19-record-service:
+    build:
+      context: .
+      dockerfile: c19_record_service/Dockerfile
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ${C19_RECORD_ENV_FILE:-.env.c19-record.production}
+    environment:
+      POSTGRES_DB: ""
+      POSTGRES_USER: ""
+      POSTGRES_PASSWORD: ""
+    depends_on:
+      c19-record-postgres:
+        condition: service_healthy
+    expose:
+      - "8090"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=2).read()"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - c19-record-private
+      - barong-ops-console-prod
+
+networks:
+  c19-record-private:
+    name: ${C19_RECORD_PRIVATE_NETWORK_NAME:-c19-record-private}
+    internal: true
+  barong-ops-console-prod:
+    name: ${BARONG_SHARED_NETWORK_NAME:-barong-ops-console-prod}
+    external: true
+
+volumes:
+  c19_record_postgres_data:
+    name: ${C19_RECORD_VOLUME_NAME:-c19_record_postgres_data}
+    labels:
+      com.barong.c19.dataset-id: ${C19_RECORD_DATASET_ID:?C19_RECORD_DATASET_ID is required}

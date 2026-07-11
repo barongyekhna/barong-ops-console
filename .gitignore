@@ -3,6 +3,8 @@
 .env.local
 .env.staging
 .env.production
+.env.c19-record.*
+!.env.c19-record.*.example
 .env.*.local
 
 # Secret material must stay outside Git. Commit only explicit *.example files.
@@ -46,6 +48,11 @@ out/
 dist/
 coverage/
 *.tsbuildinfo
+
+# Runtime-only C19 record archives contain private chat content.
+backups/c19-record/
+*.dump
+*.dump.metadata
 
 # Local editor and OS files.
 .DS_Store

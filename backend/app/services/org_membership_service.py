@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..models.org_membership import OrgMembershipRecord
 from ..models.organization import OrganizationRecord
 from ..models.user import User
+from ..modules.c19.identity_sync_service import sync_affiliation_from_membership
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.org_memberships import (
     create_org_membership_record,
@@ -183,7 +184,7 @@ def _ensure_owner_membership(
         org_id=organization.org_id,
     )
     if membership is None:
-        return create_org_membership_record(
+        membership = create_org_membership_record(
             db,
             membership_id=generate_membership_id(),
             user_id=owner_user_id,
@@ -192,18 +193,17 @@ def _ensure_owner_membership(
             status=OrgMembershipStatus.ACTIVE.value,
             joined_at=organization.created_at or _now(),
         )
-
-    if (
+    elif (
         membership.role != OrgMembershipRole.OWNER.value
         or membership.status != OrgMembershipStatus.ACTIVE.value
     ):
-        return update_org_membership_record(
+        membership = update_org_membership_record(
             db,
             membership,
             role=OrgMembershipRole.OWNER.value,
             status=OrgMembershipStatus.ACTIVE.value,
         )
-
+    sync_affiliation_from_membership(db, membership=membership)
     return membership
 
 
@@ -362,6 +362,12 @@ def add_org_member(
                 joined_at=joined_at,
             )
 
+        sync_affiliation_from_membership(
+            db,
+            membership=membership,
+            user=target_user,
+        )
+
         _log_membership_operation(
             db,
             actor=actor,
@@ -471,6 +477,7 @@ def remove_org_member(
             membership,
             status=OrgMembershipStatus.SUSPENDED.value,
         )
+        sync_affiliation_from_membership(db, membership=membership)
         _log_membership_operation(
             db,
             actor=actor,

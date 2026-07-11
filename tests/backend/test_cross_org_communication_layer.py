@@ -360,14 +360,14 @@ def test_c19e_message_send_marks_cross_org_conversation_and_records_orgs() -> No
     )
 
 
-def test_c19e_routes_are_registered_as_internal_app_routes() -> None:
+def test_c19e_legacy_policy_and_fake_send_routes_are_not_mounted() -> None:
     routes = {
         (route.path, tuple(sorted(route.methods)))
         for route in app.routes
         if "/cross-org" in route.path or "/messages/send" in route.path
     }
 
-    assert ("/api/app/comm/cross-org/check", ("POST",)) in routes
-    assert ("/api/app/messages/send", ("POST",)) in routes
+    assert not any(path.startswith("/api/app/comm/cross-org") for path, _ in routes)
+    assert not any(path.startswith("/api/app/messages") for path, _ in routes)
     assert not any(path.startswith("/api/public/comm") for path, _ in routes)
     assert not any(path.startswith("/api/control-plane/comm") for path, _ in routes)

@@ -15,16 +15,10 @@ from .api.routes.api_key_orchestration import router as api_key_orchestration_ro
 from .api.routes.ai_execution_bindings import router as ai_execution_bindings_router
 from .api.routes.approval import plural_router as approvals_router
 from .api.routes.approval import router as approval_router
-from .api.routes.attachments import router as attachments_router
 from .api.routes.auth import router as auth_router
 from .api.routes.callback_handler import router as callback_handler_router
 from .api.routes.capability_bindings import router as capability_bindings_router
 from .api.routes.capability_bootstrap import router as capability_bootstrap_router
-from .api.routes.contacts import router as contacts_router
-from .api.routes.conversations import router as conversations_router
-from .api.routes.cross_org_communication import (
-    router as cross_org_communication_router,
-)
 from .api.routes.dashboard import router as dashboard_router
 from .api.routes.errors import router as errors_router
 from .api.routes.external_dependencies import router as external_dependencies_router
@@ -32,7 +26,6 @@ from .api.routes.execution_providers import router as execution_providers_router
 from .api.routes.execution_prompts import router as execution_prompts_router
 from .api.routes.failure_handling import router as failure_handling_router
 from .api.routes.foundation_demo import router as foundation_demo_router
-from .api.routes.friends import router as friends_router
 from .api.routes.health import (
     HealthResponse,
     health,
@@ -40,22 +33,22 @@ from .api.routes.health import (
     lightweight_health_response,
     router as health_router,
 )
-from .modules.k_series.product_knowledge.router import (
-    router as k_product_knowledge_router,
-)
+from .modules.c19.router import router as c19_router
 from .modules.i_series.image_system.router import (
     router as i_image_system_router,
 )
+from .modules.k_series.product_knowledge.router import (
+    router as k_product_knowledge_router,
+)
+from .modules.key_health.router import router as key_health_router
 from .modules.notifications.router import (
     router as notifications_router,
 )
-from .modules.key_health.router import router as key_health_router
 from .modules.p_series.router import (
     router as p_upload_router,
 )
 from .api.routes.live_gate import router as live_gate_router
 from .api.routes.memory import router as memory_router
-from .api.routes.messages import router as messages_router
 from .api.routes.model_locks import router as model_locks_router
 from .api.routes.module_control import router as module_control_router
 from .api.routes.module_allocations import router as module_allocations_router
@@ -934,12 +927,7 @@ app.include_router(permissions_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(organizations_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(org_membership_router, prefix=APPLICATION_API_PREFIX)
-app.include_router(contacts_router, prefix=APPLICATION_API_PREFIX)
-app.include_router(conversations_router, prefix=APPLICATION_API_PREFIX)
-app.include_router(cross_org_communication_router, prefix=APPLICATION_API_PREFIX)
-app.include_router(friends_router, prefix=APPLICATION_API_PREFIX)
-app.include_router(messages_router, prefix=APPLICATION_API_PREFIX)
-app.include_router(attachments_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(c19_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_binding_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(module_visibility_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(shared_module_router, prefix=APPLICATION_API_PREFIX)

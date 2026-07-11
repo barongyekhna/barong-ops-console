@@ -1,10 +1,8 @@
 from __future__ import annotations
 
 import pytest
-from fastapi.testclient import TestClient
 from sqlalchemy import delete
 
-from backend.app.api.deps import get_current_user
 from backend.app.core.security import hash_password
 from backend.app.db.base import Base
 from backend.app.db.session import SessionLocal, engine
@@ -261,55 +259,18 @@ def test_c19b_build_global_directory_requires_internal_c18_user(
             build_global_directory(db, actor=outsider)
 
 
-def test_c19b_contacts_directory_route_is_registered() -> None:
+def test_c19b_directory_uses_the_durable_c19_namespace() -> None:
     routes = {
         (route.path, tuple(sorted(route.methods)))
         for route in app.routes
-        if "/contacts" in route.path
+        if "/contacts" in route.path or "/c19/directory" in route.path
     }
 
-    assert ("/api/app/contacts/directory", ("GET",)) in routes
-    assert ("/api/app/contacts/{user_id}", ("GET",)) in routes
-    assert ("/api/app/contacts/{user_id}", ("PATCH",)) in routes
+    assert ("/api/app/c19/directory", ("GET",)) in routes
+    assert not any(path.startswith("/api/app/contacts") for path, _ in routes)
 
 
-def test_c19b_directory_api_returns_grouped_contacts(
-    global_contact_tables: None,
-) -> None:
-    with SessionLocal() as db:
-        owner = _create_user(db, username="c19b_api_owner", role="owner")
-        actor = _create_user(db, username="c19b_api_actor")
-        contact_user = _create_user(db, username="c19b_api_contact")
-        org_id = _create_org(db, owner=owner, org_name="API Org")
-        _create_membership(db, user=actor, org_id=org_id, role="member")
-        _create_membership(db, user=contact_user, org_id=org_id, role="member")
-        _create_identity(
-            db,
-            user=contact_user,
-            name="陈晨",
-            org_id=org_id,
-            org_name="Old API Org",
-            title="Dispatcher",
-        )
-        db.commit()
-        actor_id = actor.id
-
-    def override_current_user() -> User:
-        with SessionLocal() as db:
-            actor = db.get(User, actor_id)
-            assert actor is not None
-            return actor
-
-    app.dependency_overrides[get_current_user] = override_current_user
-    try:
-        with TestClient(app) as client:
-            response = client.get("/api/app/contacts/directory")
-    finally:
-        app.dependency_overrides.clear()
-
-    assert response.status_code == 200
-    payload = response.json()
-    assert list(payload) == list(ALPHABET_GROUPS)
-    assert payload["C"][0]["display_name"] == "陈晨"
-    assert payload["C"][0]["org_name"] == "API Org"
-    assert payload["C"][0]["sort_key"] == "C"
+def test_legacy_c19b_directory_api_is_not_a_shadow_runtime() -> None:
+    assert not any(
+        route.path == "/api/app/contacts/directory" for route in app.routes
+    )

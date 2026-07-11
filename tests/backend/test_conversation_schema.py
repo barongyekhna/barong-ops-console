@@ -453,16 +453,17 @@ def test_c19d_conversation_api_routes_create_reuse_list_and_reserve_group(
     assert group_error.value.detail["group_chat_implemented"] is False
 
 
-def test_c19d_conversation_routes_are_registered_as_internal_app_routes() -> None:
+def test_c19d_runtime_uses_durable_c19_conversation_routes() -> None:
     routes = {
         (route.path, tuple(sorted(route.methods)))
         for route in app.routes
         if "/conversations" in route.path
     }
 
-    assert ("/api/app/conversations/create", ("POST",)) in routes
-    assert ("/api/app/conversations/{conversation_id}", ("GET",)) in routes
-    assert ("/api/app/conversations/user/{user_id}", ("GET",)) in routes
+    assert ("/api/app/c19/conversations/direct", ("POST",)) in routes
+    assert ("/api/app/c19/conversations/{conversation_id}", ("GET",)) in routes
+    assert ("/api/app/c19/conversations", ("GET",)) in routes
+    assert not any(path.startswith("/api/app/conversations") for path, _ in routes)
     assert not any(
         path.startswith("/api/public/conversations") for path, _ in routes
     )

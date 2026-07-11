@@ -123,15 +123,15 @@ def _create_identity(
     return identity
 
 
-def test_c19a_contact_routes_are_registered() -> None:
+def test_legacy_c19a_contact_routes_are_retired() -> None:
     routes = {
         (route.path, tuple(sorted(route.methods)))
         for route in app.routes
-        if "/contacts" in route.path
+        if "/contacts" in route.path or "/c19/profiles" in route.path
     }
 
-    assert ("/api/app/contacts/{user_id}", ("GET",)) in routes
-    assert ("/api/app/contacts/{user_id}", ("PATCH",)) in routes
+    assert ("/api/app/c19/profiles/{user_id}", ("GET",)) in routes
+    assert not any(path.startswith("/api/app/contacts") for path, _ in routes)
 
 
 def test_c19a_create_contact_identity_snapshots_hire_time_org(

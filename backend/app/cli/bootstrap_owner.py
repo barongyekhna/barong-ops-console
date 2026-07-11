@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from ..core.config import EXAMPLE_DATABASE_URL, get_settings
 from ..core.security import hash_password
 from ..db.session import managed_session
+from ..modules.c19.identity_sync_service import sync_profile_for_user
 from ..repositories.operation_logs import create_operation_log
 from ..repositories.users import (
     create_owner,
@@ -120,6 +121,7 @@ def bootstrap_owner(
         username=username,
         password_hash=password_hash,
     )
+    sync_profile_for_user(db, user=owner)
     create_operation_log(
         db,
         actor_type="system",

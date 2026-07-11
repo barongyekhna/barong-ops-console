@@ -6,6 +6,16 @@ from .approval import (
     ApprovalWorkflowRecord,
 )
 from .api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
+from .c19 import (
+    C19AffiliationRecord,
+    C19ConversationMemberRecord,
+    C19ConversationRecord,
+    C19ConversationUserSettingRecord,
+    C19FriendRequestRecord,
+    C19ProfileRecord,
+    C19RelationshipRecord,
+    C19UserBlockRecord,
+)
 from .contact_identity import ContactIdentityRecord
 from .context import ContextPacket
 from .error import SystemError
@@ -79,6 +89,14 @@ __all__ = [
     "AutomationJob",
     "CallbackStateRecord",
     "CallbackStateTransitionRecord",
+    "C19AffiliationRecord",
+    "C19ConversationMemberRecord",
+    "C19ConversationRecord",
+    "C19ConversationUserSettingRecord",
+    "C19FriendRequestRecord",
+    "C19ProfileRecord",
+    "C19RelationshipRecord",
+    "C19UserBlockRecord",
     "ContactIdentityRecord",
     "ContextPacket",
     "DLQStateRecord",

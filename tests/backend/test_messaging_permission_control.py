@@ -293,41 +293,43 @@ def test_c19f_default_internal_chat_and_friend_unlocking() -> None:
         _create_identity(db, user=sender, org_id=org_id, org_name="Unlock Org")
         _create_identity(db, user=receiver, org_id=org_id, org_name="Unlock Org")
         db.commit()
+        sender_id = str(sender.id)
+        receiver_id = str(receiver.id)
 
         text_decision = can_send_message(
             db,
-            sender_user_id=str(sender.id),
-            receiver_user_id=str(receiver.id),
+            sender_user_id=sender_id,
+            receiver_user_id=receiver_id,
             content_type="text",
             actor=sender,
         )
         image_denied = can_send_message(
             db,
-            sender_user_id=str(sender.id),
-            receiver_user_id=str(receiver.id),
+            sender_user_id=sender_id,
+            receiver_user_id=receiver_id,
             content_type="image",
             actor=sender,
         )
         friend_request = create_friend_request(
             db,
-            payload=FriendRequestCreateRequest(to_user_id=str(receiver.id)),
+            payload=FriendRequestCreateRequest(to_user_id=receiver_id),
             actor=sender,
         )
         voice_pending = can_send_message(
             db,
-            sender_user_id=str(sender.id),
-            receiver_user_id=str(receiver.id),
+            sender_user_id=sender_id,
+            receiver_user_id=receiver_id,
             content_type="voice",
             actor=sender,
         )
         accepted = accept_friend_request(
-            payload=FriendActionRequest(from_user_id=str(sender.id)),
+            payload=FriendActionRequest(from_user_id=sender_id),
             actor=receiver,
         )
         video_allowed = can_send_message(
             db,
-            sender_user_id=str(sender.id),
-            receiver_user_id=str(receiver.id),
+            sender_user_id=sender_id,
+            receiver_user_id=receiver_id,
             content_type="video",
             actor=sender,
         )
@@ -343,8 +345,8 @@ def test_c19f_default_internal_chat_and_friend_unlocking() -> None:
     assert voice_pending.permission.friend_status == "pending"
     assert accepted.status == "accepted"
     assert get_friend_status(
-        user_id=str(sender.id),
-        target_user_id=str(receiver.id),
+        user_id=sender_id,
+        target_user_id=receiver_id,
     ) == FriendStatus.ACCEPTED
     assert video_allowed.allowed is True
     assert video_allowed.permission.unlocked_features == [
@@ -445,18 +447,17 @@ def test_c19f_cross_org_messages_must_pass_c19e_gate() -> None:
     assert allowed.permission.unlocked_features == ["text", "emoji"]
 
 
-def test_c19f_routes_are_registered_as_internal_app_routes() -> None:
+def test_c19f_runtime_uses_durable_social_routes_without_message_shadow() -> None:
     routes = {
         (route.path, tuple(sorted(route.methods)))
         for route in app.routes
         if "/friends" in route.path or "/messages/permission/check" in route.path
     }
 
-    assert ("/api/app/friends/request", ("POST",)) in routes
-    assert ("/api/app/friends/accept", ("POST",)) in routes
-    assert ("/api/app/friends/reject", ("POST",)) in routes
-    assert ("/api/app/friends/list", ("GET",)) in routes
-    assert ("/api/app/messages/permission/check", ("POST",)) in routes
+    assert ("/api/app/c19/friends", ("GET",)) in routes
+    assert ("/api/app/c19/friends/{user_id}", ("DELETE",)) in routes
+    assert not any(path.startswith("/api/app/friends") for path, _ in routes)
+    assert not any(path.startswith("/api/app/messages") for path, _ in routes)
     assert not any(path.startswith("/api/public/friends") for path, _ in routes)
     assert not any(path.startswith("/api/control-plane/friends") for path, _ in routes)
 
