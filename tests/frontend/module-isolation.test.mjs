@@ -521,8 +521,9 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.match(sidebarSource, /const C_SYSTEM_MODULE_ORDER = \[/);
   assert.match(
     sidebarSource,
-    /admin\.modules[\s\S]*admin\.key_management[\s\S]*admin\.key_health[\s\S]*admin\.permissions[\s\S]*admin\.users[\s\S]*core\.dashboard/,
+    /admin\.modules[\s\S]*admin\.key_health[\s\S]*admin\.permissions[\s\S]*admin\.users[\s\S]*core\.dashboard/,
   );
+  assert.doesNotMatch(sidebarSource, /admin\.key_management/);
   assert.match(sidebarSource, /const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set/);
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
   assert.match(sidebarSource, /ORGANIZATION_MODULE_PREFIXES = \["r\.", "k\.", "i\.", "p\.", "seo\.", "gmc\."\]/);
@@ -1143,6 +1144,34 @@ test("K product knowledge page uses action-scoped execution gate in capability g
   );
 });
 
+test("API key management stays consolidated inside module control", () => {
+  const navigationSource = readFileSync(
+    "frontend/src/lib/navigation.ts",
+    "utf8",
+  );
+  const sidebarSource = readFileSync(
+    "frontend/src/components/capability-sidebar-engine.tsx",
+    "utf8",
+  );
+  const capabilitySource = readFileSync(
+    "frontend/src/lib/frontend-capability-state.ts",
+    "utf8",
+  );
+  const legacyRouteSource = readFileSync(
+    "frontend/src/app/(console)/api-key-management/page.tsx",
+    "utf8",
+  );
+
+  assert.doesNotMatch(navigationSource, /admin\.key_management/);
+  assert.doesNotMatch(sidebarSource, /admin\.key_management/);
+  assert.match(
+    capabilitySource,
+    /PRODUCT_HIDDEN_MODULE_KEYS = new Set\(\[[\s\S]*"admin\.key_management"/,
+  );
+  assert.match(legacyRouteSource, /redirect\("\/module-control"\)/);
+  assert.doesNotMatch(legacyRouteSource, /ModuleRegistryProductView/);
+});
+
 test("sidebar navigation exposes the full productized capability structure", () => {
   const moduleKeys = navigationItems.map((entry) => entry.module_key);
 
@@ -1158,7 +1187,6 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "business.reviews",
     "core.dashboard",
     "admin.modules",
-    "admin.key_management",
     "admin.key_health",
     "admin.settings",
     "system.errors",

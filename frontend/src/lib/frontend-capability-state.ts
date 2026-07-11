@@ -205,7 +205,6 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["business.reviews", "业务处理"],
   ["core.dashboard", "系统管理"],
   ["admin.modules", "系统管理"],
-  ["admin.key_management", "系统管理"],
   ["admin.settings", "系统管理"],
   ["system.errors", "系统管理"],
   ["system.memory_events", "系统管理"],
@@ -224,7 +223,6 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["business.reviews", "审批审计"],
   ["core.dashboard", "控制台"],
   ["admin.modules", "模块控制"],
-  ["admin.key_management", "API密钥管理"],
   ["admin.settings", "设置"],
   ["system.errors", "异常记录"],
   ["system.memory_events", "运行记录"],
@@ -243,7 +241,6 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["business.reviews", 20],
   ["core.dashboard", 10],
   ["admin.modules", 20],
-  ["admin.key_management", 30],
   ["admin.settings", 40],
   ["system.errors", 50],
   ["system.memory_events", 60],
@@ -259,11 +256,11 @@ const K_PRODUCT_KNOWLEDGE_MODULE_KEY = "k.product_knowledge";
 const R_ANALYSIS_MODULE_KEY = "r.analysis";
 const OWNER_ONLY_ADMIN_MODULE_KEYS = new Set([
   "admin.modules",
-  "admin.key_management",
 ]);
 
 export const PRODUCT_HIDDEN_MODULE_KEYS = new Set([
   "admin.agents",
+  "admin.key_management",
   "admin.settings",
   INTERNAL_EXERCISE_MODULE_KEY,
   "integration.n8n_test_bridge",

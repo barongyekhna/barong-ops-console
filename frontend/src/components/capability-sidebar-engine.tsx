@@ -24,10 +24,6 @@ const C_SYSTEM_MODULE_ORDER = [
     module_key: "admin.modules",
   },
   {
-    label: "API密钥管理",
-    module_key: "admin.key_management",
-  },
-  {
     label: "密钥检测",
     module_key: "admin.key_health",
   },

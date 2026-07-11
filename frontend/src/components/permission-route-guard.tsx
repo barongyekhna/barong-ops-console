@@ -105,8 +105,6 @@ export function PermissionRouteGuard({
     (pathname === "/modules" || pathname === "/module-control") &&
     isAuthenticated &&
     isOwner;
-  const isApiKeyManagementRoute =
-    pathname === "/api-key-management" && isAuthenticated && isPrivilegedRole;
   const rSeriesOrganization = moduleControlResult?.data.organizations.find(
     (organization) =>
       organization.org_name.trim() === R_SERIES_TARGET_ORGANIZATION_NAME,
@@ -126,8 +124,7 @@ export function PermissionRouteGuard({
     isUserManagerRoute ||
     isOrganizationListRoute ||
     isPermissionCenterRoute ||
-    isModuleControlRoute ||
-    isApiKeyManagementRoute
+    isModuleControlRoute
   ) {
     return children;
   }
