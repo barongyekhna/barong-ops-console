@@ -12,6 +12,7 @@ import {
   PackageSearch,
   Settings,
   ShieldCheck,
+  UploadCloud,
   UserRoundCog,
   type LucideIcon,
 } from "lucide-react";
@@ -102,6 +103,16 @@ export const navigationGroups: NavigationGroup[] = [
         module_key: "i.image_system",
         required_permission: "i.image_system.read",
         route_namespace: "/image-system",
+        status: "active",
+      },
+      {
+        category: "business",
+        denied_behavior: "show_locked",
+        href: "/p-upload",
+        icon: UploadCloud,
+        label: "P系列自动化上传",
+        module_key: "p.upload",
+        route_namespace: "/p-upload",
         status: "active",
       },
       {

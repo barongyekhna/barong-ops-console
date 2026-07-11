@@ -101,6 +101,71 @@ def p_upload_package(
     )
 
 
+class UploadJobItem(BaseModel):
+    job_id: str
+    product_id: str
+    product_name: str | None = None
+    sku: str | None = None
+    channel: str
+    status: str
+    external_product_id: str | None = None
+    external_url: str | None = None
+    error: str | None = None
+    created_at: str | None = None
+    finished_at: str | None = None
+
+
+class UploadJobListResponse(BaseModel):
+    jobs: list[UploadJobItem]
+    summary: dict[str, int]
+
+
+@router.get("/uploads", response_model=UploadJobListResponse)
+def p_upload_jobs_list(
+    request: Request,
+    limit: int = Query(default=50, ge=1, le=200),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> UploadJobListResponse:
+    """上架台账：驾驶舱页面的数据源（会话鉴权）。"""
+    del request, user
+    rows = db.execute(
+        select(PUploadJob, KProductKnowledgeProduct.product_name_en, KProductKnowledgeProduct.sku)
+        .join(
+            KProductKnowledgeProduct,
+            KProductKnowledgeProduct.id == PUploadJob.product_id,
+            isouter=True,
+        )
+        .order_by(PUploadJob.created_at.desc())
+        .limit(limit)
+    ).all()
+    jobs = [
+        UploadJobItem(
+            job_id=job.job_id,
+            product_id=str(job.product_id),
+            product_name=product_name,
+            sku=sku,
+            channel=job.channel,
+            status=job.status,
+            external_product_id=job.external_product_id,
+            external_url=job.external_url,
+            error=job.error,
+            created_at=job.created_at.isoformat() if job.created_at else None,
+            finished_at=job.finished_at.isoformat() if job.finished_at else None,
+        )
+        for job, product_name, sku in rows
+    ]
+    summary = {"total": len(jobs), "success": 0, "failed": 0, "in_flight": 0}
+    for job in jobs:
+        if job.status == "success":
+            summary["success"] += 1
+        elif job.status == "failed":
+            summary["failed"] += 1
+        else:
+            summary["in_flight"] += 1
+    return UploadJobListResponse(jobs=jobs, summary=summary)
+
+
 @router.get("/jobs/{job_id}/media/{asset_id}/file")
 def p_job_media_file(
     job_id: str,

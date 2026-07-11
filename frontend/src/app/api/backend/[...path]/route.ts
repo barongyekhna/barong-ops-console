@@ -612,6 +612,10 @@ function isAllowedPPath(method: string, path: string[]) {
   ) {
     return method === "POST";
   }
+  // GET /p/uploads  (上架台账，P 系列驾驶舱)
+  if (path.length === 2 && path[1] === "uploads") {
+    return method === "GET";
+  }
   return false;
 }
 

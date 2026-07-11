@@ -983,7 +983,9 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
         denied_behavior="show_locked",
         unavailable_behavior="show_unavailable",
-        execution_provider_required=True,
+        # I 的执行门禁是动作级的（/images/generate 调用时 resolve key），
+        # 不需要预注册 execution provider —— True 会让侧边栏误判 no_execution 变暗。
+        execution_provider_required=False,
         module_adapter_required=False,
         sandbox_required=False,
         feature_flag_key="modules.i.image_system",
@@ -995,6 +997,44 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             staging_acceptance=True,
             production_archive=True,
             required_checks=("future I-series adapter acceptance",),
+        ),
+        staging_acceptance_required=True,
+        production_release_required=True,
+    ),
+    _manifest(
+        module_key="p.upload",
+        display_name="P系列自动化上传",
+        description=(
+            "P-series automated publishing control plane: gate-checked upload "
+            "packages (copy + rendered images + media SEO), dispatch to n8n, "
+            "WooCommerce create/update via SKU upsert, and the upload ledger."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/p-upload",
+        api_namespace="/p",
+        navigation=_navigation(
+            group="Registry",
+            label="P系列自动化上传",
+            icon="UploadCloud",
+            order=10,
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=("n8n", "woocommerce"),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.p.upload",
+        data_boundary=_data_boundary(
+            reads=("p_upload_jobs", "k_product_knowledge_products"),
+            writes=("p_upload_jobs",),
+        ),
+        release_requirements=_release_requirements(
+            staging_acceptance=True,
+            production_archive=True,
+            required_checks=("n8n upload workflow contract",),
         ),
         staging_acceptance_required=True,
         production_release_required=True,

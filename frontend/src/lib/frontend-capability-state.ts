@@ -253,6 +253,8 @@ const INTERNAL_EXERCISE_MODULE_KEY = [
   ["foun", "dation_", "de", "mo"].join(""),
 ].join(".");
 const K_PRODUCT_KNOWLEDGE_MODULE_KEY = "k.product_knowledge";
+const I_IMAGE_SYSTEM_MODULE_KEY = "i.image_system";
+const P_UPLOAD_MODULE_KEY = "p.upload";
 const R_ANALYSIS_MODULE_KEY = "r.analysis";
 const OWNER_ONLY_ADMIN_MODULE_KEYS = new Set([
   "admin.modules",
@@ -664,8 +666,19 @@ function hasUnavailableProvider(accessItems: readonly ExecutionProviderAccessSta
   );
 }
 
+// 这些模块的执行门禁是"动作级"的（真正调用生成/上架时才 resolve key 与
+// gate），不需要预注册 execution surface —— 否则会被误判成 no_execution
+// 而在侧边栏变暗（K 最早就是这么豁免的，I/P 同理）。
+const ACTION_SCOPED_EXECUTION_GATE_MODULE_KEYS = new Set([
+  K_PRODUCT_KNOWLEDGE_MODULE_KEY,
+  I_IMAGE_SYSTEM_MODULE_KEY,
+  P_UPLOAD_MODULE_KEY,
+]);
+
 function usesActionScopedExecutionGate(moduleKey: string | undefined) {
-  return moduleKey === K_PRODUCT_KNOWLEDGE_MODULE_KEY;
+  return Boolean(
+    moduleKey && ACTION_SCOPED_EXECUTION_GATE_MODULE_KEYS.has(moduleKey),
+  );
 }
 
 function requiresExecutionSurface({
