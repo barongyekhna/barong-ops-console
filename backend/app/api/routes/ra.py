@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import text
@@ -9,13 +11,17 @@ from ...db.session import get_db, get_read_db
 from ...models.user import User
 from ...services.data_isolation import without_org_data_isolation
 from .rw import _target_org_for_user, require_r_series_org
+from r_system_v2.ra.events import list_run_events
 from r_system_v2.ra.framework import load_ra_framework_overview
+from r_system_v2.ra.prescreen import prescreen_daily_stats
+from r_system_v2.ra.quota_ledger import usage_today
 from r_system_v2.ra.auto_profit import run_auto_profit_analysis
 from r_system_v2.ra.job_queue import (
     RAJobError,
     cancel_auto_profit_job,
     create_auto_profit_job,
     get_auto_profit_job,
+    get_auto_profit_job_status,
     get_latest_auto_profit_job,
 )
 from r_system_v2.ra.profit_engine import decimal_value
@@ -217,6 +223,23 @@ def ra_profit_job_create(
     target_org = _required_target_org(db, user)
     try:
         with without_org_data_isolation():
+            # 定向探测优先：给运行中的自动巡库发让位信号，worker 收到后
+            # 保存进度回到队列，先跑手动任务，跑完自动续巡库。
+            db.execute(
+                text(
+                    """
+                    UPDATE ra_selection_runs
+                    SET counts = counts || '{"yield_requested": true}'::jsonb,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE org_id = :org_id
+                      AND channel = 'profit_auto'
+                      AND status = 'running'
+                      AND COALESCE(filters->>'auto_cruise', 'false') = 'true'
+                    """
+                ),
+                {"org_id": target_org.org_id},
+            )
+            db.commit()
             return create_auto_profit_job(
                 db,
                 org_id=target_org.org_id,
@@ -224,7 +247,7 @@ def ra_profit_job_create(
                 asin_limit=payload.asin_limit,
                 supplier_limit=payload.supplier_limit,
                 min_gross_margin=decimal_value(payload.min_gross_margin),
-                run_ai_mock=payload.run_ai_chain if payload.run_ai_mock is None else payload.run_ai_mock,
+                run_ai_chain=payload.run_ai_chain,
                 selection_channel=payload.selection_channel,
                 triggered_by=str(user.id),
             )
@@ -335,6 +358,46 @@ def ra_profit_job_get(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(exc),
         ) from exc
+
+
+@router.get("/runs/{run_id}/status")
+def ra_run_status(
+    run_id: str,
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        payload = get_auto_profit_job_status(
+            db,
+            org_id=target_org.org_id,
+            run_id=None if run_id == "latest" else run_id,
+        )
+    if payload is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="暂无 R-A 自动利润任务。",
+        )
+    return payload
+
+
+@router.get("/runs/{run_id}/events")
+def ra_run_events(
+    run_id: str,
+    after: int = Query(default=0, ge=0),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        return list_run_events(
+            db,
+            org_id=target_org.org_id,
+            run_id=None if run_id == "latest" else run_id,
+            after_seq=after,
+            limit=limit,
+        )
 
 
 @router.get("/runs/{run_id}")
@@ -476,6 +539,226 @@ def ra_suppliers(
         return _list_ra_suppliers(db, org_id=target_org.org_id, run_id=run_id, limit=limit)
 
 
+@router.get("/quota")
+def ra_quota(
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        return {
+            "providers": usage_today(db),
+            "prescreen": prescreen_daily_stats(db, org_id=target_org.org_id),
+        }
+
+
+GROUP_CHANNELS = ("amazon", "dtc_ad", "dtc_seo")
+
+
+@router.get("/groups")
+def ra_groups(
+    channel: str | None = Query(default=None, max_length=24),
+    include_rejected: bool = Query(default=False),
+    limit: int = Query(default=200, ge=1, le=500),
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    """三分组池：GPT 终审 pass 的产品按渠道路由分组；review 进待滑堆。"""
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        # 只取分组卡需要的字段，不拉整份报告（报告里含全部 AI 层审计，很重）。
+        rows = db.execute(
+            text(
+                """
+                SELECT report_id, run_id, candidate_id, asin, status,
+                       title, summary, created_at, updated_at,
+                       jsonb_build_object(
+                         'final', payload->'final',
+                         'keywords', payload->'keywords',
+                         'product', payload->'product',
+                         'product_image_url', payload->'product_image_url',
+                         'opus_review', payload->'opus_review',
+                         'route_verdicts', jsonb_build_object(
+                           'amazon', payload->'channel_routes'->'routes'->'amazon'->>'verdict',
+                           'dtc_ad', payload->'channel_routes'->'routes'->'dtc_ad'->>'verdict',
+                           'dtc_seo', payload->'channel_routes'->'routes'->'dtc_seo'->>'verdict'
+                         ),
+                         'has_deep_enrichment', (payload ? 'deep_enrichment'),
+                         'route_recommendations', (
+                           SELECT l->'model_output'->'route_recommendations'
+                           FROM jsonb_array_elements(payload->'layers') l
+                           WHERE l->'provider'->>'role' = 'gpt'
+                           LIMIT 1
+                         )
+                       ) AS payload
+                FROM ra_reports
+                WHERE org_id = :org_id
+                ORDER BY created_at DESC
+                LIMIT :limit
+                """
+            ),
+            {"org_id": target_org.org_id, "limit": limit},
+        ).mappings().all()
+
+    requested = (channel or "").strip().lower() or None
+    groups: dict[str, list[dict[str, object]]] = {
+        "amazon": [],
+        "dtc_ad": [],
+        "dtc_seo": [],
+        "review": [],
+    }
+    seen_asins: dict[str, set[str]] = {key: set() for key in groups}
+    for row in rows:
+        payload = row["payload"] if isinstance(row["payload"], dict) else {}
+        final = payload.get("final") if isinstance(payload.get("final"), dict) else {}
+        verdict = str(final.get("verdict") or "")
+        report_status = str(row["status"] or "ready")
+        if report_status == "rejected" and not include_rejected:
+            continue
+        if verdict not in {"pass", "review", "reject"}:
+            continue
+        item = _group_item(row, payload=payload, final=final)
+        asin = str(item.get("asin") or "")
+        if verdict == "reject":
+            # 风险阶梯分级放行：终审一票否决只管「亚马逊备货」这一层。
+            # 独立站通道路由 pass 的照样进独立站托盘——零库存自发货蹭流量，
+            # 昙花就昙花，开一单赚一单；卡片带「仅自发货·勿备货」标记。
+            # 门槛：必须带深挖证据（Keepa 12月+Rainforest 全量）的淘汰品才放行，
+            # 早期浅证据时代的淘汰品不翻案。
+            if not payload.get("has_deep_enrichment"):
+                continue
+            route_verdicts = (
+                payload.get("route_verdicts")
+                if isinstance(payload.get("route_verdicts"), dict)
+                else {}
+            )
+            for group_name in ("dtc_ad", "dtc_seo"):
+                if (
+                    str(route_verdicts.get(group_name) or "") == "pass"
+                    and asin not in seen_asins[group_name]
+                ):
+                    groups[group_name].append(
+                        {
+                            **item,
+                            "group": group_name,
+                            "fulfillment_only": True,
+                            "ai_route_note": _ai_route_note(payload, group_name),
+                        }
+                    )
+                    seen_asins[group_name].add(asin)
+            continue
+        if verdict == "review" and report_status != "approved":
+            # 待滑堆：GPT 拿不准的产品等你亲手左右滑。
+            if asin not in seen_asins["review"]:
+                groups["review"].append(item)
+                seen_asins["review"].add(asin)
+            continue
+        pass_channels = _report_pass_channels(final)
+        for group_name in pass_channels:
+            if group_name in groups and asin not in seen_asins[group_name]:
+                groups[group_name].append(
+                    {
+                        **item,
+                        "group": group_name,
+                        "ai_route_note": _ai_route_note(payload, group_name),
+                    }
+                )
+                seen_asins[group_name].add(asin)
+
+    counts = {name: len(items) for name, items in groups.items()}
+    if requested and requested in groups:
+        return {
+            "channel": requested,
+            "items": groups[requested],
+            "counts": counts,
+        }
+    return {"groups": groups, "counts": counts}
+
+
+def _ai_route_note(payload: dict[str, object], group_name: str) -> str | None:
+    """终审 AI（luna）对该渠道的单独意见，展示在分组卡上供人工权衡。"""
+    recommendations = payload.get("route_recommendations")
+    if not isinstance(recommendations, dict):
+        return None
+    note = recommendations.get(group_name)
+    if isinstance(note, dict):
+        verdict = str(note.get("verdict") or "").strip()
+        reason = str(note.get("reason") or "").strip()
+        note = "：".join(part for part in (verdict, reason) if part)
+    text_note = str(note or "").strip()
+    return text_note[:220] or None
+
+
+def _report_pass_channels(final: dict[str, object]) -> list[str]:
+    primary = final.get("primary_channel")
+    primary = primary if isinstance(primary, dict) else {}
+    channels = [
+        str(name)
+        for name in (primary.get("all_pass_channels") or [])
+        if str(name) in GROUP_CHANNELS
+    ]
+    routes_block = final.get("channel_routes")
+    routes_block = routes_block if isinstance(routes_block, dict) else {}
+    routes = routes_block.get("routes")
+    if isinstance(routes, dict):
+        for name, route in routes.items():
+            if (
+                str(name) in GROUP_CHANNELS
+                and isinstance(route, dict)
+                and route.get("verdict") == "pass"
+                and str(name) not in channels
+            ):
+                channels.append(str(name))
+    if not channels:
+        fallback = str(final.get("channel") or primary.get("channel") or "").strip()
+        if fallback == "both":
+            channels = ["amazon", "dtc_seo"]
+        elif fallback in GROUP_CHANNELS:
+            channels = [fallback]
+    return channels
+
+
+def _group_item(
+    row: dict[str, object] | object,
+    *,
+    payload: dict[str, object],
+    final: dict[str, object],
+) -> dict[str, object]:
+    product = payload.get("product") if isinstance(payload.get("product"), dict) else {}
+    keywords = payload.get("keywords") if isinstance(payload.get("keywords"), dict) else {}
+    primary_channel = (
+        final.get("primary_channel")
+        if isinstance(final.get("primary_channel"), dict)
+        else {}
+    )
+    opus_review = (
+        payload.get("opus_review") if isinstance(payload.get("opus_review"), dict) else None
+    )
+    return {
+        "report_id": row["report_id"],
+        "run_id": row["run_id"],
+        "candidate_id": row["candidate_id"],
+        "asin": row["asin"],
+        "status": row["status"],
+        "title": row["title"],
+        "summary": row["summary"],
+        "image_url": payload.get("product_image_url"),
+        "verdict": final.get("verdict"),
+        "final_score": final.get("final_score"),
+        "primary_channel": primary_channel.get("channel"),
+        "pass_channels": _report_pass_channels(final),
+        "gross_margin": product.get("gross_margin"),
+        "monthly_sales": product.get("monthly_sales"),
+        "price": product.get("price"),
+        "primary_keyword": keywords.get("primary"),
+        "keywords": keywords,
+        "opus_review": opus_review,
+        "decision_reason": final.get("decision_reason"),
+        "created_at": str(row["created_at"]) if row["created_at"] else None,
+        "updated_at": str(row["updated_at"]) if row["updated_at"] else None,
+    }
+
+
 @router.get("/reports")
 def ra_reports(
     run_id: str | None = Query(default=None, max_length=80),
@@ -486,6 +769,245 @@ def ra_reports(
     target_org = _required_target_org(db, user)
     with without_org_data_isolation():
         return _list_ra_reports(db, org_id=target_org.org_id, run_id=run_id, limit=limit)
+
+
+@router.get("/reports/{report_id}/detail")
+def ra_report_detail(
+    report_id: str,
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    """产品完整数据与上下文：Keepa/竞争/AI各层理由/关键词(分渠道)/供应商。"""
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        row = db.execute(
+            text(
+                """
+                SELECT report_id, run_id, candidate_id, asin, status,
+                       title, summary, payload, created_at, updated_at
+                FROM ra_reports
+                WHERE report_id = :report_id AND org_id = :org_id
+                LIMIT 1
+                """
+            ),
+            {"report_id": report_id, "org_id": target_org.org_id},
+        ).mappings().first()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="R-A 报告不存在。"
+            )
+        payload = row["payload"] if isinstance(row["payload"], dict) else {}
+        # 直接按 candidate_id 查该产品的供应商（run 级列表有 LIMIT 会漏）。
+        candidate_id = str(row["candidate_id"] or "")
+        supplier_rows = db.execute(
+            text(
+                """
+                SELECT o.id AS offer_id, o.supplier_name, o.supplier_url,
+                       o.unit_price_cny, o.moq, o.match_score, o.offer_status,
+                       o.payload AS offer_payload
+                FROM ra_supplier_offers o
+                WHERE o.org_id = :org_id AND o.candidate_id = :candidate_id
+                ORDER BY o.unit_price_cny ASC NULLS LAST
+                LIMIT 20
+                """
+            ),
+            {"org_id": target_org.org_id, "candidate_id": candidate_id},
+        ).mappings()
+        supplier_items = []
+        for supplier in supplier_rows:
+            offer_payload = (
+                supplier["offer_payload"]
+                if isinstance(supplier["offer_payload"], dict)
+                else {}
+            )
+            supplier_items.append(
+                {
+                    "offer_id": supplier["offer_id"],
+                    "supplier_name": supplier["supplier_name"],
+                    "supplier_url": supplier["supplier_url"],
+                    "unit_price_cny": float(supplier["unit_price_cny"])
+                    if supplier["unit_price_cny"] is not None
+                    else None,
+                    "moq": supplier["moq"],
+                    "match_score": supplier["match_score"],
+                    "offer_status": supplier["offer_status"],
+                    "image_verdict": offer_payload.get("image_verdict"),
+                    "source": offer_payload.get("api_family"),
+                }
+            )
+    keywords = payload.get("keywords") if isinstance(payload.get("keywords"), dict) else {}
+    signals = (
+        payload.get("channel_signals")
+        if isinstance(payload.get("channel_signals"), dict)
+        else {}
+    )
+    competition = (
+        payload.get("competition") if isinstance(payload.get("competition"), dict) else {}
+    )
+    if not keywords:
+        # 旧报告没有 keywords 块：从已存的竞争/信号数据现场组装（回填）。
+        dtc_seo = signals.get("dtc_seo") if isinstance(signals.get("dtc_seo"), dict) else {}
+        serp = dtc_seo.get("serp") if isinstance(dtc_seo.get("serp"), dict) else {}
+        page_one_titles = [
+            str(item.get("title") or "")
+            for item in (competition.get("page_one_sample") or [])
+            if isinstance(item, dict) and item.get("title")
+        ]
+        keywords = {
+            "primary": competition.get("keyword") or signals.get("keyword"),
+            "secondary": serp.get("related_searches") or [],
+            "long_tail": serp.get("people_also_ask") or [],
+            "amazon_page_one_titles": page_one_titles[:10],
+            "google_ads": {"status": "pending_basic_review", "ideas": []},
+            "sources": {"backfilled": True},
+        }
+    # 亚马逊真关键词：首次打开时由 DeepSeek 从页一标题提炼，回写缓存。
+    amazon_terms = keywords.get("amazon_terms")
+    if not isinstance(amazon_terms, dict) or not amazon_terms.get("core_keywords"):
+        from r_system_v2.ra.ai_selection import extract_amazon_ad_keywords
+
+        with without_org_data_isolation():
+            amazon_terms = extract_amazon_ad_keywords(
+                db,
+                org_id=target_org.org_id,
+                primary=keywords.get("primary"),
+                page_one_titles=keywords.get("amazon_page_one_titles") or [],
+                product_title=str(row["title"] or ""),
+            )
+            if amazon_terms.get("core_keywords"):
+                keywords["amazon_terms"] = amazon_terms
+                db.execute(
+                    text(
+                        """
+                        UPDATE ra_reports
+                        SET payload = jsonb_set(
+                              payload, '{keywords}', CAST(:keywords AS jsonb), true
+                            ),
+                            updated_at = CURRENT_TIMESTAMP
+                        WHERE report_id = :report_id AND org_id = :org_id
+                        """
+                    ),
+                    {
+                        "report_id": report_id,
+                        "org_id": target_org.org_id,
+                        "keywords": json.dumps(keywords, ensure_ascii=False, default=str),
+                    },
+                )
+                db.commit()
+
+    # 分渠道关键词：亚马逊侧（提炼后的真词）vs Google SEO 侧，明确标注。
+    keyword_channels = {
+        "amazon": {
+            "primary": keywords.get("primary"),
+            "core_keywords": (amazon_terms or {}).get("core_keywords") or [],
+            "long_tail_keywords": (amazon_terms or {}).get("long_tail_keywords") or [],
+            "source": "DeepSeek 从 Rainforest 页一竞品标题提炼（可直接投广告/写文案）",
+        },
+        "google_seo": {
+            "related_searches": keywords.get("secondary") or [],
+            "people_also_ask": keywords.get("long_tail") or [],
+            "google_ads": keywords.get("google_ads") or {"status": "pending"},
+            "source": "Serper 相关搜索/大家也在问 + Google Ads（过审后启用）",
+        },
+    }
+    return {
+        "report_id": row["report_id"],
+        "run_id": row["run_id"],
+        "candidate_id": row["candidate_id"],
+        "asin": row["asin"],
+        "status": row["status"],
+        "title": row["title"],
+        "summary": row["summary"],
+        "product": payload.get("product"),
+        "product_image_url": payload.get("product_image_url"),
+        "final": payload.get("final"),
+        "layers": [
+            {
+                "layer": layer.get("provider", {}).get("role")
+                if isinstance(layer.get("provider"), dict)
+                else None,
+                "model": layer.get("provider", {}).get("model")
+                if isinstance(layer.get("provider"), dict)
+                else None,
+                "score": layer.get("score"),
+                "verdict": layer.get("verdict"),
+                "reason": layer.get("reason"),
+                "advantages": layer.get("advantages") or [],
+                "risks": layer.get("risks") or [],
+                "channel_guess": layer.get("channel_guess"),
+            }
+            for layer in (payload.get("layers") or [])
+            if isinstance(layer, dict)
+        ],
+        "competition": competition,
+        "channel_signals": signals,
+        "channel_routes": payload.get("channel_routes"),
+        "primary_channel": payload.get("primary_channel"),
+        "keywords": keywords,
+        "keyword_channels": keyword_channels,
+        "opus_review": payload.get("opus_review"),
+        "deep_enrichment": payload.get("deep_enrichment")
+        if isinstance(payload.get("deep_enrichment"), dict)
+        else None,
+        "suppliers": supplier_items,
+        "created_at": str(row["created_at"]) if row["created_at"] else None,
+    }
+
+
+@router.post("/reports/{report_id}/opus-review")
+def ra_report_opus_review(
+    report_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    """手动触发 Opus 建议：打包全部上下文，返回系统性建议。"""
+    from r_system_v2.ra.ai_selection import RAAISelectionError, run_opus_review_for_report
+
+    target_org = _required_target_org(db, user)
+    try:
+        with without_org_data_isolation():
+            return run_opus_review_for_report(
+                db, org_id=target_org.org_id, report_id=report_id
+            )
+    except RAAISelectionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+
+@router.post("/reports/{report_id}/expand")
+def ra_report_expand(
+    report_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    """创建 1688 类目扩品后台任务（幂等）。"""
+    from r_system_v2.ra.category_expansion import RAExpansionError, create_expansion_job
+
+    target_org = _required_target_org(db, user)
+    try:
+        with without_org_data_isolation():
+            return create_expansion_job(db, org_id=target_org.org_id, report_id=report_id)
+    except RAExpansionError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        ) from exc
+
+
+@router.get("/reports/{report_id}/expansion")
+def ra_report_expansion(
+    report_id: str,
+    db: Session = Depends(get_read_db),
+    user: User = Depends(require_r_series_org),
+) -> dict[str, object]:
+    from r_system_v2.ra.category_expansion import get_latest_expansion
+
+    target_org = _required_target_org(db, user)
+    with without_org_data_isolation():
+        payload = get_latest_expansion(db, org_id=target_org.org_id, report_id=report_id)
+    if payload is None:
+        return {"status": "none", "report_id": report_id}
+    return payload
 
 
 @router.post("/reports/{report_id}/approve")

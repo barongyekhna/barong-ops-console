@@ -554,6 +554,47 @@ function ProductsTable({
   backendProductCount: number;
   products: readonly RwProduct[];
 }) {
+  const [transferChannel, setTransferChannel] = useState<"dtc" | "amazon">("dtc");
+  const [busyAsin, setBusyAsin] = useState<string | null>(null);
+  const [transferMsg, setTransferMsg] = useState("");
+
+  async function handleTransferToK(asin: string) {
+    setBusyAsin(asin);
+    setTransferMsg("");
+    try {
+      const token =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem("barong_ops_access_token")
+          : null;
+      const res = await fetch("/api/backend/k/products/import-from-r", {
+        method: "POST",
+        cache: "no-store",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ asins: [asin], channel: transferChannel }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(typeof data?.detail === "string" ? data.detail : "搬运失败");
+      }
+      const group = transferChannel === "amazon" ? "亚马逊" : "独立站";
+      if (data.created?.length) {
+        setTransferMsg(`${asin} 已搬入 K · ${group}分组`);
+      } else if (data.skipped?.length) {
+        setTransferMsg(`${asin} 已在 K 中，跳过`);
+      } else {
+        setTransferMsg(`${asin} 搬运未成功`);
+      }
+    } catch (error) {
+      setTransferMsg(
+        `${asin} 搬运失败：${error instanceof Error ? error.message : ""}`,
+      );
+    } finally {
+      setBusyAsin(null);
+    }
+  }
   if (products.length === 0) {
     if (backendProductCount > 0) {
       return (
@@ -568,6 +609,30 @@ function ProductsTable({
 
   return (
     <div className={styles.tableWrap}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          marginBottom: 10,
+          flexWrap: "wrap",
+        }}
+      >
+        <span style={{ fontSize: "0.82rem", color: "var(--mm-dim, #7d95ae)" }}>
+          搬入 K 的分组：
+        </span>
+        <label style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: "0.85rem" }}>
+          <input checked={transferChannel === "dtc"} name="rw-transfer-channel" onChange={() => setTransferChannel("dtc")} type="radio" />
+          独立站
+        </label>
+        <label style={{ display: "inline-flex", gap: 5, alignItems: "center", fontSize: "0.85rem" }}>
+          <input checked={transferChannel === "amazon"} name="rw-transfer-channel" onChange={() => setTransferChannel("amazon")} type="radio" />
+          亚马逊
+        </label>
+        {transferMsg ? (
+          <span style={{ fontSize: "0.82rem", color: "var(--mm-cyan, #39d4ff)" }}>{transferMsg}</span>
+        ) : null}
+      </div>
       <table className={styles.table}>
         <thead>
           <tr>
@@ -580,6 +645,7 @@ function ProductsTable({
             <th>利润率</th>
             <th>分数</th>
             <th>状态</th>
+            <th>搬入 K</th>
           </tr>
         </thead>
         <tbody>
@@ -645,6 +711,25 @@ function ProductsTable({
                     {decisionLabel(product.pipeline_decision)}
                   </span>
                   <span className={styles.stateText}>{stateLabel(product.state)}</span>
+                </td>
+                <td>
+                  <button
+                    disabled={busyAsin === product.asin}
+                    onClick={() => void handleTransferToK(product.asin)}
+                    style={{
+                      padding: "4px 10px",
+                      borderRadius: 6,
+                      border: "1px solid var(--mm-cyan, rgba(57,212,255,0.4))",
+                      background: "rgba(57,212,255,0.1)",
+                      color: "var(--mm-cyan, #39d4ff)",
+                      cursor: "pointer",
+                      fontSize: "0.78rem",
+                      whiteSpace: "nowrap",
+                    }}
+                    type="button"
+                  >
+                    {busyAsin === product.asin ? "搬运中…" : "搬进 K"}
+                  </button>
                 </td>
               </tr>
             );

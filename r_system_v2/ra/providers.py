@@ -115,6 +115,9 @@ class RAnalysisProviderBinding:
     def rainforest_key(self) -> str:
         return self.secret_manager.get_key("rainforest", self.org_id)
 
+    def keepa_key(self) -> str:
+        return self.secret_manager.get_key("keepa", self.org_id)
+
     def google_ads_key(self) -> str:
         return self.secret_manager.get_key("google_ads", self.org_id)
 
@@ -134,6 +137,14 @@ class RAnalysisProviderBinding:
         return self._foursapi_role_config(
             role="opus",
             markers=("opus", "claude", "anthropic", "claude_opus"),
+        )
+
+    def vision_config(self) -> dict[str, Any]:
+        """看图比对模型的 key：优先匹配「备用/vision/4o」标记的 4sapi key，
+        没有专用备用 key 时回退主 4sapi key（同一渠道都能调 gpt-4o-mini）。"""
+        return self._foursapi_role_config(
+            role="vision",
+            markers=("备用", "vision", "4o", "image", "看图", "i 系列", "i系列"),
         )
 
     def rainforest_config(self) -> dict[str, Any]:
@@ -241,7 +252,7 @@ class RAnalysisProviderBinding:
                 configured=gpt["configured"],
                 source=gpt["source"],
                 model_env="RA_GPT_MODEL",
-                model_name=os.getenv("RA_GPT_MODEL", "gpt-5.5"),
+                model_name=os.getenv("RA_GPT_MODEL", "gpt-5.6-luna"),
                 base_url_env="FOURSAPI_BASE_URL",
                 base_url_configured=bool(os.getenv("FOURSAPI_BASE_URL", "").strip())
                 or bool(gpt.get("url")),

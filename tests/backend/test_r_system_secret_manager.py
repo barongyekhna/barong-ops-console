@@ -4,6 +4,7 @@ from hashlib import sha256
 
 import pytest
 from sqlalchemy import create_engine, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.core.key_registry import metadata_for_key_type
@@ -250,3 +251,46 @@ def test_secret_manager_database_watch_invalidates_cache_and_publishes_event():
     assert changed == [{"org_id": "org_a", "service": "keepa"}]
     assert manager.get_key("keepa", "org_a") == "keepa-v2"
     assert secret_event_bus.history()[-1].source == "secret_manager.api_key_watch"
+
+
+def test_secret_manager_owned_sessions_close_and_recover_after_query_failure(
+    tmp_path,
+    monkeypatch,
+):
+    database_url = f"sqlite:///{tmp_path / 'secret-manager.db'}"
+    engine = create_engine(database_url)
+    Base.metadata.create_all(engine)
+    db = sessionmaker(bind=engine, expire_on_commit=False)()
+    _bind_key(
+        db,
+        org_id="org_a",
+        module_id=R_WAREHOUSE_MODULE_ID,
+        key_alias="keepa",
+        key_type="keepa",
+        value="keepa-owned-session",
+    )
+    db.close()
+    engine.dispose()
+
+    manager = SecretManager(database_url=database_url)
+    original_resolver = manager._resolve_from_api_key_orchestration
+    fail_once = True
+
+    def resolver(db, *, service, org_id):
+        nonlocal fail_once
+        if fail_once:
+            fail_once = False
+            db.execute(text("SELECT * FROM intentionally_missing_table"))
+        return original_resolver(db, service=service, org_id=org_id)
+
+    monkeypatch.setattr(manager, "_resolve_from_api_key_orchestration", resolver)
+
+    with pytest.raises(OperationalError):
+        manager.get_key("keepa", "org_a")
+    assert manager._owned_engine.pool.checkedout() == 0
+
+    assert manager.get_key("keepa", "org_a") == "keepa-owned-session"
+    assert manager._owned_engine.pool.checkedout() == 0
+
+    manager.close()
+    assert manager._owned_engine is None

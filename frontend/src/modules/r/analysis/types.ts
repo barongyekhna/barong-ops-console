@@ -521,6 +521,259 @@ export type RaAutoProfitJobItemsQuery = {
   item_sort_direction?: string;
 };
 
+export type RaRunEvent = {
+  seq: number;
+  run_id: string | null;
+  candidate_id: string | null;
+  asin: string | null;
+  stage: string;
+  stage_label: string;
+  verdict: string | null;
+  detail: Record<string, unknown>;
+  created_at: string | null;
+};
+
+export type RaRunEventsPayload = {
+  items: RaRunEvent[];
+  last_seq: number;
+  count: number;
+  fetched_at: string;
+};
+
+export type RaGroupItem = {
+  report_id: string;
+  run_id: string | null;
+  candidate_id: string | null;
+  asin: string | null;
+  status: string;
+  title: string | null;
+  summary: string | null;
+  image_url: string | null;
+  verdict: string | null;
+  final_score: number | null;
+  primary_channel: string | null;
+  pass_channels: string[];
+  gross_margin: number | null;
+  monthly_sales: number | null;
+  price: number | null;
+  primary_keyword: string | null;
+  keywords: {
+    primary?: string | null;
+    secondary?: string[];
+    long_tail?: string[];
+    amazon_page_one_titles?: string[];
+  } | null;
+  opus_review: {
+    score?: number | null;
+    verdict?: string | null;
+    reason?: string | null;
+  } | null;
+  decision_reason: string | null;
+  group?: string;
+  // 终审否了「备货」但独立站通道 pass：零库存自发货放行,卡片带警示标。
+  fulfillment_only?: boolean;
+  // 终审 AI 对该渠道的单独意见(只吹哨不拦路,人工滑卡时权衡)。
+  ai_route_note?: string | null;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type RaGroupsPayload = {
+  groups?: Record<string, RaGroupItem[]>;
+  items?: RaGroupItem[];
+  channel?: string;
+  counts: Record<string, number>;
+};
+
+export type RaQuotaPayload = {
+  providers: Record<
+    string,
+    {
+      label: string;
+      used: number;
+      budget: number;
+      remaining: number | null;
+      unlimited: boolean;
+    }
+  >;
+  prescreen: Record<string, number | string>;
+};
+
+export type RaOpusReview = {
+  score?: number | null;
+  verdict?: string | null;
+  reason?: string | null;
+  risks?: string[];
+  advantages?: string[];
+  model?: string | null;
+  reviewed_at?: string | null;
+};
+
+export type RaDeepEnrichment = {
+  keepa?: {
+    history_days?: number | null;
+    has_12m_history?: boolean | null;
+    bsr_trend_12m?: string | null;
+    bsr_change_pct_12m?: number | null;
+    price_floor_declining?: boolean | null;
+    price_floor_change_pct_12m?: number | null;
+    min_price_12m?: number | null;
+    current_new_price?: number | null;
+    monthly_price_floors?: number[];
+    viral_suspect?: boolean | null;
+  } | null;
+  rainforest_product?: {
+    title?: string | null;
+    brand?: string | null;
+    manufacturer?: string | null;
+    rating?: number | null;
+    ratings_total?: number | null;
+    rating_breakdown?: Record<string, number | null>;
+    recent_sales?: string | null;
+    bestsellers_rank?: Array<{ category?: string | null; rank?: number | null }>;
+    buybox_price?: number | null;
+    buybox_is_prime?: boolean | null;
+    buybox_fulfillment?: string | null;
+    listing_keywords?: string | null;
+    has_coupon?: boolean | null;
+    coupon_text?: string | null;
+    has_a_plus_content?: boolean | null;
+    videos_count?: number | null;
+    proposition_65_warning?: boolean | null;
+    feature_bullets?: string[];
+    categories?: string[];
+    variant_count?: number | null;
+    parent_asin?: string | null;
+    images_count?: number | null;
+    material?: string | null;
+    first_available?: string | null;
+  } | null;
+  reviews?: Array<{
+    rating?: number | null;
+    title?: string | null;
+    body?: string | null;
+    date?: string | null;
+    verified?: boolean | null;
+  }>;
+  review_themes?: {
+    top_complaints?: Array<{
+      theme?: string;
+      evidence?: string;
+      improvement_angle?: string;
+    }>;
+    severity?: string | null;
+    differentiation_summary?: string | null;
+    review_count_analyzed?: number | null;
+  } | null;
+  errors?: Record<string, string>;
+  fetched_at?: string | null;
+};
+
+export type RaDetailLayer = {
+  layer: string | null;
+  model: string | null;
+  score: number | null;
+  verdict: string | null;
+  reason: string | null;
+  advantages: string[];
+  risks: string[];
+  channel_guess: string | null;
+};
+
+export type RaReportDetail = {
+  report_id: string;
+  run_id: string | null;
+  candidate_id: string | null;
+  asin: string | null;
+  status: string;
+  title: string | null;
+  summary: string | null;
+  product: Record<string, unknown> | null;
+  product_image_url: string | null;
+  final: Record<string, unknown> | null;
+  layers: RaDetailLayer[];
+  competition: Record<string, unknown> | null;
+  channel_signals: Record<string, unknown> | null;
+  channel_routes: Record<string, unknown> | null;
+  primary_channel: Record<string, unknown> | null;
+  keywords: Record<string, unknown> | null;
+  keyword_channels: {
+    amazon: {
+      primary: string | null;
+      core_keywords: string[];
+      long_tail_keywords: string[];
+      source: string;
+    };
+    google_seo: {
+      related_searches: string[];
+      people_also_ask: string[];
+      google_ads: Record<string, unknown>;
+      source: string;
+    };
+  };
+  opus_review: RaOpusReview | null;
+  deep_enrichment: RaDeepEnrichment | null;
+  suppliers: Array<{
+    offer_id: string;
+    supplier_name: string | null;
+    supplier_url: string | null;
+    unit_price_cny: number | null;
+    moq: number | null;
+    match_score: number | null;
+    offer_status: string | null;
+  }>;
+  created_at: string | null;
+};
+
+export type RaExpansionCandidate = {
+  offer_id: string;
+  title: string | null;
+  detail_url: string;
+  image_url: string | null;
+  price_cny: number | null;
+  moq: number | null;
+  sale_amount: number | null;
+  composite_score: number | null;
+  gmv_30d: string | null;
+  delivery_free: boolean;
+  shili_supplier: boolean;
+  city: string | null;
+  ai_score?: number | null;
+  role?: string;
+  reason?: string;
+};
+
+export type RaExpansion = {
+  id?: string;
+  report_id: string;
+  asin?: string | null;
+  status: "none" | "pending" | "running" | "completed" | "failed" | string;
+  anchor?: Record<string, unknown>;
+  candidates?: RaExpansionCandidate[];
+  selected?: RaExpansionCandidate[];
+  counts?: Record<string, unknown>;
+  error?: string | null;
+  updated_at?: string | null;
+};
+
+export type RaKImportResult = {
+  created: Array<Record<string, unknown>>;
+  skipped: string[];
+  errors: Array<{ asin: string; reason: string }>;
+};
+
+export type RaJobStatusResult = {
+  run_id: string;
+  status: "queued" | "running" | "completed" | "partial" | "failed" | "cancelled" | "paused" | string;
+  runtime_mode: string | null;
+  query: string | null;
+  counts: RaAutoProfitResult["counts"] & { warnings?: string[] };
+  warnings: string[];
+  created_at: string | null;
+  started_at: string | null;
+  finished_at: string | null;
+};
+
 export type RaAutoProfitJobResult = RaAutoProfitResult & {
   run_id: string;
   status: "queued" | "running" | "completed" | "partial" | "failed" | string;

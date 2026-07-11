@@ -1,0 +1,286 @@
+.radarBand {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
+  gap: 26px;
+  align-items: center;
+  border: 1px solid var(--color-line);
+  border-radius: 14px;
+  background: var(--color-surface);
+  padding: 22px 26px;
+  position: relative;
+  overflow: hidden;
+}
+
+@media (max-width: 860px) {
+  .radarBand {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: center;
+  }
+}
+
+/* ---------------- 雷达本体 ---------------- */
+.radarStage {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+}
+
+.radar {
+  position: relative;
+  width: min(300px, 68vw);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgb(57 212 255 / 7%) 0%, rgb(4 10 18 / 92%) 68%),
+    #04121c;
+  border: 1px solid rgb(57 212 255 / 35%);
+  box-shadow:
+    0 0 40px rgb(57 212 255 / 12%),
+    inset 0 0 60px rgb(0 0 0 / 55%);
+  overflow: hidden;
+}
+
+.ring {
+  position: absolute;
+  border: 1px solid rgb(57 212 255 / 22%);
+  border-radius: 50%;
+}
+
+.ring[data-ring="1"] { inset: 12%; }
+.ring[data-ring="2"] { inset: 27%; }
+.ring[data-ring="3"] { inset: 40%; border-style: dashed; }
+
+.crosshair::before,
+.crosshair::after {
+  content: "";
+  position: absolute;
+  background: rgb(57 212 255 / 18%);
+}
+
+.crosshair::before {
+  left: 50%;
+  top: 4%;
+  bottom: 4%;
+  width: 1px;
+  transform: translateX(-50%);
+}
+
+.crosshair::after {
+  top: 50%;
+  left: 4%;
+  right: 4%;
+  height: 1px;
+  transform: translateY(-50%);
+}
+
+.sweep {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    from 0deg,
+    rgb(57 255 176 / 0%) 0deg,
+    rgb(57 255 176 / 4%) 300deg,
+    rgb(57 255 176 / 45%) 352deg,
+    rgb(120 255 210 / 85%) 359deg,
+    rgb(57 255 176 / 0%) 360deg
+  );
+  animation: radarSweep 6s linear infinite;
+  opacity: 0.35;
+}
+
+.radarBand[data-running="true"] .sweep {
+  animation-duration: 2.6s;
+  opacity: 0.85;
+}
+
+@keyframes radarSweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.radarCore {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #5fe3ff;
+  box-shadow: 0 0 12px #39d4ff, 0 0 30px rgb(57 212 255 / 55%);
+}
+
+.blip {
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  margin: -3.5px 0 0 -3.5px;
+  border-radius: 50%;
+  animation: blipPulse 2.6s ease-out infinite;
+}
+
+.blip[data-kind="pass"] {
+  background: #4dffa1;
+  box-shadow: 0 0 10px rgb(77 255 161 / 85%);
+}
+
+.blip[data-kind="scan"] {
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  background: rgb(255 107 138 / 65%);
+  box-shadow: 0 0 6px rgb(255 107 138 / 45%);
+}
+
+@keyframes blipPulse {
+  0% { opacity: 0; transform: scale(0.4); }
+  12% { opacity: 1; transform: scale(1.25); }
+  30% { opacity: 0.9; transform: scale(1); }
+  100% { opacity: 0.25; transform: scale(0.9); }
+}
+
+.radarReadout {
+  display: flex;
+  gap: 14px;
+  font-family: var(--cc-mono, ui-monospace, monospace);
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.radarReadout [data-status] {
+  color: #4dffa1;
+  text-shadow: 0 0 10px rgb(77 255 161 / 45%);
+}
+
+.radarBand[data-running="false"] .radarReadout [data-status] {
+  color: var(--color-muted);
+  text-shadow: none;
+}
+
+/* ---------------- 右侧控制台 ---------------- */
+.consolePanel {
+  display: grid;
+  gap: 10px;
+  align-content: center;
+  min-width: 0;
+}
+
+.kicker {
+  font-family: var(--cc-mono, ui-monospace, monospace);
+  font-size: 0.64rem;
+  letter-spacing: 0.28em;
+  color: #39d4ff;
+}
+
+.consolePanel h2 {
+  margin: 0;
+  font-size: 1.45rem;
+  letter-spacing: 0.04em;
+  color: var(--color-text);
+  text-shadow: 0 0 24px rgb(57 212 255 / 18%);
+}
+
+.lead {
+  margin: 0;
+  font-size: 0.84rem;
+  line-height: 1.8;
+  color: var(--color-muted);
+  max-width: 46em;
+}
+
+.form {
+  margin-top: 6px;
+}
+
+.inputRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgb(57 212 255 / 35%);
+  border-radius: 10px;
+  padding: 6px 6px 6px 14px;
+  background: rgb(4 12 20 / 55%);
+  color: #39d4ff;
+}
+
+.inputRow input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--color-text);
+  font-size: 0.92rem;
+  padding: 8px 0;
+}
+
+.inputRow input::placeholder {
+  color: var(--color-muted);
+}
+
+.inputRow button {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid rgb(57 212 255 / 60%);
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-weight: 700;
+  font-size: 0.82rem;
+  letter-spacing: 0.04em;
+  color: #03121a;
+  background: linear-gradient(180deg, #5fe3ff, #22a7d8);
+  box-shadow: 0 8px 22px -8px rgb(57 212 255 / 55%);
+  cursor: pointer;
+  transition: transform 0.15s ease, filter 0.15s ease;
+  white-space: nowrap;
+}
+
+.inputRow button:hover:not(:disabled) {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.inputRow button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.spinIcon {
+  animation: radarSpin 1s linear infinite;
+}
+
+@keyframes radarSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.errorLine,
+.warnLine {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+}
+
+.errorLine {
+  color: #ff6b8a;
+}
+
+.warnLine {
+  color: #ffb13b;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sweep,
+  .blip,
+  .spinIcon {
+    animation: none;
+  }
+}

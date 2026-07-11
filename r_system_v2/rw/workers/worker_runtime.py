@@ -221,6 +221,37 @@ def build_ra_worker_runtime() -> tuple[WorkerRuntimeStatus, RaProfitJobWorker]:
     return status, worker
 
 
+def _start_auto_cruise_thread() -> None:
+    """Launch the R-A auto-cruise scheduler next to the job worker."""
+    import threading
+
+    try:
+        from backend.app.db.session import SessionLocal
+        from backend.app.services.data_isolation import without_org_data_isolation
+        from r_system_v2.ra.auto_cruise import RaAutoCruiseScheduler
+    except Exception as exc:
+        _log(f"R-A auto-cruise unavailable: {exc}")
+        return
+    org_id = _resolve_org_id()
+    if not org_id:
+        _log("R-A auto-cruise disabled: no target org resolved")
+        return
+    scheduler = RaAutoCruiseScheduler(
+        session_factory=SessionLocal,
+        org_id=org_id,
+        without_isolation=without_org_data_isolation,
+    )
+    thread = threading.Thread(
+        target=lambda: scheduler.run_forever(
+            should_stop=lambda: not RUNNING,
+            log=_log,
+        ),
+        name="ra-auto-cruise",
+        daemon=True,
+    )
+    thread.start()
+
+
 def main() -> None:
     signal.signal(signal.SIGTERM, _handle_stop)
     signal.signal(signal.SIGINT, _handle_stop)
@@ -240,6 +271,7 @@ def main() -> None:
     if worker == "rw" and engine is not None:
         engine.run_forever(should_stop=lambda: not RUNNING)
     elif worker == "ra" and RA_JOB_WORKER is not None:
+        _start_auto_cruise_thread()
         RA_JOB_WORKER.run_forever(should_stop=lambda: not RUNNING, log=_log)
     else:
         while RUNNING:

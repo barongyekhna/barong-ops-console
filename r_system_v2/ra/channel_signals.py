@@ -128,7 +128,9 @@ def ensure_channel_signals(
     profit = _dict_value(context.get("profit"))
     keyword = _keyword(product=product, competition=competition)
     serper_block = _serper_or_mock(db, org_id=org_id, keyword=keyword, product=product)
-    keyword_planner_block = _google_keyword_planner_state(db, org_id=org_id)
+    keyword_planner_block = _google_keyword_planner_state(
+        db, org_id=org_id, keyword=keyword
+    )
     payload = {
         "version": "ra_channel_signals_v1",
         "keyword": keyword,
@@ -344,7 +346,49 @@ def _dtc_seo_signal(
     )
     signal["serp"] = serper_block
     signal["keyword_planner"] = keyword_planner_block
+    cross = _keepa_serper_cross(
+        monthly_sales=monthly_sales,
+        serp_weakness_score=serp_score,
+        serp_is_real=str(serper_block.get("source") or "") == "serper_search",
+    )
+    signal["seo_opportunity_score"] = cross["seo_opportunity_score"]
+    signal["dtc_seo_candidate"] = cross["dtc_seo_candidate"]
+    if cross["dtc_seo_candidate"]:
+        signal["reasons"] = (signal.get("reasons") or []) + [
+            "Keepa×Serper 命中：亚马逊需求已验证且 Google 页一弱，独立站 SEO 黄金位。"
+        ]
     return signal
+
+
+def _keepa_serper_cross(
+    *,
+    monthly_sales: int | None,
+    serp_weakness_score: int | None,
+    serp_is_real: bool,
+) -> dict[str, Any]:
+    """杀手锏交叉分：亚马逊有需求（Keepa）× Google 页一好排（Serper）。"""
+    min_demand = _int_env("RA_SEO_MIN_DEMAND_UNITS", 300)
+    min_weakness = _int_env("RA_SERP_WEAKNESS_MIN", 60)
+    demand_norm = (
+        _clamp_int(monthly_sales / 10, 0, 100) if monthly_sales is not None else None
+    )
+    if demand_norm is None or serp_weakness_score is None:
+        return {"seo_opportunity_score": None, "dtc_seo_candidate": False}
+    score = _clamp_int(0.5 * demand_norm + 0.5 * serp_weakness_score, 0, 100)
+    candidate = bool(
+        serp_is_real
+        and monthly_sales is not None
+        and monthly_sales >= min_demand
+        and serp_weakness_score >= min_weakness
+    )
+    return {"seo_opportunity_score": score, "dtc_seo_candidate": candidate}
+
+
+def _int_env(name: str, default: int) -> int:
+    try:
+        return int(os.getenv(name, str(default)))
+    except ValueError:
+        return default
 
 
 def _serper_or_mock(
@@ -363,24 +407,35 @@ def _serper_or_mock(
         key = ""
     if not key:
         return _mock_serp(keyword=keyword, product=product, reason="serper_key_missing")
+    # Serper 调用最长 10s：先结束打开的 SQL 事务，避免 idle-in-transaction 超时。
+    try:
+        db.rollback()
+    except Exception:
+        pass
     raw = _serper_search(api_key=key, keyword=keyword)
     return _serp_signal_from_response(raw, keyword=keyword, provider_mode="real_serper")
 
 
-def _google_keyword_planner_state(db: Session, *, org_id: str) -> dict[str, Any]:
+def _google_keyword_planner_state(
+    db: Session,
+    *,
+    org_id: str,
+    keyword: str | None = None,
+) -> dict[str, Any]:
+    binding = RAnalysisProviderBinding(
+        org_id=org_id,
+        secret_manager=SecretManager(db_session=db),
+    )
+    google_ads_value = ""
     try:
-        configured = bool(
-            RAnalysisProviderBinding(
-                org_id=org_id,
-                secret_manager=SecretManager(db_session=db),
-            ).google_ads_key()
-        )
+        google_ads_value = binding.google_ads_key()
+        configured = bool(google_ads_value)
         source = "api_key_orchestration"
     except SecretManagerError:
         configured = False
         source = "api_key_orchestration_missing"
     gate = google_ads_runtime_gate(configured=configured)
-    return {
+    state = {
         "provider_mode": gate["routing"],
         "configured": configured,
         "source": source,
@@ -392,7 +447,30 @@ def _google_keyword_planner_state(db: Session, *, org_id: str) -> dict[str, Any]
         "competition_index": None,
         "cpc_low_micros": None,
         "cpc_high_micros": None,
+        "keyword_ideas": [],
     }
+    if not (gate["runtime_enabled"] and keyword and google_ads_value):
+        return state
+    # 过审 + 显式开启后才发真请求；失败降级为门控态，不影响漏斗。
+    try:
+        from r_system_v2.ra.google_keyword_planner import GoogleKeywordPlannerClient
+
+        client = GoogleKeywordPlannerClient.from_secret_value(google_ads_value)
+        ideas = client.keyword_ideas(keyword)
+        seed_metrics = _dict_value(ideas.get("seed_metrics"))
+        state.update(
+            {
+                "provider_mode": "google_ads_keyword_planner",
+                "avg_monthly_searches": seed_metrics.get("avg_monthly_searches"),
+                "competition_index": seed_metrics.get("competition_index"),
+                "cpc_low_micros": seed_metrics.get("cpc_low_micros"),
+                "cpc_high_micros": seed_metrics.get("cpc_high_micros"),
+                "keyword_ideas": ideas.get("ideas") or [],
+            }
+        )
+    except Exception as exc:
+        state["detail"] = f"{state['detail']}（真实调用失败：{str(exc)[:160]}）"
+    return state
 
 
 def _serper_search(*, api_key: str, keyword: str) -> dict[str, Any]:
@@ -450,8 +528,41 @@ def _serp_signal_from_response(
         "weak_surface_count": weak,
         "marketplace_count": marketplace,
         "result_count": len(organic),
+        # 白捡的关键词素材：进 K 系列的种子词，绝不丢弃。
+        "related_searches": _related_searches(raw),
+        "people_also_ask": _people_also_ask(raw),
         "source": "serper_search",
     }
+
+
+def _related_searches(raw: dict[str, Any]) -> list[str]:
+    values = raw.get("relatedSearches")
+    if not isinstance(values, list):
+        return []
+    output: list[str] = []
+    for item in values[:10]:
+        if isinstance(item, dict):
+            query = str(item.get("query") or "").strip()
+        else:
+            query = str(item or "").strip()
+        if query and query not in output:
+            output.append(query)
+    return output
+
+
+def _people_also_ask(raw: dict[str, Any]) -> list[str]:
+    values = raw.get("peopleAlsoAsk")
+    if not isinstance(values, list):
+        return []
+    output: list[str] = []
+    for item in values[:10]:
+        if isinstance(item, dict):
+            question = str(item.get("question") or "").strip()
+        else:
+            question = str(item or "").strip()
+        if question and question not in output:
+            output.append(question)
+    return output
 
 
 def _mock_serp(*, keyword: str, product: dict[str, Any], reason: str) -> dict[str, Any]:
@@ -468,6 +579,8 @@ def _mock_serp(*, keyword: str, product: dict[str, Any], reason: str) -> dict[st
         "weak_surface_count": None,
         "marketplace_count": None,
         "result_count": None,
+        "related_searches": [],
+        "people_also_ask": [],
         "source": "mock",
         "mock_reason": reason,
     }

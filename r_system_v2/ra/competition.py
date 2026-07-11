@@ -20,6 +20,12 @@ from sqlalchemy.orm import Session
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 from r_system_v2.ra.profit_service import _json_bind
 from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.ra.quota_ledger import (
+    PROVIDER_RAINFOREST,
+    RAQuotaExhaustedError,
+    refund,
+    try_consume,
+)
 
 
 DEFAULT_RAINFOREST_BASE_URL = "https://api.rainforestapi.com"
@@ -106,7 +112,13 @@ def ensure_competition_snapshot(
     try:
         client = RainforestClient.from_binding(db=db, org_id=org_id)
         db.commit()
-        raw = client.search(keyword=cleaned_keyword)
+        # search = 2 credits；缓存未命中才走到这里，先向日预算账本记账。
+        try_consume(db, PROVIDER_RAINFOREST, amount=2)
+        try:
+            raw = client.search(keyword=cleaned_keyword)
+        except Exception:
+            refund(db, PROVIDER_RAINFOREST, amount=2)
+            raise
         snapshot = _snapshot_from_rainforest(
             raw,
             org_id=org_id,
@@ -116,6 +128,17 @@ def ensure_competition_snapshot(
             mode=mode,
             context=context,
         )
+    except RAQuotaExhaustedError as exc:
+        # 预算耗尽不是数据错误：缺竞争数据不误杀，产品照进 AI 链。
+        snapshot = _failure_snapshot(
+            org_id=org_id,
+            asin=str(context.get("asin") or ""),
+            keyword=cleaned_keyword,
+            keyword_source=keyword_info["source"],
+            mode=mode,
+            error=str(exc),
+        )
+        snapshot["source"] = "rainforest_budget_exhausted"
     except Exception as exc:
         snapshot = _failure_snapshot(
             org_id=org_id,

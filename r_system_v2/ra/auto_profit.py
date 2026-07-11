@@ -212,7 +212,7 @@ def match_rw_products_for_query(
     exclude_sql = ""
     if excluded:
         placeholders: list[str] = []
-        for index, asin in enumerate(excluded[:50]):
+        for index, asin in enumerate(excluded[:300]):
             key = f"exclude_asin_{index}"
             params[key] = asin
             placeholders.append(f":{key}")
@@ -291,6 +291,70 @@ def match_rw_products_for_query(
     return scored[: max(1, min(int(limit), MAX_ASIN_LIMIT))]
 
 
+def select_auto_candidates(
+    db: Session,
+    *,
+    org_id: str | None = None,
+    limit: int,
+    exclude_asins: set[str] | list[str] | tuple[str, ...] | None = None,
+) -> list[dict[str, Any]]:
+    """自动巡库候选：无需关键词，直接取尚未被 R-A 处理的 R-W 产品。
+
+    排序交给调用方（job_queue 会按 prescreen 分数二次排序），这里先按
+    R-W skill 分 + 新鲜度粗排并保证有可用图片。
+    """
+    del org_id  # products_rw 为单组织表，保留参数以对齐调用约定。
+    excluded = _normalized_asin_list(exclude_asins)
+    params: dict[str, object] = {"scan_limit": _rw_scan_limit(limit, len(excluded))}
+    exclude_sql = ""
+    if excluded:
+        placeholders: list[str] = []
+        for index, asin in enumerate(excluded[:600]):
+            key = f"exclude_asin_{index}"
+            params[key] = asin
+            placeholders.append(f":{key}")
+        exclude_sql = (
+            "AND UPPER(COALESCE(CAST(asin AS TEXT), '')) "
+            f"NOT IN ({', '.join(placeholders)})"
+        )
+    rows = db.execute(
+        text(
+            f"""
+            SELECT asin, marketplace, source_query, title, title_zh, image_url,
+                   brand, category, category_id, category_path, price, state,
+                   skill_score, features, updated_at,
+                   {_last_profit_sql(None)}
+            FROM products_rw
+            WHERE COALESCE(LOWER(CAST(state AS TEXT)), '') NOT LIKE '%reject%'
+              AND {_ra_profit_not_processed_sql(db)}
+              {exclude_sql}
+            ORDER BY skill_score DESC NULLS LAST, updated_at DESC NULLS LAST, asin ASC
+            LIMIT :scan_limit
+            """
+        ),
+        params,
+    ).mappings()
+    excluded_set = set(excluded)
+    selected: list[dict[str, Any]] = []
+    for row in rows:
+        product = dict(row)
+        asin = str(product.get("asin") or "").strip().upper()
+        if not asin or asin in excluded_set:
+            continue
+        features = _dict_value(product.get("features"))
+        if not product_image_candidates(
+            asin=asin,
+            image_url=str(product.get("image_url")) if product.get("image_url") else None,
+            features=features,
+        ):
+            continue
+        product["match_score"] = int(product.get("skill_score") or 0)
+        selected.append(product)
+        if len(selected) >= max(1, min(int(limit), MAX_ASIN_LIMIT)):
+            break
+    return selected
+
+
 def _normalized_asin_list(values: set[str] | list[str] | tuple[str, ...] | None) -> list[str]:
     normalized: list[str] = []
     seen: set[str] = set()
@@ -316,13 +380,25 @@ def _ra_profit_not_processed_sql(db: Session) -> str:
     except Exception:
         dialect = "postgresql"
     if dialect == "postgresql":
+        # prescreen_cut 不是死刑：30 天后允许重新进入匹配池重打分。
+        # CASE 短路：绝大多数行 status 为空，直接命中 ELSE，不做时间戳转换。
         return (
-            "COALESCE(features->'ra_profit'->>'status', '') "
-            "NOT IN ('pass', 'reject', 'blocked', 'failed', 'quantity_pending')"
+            "CASE COALESCE(features->'ra_profit'->>'status', '') "
+            "WHEN 'pass' THEN false "
+            "WHEN 'reject' THEN false "
+            "WHEN 'blocked' THEN false "
+            "WHEN 'failed' THEN false "
+            "WHEN 'quantity_pending' THEN false "
+            "WHEN 'prescreen_cut' THEN COALESCE("
+            "(features->'ra_profit'->>'calculated_at')::timestamptz, "
+            "TIMESTAMPTZ 'epoch'"
+            ") <= CURRENT_TIMESTAMP - INTERVAL '30 days' "
+            "ELSE true "
+            "END"
         )
     return (
         "COALESCE(json_extract(features, '$.ra_profit.status'), '') "
-        "NOT IN ('pass', 'reject', 'blocked', 'failed', 'quantity_pending')"
+        "NOT IN ('pass', 'reject', 'blocked', 'failed', 'quantity_pending', 'prescreen_cut')"
     )
 
 

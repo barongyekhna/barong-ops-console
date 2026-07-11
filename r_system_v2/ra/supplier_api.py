@@ -17,6 +17,7 @@ import hmac
 import json
 from math import ceil
 import os
+import time
 import re
 from typing import Any, Protocol
 from urllib.error import HTTPError, URLError
@@ -32,8 +33,13 @@ DEFAULT_SUPPLIER_SOURCE_MODE = "auto_1688_api"
 DEFAULT_1688_OPEN_API_BASE_URL = "https://gw.open.1688.com/openapi/param2"
 DEFAULT_1688_IMAGE_SEARCH_NAMESPACE = "com.alibaba.linkplus"
 DEFAULT_1688_IMAGE_SEARCH_API_NAME = "alibaba.cross.similar.offer.search"
-DEFAULT_1688_KEYWORD_SEARCH_NAMESPACE = "com.alibaba.product"
-DEFAULT_1688_KEYWORD_SEARCH_API_NAME = "product.search.keywordQuery"
+# 图搜分销商品（¥1500 功能包，50 万次/6 个月）：跨境图搜额度用完后的第二通道。
+DEFAULT_1688_CPS_IMAGE_SEARCH_NAMESPACE = "com.alibaba.linkplus"
+DEFAULT_1688_CPS_IMAGE_SEARCH_API_NAME = "alibaba.cps.similar.offer.search"
+# 国内分销词搜（注册应用自带权限，不限量）。2026-07-10 用户指正后实测打通：
+# 返回选品中心陈列品/严选品池（一件代发包邮、48h 发货、moq=1），带图可比对。
+DEFAULT_1688_KEYWORD_SEARCH_NAMESPACE = "com.alibaba.fenxiao"
+DEFAULT_1688_KEYWORD_SEARCH_API_NAME = "product.keywords.search"
 DEFAULT_1688_PRODUCT_INFO_NAMESPACE = "com.alibaba.product"
 DEFAULT_1688_PRODUCT_INFO_API_NAME = "alibaba.cross.productInfo"
 DEFAULT_1688_FREIGHT_NAMESPACE = "com.alibaba.fenxiao.crossborder"
@@ -176,6 +182,7 @@ class SupplierApiProvider(Protocol):
         product: dict[str, Any],
         keyword_profile: dict[str, Any],
         limit: int,
+        image_channel: str = "cross",
     ) -> list[SupplierApiOffer]:
         ...
 
@@ -189,7 +196,9 @@ class Mock1688OfficialApiProvider:
         product: dict[str, Any],
         keyword_profile: dict[str, Any],
         limit: int,
+        image_channel: str = "cross",
     ) -> list[SupplierApiOffer]:
+        del image_channel  # mock 不区分图搜通道。
         bounded_limit = max(3, min(int(limit), 5))
         base_keyword = _base_keyword(product, keyword_profile)
         asin = str(product.get("asin") or "UNKNOWN").upper()
@@ -242,6 +251,7 @@ class Alibaba1688OfficialApiProvider:
         product: dict[str, Any],
         keyword_profile: dict[str, Any],
         limit: int,
+        image_channel: str = "cross",
     ) -> list[SupplierApiOffer]:
         if not self.credentials.ready:
             raise RASupplierApiError("1688 官方 API 密钥尚未完整绑定。")
@@ -250,12 +260,16 @@ class Alibaba1688OfficialApiProvider:
         if not image_url:
             raise RASupplierApiError("该 R-W 产品缺少可用于 1688 图搜的图片。")
 
-        payload = self._call_image_search(
-            image_url=image_url,
-            keyword_profile=keyword_profile,
-            limit=limit,
-        )
-        offers = _normalize_image_search_offers(payload, limit=limit)
+        if image_channel == "cps":
+            payload = self._call_cps_image_search(image_url=image_url, limit=limit)
+            offers = _normalize_cps_offers(payload, limit=limit)
+        else:
+            payload = self._call_image_search(
+                image_url=image_url,
+                keyword_profile=keyword_profile,
+                limit=limit,
+            )
+            offers = _normalize_image_search_offers(payload, limit=limit)
         if _keyword_search_enabled():
             try:
                 keyword_payload = self._call_keyword_search(
@@ -284,6 +298,47 @@ class Alibaba1688OfficialApiProvider:
             )
             for offer in offers
         ]
+
+    def search_offers_keyword_only(
+        self,
+        *,
+        product: dict[str, Any],
+        keyword_profile: dict[str, Any],
+        limit: int,
+    ) -> list[SupplierApiOffer]:
+        """词搜-only 通道（不限量、零图搜成本）。
+
+        选品中心池子小而精，长规格词搜不到东西——所以按候选词从具体到
+        宽泛逐个重试（每次调用免费），拿到结果即停。
+        """
+        if not self.credentials.ready:
+            raise RASupplierApiError("1688 官方 API 密钥尚未完整绑定。")
+        offers: list[SupplierApiOffer] = []
+        last_error: Exception | None = None
+        for keyword in _keyword_search_candidates(
+            product=product, keyword_profile=keyword_profile
+        ):
+            try:
+                keyword_payload = self._call_keyword_search(
+                    product=product,
+                    keyword_profile=keyword_profile,
+                    limit=limit,
+                    keyword=keyword,
+                )
+            except RASupplierApiError as exc:
+                last_error = exc
+                continue
+            offers = _normalize_image_search_offers(
+                keyword_payload,
+                limit=limit,
+                source="alibaba1688_official_keyword_search",
+                api_family="1688_keyword_search",
+            )
+            if offers:
+                break
+        if not offers and last_error is not None:
+            raise last_error
+        return _dedupe_offers(offers, limit=limit)
 
     def _call_image_search(
         self,
@@ -314,12 +369,47 @@ class Alibaba1688OfficialApiProvider:
             endpoint=endpoint,
         )
 
+    def _call_cps_image_search(
+        self,
+        *,
+        image_url: str,
+        limit: int,
+        page: int = 1,
+    ) -> dict[str, Any]:
+        """图搜分销商品（linkplus/alibaba.cps.similar.offer.search）。
+
+        应用级参数为扁平结构（picUrl/page/...），按销量倒序取最热同款。
+        """
+        api_name = os.getenv(
+            "RA_1688_CPS_IMAGE_SEARCH_API_NAME",
+            DEFAULT_1688_CPS_IMAGE_SEARCH_API_NAME,
+        ).strip()
+        namespace = os.getenv(
+            "RA_1688_CPS_IMAGE_SEARCH_NAMESPACE",
+            DEFAULT_1688_CPS_IMAGE_SEARCH_NAMESPACE,
+        ).strip()
+        del limit  # 接口固定分页返回，条数由 normalize 截取。
+        return self._call_openapi(
+            namespace=namespace,
+            api_name=api_name,
+            params={
+                "picUrl": image_url,
+                "page": max(1, int(page)),
+                "sortFields": os.getenv(
+                    "RA_1688_CPS_SORT_FIELDS", "sale_amount:desc"
+                ).strip(),
+            },
+            error_label="1688 分销图搜",
+            allow_business_error=True,
+        )
+
     def _call_keyword_search(
         self,
         *,
         product: dict[str, Any],
         keyword_profile: dict[str, Any],
         limit: int,
+        keyword: str | None = None,
     ) -> dict[str, Any]:
         api_name = os.getenv(
             "RA_1688_KEYWORD_SEARCH_API_NAME",
@@ -329,7 +419,10 @@ class Alibaba1688OfficialApiProvider:
             "RA_1688_KEYWORD_SEARCH_NAMESPACE",
             DEFAULT_1688_KEYWORD_SEARCH_NAMESPACE,
         ).strip()
-        keyword = _keyword_search_term(product=product, keyword_profile=keyword_profile)
+        if keyword is None:
+            keyword = _keyword_search_term(
+                product=product, keyword_profile=keyword_profile
+            )
         if not api_name or not keyword:
             raise RASupplierApiError("1688 关键词搜索 API 未配置或关键词为空。")
         params = {
@@ -442,25 +535,36 @@ class Alibaba1688OfficialApiProvider:
             )
 
         data = urlencode(_flatten_params(request_payload)).encode("utf-8")
-        request = Request(
-            url,
-            data=data,
-            method="POST",
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
-                "Accept": "application/json",
-                "User-Agent": "barong-ra/1.0",
-            },
-        )
         timeout = self.credentials.timeout_seconds or _int_env("RA_1688_TIMEOUT_SECONDS") or 15
-        try:
-            with urlopen(request, timeout=max(3, timeout)) as response:
-                body = response.read().decode("utf-8", errors="replace")
-        except HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")[:500]
-            raise RASupplierApiError(f"{error_label}请求失败：HTTP {exc.code} {detail}") from exc
-        except URLError as exc:
-            raise RASupplierApiError(f"{error_label}网络失败：{exc.reason}") from exc
+        body: str | None = None
+        # QPS 频率限制（gw.QosAppFrequencyLimit）用短退避重试，不算失败。
+        for attempt in range(3):
+            request = Request(
+                url,
+                data=data,
+                method="POST",
+                headers={
+                    "Content-Type": "application/x-www-form-urlencoded;charset=utf-8",
+                    "Accept": "application/json",
+                    "User-Agent": "barong-ra/1.0",
+                },
+            )
+            try:
+                with urlopen(request, timeout=max(3, timeout)) as response:
+                    body = response.read().decode("utf-8", errors="replace")
+                break
+            except HTTPError as exc:
+                detail = exc.read().decode("utf-8", errors="replace")[:500]
+                if "FrequencyLimit" in detail and attempt < 2:
+                    time.sleep(1.5 * (attempt + 1))
+                    continue
+                raise RASupplierApiError(
+                    f"{error_label}请求失败：HTTP {exc.code} {detail}"
+                ) from exc
+            except URLError as exc:
+                raise RASupplierApiError(f"{error_label}网络失败：{exc.reason}") from exc
+        if body is None:
+            raise RASupplierApiError(f"{error_label}请求失败：重试后仍被频率限制。")
 
         try:
             parsed = json.loads(body)
@@ -677,6 +781,15 @@ def _optional_int(value: Any) -> int | None:
     return parsed if parsed > 0 else None
 
 
+def _int_value(value: Any) -> int | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def _money(value: Decimal) -> Decimal:
     return value.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -811,6 +924,104 @@ def _normalize_image_search_offers(
     return output
 
 
+def _cps_price_cny(value: Any) -> Decimal | None:
+    """CPS 接口价格字段为 Long（单位：分）；防御字符串小数（单位：元）。"""
+    if value is None:
+        return None
+    raw = str(value).strip()
+    if not raw:
+        return None
+    try:
+        parsed = Decimal(raw)
+    except Exception:
+        return None
+    if parsed <= 0:
+        return None
+    if "." in raw:
+        return _money(parsed)
+    return _money(parsed / Decimal(100))
+
+
+def _normalize_cps_offers(
+    payload: dict[str, Any],
+    *,
+    limit: int,
+) -> list[SupplierApiOffer]:
+    """图搜分销出参：result.result[] = LinkProductResult 对象数组。"""
+    result_block = payload.get("result")
+    items: list[Any] = []
+    if isinstance(result_block, dict):
+        inner = result_block.get("result")
+        if isinstance(inner, list):
+            items = inner
+    if not items:
+        items = _extract_offer_items(payload)
+    output: list[SupplierApiOffer] = []
+    min_unit_price = _min_official_unit_price_cny()
+    for index, item in enumerate(items):
+        if len(output) >= max(1, min(int(limit or 5), 20)):
+            break
+        if not isinstance(item, dict):
+            continue
+        offer_id = _optional_string(item.get("offerId") or item.get("offer_id"))
+        detail_url = _optional_string(item.get("detailUrl") or item.get("detail_url"))
+        if not detail_url and offer_id:
+            detail_url = f"https://detail.1688.com/offer/{offer_id}.html"
+        if not detail_url:
+            continue
+        price = _cps_price_cny(item.get("price")) or _cps_price_cny(item.get("oldPrice"))
+        if price is None or price < min_unit_price:
+            continue
+        title = _optional_string(item.get("subject"))
+        moq = _int_value(item.get("quantityBegin")) or 1
+        sale_amount = _int_value(item.get("saleAmount"))
+        delivery_free = item.get("deliveryFree") is True
+        city = _optional_string(item.get("city"))
+        province = _optional_string(item.get("province"))
+        supplier_name = "1688分销·" + (city or province or "实力商家")
+        output.append(
+            SupplierApiOffer(
+                supplier_name=supplier_name,
+                supplier_url=detail_url,
+                title=title or "1688 分销图搜同款商品",
+                unit_price_cny=price,
+                domestic_shipping_cny=Decimal("0") if delivery_free else None,
+                moq=moq,
+                rating=None,
+                match_score=max(60, 92 - index * 3),
+                stock=_int_value(item.get("supplyAmount")),
+                monthly_sales=sale_amount,
+                one_piece_hint=moq <= 1,
+                platform="1688",
+                platform_label="1688",
+                source="alibaba1688_cps_image_search",
+                payload={
+                    "official_api": True,
+                    "api_family": "1688_cps_image_search",
+                    "offer_id": offer_id,
+                    "title": title,
+                    "unit": item.get("unit"),
+                    "image_url": item.get("imageUrl"),
+                    "video_url": item.get("videoUrl"),
+                    "detail_url": detail_url,
+                    "delivery_free": delivery_free,
+                    "sale_amount": sale_amount,
+                    "want_buy": _int_value(item.get("wantBuy")),
+                    "best_shop": item.get("best") is True,
+                    "shili_supplier": item.get("shili") is True,
+                    "province": province,
+                    "city": city,
+                    "supply_amount": _int_value(item.get("supplyAmount")),
+                    "services": item.get("services"),
+                    "category_id": item.get("categoryId"),
+                    "raw_price_cent": item.get("price"),
+                    "raw_old_price_cent": item.get("oldPrice"),
+                },
+            )
+        )
+    return output
+
+
 def _dedupe_offers(offers: list[SupplierApiOffer], *, limit: int) -> list[SupplierApiOffer]:
     output: list[SupplierApiOffer] = []
     seen: set[str] = set()
@@ -837,6 +1048,61 @@ def _keyword_search_enabled() -> bool:
         "no",
         "off",
     }
+
+
+_SPEC_PREFIX_RE = re.compile(
+    r"^[\d一二三四五六七八九十]+\s*"
+    r"(?:千克|公斤|毫升|升|米|厘米|毫米|寸|英寸|克|磅|片|只|个|件|包|卷|色|款|"
+    r"kg|g|ml|l|cm|mm|m|pcs|pack)?\s*",
+    re.IGNORECASE,
+)
+_SPEC_NOISE_RE = re.compile(
+    r"[\(（【\[].*?[\)）】\]]|"
+    r"\d+(?:\.\d+)?\s*(?:千克|公斤|毫升|升|厘米|毫米|寸|英寸|克|磅|kg|g|ml|l|cm|mm|pcs)",
+    re.IGNORECASE,
+)
+
+
+def _keyword_search_candidates(
+    *,
+    product: dict[str, Any],
+    keyword_profile: dict[str, Any],
+) -> list[str]:
+    """候选搜索词：原词 → 去规格词 → 核心词，从具体到宽泛逐个尝试。"""
+    raw_values = [
+        keyword_profile.get("product_type_zh"),
+        *(_list_value(keyword_profile.get("core_keywords_zh"))[:3]),
+        product.get("title_zh"),
+    ]
+    candidates: list[str] = []
+
+    def push(value: Any) -> None:
+        text = _optional_string(value)
+        if not text:
+            return
+        cleaned = text.strip()[:30]
+        if cleaned and cleaned not in candidates:
+            candidates.append(cleaned)
+
+    for value in raw_values:
+        text = _optional_string(value)
+        if not text:
+            continue
+        push(text)
+        # 剥掉数量/规格前缀与括号内容："4千克PLA打印丝套装(黑)"→"PLA打印丝套装"
+        simplified = _SPEC_NOISE_RE.sub(" ", text)
+        simplified = _SPEC_PREFIX_RE.sub("", simplified.strip())
+        simplified = re.sub(r"\s+", " ", simplified).strip()
+        push(simplified)
+        # 更宽泛：取简化词的最后两个空格分段（中文核心名词通常在尾部）。
+        parts = simplified.split(" ")
+        if len(parts) >= 2:
+            push(" ".join(parts[-2:]))
+    return candidates[:4] or [
+        value
+        for value in (_keyword_search_term(product=product, keyword_profile=keyword_profile),)
+        if value
+    ]
 
 
 def _keyword_search_term(*, product: dict[str, Any], keyword_profile: dict[str, Any]) -> str | None:

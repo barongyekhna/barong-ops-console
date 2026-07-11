@@ -26,11 +26,23 @@ from r_system_v2.ra.auto_profit import (
     MAX_ASIN_LIMIT,
     MAX_SUPPLIER_LIMIT,
     match_rw_products_for_query,
+    select_auto_candidates,
 )
 from r_system_v2.ra.exchange_rate import get_usd_cny_quote
 from r_system_v2.ra.profit_engine import decimal_value
 from r_system_v2.ra.profit_service import _json_bind
 from r_system_v2.ra.profit_service import profit_formula_config
+from r_system_v2.ra.events import emit_event
+from r_system_v2.ra.prescreen import (
+    load_prescreen_scores,
+    prescreen_mode,
+    run_prescreen_for_product,
+)
+from r_system_v2.ra.quota_ledger import (
+    PROVIDER_1688_CPS_IMAGE_SEARCH,
+    PROVIDER_1688_IMAGE_SEARCH,
+    RAQuotaExhaustedError,
+)
 from r_system_v2.ra.relevance import classify_product_relevance
 from r_system_v2.ra.supplier_discovery import discover_1688_supplier_offers
 from r_system_v2.rw.product_images import primary_product_image_url, product_image_candidates
@@ -56,12 +68,15 @@ def create_auto_profit_job(
     asin_limit: int = DEFAULT_JOB_ASIN_LIMIT,
     supplier_limit: int = DEFAULT_SUPPLIER_LIMIT,
     min_gross_margin: Decimal | None = None,
-    run_ai_mock: bool = True,
+    run_ai_chain: bool = True,
     selection_channel: str = "amazon",
     triggered_by: str | None = None,
+    auto_cruise: bool = False,
+    target_profit_pass: int | None = None,
+    max_products_per_job: int | None = None,
 ) -> dict[str, object]:
     cleaned_query = str(query or "").strip()
-    if not cleaned_query:
+    if not cleaned_query and not auto_cruise:
         raise RAJobError("请输入关键词或类目。")
 
     run_id = str(uuid4())
@@ -69,12 +84,13 @@ def create_auto_profit_job(
         "query": cleaned_query[:120],
         "asin_limit": _bounded_asin_limit(asin_limit),
         "supplier_limit": _bounded_supplier_limit(supplier_limit),
-        "target_profit_pass": _target_profit_pass(),
-        "max_products_per_job": _max_products_per_job(),
+        "target_profit_pass": _target_profit_pass(target_profit_pass),
+        "max_products_per_job": _max_products_per_job(max_products_per_job),
         "min_gross_margin": _number(min_gross_margin),
-        "run_ai_chain": bool(run_ai_mock),
+        "run_ai_chain": bool(run_ai_chain),
         "run_ai_mock": False,
         "selection_channel": _selection_channel(selection_channel),
+        "auto_cruise": bool(auto_cruise),
     }
     counts = _initial_counts(filters)
     db.execute(
@@ -160,6 +176,40 @@ def get_latest_auto_profit_job(
     )
 
 
+def get_auto_profit_job_status(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str | None = None,
+) -> dict[str, object] | None:
+    """Lightweight run status for frontend polling: row + counts only, no items."""
+    row = (
+        _load_job_row(db, org_id=org_id, run_id=run_id)
+        if run_id
+        else _load_latest_job_row(db, org_id=org_id)
+    )
+    if row is None:
+        return None
+    counts = _dict_value(row.get("counts"))
+    if str(row.get("status") or "") in {"queued", "running"}:
+        counts.update(
+            _live_counts(db, org_id=str(row["org_id"]), run_id=str(row["run_id"]))
+        )
+    db.rollback()
+    filters = _dict_value(row.get("filters"))
+    return {
+        "run_id": str(row["run_id"]),
+        "status": row.get("status"),
+        "runtime_mode": row.get("runtime_mode"),
+        "query": filters.get("query"),
+        "counts": counts,
+        "warnings": counts.get("warnings") or [],
+        "created_at": _iso(row.get("created_at")),
+        "started_at": _iso(row.get("started_at")),
+        "finished_at": _iso(row.get("finished_at")),
+    }
+
+
 def cancel_auto_profit_job(
     db: Session,
     *,
@@ -243,6 +293,7 @@ class RaProfitJobWorker:
         min_gross_margin = decimal_value(filters.get("min_gross_margin"))
         run_ai_chain = filters.get("run_ai_chain", filters.get("run_ai_mock")) is not False
         selection_channel = _selection_channel(filters.get("selection_channel") or "amazon")
+        auto_cruise = bool(filters.get("auto_cruise"))
         quote = get_usd_cny_quote()
         target_profit_pass = _target_profit_pass(filters.get("target_profit_pass"))
         max_products_per_job = _max_products_per_job(filters.get("max_products_per_job"))
@@ -251,6 +302,7 @@ class RaProfitJobWorker:
         with self.session_factory() as db:
             with _without_org_data_isolation():
                 counts = _dict_value(job.get("counts"))
+                counts.pop("yield_requested", None)
                 counts.update(
                     {
                         "target_profit_pass": target_profit_pass,
@@ -288,20 +340,36 @@ class RaProfitJobWorker:
                         current_pass >= target_profit_pass
                         or processed >= max_products_per_job
                         or counts.get("fatal_provider_error")
+                        or counts.get("quota_exhausted")
+                        or counts.get("yield_requested")
                     ):
                         _update_job(db, run_id=run_id, status="running", counts=counts)
                         break
-                    products = match_rw_products_for_query(
-                        db,
-                        org_id=org_id,
-                        query=query,
-                        limit=asin_limit,
-                        exclude_asins=attempted_asins,
-                    )
+                    # 当天已「顺延」的产品不再重选，防止图搜额度耗尽时循环空转。
+                    deferred_today = _deferred_asins_today(db, org_id=org_id)
+                    excluded_asins = attempted_asins | deferred_today
+                    if auto_cruise:
+                        products = select_auto_candidates(
+                            db,
+                            org_id=org_id,
+                            limit=asin_limit,
+                            exclude_asins=excluded_asins,
+                        )
+                        products = _order_by_prescreen_score(
+                            db, org_id=org_id, products=products
+                        )
+                    else:
+                        products = match_rw_products_for_query(
+                            db,
+                            org_id=org_id,
+                            query=query,
+                            limit=asin_limit,
+                            exclude_asins=excluded_asins,
+                        )
                     fresh_products = [
                         product
                         for product in products
-                        if str(product.get("asin") or "").upper() not in attempted_asins
+                        if str(product.get("asin") or "").upper() not in excluded_asins
                     ]
                     counts["matched_products"] = int(counts.get("matched_products") or 0) + len(
                         fresh_products
@@ -314,7 +382,14 @@ class RaProfitJobWorker:
                     with _without_org_data_isolation():
                         row = _load_job_row(db, org_id=org_id, run_id=run_id)
                         counts = _dict_value(row.get("counts") if row else {})
-                        if int(counts.get("processed_products") or 0) == 0:
+                        if auto_cruise:
+                            warnings = list(counts.get("warnings") or [])
+                            warnings.append(
+                                "自动巡库：当前没有更多未处理的 R-W 产品，等待新品入库。"
+                            )
+                            counts["warnings"] = warnings[-10:]
+                            _update_job(db, run_id=run_id, status="running", counts=counts)
+                        elif int(counts.get("processed_products") or 0) == 0:
                             notice = _no_rw_product_notice(query)
                             warnings = list(counts.get("warnings") or [])
                             warnings.append(notice["message"])
@@ -346,8 +421,11 @@ class RaProfitJobWorker:
                 target_profit_pass=target_profit_pass,
                 run_ai_chain=run_ai_chain,
                 selection_channel=selection_channel,
+                allow_mock_fallback=not auto_cruise,
                 log=log,
             )
+            if batch_result.get("yielded"):
+                break
             if not batch_result["processed"]:
                 break
 
@@ -356,6 +434,15 @@ class RaProfitJobWorker:
                 row = _load_job_row(db, org_id=org_id, run_id=run_id)
                 counts = _dict_value(row.get("counts") if row else {})
                 counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
+                if counts.pop("yield_requested", None):
+                    # 让位给定向探测：保存进度回队列，手动任务跑完自动续。
+                    warnings = list(counts.get("warnings") or [])
+                    warnings.append("巡库暂让：定向探测优先，完成后自动继续。")
+                    counts["warnings"] = warnings[-10:]
+                    _update_job(db, run_id=run_id, status="queued", counts=counts, finish=False)
+                    if log:
+                        log(f"R-A job yielded to manual probe run_id={run_id}")
+                    return
                 if run_ai_chain:
                     ai_result = load_ai_selection_for_run(
                         db,
@@ -363,15 +450,25 @@ class RaProfitJobWorker:
                         run_id=run_id,
                     )
                     counts.update(_dict_value(ai_result.get("counts")))
-                if counts.get("fatal_provider_error"):
-                    final_status = "failed"
-                elif int(counts.get("profit_pass") or 0) >= target_profit_pass:
+                if int(counts.get("profit_pass") or 0) >= target_profit_pass:
                     final_status = "completed"
+                elif counts.get("quota_exhausted"):
+                    # 日预算用完不算失败：暂停，worker 明天自动重新认领续跑。
+                    final_status = "paused"
+                    counts["quota_exhausted"] = False
+                elif counts.get("fatal_provider_error"):
+                    final_status = "failed"
                 elif counts.get("warnings"):
                     final_status = "partial"
                 else:
                     final_status = "completed"
-                _update_job(db, run_id=run_id, status=final_status, counts=counts, finish=True)
+                _update_job(
+                    db,
+                    run_id=run_id,
+                    status=final_status,
+                    counts=counts,
+                    finish=final_status != "paused",
+                )
         if log:
             log(f"R-A job finished run_id={run_id}")
 
@@ -388,10 +485,12 @@ class RaProfitJobWorker:
         target_profit_pass: int,
         run_ai_chain: bool,
         selection_channel: str,
-        log: Callable[[str], None] | None,
+        allow_mock_fallback: bool = True,
+        log: Callable[[str], None] | None = None,
     ) -> dict[str, int]:
         processed = 0
         product_index = 0
+        was_yielded = False
         ai_workers = _ai_worker_concurrency(None) if run_ai_chain else 0
         with ThreadPoolExecutor(max_workers=self.concurrency) as executor:
             ai_executor = ThreadPoolExecutor(max_workers=ai_workers) if ai_workers > 0 else None
@@ -415,7 +514,15 @@ class RaProfitJobWorker:
                                 return {"processed": processed}
                             counts.update(_live_counts(db, org_id=org_id, run_id=run_id))
                             current_pass = int(counts.get("profit_pass") or 0)
+                            quota_exhausted = bool(counts.get("quota_exhausted"))
+                            if counts.get("yield_requested"):
+                                was_yielded = True
+                    if quota_exhausted or was_yielded:
+                        # 停止投放新产品，只把在途的跑完。
+                        product_index = len(products)
                     if current_pass >= target_profit_pass and not pending:
+                        break
+                    if (quota_exhausted or was_yielded) and not pending:
                         break
 
                     max_pending = self.concurrency
@@ -440,6 +547,7 @@ class RaProfitJobWorker:
                                 supplier_limit,
                                 exchange_rate,
                                 min_gross_margin,
+                                product,
                             )
                         )
                         with self.session_factory() as db:
@@ -450,6 +558,21 @@ class RaProfitJobWorker:
                                     counts.get("selected_products") or 0
                                 ) + 1
                                 _update_job(db, run_id=run_id, status="running", counts=counts)
+                                emit_event(
+                                    db,
+                                    org_id=org_id,
+                                    run_id=run_id,
+                                    stage="selected",
+                                    asin=asin,
+                                    detail={
+                                        "title": product.get("title"),
+                                        "title_zh": product.get("title_zh"),
+                                        "image_url": product.get("image_url"),
+                                        "price": _number(product.get("price")),
+                                        "category": product.get("category"),
+                                        "prescreen_score": product.get("prescreen_score"),
+                                    },
+                                )
 
                     if not pending:
                         break
@@ -475,6 +598,7 @@ class RaProfitJobWorker:
                                     run_id,
                                     str(result["candidate_id"]),
                                     selection_channel,
+                                    allow_mock_fallback,
                                 )
                             )
                         if log:
@@ -496,7 +620,7 @@ class RaProfitJobWorker:
             finally:
                 if ai_executor is not None:
                     ai_executor.shutdown(wait=True)
-        return {"processed": processed}
+        return {"processed": processed, "yielded": was_yielded}
 
     def _record_product_result(
         self,
@@ -509,13 +633,31 @@ class RaProfitJobWorker:
             with _without_org_data_isolation():
                 row = _load_job_row(db, org_id=org_id, run_id=run_id)
                 counts = _dict_value(row.get("counts") if row else {})
-                counts["processed_products"] = int(counts.get("processed_products") or 0) + 1
+                if result.get("deferred"):
+                    # 顺延产品不计入 processed：让"全员顺延"的空转 run 触发冷却。
+                    counts["image_deferred"] = int(counts.get("image_deferred") or 0) + 1
+                    if int(counts["image_deferred"]) >= _max_deferred_per_run():
+                        # 顺延成灾 = 词搜和图搜今天都指望不上，整体歇到明天。
+                        counts["quota_exhausted"] = True
+                        warnings = list(counts.get("warnings") or [])
+                        warnings.append(
+                            "顺延产品过多：今日图搜额度已尽且词搜不可用，任务暂停到明天。"
+                        )
+                        counts["warnings"] = warnings[-10:]
+                else:
+                    counts["processed_products"] = int(counts.get("processed_products") or 0) + 1
+                if result.get("verdict") == "prescreen_cut":
+                    counts["prescreen_cut"] = int(counts.get("prescreen_cut") or 0) + 1
+                elif result.get("prescreen_verdict") in {"keep", "hold"}:
+                    counts["prescreen_pass"] = int(counts.get("prescreen_pass") or 0) + 1
                 if result.get("error"):
                     warnings = list(counts.get("warnings") or [])
                     warnings.append(f"{result.get('asin')}: {result.get('error')}")
                     counts["warnings"] = warnings[-10:]
                     if result.get("fatal"):
                         counts["fatal_provider_error"] = True
+                    if result.get("quota_exhausted"):
+                        counts["quota_exhausted"] = True
                 elif result.get("warnings"):
                     warnings = list(counts.get("warnings") or [])
                     for warning in result.get("warnings") or []:
@@ -581,6 +723,61 @@ class RaProfitJobWorker:
                 _update_job(db, run_id=run_id, status="running", counts=counts)
 
 
+def _deferred_asins_today(db: Session, *, org_id: str) -> set[str]:
+    """今天因图搜额度耗尽而顺延的 ASIN（明天预算刷新后自动重新入场）。"""
+    try:
+        rows = db.execute(
+            text(
+                """
+                SELECT DISTINCT UPPER(asin) AS asin
+                FROM ra_run_events
+                WHERE org_id = :org_id
+                  AND verdict = 'deferred'
+                  AND created_at::date = CURRENT_DATE
+                  AND asin IS NOT NULL
+                """
+            ),
+            {"org_id": org_id},
+        ).mappings()
+        return {str(row["asin"]) for row in rows}
+    except Exception:
+        db.rollback()
+        return set()
+
+
+def _order_by_prescreen_score(
+    db: Session,
+    *,
+    org_id: str,
+    products: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """存量夜扫打好的分数用于排队：好产品优先花今天的付费额度。"""
+    if not products:
+        return products
+    try:
+        scores = load_prescreen_scores(
+            db,
+            org_id=org_id,
+            asins=[str(product.get("asin") or "") for product in products],
+        )
+    except Exception:
+        db.rollback()
+        return products
+    for product in products:
+        asin = str(product.get("asin") or "").strip().upper()
+        row = scores.get(asin) or {}
+        product["prescreen_score"] = row.get("score")
+        product["prescreen_verdict"] = row.get("verdict")
+    return sorted(
+        products,
+        key=lambda product: (
+            int(product.get("prescreen_score") or -1),
+            int(product.get("match_score") or 0),
+        ),
+        reverse=True,
+    )
+
+
 def _process_product_for_job(
     session_factory: sessionmaker[Session],
     org_id: str,
@@ -589,8 +786,63 @@ def _process_product_for_job(
     supplier_limit: int,
     exchange_rate: Decimal,
     min_gross_margin: Decimal | None,
+    product: dict[str, Any] | None = None,
 ) -> dict[str, object]:
     try:
+        # ① DeepSeek 量化初筛：便宜的第一道闸，先于任何付费调用。
+        mode = prescreen_mode()
+        prescreen_result: dict[str, Any] | None = None
+        if mode != "off" and product:
+            try:
+                with session_factory() as db:
+                    with _without_org_data_isolation():
+                        prescreen_result = run_prescreen_for_product(
+                            db,
+                            org_id=org_id,
+                            product=product,
+                            run_id=run_id,
+                        )
+                        emit_event(
+                            db,
+                            org_id=org_id,
+                            run_id=run_id,
+                            stage="prescreen",
+                            asin=asin,
+                            verdict=str(prescreen_result.get("verdict") or ""),
+                            detail={
+                                "score": prescreen_result.get("score"),
+                                "reason": prescreen_result.get("reason"),
+                                "channel_guess": prescreen_result.get("channel_guess"),
+                                "cached": bool(prescreen_result.get("cached")),
+                                "mode": mode,
+                            },
+                        )
+                        if (
+                            mode == "enforce"
+                            and str(prescreen_result.get("verdict") or "") == "cut"
+                        ):
+                            _mark_rw_profit_status(
+                                db,
+                                asin=asin,
+                                status="prescreen_cut",
+                                run_id=run_id,
+                                candidate_id="",
+                                reason=str(prescreen_result.get("reason") or ""),
+                                snapshot=None,
+                            )
+                            return {
+                                "asin": asin,
+                                "verdict": "prescreen_cut",
+                                "prescreen_verdict": "cut",
+                                "warnings": [],
+                            }
+            except Exception as prescreen_exc:  # 初筛失败绝不拦截产品。
+                prescreen_result = {
+                    "verdict": "hold",
+                    "reason": f"初筛异常，按放行处理：{prescreen_exc}",
+                }
+
+        # ② 1688 图搜（花额度）→ ③ 利润硬门。
         with session_factory() as db:
             with _without_org_data_isolation():
                 discovery = discover_1688_supplier_offers(
@@ -604,7 +856,41 @@ def _process_product_for_job(
                     min_gross_margin=min_gross_margin,
                 )
                 verdict = _profit_verdict_from_discovery(discovery)
+                discovery_counts = _dict_value(discovery.get("counts"))
+                emit_event(
+                    db,
+                    org_id=org_id,
+                    run_id=run_id,
+                    stage="supplier_search",
+                    asin=asin,
+                    candidate_id=str(discovery.get("candidate_id") or "") or None,
+                    verdict="complete",
+                    detail={
+                        "candidate_offers": discovery_counts.get("candidate_offers"),
+                        "priced_offers": discovery_counts.get("priced_offers"),
+                        "searches": discovery_counts.get("searches"),
+                        "search_strategy": discovery_counts.get("search_strategy"),
+                    },
+                )
                 if verdict.get("status"):
+                    snapshot = verdict.get("snapshot") or {}
+                    emit_event(
+                        db,
+                        org_id=org_id,
+                        run_id=run_id,
+                        stage="profit_gate",
+                        asin=asin,
+                        candidate_id=str(discovery.get("candidate_id") or "") or None,
+                        verdict=str(verdict["status"]),
+                        detail={
+                            "reason": verdict.get("reason"),
+                            "gross_margin": _number(
+                                snapshot.get("gross_margin")
+                                if isinstance(snapshot, dict)
+                                else None
+                            ),
+                        },
+                    )
                     _mark_rw_profit_status(
                         db,
                         asin=asin,
@@ -622,8 +908,42 @@ def _process_product_for_job(
             "candidate_id": str(discovery.get("candidate_id") or ""),
             "counts": discovery.get("counts"),
             "verdict": verdict.get("status"),
+            "prescreen_verdict": (
+                str(prescreen_result.get("verdict") or "") if prescreen_result else None
+            ),
             "warnings": warnings,
         }
+    except RAQuotaExhaustedError as exc:
+        from r_system_v2.ra.supplier_discovery import _supplier_search_strategy
+
+        if (
+            getattr(exc, "provider", "")
+            in {PROVIDER_1688_IMAGE_SEARCH, PROVIDER_1688_CPS_IMAGE_SEARCH}
+            and _supplier_search_strategy() == "keyword_first"
+        ):
+            # 词搜优先时代：图搜额度尽只影响"词搜确认不了"的产品——
+            # 该产品顺延明天（不标记 ra_profit 状态），流水线继续跑其它产品。
+            try:
+                with session_factory() as db:
+                    with _without_org_data_isolation():
+                        emit_event(
+                            db,
+                            org_id=org_id,
+                            run_id=run_id,
+                            stage="profit_gate",
+                            asin=asin,
+                            verdict="deferred",
+                            detail={"reason": "词搜未确认同款且今日图搜额度已尽，顺延明天重试。"},
+                        )
+            except Exception:
+                pass
+            return {
+                "asin": asin,
+                "verdict": "image_budget_deferred",
+                "deferred": True,
+                "warnings": [],
+            }
+        return {"asin": asin, "error": str(exc), "quota_exhausted": True}
     except Exception as exc:  # pragma: no cover - external provider dependent.
         message = str(exc)
         return {"asin": asin, "error": message, "fatal": _is_fatal_supplier_error(message)}
@@ -635,6 +955,7 @@ def _process_candidate_ai_for_job(
     run_id: str,
     candidate_id: str,
     selection_channel: str,
+    allow_mock_fallback: bool = True,
 ) -> dict[str, object]:
     try:
         with session_factory() as db:
@@ -652,7 +973,8 @@ def _process_candidate_ai_for_job(
         }
     except Exception as exc:  # pragma: no cover - external provider dependent.
         message = str(exc)
-        if _should_fallback_to_mock_ai(message):
+        # 自动巡库模式禁止 mock 静默降级：假结论混进分组比停下来更糟。
+        if allow_mock_fallback and _should_fallback_to_mock_ai(message):
             try:
                 with session_factory() as db:
                     with _without_org_data_isolation():
@@ -794,7 +1116,7 @@ def _mark_rw_profit_status(
 ) -> None:
     normalized_status = (
         status
-        if status in {"pass", "reject", "blocked", "quantity_pending"}
+        if status in {"pass", "reject", "blocked", "quantity_pending", "prescreen_cut"}
         else "failed"
     )
     row = db.execute(
@@ -971,8 +1293,21 @@ def _claim_next_job(db: Session) -> dict[str, Any] | None:
             """
             SELECT run_id, org_id, filters, counts
             FROM ra_selection_runs
-            WHERE channel = 'profit_auto' AND status = 'queued'
-            ORDER BY created_at ASC
+            WHERE channel = 'profit_auto'
+              AND (
+                status = 'queued'
+                OR (status = 'paused' AND updated_at::date < CURRENT_DATE)
+                -- worker 重启/崩溃留下的孤儿任务：10 分钟无心跳即回收续跑。
+                OR (
+                  status = 'running'
+                  AND updated_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+                )
+              )
+            -- 定向探测（手动任务）永远排在自动巡库前面。
+            ORDER BY
+              CASE WHEN COALESCE(filters->>'auto_cruise', 'false') = 'true'
+                   THEN 1 ELSE 0 END,
+              created_at ASC
             LIMIT 1
             FOR UPDATE SKIP LOCKED
             """
@@ -1096,7 +1431,16 @@ def _job_payload(
         sort=item_sort,
         sort_direction=item_sort_direction,
     )
-    ai_selection = load_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
+    ai_summary = load_ai_selection_for_run(db, org_id=org_id, run_id=run_id)
+    # 明细已合并进每个 item.ai_selection；顶层只保留计数，避免载荷翻倍。
+    ai_selection = {
+        "run_id": ai_summary.get("run_id"),
+        "runtime_mode": ai_summary.get("runtime_mode"),
+        "mock": ai_summary.get("mock"),
+        "ai_pipeline_version": ai_summary.get("ai_pipeline_version"),
+        "items": [],
+        "counts": ai_summary.get("counts") or {},
+    }
     db.rollback()
     quote = get_usd_cny_quote()
     return {
@@ -2303,6 +2647,13 @@ def _target_profit_pass(value: Any | None = None) -> int:
     except (TypeError, ValueError):
         parsed = DEFAULT_TARGET_PROFIT_PASS
     return max(1, min(parsed, 50))
+
+
+def _max_deferred_per_run() -> int:
+    try:
+        return max(5, min(int(os.getenv("RA_MAX_DEFERRED_PER_RUN", "40")), 500))
+    except ValueError:
+        return 40
 
 
 def _max_products_per_job(value: Any | None = None) -> int:

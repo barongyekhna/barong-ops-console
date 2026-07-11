@@ -241,7 +241,24 @@ def load_mock_ai_selection_by_candidate(
     return output
 
 
-def _load_candidate_contexts(db: Session, *, org_id: str, run_id: str) -> list[dict[str, Any]]:
+AI_DONE_CANDIDATE_STATUSES = (
+    "profit_passed",
+    "ai_passed",
+    "ai_rejected",
+    "ai_review",
+    "ai_mock_passed",
+    "ai_mock_rejected",
+    "ai_mock_review",
+)
+
+
+def _load_candidate_contexts(
+    db: Session,
+    *,
+    org_id: str,
+    run_id: str,
+    statuses: tuple[str, ...] = ("profit_passed",),
+) -> list[dict[str, Any]]:
     rows = db.execute(
         text(
             """
@@ -256,11 +273,11 @@ def _load_candidate_contexts(db: Session, *, org_id: str, run_id: str) -> list[d
             FROM ra_candidates c
             LEFT JOIN products_rw p ON p.asin = c.source_asin
             WHERE c.org_id = :org_id AND c.run_id = :run_id
-              AND c.candidate_status = 'profit_passed'
+              AND c.candidate_status = ANY(:statuses)
             ORDER BY c.created_at ASC
             """
         ),
-        {"org_id": org_id, "run_id": run_id},
+        {"org_id": org_id, "run_id": run_id, "statuses": list(statuses)},
     ).mappings()
     contexts: list[dict[str, Any]] = []
     for row in rows:
@@ -560,7 +577,7 @@ def _gpt_layer(
 
     return _layer_decision(
         layer="gpt",
-        model_name="mock-gpt-5.5",
+        model_name="mock-gpt-5.6-luna",
         score=score,
         advantages=advantages,
         risks=risks,
@@ -1013,14 +1030,15 @@ def _load_evaluations_by_candidate(
                    payload, created_at
             FROM ra_ai_evaluations
             WHERE org_id = :org_id AND run_id = :run_id
-              AND layer IN ('deepseek', 'gpt', 'opus')
+              AND layer IN ('prescreen', 'deepseek', 'gpt', 'opus')
             ORDER BY created_at ASC
             """
         ),
         {"org_id": org_id, "run_id": run_id},
     ).mappings()
     output: dict[str, list[dict[str, object]]] = {}
-    order = {layer: index for index, layer in enumerate(MOCK_LAYERS)}
+    order = {"prescreen": -1}
+    order.update({layer: index for index, layer in enumerate(MOCK_LAYERS)})
     for row in rows:
         candidate_id = str(row["candidate_id"] or "")
         payload = _dict_value(row.get("payload"))

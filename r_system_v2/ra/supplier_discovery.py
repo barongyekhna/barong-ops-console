@@ -36,6 +36,14 @@ from r_system_v2.ra.supplier_api import (
     supplier_source_mode,
 )
 from r_system_v2.ra.providers import RAnalysisProviderBinding
+from r_system_v2.ra.quota_ledger import (
+    PROVIDER_1688_APP_CALLS,
+    PROVIDER_1688_CPS_IMAGE_SEARCH,
+    PROVIDER_1688_IMAGE_SEARCH,
+    RAQuotaExhaustedError,
+    refund,
+    try_consume,
+)
 from r_system_v2.ra.supplier_keyword_skill import (
     build_supplier_keyword_profile,
     evaluate_supplier_alignment,
@@ -280,9 +288,11 @@ def discover_1688_supplier_offers(
     )
     db.commit()
     source_mode = supplier_source_mode()
+    # 始终启用 DeepSeek 抽词：词搜命中靠干净核心词（如「荧光棒」），
+    # 启发式长串标题在分销选品池里几乎搜不到东西。失败自动回退启发式。
     keyword_profile = build_supplier_keyword_profile(
-        None if source_mode != "serper_legacy" else db,
-        org_id=None if source_mode != "serper_legacy" else org_id,
+        db,
+        org_id=org_id,
         product=product,
     )
     if source_mode != "serper_legacy":
@@ -570,16 +580,162 @@ def _discover_with_supplier_api_provider(
         or product.get("title")
         or asin
     ).strip()
-    query = f"1688官方图搜同类商品：{base_query[:80]}"
-    # Official 1688 calls can take several seconds per product, especially when
-    # enrichment probes productInfo/freight. End any open SQL transaction before
-    # those network calls so PostgreSQL does not see an idle transaction.
-    _discard_db_transaction(db)
-    offers_from_api = provider.search_offers(
-        product=product,
-        keyword_profile=keyword_profile,
-        limit=result_limit,
-    )
+    is_real_provider = provider.provider_name != "mock_1688_api"
+    strategy = _supplier_search_strategy()
+    search_strategy_used = "image_first"
+    image_confirm: dict[str, Any] | None = None
+    offers_from_api: list[Any] | None = None
+
+    # App 全局调用总闸（测试期 5000/天）：每产品按 ~10 次调用估算预扣，
+    # 总闸尽时抛额度异常 → 任务整体暂停到明天，避免整天打 403 空炮。
+    if is_real_provider:
+        try_consume(
+            db,
+            PROVIDER_1688_APP_CALLS,
+            amount=_estimated_calls_per_product(),
+        )
+
+    # ① 词搜优先（免费不限量）：找到候选后用图片感知哈希和亚马逊主图比对，
+    #    确认同款即免掉图搜额度；词搜无果或图片全不相似才降级图搜。
+    keyword_search_error: str | None = None
+    if is_real_provider and strategy == "keyword_first":
+        _discard_db_transaction(db)
+        try:
+            keyword_offers = provider.search_offers_keyword_only(
+                product=product,
+                keyword_profile=keyword_profile,
+                limit=result_limit,
+            )
+        except Exception as exc:
+            # 词搜失败绝不静默：权限/配置问题必须在任务警告里可见。
+            keyword_offers = []
+            keyword_search_error = str(exc)[:200]
+        if keyword_offers:
+            from r_system_v2.ra.image_match import (
+                VERDICT_SAME,
+                VERDICT_SIMILAR,
+                ai_compare_amazon_to_offers,
+                compare_amazon_to_offers,
+            )
+            from r_system_v2.ra.supplier_api import _product_image_url
+
+            amazon_image = _product_image_url(product)
+            offer_images = [
+                (offer.payload or {}).get("image_url") for offer in keyword_offers
+            ]
+            is_seasonal = _is_seasonal_product(product)
+            # AI 看图主判（gpt-4o-mini）：判"同一产品/同类产品/不同产品"。
+            image_confirm = ai_compare_amazon_to_offers(
+                db,
+                org_id=org_id,
+                amazon_image_url=amazon_image,
+                offer_image_urls=offer_images,
+                product_title=product.get("title_zh") or product.get("title"),
+                is_seasonal=is_seasonal,
+            )
+            matched_count = 0
+            if image_confirm.get("available"):
+                verdicts = image_confirm.get("verdicts") or {}
+                # 节日产品图案即商品：只认 same；普通产品 same+similar 都可进利润。
+                accepted = (
+                    {VERDICT_SAME}
+                    if is_seasonal
+                    else {VERDICT_SAME, VERDICT_SIMILAR}
+                )
+                rank = {VERDICT_SAME: 2, VERDICT_SIMILAR: 1}
+                for offer in keyword_offers:
+                    if offer.payload is None:
+                        continue
+                    entry = verdicts.get(str(offer.payload.get("image_url") or ""))
+                    verdict = str((entry or {}).get("verdict") or "")
+                    offer.payload["image_verdict"] = verdict or None
+                    offer.payload["image_confidence"] = (entry or {}).get("confidence")
+                    offer.payload["image_matched"] = verdict in accepted
+                    offer.payload["similar_reference_price"] = (
+                        verdict == VERDICT_SIMILAR
+                    )
+                    offer.payload["image_match_rank"] = rank.get(verdict, 0)
+                    if verdict in accepted:
+                        matched_count += 1
+                image_confirm["matched_count"] = matched_count
+            else:
+                # AI 不可用 → dHash 降级（认"同图"，宁漏不冤）。
+                fallback = compare_amazon_to_offers(amazon_image, offer_images)
+                threshold = float(fallback.get("threshold") or 0.7)
+                for offer in keyword_offers:
+                    if offer.payload is None:
+                        continue
+                    image_url = offer.payload.get("image_url")
+                    score = (
+                        fallback["scores"].get(str(image_url)) if image_url else None
+                    )
+                    offer.payload["image_similarity"] = score
+                    matched = bool(score is not None and score >= threshold)
+                    offer.payload["image_matched"] = matched
+                    offer.payload["image_match_rank"] = 2 if matched else 0
+                matched_count = int(fallback.get("matched_count") or 0)
+                fallback["ai_error"] = image_confirm.get("error")
+                image_confirm = {**fallback, "provider_mode": "dhash_fallback"}
+            if matched_count >= _keyword_first_min_matched():
+                keyword_offers = sorted(
+                    keyword_offers,
+                    key=lambda item: (
+                        int((item.payload or {}).get("image_match_rank") or 0),
+                        item.match_score,
+                    ),
+                    reverse=True,
+                )
+                offers_from_api = keyword_offers
+                search_strategy_used = "keyword_first"
+
+    # ② 图搜路径：image_first 策略，或词搜优先未确认同款时的兜底。
+    #    双通道瀑布：跨境图搜（330/天）优先，用完自动切分销图搜（50万次包，2600/天）。
+    if offers_from_api is None:
+        image_channel = "cross"
+        image_provider_key = PROVIDER_1688_IMAGE_SEARCH
+        if is_real_provider:
+            search_strategy_used = (
+                "image_fallback" if strategy == "keyword_first" else "image_first"
+            )
+            try:
+                try_consume(db, PROVIDER_1688_IMAGE_SEARCH)
+            except RAQuotaExhaustedError:
+                # 跨境额度尽 → 分销包接力；分销也尽才真正抛额度异常。
+                try_consume(db, PROVIDER_1688_CPS_IMAGE_SEARCH)
+                image_channel = "cps"
+                image_provider_key = PROVIDER_1688_CPS_IMAGE_SEARCH
+                search_strategy_used = (
+                    "cps_image_fallback"
+                    if strategy == "keyword_first"
+                    else "cps_image_first"
+                )
+        # Official 1688 calls can take several seconds per product, especially when
+        # enrichment probes productInfo/freight. End any open SQL transaction before
+        # those network calls so PostgreSQL does not see an idle transaction.
+        _discard_db_transaction(db)
+        try:
+            offers_from_api = provider.search_offers(
+                product=product,
+                keyword_profile=keyword_profile,
+                limit=result_limit,
+                image_channel=image_channel,
+            )
+        except Exception as exc:
+            if is_real_provider:
+                refund(db, image_provider_key)
+            if image_channel == "cps" and "FrequencyLimit" in str(exc):
+                # 分销包配额未到账/被限频：视同该通道今日额度耗尽，
+                # 产品走顺延而不是报错刷屏；配额到账后自动恢复。
+                raise RAQuotaExhaustedError(
+                    PROVIDER_1688_CPS_IMAGE_SEARCH, used=0, budget=0
+                ) from exc
+            raise
+    if search_strategy_used == "keyword_first":
+        query = f"1688官方词搜同款（图片已比对）：{base_query[:80]}"
+    elif search_strategy_used.startswith("cps_"):
+        query = f"1688分销图搜同款（50万次包）：{base_query[:80]}"
+    else:
+        query = f"1688官方图搜同类商品：{base_query[:80]}"
     _discard_db_transaction(db)
     _insert_supplier_search(
         db,
@@ -599,6 +755,8 @@ def _discover_with_supplier_api_provider(
             "keyword_profile": keyword_profile,
             "searched_at": datetime.now(UTC).isoformat(),
             "mocked": provider.provider_name == "mock_1688_api",
+            "search_strategy": search_strategy_used,
+            "image_confirm": image_confirm,
             "results": [
                 {
                     "supplier_name": offer.supplier_name,
@@ -619,6 +777,8 @@ def _discover_with_supplier_api_provider(
 
     offers: list[dict[str, object]] = []
     warnings: list[str] = []
+    if keyword_search_error:
+        warnings.append(f"{asin}: 1688 词搜失败（{keyword_search_error}）")
     searches: list[dict[str, object]] = [
         {
             "search_id": search_id,
@@ -761,7 +921,14 @@ def _discover_with_supplier_api_provider(
         priced_count = sum(1 for offer in offers if offer["unit_price_cny"] is not None)
 
     profit_run: dict[str, object] | None = None
-    if auto_calculate and priced_count >= min_profit_suppliers:
+    if auto_calculate and priced_count >= 1:
+        # 图搜额度已经花了：只要有可定价供应商就出利润结论，
+        # 样本不足正式要求时降级为低置信度而不是废单。
+        if priced_count < min_profit_suppliers:
+            warnings.append(
+                f"{asin}: 可定价供应商仅 {priced_count} 条（正式要求 {min_profit_suppliers} 条），"
+                "利润结论按低置信度处理，后续 AI 层会复核。"
+            )
         profit_run = run_profit_for_existing_offers(
             db,
             org_id=org_id,
@@ -773,7 +940,7 @@ def _discover_with_supplier_api_provider(
         )
     elif auto_calculate:
         warnings.append(
-            f"{asin}: 可靠可定价供应商仅 {priced_count} 条，不足 {min_profit_suppliers} 条，未生成正式利润结论。"
+            f"{asin}: 1688 图搜与词搜兜底均未找到可定价供应商，未生成利润结论。"
         )
         db.commit()
 
@@ -789,9 +956,49 @@ def _discover_with_supplier_api_provider(
             "searches": len(searches),
             "candidate_offers": len(offers),
             "priced_offers": priced_count,
+            "search_strategy": search_strategy_used,
+            "image_search_used": search_strategy_used != "keyword_first",
         },
         "warnings": warnings,
     }
+
+
+_SEASONAL_KEYWORDS = (
+    "christmas", "xmas", "halloween", "easter", "valentine", "thanksgiving",
+    "new year", "st patrick", "st. patrick", "4th of july", "fourth of july",
+    "independence day", "hanukkah", "advent",
+    "圣诞", "万圣", "复活节", "情人节", "感恩节", "新年", "元旦", "春节",
+    "国庆", "独立日", "节日装饰",
+)
+
+
+def _is_seasonal_product(product: dict[str, Any]) -> bool:
+    """节日主题产品：图案/主题即商品本身，图片比对只认 same_product。"""
+    blob = " ".join(
+        str(product.get(key) or "").lower()
+        for key in ("title", "title_zh", "category", "category_path", "source_query")
+    )
+    return any(keyword in blob for keyword in _SEASONAL_KEYWORDS)
+
+
+def _supplier_search_strategy() -> str:
+    raw = os.getenv("RA_1688_SEARCH_STRATEGY", "keyword_first").strip().lower()
+    return raw if raw in {"keyword_first", "image_first"} else "keyword_first"
+
+
+def _estimated_calls_per_product() -> int:
+    """每产品对 1688 App 的调用次数估算（词搜重试+图搜+offer 详情/运费探测）。"""
+    try:
+        return max(1, min(int(os.getenv("RA_1688_CALLS_PER_PRODUCT_EST", "10")), 50))
+    except ValueError:
+        return 10
+
+
+def _keyword_first_min_matched() -> int:
+    try:
+        return max(1, min(int(os.getenv("RA_KEYWORD_FIRST_MIN_MATCHED", "1")), 5))
+    except ValueError:
+        return 1
 
 
 def _append_1688_keyword_fallback_offers(

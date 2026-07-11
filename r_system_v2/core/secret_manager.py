@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 import os
-from typing import Any, Callable
+from threading import Lock
+from typing import Any, Callable, Iterator
 
 from r_system_v2.core.secret_event_bus import (
     SECRET_RELOAD_REQUESTED,
@@ -34,6 +36,7 @@ R_ANALYSIS_MODULE_ID = "r.analysis"
 
 SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
     "keepa": (
+        (R_ANALYSIS_MODULE_ID, "keepa"),
         (R_WAREHOUSE_MODULE_ID, "keepa"),
     ),
     "deepseek": (
@@ -142,37 +145,47 @@ class SecretManager:
     def __init__(self, db_session: Any | None = None, database_url: str | None = None) -> None:
         self.db_session = db_session
         self.database_url = database_url or os.getenv("DATABASE_URL")
-        self._owned_session: Any | None = None
+        self._owned_engine: Any | None = None
+        self._owned_session_factory: Callable[[], Any] | None = None
+        self._session_factory_lock = Lock()
 
     def get_key(self, service: str, org_id: str) -> str:
         service = self._normalize_service(service)
         org_id = self._normalize_org_id(org_id)
-        db = self._session()
-        if db is None:
-            cached = self._cache.get((org_id, service))
-            if cached is not None:
-                return cached.value
-            raise SecretNotFoundError(f"api_key_orchestration_unavailable:{org_id}:{service}")
+        with self._session_scope() as db:
+            if db is None:
+                cached = self._cache.get((org_id, service))
+                if cached is not None:
+                    return cached.value
+                raise SecretNotFoundError(
+                    f"api_key_orchestration_unavailable:{org_id}:{service}"
+                )
 
-        entry = self._resolve_from_api_key_orchestration(db, service=service, org_id=org_id)
+            entry = self._resolve_from_api_key_orchestration(
+                db,
+                service=service,
+                org_id=org_id,
+            )
         self._cache[(org_id, service)] = entry
         return entry.value
 
     def get_secret_config(self, service: str, org_id: str) -> dict[str, Any]:
         service = self._normalize_service(service)
         org_id = self._normalize_org_id(org_id)
-        db = self._session()
-        if db is None:
-            entry = self._cache.get((org_id, service))
-            if entry is None:
-                raise SecretNotFoundError(f"api_key_orchestration_unavailable:{org_id}:{service}")
-        else:
-            entry = self._resolve_from_api_key_orchestration(
-                db,
-                service=service,
-                org_id=org_id,
-            )
-            self._cache[(org_id, service)] = entry
+        with self._session_scope() as db:
+            if db is None:
+                entry = self._cache.get((org_id, service))
+                if entry is None:
+                    raise SecretNotFoundError(
+                        f"api_key_orchestration_unavailable:{org_id}:{service}"
+                    )
+            else:
+                entry = self._resolve_from_api_key_orchestration(
+                    db,
+                    service=service,
+                    org_id=org_id,
+                )
+                self._cache[(org_id, service)] = entry
         return {
             "service": service,
             "org_id": org_id,
@@ -283,11 +296,14 @@ class SecretManager:
         service = self._normalize_service(service)
         org_id = self._normalize_org_id(org_id)
         try:
-            entry = self._resolve_from_api_key_orchestration(
-                self._required_session(),
-                service=service,
-                org_id=org_id,
-            )
+            with self._session_scope() as db:
+                if db is None:
+                    raise SecretNotFoundError("api_key_orchestration_unavailable")
+                entry = self._resolve_from_api_key_orchestration(
+                    db,
+                    service=service,
+                    org_id=org_id,
+                )
         except SecretManagerError:
             return SecretStatus(
                 service=service,
@@ -341,27 +357,59 @@ class SecretManager:
             raise SecretIsolationError("org_id_required")
         return normalized
 
-    def _required_session(self) -> Any:
-        db = self._session()
-        if db is None:
-            raise SecretNotFoundError("api_key_orchestration_unavailable")
-        return db
-
-    def _session(self) -> Any | None:
+    @contextmanager
+    def _session_scope(self) -> Iterator[Any | None]:
         if self.db_session is not None:
-            return self.db_session
-        if self._owned_session is not None:
-            return self._owned_session
+            yield self.db_session
+            return
+
+        session_factory = self._owned_factory()
+        if session_factory is None:
+            yield None
+            return
+
+        db = session_factory()
+        try:
+            yield db
+        finally:
+            try:
+                if db.in_transaction():
+                    db.rollback()
+            except Exception:
+                try:
+                    db.invalidate()
+                except Exception:
+                    pass
+            finally:
+                db.close()
+
+    def _owned_factory(self) -> Callable[[], Any] | None:
+        if self._owned_session_factory is not None:
+            return self._owned_session_factory
         if not self.database_url:
             return None
-        try:
-            from sqlalchemy import create_engine
-            from sqlalchemy.orm import sessionmaker
-        except ImportError:
-            return None
-        engine = create_engine(self.database_url, pool_pre_ping=True)
-        self._owned_session = sessionmaker(bind=engine, expire_on_commit=False)()
-        return self._owned_session
+        with self._session_factory_lock:
+            if self._owned_session_factory is not None:
+                return self._owned_session_factory
+            try:
+                from sqlalchemy import create_engine
+                from sqlalchemy.orm import sessionmaker
+            except ImportError:
+                return None
+            self._owned_engine = create_engine(self.database_url, pool_pre_ping=True)
+            self._owned_session_factory = sessionmaker(
+                bind=self._owned_engine,
+                expire_on_commit=False,
+            )
+        return self._owned_session_factory
+
+    def close(self) -> None:
+        with self._session_factory_lock:
+            engine = self._owned_engine
+            self._owned_engine = None
+            self._owned_session_factory = None
+        if engine is not None:
+            engine.dispose()
 
     def _resolve_from_api_key_orchestration(
         self,
@@ -403,35 +451,35 @@ class SecretManager:
         )
 
     def _database_watch_snapshot(self) -> dict[tuple[str, str], str]:
-        db = self._session()
-        if db is None:
-            return {}
-        try:
-            from sqlalchemy import text
-        except ImportError:
-            return {}
-        try:
-            result = db.execute(
-                text(
-                    """
-                    SELECT
-                        b.org_id,
-                        b.module_id,
-                        b.key_alias,
-                        b.key_id,
-                        CAST(b.updated_at AS TEXT) AS binding_updated_at,
-                        CAST(k.updated_at AS TEXT) AS key_updated_at
-                    FROM api_key_module_bindings b
-                    JOIN api_key_records k ON k.key_id = b.key_id
-                    WHERE b.status = 'active'
-                      AND k.status = 'active'
-                      AND k.org_id = b.org_id
-                    """
+        with self._session_scope() as db:
+            if db is None:
+                return {}
+            try:
+                from sqlalchemy import text
+            except ImportError:
+                return {}
+            try:
+                result = db.execute(
+                    text(
+                        """
+                        SELECT
+                            b.org_id,
+                            b.module_id,
+                            b.key_alias,
+                            b.key_id,
+                            CAST(b.updated_at AS TEXT) AS binding_updated_at,
+                            CAST(k.updated_at AS TEXT) AS key_updated_at
+                        FROM api_key_module_bindings b
+                        JOIN api_key_records k ON k.key_id = b.key_id
+                        WHERE b.status = 'active'
+                          AND k.status = 'active'
+                          AND k.org_id = b.org_id
+                        """
+                    )
                 )
-            )
-        except Exception:
-            return {}
-        rows = list(result.mappings().all())
+            except Exception:
+                return {}
+            rows = list(result.mappings().all())
         snapshot: dict[tuple[str, str], str] = {}
         for row in rows:
             module_alias = (str(row["module_id"]), str(row["key_alias"]))

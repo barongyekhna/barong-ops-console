@@ -2,11 +2,9 @@
 
 import {
   AlertTriangle,
-  CheckCircle2,
   Copy,
   Database,
   ExternalLink,
-  Loader2,
   Search,
 } from "lucide-react";
 import {
@@ -22,6 +20,7 @@ import {
   createRaAutoProfitJob,
   getRaAutoProfitJob,
   getRaFrameworkStatus,
+  getRaJobStatus,
   getLatestRaAutoProfitJob,
   getRaProfitSnapshots,
 } from "@/modules/r/analysis/api";
@@ -33,12 +32,16 @@ import type {
   RaProfitSnapshot,
 } from "@/modules/r/analysis/types";
 
+import { RadarScan } from "@/modules/r/analysis/RadarScan";
+
 import styles from "./AnalysisWorkspace.module.css";
 
 const DEFAULT_ASIN_LIMIT = 20;
 const DEFAULT_SUPPLIER_LIMIT = 5;
 const RESULT_PAGE_SIZE = 50;
-const POLL_INTERVAL_MS = 3_000;
+const POLL_INTERVAL_MS = 5_000;
+const POLL_BACKOFF_MAX_MS = 30_000;
+const ITEMS_REFRESH_MS = 30_000;
 const DEFAULT_ITEMS_QUERY: RaAutoProfitJobItemsQuery = {
   item_page: 1,
   item_page_size: RESULT_PAGE_SIZE,
@@ -47,7 +50,7 @@ const DEFAULT_ITEMS_QUERY: RaAutoProfitJobItemsQuery = {
   item_verdict: "all",
 };
 
-export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) {
+export function AnalysisWorkspace() {
   const [status, setStatus] = useState<RaFrameworkStatus | null>(null);
   const [snapshots, setSnapshots] = useState<RaProfitSnapshot[]>([]);
   const [query, setQuery] = useState("");
@@ -100,15 +103,81 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
     };
   }, []);
 
+  // 轻量状态轮询：只拉 status + counts（毫秒级查询），带错误退避。
+  useEffect(() => {
+    if (!result?.run_id || isTerminalStatus(result.status)) {
+      return undefined;
+    }
+
+    let cancelled = false;
+    let timer: number | undefined;
+    let errorStreak = 0;
+    const runId = result.run_id;
+
+    const tick = async () => {
+      try {
+        const statusPayload = await getRaJobStatus(runId);
+        if (cancelled) {
+          return;
+        }
+        errorStreak = 0;
+        setRunError(null);
+        setResult((prev) =>
+          prev && prev.run_id === statusPayload.run_id
+            ? {
+                ...prev,
+                status: statusPayload.status,
+                counts: { ...prev.counts, ...statusPayload.counts },
+                warnings: statusPayload.warnings ?? prev.warnings,
+                finished_at: statusPayload.finished_at ?? prev.finished_at,
+              }
+            : prev,
+        );
+        setRunning(!isTerminalStatus(statusPayload.status));
+      } catch (requestError) {
+        if (cancelled) {
+          return;
+        }
+        errorStreak += 1;
+        setRunError(
+          requestError instanceof Error
+            ? requestError.message
+            : "读取后台任务进度失败。",
+        );
+      }
+      if (!cancelled) {
+        const delay = Math.min(
+          POLL_INTERVAL_MS * 2 ** Math.min(errorStreak, 3),
+          POLL_BACKOFF_MAX_MS,
+        );
+        timer = window.setTimeout(() => {
+          void tick();
+        }, delay);
+      }
+    };
+
+    timer = window.setTimeout(() => {
+      void tick();
+    }, POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) {
+        window.clearTimeout(timer);
+      }
+    };
+  }, [result?.run_id, result?.status]);
+
+  // 明细列表刷新：翻页/筛选变化、状态到达终态时立即拉；运行中每 15 秒节流刷新一次。
   useEffect(() => {
     if (!result?.run_id) {
       return undefined;
     }
 
     let cancelled = false;
-    const poll = async () => {
+    const runId = result.run_id;
+    const fetchItems = async () => {
       try {
-        const payload = await getRaAutoProfitJob(result.run_id, itemsQuery);
+        const payload = await getRaAutoProfitJob(runId, itemsQuery);
         if (cancelled) {
           return;
         }
@@ -131,17 +200,16 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
       }
     };
 
+    void fetchItems();
     if (isTerminalStatus(result.status)) {
-      void poll();
       return () => {
         cancelled = true;
       };
     }
 
     const timer = window.setInterval(() => {
-      void poll();
-    }, POLL_INTERVAL_MS);
-    void poll();
+      void fetchItems();
+    }, ITEMS_REFRESH_MS);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
@@ -199,62 +267,21 @@ export function AnalysisWorkspace({ view }: { view: "dashboard" | "analysis" }) 
 
   return (
     <div className={styles.workspace}>
-      <section className={styles.heroBand}>
-        <div className={styles.heroText}>
-          <span className={styles.kicker}>R-A 利润 + 多 AI</span>
-          <h2>{view === "dashboard" ? "选品候选总览" : "关键词/类目自动选品"}</h2>
-          <p>
-            输入模糊关键词或类目后，系统只从 R-W 产品库中匹配同关键词/同类目的
-            ASIN，再自动用 1688 官方图搜寻找同款供应商、计算毛利润，并把利润通过的
-            产品送入 Rainforest 竞争富化和 DeepSeek/GPT/Opus 三层选品链。
-          </p>
-        </div>
-        <div className={styles.statusPill} data-state={error ? "error" : "ready"}>
-          {error ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
-          <span>{error ? "状态接口异常" : loading ? "读取中" : "后端已连接"}</span>
-        </div>
-      </section>
-
-      {error ? (
-        <section className={styles.noticeBand}>
-          <AlertTriangle size={18} />
-          <div>
-            <strong>后端状态接口暂时不可读，但页面不会清空</strong>
-            <span>{error}</span>
-          </div>
-        </section>
-      ) : null}
-
-      <section className={styles.searchBand}>
-        <form className={styles.searchForm} onSubmit={handleSubmit}>
-          <label htmlFor="ra-auto-query">关键词 / 类目</label>
-          <div className={styles.searchRow}>
-            <Search size={18} />
-            <input
-              id="ra-auto-query"
-              maxLength={120}
-              placeholder="例如：露营桌、办公收纳、庭院灯"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-            <button disabled={running || !query.trim()} type="submit">
-              {running ? <Loader2 className={styles.spinIcon} size={17} /> : <Search size={17} />}
-              <span>{running ? "后台分析中" : "开始自动分析"}</span>
-            </button>
-          </div>
-          <p>
-            后台每批最多抓取 {DEFAULT_ASIN_LIMIT} 个 R-W 候选 ASIN，每个
-            ASIN 优先抓取 {DEFAULT_SUPPLIER_LIMIT} 个一件代发/一件起批供应商，
-            若利润通过不足 10 个会继续从 R-W 补货，页面每 3 秒自动刷新结果。
-          </p>
-        </form>
-        {runError ? (
-          <div className={styles.inlineError}>
-            <AlertTriangle size={16} />
-            <span>{runError}</span>
-          </div>
-        ) : null}
-      </section>
+      <RadarScan
+        running={running}
+        query={query}
+        onQueryChange={setQuery}
+        onSubmit={handleSubmit}
+        counts={{
+          matched: summary.matched,
+          processed: result?.counts.processed_products ?? null,
+          pass: summary.passed,
+          aiPass: summary.aiPassed,
+        }}
+        statusText={result ? jobStatusLabel(result.status) : null}
+        error={error}
+        runError={runError}
+      />
 
       <section className={styles.metricGrid} aria-label="R-A 自动利润指标">
         <Metric label="R-W 匹配产品" value={formatCount(summary.matched)} />
@@ -1687,11 +1714,23 @@ function jobStatusLabel(value: string | null | undefined) {
   if (value === "failed") {
     return "任务失败";
   }
+  if (value === "paused") {
+    return "已暂停（今日额度用完，明天自动继续）";
+  }
+  if (value === "cancelled") {
+    return "已取消";
+  }
   return value || "等待中";
 }
 
 function isTerminalStatus(value: string | null | undefined) {
-  return value === "completed" || value === "partial" || value === "failed";
+  return (
+    value === "completed" ||
+    value === "partial" ||
+    value === "failed" ||
+    value === "cancelled" ||
+    value === "paused"
+  );
 }
 
 function formatRate(value: number | null | undefined) {

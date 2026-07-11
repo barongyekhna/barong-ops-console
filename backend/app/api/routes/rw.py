@@ -434,17 +434,6 @@ def rw_products(
             params["state"] = state
     where_sql = f"WHERE {' AND '.join(filters)}" if filters else ""
     try:
-        total_row = db.execute(
-            text(
-                f"""
-                SELECT COUNT(*) AS total
-                FROM products_rw
-                {where_sql}
-                """
-            ),
-            params,
-        ).mappings().first()
-        total_count = int(total_row["total"] or 0) if total_row else 0
         result = db.execute(
             text(
                 f"""
@@ -455,7 +444,8 @@ def rw_products(
                        fulfillment_method, lithium_battery_warning,
                        brand_share, price_trend, rating, state,
                        rule_reject_reason, category_id, category_path, skill_score,
-                       features, last_keepa_pull, updated_at
+                       features, last_keepa_pull, updated_at,
+                       COUNT(*) OVER() AS total_count
                 FROM products_rw
                 {where_sql}
                 ORDER BY {order_column} {order_sql} NULLS LAST
@@ -465,7 +455,22 @@ def rw_products(
             ),
             params,
         )
-        for row in result:
+        fetched_rows = list(result)
+        if fetched_rows:
+            total_count = int(fetched_rows[0].total_count or 0)
+        elif offset > 0:
+            total_row = db.execute(
+                text(
+                    f"""
+                    SELECT COUNT(*) AS total
+                    FROM products_rw
+                    {where_sql}
+                    """
+                ),
+                params,
+            ).mappings().first()
+            total_count = int(total_row["total"] or 0) if total_row else 0
+        for row in fetched_rows:
             features = row.features if isinstance(row.features, dict) else {}
             image_candidates = product_image_candidates(
                 asin=row.asin,

@@ -128,7 +128,7 @@ export const navigationGroups: NavigationGroup[] = [
       {
         category: "business",
         denied_behavior: "show_locked",
-        href: "/r-a/dashboard",
+        href: "/r-a/live",
         icon: ClipboardCheck,
         label: "R-A 产品分析中心",
         module_key: "r.analysis",
