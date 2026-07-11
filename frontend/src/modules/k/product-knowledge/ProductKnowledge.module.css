@@ -1948,3 +1948,133 @@
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
+
+/* ===== 卖点整理 · 阅读/编辑双模式 ===== */
+
+.spReadHead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.spChips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.spMetaChip,
+.spKeywordChip,
+.spTagChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 650;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.spMetaChip {
+  background: rgb(120 200 255 / 8%);
+  border-color: rgb(120 200 255 / 35%);
+}
+
+.spKeywordChip {
+  background: rgb(14 122 95 / 8%);
+  border-color: rgb(14 122 95 / 30%);
+}
+
+.spTagChip {
+  background: rgb(255 177 59 / 8%);
+  border-color: rgb(255 177 59 / 35%);
+}
+
+.spReadList {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.spReadCard {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 12px 16px;
+  background: rgb(255 255 255 / 3%);
+}
+
+.spReadCard p {
+  margin: 8px 0 0;
+  font-size: 0.92rem;
+  line-height: 1.6;
+}
+
+.spReadCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.spCategoryBadge {
+  display: inline-flex;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  color: #0e7a5f;
+  background: rgb(14 122 95 / 10%);
+  border: 1px solid rgb(14 122 95 / 30%);
+}
+
+.spScoreBadge {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.spFold {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.spFold summary {
+  cursor: pointer;
+  padding: 11px 16px;
+  font-size: 0.84rem;
+  font-weight: 700;
+  user-select: none;
+}
+
+.spFold[open] summary {
+  border-bottom: 1px solid var(--line);
+}
+
+.spFold p {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 0.88rem;
+  line-height: 1.7;
+  white-space: pre-wrap;
+}
+
+.spEditBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}

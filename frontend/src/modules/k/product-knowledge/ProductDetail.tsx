@@ -9,6 +9,7 @@ import {
   FileText,
   ImagePlus,
   LoaderCircle,
+  Pencil,
   Play,
   Plus,
   RotateCcw,
@@ -501,6 +502,7 @@ export function ProductDetail({
   const [isSavingSellingPoints, setIsSavingSellingPoints] = useState(false);
   const [sellingPointsApproved, setSellingPointsApproved] = useState(false);
   const [sellingPointsTouched, setSellingPointsTouched] = useState(false);
+  const [isEditingSellingPoints, setIsEditingSellingPoints] = useState(false);
   const [sellingPointsCopyStatus, setSellingPointsCopyStatus] = useState("");
 
   const riskKeywords = useMemo(() => normalizeRiskKeywords(workflow), [workflow]);
@@ -1683,6 +1685,7 @@ export function ProductDetail({
               onClick={() => {
                 setSellingPointsTouched(true);
                 setSellingPointsApproved(false);
+                setIsEditingSellingPoints(false);
                 onGenerateSellingPoints?.();
               }}
               type="button"
@@ -1731,8 +1734,96 @@ export function ProductDetail({
           <p className={styles.sellingPointsError}>{sellingPointReviewError}</p>
         ) : null}
 
-        {sellingPoints ? (
+        {sellingPoints && !isEditingSellingPoints ? (
           <div className={styles.sellingPointsResult}>
+            {/* ---- 阅读模式：整洁展示，点「编辑」才出输入框 ---- */}
+            <div className={styles.spReadHead}>
+              <div className={styles.spChips}>
+                <span className={styles.spMetaChip}>语言 {targetLanguage || "—"}</span>
+                {seoKeywordsText
+                  .split(/[,，\n]/)
+                  .map((keyword) => keyword.trim())
+                  .filter(Boolean)
+                  .slice(0, 12)
+                  .map((keyword) => (
+                    <span className={styles.spKeywordChip} key={keyword}>
+                      {keyword}
+                    </span>
+                  ))}
+                {marketTagsText
+                  .split(/[,，\n]/)
+                  .map((tag) => tag.trim())
+                  .filter(Boolean)
+                  .slice(0, 8)
+                  .map((tag) => (
+                    <span className={styles.spTagChip} key={tag}>
+                      {tag}
+                    </span>
+                  ))}
+              </div>
+              <button
+                className="secondary-button"
+                onClick={() => setIsEditingSellingPoints(true)}
+                type="button"
+              >
+                <Pencil aria-hidden="true" size={15} />
+                编辑
+              </button>
+            </div>
+
+            <ol className={styles.spReadList}>
+              {sellingBullets.map((bullet, index) => (
+                <li className={styles.spReadCard} key={`${index}-${bullet.category}`}>
+                  <div className={styles.spReadCardTop}>
+                    <span className={styles.spCategoryBadge}>
+                      {bullet.category || "卖点"}
+                    </span>
+                    <span
+                      className={styles.spScoreBadge}
+                      title="重要度"
+                    >
+                      ★ {Number(bullet.importance_score ?? 0).toFixed(1)}
+                    </span>
+                  </div>
+                  <p>{bullet.text}</p>
+                </li>
+              ))}
+            </ol>
+
+            {chineseTranslation ? (
+              <details className={styles.spFold} open>
+                <summary>中文翻译（供你审核）</summary>
+                <p>{chineseTranslation}</p>
+              </details>
+            ) : null}
+            {marketingCopy ? (
+              <details className={styles.spFold}>
+                <summary>转化文案</summary>
+                <p>{marketingCopy}</p>
+              </details>
+            ) : null}
+            {translatedVersion ? (
+              <details className={styles.spFold}>
+                <summary>目标市场译文</summary>
+                <p>{translatedVersion}</p>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+
+        {sellingPoints && isEditingSellingPoints ? (
+          <div className={styles.sellingPointsResult}>
+            <div className={styles.spEditBar}>
+              <span>编辑模式 —— 改完点「完成编辑」回到清爽视图，再提交卖点。</span>
+              <button
+                className="secondary-button"
+                onClick={() => setIsEditingSellingPoints(false)}
+                type="button"
+              >
+                <CheckCircle2 aria-hidden="true" size={15} />
+                完成编辑
+              </button>
+            </div>
             <div className={styles.sellingPointEditorGrid}>
               <label className={styles.field}>
                 <span>目标语言</span>
@@ -1836,11 +1927,13 @@ export function ProductDetail({
               />
             </label>
           </div>
-        ) : (
+        ) : null}
+
+        {!sellingPoints ? (
           <p className={styles.sellingPointsEmpty}>
             点击生成后显示 DeepSeek 整理的卖点，人工确认后保存。
           </p>
-        )}
+        ) : null}
 
         <div className={styles.sectionFooter}>
           <span data-complete={sellingPointsComplete}>
