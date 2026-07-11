@@ -6,6 +6,38 @@
   border-radius: 8px;
 }
 
+.inboxOverlay {
+  height: 100%;
+  min-height: 0;
+  background: #04070e;
+}
+
+.inboxOverlay .content {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.inboxOverlay .header,
+.inboxOverlay .commandBar,
+.inboxOverlay .error {
+  flex-shrink: 0;
+}
+
+.inboxOverlay .list {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
+}
+
+.inboxOverlay .state {
+  min-height: 0;
+  flex: 1 1 auto;
+}
+
 .content {
   position: relative;
   z-index: 1;
@@ -458,6 +490,12 @@
 }
 
 @media (max-width: 760px) {
+  .inboxOverlay {
+    border-right: 0;
+    border-left: 0;
+    border-radius: 0;
+  }
+
   .content {
     padding: 17px 12px 28px;
   }

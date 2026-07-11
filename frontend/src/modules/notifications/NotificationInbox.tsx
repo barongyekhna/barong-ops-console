@@ -25,6 +25,11 @@ import {
 import styles from "./NotificationInbox.module.css";
 
 type Filter = "all" | "unread";
+type NotificationInboxProps = {
+  onClose?: () => void;
+  onUnreadChange?: (unread: number) => void;
+  variant?: "overlay" | "page";
+};
 
 const LEVEL_LABEL: Record<string, string> = {
   info: "信息",
@@ -77,7 +82,11 @@ function externalLinks(refs: Record<string, unknown> | null) {
   return out;
 }
 
-export function NotificationInbox() {
+export function NotificationInbox({
+  onClose,
+  onUnreadChange,
+  variant = "page",
+}: NotificationInboxProps = {}) {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [filter, setFilter] = useState<Filter>("all");
@@ -98,13 +107,14 @@ export function NotificationInbox() {
       if (!mounted.current) return;
       setItems(result.items);
       setUnread(result.unread);
+      onUnreadChange?.(result.unread);
     } catch (err) {
       if (!mounted.current) return;
       setError(err instanceof Error ? err.message : "通知加载失败。");
     } finally {
       if (mounted.current) setLoading(false);
     }
-  }, []);
+  }, [onUnreadChange]);
 
   useEffect(() => {
     mounted.current = true;
@@ -147,6 +157,10 @@ export function NotificationInbox() {
   }
 
   function handleClose() {
+    if (onClose) {
+      onClose();
+      return;
+    }
     let returnPath: string | null = null;
     try {
       returnPath = safeReturnPath(
@@ -159,15 +173,20 @@ export function NotificationInbox() {
     window.location.replace(returnPath ?? "/dashboard");
   }
 
+  const closeLabel = onClose ? "关闭通知浮层" : "关闭通知并返回";
+
   return (
-    <section className={`${styles.inbox} cc-dash`} aria-label="通知收件箱">
+    <section
+      className={`${styles.inbox} ${variant === "overlay" ? styles.inboxOverlay : ""} cc-dash`}
+      aria-label="通知收件箱"
+    >
       <DashboardScene />
       <div className={styles.content}>
         <button
-          aria-label="关闭通知并返回"
+          aria-label={closeLabel}
           className={styles.closeButton}
           onClick={handleClose}
-          title="关闭通知并返回"
+          title={closeLabel}
           type="button"
         >
           <X aria-hidden="true" size={19} />
