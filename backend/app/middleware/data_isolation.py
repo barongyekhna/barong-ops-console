@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import json
 import re
+from threading import Lock
 from uuid import uuid4
 
+import anyio
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import inspect
@@ -197,7 +199,20 @@ def _is_data_isolation_exempt_path(path: str) -> bool:
     )
 
 
-def _c05b_schema_without_c18_data_isolation() -> bool:
+# The schema shape only changes at migration time, never mid-process, so the
+# probe result is cached for the process lifetime. Uncached it costs 1-2 pg
+# catalog queries on every API request.
+_c05b_schema_probe_cache: bool | None = None
+_c05b_schema_probe_lock = Lock()
+
+
+def _reset_c05b_schema_probe_cache_for_tests() -> None:
+    global _c05b_schema_probe_cache
+    with _c05b_schema_probe_lock:
+        _c05b_schema_probe_cache = None
+
+
+def _probe_c05b_schema_without_c18_data_isolation() -> bool:
     with managed_read_session() as db:
         if not table_exists(db, "org_memberships"):
             return True
@@ -209,6 +224,19 @@ def _c05b_schema_without_c18_data_isolation() -> bool:
             if "org_id" not in operation_log_columns:
                 return True
     return False
+
+
+def _c05b_schema_without_c18_data_isolation() -> bool:
+    global _c05b_schema_probe_cache
+    cached = _c05b_schema_probe_cache
+    if cached is not None:
+        return cached
+    with _c05b_schema_probe_lock:
+        if _c05b_schema_probe_cache is None:
+            _c05b_schema_probe_cache = (
+                _probe_c05b_schema_without_c18_data_isolation()
+            )
+        return _c05b_schema_probe_cache
 
 
 async def enforce_org_data_isolation(request: Request, call_next):
@@ -224,7 +252,7 @@ async def enforce_org_data_isolation(request: Request, call_next):
     if not _is_api_path(request):
         return await call_next(request)
 
-    if _c05b_schema_without_c18_data_isolation():
+    if await anyio.to_thread.run_sync(_c05b_schema_without_c18_data_isolation):
         org_context = get_org_context(request)
         if org_context is None:
             return await call_next(request)
@@ -279,22 +307,29 @@ async def enforce_org_data_isolation(request: Request, call_next):
         session_id=session_id,
     )
     if current_session is None:
-        with without_org_data_isolation():
-            with managed_read_session() as db:
-                try:
+        # Session validation is synchronous SQLAlchemy work; run it on the
+        # thread pool so it cannot block the event loop under concurrency.
+        def _validate_session_off_loop():
+            with without_org_data_isolation():
+                with managed_read_session() as db:
                     identity = validate_session_identity_fast(
                         db,
                         session_id=session_id,
                     )
-                    current_session = authenticated_session_from_identity(
+                    return authenticated_session_from_identity(
                         identity,
                         audit=audit,
                     )
-                except InvalidSessionError:
-                    return _security_response(
-                        status.HTTP_401_UNAUTHORIZED,
-                        "Not authenticated.",
-                    )
+
+        try:
+            current_session = await anyio.to_thread.run_sync(
+                _validate_session_off_loop
+            )
+        except InvalidSessionError:
+            return _security_response(
+                status.HTTP_401_UNAUTHORIZED,
+                "Not authenticated.",
+            )
         cache_authenticated_session(
             request,
             session_id=session_id,

@@ -59,6 +59,8 @@ def test_http_middleware_propagates_request_context(
     assert response.status_code == 204
     assert response.headers["X-Request-ID"] == "ctx-http-test"
 
+    # 2026-07-11 downsampling contract: successful requests persist no api.*
+    # audit rows (they were pure write amplification); failures still do.
     events = get_event_buffer_snapshot()
     api_events = [
         event
@@ -66,10 +68,28 @@ def test_http_middleware_propagates_request_context(
         if event.context_id == "ctx-http-test"
         and event.event_type.startswith("api.")
     ]
-    assert {event.event_type for event in api_events} == {
-        "api.request.received",
+    assert api_events == []
+
+    async def failing_call_next(request: Request) -> Response:
+        return Response(status_code=503)
+
+    failing_scope = dict(scope, headers=[(b"x-request-id", b"ctx-http-fail")])
+    failing_request = Request(failing_scope, receive=receive)
+    failing_response = asyncio.run(
+        capture_audit_events(failing_request, failing_call_next)
+    )
+    assert failing_response.status_code == 503
+
+    failed_events = [
+        event
+        for event in get_event_buffer_snapshot()
+        if event.context_id == "ctx-http-fail"
+        and event.event_type.startswith("api.")
+    ]
+    assert {event.event_type for event in failed_events} == {
         "api.response.completed",
     }
+    assert all(event.status == "failed" for event in failed_events)
 
 
 def test_failure_handler_emits_failure_and_retry_events() -> None:

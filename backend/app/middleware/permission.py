@@ -4,6 +4,7 @@ import re
 from dataclasses import dataclass
 from uuid import uuid4
 
+import anyio
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
@@ -211,11 +212,23 @@ def resolve_permission_request_context(
     )
 
 
+# The schema shape only changes at migration time, never mid-process; cache
+# the probe so it does not cost two pg catalog queries per API request.
+_c18_permission_tables_cache: bool | None = None
+
+
+def _reset_c18_permission_tables_cache_for_tests() -> None:
+    global _c18_permission_tables_cache
+    _c18_permission_tables_cache = None
+
+
 def _c18_permission_tables_available(db: Session) -> bool:
-    return table_exists(db, "org_memberships") and table_exists(
-        db,
-        "module_bindings",
-    )
+    global _c18_permission_tables_cache
+    if _c18_permission_tables_cache is None:
+        _c18_permission_tables_cache = table_exists(
+            db, "org_memberships"
+        ) and table_exists(db, "module_bindings")
+    return _c18_permission_tables_cache
 
 
 async def enforce_permission_isolation(request: Request, call_next):
@@ -256,64 +269,75 @@ async def enforce_permission_isolation(request: Request, call_next):
         request,
         session_id=session_id,
     )
-    with managed_read_session() as db:
-        if current_session is None:
-            try:
+
+    # Session validation and the permission decision are synchronous
+    # SQLAlchemy work; run them on the thread pool so they cannot block the
+    # event loop under concurrency.
+    def _decide_permission_off_loop():
+        resolved_session = current_session
+        with managed_read_session() as db:
+            if resolved_session is None:
                 identity = validate_session_identity_fast(
                     db,
                     session_id=session_id,
                 )
-                current_session = authenticated_session_from_identity(
+                resolved_session = authenticated_session_from_identity(
                     identity,
                     audit=audit,
                 )
-            except InvalidSessionError:
-                emit_event(
-                    event_type="permission_isolation.check",
-                    module="system",
-                    action="c18f.permission_check",
-                    source="backend",
-                    status="failed",
-                    context_id=audit.request_id,
-                    payload={
-                        "org_id": context.org_id,
-                        "module_id": context.module_id,
-                        "permission_action": context.action,
-                        "reason": "invalid_session",
-                    },
+                cache_authenticated_session(
+                    request,
+                    session_id=session_id,
+                    current_session=resolved_session,
                 )
-                return _security_response(
-                    status.HTTP_401_UNAUTHORIZED,
-                    "Not authenticated.",
-                )
-            cache_authenticated_session(
-                request,
-                session_id=session_id,
-                current_session=current_session,
-            )
 
-        queue_session_seen(current_session.auth_session.session_id_hash)
-        request.state.user_id = str(current_session.user.id)
-        set_current_event_context(user_id=str(current_session.user.id))
-        if not _c18_permission_tables_available(db):
-            skipped_c05b_compat = True
-            decision = None
-            request.state.c18f_permission_decision = {
-                "allowed": True,
-                "denied": False,
-                "denial_code": None,
-                "reason": "C18 permission tables unavailable on c05b baseline.",
-            }
-        else:
-            decision = check_permission(
+            queue_session_seen(resolved_session.auth_session.session_id_hash)
+            request.state.user_id = str(resolved_session.user.id)
+            if not _c18_permission_tables_available(db):
+                request.state.c18f_permission_decision = {
+                    "allowed": True,
+                    "denied": False,
+                    "denial_code": None,
+                    "reason": "C18 permission tables unavailable on c05b baseline.",
+                }
+                return resolved_session, None, True
+            resolved_decision = check_permission(
                 db,
-                current_session.user.id,
+                resolved_session.user.id,
                 context.org_id,
                 context.module_id,
                 context.action,
                 request=request,
             )
-            request.state.c18f_permission_decision = decision.model_dump(mode="json")
+            request.state.c18f_permission_decision = resolved_decision.model_dump(
+                mode="json"
+            )
+            return resolved_session, resolved_decision, False
+
+    try:
+        current_session, decision, skipped_c05b_compat = (
+            await anyio.to_thread.run_sync(_decide_permission_off_loop)
+        )
+    except InvalidSessionError:
+        emit_event(
+            event_type="permission_isolation.check",
+            module="system",
+            action="c18f.permission_check",
+            source="backend",
+            status="failed",
+            context_id=audit.request_id,
+            payload={
+                "org_id": context.org_id,
+                "module_id": context.module_id,
+                "permission_action": context.action,
+                "reason": "invalid_session",
+            },
+        )
+        return _security_response(
+            status.HTTP_401_UNAUTHORIZED,
+            "Not authenticated.",
+        )
+    set_current_event_context(user_id=str(current_session.user.id))
 
     if skipped_c05b_compat:
         emit_event(

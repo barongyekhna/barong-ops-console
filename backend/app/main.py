@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 from threading import Lock
 from time import monotonic
 
@@ -292,18 +293,8 @@ def _structured_failure_detail_for_production(
     return detail
 
 
-app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-    debug=False if _production_like() else settings.app_debug,
-    docs_url="/docs" if _docs_enabled() else None,
-    redoc_url="/redoc" if _docs_enabled() else None,
-    openapi_url="/openapi.json" if _docs_enabled() else None,
-)
-
-
-@app.on_event("startup")
-def enforce_production_migration_safety() -> None:
+@asynccontextmanager
+async def _app_lifespan(_app: FastAPI):
     if _production_like():
         from .db.migration_safety import enforce_migration_safety
         from .db.session import engine
@@ -314,14 +305,24 @@ def enforce_production_migration_safety() -> None:
     start_login_side_effect_worker()
     start_module_control_cache_worker()
     refresh_module_control_center_cache_async(force=True)
+    try:
+        yield
+    finally:
+        stop_login_side_effect_worker()
+        stop_module_control_cache_worker()
+        stop_api_key_usage_flush_worker()
+        stop_session_seen_flush_worker()
 
 
-@app.on_event("shutdown")
-def flush_deferred_session_seen_updates() -> None:
-    stop_login_side_effect_worker()
-    stop_module_control_cache_worker()
-    stop_api_key_usage_flush_worker()
-    stop_session_seen_flush_worker()
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    debug=False if _production_like() else settings.app_debug,
+    docs_url="/docs" if _docs_enabled() else None,
+    redoc_url="/redoc" if _docs_enabled() else None,
+    openapi_url="/openapi.json" if _docs_enabled() else None,
+    lifespan=_app_lifespan,
+)
 
 
 def _is_control_plane_path(path: str) -> bool:
@@ -647,14 +648,17 @@ async def enforce_control_plane_isolation(request: Request, call_next):
         )
 
     if lightweight_control_plane:
-        with managed_read_session() as db:
-            try:
-                identity = validate_session_identity_fast(db, session_id=session_id)
-            except InvalidSessionError:
-                return _control_plane_denied_response(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Not authenticated.",
-                )
+        def _load_identity_off_loop() -> AuthenticatedUserIdentity:
+            with managed_read_session() as db:
+                return validate_session_identity_fast(db, session_id=session_id)
+
+        try:
+            identity = await anyio.to_thread.run_sync(_load_identity_off_loop)
+        except InvalidSessionError:
+            return _control_plane_denied_response(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Not authenticated.",
+            )
 
         current_session = _session_from_identity(identity, audit=audit)
         queue_session_seen(identity.session_id_hash)
@@ -686,72 +690,85 @@ async def enforce_control_plane_isolation(request: Request, call_next):
         request.state.control_plane_pipeline = "lightweight"
         return await call_next(request)
 
-    with managed_read_session() as db:
-        try:
-            current_session = validate_session(
+    # Full session validation + platform permission decision are synchronous
+    # SQLAlchemy work; run them on the thread pool so they cannot block the
+    # event loop under concurrency.
+    def _validate_and_decide_off_loop():
+        with managed_read_session() as db:
+            session = validate_session(
                 db,
                 session_id=session_id,
                 audit=get_audit_context(request),
             )
-        except InvalidSessionError:
-            emit_event(
-                event_type="control_plane.exit",
-                module="C16",
-                action=f"{request.method} {request.url.path}",
-                source="backend",
-                status="failed",
-                context_id=audit.request_id,
-                payload={"reason": "invalid_session"},
+            queue_session_seen(session.auth_session.session_id_hash)
+            cache_authenticated_session(
+                request,
+                session_id=session_id,
+                current_session=session,
             )
-            return _control_plane_denied_response(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Not authenticated.",
+            # Extract primitives while the ORM instances are still bound;
+            # closing the read session expires their attributes.
+            user_id_value = str(session.user.id)
+            role_value = session.user.role
+            rbac_decision = PermissionDecisionEngine(
+                db,
+                request=request,
+            ).decide_platform_metadata(
+                UnifiedPermissionRequest(
+                    user_id=session.user.id,
+                    org_id=None,
+                    module_id="C16",
+                    action="admin",
+                    role=role_value,
+                    scope_type="global",
+                    scope_key="*",
+                    source="control_plane_isolation",
+                )
             )
+            return user_id_value, role_value, rbac_decision
 
-        queue_session_seen(current_session.auth_session.session_id_hash)
-        cache_authenticated_session(
-            request,
-            session_id=session_id,
-            current_session=current_session,
+    try:
+        session_user_id, session_user_role, decision = (
+            await anyio.to_thread.run_sync(_validate_and_decide_off_loop)
         )
-        decision = PermissionDecisionEngine(
-            db,
-            request=request,
-        ).decide_platform_metadata(
-            UnifiedPermissionRequest(
-                user_id=current_session.user.id,
-                org_id=None,
-                module_id="C16",
-                action="admin",
-                role=current_session.user.role,
-                scope_type="global",
-                scope_key="*",
-                source="control_plane_isolation",
-            )
+    except InvalidSessionError:
+        emit_event(
+            event_type="control_plane.exit",
+            module="C16",
+            action=f"{request.method} {request.url.path}",
+            source="backend",
+            status="failed",
+            context_id=audit.request_id,
+            payload={"reason": "invalid_session"},
         )
-        request.state.control_plane_rbac_decision = decision
-        if not decision.allowed:
-            request.state.user_id = str(current_session.user.id)
-            emit_event(
-                event_type="control_plane.exit",
-                module="C16",
-                action=f"{request.method} {request.url.path}",
-                source="backend",
-                status="failed",
-                context_id=audit.request_id,
-                user_id=str(current_session.user.id),
-                payload={
-                    "reason": "permission_denied",
-                    "role": current_session.user.role,
-                    "decision_source": "PermissionDecisionEngine",
-                    "denial_code": decision.denial_code,
-                },
-            )
-            return _control_plane_denied_response(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Forbidden.",
-            )
-        request.state.user_id = str(current_session.user.id)
+        return _control_plane_denied_response(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated.",
+        )
+
+    request.state.control_plane_rbac_decision = decision
+    if not decision.allowed:
+        request.state.user_id = session_user_id
+        emit_event(
+            event_type="control_plane.exit",
+            module="C16",
+            action=f"{request.method} {request.url.path}",
+            source="backend",
+            status="failed",
+            context_id=audit.request_id,
+            user_id=session_user_id,
+            payload={
+                "reason": "permission_denied",
+                "role": session_user_role,
+                "decision_source": "PermissionDecisionEngine",
+                "denial_code": decision.denial_code,
+            },
+        )
+        return _control_plane_denied_response(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Forbidden.",
+        )
+    request.state.user_id = session_user_id
 
     response = await call_next(request)
     emit_event(
@@ -799,7 +816,7 @@ async def short_circuit_auth_me(request: Request, call_next):
     if not is_auth_me_path(request.url.path):
         return await call_next(request)
 
-    payload = _auth_me_payload(request)
+    payload = await anyio.to_thread.run_sync(_auth_me_payload, request)
     if payload is None:
         return _json_security_response(
             status_code=status.HTTP_401_UNAUTHORIZED,

@@ -58,6 +58,21 @@ HIGH_FREQUENCY_SUCCESS_EVENT_TYPES = frozenset(
         "rbac.check",
         "rbac.owner_check",
         "rbac.permission_check",
+        # 2026-07-11 approved downsampling: per-request success events are
+        # write amplification (one synchronous INSERT each on the hot path).
+        # Failures of the same event types are still persisted, and the
+        # control_plane.* audit trail stays untouched.
+        "api.response.completed",
+        "org_data_isolation.api_context",
+        "permission_isolation.check",
+    }
+)
+# Pending-status markers that only pair with a success outcome later; the
+# failure completion event carries all investigative detail, so persisting
+# the start marker per request is pure noise.
+HIGH_FREQUENCY_PENDING_EVENT_TYPES = frozenset(
+    {
+        "api.request.received",
     }
 )
 
@@ -771,7 +786,9 @@ def emit_event(
         payload=sanitize_event_payload(dict(payload or {})),
         metadata=sanitize_event_payload(dict(metadata or {})),
     )
-    if status == "success" and event_type in HIGH_FREQUENCY_SUCCESS_EVENT_TYPES:
+    if (status == "success" and event_type in HIGH_FREQUENCY_SUCCESS_EVENT_TYPES) or (
+        status == "pending" and event_type in HIGH_FREQUENCY_PENDING_EVENT_TYPES
+    ):
         return EmittedAuditEvent(
             **event.model_dump(mode="python"),
             persisted=False,

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any, Literal
 from uuid import uuid4
 
+import anyio
 from fastapi import Request, status
 from fastapi.responses import JSONResponse
 from sqlalchemy import select
@@ -434,36 +435,47 @@ async def org_context_middleware(request: Request, call_next):
         request,
         session_id=session_id,
     )
-    with managed_read_session() as db:
-        if current_session is None:
-            try:
+
+    # Session validation and org-context resolution are synchronous
+    # SQLAlchemy work; run them on the thread pool so they cannot block the
+    # event loop under concurrency.
+    def _resolve_org_context_off_loop():
+        resolved_session = current_session
+        with managed_read_session() as db:
+            if resolved_session is None:
                 identity = validate_session_identity_fast(
                     db,
                     session_id=session_id,
                 )
-                current_session = authenticated_session_from_identity(
+                resolved_session = authenticated_session_from_identity(
                     identity,
                     audit=audit,
                 )
-            except InvalidSessionError:
-                return _security_response(
-                    status.HTTP_401_UNAUTHORIZED,
-                    "Not authenticated.",
+                cache_authenticated_session(
+                    request,
+                    session_id=session_id,
+                    current_session=resolved_session,
                 )
-            cache_authenticated_session(
-                request,
-                session_id=session_id,
-                current_session=current_session,
-            )
 
-        queue_session_seen(current_session.auth_session.session_id_hash)
-        request.state.user_id = str(current_session.user.id)
-        context, resolution_source = build_org_context(
-            db,
-            request=request,
-            user=current_session.user,
-            auth_session=current_session.auth_session,
-            request_id=request_id,
+            queue_session_seen(resolved_session.auth_session.session_id_hash)
+            request.state.user_id = str(resolved_session.user.id)
+            resolved_context, source = build_org_context(
+                db,
+                request=request,
+                user=resolved_session.user,
+                auth_session=resolved_session.auth_session,
+                request_id=request_id,
+            )
+        return resolved_context, source
+
+    try:
+        context, resolution_source = await anyio.to_thread.run_sync(
+            _resolve_org_context_off_loop
+        )
+    except InvalidSessionError:
+        return _security_response(
+            status.HTTP_401_UNAUTHORIZED,
+            "Not authenticated.",
         )
 
     if context is not None:
