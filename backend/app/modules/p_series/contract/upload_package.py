@@ -83,7 +83,7 @@ class ImageAsset(BaseModel):
     image gallery; description images are embedded inside ``description.html``
     at the ``embed_token`` placeholder (the uploader replaces the token with
     the store-hosted media URL after uploading). title/alt/caption/description
-    are the WordPress media SEO fields, written by gpt-5.5 at art-direction
+    are the WordPress media SEO fields, written by gpt-5.6-luna at art-direction
     time.
     """
 

@@ -7,7 +7,7 @@ overlay），也不许留在成品图像素里（产品实拍上的 logo 必须�
 防线分四层，这个模块承担第 3 层（独立 AI 审查）+ 全链共享的工具：
 1. 源头：R→K 搬运剥品牌、落 ``detected_brand_terms`` 黑名单（r_to_k_transfer）。
 2. 生成：文案/作图指令红线带黑名单（prompt_skills / workflow_engine）。
-3. 审查（本模块）：文本面 = 黑名单精确匹配 + gpt-5.5 语义识别；
+3. 审查（本模块）：文本面 = 黑名单精确匹配 + gpt-5.6-luna 语义识别；
    图像面 = 每张成品图过视觉模型找品牌标识。fail-closed：任何一步
    出错都算未通过，宁可拦住也不放行。
 4. 门禁：P 上架要求 audit 存在 + clean + 内容指纹一致（p_series assemble）。
@@ -229,7 +229,7 @@ def blacklist_violations(
     return violations
 
 
-# --- AI 调用（gpt-5.5 文本审 + 视觉审图，httpx 直连 4sapi） ------------------
+# --- AI 调用（gpt-5.6-luna 文本审 + 视觉审图，httpx 直连 4sapi） ------------------
 
 def _resolve_chat_key(db: Session, user: User | None):
     context = require_module_execution_ready(
@@ -247,7 +247,7 @@ def _chat_completion(key, messages: list[dict[str, Any]]) -> str:
     if not url.endswith("/v1"):
         url = f"{url}/v1"
     url = f"{url}/chat/completions"
-    body = {"model": "gpt-5.5", "messages": messages}
+    body = {"model": "gpt-5.6-luna", "messages": messages}
     with httpx.Client(timeout=_AUDIT_TIMEOUT_SECONDS) as client:
         response = client.post(
             url,

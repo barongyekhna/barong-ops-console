@@ -88,7 +88,7 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
     )
     assert (
         AIModelRouter.resolve_model(provider="chatgpt", task_type="chat")
-        == "gpt-5.5"
+        == "gpt-5.6-luna"
     )
     assert (
         AIModelRouter.resolve_model(provider="claude", task_type="chat")
@@ -107,7 +107,7 @@ def test_model_router_and_adapters_define_required_mapping() -> None:
             OpenAIAdapter,
             "https://4sapi.example",
             "generate",
-            "gpt-5.5",
+            "gpt-5.6-luna",
             "https://4sapi.example/v1/chat/completions",
         ),
         (
@@ -189,7 +189,7 @@ def test_execution_router_syncs_provider_config_and_injects_model(
 
     assert result == {"keywords": ["steel pump"]}
     assert captured[0].url == "https://4sapi.example/v1/chat/completions"
-    assert captured[0].body["model"] == "gpt-5.5"
+    assert captured[0].body["model"] == "gpt-5.6-luna"
     assert captured[0].body["task_type"] == "generate"
     assert captured[0].headers["Authorization"] == "Bearer chatgpt"
     provider_config = db.scalar(
@@ -254,7 +254,7 @@ def test_execution_router_falls_back_to_default_provider(
     assert captured[0].url == "https://4sapi-claude.example/v1/messages"
     assert captured[0].body["model"] == "claude-opus-4-8-thinking"
     assert captured[1].url == "https://4sapi-chatgpt.example/v1/chat/completions"
-    assert captured[1].body["model"] == "gpt-5.5"
+    assert captured[1].body["model"] == "gpt-5.6-luna"
 
 
 def test_k_business_modules_do_not_directly_post_http() -> None:

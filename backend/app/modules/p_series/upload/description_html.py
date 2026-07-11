@@ -1,7 +1,7 @@
 """把 K 的 marketing_copy_json 按 product-page-layout skill 骨架拼成
 WooCommerce 的 description_html，并生成 Schema.org 结构化数据（Product + FAQPage）。
 
-内容 AI（gpt-5.5）早在文案阶段就生成好了（product_page_copy / page_faq / json_ld），
+内容 AI（gpt-5.6-luna）早在文案阶段就生成好了（product_page_copy / page_faq / json_ld），
 这里只做**确定性排版 + schema 组装**，不再调 AI。
 
 排版铁律（见 SKILL.md）：正文绝不含价格/库存/配送（走结构化字段）。

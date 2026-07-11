@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+from collections.abc import Sequence
 from pathlib import Path
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -601,6 +602,29 @@ def _product_variants(
     )
 
 
+def _product_variants_by_product_ids(
+    db: Session,
+    product_ids: Sequence[UUID],
+) -> dict[UUID, list[KProductKnowledgeVariant]]:
+    if not product_ids:
+        return {}
+
+    grouped: dict[UUID, list[KProductKnowledgeVariant]] = {
+        product_id: [] for product_id in product_ids
+    }
+    variants = db.scalars(
+        select(KProductKnowledgeVariant)
+        .where(KProductKnowledgeVariant.product_id.in_(product_ids))
+        .order_by(
+            KProductKnowledgeVariant.product_id.asc(),
+            KProductKnowledgeVariant.created_at.asc(),
+        )
+    )
+    for variant in variants:
+        grouped.setdefault(variant.product_id, []).append(variant)
+    return grouped
+
+
 def _product_read(
     db: Session,
     product: KProductKnowledgeProduct,
@@ -621,8 +645,10 @@ def _product_read(
 def _product_list_item(
     db: Session,
     product: KProductKnowledgeProduct,
+    variants: list[KProductKnowledgeVariant] | None = None,
 ) -> ProductKnowledgeListItem:
-    variants = _product_variants(db, product)
+    if variants is None:
+        variants = _product_variants(db, product)
     return ProductKnowledgeListItem.model_validate(product).model_copy(
         update={
             "main_keyword": product.primary_keyword,
@@ -2013,8 +2039,19 @@ def product_knowledge_list(
         review_status=review_status,
         q=q,
     )
+    variants_by_product_id = _product_variants_by_product_ids(
+        db,
+        [item.id for item in items],
+    )
     return ProductKnowledgeListResponse(
-        items=[_product_list_item(db, item) for item in items],
+        items=[
+            _product_list_item(
+                db,
+                item,
+                variants_by_product_id.get(item.id, []),
+            )
+            for item in items
+        ],
         count=_count_products(
             db,
             scope_context=scope_context,
