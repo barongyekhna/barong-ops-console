@@ -449,6 +449,24 @@ def test_asset_runtime_secrets_archives_and_backup_roles_are_isolated() -> None:
     assert "prepare or commit" in operations
 
 
+def test_postgres_internal_char_catalog_values_are_cast_before_concatenation() -> None:
+    scripts_with_constraint_types = (
+        "scripts/c19_asset_backup.sh",
+        "scripts/c19_asset_restore.sh",
+        "scripts/c19_record_backup.sh",
+        "scripts/c19_record_restore.sh",
+        "scripts/c19_full_backup.sh",
+    )
+    for script_name in scripts_with_constraint_types:
+        script = (ROOT / script_name).read_text(encoding="utf-8")
+        assert "|| constraint_record.contype from" not in script
+        if "|| constraint_record.contype" in script:
+            assert "|| constraint_record.contype::text" in script
+        assert "|| constraint_record.confdeltype from" not in script
+        if "|| constraint_record.confdeltype" in script:
+            assert "|| constraint_record.confdeltype::text" in script
+
+
 def test_asset_operations_scripts_parse_and_help_without_runtime_secrets() -> None:
     for script_name in ("c19_asset_backup.sh", "c19_asset_restore.sh"):
         script = ROOT / "scripts" / script_name

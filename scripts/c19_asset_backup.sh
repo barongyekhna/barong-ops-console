@@ -217,7 +217,7 @@ validate_asset_v3_catalog() {
             --tuples-only \
             --no-align \
             --set=ON_ERROR_STOP=1 \
-            --command="select table_record.relname || ':' || constraint_record.conname || ':' || constraint_record.contype from pg_constraint as constraint_record join pg_class as table_record on table_record.oid = constraint_record.conrelid join pg_namespace as schema_record on schema_record.oid = table_record.relnamespace where schema_record.nspname = 'public' and table_record.relname = 'chat_assets' and constraint_record.convalidated order by constraint_record.conname"
+            --command="select table_record.relname || ':' || constraint_record.conname || ':' || constraint_record.contype::text from pg_constraint as constraint_record join pg_class as table_record on table_record.oid = constraint_record.conrelid join pg_namespace as schema_record on schema_record.oid = table_record.relnamespace where schema_record.nspname = 'public' and table_record.relname = 'chat_assets' and constraint_record.convalidated order by constraint_record.conname"
     )" || fail "Could not validate the C19 Asset v3 source constraints."
     for constraint_identity in \
         "chat_assets:ck_chat_assets_retention_preparation_consistent:c" \
