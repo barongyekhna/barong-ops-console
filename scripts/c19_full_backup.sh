@@ -463,8 +463,8 @@ validate_record_source_catalog() {
         "record_asset_deletion_outbox:pk_record_asset_deletion_outbox:p" \
         "record_retention_operations:pk_record_retention_operations:p" \
         "record_retention_batches:pk_record_retention_batches:p" \
-        "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id_record_retention_operations:f" \
-        "record_retention_batches:fk_record_retention_batches_operation_id_record_retention_operations:f" \
+        "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id__ecb1:f" \
+        "record_retention_batches:fk_record_retention_batches_operation_id_record_retenti_0030:f" \
         "record_asset_deletion_outbox:uq_record_asset_deletion_outbox_record_asset:u" \
         "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_attempt_count_nonnegative:c" \
         "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_state_supported:c" \
@@ -474,8 +474,8 @@ validate_record_source_catalog() {
         "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_authorization_consistent:c" \
         "record_retention_operations:ck_record_retention_operations_approved_maximum_supported:c" \
         "record_retention_operations:ck_record_retention_operations_approved_asset_maximum_supported:c" \
-        "record_retention_operations:ck_record_retention_operations_asset_jobs_enqueued_within_maximum:c" \
-        "record_retention_operations:ck_record_retention_operations_asset_jobs_completed_within_enqueued:c" \
+        "record_retention_operations:ck_record_retention_operations_asset_jobs_enqueued_with_3d91:c" \
+        "record_retention_operations:ck_record_retention_operations_asset_jobs_completed_wit_5f0c:c" \
         "record_retention_operations:ck_record_retention_operations_affected_count_nonnegative:c" \
         "record_retention_operations:ck_record_retention_operations_affected_within_approved_maximum:c" \
         "record_retention_operations:ck_record_retention_operations_next_batch_ordinal_nonnegative:c" \
@@ -496,8 +496,8 @@ validate_record_source_catalog() {
             --command="select child_table.relname || ':' || constraint_record.conname || ':' || child_column.attname || ':' || parent_table.relname || ':' || parent_column.attname || ':' || constraint_record.confdeltype::text from pg_constraint as constraint_record join pg_class as child_table on child_table.oid = constraint_record.conrelid join pg_class as parent_table on parent_table.oid = constraint_record.confrelid join pg_namespace as schema_record on schema_record.oid = child_table.relnamespace join pg_attribute as child_column on child_column.attrelid = child_table.oid and child_column.attnum = constraint_record.conkey[1] join pg_attribute as parent_column on parent_column.attrelid = parent_table.oid and parent_column.attnum = constraint_record.confkey[1] where schema_record.nspname = 'public' and constraint_record.contype = 'f' and constraint_record.convalidated and array_length(constraint_record.conkey, 1) = 1 and child_table.relname in ('record_asset_deletion_outbox','record_retention_batches') order by child_table.relname, constraint_record.conname"
     )" || fail "Could not validate the frozen Record v4 foreign-key catalog."
     for expected in \
-        "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id_record_retention_operations:retention_operation_id:record_retention_operations:operation_id:r" \
-        "record_retention_batches:fk_record_retention_batches_operation_id_record_retention_operations:operation_id:record_retention_operations:operation_id:r"; do
+        "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id__ecb1:retention_operation_id:record_retention_operations:operation_id:r" \
+        "record_retention_batches:fk_record_retention_batches_operation_id_record_retenti_0030:operation_id:record_retention_operations:operation_id:r"; do
         grep -Fxq "$expected" <<<"$foreign_key_rows" || \
             fail "Frozen Record v4 source has an invalid foreign key $expected."
     done
@@ -569,8 +569,8 @@ validate_archive_schema_tokens() {
 validate_archive_schema_tokens record_compose c19-record-postgres "$record_archive" \
     pk_record_asset_coordination pk_record_asset_deletion_outbox \
     pk_record_retention_operations pk_record_retention_batches \
-    fk_record_asset_deletion_outbox_retention_operation_id_record_retention_operations \
-    fk_record_retention_batches_operation_id_record_retention_operations \
+    fk_record_asset_deletion_outbox_retention_operation_id__ecb1 \
+    fk_record_retention_batches_operation_id_record_retenti_0030 \
     uq_record_asset_deletion_outbox_record_asset \
     ck_record_asset_deletion_outbox_attempt_count_nonnegative \
     ck_record_asset_deletion_outbox_state_supported \
@@ -580,8 +580,8 @@ validate_archive_schema_tokens record_compose c19-record-postgres "$record_archi
     ck_record_asset_deletion_outbox_authorization_consistent \
     ck_record_retention_operations_approved_maximum_supported \
     ck_record_retention_operations_approved_asset_maximum_supported \
-    ck_record_retention_operations_asset_jobs_enqueued_within_maximum \
-    ck_record_retention_operations_asset_jobs_completed_within_enqueued \
+    ck_record_retention_operations_asset_jobs_enqueued_with_3d91 \
+    ck_record_retention_operations_asset_jobs_completed_wit_5f0c \
     ck_record_retention_operations_affected_count_nonnegative \
     ck_record_retention_operations_affected_within_approved_maximum \
     ck_record_retention_operations_next_batch_ordinal_nonnegative \

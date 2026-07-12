@@ -661,8 +661,8 @@ required_retention_constraints=(
     "record_asset_deletion_outbox:pk_record_asset_deletion_outbox:p"
     "record_retention_operations:pk_record_retention_operations:p"
     "record_retention_batches:pk_record_retention_batches:p"
-    "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id_record_retention_operations:f"
-    "record_retention_batches:fk_record_retention_batches_operation_id_record_retention_operations:f"
+    "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id__ecb1:f"
+    "record_retention_batches:fk_record_retention_batches_operation_id_record_retenti_0030:f"
     "record_asset_deletion_outbox:uq_record_asset_deletion_outbox_record_asset:u"
     "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_attempt_count_nonnegative:c"
     "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_state_supported:c"
@@ -672,8 +672,8 @@ required_retention_constraints=(
     "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_authorization_consistent:c"
     "record_retention_operations:ck_record_retention_operations_approved_maximum_supported:c"
     "record_retention_operations:ck_record_retention_operations_approved_asset_maximum_supported:c"
-    "record_retention_operations:ck_record_retention_operations_asset_jobs_enqueued_within_maximum:c"
-    "record_retention_operations:ck_record_retention_operations_asset_jobs_completed_within_enqueued:c"
+    "record_retention_operations:ck_record_retention_operations_asset_jobs_enqueued_with_3d91:c"
+    "record_retention_operations:ck_record_retention_operations_asset_jobs_completed_wit_5f0c:c"
     "record_retention_operations:ck_record_retention_operations_affected_count_nonnegative:c"
     "record_retention_operations:ck_record_retention_operations_affected_within_approved_maximum:c"
     "record_retention_operations:ck_record_retention_operations_next_batch_ordinal_nonnegative:c"
@@ -695,8 +695,8 @@ retention_foreign_keys="$(
         --command="select child_table.relname || ':' || constraint_record.conname || ':' || child_column.attname || ':' || parent_table.relname || ':' || parent_column.attname || ':' || constraint_record.confdeltype::text from pg_constraint as constraint_record join pg_class as child_table on child_table.oid = constraint_record.conrelid join pg_class as parent_table on parent_table.oid = constraint_record.confrelid join pg_namespace as schema_record on schema_record.oid = child_table.relnamespace join pg_attribute as child_column on child_column.attrelid = child_table.oid and child_column.attnum = constraint_record.conkey[1] join pg_attribute as parent_column on parent_column.attrelid = parent_table.oid and parent_column.attnum = constraint_record.confkey[1] where schema_record.nspname = 'public' and constraint_record.contype = 'f' and constraint_record.convalidated and array_length(constraint_record.conkey, 1) = 1 and child_table.relname in ('record_asset_deletion_outbox','record_retention_batches') order by child_table.relname, constraint_record.conname"
 )"
 for foreign_key_identity in \
-    "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id_record_retention_operations:retention_operation_id:record_retention_operations:operation_id:r" \
-    "record_retention_batches:fk_record_retention_batches_operation_id_record_retention_operations:operation_id:record_retention_operations:operation_id:r"; do
+    "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id__ecb1:retention_operation_id:record_retention_operations:operation_id:r" \
+    "record_retention_batches:fk_record_retention_batches_operation_id_record_retenti_0030:operation_id:record_retention_operations:operation_id:r"; do
     grep -Fxq "$foreign_key_identity" <<<"$retention_foreign_keys" || \
         fail "Restored Record v4 retention schema has an invalid foreign key $foreign_key_identity; record service remains stopped."
 done
