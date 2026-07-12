@@ -11,15 +11,17 @@ from __future__ import annotations
 import os
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, status
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user
+from ...core.roles import is_super_admin_role
 from ...db.session import get_db
 from ...models.user import User
+from ...services.permission_service import resolve_current_user_permission_info
 from ..k_series.product_knowledge.models import (
     KProductKnowledgeMediaAsset,
     KProductKnowledgeProduct,
@@ -36,6 +38,40 @@ from .upload.jobs import (
 from .upload.models import PUploadJob
 
 router = APIRouter(prefix="/p", tags=["p-upload"])
+
+MODULE_KEY = "p.upload"
+PERMISSION_READ = "p.upload.read"
+PERMISSION_EXECUTE = "p.upload.execute"
+
+
+def _require_p_permission(permission_key: str):
+    """人用端点鉴权：owner / super_admin 放行，否则需持有对应 p.upload.* 权限。
+
+    execute 隐含 read。机器端点（取数/取图/回报）走 job-token，不经过这里。
+    """
+
+    def dependency(
+        request: Request,
+        db: Session = Depends(get_db),
+        user: User = Depends(get_current_user),
+    ) -> User:
+        permissions = resolve_current_user_permission_info(db, user, request=request)
+        allowed_keys = {permission_key}
+        if permission_key == PERMISSION_READ:
+            # 能派单的人自然能看板；execute 隐含 read。
+            allowed_keys.add(PERMISSION_EXECUTE)
+        if (
+            permissions.is_owner_full_access
+            or is_super_admin_role(user.role)
+            or allowed_keys.intersection(permissions.permission_keys)
+        ):
+            return user
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Missing permission: {permission_key}",
+        )
+
+    return dependency
 
 
 def _public_base() -> str:
@@ -130,7 +166,7 @@ def p_upload_jobs_list(
     request: Request,
     limit: int = Query(default=50, ge=1, le=200),
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(_require_p_permission(PERMISSION_READ)),
 ) -> UploadJobListResponse:
     """上架台账：驾驶舱页面的数据源（会话鉴权）。
 
@@ -227,7 +263,7 @@ def p_dispatch(
     request: Request,
     channel: str = "woocommerce",
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(_require_p_permission(PERMISSION_EXECUTE)),
 ) -> DispatchResponse:
     del request, user
     product = _load_product(db, product_id)
@@ -261,7 +297,7 @@ def p_dispatch_batch(
     payload: DispatchBatchRequest,
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(_require_p_permission(PERMISSION_EXECUTE)),
 ) -> DispatchBatchResponse:
     """批量上架：全部入队，由串行队列一单一单发 n8n（防 Woo 429）。"""
     del request, user
@@ -306,7 +342,7 @@ class BoardResponse(BaseModel):
 def p_products_board(
     request: Request,
     db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
+    user: User = Depends(_require_p_permission(PERMISSION_READ)),
 ) -> BoardResponse:
     """待上传 / 已上传分组：K 链路走完（有文案）的产品全景。"""
     del request, user

@@ -98,6 +98,43 @@ class PermissionAssignmentKeyUpdateNotAllowedError(PermissionServiceError):
     pass
 
 
+class PermissionAssignmentScopeForbiddenError(PermissionServiceError):
+    """Actor is not allowed to manage this target user's permissions."""
+
+
+def ensure_actor_can_manage_target_permissions(
+    actor: User,
+    target_user: User,
+) -> None:
+    """Enforce the assignment authority ladder.
+
+    - Owner: may manage any (non-owner) user's permissions, in any organization.
+    - Super admin: may manage only non-owner / non-super-admin members of their
+      OWN organization.
+    - Anyone else: rejected (the endpoint dependency already gates, this is the
+      authoritative backstop so the rule holds even if a caller bypasses it).
+    """
+    if is_owner_role(actor.role):
+        return
+    if not is_super_admin_role(actor.role):
+        raise PermissionAssignmentScopeForbiddenError(
+            "Owner or super admin role is required to manage permissions."
+        )
+    actor_org = (actor.organization_id or "").strip()
+    if not actor_org:
+        raise PermissionAssignmentScopeForbiddenError(
+            "Super admin organization context is required to manage permissions."
+        )
+    if normalize_role(target_user.role) in {"owner", "super_admin"}:
+        raise PermissionAssignmentScopeForbiddenError(
+            "Super admin cannot manage owner or super admin permissions."
+        )
+    if (target_user.organization_id or "").strip() != actor_org:
+        raise PermissionAssignmentScopeForbiddenError(
+            "Super admin can only manage permissions for users in their own organization."
+        )
+
+
 HIGH_RISK_CONFIRMATION_TEXT = "CONFIRM_HIGH_RISK_PERMISSION"
 PERMISSION_ASSIGNMENT_GRANT_ACTION = "permission.assignment.grant"
 PERMISSION_ASSIGNMENT_UPDATE_ACTION = "permission.assignment.update"
@@ -684,8 +721,10 @@ def list_user_permission_assignments(
     db: Session,
     *,
     user_id: int,
+    actor: User,
 ) -> PermissionAssignmentListResult:
     target_user = _require_user(db, user_id)
+    ensure_actor_can_manage_target_permissions(actor, target_user)
     if is_owner_role(target_user.role):
         return PermissionAssignmentListResult(
             user_id=target_user.id,
@@ -794,6 +833,25 @@ def grant_user_permission(
             audit=audit,
             error_code="target_user_not_found",
             exc=PermissionUserNotFoundError("User not found."),
+            confirmation_provided=confirm_high_risk,
+        )
+    try:
+        ensure_actor_can_manage_target_permissions(actor, target_user)
+    except PermissionAssignmentScopeForbiddenError as exc:
+        _log_permission_failure_and_raise(
+            db,
+            actor=actor,
+            action=action,
+            target_user_id=user_id,
+            permission_key=normalized_key,
+            scope_type=normalized_scope_type,
+            scope_key=normalized_scope_key,
+            reason=reason,
+            risk_level=None,
+            high_risk=False,
+            audit=audit,
+            error_code="assignment_scope_forbidden",
+            exc=exc,
             confirmation_provided=confirm_high_risk,
         )
     if is_owner_role(target_user.role):
@@ -989,6 +1047,27 @@ def update_user_assignment(
                 if isinstance(exc, PermissionAssignmentNotFoundError)
                 else "target_user_not_found"
             ),
+            exc=exc,
+            assignment_id=assignment_id,
+            confirmation_provided=payload.confirm_high_risk,
+        )
+
+    try:
+        ensure_actor_can_manage_target_permissions(actor, target_user)
+    except PermissionAssignmentScopeForbiddenError as exc:
+        _log_permission_failure_and_raise(
+            db,
+            actor=actor,
+            action=action,
+            target_user_id=user_id,
+            permission_key=assignment.permission_key,
+            scope_type=None,
+            scope_key=None,
+            reason=payload.reason,
+            risk_level=None,
+            high_risk=False,
+            audit=audit,
+            error_code="assignment_scope_forbidden",
             exc=exc,
             assignment_id=assignment_id,
             confirmation_provided=payload.confirm_high_risk,
@@ -1279,6 +1358,26 @@ def revoke_user_assignment(
                 if isinstance(exc, PermissionAssignmentNotFoundError)
                 else "target_user_not_found"
             ),
+            exc=exc,
+            assignment_id=assignment_id,
+        )
+
+    try:
+        ensure_actor_can_manage_target_permissions(actor, target_user)
+    except PermissionAssignmentScopeForbiddenError as exc:
+        _log_permission_failure_and_raise(
+            db,
+            actor=actor,
+            action=action,
+            target_user_id=user_id,
+            permission_key=assignment.permission_key,
+            scope_type=None,
+            scope_key=None,
+            reason=reason,
+            risk_level=None,
+            high_risk=False,
+            audit=audit,
+            error_code="assignment_scope_forbidden",
             exc=exc,
             assignment_id=assignment_id,
         )

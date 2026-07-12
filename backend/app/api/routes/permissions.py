@@ -39,6 +39,7 @@ from ...services.permission_service import (
     PermissionAssignmentKeyUpdateNotAllowedError,
     PermissionAssignmentNotFoundError,
     PermissionAssignmentOwnerTargetError,
+    PermissionAssignmentScopeForbiddenError,
     PermissionAssignmentWildcardError,
     PermissionDisabledError,
     PermissionNotFoundError,
@@ -52,7 +53,11 @@ from ...services.permission_service import (
     update_user_assignment,
     upsert_permission_registry,
 )
-from ..deps import get_audit_context, require_owner, require_rbac
+from ..deps import (
+    get_audit_context,
+    require_permission_manager,
+    require_rbac,
+)
 
 router = APIRouter(prefix="/permissions", tags=["permissions"])
 logger = logging.getLogger(__name__)
@@ -79,6 +84,11 @@ def _raise_permission_assignment_error(exc: Exception) -> None:
     if isinstance(exc, PermissionAssignmentDuplicateError):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from None
+    if isinstance(exc, PermissionAssignmentScopeForbiddenError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from None
     if isinstance(
@@ -312,11 +322,11 @@ def user_permission_assignments(
     user_id: int,
     guard: None = Depends(guarded_heavy_api_request("permissions.assignments")),
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    actor: User = Depends(require_permission_manager),
 ) -> PermissionAssignmentListResponse:
-    del guard, owner
+    del guard
     try:
-        result = list_user_permission_assignments(db, user_id=user_id)
+        result = list_user_permission_assignments(db, user_id=user_id, actor=actor)
     except Exception as exc:
         _raise_permission_assignment_error(exc)
     return PermissionAssignmentListResponse.model_validate(result)
@@ -332,7 +342,7 @@ def user_permission_assignment_create(
     payload: PermissionAssignmentCreate,
     request: Request,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    actor: User = Depends(require_permission_manager),
 ) -> PermissionAssignmentActionResponse:
     if payload.user_id is not None and payload.user_id != user_id:
         raise HTTPException(
@@ -346,7 +356,7 @@ def user_permission_assignment_create(
             permission_key=payload.permission_key,
             scope_type=payload.scope_type,
             scope_key=payload.scope_key or "*",
-            actor=owner,
+            actor=actor,
             audit=get_audit_context(request),
             reason=payload.reason,
             expires_at=payload.expires_at,
@@ -368,7 +378,7 @@ def user_permission_assignment_update(
     payload: PermissionAssignmentUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    actor: User = Depends(require_permission_manager),
 ) -> PermissionAssignmentActionResponse:
     try:
         result = update_user_assignment(
@@ -376,7 +386,7 @@ def user_permission_assignment_update(
             user_id=user_id,
             assignment_id=assignment_id,
             payload=payload,
-            actor=owner,
+            actor=actor,
             audit=get_audit_context(request),
         )
     except Exception as exc:
@@ -394,14 +404,14 @@ def user_permission_assignment_revoke(
     request: Request,
     payload: PermissionAssignmentRevokeRequest | None = Body(default=None),
     db: Session = Depends(get_db),
-    owner: User = Depends(require_owner),
+    actor: User = Depends(require_permission_manager),
 ) -> PermissionAssignmentActionResponse:
     try:
         result = revoke_user_assignment(
             db,
             user_id=user_id,
             assignment_id=assignment_id,
-            actor=owner,
+            actor=actor,
             audit=get_audit_context(request),
             reason=payload.reason if payload is not None else None,
         )

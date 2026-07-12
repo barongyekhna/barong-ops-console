@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..core.config import Settings, get_settings
 from ..core.permissions import SCOPE_GLOBAL, SCOPE_ORGANIZATION
-from ..core.roles import is_owner_role
+from ..core.roles import is_owner_role, is_super_admin_role
 from ..core.session_cookies import get_session_id_from_request
 from ..db.session import get_db
 from ..models.user import User
@@ -236,6 +236,53 @@ def require_owner(
         user_id=str(user.id),
         payload={"role": user.role},
     )
+    return user
+
+
+def require_permission_manager(
+    request: Request,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> User:
+    """Owner or super admin may reach permission-assignment endpoints.
+
+    Owner assigns globally; super admin is restricted to their own organization's
+    members by the permission service (org-scope enforced there, not here).
+    """
+    decision = PermissionDecisionEngine(db, request=request).decide_platform_metadata(
+        UnifiedPermissionRequest(
+            user_id=user.id,
+            org_id=getattr(request.state, "org_id", None),
+            module_id="ADMIN",
+            action="admin",
+            role=user.role,
+            scope_type=SCOPE_GLOBAL,
+            scope_key="*",
+            source="api_require_permission_manager",
+        )
+    )
+    allowed = decision.allowed and (
+        is_owner_role(user.role) or is_super_admin_role(user.role)
+    )
+    emit_event(
+        event_type="rbac.permission_manager_check",
+        module="system",
+        action="rbac.permission_manager",
+        source="backend",
+        status="success" if allowed else "failed",
+        context_id=get_audit_context(request).request_id,
+        user_id=str(user.id),
+        payload={
+            "role": user.role,
+            "decision_source": "PermissionDecisionEngine",
+            "denial_code": decision.denial_code,
+        },
+    )
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Owner or super admin role required.",
+        )
     return user
 
 

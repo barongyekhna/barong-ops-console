@@ -112,6 +112,7 @@ export const navigationGroups: NavigationGroup[] = [
         icon: UploadCloud,
         label: "P系列自动化上传",
         module_key: "p.upload",
+        required_permission: "p.upload.read",
         route_namespace: "/p-upload",
         status: "active",
       },
