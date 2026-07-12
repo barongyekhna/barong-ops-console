@@ -99,6 +99,7 @@ def test_asset_stack_separates_control_bytes_scanner_and_volumes() -> None:
     )
     assert "User clamav" in scanner_policy
     assert "TCPSocket 3310" in scanner_policy
+    assert "LocalSocket /run/clamav/clamd.sock" in scanner_policy
     assert "StreamMaxLength 64M" in scanner_policy
     assert "MaxFileSize 64M" in scanner_policy
     assert "ConcurrentDatabaseReload no" in scanner_policy
