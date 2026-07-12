@@ -45,6 +45,7 @@ from backend.app.modules.c19.message_service import (
     get_resume,
     get_user_event_tail,
     get_unread,
+    get_unread_summary,
     list_message_history,
     list_user_events,
     send_message,
@@ -64,8 +65,11 @@ from backend.app.modules.c19.storage import (
     ChatRecordPageDTO,
     ChatRecordQueryDTO,
     ChatResumePositionDTO,
-    ChatRetentionCommandDTO,
+    ChatRetentionBatchCommandDTO,
+    ChatRetentionBatchResultDTO,
     ChatUnreadPositionDTO,
+    ChatUnreadSummaryDTO,
+    ChatUnreadSummaryQueryDTO,
     ChatUserEventDTO,
     ChatUserEventPageDTO,
     ChatUserEventQueryDTO,
@@ -88,6 +92,7 @@ class FakeExternalRecordStore:
     def __init__(self) -> None:
         self.append_attempts: list[ChatRecordAppendDTO] = []
         self.records: dict[tuple[str, str], tuple[ChatRecordAppendDTO, ChatRecordDTO]] = {}
+        self.unread_summary_queries: list[ChatUnreadSummaryQueryDTO] = []
 
     @property
     def capability(self) -> StorageCapabilityDescription:
@@ -111,6 +116,7 @@ class FakeExternalRecordStore:
             command.content_type,
             command.content,
             command.metadata,
+            command.assets,
         )
 
     async def append_record(self, record: ChatRecordAppendDTO) -> ChatRecordDTO:
@@ -135,9 +141,32 @@ class FakeExternalRecordStore:
             sender_org_id=record.sender_org_id,
             recipient_org_ids=record.recipient_org_ids,
             metadata=record.metadata,
+            assets=record.assets,
         )
         self.records[key] = (record, persisted)
         return persisted
+
+    async def get_authorized_record(
+        self,
+        *,
+        conversation_id: str,
+        record_id: str,
+        user_id: str,
+    ) -> ChatRecordDTO:
+        for _, record in self.records.values():
+            if (
+                record.conversation_id == conversation_id
+                and record.record_id == record_id
+                and (
+                    record.sender_user_id == user_id
+                    or user_id in record.recipient_user_ids
+                )
+            ):
+                return record
+        raise ChatRecordStoreRejectedError(
+            operation="get_authorized_record",
+            status_code=404,
+        )
 
     async def list_records(self, query: ChatRecordQueryDTO) -> ChatRecordPageDTO:
         records = tuple(
@@ -224,6 +253,16 @@ class FakeExternalRecordStore:
             latest_sequence=1,
         )
 
+    async def get_unread_summary(
+        self,
+        query: ChatUnreadSummaryQueryDTO,
+    ) -> ChatUnreadSummaryDTO:
+        self.unread_summary_queries.append(query)
+        return ChatUnreadSummaryDTO(
+            total_unread_count=len(query.conversation_ids) * 2,
+            unread_conversation_count=len(query.conversation_ids),
+        )
+
     async def get_resume_position(
         self,
         query: ChatPositionQueryDTO,
@@ -244,12 +283,19 @@ class FakeExternalRecordStore:
         del command
         return ChatRecordMutationResultDTO(0, datetime.now(UTC))
 
-    async def apply_retention(
+    async def apply_retention_batch(
         self,
-        command: ChatRetentionCommandDTO,
-    ) -> ChatRecordMutationResultDTO:
+        command: ChatRetentionBatchCommandDTO,
+    ) -> ChatRetentionBatchResultDTO:
         del command
-        return ChatRecordMutationResultDTO(0, datetime.now(UTC))
+        return ChatRetentionBatchResultDTO(
+            operation_id="rtn_" + "a" * 64,
+            batch_ordinal=0,
+            affected_count=0,
+            cumulative_affected_count=0,
+            operation_complete=True,
+            completed_at=datetime.now(UTC),
+        )
 
 
 @pytest.fixture
@@ -395,6 +441,7 @@ def test_router_contract_and_metadata_have_no_local_message_storage() -> None:
         ("POST", "/c19/conversations/{conversation_id}/read"),
         ("GET", "/c19/conversations/{conversation_id}/unread"),
         ("GET", "/c19/conversations/{conversation_id}/resume"),
+        ("GET", "/c19/unread"),
         ("GET", "/c19/events"),
         ("GET", "/c19/events/tail"),
     }
@@ -446,6 +493,80 @@ def test_send_is_store_backed_idempotent_and_derives_recipients(
     assert sent.recipient_user_ids == ("2",)
     assert sent.sender_org_id == ORG_ONE
     assert sent.recipient_org_ids == (ORG_TWO,)
+
+
+def test_affiliation_free_members_can_send_and_receive_messages(
+    runtime_db: tuple[Engine, sessionmaker[Session]],
+) -> None:
+    _, factory = runtime_db
+    store = FakeExternalRecordStore()
+    conversation_id = "c19_direct_native_users"
+    now = datetime.now(UTC)
+    with factory() as db:
+        db.add_all(
+            [
+                User(
+                    id=user_id,
+                    username=f"native-chat-{user_id}",
+                    password_hash="unused",
+                    role=role,
+                    organization_id=None,
+                    must_change_password=False,
+                    is_active=True,
+                )
+                for user_id, role in ((4, "viewer"), (5, "custom-role"))
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                C19ProfileRecord(user_id=user_id, display_name=f"Native {user_id}")
+                for user_id in (4, 5)
+            ]
+        )
+        db.flush()
+        db.add(
+            C19ConversationRecord(
+                conversation_id=conversation_id,
+                conversation_type="direct",
+                direct_pair_key="4:5",
+                created_by_user_id=4,
+                status="active",
+            )
+        )
+        db.flush()
+        db.add_all(
+            [
+                C19ConversationMemberRecord(
+                    conversation_id=conversation_id,
+                    affiliation_id=None,
+                    user_id=user_id,
+                    org_id_at_join=None,
+                    role="member",
+                    status="active",
+                    joined_at=now,
+                )
+                for user_id in (4, 5)
+            ]
+        )
+        db.commit()
+
+        sent = asyncio.run(
+            send_message(
+                db,
+                actor=_actor(db, 4),
+                conversation_id=conversation_id,
+                payload=_message().model_copy(
+                    update={"client_message_id": "native-message-1"}
+                ),
+                store=store,
+            )
+        )
+
+    assert sent.sender_user_id == "4"
+    assert sent.recipient_user_ids == ["5"]
+    assert sent.sender_org_id is None
+    assert sent.recipient_org_ids == []
 
 
 def test_unconfigured_store_and_access_denials_never_fake_success(
@@ -606,7 +727,7 @@ def test_idempotent_group_replay_keeps_first_recipient_snapshot(
     assert first.recipient_user_ids == replay.recipient_user_ids == ["2", "3"]
     assert first.recipient_org_ids == [ORG_TWO]
     assert store.append_attempts[0].recipient_org_ids == (ORG_TWO,)
-    assert store.append_attempts[1].recipient_user_ids == ("2",)
+    assert store.append_attempts[1].recipient_user_ids == ("2", "3")
 
 
 def test_actor_keeps_history_when_peer_becomes_inactive_but_new_send_is_denied(
@@ -624,9 +745,9 @@ def test_actor_keeps_history_when_peer_becomes_inactive_but_new_send_is_denied(
                 store=store,
             )
         )
-        peer_membership = db.get(OrgMembershipRecord, "membership-2")
-        assert peer_membership is not None
-        peer_membership.status = "suspended"
+        peer = db.get(User, 2)
+        assert peer is not None
+        peer.is_active = False
         db.commit()
 
         history = asyncio.run(
@@ -741,6 +862,59 @@ def test_history_positions_and_events_are_scoped_to_current_member(
     assert events.next_cursor == "opaque-next"
     assert event_tail.cursor == "opaque-tail"
     assert event_tail.latest_event_sequence == 2
+
+
+def test_global_unread_uses_only_the_complete_active_membership_set(
+    runtime_db: tuple[Engine, sessionmaker[Session]],
+) -> None:
+    _, factory = runtime_db
+    member_store = FakeExternalRecordStore()
+    outsider_store = FakeExternalRecordStore()
+    with factory() as db:
+        member_summary = asyncio.run(
+            get_unread_summary(db, actor=_actor(db, 1), store=member_store)
+        )
+        outsider_summary = asyncio.run(
+            get_unread_summary(db, actor=_actor(db, 3), store=outsider_store)
+        )
+
+    assert member_summary.model_dump() == {
+        "total_unread_count": 2,
+        "unread_conversation_count": 1,
+    }
+    assert member_store.unread_summary_queries[0].conversation_ids == (
+        CONVERSATION_ID,
+    )
+    assert outsider_summary.model_dump() == {
+        "total_unread_count": 0,
+        "unread_conversation_count": 0,
+    }
+    assert outsider_store.unread_summary_queries == []
+
+
+def test_global_unread_chunks_every_membership_without_truncation(
+    runtime_db: tuple[Engine, sessionmaker[Session]],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _, factory = runtime_db
+    store = FakeExternalRecordStore()
+    conversation_ids = tuple(f"conversation-{index:04d}" for index in range(2501))
+    monkeypatch.setattr(
+        "backend.app.modules.c19.message_service.list_active_conversation_ids",
+        lambda _db, *, user_id: conversation_ids if user_id == 1 else (),
+    )
+
+    with factory() as db:
+        summary = asyncio.run(
+            get_unread_summary(db, actor=_actor(db, 1), store=store)
+        )
+
+    assert summary.total_unread_count == 5002
+    assert summary.unread_conversation_count == 2501
+    assert [
+        len(query.conversation_ids) for query in store.unread_summary_queries
+    ] == [1000, 1000, 501]
+    assert all(query.user_id == "1" for query in store.unread_summary_queries)
 
 
 def test_event_endpoint_negotiates_content_free_sse_pages(
@@ -903,6 +1077,81 @@ def test_http_adapter_reads_body_free_user_event_tail() -> None:
     assert requested[0].url == httpx.URL(
         "http://c19-record-service:8090/v1/users/2/events/tail"
     )
+
+
+def test_http_adapter_uses_exact_content_free_unread_summary_wire() -> None:
+    requested: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requested.append(request)
+        assert json.loads(request.content) == {
+            "conversation_ids": ["conversation-a", "conversation-b"]
+        }
+        return httpx.Response(
+            200,
+            json={
+                "total_unread_count": 9,
+                "unread_conversation_count": 2,
+            },
+        )
+
+    async def run() -> ChatUnreadSummaryDTO:
+        async with HttpChatRecordStore(
+            HttpChatRecordStoreConfig(
+                base_url="http://c19-record-service:8090",
+                token="t" * 32,
+            ),
+            transport=httpx.MockTransport(handler),
+        ) as store:
+            return await store.get_unread_summary(
+                ChatUnreadSummaryQueryDTO(
+                    user_id="7",
+                    conversation_ids=("conversation-a", "conversation-b"),
+                )
+            )
+
+    result = asyncio.run(run())
+
+    assert result == ChatUnreadSummaryDTO(
+        total_unread_count=9,
+        unread_conversation_count=2,
+    )
+    assert requested[0].method == "POST"
+    assert requested[0].url == httpx.URL(
+        "http://c19-record-service:8090/v1/users/7/unread-summary"
+    )
+
+
+def test_http_adapter_rejects_unread_summary_response_shape_drift() -> None:
+    def handler(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "total_unread_count": 1,
+                "unread_conversation_count": 1,
+                "content": "must-not-cross-boundary",
+            },
+        )
+
+    async def run() -> None:
+        async with HttpChatRecordStore(
+            HttpChatRecordStoreConfig(
+                base_url="http://c19-record-service:8090",
+                token="t" * 32,
+            ),
+            transport=httpx.MockTransport(handler),
+        ) as store:
+            with pytest.raises(ChatRecordStoreProtocolError) as captured:
+                await store.get_unread_summary(
+                    ChatUnreadSummaryQueryDTO(
+                        user_id="7",
+                        conversation_ids=("conversation-a",),
+                    )
+                )
+            assert captured.value.operation == "get_unread_summary"
+            assert "must-not-cross-boundary" not in str(captured.value)
+
+    asyncio.run(run())
 
 
 def test_http_adapter_rejects_history_record_for_nonparticipant_user() -> None:

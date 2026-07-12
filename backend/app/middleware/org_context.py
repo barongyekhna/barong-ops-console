@@ -53,8 +53,9 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
         "/api/app/permissions/me",
     )
 )
-# C19 authorizes a global member directory and participant-scoped conversations;
-# it validates authoritative affiliations inside its own application services.
+# C19 is native to every active authenticated user and has no organization
+# admission gate. Its own services enforce participant/content policy and
+# validate an affiliation only when a user explicitly selects organization data.
 ORG_CONTEXT_EXEMPT_PREFIXES = ("/api/app/c19",)
 FRONTEND_ORG_QUERY_KEYS = ("org_id", "active_org_id")
 FRONTEND_ORG_HEADER_KEYS = ("x-org-id", "x-active-org-id")

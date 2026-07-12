@@ -51,8 +51,9 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
         "/api/app/module/shared/list",
     )
 )
-# C19 is global communication metadata, not tenant business data. Its services
-# enter a narrow bypass only after session and authoritative affiliation checks.
+# C19 is global communication metadata, not tenant business data. Every active
+# authenticated user may enter it; participant/content policy is enforced by
+# C19 itself, while affiliations are optional descriptive context only.
 ORG_CONTEXT_EXEMPT_PREFIXES = ("/api/app/c19",)
 ORG_PATH_PATTERN = re.compile(r"/org/(?P<org_id>org_[0-9a-f]{32})(?:/|$)")
 MUTATING_METHODS = frozenset(("POST", "PUT", "PATCH", "DELETE"))

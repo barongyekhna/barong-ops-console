@@ -37,7 +37,7 @@ STAGING_INTEGRATION_REPORT_FILE = REPOSITORY_ROOT / "staging_integration_report.
 ROLLBACK_DRILL_REPORT_FILE = REPOSITORY_ROOT / "rollback_drill_report.json"
 STAGING_OBSERVABILITY_REPORT_FILE = REPOSITORY_ROOT / "staging_observability_report.json"
 
-EXPECTED_ALEMBIC_HEAD = "20260711_03_render_staging"
+EXPECTED_ALEMBIC_HEAD = "20260712_01_c19_native_access"
 PINNED_COMPOSE_VERSION = "1.29.2"
 STAGING_PROJECT = "barong-ops-console-staging"
 STAGING_FRONTEND_URL = "http://127.0.0.1:3100"
@@ -288,9 +288,9 @@ def compose_drift_guards(compose_text: str, env_values: dict[str, str]) -> list[
         },
         {
             "id": "runtime_env_file_count",
-            "expected": 3,
+            "expected": 4,
             "actual": env_file_count,
-            "status": "passed" if env_file_count == 3 else "failed",
+            "status": "passed" if env_file_count == 4 else "failed",
         },
         {
             "id": "no_host_env_interpolation",

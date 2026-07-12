@@ -167,8 +167,8 @@ class ConversationMemberView(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     user_id: int
-    affiliation_id: str
-    org_id: str
+    affiliation_id: str | None
+    org_id: str | None
     role: ConversationMemberRole
     status: ConversationMemberStatus
     joined_at: datetime
@@ -183,7 +183,7 @@ class ConversationSummary(BaseModel):
     title: str | None
     status: ConversationStatus
     actor_role: ConversationMemberRole
-    actor_org_id: str
+    actor_org_id: str | None
     active_member_count: int = Field(ge=0)
     settings: ConversationSettingsView
     created_at: datetime

@@ -11,7 +11,15 @@ from dataclasses import dataclass
 from typing import Literal
 
 
-CursorKind = Literal["records_older", "records_after", "events"]
+CursorKind = Literal[
+    "records_older",
+    "records_after",
+    "events",
+    "moment_feed",
+    "moment_likes",
+    "moment_comments",
+    "moment_events",
+]
 
 
 class InvalidCursorError(ValueError):

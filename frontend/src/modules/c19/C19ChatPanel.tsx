@@ -2,14 +2,20 @@
 
 import {
   ChevronUp,
+  FileText,
+  ImageIcon,
+  LoaderCircle,
   MessageSquareText,
+  Paperclip,
   RefreshCcw,
   Send,
   Smile,
   Wifi,
   WifiOff,
+  X,
 } from "lucide-react";
 import {
+  type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
   useCallback,
@@ -25,6 +31,9 @@ import {
   advanceC19Delivery,
   advanceC19Read,
   c19EventStreamUrl,
+  createC19AssetUploadIntent,
+  finalizeC19AssetUpload,
+  getC19AssetStatus,
   getC19MessageEventTail,
   getC19ResumePosition,
   getC19UnreadPosition,
@@ -33,6 +42,16 @@ import {
   sendC19Message,
 } from "./api";
 import {
+  C19_ASSET_ACCEPT,
+  C19AssetTransferError,
+  assertC19UploadLocator,
+  inspectC19AssetSelection,
+  makeC19ClientAssetId,
+  putC19AssetBytes,
+  sha256C19File,
+  waitForC19AssetPoll,
+} from "./C19AssetTransfer";
+import {
   C19RecoverySafetyError as RecoverySafetyError,
   c19ReceiptSafetyScope,
   drainC19ForwardRecoveryBatch,
@@ -40,9 +59,13 @@ import {
   isC19ReceiptSafetyScopeActive,
   mergeC19MessageWindow,
 } from "./C19ChatRecovery";
+import { C19MessageAsset } from "./C19MessageAsset";
+import { announceC19UnreadChanged } from "./C19UnreadStatus";
 import styles from "./C19Workspace.module.css";
 import type {
   C19Conversation,
+  C19Asset,
+  C19AssetKind,
   C19MessageContentType,
   C19MessageEvent,
   C19MessageEventPage,
@@ -63,6 +86,7 @@ const EVENT_POLL_INTERVAL_MS = 4_000;
 const SSE_RECONNECT_INTERVAL_MS = 30_000;
 const STATUS_REFRESH_INTERVAL_MS = 15_000;
 const MESSAGE_MAX_LENGTH = 4_000;
+const ASSET_SCAN_POLL_LIMIT = 120;
 const QUICK_EMOJI = ["👍", "❤️", "😊", "🎉", "收到", "谢谢"] as const;
 const eventCursorMemory = new Map<string, string>();
 
@@ -73,6 +97,35 @@ type PendingMessage = {
   clientMessageId: string;
   content: string;
   contentType: C19MessageContentType;
+  asset?: PendingAsset;
+};
+
+type PendingAsset = {
+  assetId?: string;
+  clientAssetId: string;
+  file: File;
+  filename: string;
+  kind: C19AssetKind;
+  mediaType: string;
+  previewUrl: string | null;
+  sha256Hex?: string;
+  sizeBytes: number;
+};
+
+type AssetTransferPhase =
+  | "selected"
+  | "hashing"
+  | "intent"
+  | "uploading"
+  | "scanning"
+  | "active"
+  | "persisting"
+  | "failed";
+
+type AssetTransferState = {
+  phase: AssetTransferPhase;
+  progress: number;
+  statusText: string;
 };
 
 type RecoveryCheckpoint = {
@@ -103,6 +156,8 @@ function runtimeErrorMessage(error: unknown, fallback: string) {
     if (error.status === 403) return "你已不再拥有这个会话的访问权。";
     if (error.status === 404) return "会话或消息运行时不存在。";
     if (error.status === 409) return error.message || "消息状态发生冲突，请刷新后重试。";
+    if (error.status === 413) return "图片或文件超过资产服务允许的大小。";
+    if (error.status === 415) return "图片或文件类型不受支持。";
     if (error.status === 422) return error.message || "消息内容不符合发送规则。";
     if (error.status === 429) return "发送过于频繁，请稍后再试。";
     if (error.status >= 500) return "聊天记录服务暂时不可用，消息没有被假定为成功。";
@@ -173,6 +228,9 @@ export function C19ChatPanel({
   const [resumePosition, setResumePosition] =
     useState<C19ResumePosition | null>(null);
   const [draft, setDraft] = useState("");
+  const [selectedAsset, setSelectedAsset] = useState<PendingAsset | null>(null);
+  const [assetTransfer, setAssetTransfer] =
+    useState<AssetTransferState | null>(null);
   const [pendingMessage, setPendingMessage] = useState<PendingMessage | null>(null);
   const [isSending, setIsSending] = useState(false);
   const [isLoadingHistory, setIsLoadingHistory] = useState(true);
@@ -200,6 +258,9 @@ export function C19ChatPanel({
   const receiptInFlightRef = useRef({ delivered: 0, read: 0 });
   const receiptSafetyScopeRef = useRef<string | null>(null);
   const pendingMessageRef = useRef<PendingMessage | null>(null);
+  const assetAbortRef = useRef<AbortController | null>(null);
+  const assetPreviewUrlRef = useRef<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const sendInFlightRef = useRef(false);
   const sendOperationRef = useRef(0);
   const messageHistoryRef = useRef<HTMLDivElement | null>(null);
@@ -219,6 +280,37 @@ export function C19ChatPanel({
   });
   activeConversationRef.current = conversationId;
   activeUserIdRef.current = userId;
+
+  const revokeAssetPreview = useCallback(() => {
+    if (assetPreviewUrlRef.current) {
+      URL.revokeObjectURL(assetPreviewUrlRef.current);
+      assetPreviewUrlRef.current = null;
+    }
+  }, []);
+
+  const resetAssetComposer = useCallback(
+    (abort = true) => {
+      if (abort) assetAbortRef.current?.abort();
+      assetAbortRef.current = null;
+      revokeAssetPreview();
+      setSelectedAsset(null);
+      setAssetTransfer(null);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    },
+    [revokeAssetPreview],
+  );
+
+  useEffect(() => {
+    const disposeVolatileAsset = () => {
+      assetAbortRef.current?.abort();
+      revokeAssetPreview();
+    };
+    window.addEventListener("pagehide", disposeVolatileAsset);
+    return () => {
+      window.removeEventListener("pagehide", disposeVolatileAsset);
+      disposeVolatileAsset();
+    };
+  }, [revokeAssetPreview]);
 
   const profileNames = useMemo(
     () => new Map(profiles.map((profile) => [profile.user_id, profile.display_name])),
@@ -599,6 +691,7 @@ export function C19ChatPanel({
     setUnreadPosition(null);
     setResumePosition(null);
     setDraft("");
+    resetAssetComposer();
     setPendingMessage(null);
     pendingMessageRef.current = null;
     sendInFlightRef.current = false;
@@ -641,7 +734,7 @@ export function C19ChatPanel({
     return () => {
       cancelled = true;
     };
-  }, [conversationId, recoverFromResume]);
+  }, [conversationId, recoverFromResume, resetAssetComposer]);
 
   useEffect(() => {
     if (!stickToBottomRef.current) return;
@@ -789,6 +882,7 @@ export function C19ChatPanel({
           void refreshUnread();
         }
         setReceiptError("");
+        announceC19UnreadChanged();
       })
       .catch((error) => {
         if (
@@ -1157,6 +1251,63 @@ export function C19ChatPanel({
     }
   }, [conversationId, historyCursor, isLoadingOlder, mergeRenderedRecords]);
 
+  const selectAsset = useCallback(
+    (event: ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0] ?? null;
+      event.target.value = "";
+      if (!file) return;
+      if (renderWindowModeRef.current === "older") {
+        setSendError("正在浏览历史消息，请先回到最新消息后再选择图片或文件。");
+        return;
+      }
+      if (pendingMessageRef.current || sendInFlightRef.current) return;
+
+      try {
+        const inspected = inspectC19AssetSelection(file);
+        resetAssetComposer();
+        const previewUrl =
+          inspected.kind === "image" ? URL.createObjectURL(file) : null;
+        assetPreviewUrlRef.current = previewUrl;
+        const selected = {
+          clientAssetId: makeC19ClientAssetId(),
+          file,
+          filename: inspected.filename,
+          kind: inspected.kind,
+          mediaType: inspected.mediaType,
+          previewUrl,
+          sizeBytes: inspected.sizeBytes,
+        } satisfies PendingAsset;
+        setSelectedAsset(selected);
+        setAssetTransfer({
+          phase: "selected",
+          progress: 0,
+          statusText: "已选择；发送时会先计算校验值并进入隔离扫描。",
+        });
+        setSendError("");
+      } catch (error) {
+        resetAssetComposer();
+        setSendError(
+          error instanceof Error && error.message
+            ? error.message
+            : "无法选择这个图片或文件。",
+        );
+      }
+    },
+    [resetAssetComposer],
+  );
+
+  const cancelAssetOperation = useCallback(() => {
+    if (assetTransfer?.phase === "persisting") return;
+    sendOperationRef.current += 1;
+    assetAbortRef.current?.abort();
+    sendInFlightRef.current = false;
+    setIsSending(false);
+    pendingMessageRef.current = null;
+    setPendingMessage(null);
+    setSendError("");
+    resetAssetComposer();
+  }, [assetTransfer?.phase, resetAssetComposer]);
+
   const transmit = useCallback(
     async (pending: PendingMessage) => {
       if (sendInFlightRef.current) return;
@@ -1165,12 +1316,193 @@ export function C19ChatPanel({
       sendInFlightRef.current = true;
       setIsSending(true);
       setSendError("");
+      const controller = new AbortController();
+      assetAbortRef.current?.abort();
+      assetAbortRef.current = controller;
+      let currentPending = pending;
+      let messagePersistenceStarted = false;
+
+      const operationIsCurrent = () =>
+        activeConversationRef.current === conversationId &&
+        sendOperationRef.current === operation &&
+        !controller.signal.aborted;
+
+      const rememberAsset = (asset: PendingAsset) => {
+        currentPending = { ...currentPending, asset };
+        if (!operationIsCurrent()) return;
+        pendingMessageRef.current = currentPending;
+        setPendingMessage(currentPending);
+        setSelectedAsset(asset);
+      };
+
+      const updateAssetTransfer = (next: AssetTransferState) => {
+        if (operationIsCurrent()) setAssetTransfer(next);
+      };
+
+      const requireUsableAssetState = (asset: C19Asset) => {
+        if (asset.status === "active") return;
+        if (asset.status === "rejected" || asset.status === "quarantined") {
+          throw new C19AssetTransferError(
+            "安全扫描拒绝了这个文件；消息没有被假定为成功。",
+          );
+        }
+        if (
+          asset.status === "deleted" ||
+          asset.status === "delete_pending" ||
+          asset.status === "expired"
+        ) {
+          throw new C19AssetTransferError(
+            "上传资产已失效，请取消后重新选择文件。",
+          );
+        }
+      };
+
+      const requireMatchingAssetSnapshot = (
+        asset: C19Asset,
+        pendingAsset: PendingAsset,
+      ) => {
+        if (
+          asset.client_asset_id !== pendingAsset.clientAssetId ||
+          asset.kind !== pendingAsset.kind ||
+          asset.filename !== pendingAsset.filename ||
+          asset.media_type !== pendingAsset.mediaType ||
+          asset.size_bytes !== pendingAsset.sizeBytes ||
+          asset.sha256_hex !== pendingAsset.sha256Hex
+        ) {
+          throw new C19AssetTransferError(
+            "资产服务返回的不可变快照与本次选择不一致，已停止发送。",
+          );
+        }
+      };
+
       try {
+        if (currentPending.asset) {
+          let pendingAsset = currentPending.asset;
+          if (!pendingAsset.sha256Hex) {
+            updateAssetTransfer({
+              phase: "hashing",
+              progress: 0,
+              statusText: "正在本机计算 SHA-256，不会把文件交给 JSON 代理。",
+            });
+            const sha256Hex = await sha256C19File(
+              pendingAsset.file,
+              controller.signal,
+            );
+            pendingAsset = { ...pendingAsset, sha256Hex };
+            rememberAsset(pendingAsset);
+          }
+          if (!pendingAsset.sha256Hex) {
+            throw new C19AssetTransferError("文件校验值计算失败。");
+          }
+
+          updateAssetTransfer({
+            phase: "intent",
+            progress: 0,
+            statusText: "正在申请一次性上传票。",
+          });
+          const intent = await createC19AssetUploadIntent(
+            conversationId,
+            {
+              client_asset_id: pendingAsset.clientAssetId,
+              filename: pendingAsset.filename,
+              kind: pendingAsset.kind,
+              media_type: pendingAsset.mediaType,
+              sha256_hex: pendingAsset.sha256Hex,
+              size_bytes: pendingAsset.sizeBytes,
+            },
+            controller.signal,
+          );
+          if (
+            pendingAsset.assetId &&
+            pendingAsset.assetId !== intent.asset.asset_id
+          ) {
+            throw new C19AssetTransferError("资产幂等响应不一致，已停止发送。");
+          }
+          pendingAsset = { ...pendingAsset, assetId: intent.asset.asset_id };
+          rememberAsset(pendingAsset);
+          let remoteAsset = intent.asset;
+          requireMatchingAssetSnapshot(remoteAsset, pendingAsset);
+          requireUsableAssetState(remoteAsset);
+
+          if (remoteAsset.status === "pending_upload") {
+            if (!intent.upload_locator) {
+              throw new C19AssetTransferError(
+                "资产服务没有为待上传文件签发上传票。",
+              );
+            }
+            updateAssetTransfer({
+              phase: "uploading",
+              progress: 0,
+              statusText: "正在把原始字节直传资产数据面。",
+            });
+            await putC19AssetBytes({
+              file: pendingAsset.file,
+              locator: assertC19UploadLocator(intent.upload_locator),
+              onProgress: (progress) =>
+                updateAssetTransfer({
+                  phase: "uploading",
+                  progress,
+                  statusText:
+                    progress < 100
+                      ? `正在直传文件：${progress}%`
+                      : "字节已上传，等待服务端确认。",
+                }),
+              signal: controller.signal,
+            });
+            remoteAsset = await finalizeC19AssetUpload(
+              conversationId,
+              remoteAsset.asset_id,
+              controller.signal,
+            );
+            requireMatchingAssetSnapshot(remoteAsset, pendingAsset);
+            requireUsableAssetState(remoteAsset);
+          }
+
+          let scanPolls = 0;
+          while (remoteAsset.status !== "active") {
+            if (scanPolls >= ASSET_SCAN_POLL_LIMIT) {
+              throw new C19AssetTransferError(
+                "安全扫描仍未完成，可使用相同资产编号继续重试。",
+              );
+            }
+            updateAssetTransfer({
+              phase: "scanning",
+              progress: 100,
+              statusText: "文件处于隔离区，正在校验格式并进行恶意软件扫描。",
+            });
+            await waitForC19AssetPoll(controller.signal);
+            remoteAsset = await getC19AssetStatus(
+              conversationId,
+              remoteAsset.asset_id,
+              controller.signal,
+            );
+            requireMatchingAssetSnapshot(remoteAsset, pendingAsset);
+            requireUsableAssetState(remoteAsset);
+            scanPolls += 1;
+          }
+
+          updateAssetTransfer({
+            phase: "active",
+            progress: 100,
+            statusText: "安全扫描通过，正在写入消息记录。",
+          });
+          await waitForC19AssetPoll(controller.signal, 0);
+          updateAssetTransfer({
+            phase: "persisting",
+            progress: 100,
+            statusText: "正在把不可变资产引用持久化到消息记录。",
+          });
+        }
+
+        messagePersistenceStarted = true;
         const persisted = await sendC19Message(conversationId, {
-          client_message_id: pending.clientMessageId,
-          content: pending.content,
-          content_type: pending.contentType,
-        });
+          asset: currentPending.asset?.assetId
+            ? { asset_id: currentPending.asset.assetId }
+            : undefined,
+          client_message_id: currentPending.clientMessageId,
+          content: currentPending.content,
+          content_type: currentPending.contentType,
+        }, controller.signal);
         if (
           activeConversationRef.current !== conversationId ||
           sendOperationRef.current !== operation
@@ -1183,6 +1515,10 @@ export function C19ChatPanel({
         setPendingMessage(null);
         pendingMessageRef.current = null;
         setDraft("");
+        if (currentPending.asset) {
+          assetAbortRef.current = null;
+          resetAssetComposer(false);
+        }
       } catch (error) {
         if (
           activeConversationRef.current !== conversationId ||
@@ -1193,25 +1529,39 @@ export function C19ChatPanel({
         if (error instanceof ApiError && error.status === 410) {
           pendingMessageRef.current = null;
           setPendingMessage(null);
+          if (currentPending.asset) resetAssetComposer(false);
           setSendError(
-            "这条消息的旧记录已经删除，原 client_message_id 不能继续重放；内容已保留，再次发送会生成新的消息编号。",
+            !messagePersistenceStarted
+              ? "原 client_asset_id 已永久失效，不能继续重放；请重新选择文件。"
+              : currentPending.asset
+                ? "这条消息的旧记录已经删除，原 client_message_id 不能继续重放；请重新选择文件后发送。"
+                : "这条消息的旧记录已经删除，原 client_message_id 不能继续重放；内容已保留，再次发送会生成新的消息编号。",
           );
           return;
         }
-        setSendError(
-          runtimeErrorMessage(
-            error,
-            "发送失败；服务端未确认持久化，可使用同一消息编号安全重试。",
-          ),
+        const errorMessage = runtimeErrorMessage(
+          error,
+          currentPending.asset
+            ? "资产或消息尚未确认成功，可使用同一资产和消息编号安全重试。"
+            : "发送失败；服务端未确认持久化，可使用同一消息编号安全重试。",
         );
+        setSendError(errorMessage);
+        if (currentPending.asset) {
+          setAssetTransfer({
+            phase: "failed",
+            progress: 0,
+            statusText: errorMessage,
+          });
+        }
       } finally {
         if (sendOperationRef.current === operation) {
           sendInFlightRef.current = false;
           setIsSending(false);
         }
+        if (assetAbortRef.current === controller) assetAbortRef.current = null;
       }
     },
-    [conversationId, mergeRenderedRecords],
+    [conversationId, mergeRenderedRecords, resetAssetComposer],
   );
 
   const submitMessage = useCallback(
@@ -1227,17 +1577,18 @@ export function C19ChatPanel({
         return;
       }
       const content = draft.trim();
-      if (!content || conversation.status !== "active") return;
+      if ((!content && !selectedAsset) || conversation.status !== "active") return;
       const pending = {
+        asset: selectedAsset ?? undefined,
         clientMessageId: makeClientMessageId(),
         content,
-        contentType: contentTypeFor(content),
+        contentType: selectedAsset?.kind ?? contentTypeFor(content),
       } satisfies PendingMessage;
       setPendingMessage(pending);
       pendingMessageRef.current = pending;
       void transmit(pending);
     },
-    [conversation.status, draft, pendingMessage, transmit],
+    [conversation.status, draft, pendingMessage, selectedAsset, transmit],
   );
 
   const onComposerKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -1262,14 +1613,18 @@ export function C19ChatPanel({
     <section className={styles.chatPanel} aria-labelledby="c19-chat-title">
       <header className={styles.chatHeading}>
         <div>
-          <span>文字与 Emoji</span>
+          <span>文字、Emoji、图片与文件</span>
           <h3 id="c19-chat-title">
             <MessageSquareText aria-hidden="true" size={20} />
             {conversation.title || (conversation.type === "group" ? "群组聊天" : "单聊")}
           </h3>
         </div>
         <div className={styles.chatRuntimeState}>
-          <span data-mode={isRecovering ? "connecting" : connectionMode}>
+          <span
+            aria-live="polite"
+            data-mode={isRecovering ? "connecting" : connectionMode}
+            role="status"
+          >
             {connectionMode === "offline" ? (
               <WifiOff aria-hidden="true" size={14} />
             ) : (
@@ -1284,6 +1639,7 @@ export function C19ChatPanel({
       </header>
 
       <div
+        aria-busy={isLoadingHistory || isRecovering}
         aria-live="polite"
         className={styles.messageHistory}
         onScroll={(event) => {
@@ -1320,7 +1676,9 @@ export function C19ChatPanel({
         {isLoadingHistory ? (
           <div className={styles.chatEmpty} role="status">正在读取持久化消息…</div>
         ) : records.length === 0 ? (
-          <div className={styles.chatEmpty}>还没有消息，可以发送第一条文字或 Emoji。</div>
+          <div className={styles.chatEmpty} role="status">
+            还没有消息，可以发送第一条消息。
+          </div>
         ) : (
           records.map((record) => {
             const own = isSameUser(record.sender_user_id, userId);
@@ -1335,7 +1693,21 @@ export function C19ChatPanel({
                     {profileNames.get(senderId) ?? `成员 #${record.sender_user_id}`}
                   </strong>
                 ) : null}
-                <p>{record.content}</p>
+                {record.assets.map((asset) => (
+                  <C19MessageAsset
+                    asset={asset}
+                    conversationId={conversationId}
+                    key={`${record.record_id}:${asset.asset_id}:${asset.ordinal}`}
+                    recordId={record.record_id}
+                  />
+                ))}
+                {(record.content_type === "image" || record.content_type === "file") &&
+                record.assets.length === 0 ? (
+                  <small className={styles.assetInlineError}>
+                    这条消息的资产引用不可用。
+                  </small>
+                ) : null}
+                {record.content ? <p>{record.content}</p> : null}
                 <footer>
                   <time dateTime={record.persisted_at}>{messageTime(record.persisted_at)}</time>
                   {own ? <span>{receiptLabel(record.status)}</span> : null}
@@ -1417,6 +1789,79 @@ export function C19ChatPanel({
             </button>
           ))}
         </div>
+        <div className={styles.assetPickerRow}>
+          <input
+            accept={C19_ASSET_ACCEPT}
+            aria-label="选择一张图片或一个普通文件"
+            className={styles.assetFileInput}
+            disabled={
+              renderWindowMode === "older" ||
+              Boolean(pendingMessage) ||
+              conversation.status !== "active"
+            }
+            onChange={selectAsset}
+            ref={fileInputRef}
+            type="file"
+          />
+          <button
+            disabled={
+              renderWindowMode === "older" ||
+              Boolean(pendingMessage) ||
+              conversation.status !== "active"
+            }
+            onClick={() => fileInputRef.current?.click()}
+            type="button"
+          >
+            <Paperclip aria-hidden="true" size={15} />
+            {selectedAsset ? "更换附件" : "添加图片或文件"}
+          </button>
+          <span>图片 ≤ 20 MiB · 文件 ≤ 50 MiB · 每条消息 1 个</span>
+        </div>
+        {selectedAsset ? (
+          <div className={styles.selectedAssetCard}>
+            {selectedAsset.kind === "image" && selectedAsset.previewUrl ? (
+              <img
+                alt={`${selectedAsset.filename} 本地预览`}
+                decoding="async"
+                src={selectedAsset.previewUrl}
+              />
+            ) : selectedAsset.kind === "image" ? (
+              <ImageIcon aria-hidden="true" size={24} />
+            ) : (
+              <FileText aria-hidden="true" size={24} />
+            )}
+            <div>
+              <strong>{selectedAsset.filename}</strong>
+              <span aria-live="polite">
+                {assetTransfer?.statusText ?? "等待发送"}
+              </span>
+              {assetTransfer?.phase === "uploading" ? (
+                <progress max={100} value={assetTransfer.progress}>
+                  {assetTransfer.progress}%
+                </progress>
+              ) : null}
+              <small>
+                {selectedAsset.clientAssetId}
+                {selectedAsset.assetId ? ` · ${selectedAsset.assetId}` : ""}
+              </small>
+            </div>
+            {isSending && assetTransfer?.phase !== "failed" ? (
+              <LoaderCircle
+                aria-hidden="true"
+                className={styles.assetSpinner}
+                size={18}
+              />
+            ) : null}
+            <button
+              aria-label="取消当前图片或文件"
+              disabled={assetTransfer?.phase === "persisting"}
+              onClick={cancelAssetOperation}
+              type="button"
+            >
+              <X aria-hidden="true" size={15} />
+            </button>
+          </div>
+        ) : null}
         <textarea
           aria-label="C19 消息内容"
           disabled={
@@ -1430,6 +1875,8 @@ export function C19ChatPanel({
           placeholder={
             renderWindowMode === "older"
               ? "请先回到最新消息后再发送"
+              : selectedAsset
+                ? "可填写图片或文件说明；也可以留空"
               : conversation.status === "active"
               ? "输入文字或 Emoji；Enter 发送，Shift+Enter 换行"
               : "该会话已经关闭"
@@ -1439,7 +1886,7 @@ export function C19ChatPanel({
         />
         <div className={styles.composerFooter}>
           <span>
-            {draft.length}/{MESSAGE_MAX_LENGTH} · 图片、文件、朋友圈及音视频未开放
+            {draft.length}/{MESSAGE_MAX_LENGTH} · 原始字节直传隔离资产服务，不经过 JSON 代理
           </span>
           <button
             className={styles.sendButton}
@@ -1447,12 +1894,18 @@ export function C19ChatPanel({
               isSending ||
               renderWindowMode === "older" ||
               conversation.status !== "active" ||
-              (!pendingMessage && !draft.trim())
+              (!pendingMessage && !draft.trim() && !selectedAsset)
             }
             type="submit"
           >
             <Send aria-hidden="true" size={16} />
-            {isSending ? "持久化中…" : pendingMessage ? "安全重试" : "发送"}
+            {isSending
+              ? selectedAsset
+                ? "资产处理中…"
+                : "持久化中…"
+              : pendingMessage
+                ? "安全重试"
+                : "发送"}
           </button>
         </div>
         {sendError && pendingMessage ? (
@@ -1460,14 +1913,21 @@ export function C19ChatPanel({
             <div>
               <strong>消息尚未确认成功</strong>
               <span>{sendError}</span>
-              <small>重试会复用同一 client_message_id，不会制造重复消息。</small>
+              <small>
+                重试会复用同一 client_message_id
+                {pendingMessage.asset ? " 与 client_asset_id" : ""}，不会制造重复消息。
+              </small>
             </div>
             <button
               disabled={isSending}
               onClick={() => {
-                setPendingMessage(null);
-                pendingMessageRef.current = null;
-                setSendError("");
+                if (pendingMessage.asset) {
+                  cancelAssetOperation();
+                } else {
+                  setPendingMessage(null);
+                  pendingMessageRef.current = null;
+                  setSendError("");
+                }
               }}
               type="button"
             >

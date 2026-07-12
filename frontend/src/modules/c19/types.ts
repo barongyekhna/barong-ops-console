@@ -77,9 +77,9 @@ export type C19ConversationMemberStatus =
   | "banned";
 
 export type C19ConversationMember = {
-  affiliation_id: string;
+  affiliation_id: string | null;
   user_id: number;
-  org_id: string;
+  org_id: string | null;
   role: C19ConversationMemberRole;
   status: C19ConversationMemberStatus;
   joined_at: string;
@@ -115,7 +115,7 @@ export type C19ConversationSummary = {
   title: string | null;
   status: C19ConversationStatus;
   actor_role: C19ConversationMemberRole;
-  actor_org_id: string;
+  actor_org_id: string | null;
   active_member_count: number;
   settings: C19ConversationSettings;
   created_at: string;
@@ -135,7 +135,7 @@ export type C19GroupLeaveResponse = {
 
 export type C19ParticipantInput = {
   user_id: number;
-  affiliation_id: string;
+  affiliation_id?: string;
 };
 
 export type C19DirectoryQuery = {
@@ -186,7 +186,57 @@ export type C19UpdateConversationSettingsInput = Partial<
   >
 >;
 
-export type C19MessageContentType = "text" | "emoji";
+export type C19AssetKind = "image" | "file";
+export type C19AssetStatus =
+  | "pending_upload"
+  | "uploaded"
+  | "scanning"
+  | "active"
+  | "rejected"
+  | "quarantined"
+  | "delete_pending"
+  | "deleted"
+  | "expired";
+
+export type C19Asset = {
+  asset_id: string;
+  client_asset_id: string;
+  kind: C19AssetKind;
+  filename: string;
+  media_type: string;
+  size_bytes: number;
+  sha256_hex: string;
+  version: number;
+  status: C19AssetStatus;
+};
+
+export type C19AssetReference = Omit<C19Asset, "status"> & {
+  ordinal: number;
+};
+
+export type C19AssetUploadIntentInput = {
+  client_asset_id: string;
+  kind: C19AssetKind;
+  filename: string;
+  media_type: string;
+  size_bytes: number;
+  sha256_hex: string;
+};
+
+export type C19AssetUploadIntent = {
+  asset: C19Asset;
+  upload_locator: string | null;
+  expires_at: string | null;
+};
+
+export type C19AssetAccessVariant = "original" | "thumbnail";
+
+export type C19AssetAccessIntent = {
+  download_locator: string;
+  expires_at: string;
+};
+
+export type C19MessageContentType = "text" | "emoji" | "image" | "file";
 export type C19MessageStatus = "sent" | "delivered" | "read";
 
 /**
@@ -209,6 +259,7 @@ export type C19MessageRecord = {
   sender_org_id: string | null;
   recipient_org_ids: string[];
   metadata: Record<string, string>;
+  assets: C19AssetReference[];
 };
 
 export type C19MessageHistoryPage = {
@@ -221,6 +272,9 @@ export type C19SendMessageInput = {
   client_message_id: string;
   content_type: C19MessageContentType;
   content: string;
+  asset?: {
+    asset_id: string;
+  };
 };
 
 export type C19ReceiptPosition = {
@@ -237,6 +291,11 @@ export type C19UnreadPosition = {
   unread_count: number;
   first_unread_sequence: number | null;
   latest_sequence: number;
+};
+
+export type C19UnreadSummary = {
+  total_unread_count: number;
+  unread_conversation_count: number;
 };
 
 export type C19ResumePosition = {
@@ -267,4 +326,141 @@ export type C19MessageEventPage = {
 export type C19MessageEventTail = {
   cursor: string;
   latest_event_sequence: number;
+};
+
+export type C19MomentVisibility = "public" | "org" | "friends" | "private";
+
+export type C19MomentAudienceOrganization = {
+  org_id: string;
+  org_name: string;
+};
+
+export type C19Moment = {
+  moment_id: string;
+  client_moment_id: string;
+  author_org_id: string | null;
+  author: C19ProfileSummary;
+  content: string;
+  visibility: C19MomentVisibility;
+  audience_organizations: C19MomentAudienceOrganization[];
+  state: "published";
+  assets: C19AssetReference[];
+  like_count: number;
+  comment_count: number;
+  viewer_has_liked: boolean;
+  created_at: string;
+  published_at: string;
+};
+
+export type C19MomentDraft = {
+  moment_id: string;
+  client_moment_id: string;
+  state: "draft" | "published" | "delete_pending" | "deleted";
+  created_at: string;
+  persisted_at: string;
+};
+
+export type C19CreateMomentDraftInput = {
+  client_moment_id: string;
+};
+
+export type C19PublishMomentInput = {
+  content: string;
+  visibility: C19MomentVisibility;
+  audience_affiliation_ids?: string[];
+  asset_ids: string[];
+};
+
+export type C19MomentFeedPage = {
+  moments: C19Moment[];
+  next_cursor: string | null;
+  latest_event_sequence: number;
+};
+
+export type C19MomentDeleteResponse = {
+  moment_id: string;
+  state: "deleted";
+};
+
+export type C19MomentLike = {
+  profile: C19ProfileSummary;
+  sequence: number;
+  created_at: string;
+};
+
+export type C19MomentLikePage = {
+  likes: C19MomentLike[];
+  next_cursor: string | null;
+};
+
+export type C19MomentLikeMutation = {
+  moment_id: string;
+  liked: boolean;
+  changed: boolean;
+  like_count: number;
+  updated_at: string;
+};
+
+export type C19MomentComment = {
+  comment_id: string;
+  moment_id: string;
+  client_comment_id: string;
+  author: C19ProfileSummary;
+  content: string;
+  state: "active";
+  sequence: number;
+  created_at: string;
+  persisted_at: string;
+};
+
+export type C19MomentCommentPage = {
+  comments: C19MomentComment[];
+  next_cursor: string | null;
+};
+
+export type C19CreateMomentCommentInput = {
+  client_comment_id: string;
+  content: string;
+};
+
+export type C19MomentCommentDeleteResponse = {
+  moment_id: string;
+  comment_id: string;
+  state: "deleted";
+  changed: boolean;
+  comment_count: number;
+  deleted_at: string;
+};
+
+export type C19MomentEventType =
+  | "published"
+  | "deleted"
+  | "liked"
+  | "unliked"
+  | "commented"
+  | "comment_deleted";
+
+export type C19MomentEvent = {
+  event_id: string;
+  event_sequence: number;
+  event_type: C19MomentEventType;
+  moment_id: string;
+  actor_user_id: number | string;
+  comment_id: string | null;
+  created_at: string;
+};
+
+export type C19MomentEventPage = {
+  events: C19MomentEvent[];
+  next_cursor: string | null;
+  latest_event_sequence: number;
+};
+
+export type C19MomentEventTail = {
+  cursor: string;
+  latest_event_sequence: number;
+};
+
+export type C19MomentAssetUploadIntent = C19AssetUploadIntent & {
+  moment_id: string;
 };

@@ -10,6 +10,7 @@ from alembic.migration import MigrationContext
 from alembic.operations import Operations
 from alembic.script import ScriptDirectory
 from sqlalchemy import (
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKeyConstraint,
@@ -37,6 +38,13 @@ MIGRATION_PATH = (
     / "alembic"
     / "versions"
     / "20260711_01_c19_control_metadata_core.py"
+)
+NATIVE_ACCESS_MIGRATION_PATH = (
+    REPOSITORY_ROOT
+    / "backend"
+    / "alembic"
+    / "versions"
+    / "20260712_01_c19_native_user_access.py"
 )
 C19_CONTROL_TABLES = {
     "c19_profiles",
@@ -138,6 +146,22 @@ def test_c19_member_and_settings_tables_contain_no_remote_record_position() -> N
     ]
     assert len(affiliation_foreign_keys) == 1
     assert affiliation_foreign_keys[0].ondelete == "RESTRICT"
+    assert member_table.columns["affiliation_id"].nullable is True
+    assert member_table.columns["org_id_at_join"].nullable is True
+    profile_foreign_keys = [
+        constraint
+        for constraint in member_table.constraints
+        if isinstance(constraint, ForeignKeyConstraint)
+        and {element.target_fullname for element in constraint.elements}
+        == {"c19_profiles.user_id"}
+    ]
+    assert len(profile_foreign_keys) == 1
+    assert profile_foreign_keys[0].ondelete == "RESTRICT"
+    assert any(
+        isinstance(constraint, CheckConstraint)
+        and "affiliation_snapshot_consistent" in str(constraint.name)
+        for constraint in member_table.constraints
+    )
 
 
 def test_c19_control_metadata_migration_is_in_the_single_alembic_chain() -> None:
@@ -149,6 +173,7 @@ def test_c19_control_metadata_migration_is_in_the_single_alembic_chain() -> None
     assert "20260711_01_c19_control_core" in {
         item.revision for item in script.iterate_revisions(heads[0], "base")
     }
+    assert heads == ["20260712_01_c19_native_access"]
     revision = script.get_revision("20260711_01_c19_control_core")
     assert revision is not None
     assert revision.down_revision == "20260710_05_k_brand_guard"
@@ -159,6 +184,13 @@ def test_c19_migration_upgrades_backfills_multi_org_and_downgrades() -> None:
     assert spec is not None and spec.loader is not None
     migration = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(migration)
+    native_spec = importlib.util.spec_from_file_location(
+        "c19_native_access_migration",
+        NATIVE_ACCESS_MIGRATION_PATH,
+    )
+    assert native_spec is not None and native_spec.loader is not None
+    native_migration = importlib.util.module_from_spec(native_spec)
+    native_spec.loader.exec_module(native_migration)
 
     engine = create_engine("sqlite+pysqlite:///:memory:")
     metadata = MetaData()
@@ -270,6 +302,37 @@ def test_c19_migration_upgrades_backfills_multi_org_and_downgrades() -> None:
         assert (
             connection.scalar(select(func.count()).select_from(affiliations)) == 2
         )
+
+        # Simulate legacy drift, then prove the native-user migration repairs
+        # the global profile invariant and makes only the org snapshot optional.
+        connection.execute(profiles.delete().where(profiles.c.user_id == 2))
+        connection.execute(
+            users.update().where(users.c.id == 2).values(username="   ")
+        )
+        native_migration.op = Operations(context)
+        native_migration.upgrade()
+        assert connection.scalar(select(func.count()).select_from(profiles)) == 2
+        assert connection.scalar(
+            select(profiles.c.display_name).where(profiles.c.user_id == 2)
+        ) == "User 2"
+        member_columns = {
+            column["name"]: column
+            for column in inspect(connection).get_columns(
+                "c19_conversation_members"
+            )
+        }
+        assert member_columns["affiliation_id"]["nullable"] is True
+        assert member_columns["org_id_at_join"]["nullable"] is True
+
+        native_migration.downgrade()
+        downgraded_member_columns = {
+            column["name"]: column
+            for column in inspect(connection).get_columns(
+                "c19_conversation_members"
+            )
+        }
+        assert downgraded_member_columns["affiliation_id"]["nullable"] is False
+        assert downgraded_member_columns["org_id_at_join"]["nullable"] is False
 
         migration.downgrade()
         tables_after_downgrade = set(inspect(connection).get_table_names())

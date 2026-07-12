@@ -290,7 +290,7 @@ def test_direct_conversation_is_unique_and_survives_new_sessions(
     ]
 
 
-def test_direct_and_group_creation_fail_closed_for_blocks_and_ambiguous_affiliation(
+def test_creation_keeps_blocks_and_treats_affiliation_as_explicit_optional_context(
     runtime_harness: RuntimeHarness,
 ) -> None:
     factory = runtime_harness.session_factory
@@ -382,19 +382,21 @@ def test_direct_and_group_creation_fail_closed_for_blocks_and_ambiguous_affiliat
             )
         )
         db.commit()
-        _assert_error(
-            "c19_affiliation_required",
-            lambda: create_direct_conversation(
-                db,
-                payload=DirectConversationCreateRequest(peer_user_id=6),
-                actor=_user(db, 1),
-            ),
+        affiliation_free = create_direct_conversation(
+            db,
+            payload=DirectConversationCreateRequest(peer_user_id=6),
+            actor=_user(db, 1),
+        )
+        assert all(
+            member.affiliation_id is None and member.org_id is None
+            for member in affiliation_free.members
         )
         direct = create_direct_conversation(
             db,
             payload=DirectConversationCreateRequest(
-                peer_user_id=6,
+                peer_user_id=2,
                 actor_affiliation_id=runtime_harness.affiliations[1],
+                peer_affiliation_id=runtime_harness.affiliations[2],
             ),
             actor=_user(db, 1),
         )
@@ -402,7 +404,7 @@ def test_direct_and_group_creation_fail_closed_for_blocks_and_ambiguous_affiliat
         assert actor_member.affiliation_id == runtime_harness.affiliations[1]
 
 
-def test_group_lifecycle_enforces_participation_roles_owner_and_live_affiliation(
+def test_group_lifecycle_enforces_participation_roles_and_owner_not_affiliation(
     runtime_harness: RuntimeHarness,
 ) -> None:
     factory = runtime_harness.session_factory
@@ -419,7 +421,7 @@ def test_group_lifecycle_enforces_participation_roles_owner_and_live_affiliation
             actor=_user(db, 1),
         )
         conversation_id = group.conversation_id
-        assert {member.org_id for member in group.members} == {ORG_ONE, ORG_TWO}
+        assert {member.org_id for member in group.members} == {None}
         assert sum(
             member.role == "owner" and member.status == "active"
             for member in group.members
@@ -466,15 +468,12 @@ def test_group_lifecycle_enforces_participation_roles_owner_and_live_affiliation
         assert target_membership is not None
         target_membership.status = "suspended"
         db.commit()
-        _assert_error(
-            "c19_group_access_denied",
-            lambda: transfer_group_owner(
-                db,
-                conversation_id=conversation_id,
-                payload=GroupOwnerTransferRequest(new_owner_user_id=3),
-                actor=_user(db, 1),
-            ),
+        still_a_member = get_conversation_detail(
+            db,
+            conversation_id=conversation_id,
+            actor=_user(db, 3),
         )
+        assert still_a_member.conversation_id == conversation_id
         target_membership = db.get(
             OrgMembershipRecord,
             runtime_harness.memberships[3],
@@ -598,3 +597,53 @@ def test_settings_persist_without_local_message_or_read_cursor_state(
         "c19.conversation.direct.create",
         "c19.conversation.settings.update",
     ]
+
+
+def test_users_without_any_affiliation_can_create_direct_and_group_conversations(
+    runtime_harness: RuntimeHarness,
+) -> None:
+    with runtime_harness.session_factory() as db:
+        db.add_all(
+            [
+                User(
+                    id=user_id,
+                    username=f"native-c19-{user_id}",
+                    password_hash="not-used",
+                    role=role,
+                    organization_id=None,
+                    must_change_password=False,
+                    is_active=True,
+                )
+                for user_id, role in ((7, "viewer"), (8, "unknown-role"))
+            ]
+        )
+        db.flush()
+        db.add_all(
+            [
+                C19ProfileRecord(user_id=user_id, display_name=f"Native {user_id}")
+                for user_id in (7, 8)
+            ]
+        )
+        db.commit()
+
+        direct = create_direct_conversation(
+            db,
+            payload=DirectConversationCreateRequest(peer_user_id=8),
+            actor=_user(db, 7),
+        )
+        assert {member.user_id for member in direct.members} == {7, 8}
+        assert all(member.affiliation_id is None for member in direct.members)
+
+        group = create_group(
+            db,
+            payload=GroupCreateRequest(
+                title="Native C19",
+                members=[
+                    ConversationMemberInput(user_id=8),
+                    ConversationMemberInput(user_id=1),
+                ],
+            ),
+            actor=_user(db, 7),
+        )
+        assert {member.user_id for member in group.members} == {1, 7, 8}
+        assert all(member.org_id is None for member in group.members)

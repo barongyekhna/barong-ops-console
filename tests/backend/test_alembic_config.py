@@ -48,6 +48,7 @@ MIGRATIONS_WITH_DATA_BACKFILLS = {
     "20260617_01_c18_tenant_consistency.py",
     "20260625_01_k_series_sku_variant_upgrade.py",
     "20260711_01_c19_control_metadata_core.py",
+    "20260712_01_c19_native_user_access.py",
 }
 
 

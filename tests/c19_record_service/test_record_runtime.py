@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from concurrent.futures import ThreadPoolExecutor
 from datetime import UTC, datetime, timedelta
 from threading import Barrier
@@ -11,33 +13,39 @@ from sqlalchemy.dialects import postgresql
 from c19_record_service.database import Base, DatabaseRuntime
 from c19_record_service.models import (
     ChatRecord,
+    RecordAssetReference as RecordAssetReferenceModel,
     RecordIdempotencyLedger,
     RecordMutationAudit,
     UserRecordEvent,
 )
 from c19_record_service.repository import (
+    _idempotency_key_lock_statement,
+    _intent_sha256,
+    _expected_retention_operation_id,
+    _record_ledgers_lock_statement,
     DeletedIdempotencyKeyError,
     IdempotencyConflictError,
     UnsupportedContentError,
-    _idempotency_key_lock_statement,
-    _record_ledgers_lock_statement,
     advance_position,
     append_record,
     apply_retention,
     delete_records,
+    get_visible_record,
     get_user_event_tail,
     list_records,
     list_user_events,
     resume_position,
     unread_position,
+    unread_summary,
 )
+from c19_record_service.operations import record_ops_snapshot
 from c19_record_service.schemas import (
     DeleteRecordsRequest,
     PositionAdvanceRequest,
     RetentionRequest,
 )
 
-from helpers import make_record
+from helpers import make_asset, make_record
 
 
 def test_postgres_replay_and_delete_lock_the_same_ledger_rows() -> None:
@@ -89,6 +97,76 @@ def test_idempotency_uses_user_intent_not_dynamic_member_snapshot(runtime) -> No
     with runtime.session_factory() as session:
         with pytest.raises(IdempotencyConflictError):
             append_record(session, conflicting, max_message_chars=1000)
+
+
+def test_asset_free_text_keeps_exact_stage3_v1_intent_digest(runtime) -> None:
+    request = make_record(1, content="旧消息🙂")
+    stage3_canonical = json.dumps(
+        {
+            "client_message_id": request.client_message_id,
+            "content": request.content,
+            "content_type": request.content_type,
+            "conversation_id": request.conversation_id,
+            "sender_user_id": request.sender_user_id,
+        },
+        ensure_ascii=False,
+        separators=(",", ":"),
+        sort_keys=True,
+    ).encode("utf-8")
+    expected = hashlib.sha256(stage3_canonical).hexdigest()
+
+    assert _intent_sha256(request) == expected
+    with runtime.session_factory() as session:
+        first = append_record(session, request, max_message_chars=1000)
+        ledger = session.get(
+            RecordIdempotencyLedger,
+            (request.sender_user_id, request.client_message_id),
+        )
+        assert ledger is not None
+        assert ledger.intent_version == 1
+        assert ledger.intent_sha256 == expected
+
+    retry = request.model_copy(
+        update={
+            "recipient_user_ids": ["user-2", "user-3"],
+            "metadata": {"changed": "snapshot-only"},
+        }
+    )
+    with runtime.session_factory() as session:
+        replay = append_record(session, retry, max_message_chars=1000)
+    assert replay.replayed is True
+    assert replay.record.record_id == first.record.record_id
+    assert replay.record.assets == []
+
+
+def test_asset_snapshot_is_v2_idempotent_and_cannot_be_swapped(runtime) -> None:
+    original = make_record(
+        1,
+        content="",
+        content_type="image",
+        assets=[make_asset(1)],
+    )
+    with runtime.session_factory() as session:
+        first = append_record(session, original, max_message_chars=1000)
+        ledger = session.get(
+            RecordIdempotencyLedger,
+            (original.sender_user_id, original.client_message_id),
+        )
+        assert ledger is not None
+        assert ledger.intent_version == 2
+
+    with runtime.session_factory() as session:
+        replay = append_record(session, original, max_message_chars=1000)
+    assert replay.replayed is True
+    assert replay.record.record_id == first.record.record_id
+    assert [asset.asset_id for asset in replay.record.assets] == [
+        original.assets[0].asset_id
+    ]
+
+    changed_asset = original.model_copy(update={"assets": [make_asset(2)]})
+    with runtime.session_factory() as session:
+        with pytest.raises(IdempotencyConflictError):
+            append_record(session, changed_asset, max_message_chars=1000)
 
 
 def test_text_and_emoji_validation(runtime) -> None:
@@ -209,6 +287,94 @@ def test_history_starts_with_latest_page_and_uses_directional_cursors(
     assert recovered.next_cursor is not None
 
 
+def test_exact_visibility_uses_record_event_and_assets_return_in_ordinal_order(
+    runtime,
+) -> None:
+    first_request = make_record(
+        1,
+        content="caption",
+        content_type="image",
+        recipient_user_ids=["user-2"],
+        assets=[make_asset(1)],
+    )
+    with runtime.session_factory() as session:
+        first = append_record(
+            session, first_request, max_message_chars=1000
+        ).record
+        expansion_asset = make_asset(2, ordinal=1)
+        session.add(
+            RecordAssetReferenceModel(
+                id="00000000-0000-0000-0000-000000000002",
+                record_id=first.record_id,
+                asset_id=expansion_asset.asset_id,
+                client_asset_id=expansion_asset.client_asset_id,
+                kind=expansion_asset.kind,
+                filename=expansion_asset.filename,
+                media_type=expansion_asset.media_type,
+                size_bytes=expansion_asset.size_bytes,
+                sha256_hex=expansion_asset.sha256_hex,
+                version=expansion_asset.version,
+                ordinal=expansion_asset.ordinal,
+            )
+        )
+        session.commit()
+
+    with runtime.session_factory() as session:
+        visible = get_visible_record(
+            session,
+            conversation_id="conversation-1",
+            record_id=first.record_id,
+            user_id="user-2",
+        )
+        pre_join_hidden = get_visible_record(
+            session,
+            conversation_id="conversation-1",
+            record_id=first.record_id,
+            user_id="user-3",
+        )
+        wrong_conversation = get_visible_record(
+            session,
+            conversation_id="conversation-other",
+            record_id=first.record_id,
+            user_id="user-2",
+        )
+    assert visible is not None
+    assert [asset.ordinal for asset in visible.assets] == [0, 1]
+    assert [asset.asset_id for asset in visible.assets] == [
+        make_asset(1).asset_id,
+        make_asset(2).asset_id,
+    ]
+    assert pre_join_hidden is None
+    assert wrong_conversation is None
+
+    # A later record can include the newly joined user without retroactively
+    # granting that user access to the first record.
+    with runtime.session_factory() as session:
+        later = append_record(
+            session,
+            make_record(2, recipient_user_ids=["user-2", "user-3"]),
+            max_message_chars=1000,
+        ).record
+        assert (
+            get_visible_record(
+                session,
+                conversation_id="conversation-1",
+                record_id=later.record_id,
+                user_id="user-3",
+            )
+            is not None
+        )
+        assert (
+            get_visible_record(
+                session,
+                conversation_id="conversation-1",
+                record_id=first.record_id,
+                user_id="user-3",
+            )
+            is None
+        )
+
+
 def test_receipts_are_monotonic_status_is_aggregated_and_sender_is_not_unread(
     runtime, codec
 ) -> None:
@@ -288,6 +454,112 @@ def test_receipts_are_monotonic_status_is_aggregated_and_sender_is_not_unread(
         replay = append_record(session, original, max_message_chars=1000)
     assert replay.replayed is True
     assert replay.record.status == "read"
+
+
+def test_unread_summary_is_content_free_exact_and_scoped_to_supplied_conversations(
+    runtime,
+) -> None:
+    with runtime.session_factory() as session:
+        append_record(
+            session,
+            make_record(1, conversation_id="conversation-1"),
+            max_message_chars=1000,
+        )
+        append_record(
+            session,
+            make_record(2, conversation_id="conversation-1"),
+            max_message_chars=1000,
+        )
+        append_record(
+            session,
+            make_record(
+                3,
+                conversation_id="conversation-1",
+                sender_user_id="user-2",
+                recipient_user_ids=["user-1"],
+            ),
+            max_message_chars=1000,
+        )
+        append_record(
+            session,
+            make_record(
+                4,
+                conversation_id="conversation-2",
+                sender_user_id="user-3",
+                recipient_user_ids=["user-2"],
+            ),
+            max_message_chars=1000,
+        )
+        append_record(
+            session,
+            make_record(
+                5,
+                conversation_id="conversation-not-authorized",
+                sender_user_id="user-3",
+                recipient_user_ids=["user-2"],
+            ),
+            max_message_chars=1000,
+        )
+    with runtime.session_factory() as session:
+        advance_position(
+            session,
+            conversation_id="conversation-1",
+            request=PositionAdvanceRequest(
+                user_id="user-2",
+                through_sequence=1,
+                occurred_at=datetime.now(UTC),
+            ),
+            position_type="read",
+        )
+    with runtime.session_factory() as session:
+        all_authorized = unread_summary(
+            session,
+            user_id="user-2",
+            conversation_ids=["conversation-1", "conversation-2"],
+        )
+        one_shard = unread_summary(
+            session,
+            user_id="user-2",
+            conversation_ids=["conversation-1"],
+        )
+        empty = unread_summary(session, user_id="user-2", conversation_ids=[])
+
+    assert all_authorized.model_dump() == {
+        "total_unread_count": 2,
+        "unread_conversation_count": 2,
+    }
+    assert one_shard.model_dump() == {
+        "total_unread_count": 1,
+        "unread_conversation_count": 1,
+    }
+    assert empty.model_dump() == {
+        "total_unread_count": 0,
+        "unread_conversation_count": 0,
+    }
+
+
+def test_record_ops_snapshot_contains_only_bounded_aggregate_state(runtime) -> None:
+    secret = "must-never-appear-in-ops-snapshot"
+    with runtime.session_factory() as session:
+        append_record(
+            session,
+            make_record(91, content=secret),
+            max_message_chars=1000,
+        )
+    with runtime.session_factory() as session:
+        snapshot = record_ops_snapshot(session)
+    payload = snapshot.model_dump_json()
+    assert snapshot.chat_records == 1
+    assert snapshot.chat_delivery_events == 2
+    assert snapshot.moment_states == {
+        "draft": 0,
+        "published": 0,
+        "delete_pending": 0,
+        "deleted": 0,
+    }
+    assert secret not in payload
+    for forbidden in ("user-1", "conversation-1", "client-91"):
+        assert forbidden not in payload
 
 
 def test_user_event_cursor_always_advances_and_empty_poll_does_not_replay(
@@ -390,17 +662,20 @@ def test_explicit_delete_and_retention_remove_content_but_keep_audit(runtime) ->
             )
 
     with runtime.session_factory() as session:
-        retained = apply_retention(
-            session,
-            RetentionRequest(
-                requested_by_user_id="operator-1",
-                reason="approved retention policy",
-                requested_at=datetime.now(UTC),
-                delete_before=datetime.now(UTC) - timedelta(days=1),
-                conversation_id="conversation-1",
-                maximum_records=1,
-            ),
+        request = RetentionRequest(
+            operation_id="rtn_" + "0" * 64,
+            batch_ordinal=0,
+            approved_maximum_records=1,
+            approved_maximum_asset_jobs=1,
+            requested_by_user_id="operator-1",
+            reason="approved retention policy",
+            requested_at=datetime.now(UTC),
+            delete_before=datetime.now(UTC) - timedelta(days=1),
+            conversation_id="conversation-1",
+            maximum_records=1,
         )
+        request.operation_id = _expected_retention_operation_id(request)
+        retained = apply_retention(session, request)
         assert retained.affected_count == 1
         assert session.scalar(select(func.count(ChatRecord.id))) == 1
         assert session.scalar(select(func.count(RecordMutationAudit.id))) == 2
@@ -424,6 +699,39 @@ def test_explicit_delete_and_retention_remove_content_but_keep_audit(runtime) ->
     with runtime.session_factory() as session:
         with pytest.raises(DeletedIdempotencyKeyError):
             append_record(session, make_record(2), max_message_chars=1000)
+
+
+def test_asset_references_cascade_on_delete_and_key_remains_410(runtime) -> None:
+    original = make_record(
+        1,
+        content="invoice",
+        content_type="file",
+        assets=[make_asset(1, kind="file")],
+    )
+    with runtime.session_factory() as session:
+        saved = append_record(session, original, max_message_chars=1000).record
+        assert session.scalar(select(func.count(RecordAssetReferenceModel.id))) == 1
+
+    with runtime.session_factory() as session:
+        result = delete_records(
+            session,
+            DeleteRecordsRequest(
+                conversation_id="conversation-1",
+                record_ids=[saved.record_id],
+                requested_by_user_id="operator-1",
+                reason="asset privacy deletion",
+                requested_at=datetime.now(UTC),
+            ),
+        )
+        assert result.affected_count == 1
+        assert session.scalar(select(func.count(RecordAssetReferenceModel.id))) == 0
+
+    with runtime.session_factory() as session:
+        with pytest.raises(DeletedIdempotencyKeyError):
+            append_record(session, original, max_message_chars=1000)
+        changed = original.model_copy(update={"assets": [make_asset(2, kind="file")]})
+        with pytest.raises(DeletedIdempotencyKeyError):
+            append_record(session, changed, max_message_chars=1000)
 
 
 def test_delete_racing_safe_retries_never_resurrects_or_refans_out(runtime) -> None:

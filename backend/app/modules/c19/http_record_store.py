@@ -8,6 +8,7 @@ missing, unreachable, or malformed providers without manufacturing a success.
 from __future__ import annotations
 
 import os
+import re
 from ipaddress import ip_address
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -16,8 +17,37 @@ from urllib.parse import quote, urlsplit
 
 import httpx
 
+from .moment_storage import (
+    MOMENT_STORE_OPERATIONS,
+    MomentCommentCreateDTO,
+    MomentCommentDeleteDTO,
+    MomentCommentDeleteResultDTO,
+    MomentCommentDTO,
+    MomentCommentPageDTO,
+    MomentCommentQueryDTO,
+    MomentDTO,
+    MomentDeleteCommandDTO,
+    MomentDeleteResultDTO,
+    MomentDraftDTO,
+    MomentDraftReserveDTO,
+    MomentFeedPageDTO,
+    MomentFeedQueryDTO,
+    MomentLikeCommandDTO,
+    MomentLikeDTO,
+    MomentLikePageDTO,
+    MomentLikeQueryDTO,
+    MomentLikeResultDTO,
+    MomentPublishDTO,
+    MomentQueryDTO,
+    MomentUserEventDTO,
+    MomentUserEventPageDTO,
+    MomentUserEventQueryDTO,
+    MomentUserEventTailDTO,
+    MomentViewerContextDTO,
+)
 from .storage import (
     CHAT_RECORD_STORE_OPERATIONS,
+    ChatAssetReferenceDTO,
     ChatPositionAdvanceDTO,
     ChatPositionQueryDTO,
     ChatReceiptPositionDTO,
@@ -28,8 +58,11 @@ from .storage import (
     ChatRecordPageDTO,
     ChatRecordQueryDTO,
     ChatResumePositionDTO,
-    ChatRetentionCommandDTO,
+    ChatRetentionBatchCommandDTO,
+    ChatRetentionBatchResultDTO,
     ChatUnreadPositionDTO,
+    ChatUnreadSummaryDTO,
+    ChatUnreadSummaryQueryDTO,
     ChatUserEventDTO,
     ChatUserEventPageDTO,
     ChatUserEventQueryDTO,
@@ -146,8 +179,15 @@ def _iso(value: datetime) -> str:
     return value.isoformat()
 
 
-def _mapping(value: Any, *, operation: str) -> Mapping[str, Any]:
+def _mapping(
+    value: Any,
+    *,
+    operation: str,
+    exact_keys: frozenset[str] | None = None,
+) -> Mapping[str, Any]:
     if not isinstance(value, dict):
+        raise ChatRecordStoreProtocolError(operation=operation)
+    if exact_keys is not None and frozenset(value) != exact_keys:
         raise ChatRecordStoreProtocolError(operation=operation)
     return value
 
@@ -187,6 +227,18 @@ def _integer(
 ) -> int:
     value = data.get(key)
     if isinstance(value, bool) or not isinstance(value, int) or value < minimum:
+        raise ChatRecordStoreProtocolError(operation=operation)
+    return value
+
+
+def _boolean(
+    data: Mapping[str, Any],
+    key: str,
+    *,
+    operation: str,
+) -> bool:
+    value = data.get(key)
+    if not isinstance(value, bool):
         raise ChatRecordStoreProtocolError(operation=operation)
     return value
 
@@ -235,13 +287,145 @@ def _metadata_tuple(
     return tuple(sorted(value.items()))
 
 
+_ASSET_ID_RE = re.compile(r"^att_[0-9a-f]{32}$")
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+_ASSET_REFERENCE_KEYS = frozenset(
+    {
+        "asset_id",
+        "client_asset_id",
+        "kind",
+        "filename",
+        "media_type",
+        "size_bytes",
+        "sha256_hex",
+        "version",
+        "ordinal",
+    }
+)
+_IMAGE_MEDIA_TYPES = frozenset(
+    {"image/jpeg", "image/png", "image/webp", "image/gif"}
+)
+_FILE_MEDIA_TYPES = frozenset(
+    {
+        "application/pdf",
+        "text/plain",
+        "text/csv",
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "application/zip",
+    }
+)
+_RECORD_KEYS = frozenset(
+    {
+        "record_id",
+        "client_message_id",
+        "conversation_id",
+        "sequence",
+        "sender_user_id",
+        "recipient_user_ids",
+        "content_type",
+        "content",
+        "status",
+        "created_at",
+        "persisted_at",
+        "sender_org_id",
+        "recipient_org_ids",
+        "metadata",
+        "assets",
+    }
+)
+
+
+def _assets_tuple(
+    data: Mapping[str, Any],
+    *,
+    operation: str,
+    maximum: int = 1,
+    image_only: bool = False,
+) -> tuple[ChatAssetReferenceDTO, ...]:
+    value = data.get("assets", [])
+    if not isinstance(value, list) or len(value) > maximum:
+        raise ChatRecordStoreProtocolError(operation=operation)
+    assets: list[ChatAssetReferenceDTO] = []
+    for raw in value:
+        item = _mapping(raw, operation=operation)
+        if frozenset(item) != _ASSET_REFERENCE_KEYS:
+            raise ChatRecordStoreProtocolError(operation=operation)
+        asset_id = _required_string(item, "asset_id", operation=operation)
+        client_asset_id = _required_string(
+            item, "client_asset_id", operation=operation
+        )
+        sha256_hex = _required_string(item, "sha256_hex", operation=operation)
+        kind = _required_string(item, "kind", operation=operation)
+        filename = _required_string(item, "filename", operation=operation)
+        media_type = _required_string(item, "media_type", operation=operation)
+        size_bytes = _integer(item, "size_bytes", operation=operation, minimum=1)
+        if (
+            _ASSET_ID_RE.fullmatch(asset_id) is None
+            or _SHA256_RE.fullmatch(sha256_hex) is None
+            or kind not in {"image", "file"}
+            or len(client_asset_id) > 128
+            or len(filename) > 255
+            or filename in {".", ".."}
+            or "/" in filename
+            or "\\" in filename
+            or any(ord(character) < 32 for character in filename)
+            or media_type != media_type.lower()
+            or size_bytes > 64 * 1024 * 1024
+            or (kind == "image" and media_type not in _IMAGE_MEDIA_TYPES)
+            or (kind == "file" and media_type not in _FILE_MEDIA_TYPES)
+            or (image_only and kind != "image")
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        assets.append(
+            ChatAssetReferenceDTO(
+                asset_id=asset_id,
+                client_asset_id=client_asset_id,
+                kind=kind,  # type: ignore[arg-type]
+                filename=filename,
+                media_type=media_type,
+                size_bytes=size_bytes,
+                sha256_hex=sha256_hex,
+                version=_integer(item, "version", operation=operation, minimum=1),
+                ordinal=_integer(item, "ordinal", operation=operation),
+            )
+        )
+    if [asset.ordinal for asset in assets] != list(range(len(assets))):
+        raise ChatRecordStoreProtocolError(operation=operation)
+    return tuple(assets)
+
+
 def _record_from_json(data: Any, *, operation: str) -> ChatRecordDTO:
     item = _mapping(data, operation=operation)
+    if not frozenset(item).issubset(_RECORD_KEYS):
+        raise ChatRecordStoreProtocolError(operation=operation)
     status = _required_string(item, "status", operation=operation)
     if status not in {"sent", "delivered", "read"}:
         raise ChatRecordStoreProtocolError(operation=operation)
     content_type = _required_string(item, "content_type", operation=operation)
-    if content_type not in {"text", "emoji"}:
+    if content_type not in {"text", "emoji", "image", "file"}:
+        raise ChatRecordStoreProtocolError(operation=operation)
+    content = item.get("content")
+    if (
+        not isinstance(content, str)
+        or len(content) > 4000
+        or any(
+            ord(character) < 32 and character not in {"\n", "\t"}
+            for character in content
+        )
+    ):
+        raise ChatRecordStoreProtocolError(operation=operation)
+    assets = _assets_tuple(item, operation=operation)
+    if (
+        (content_type in {"image", "file"}) != (len(assets) == 1)
+        or (content_type in {"text", "emoji"} and not content.strip())
+        or (
+            content_type == "emoji"
+            and (len(content) > 64 or "\n" in content or "\t" in content)
+        )
+        or (assets and assets[0].kind != content_type)
+    ):
         raise ChatRecordStoreProtocolError(operation=operation)
     return ChatRecordDTO(
         record_id=_required_string(item, "record_id", operation=operation),
@@ -267,7 +451,7 @@ def _record_from_json(data: Any, *, operation: str) -> ChatRecordDTO:
             operation=operation,
         ),
         content_type=content_type,
-        content=_required_string(item, "content", operation=operation),
+        content=content,
         status=status,  # type: ignore[arg-type]
         created_at=_timestamp(item, "created_at", operation=operation),
         persisted_at=_timestamp(item, "persisted_at", operation=operation),
@@ -282,6 +466,7 @@ def _record_from_json(data: Any, *, operation: str) -> ChatRecordDTO:
             operation=operation,
         ),
         metadata=_metadata_tuple(item, operation=operation),
+        assets=assets,
     )
 
 
@@ -306,6 +491,325 @@ def _receipt_from_json(data: Any, *, operation: str) -> ChatReceiptPositionDTO:
         ),
         updated_at=_timestamp(item, "updated_at", operation=operation),
     )
+
+
+_MOMENT_ID_RE = re.compile(r"^mom_[0-9a-f]{32}$")
+_COMMENT_ID_RE = re.compile(r"^cmt_[0-9a-f]{32}$")
+_DRAFT_KEYS = frozenset(
+    {
+        "moment_id",
+        "client_moment_id",
+        "author_user_id",
+        "state",
+        "created_at",
+        "persisted_at",
+    }
+)
+_MOMENT_KEYS = frozenset(
+    {
+        "moment_id",
+        "client_moment_id",
+        "author_user_id",
+        "author_org_id",
+        "visibility",
+        "audience_org_ids",
+        "content",
+        "state",
+        "created_at",
+        "published_at",
+        "assets",
+        "like_count",
+        "comment_count",
+        "viewer_has_liked",
+    }
+)
+
+
+def _draft_from_json(data: Any, *, operation: str) -> MomentDraftDTO:
+    item = _mapping(data, operation=operation, exact_keys=_DRAFT_KEYS)
+    moment_id = _required_string(item, "moment_id", operation=operation)
+    state = _required_string(item, "state", operation=operation)
+    if (
+        _MOMENT_ID_RE.fullmatch(moment_id) is None
+        or state not in {"draft", "published", "delete_pending", "deleted"}
+    ):
+        raise ChatRecordStoreProtocolError(operation=operation)
+    return MomentDraftDTO(
+        moment_id=moment_id,
+        client_moment_id=_required_string(
+            item,
+            "client_moment_id",
+            operation=operation,
+        ),
+        author_user_id=_required_string(
+            item,
+            "author_user_id",
+            operation=operation,
+        ),
+        state=state,  # type: ignore[arg-type]
+        created_at=_timestamp(item, "created_at", operation=operation),
+        persisted_at=_timestamp(item, "persisted_at", operation=operation),
+    )
+
+
+def _moment_from_json(data: Any, *, operation: str) -> MomentDTO:
+    item = _mapping(data, operation=operation, exact_keys=_MOMENT_KEYS)
+    moment_id = _required_string(item, "moment_id", operation=operation)
+    visibility = _required_string(item, "visibility", operation=operation)
+    state = _required_string(item, "state", operation=operation)
+    content = item.get("content")
+    audience_org_ids = _string_tuple(
+        item,
+        "audience_org_ids",
+        operation=operation,
+    )
+    if (
+        _MOMENT_ID_RE.fullmatch(moment_id) is None
+        or visibility not in {"public", "org", "friends", "private"}
+        or state != "published"
+        or not isinstance(content, str)
+        or len(content) > 4000
+        or any(
+            ord(character) < 32 and character not in {"\n", "\t"}
+            for character in content
+        )
+        or len(audience_org_ids) > 32
+        or len(audience_org_ids) != len(set(audience_org_ids))
+        or (visibility == "org") != bool(audience_org_ids)
+    ):
+        raise ChatRecordStoreProtocolError(operation=operation)
+    return MomentDTO(
+        moment_id=moment_id,
+        client_moment_id=_required_string(
+            item,
+            "client_moment_id",
+            operation=operation,
+        ),
+        author_user_id=_required_string(
+            item,
+            "author_user_id",
+            operation=operation,
+        ),
+        author_org_id=_optional_string(
+            item,
+            "author_org_id",
+            operation=operation,
+        ),
+        visibility=visibility,  # type: ignore[arg-type]
+        audience_org_ids=audience_org_ids,
+        content=content,
+        state="published",
+        created_at=_timestamp(item, "created_at", operation=operation),
+        published_at=_timestamp(item, "published_at", operation=operation),
+        assets=_assets_tuple(
+            item,
+            operation=operation,
+            maximum=9,
+            image_only=True,
+        ),
+        like_count=_integer(item, "like_count", operation=operation),
+        comment_count=_integer(item, "comment_count", operation=operation),
+        viewer_has_liked=_boolean(
+            item,
+            "viewer_has_liked",
+            operation=operation,
+        ),
+    )
+
+
+def _like_result_from_json(data: Any, *, operation: str) -> MomentLikeResultDTO:
+    item = _mapping(
+        data,
+        operation=operation,
+        exact_keys=frozenset(
+            {
+                "moment_id",
+                "user_id",
+                "liked",
+                "changed",
+                "like_count",
+                "updated_at",
+            }
+        ),
+    )
+    moment_id = _required_string(item, "moment_id", operation=operation)
+    if _MOMENT_ID_RE.fullmatch(moment_id) is None:
+        raise ChatRecordStoreProtocolError(operation=operation)
+    return MomentLikeResultDTO(
+        moment_id=moment_id,
+        user_id=_required_string(item, "user_id", operation=operation),
+        liked=_boolean(item, "liked", operation=operation),
+        changed=_boolean(item, "changed", operation=operation),
+        like_count=_integer(item, "like_count", operation=operation),
+        updated_at=_timestamp(item, "updated_at", operation=operation),
+    )
+
+
+def _comment_from_json(data: Any, *, operation: str) -> MomentCommentDTO:
+    item = _mapping(
+        data,
+        operation=operation,
+        exact_keys=frozenset(
+            {
+                "comment_id",
+                "client_comment_id",
+                "moment_id",
+                "author_user_id",
+                "content",
+                "state",
+                "sequence",
+                "created_at",
+                "persisted_at",
+            }
+        ),
+    )
+    comment_id = _required_string(item, "comment_id", operation=operation)
+    moment_id = _required_string(item, "moment_id", operation=operation)
+    state = _required_string(item, "state", operation=operation)
+    content = item.get("content")
+    if (
+        _COMMENT_ID_RE.fullmatch(comment_id) is None
+        or _MOMENT_ID_RE.fullmatch(moment_id) is None
+        or state != "active"
+        or not isinstance(content, str)
+        or not content.strip()
+        or len(content) > 1000
+        or any(
+            ord(character) < 32 and character not in {"\n", "\t"}
+            for character in content
+        )
+    ):
+        raise ChatRecordStoreProtocolError(operation=operation)
+    return MomentCommentDTO(
+        comment_id=comment_id,
+        client_comment_id=_required_string(
+            item,
+            "client_comment_id",
+            operation=operation,
+        ),
+        moment_id=moment_id,
+        author_user_id=_required_string(
+            item,
+            "author_user_id",
+            operation=operation,
+        ),
+        content=content,
+        state="active",
+        sequence=_integer(item, "sequence", operation=operation, minimum=1),
+        created_at=_timestamp(item, "created_at", operation=operation),
+        persisted_at=_timestamp(item, "persisted_at", operation=operation),
+    )
+
+
+def _delete_result_from_json(
+    data: Any,
+    *,
+    operation: str,
+) -> MomentDeleteResultDTO:
+    item = _mapping(
+        data,
+        operation=operation,
+        exact_keys=frozenset(
+            {"moment_id", "state", "changed", "assets", "updated_at"}
+        ),
+    )
+    moment_id = _required_string(item, "moment_id", operation=operation)
+    state = _required_string(item, "state", operation=operation)
+    assets = _assets_tuple(
+        item,
+        operation=operation,
+        maximum=9,
+        image_only=True,
+    )
+    if (
+        _MOMENT_ID_RE.fullmatch(moment_id) is None
+        or state not in {"delete_pending", "deleted"}
+        or (state == "deleted" and assets)
+    ):
+        raise ChatRecordStoreProtocolError(operation=operation)
+    return MomentDeleteResultDTO(
+        moment_id=moment_id,
+        state=state,  # type: ignore[arg-type]
+        assets=assets,
+        changed=_boolean(item, "changed", operation=operation),
+        updated_at=_timestamp(item, "updated_at", operation=operation),
+    )
+
+
+def _moment_event_from_json(
+    data: Any,
+    *,
+    operation: str,
+    user_id: str,
+) -> MomentUserEventDTO:
+    item = _mapping(
+        data,
+        operation=operation,
+        exact_keys=frozenset(
+            {
+                "event_id",
+                "event_sequence",
+                "event_type",
+                "moment_id",
+                "actor_user_id",
+                "comment_id",
+                "created_at",
+            }
+        ),
+    )
+    event_type = _required_string(item, "event_type", operation=operation)
+    moment_id = _required_string(item, "moment_id", operation=operation)
+    comment_id = _optional_string(item, "comment_id", operation=operation)
+    if (
+        event_type
+        not in {
+            "published",
+            "deleted",
+            "liked",
+            "unliked",
+            "commented",
+            "comment_deleted",
+        }
+        or _MOMENT_ID_RE.fullmatch(moment_id) is None
+        or (
+            (event_type in {"commented", "comment_deleted"})
+            != (comment_id is not None)
+        )
+        or (
+            comment_id is not None
+            and _COMMENT_ID_RE.fullmatch(comment_id) is None
+        )
+    ):
+        raise ChatRecordStoreProtocolError(operation=operation)
+    return MomentUserEventDTO(
+        event_id=_required_string(item, "event_id", operation=operation),
+        user_id=user_id,
+        event_sequence=_integer(
+            item,
+            "event_sequence",
+            operation=operation,
+            minimum=1,
+        ),
+        event_type=event_type,  # type: ignore[arg-type]
+        moment_id=moment_id,
+        actor_user_id=_required_string(
+            item,
+            "actor_user_id",
+            operation=operation,
+        ),
+        comment_id=comment_id,
+        created_at=_timestamp(item, "created_at", operation=operation),
+    )
+
+
+def _context_json(context: MomentViewerContextDTO) -> dict[str, object]:
+    return {
+        "viewer_user_id": context.viewer_user_id,
+        "active_user_ids": list(context.active_user_ids),
+        "active_org_ids": list(context.active_org_ids),
+        "friend_user_ids": list(context.friend_user_ids),
+        "blocked_user_ids": list(context.blocked_user_ids),
+    }
 
 
 class HttpChatRecordStore:
@@ -426,6 +930,20 @@ class HttpChatRecordStore:
             "sender_org_id": record.sender_org_id,
             "recipient_org_ids": list(record.recipient_org_ids),
             "metadata": dict(record.metadata),
+            "assets": [
+                {
+                    "asset_id": asset.asset_id,
+                    "client_asset_id": asset.client_asset_id,
+                    "kind": asset.kind,
+                    "filename": asset.filename,
+                    "media_type": asset.media_type,
+                    "size_bytes": asset.size_bytes,
+                    "sha256_hex": asset.sha256_hex,
+                    "version": asset.version,
+                    "ordinal": asset.ordinal,
+                }
+                for asset in record.assets
+            ],
         }
         result = _record_from_json(
             await self._request_json(
@@ -441,6 +959,40 @@ class HttpChatRecordStore:
             result.client_message_id != record.client_message_id
             or result.conversation_id != record.conversation_id
             or result.sender_user_id != record.sender_user_id
+            or result.content_type != record.content_type
+            or result.content != record.content
+            or result.assets != record.assets
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return result
+
+    async def get_authorized_record(
+        self,
+        *,
+        conversation_id: str,
+        record_id: str,
+        user_id: str,
+    ) -> ChatRecordDTO:
+        operation = "get_authorized_record"
+        result = _record_from_json(
+            await self._request_json(
+                "GET",
+                (
+                    f"/v1/conversations/{quote(conversation_id, safe='')}"
+                    f"/records/{quote(record_id, safe='')}"
+                ),
+                operation=operation,
+                params={"user_id": user_id},
+            ),
+            operation=operation,
+        )
+        if (
+            result.conversation_id != conversation_id
+            or result.record_id != record_id
+            or (
+                result.sender_user_id != user_id
+                and user_id not in result.recipient_user_ids
+            )
         ):
             raise ChatRecordStoreProtocolError(operation=operation)
         return result
@@ -673,6 +1225,49 @@ class HttpChatRecordStore:
             raise ChatRecordStoreProtocolError(operation=operation)
         return result
 
+    async def get_unread_summary(
+        self,
+        query: ChatUnreadSummaryQueryDTO,
+    ) -> ChatUnreadSummaryDTO:
+        operation = "get_unread_summary"
+        if (
+            not query.user_id
+            or len(query.conversation_ids) > 1000
+            or len(set(query.conversation_ids)) != len(query.conversation_ids)
+            or any(not conversation_id for conversation_id in query.conversation_ids)
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        data = _mapping(
+            await self._request_json(
+                "POST",
+                f"/v1/users/{quote(query.user_id, safe='')}/unread-summary",
+                operation=operation,
+                json={"conversation_ids": list(query.conversation_ids)},
+            ),
+            operation=operation,
+            exact_keys=frozenset(
+                {"total_unread_count", "unread_conversation_count"}
+            ),
+        )
+        result = ChatUnreadSummaryDTO(
+            total_unread_count=_integer(
+                data,
+                "total_unread_count",
+                operation=operation,
+            ),
+            unread_conversation_count=_integer(
+                data,
+                "unread_conversation_count",
+                operation=operation,
+            ),
+        )
+        if (
+            result.unread_conversation_count > len(query.conversation_ids)
+            or result.total_unread_count < result.unread_conversation_count
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return result
+
     async def get_resume_position(
         self,
         query: ChatPositionQueryDTO,
@@ -718,6 +1313,488 @@ class HttpChatRecordStore:
             raise ChatRecordStoreProtocolError(operation=operation)
         return result
 
+    async def reserve_moment(
+        self,
+        command: MomentDraftReserveDTO,
+    ) -> MomentDraftDTO:
+        operation = "reserve_moment"
+        draft = _draft_from_json(
+            await self._request_json(
+                "POST",
+                "/v1/moments/drafts",
+                operation=operation,
+                json={
+                    "client_moment_id": command.client_moment_id,
+                    "author_user_id": command.author_user_id,
+                },
+                accepted_statuses=frozenset({200, 201}),
+            ),
+            operation=operation,
+        )
+        if (
+            draft.client_moment_id != command.client_moment_id
+            or draft.author_user_id != command.author_user_id
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return draft
+
+    async def get_moment_draft(
+        self,
+        *,
+        moment_id: str,
+        author_user_id: str,
+    ) -> MomentDraftDTO:
+        operation = "get_moment_draft"
+        draft = _draft_from_json(
+            await self._request_json(
+                "POST",
+                f"/v1/moments/{quote(moment_id, safe='')}/draft/query",
+                operation=operation,
+                json={"author_user_id": author_user_id},
+            ),
+            operation=operation,
+        )
+        if (
+            draft.moment_id != moment_id
+            or draft.author_user_id != author_user_id
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return draft
+
+    async def publish_moment(self, command: MomentPublishDTO) -> MomentDTO:
+        operation = "publish_moment"
+        moment = _moment_from_json(
+            await self._request_json(
+                "POST",
+                f"/v1/moments/{quote(command.moment_id, safe='')}/publish",
+                operation=operation,
+                json={
+                    "author_user_id": command.author_user_id,
+                    "author_org_id": command.author_org_id,
+                    "content": command.content,
+                    "visibility": command.visibility,
+                    "audience_user_ids": list(command.audience_user_ids),
+                    "audience_org_ids": list(command.audience_org_ids),
+                    "assets": [
+                        {
+                            "asset_id": asset.asset_id,
+                            "client_asset_id": asset.client_asset_id,
+                            "kind": asset.kind,
+                            "filename": asset.filename,
+                            "media_type": asset.media_type,
+                            "size_bytes": asset.size_bytes,
+                            "sha256_hex": asset.sha256_hex,
+                            "version": asset.version,
+                            "ordinal": asset.ordinal,
+                        }
+                        for asset in command.assets
+                    ],
+                },
+                accepted_statuses=frozenset({200, 201}),
+            ),
+            operation=operation,
+        )
+        if (
+            moment.moment_id != command.moment_id
+            or moment.client_moment_id != command.client_moment_id
+            or moment.author_user_id != command.author_user_id
+            or moment.author_org_id != command.author_org_id
+            or moment.visibility != command.visibility
+            or moment.audience_org_ids != command.audience_org_ids
+            or moment.content != command.content
+            or moment.assets != command.assets
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return moment
+
+    async def get_moment(self, query: MomentQueryDTO) -> MomentDTO:
+        operation = "get_moment"
+        moment = _moment_from_json(
+            await self._request_json(
+                "POST",
+                f"/v1/moments/{quote(query.moment_id, safe='')}/query",
+                operation=operation,
+                json={"context": _context_json(query.context)},
+            ),
+            operation=operation,
+        )
+        if moment.moment_id != query.moment_id:
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return moment
+
+    async def list_moment_feed(
+        self,
+        query: MomentFeedQueryDTO,
+    ) -> MomentFeedPageDTO:
+        operation = "list_moment_feed"
+        data = _mapping(
+            await self._request_json(
+                "POST",
+                "/v1/moments/feed/query",
+                operation=operation,
+                json={
+                    "context": _context_json(query.context),
+                    "limit": query.limit,
+                    "cursor": query.cursor,
+                },
+            ),
+            operation=operation,
+            exact_keys=frozenset(
+                {"moments", "next_cursor", "latest_event_sequence"}
+            ),
+        )
+        raw_moments = data.get("moments")
+        if not isinstance(raw_moments, list) or len(raw_moments) > query.limit:
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return MomentFeedPageDTO(
+            moments=tuple(
+                _moment_from_json(item, operation=operation)
+                for item in raw_moments
+            ),
+            next_cursor=_optional_string(
+                data,
+                "next_cursor",
+                operation=operation,
+            ),
+            latest_event_sequence=_integer(
+                data,
+                "latest_event_sequence",
+                operation=operation,
+            ),
+        )
+
+    async def set_moment_like(
+        self,
+        command: MomentLikeCommandDTO,
+    ) -> MomentLikeResultDTO:
+        operation = "set_moment_like"
+        suffix = "likes" if command.liked else "likes/remove"
+        result = _like_result_from_json(
+            await self._request_json(
+                "POST",
+                f"/v1/moments/{quote(command.moment_id, safe='')}/{suffix}",
+                operation=operation,
+                json={
+                    "context": _context_json(command.context),
+                    "user_id": command.context.viewer_user_id,
+                    "occurred_at": _iso(command.occurred_at),
+                },
+            ),
+            operation=operation,
+        )
+        if (
+            result.moment_id != command.moment_id
+            or result.user_id != command.context.viewer_user_id
+            or result.liked != command.liked
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return result
+
+    async def list_moment_likes(
+        self,
+        query: MomentLikeQueryDTO,
+    ) -> MomentLikePageDTO:
+        operation = "list_moment_likes"
+        data = _mapping(
+            await self._request_json(
+                "POST",
+                f"/v1/moments/{quote(query.moment_id, safe='')}/likes/query",
+                operation=operation,
+                json={
+                    "context": _context_json(query.context),
+                    "limit": query.limit,
+                    "cursor": query.cursor,
+                },
+            ),
+            operation=operation,
+            exact_keys=frozenset({"items", "count", "next_cursor"}),
+        )
+        raw_items = data.get("items")
+        count = _integer(data, "count", operation=operation)
+        if (
+            not isinstance(raw_items, list)
+            or len(raw_items) > query.limit
+            or count < len(raw_items)
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        likes: list[MomentLikeDTO] = []
+        for raw in raw_items:
+            item = _mapping(
+                raw,
+                operation=operation,
+                exact_keys=frozenset({"user_id", "sequence", "liked_at"}),
+            )
+            likes.append(
+                MomentLikeDTO(
+                    user_id=_required_string(
+                        item,
+                        "user_id",
+                        operation=operation,
+                    ),
+                    sequence=_integer(
+                        item,
+                        "sequence",
+                        operation=operation,
+                        minimum=1,
+                    ),
+                    created_at=_timestamp(
+                        item,
+                        "liked_at",
+                        operation=operation,
+                    ),
+                )
+            )
+        return MomentLikePageDTO(
+            likes=tuple(likes),
+            next_cursor=_optional_string(
+                data,
+                "next_cursor",
+                operation=operation,
+            ),
+        )
+
+    async def create_moment_comment(
+        self,
+        command: MomentCommentCreateDTO,
+    ) -> MomentCommentDTO:
+        operation = "create_moment_comment"
+        comment = _comment_from_json(
+            await self._request_json(
+                "POST",
+                f"/v1/moments/{quote(command.moment_id, safe='')}/comments",
+                operation=operation,
+                json={
+                    "context": _context_json(command.context),
+                    "client_comment_id": command.client_comment_id,
+                    "author_user_id": command.author_user_id,
+                    "content": command.content,
+                },
+                accepted_statuses=frozenset({200, 201}),
+            ),
+            operation=operation,
+        )
+        if (
+            comment.moment_id != command.moment_id
+            or comment.author_user_id != command.author_user_id
+            or comment.client_comment_id != command.client_comment_id
+            or comment.content != command.content
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return comment
+
+    async def list_moment_comments(
+        self,
+        query: MomentCommentQueryDTO,
+    ) -> MomentCommentPageDTO:
+        operation = "list_moment_comments"
+        data = _mapping(
+            await self._request_json(
+                "POST",
+                f"/v1/moments/{quote(query.moment_id, safe='')}/comments/query",
+                operation=operation,
+                json={
+                    "context": _context_json(query.context),
+                    "limit": query.limit,
+                    "cursor": query.cursor,
+                },
+            ),
+            operation=operation,
+            exact_keys=frozenset({"items", "count", "next_cursor"}),
+        )
+        raw_items = data.get("items")
+        count = _integer(data, "count", operation=operation)
+        if (
+            not isinstance(raw_items, list)
+            or len(raw_items) > query.limit
+            or count < len(raw_items)
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        comments = tuple(
+            _comment_from_json(item, operation=operation)
+            for item in raw_items
+        )
+        if any(comment.moment_id != query.moment_id for comment in comments):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return MomentCommentPageDTO(
+            comments=comments,
+            next_cursor=_optional_string(
+                data,
+                "next_cursor",
+                operation=operation,
+            ),
+        )
+
+    async def delete_moment_comment(
+        self,
+        command: MomentCommentDeleteDTO,
+    ) -> MomentCommentDeleteResultDTO:
+        operation = "delete_moment_comment"
+        data = _mapping(
+            await self._request_json(
+                "POST",
+                (
+                    f"/v1/moments/{quote(command.moment_id, safe='')}"
+                    f"/comments/{quote(command.comment_id, safe='')}/delete"
+                ),
+                operation=operation,
+                json={
+                    "context": _context_json(command.context),
+                    "requested_by_user_id": command.requested_by_user_id,
+                    "requested_at": _iso(command.requested_at),
+                },
+            ),
+            operation=operation,
+            exact_keys=frozenset(
+                {
+                    "moment_id",
+                    "comment_id",
+                    "changed",
+                    "comment_count",
+                    "deleted_at",
+                }
+            ),
+        )
+        moment_id = _required_string(data, "moment_id", operation=operation)
+        comment_id = _required_string(data, "comment_id", operation=operation)
+        if (
+            moment_id != command.moment_id
+            or comment_id != command.comment_id
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return MomentCommentDeleteResultDTO(
+            moment_id=moment_id,
+            comment_id=comment_id,
+            state="deleted",
+            changed=_boolean(data, "changed", operation=operation),
+            comment_count=_integer(
+                data,
+                "comment_count",
+                operation=operation,
+            ),
+            deleted_at=_timestamp(data, "deleted_at", operation=operation),
+        )
+
+    async def begin_moment_delete(
+        self,
+        command: MomentDeleteCommandDTO,
+    ) -> MomentDeleteResultDTO:
+        operation = "begin_moment_delete"
+        result = _delete_result_from_json(
+            await self._request_json(
+                "POST",
+                f"/v1/moments/{quote(command.moment_id, safe='')}/delete",
+                operation=operation,
+                json={
+                    "context": _context_json(command.context),
+                    "requested_by_user_id": command.requested_by_user_id,
+                    "requested_at": _iso(command.requested_at),
+                },
+            ),
+            operation=operation,
+        )
+        if result.moment_id != command.moment_id:
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return result
+
+    async def complete_moment_delete(
+        self,
+        command: MomentDeleteCommandDTO,
+    ) -> MomentDeleteResultDTO:
+        operation = "complete_moment_delete"
+        result = _delete_result_from_json(
+            await self._request_json(
+                "POST",
+                (
+                    f"/v1/moments/{quote(command.moment_id, safe='')}"
+                    "/delete/complete"
+                ),
+                operation=operation,
+                json={
+                    "requested_by_user_id": command.requested_by_user_id,
+                    "completed_at": _iso(command.requested_at),
+                },
+            ),
+            operation=operation,
+        )
+        if result.moment_id != command.moment_id or result.state != "deleted":
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return result
+
+    async def list_moment_events(
+        self,
+        query: MomentUserEventQueryDTO,
+    ) -> MomentUserEventPageDTO:
+        operation = "list_moment_events"
+        data = _mapping(
+            await self._request_json(
+                "POST",
+                "/v1/moments/events/query",
+                operation=operation,
+                json={
+                    "context": _context_json(query.context),
+                    "limit": query.limit,
+                    "cursor": query.cursor,
+                },
+            ),
+            operation=operation,
+            exact_keys=frozenset(
+                {"events", "next_cursor", "latest_event_sequence"}
+            ),
+        )
+        raw_events = data.get("events")
+        if not isinstance(raw_events, list) or len(raw_events) > query.limit:
+            raise ChatRecordStoreProtocolError(operation=operation)
+        events = tuple(
+            _moment_event_from_json(
+                item,
+                operation=operation,
+                user_id=query.context.viewer_user_id,
+            )
+            for item in raw_events
+        )
+        if any(event.user_id != query.context.viewer_user_id for event in events):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return MomentUserEventPageDTO(
+            events=events,
+            next_cursor=_optional_string(
+                data,
+                "next_cursor",
+                operation=operation,
+            ),
+            latest_event_sequence=_integer(
+                data,
+                "latest_event_sequence",
+                operation=operation,
+            ),
+        )
+
+    async def get_moment_event_tail(
+        self,
+        context: MomentViewerContextDTO,
+    ) -> MomentUserEventTailDTO:
+        operation = "get_moment_event_tail"
+        data = _mapping(
+            await self._request_json(
+                "POST",
+                "/v1/moments/events/tail",
+                operation=operation,
+                json={"context": _context_json(context)},
+            ),
+            operation=operation,
+            exact_keys=frozenset(
+                {"cursor", "latest_event_sequence"}
+            ),
+        )
+        return MomentUserEventTailDTO(
+            user_id=context.viewer_user_id,
+            cursor=_required_string(data, "cursor", operation=operation),
+            latest_event_sequence=_integer(
+                data,
+                "latest_event_sequence",
+                operation=operation,
+            ),
+        )
+
     async def delete_records(
         self,
         command: ChatRecordDeleteCommandDTO,
@@ -739,17 +1816,21 @@ class HttpChatRecordStore:
             operation=operation,
         )
 
-    async def apply_retention(
+    async def apply_retention_batch(
         self,
-        command: ChatRetentionCommandDTO,
-    ) -> ChatRecordMutationResultDTO:
-        operation = "apply_retention"
-        return self._mutation_result(
+        command: ChatRetentionBatchCommandDTO,
+    ) -> ChatRetentionBatchResultDTO:
+        operation = "apply_retention_batch"
+        data = _mapping(
             await self._request_json(
                 "POST",
                 "/v1/retention/apply",
                 operation=operation,
                 json={
+                    "operation_id": command.operation_id,
+                    "batch_ordinal": command.batch_ordinal,
+                    "approved_maximum_records": command.approved_maximum_records,
+                    "approved_maximum_asset_jobs": command.approved_maximum_asset_jobs,
                     "requested_by_user_id": command.requested_by_user_id,
                     "reason": command.reason,
                     "requested_at": _iso(command.requested_at),
@@ -759,6 +1840,44 @@ class HttpChatRecordStore:
                 },
             ),
             operation=operation,
+            exact_keys=frozenset(
+                {
+                    "operation_id",
+                    "batch_ordinal",
+                    "affected_count",
+                    "cumulative_affected_count",
+                    "operation_complete",
+                    "completed_at",
+                }
+            ),
+        )
+        operation_id = _required_string(data, "operation_id", operation=operation)
+        batch_ordinal = _integer(data, "batch_ordinal", operation=operation)
+        affected_count = _integer(data, "affected_count", operation=operation)
+        cumulative_affected_count = _integer(
+            data,
+            "cumulative_affected_count",
+            operation=operation,
+        )
+        if (
+            operation_id != command.operation_id
+            or batch_ordinal != command.batch_ordinal
+            or affected_count > command.maximum_records
+            or cumulative_affected_count < affected_count
+            or cumulative_affected_count > command.approved_maximum_records
+        ):
+            raise ChatRecordStoreProtocolError(operation=operation)
+        return ChatRetentionBatchResultDTO(
+            operation_id=operation_id,
+            batch_ordinal=batch_ordinal,
+            affected_count=affected_count,
+            cumulative_affected_count=cumulative_affected_count,
+            operation_complete=_boolean(
+                data,
+                "operation_complete",
+                operation=operation,
+            ),
+            completed_at=_timestamp(data, "completed_at", operation=operation),
         )
 
     @staticmethod
@@ -785,8 +1904,10 @@ def configured_chat_record_capability() -> StorageCapabilityDescription:
         writable=True,
         durable=True,
         external_io_enabled=True,
-        operations=CHAT_RECORD_STORE_OPERATIONS,
-        reason="C19 chat record service is configured.",
+        operations=tuple(
+            dict.fromkeys(CHAT_RECORD_STORE_OPERATIONS + MOMENT_STORE_OPERATIONS)
+        ),
+        reason="C19 record service is configured for chat and Moments.",
     )
 
 

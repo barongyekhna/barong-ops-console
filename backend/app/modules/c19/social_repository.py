@@ -2,17 +2,15 @@
 
 from __future__ import annotations
 
-from sqlalchemy import String, and_, case, cast, exists, func, or_, select
+from sqlalchemy import and_, case, exists, func, or_, select
 from sqlalchemy.orm import Session
 
 from ...models.c19 import (
-    C19AffiliationRecord,
     C19FriendRequestRecord,
+    C19ProfileRecord,
     C19RelationshipRecord,
     C19UserBlockRecord,
 )
-from ...models.organization import OrganizationRecord
-from ...models.org_membership import OrgMembershipRecord
 from ...models.user import User
 
 
@@ -41,28 +39,11 @@ def lock_user_pair(db: Session, *, user_a_id: int, user_b_id: int) -> None:
 
 def _active_user_exists(user_id_expression):
     return exists(
-        select(C19AffiliationRecord.affiliation_id)
-        .join(User, User.id == C19AffiliationRecord.user_id)
-        .join(
-            OrganizationRecord,
-            OrganizationRecord.org_id == C19AffiliationRecord.org_id,
-        )
-        .join(
-            OrgMembershipRecord,
-            and_(
-                OrgMembershipRecord.membership_id
-                == C19AffiliationRecord.source_membership_id,
-                OrgMembershipRecord.user_id
-                == cast(C19AffiliationRecord.user_id, String),
-                OrgMembershipRecord.org_id == C19AffiliationRecord.org_id,
-            ),
-        )
+        select(User.id)
+        .join(C19ProfileRecord, C19ProfileRecord.user_id == User.id)
         .where(
             User.id == user_id_expression,
             User.is_active.is_(True),
-            C19AffiliationRecord.status == "active",
-            OrgMembershipRecord.status == "active",
-            OrganizationRecord.status == "active",
         )
     )
 

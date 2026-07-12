@@ -98,6 +98,23 @@ def test_production_cookie_policy_enforces_secure_cookie() -> None:
     assert policy.samesite == "none"
 
 
+def test_session_cookie_path_covers_both_c19_asset_byte_locators() -> None:
+    policy = get_session_cookie_policy(
+        Settings(
+            app_env="production",
+            auth_session_cookie_path="/api/backend",
+        )
+    )
+    ticket = "A" * 43
+
+    assert policy.path == "/api/backend"
+    for locator in (
+        f"/api/backend/c19-assets/u/{ticket}",
+        f"/api/backend/c19-assets/d/{ticket}",
+    ):
+        assert locator.startswith(f"{policy.path}/")
+
+
 def test_set_and_clear_cookie_share_policy_attributes() -> None:
     settings = Settings(
         app_env="development",

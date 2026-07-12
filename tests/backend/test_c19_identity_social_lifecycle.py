@@ -31,6 +31,7 @@ from backend.app.modules.c19.identity_service import (
 from backend.app.modules.c19.identity_social_router import FriendRequestIdPath, router
 from backend.app.modules.c19.identity_sync_service import (
     sync_affiliation_from_membership,
+    sync_profile_for_user,
 )
 from backend.app.modules.c19.social_schemas import (
     C19FriendRequestCreate,
@@ -259,7 +260,21 @@ def test_router_contract_uses_fixed_paths_and_safe_query_names() -> None:
 def test_directory_aggregates_all_affiliations_and_trusts_source_membership(
     db: Session,
 ) -> None:
-    actor, target, _, org_one, org_two = _seed_people(db)
+    actor, target, third, org_one, org_two = _seed_people(db)
+
+    organization_search = list_directory(
+        db,
+        actor=actor,
+        search="Beta Factory",
+        affiliation_org_id=None,
+        limit=50,
+        offset=0,
+    )
+    assert organization_search.count == 2
+    assert {item.user_id for item in organization_search.items} == {
+        target.id,
+        third.id,
+    }
 
     directory = list_directory(
         db,
@@ -317,6 +332,18 @@ def test_directory_aggregates_all_affiliations_and_trusts_source_membership(
     )
     actor_membership.status = "suspended"
     db.commit()
+    affiliation_free_access = list_directory(
+        db,
+        actor=actor,
+        search="target",
+        affiliation_org_id=None,
+        limit=50,
+        offset=0,
+    )
+    assert affiliation_free_access.count == 1
+
+    actor.is_active = False
+    db.commit()
     with pytest.raises(C19ActorUnavailableError):
         list_directory(
             db,
@@ -326,6 +353,60 @@ def test_directory_aggregates_all_affiliations_and_trusts_source_membership(
             limit=50,
             offset=0,
         )
+
+
+def test_active_user_without_affiliation_has_a_global_c19_profile(
+    db: Session,
+) -> None:
+    actor = _user(db, "affiliation-free-actor", role="viewer")
+    db.commit()
+
+    directory = list_directory(
+        db,
+        actor=actor,
+        search="affiliation-free",
+        affiliation_org_id=None,
+        limit=50,
+        offset=0,
+    )
+    profile = get_profile(db, actor=actor, user_id=actor.id)
+
+    assert directory.count == 1
+    assert directory.items[0].user_id == actor.id
+    assert directory.items[0].affiliations == []
+    assert profile.affiliations == []
+
+
+def test_affiliation_free_users_can_become_friends(
+    db: Session,
+    social_audit_events: list[dict[str, object]],
+) -> None:
+    actor = _user(db, "native-social-actor", role="viewer")
+    target = _user(db, "native-social-target", role="custom-role")
+    sync_profile_for_user(db, user=actor)
+    sync_profile_for_user(db, user=target)
+    db.commit()
+
+    request = create_friend_request(
+        db,
+        actor=actor,
+        payload=C19FriendRequestCreate(addressee_user_id=target.id),
+        audit=AUDIT,
+    )
+    accepted = accept_friend_request(
+        db,
+        actor=target,
+        request_id=request.request_id,
+        audit=AUDIT,
+    )
+    friends = list_friends(db, actor=actor, limit=50, offset=0)
+
+    assert accepted.status.value == "accepted"
+    assert [item.profile.user_id for item in friends.items] == [target.id]
+    assert [event["action"] for event in social_audit_events] == [
+        "c19.friend_request.create",
+        "c19.friend_request.accept",
+    ]
 
 
 def test_user_and_membership_lifecycle_sync_is_transactional(

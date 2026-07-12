@@ -92,6 +92,8 @@ export function PermissionRouteGuard({
   const { items, moduleAccessUnknown } = useModuleAccess();
   const capability = getCapabilityForPath(pathname);
   const isAuthenticated = status === "authenticated";
+  const isC19Route =
+    (pathname === "/c19" || pathname.startsWith("/c19/")) && isAuthenticated;
   const isPrivilegedRole =
     isOwnerRole(user?.role) || isSuperAdminRole(user?.role);
   const isOwner = isOwnerRole(user?.role);
@@ -121,6 +123,7 @@ export function PermissionRouteGuard({
   );
 
   if (
+    isC19Route ||
     isUserManagerRoute ||
     isOrganizationListRoute ||
     isPermissionCenterRoute ||

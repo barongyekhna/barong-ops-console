@@ -19,6 +19,7 @@ RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
 COPY --chown=app:app backend ./backend
 COPY --chown=app:app r_system_v2 ./r_system_v2
 COPY --chown=app:app tests/backend ./tests/backend
+COPY --chown=app:app tests/fixtures ./tests/fixtures
 
 USER app
 

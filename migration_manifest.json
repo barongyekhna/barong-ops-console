@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260711_03_render_staging",
+  "alembic_head": "20260712_01_c19_native_access",
   "environment": "staging",
-  "expected_alembic_head": "20260711_03_render_staging",
+  "expected_alembic_head": "20260712_01_c19_native_access",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 49,
-  "migration_hash": "da081f1e5fda58db2b90152358228d840da8305131f7eba254e207e6d1c97085",
+  "migration_count": 50,
+  "migration_hash": "0e16118ca17930b6573a14cd3d11144f74d743bdb0ea89912c53fc15bc8ae8a7",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -56,9 +56,10 @@
     "20260710_05_k_brand_guard",
     "20260711_01_c19_control_core",
     "20260711_02_webhook_registry",
-    "20260711_03_render_staging"
+    "20260711_03_render_staging",
+    "20260712_01_c19_native_access"
   ],
-  "migration_order_checksum": "944531eb256361bb5a232fadf461782ba40ef1c184d526720d06280f6dacc579",
+  "migration_order_checksum": "dae3b51502c92e3fb77f0b2d156cccb3f99562d159a331aca4ed21714d1924e9",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -402,6 +403,13 @@
       "down_revision": "20260711_02_webhook_registry",
       "path": "backend/alembic/versions/20260711_03_render_staging.py",
       "version": "20260711_03_render_staging"
+    },
+    {
+      "applied_at": "2026-07-12T00:00:00Z",
+      "checksum": "6141690d23c68c7472b9ae8d09bb4e49856d75d08218ce5e30e9f67672bdc42a",
+      "down_revision": "20260711_03_render_staging",
+      "path": "backend/alembic/versions/20260712_01_c19_native_user_access.py",
+      "version": "20260712_01_c19_native_access"
     }
   ]
 }

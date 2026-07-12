@@ -873,6 +873,12 @@ textarea:focus-visible {
   white-space: nowrap;
 }
 
+.navigation-status-badge.c19-unread-badge {
+  color: #fff;
+  background: #c2410c;
+  border-color: #fb923c;
+}
+
 .navigation-status-badge.locked {
   color: #d5a14c;
   background: #2b251b;

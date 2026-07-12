@@ -6,7 +6,7 @@ const contentSecurityPolicy = [
   "form-action 'self'",
   "frame-ancestors 'none'",
   "object-src 'none'",
-  "img-src 'self' data: https://images-na.ssl-images-amazon.com https://m.media-amazon.com",
+  "img-src 'self' data: blob: https://images-na.ssl-images-amazon.com https://m.media-amazon.com",
   "font-src 'self' data:",
   "style-src 'self' 'unsafe-inline'",
   "script-src 'self' 'unsafe-inline'",

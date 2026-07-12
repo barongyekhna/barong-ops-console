@@ -10,9 +10,9 @@ import json
 import unicodedata
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import and_, case, delete, exists, func, or_, select
 from sqlalchemy.dialects.postgresql import insert as postgres_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.exc import IntegrityError
@@ -23,23 +23,39 @@ from .models import (
     ChatRecord,
     ConversationSequence,
     ParticipantPosition,
+    MomentAssetReference,
+    RecordAssetCoordination,
+    RecordAssetDeletionOutbox,
+    RecordAssetReference as RecordAssetReferenceModel,
     RecordIdempotencyLedger,
     RecordMutationAudit,
+    RecordRetentionBatch,
+    RecordRetentionOperation,
     UserEventSequence,
     UserRecordEvent,
 )
 from .schemas import (
     CombinedPositionResponse,
+    AssetDeletionClaimRequest,
+    AssetDeletionClaimResponse,
+    AssetDeletionCompleteRequest,
+    AssetDeletionCompleteResponse,
+    AssetDeletionJob,
+    AssetDeletionAuthorizeRequest,
+    AssetDeletionAuthorizeResponse,
     DeleteRecordsRequest,
     MutationResultResponse,
     PositionAdvanceRequest,
     ReceiptPositionResponse,
     RecordAppendRequest,
+    RecordAssetReference,
     RecordPageResponse,
     RecordResponse,
     ResumePositionResponse,
     RetentionRequest,
+    RetentionBatchResponse,
     UnreadPositionResponse,
+    UnreadSummaryResponse,
     UserEventPageResponse,
     UserEventResponse,
     UserEventTailResponse,
@@ -70,6 +86,14 @@ class UnsupportedContentError(RecordStoreError):
     pass
 
 
+class RetentionOperationConflictError(RecordStoreError):
+    pass
+
+
+class AssetDeletionLeaseError(RecordStoreError):
+    pass
+
+
 @dataclass(frozen=True, slots=True)
 class AppendResult:
     record: RecordResponse
@@ -87,6 +111,48 @@ def _dialect_insert(session: Session, table: type[object]):
     if dialect == "sqlite":
         return sqlite_insert(table)
     return None
+
+
+def _lock_asset_coordination(
+    session: Session, asset_ids: list[str], *, now: datetime | None = None
+) -> None:
+    """Create and lock permanent asset fences in deterministic ID order.
+
+    All Record and Moment reference writers, reference deletion, and outbox
+    authorization use this same transaction fence. PostgreSQL row locks close
+    the absent-row/TOCTOU window; SQLite's conflict-aware insert plus write
+    transaction is the test/development fallback.
+    """
+
+    ordered = sorted(set(asset_ids))
+    if not ordered:
+        return
+    created_at = now or utcnow()
+    insert_statement = _dialect_insert(session, RecordAssetCoordination)
+    for asset_id in ordered:
+        if insert_statement is not None:
+            session.execute(
+                insert_statement.values(
+                    asset_id=asset_id, created_at=created_at
+                ).on_conflict_do_nothing(
+                    index_elements=[RecordAssetCoordination.__table__.c.asset_id]
+                )
+            )
+        elif session.get(RecordAssetCoordination, asset_id) is None:
+            session.add(
+                RecordAssetCoordination(asset_id=asset_id, created_at=created_at)
+            )
+            session.flush()
+    list(session.scalars(_asset_coordination_lock_statement(ordered)))
+
+
+def _asset_coordination_lock_statement(asset_ids: list[str]):
+    return (
+        select(RecordAssetCoordination)
+        .where(RecordAssetCoordination.asset_id.in_(sorted(set(asset_ids))))
+        .order_by(RecordAssetCoordination.asset_id)
+        .with_for_update()
+    )
 
 
 def _next_sequence(
@@ -128,7 +194,45 @@ def _next_sequence(
     return row.last_sequence
 
 
-def _record_response(record: ChatRecord, *, status: str = "sent") -> RecordResponse:
+def _asset_response(reference: RecordAssetReferenceModel) -> RecordAssetReference:
+    return RecordAssetReference(
+        asset_id=reference.asset_id,
+        client_asset_id=reference.client_asset_id,
+        kind=reference.kind,
+        filename=reference.filename,
+        media_type=reference.media_type,
+        size_bytes=reference.size_bytes,
+        sha256_hex=reference.sha256_hex,
+        version=reference.version,
+        ordinal=reference.ordinal,
+    )
+
+
+def _asset_references_by_record(
+    session: Session, record_ids: list[str]
+) -> dict[str, list[RecordAssetReference]]:
+    if not record_ids:
+        return {}
+    result: dict[str, list[RecordAssetReference]] = {}
+    rows = session.execute(
+        select(RecordAssetReferenceModel)
+        .where(RecordAssetReferenceModel.record_id.in_(record_ids))
+        .order_by(
+            RecordAssetReferenceModel.record_id,
+            RecordAssetReferenceModel.ordinal,
+        )
+    ).scalars()
+    for row in rows:
+        result.setdefault(row.record_id, []).append(_asset_response(row))
+    return result
+
+
+def _record_response(
+    record: ChatRecord,
+    *,
+    status: str = "sent",
+    assets: list[RecordAssetReference] | None = None,
+) -> RecordResponse:
     return RecordResponse(
         record_id=record.id,
         client_message_id=record.client_message_id,
@@ -144,25 +248,53 @@ def _record_response(record: ChatRecord, *, status: str = "sent") -> RecordRespo
         sender_org_id=record.sender_org_id,
         recipient_org_ids=list(record.recipient_org_ids),
         metadata=dict(record.record_metadata),
+        assets=list(assets or []),
     )
 
 
 def _intent_sha256(request: RecordAppendRequest) -> str:
     """Hash only immutable user intent; never persist or log the canonical body."""
 
+    # This v1 object and JSON encoding are deliberately byte-for-byte identical
+    # to the Stage 3 implementation. Existing text/emoji retries therefore keep
+    # matching ledgers written before the asset schema existed.
+    intent = {
+        "client_message_id": request.client_message_id,
+        "content": request.content,
+        "content_type": request.content_type,
+        "conversation_id": request.conversation_id,
+        "sender_user_id": request.sender_user_id,
+    }
+    if request.assets:
+        intent = {
+            **intent,
+            "assets": [
+                {
+                    "asset_id": asset.asset_id,
+                    "client_asset_id": asset.client_asset_id,
+                    "filename": asset.filename,
+                    "kind": asset.kind,
+                    "media_type": asset.media_type,
+                    "ordinal": asset.ordinal,
+                    "sha256_hex": asset.sha256_hex,
+                    "size_bytes": asset.size_bytes,
+                    "version": asset.version,
+                }
+                for asset in request.assets
+            ],
+            "intent_version": 2,
+        }
     canonical = json.dumps(
-        {
-            "client_message_id": request.client_message_id,
-            "content": request.content,
-            "content_type": request.content_type,
-            "conversation_id": request.conversation_id,
-            "sender_user_id": request.sender_user_id,
-        },
+        intent,
         ensure_ascii=False,
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
     return hashlib.sha256(canonical).hexdigest()
+
+
+def _intent_version(request: RecordAppendRequest) -> int:
+    return 2 if request.assets else 1
 
 
 def _record_status(session: Session, record: ChatRecord) -> str:
@@ -202,6 +334,7 @@ def _claim_idempotency_key(
     request: RecordAppendRequest,
     *,
     intent_sha256: str,
+    intent_version: int,
     now: datetime,
 ) -> bool:
     insert_statement = _dialect_insert(session, RecordIdempotencyLedger)
@@ -209,6 +342,7 @@ def _claim_idempotency_key(
         "sender_user_id": request.sender_user_id,
         "client_message_id": request.client_message_id,
         "intent_sha256": intent_sha256,
+        "intent_version": intent_version,
         "conversation_id": request.conversation_id,
         "record_id": None,
         "sequence": None,
@@ -276,6 +410,7 @@ def _resolve_idempotent_replay(
     request: RecordAppendRequest,
     *,
     intent_sha256: str,
+    intent_version: int,
 ) -> AppendResult:
     ledger = session.execute(
         _idempotency_key_lock_statement(
@@ -286,20 +421,38 @@ def _resolve_idempotent_replay(
         raise RecordStoreInvariantError("idempotency ledger claim disappeared")
     if ledger.status == "deleted":
         raise DeletedIdempotencyKeyError("message was permanently deleted")
-    if ledger.intent_sha256 != intent_sha256:
+    if (
+        ledger.intent_version != intent_version
+        or ledger.intent_sha256 != intent_sha256
+    ):
         raise IdempotencyConflictError("idempotency key was reused")
     if ledger.status != "active" or ledger.record_id is None:
         raise RecordStoreInvariantError("active idempotency ledger is incomplete")
     record = session.get(ChatRecord, ledger.record_id)
     if record is None:
         raise RecordStoreInvariantError("active idempotency record is missing")
+    assets = _asset_references_by_record(session, [record.id]).get(record.id, [])
     return AppendResult(
-        _record_response(record, status=_record_status(session, record)),
+        _record_response(
+            record,
+            status=_record_status(session, record),
+            assets=assets,
+        ),
         True,
     )
 
 
 def _validate_content(request: RecordAppendRequest, max_message_chars: int) -> None:
+    if request.content_type in {"image", "file"}:
+        if len(request.assets) != 1 or request.assets[0].kind != request.content_type:
+            raise UnsupportedContentError(
+                "image and file records require one matching asset"
+            )
+        if len(request.content) > min(max_message_chars, 4_000):
+            raise UnsupportedContentError("asset caption exceeds configured limit")
+        return
+    if request.assets:
+        raise UnsupportedContentError("text and emoji records cannot contain assets")
     if not request.content or not request.content.strip():
         raise UnsupportedContentError("message content cannot be empty")
     if len(request.content) > max_message_chars:
@@ -342,18 +495,42 @@ def append_record(
 ) -> AppendResult:
     persisted_at = utcnow()
     intent_sha256 = _intent_sha256(request)
+    intent_version = _intent_version(request)
     claimed = _claim_idempotency_key(
         session,
         request,
         intent_sha256=intent_sha256,
+        intent_version=intent_version,
         now=persisted_at,
     )
     if not claimed:
         return _resolve_idempotent_replay(
-            session, request, intent_sha256=intent_sha256
+            session,
+            request,
+            intent_sha256=intent_sha256,
+            intent_version=intent_version,
         )
     try:
         _validate_content(request, max_message_chars)
+        if request.assets:
+            _lock_asset_coordination(
+                session,
+                [asset.asset_id for asset in request.assets],
+                now=persisted_at,
+            )
+            retired_asset = session.scalar(
+                select(RecordAssetDeletionOutbox.asset_id)
+                .where(
+                    RecordAssetDeletionOutbox.asset_id.in_(
+                        [asset.asset_id for asset in request.assets]
+                    )
+                )
+                .limit(1)
+            )
+            if retired_asset is not None:
+                raise RecordStoreInvariantError(
+                    "asset identifier is already governed by retention"
+                )
         sequence = _next_sequence(
             session,
             model=ConversationSequence,
@@ -378,6 +555,22 @@ def append_record(
         )
         session.add(record)
         session.flush()
+        for asset in request.assets:
+            session.add(
+                RecordAssetReferenceModel(
+                    id=str(uuid.uuid4()),
+                    record_id=record.id,
+                    asset_id=asset.asset_id,
+                    client_asset_id=asset.client_asset_id,
+                    kind=asset.kind,
+                    filename=asset.filename,
+                    media_type=asset.media_type,
+                    size_bytes=asset.size_bytes,
+                    sha256_hex=asset.sha256_hex,
+                    version=asset.version,
+                    ordinal=asset.ordinal,
+                )
+            )
         ledger = session.get(
             RecordIdempotencyLedger,
             (request.sender_user_id, request.client_message_id),
@@ -408,15 +601,21 @@ def append_record(
                 )
             )
         session.commit()
-        return AppendResult(_record_response(record), False)
-    except UnsupportedContentError:
+        return AppendResult(
+            _record_response(record, assets=list(request.assets)),
+            False,
+        )
+    except (UnsupportedContentError, RecordStoreInvariantError):
         session.rollback()
         raise
     except IntegrityError:
         session.rollback()
         try:
             return _resolve_idempotent_replay(
-                session, request, intent_sha256=intent_sha256
+                session,
+                request,
+                intent_sha256=intent_sha256,
+                intent_version=intent_version,
             )
         except RecordStoreInvariantError:
             raise RecordStoreInvariantError(
@@ -528,12 +727,50 @@ def list_records(
             return "delivered"
         return "sent"
 
+    assets_by_record = _asset_references_by_record(
+        session, [record.id for record in page_rows]
+    )
     return RecordPageResponse(
         records=[
-            _record_response(row, status=aggregate_status(row)) for row in page_rows
+            _record_response(
+                row,
+                status=aggregate_status(row),
+                assets=assets_by_record.get(row.id, []),
+            )
+            for row in page_rows
         ],
         next_cursor=next_cursor,
         latest_sequence=latest,
+    )
+
+
+def get_visible_record(
+    session: Session,
+    *,
+    conversation_id: str,
+    record_id: str,
+    user_id: str,
+) -> RecordResponse | None:
+    """Return a record only when its immutable event audience includes the user."""
+
+    record = session.execute(
+        select(ChatRecord)
+        .join(UserRecordEvent, UserRecordEvent.record_id == ChatRecord.id)
+        .where(
+            ChatRecord.id == record_id,
+            ChatRecord.conversation_id == conversation_id,
+            UserRecordEvent.user_id == user_id,
+            UserRecordEvent.conversation_id == conversation_id,
+        )
+        .limit(1)
+    ).scalar_one_or_none()
+    if record is None:
+        return None
+    assets = _asset_references_by_record(session, [record.id]).get(record.id, [])
+    return _record_response(
+        record,
+        status=_record_status(session, record),
+        assets=assets,
     )
 
 
@@ -687,7 +924,10 @@ def unread_position(
     position = session.get(ParticipantPosition, (conversation_id, user_id))
     read_through = position.read_through_sequence if position else 0
     count, first = session.execute(
-        select(func.count(UserRecordEvent.id), func.min(UserRecordEvent.record_sequence))
+        select(
+            func.count(UserRecordEvent.id),
+            func.min(UserRecordEvent.record_sequence),
+        )
         .join(ChatRecord, ChatRecord.id == UserRecordEvent.record_id)
         .where(
             UserRecordEvent.user_id == user_id,
@@ -702,6 +942,48 @@ def unread_position(
         unread_count=int(count),
         first_unread_sequence=int(first) if first is not None else None,
         latest_sequence=_latest_sequence(session, conversation_id),
+    )
+
+
+def unread_summary(
+    session: Session, *, user_id: str, conversation_ids: list[str]
+) -> UnreadSummaryResponse:
+    """Aggregate unread recipient events without loading record content.
+
+    Barong supplies only conversations the caller may currently access.  The
+    Record Service deliberately does not discover or widen that set.
+    """
+
+    if not conversation_ids:
+        return UnreadSummaryResponse(
+            total_unread_count=0,
+            unread_conversation_count=0,
+        )
+    total, conversations = session.execute(
+        select(
+            func.count(UserRecordEvent.id),
+            func.count(func.distinct(UserRecordEvent.conversation_id)),
+        )
+        .join(ChatRecord, ChatRecord.id == UserRecordEvent.record_id)
+        .outerjoin(
+            ParticipantPosition,
+            and_(
+                ParticipantPosition.conversation_id
+                == UserRecordEvent.conversation_id,
+                ParticipantPosition.user_id == user_id,
+            ),
+        )
+        .where(
+            UserRecordEvent.user_id == user_id,
+            UserRecordEvent.conversation_id.in_(conversation_ids),
+            ChatRecord.sender_user_id != user_id,
+            UserRecordEvent.record_sequence
+            > func.coalesce(ParticipantPosition.read_through_sequence, 0),
+        )
+    ).one()
+    return UnreadSummaryResponse(
+        total_unread_count=int(total or 0),
+        unread_conversation_count=int(conversations or 0),
     )
 
 
@@ -818,10 +1100,73 @@ def get_user_event_tail(
 
 
 def _delete_record_ids(
-    session: Session, record_ids: list[str], *, deleted_at: datetime
-) -> int:
+    session: Session,
+    record_ids: list[str],
+    *,
+    deleted_at: datetime,
+    retention_operation_id: str | None = None,
+) -> tuple[int, int]:
     if not record_ids:
-        return 0
+        return 0, 0
+    asset_rows = session.execute(
+        select(
+            RecordAssetReferenceModel.asset_id,
+            RecordAssetReferenceModel.record_id,
+            ChatRecord.conversation_id,
+        )
+        .join(ChatRecord, ChatRecord.id == RecordAssetReferenceModel.record_id)
+        .where(RecordAssetReferenceModel.record_id.in_(record_ids))
+        .order_by(
+            RecordAssetReferenceModel.record_id,
+            RecordAssetReferenceModel.asset_id,
+        )
+    ).all()
+    _lock_asset_coordination(
+        session,
+        [asset_id for asset_id, _record_id, _conversation_id in asset_rows],
+        now=deleted_at,
+    )
+    outbox_insert = _dialect_insert(session, RecordAssetDeletionOutbox)
+    inserted_outbox_count = 0
+    for asset_id, record_id, conversation_id in asset_rows:
+        values = {
+            "id": str(uuid.uuid4()),
+            "asset_id": asset_id,
+            "record_id": record_id,
+            "conversation_id": conversation_id,
+            "retention_operation_id": retention_operation_id,
+            "state": "pending",
+            "attempt_count": 0,
+            "created_at": deleted_at,
+            "last_attempt_at": None,
+            "lease_owner": None,
+            "lease_until": None,
+            "authorized_at": None,
+            "outcome": None,
+            "completed_at": None,
+        }
+        if outbox_insert is not None:
+            inserted = session.execute(
+                outbox_insert.values(**values)
+                .on_conflict_do_nothing(
+                    index_elements=[
+                        RecordAssetDeletionOutbox.__table__.c.record_id,
+                        RecordAssetDeletionOutbox.__table__.c.asset_id,
+                    ]
+                )
+                .returning(RecordAssetDeletionOutbox.__table__.c.id)
+            ).scalar_one_or_none()
+            inserted_outbox_count += int(inserted is not None)
+        else:
+            existing = session.scalar(
+                select(RecordAssetDeletionOutbox.id).where(
+                    RecordAssetDeletionOutbox.record_id == record_id,
+                    RecordAssetDeletionOutbox.asset_id == asset_id,
+                )
+            )
+            if existing is None:
+                session.add(RecordAssetDeletionOutbox(**values))
+                inserted_outbox_count += 1
     ledgers = list(
         session.execute(_record_ledgers_lock_statement(record_ids)).scalars()
     )
@@ -838,7 +1183,7 @@ def _delete_record_ids(
         delete(UserRecordEvent).where(UserRecordEvent.record_id.in_(record_ids))
     )
     result = session.execute(delete(ChatRecord).where(ChatRecord.id.in_(record_ids)))
-    return int(result.rowcount or 0)
+    return int(result.rowcount or 0), inserted_outbox_count
 
 
 def delete_records(
@@ -853,7 +1198,7 @@ def delete_records(
         ).scalars()
     )
     completed = utcnow()
-    affected = _delete_record_ids(session, ids, deleted_at=completed)
+    affected, _enqueued = _delete_record_ids(session, ids, deleted_at=completed)
     session.add(
         RecordMutationAudit(
             id=str(uuid.uuid4()),
@@ -873,18 +1218,134 @@ def delete_records(
     return MutationResultResponse(affected_count=affected, completed_at=completed)
 
 
+def _expected_retention_operation_id(request: RetentionRequest) -> str:
+    evidence = {
+        "approved_maximum_asset_jobs": request.approved_maximum_asset_jobs,
+        "approved_maximum_records": request.approved_maximum_records,
+        "conversation_id": request.conversation_id,
+        "delete_before": request.delete_before.isoformat(),
+        "reason": request.reason,
+        "requested_by_user_id": request.requested_by_user_id,
+    }
+    digest = hashlib.sha256(
+        json.dumps(evidence, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    return f"rtn_{digest}"
+
+
 def apply_retention(
     session: Session, request: RetentionRequest
-) -> MutationResultResponse:
+) -> RetentionBatchResponse:
+    if request.operation_id != _expected_retention_operation_id(request):
+        raise RetentionOperationConflictError("retention operation id mismatch")
+    now = utcnow()
+    insert_statement = _dialect_insert(session, RecordRetentionOperation)
+    values = {
+        "operation_id": request.operation_id,
+        "requested_by_user_id": request.requested_by_user_id,
+        "reason": request.reason,
+        "delete_before": request.delete_before,
+        "conversation_id": request.conversation_id,
+        "approved_maximum_records": request.approved_maximum_records,
+        "approved_maximum_asset_jobs": request.approved_maximum_asset_jobs,
+        "affected_count": 0,
+        "asset_jobs_enqueued_count": 0,
+        "asset_jobs_completed_count": 0,
+        "next_batch_ordinal": 0,
+        "created_at": now,
+        "updated_at": now,
+        "completed_at": None,
+    }
+    if insert_statement is not None:
+        session.execute(
+            insert_statement.values(**values).on_conflict_do_nothing(
+                index_elements=[RecordRetentionOperation.__table__.c.operation_id]
+            )
+        )
+    elif session.get(RecordRetentionOperation, request.operation_id) is None:
+        session.add(RecordRetentionOperation(**values))
+        session.flush()
+
+    operation = session.execute(
+        select(RecordRetentionOperation)
+        .where(RecordRetentionOperation.operation_id == request.operation_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if operation is None:
+        raise RecordStoreInvariantError("retention operation claim disappeared")
+    if (
+        operation.requested_by_user_id != request.requested_by_user_id
+        or operation.reason != request.reason
+        or operation.delete_before != request.delete_before
+        or operation.conversation_id != request.conversation_id
+        or operation.approved_maximum_records
+        != request.approved_maximum_records
+        or operation.approved_maximum_asset_jobs
+        != request.approved_maximum_asset_jobs
+    ):
+        raise RetentionOperationConflictError("retention policy conflict")
+
+    replay = session.get(
+        RecordRetentionBatch, (request.operation_id, request.batch_ordinal)
+    )
+    if replay is not None:
+        if replay.maximum_records != request.maximum_records:
+            raise RetentionOperationConflictError("retention batch size conflict")
+        return RetentionBatchResponse(
+            operation_id=replay.operation_id,
+            batch_ordinal=replay.batch_ordinal,
+            affected_count=replay.affected_count,
+            cumulative_affected_count=replay.cumulative_affected_count,
+            operation_complete=replay.operation_complete,
+            completed_at=replay.completed_at,
+        )
+    if operation.completed_at is not None:
+        raise RetentionOperationConflictError("retention operation is complete")
+    if request.batch_ordinal != operation.next_batch_ordinal:
+        raise RetentionOperationConflictError("retention batch ordinal conflict")
+    remaining = operation.approved_maximum_records - operation.affected_count
+    if request.maximum_records > remaining:
+        raise RetentionOperationConflictError(
+            "retention batch exceeds approved operation maximum"
+        )
     query = select(ChatRecord.id).where(ChatRecord.created_at < request.delete_before)
     if request.conversation_id is not None:
         query = query.where(ChatRecord.conversation_id == request.conversation_id)
     query = query.order_by(ChatRecord.created_at.asc(), ChatRecord.id.asc())
-    if request.maximum_records is not None:
-        query = query.limit(request.maximum_records)
-    ids = list(session.execute(query).scalars())
+    query = query.limit(request.maximum_records)
+    candidate_ids = list(session.execute(query).scalars())
+    remaining_asset_jobs = (
+        operation.approved_maximum_asset_jobs
+        - operation.asset_jobs_enqueued_count
+    )
+    asset_counts = {
+        record_id: int(count)
+        for record_id, count in session.execute(
+            select(
+                RecordAssetReferenceModel.record_id,
+                func.count(RecordAssetReferenceModel.id),
+            )
+            .where(RecordAssetReferenceModel.record_id.in_(candidate_ids))
+            .group_by(RecordAssetReferenceModel.record_id)
+        ).all()
+    }
+    ids: list[str] = []
+    enqueued_jobs = 0
+    asset_budget_exhausted = False
+    for record_id in candidate_ids:
+        reference_count = asset_counts.get(record_id, 0)
+        if enqueued_jobs + reference_count > remaining_asset_jobs:
+            asset_budget_exhausted = True
+            break
+        ids.append(record_id)
+        enqueued_jobs += reference_count
     completed = utcnow()
-    affected = _delete_record_ids(session, ids, deleted_at=completed)
+    affected, actually_enqueued_jobs = _delete_record_ids(
+        session,
+        ids,
+        deleted_at=completed,
+        retention_operation_id=request.operation_id,
+    )
     session.add(
         RecordMutationAudit(
             id=str(uuid.uuid4()),
@@ -900,8 +1361,280 @@ def apply_retention(
             completed_at=completed,
         )
     )
+    cumulative = operation.affected_count + affected
+    operation.affected_count = cumulative
+    operation.asset_jobs_enqueued_count += actually_enqueued_jobs
+    operation.next_batch_ordinal += 1
+    operation.updated_at = completed
+    operation_complete = (
+        asset_budget_exhausted
+        or operation.asset_jobs_enqueued_count
+        >= operation.approved_maximum_asset_jobs
+        or affected < request.maximum_records
+        or cumulative >= operation.approved_maximum_records
+    )
+    if operation_complete:
+        operation.completed_at = completed
+    session.add(
+        RecordRetentionBatch(
+            operation_id=request.operation_id,
+            batch_ordinal=request.batch_ordinal,
+            maximum_records=request.maximum_records,
+            affected_count=affected,
+            cumulative_affected_count=cumulative,
+            operation_complete=operation_complete,
+            completed_at=completed,
+        )
+    )
     session.commit()
-    return MutationResultResponse(affected_count=affected, completed_at=completed)
+    return RetentionBatchResponse(
+        operation_id=request.operation_id,
+        batch_ordinal=request.batch_ordinal,
+        affected_count=affected,
+        cumulative_affected_count=cumulative,
+        operation_complete=operation_complete,
+        completed_at=completed,
+    )
+
+
+def claim_asset_deletions(
+    session: Session, request: AssetDeletionClaimRequest
+) -> AssetDeletionClaimResponse:
+    now = utcnow()
+    has_chat_reference = exists().where(
+        RecordAssetReferenceModel.asset_id == RecordAssetDeletionOutbox.asset_id
+    )
+    has_moment_reference = exists().where(
+        MomentAssetReference.asset_id == RecordAssetDeletionOutbox.asset_id
+    )
+    operation_scope = (
+        RecordAssetDeletionOutbox.retention_operation_id
+        == request.retention_operation_id
+        if request.retention_operation_id is not None
+        else True
+    )
+    blocked = int(
+        session.scalar(
+            select(func.count(RecordAssetDeletionOutbox.id)).where(
+                RecordAssetDeletionOutbox.state == "pending",
+                operation_scope,
+                or_(has_chat_reference, has_moment_reference),
+            )
+        )
+        or 0
+    )
+    active_state = RecordAssetDeletionOutbox.state.in_(("pending", "authorized"))
+    leased = int(
+        session.scalar(
+            select(func.count(RecordAssetDeletionOutbox.id)).where(
+                active_state,
+                operation_scope,
+                RecordAssetDeletionOutbox.lease_until > now,
+                or_(
+                    RecordAssetDeletionOutbox.state == "authorized",
+                    and_(~has_chat_reference, ~has_moment_reference),
+                ),
+            )
+        )
+        or 0
+    )
+    eligible = int(
+        session.scalar(
+            select(func.count(RecordAssetDeletionOutbox.id)).where(
+                active_state,
+                operation_scope,
+                or_(
+                    RecordAssetDeletionOutbox.lease_until.is_(None),
+                    RecordAssetDeletionOutbox.lease_until <= now,
+                ),
+                or_(
+                    RecordAssetDeletionOutbox.state == "authorized",
+                    and_(~has_chat_reference, ~has_moment_reference),
+                ),
+            )
+        )
+        or 0
+    )
+    jobs = list(
+        session.scalars(
+            select(RecordAssetDeletionOutbox)
+            .where(
+                active_state,
+                operation_scope,
+                or_(
+                    RecordAssetDeletionOutbox.lease_until.is_(None),
+                    RecordAssetDeletionOutbox.lease_until <= now,
+                ),
+                or_(
+                    RecordAssetDeletionOutbox.state == "authorized",
+                    and_(~has_chat_reference, ~has_moment_reference),
+                ),
+            )
+            .order_by(
+                RecordAssetDeletionOutbox.created_at,
+                RecordAssetDeletionOutbox.id,
+            )
+            .limit(request.limit)
+            .with_for_update(skip_locked=True)
+        )
+    )
+    _lock_asset_coordination(
+        session, [job.asset_id for job in jobs], now=now
+    )
+    deliverable: list[RecordAssetDeletionOutbox] = []
+    for job in jobs:
+        referenced = session.scalar(
+            select(RecordAssetReferenceModel.id)
+            .where(RecordAssetReferenceModel.asset_id == job.asset_id)
+            .limit(1)
+        ) or session.scalar(
+            select(MomentAssetReference.id)
+            .where(MomentAssetReference.asset_id == job.asset_id)
+            .limit(1)
+        )
+        if referenced is not None:
+            if job.state == "authorized":
+                # Defensive corruption containment. A correctly fenced writer
+                # cannot create this state, but delivery must still fail closed.
+                job.state = "pending"
+                job.authorized_at = None
+                job.lease_owner = None
+                job.lease_until = None
+            continue
+        deliverable.append(job)
+    jobs = deliverable
+    lease_until = now + timedelta(seconds=request.lease_seconds)
+    for job in jobs:
+        job.attempt_count += 1
+        job.last_attempt_at = now
+        job.lease_owner = request.worker_id
+        job.lease_until = lease_until
+    session.commit()
+    return AssetDeletionClaimResponse(
+        jobs=[
+            AssetDeletionJob(
+                job_id=job.id,
+                asset_id=job.asset_id,
+                record_id=job.record_id,
+                conversation_id=job.conversation_id,
+                phase="commit" if job.state == "authorized" else "prepare",
+            )
+            for job in jobs
+        ],
+        eligible_count=eligible,
+        blocked_count=blocked,
+        leased_count=leased,
+    )
+
+
+def authorize_asset_deletion(
+    session: Session,
+    *,
+    job_id: str,
+    request: AssetDeletionAuthorizeRequest,
+) -> AssetDeletionAuthorizeResponse:
+    now = utcnow()
+    job = session.execute(
+        select(RecordAssetDeletionOutbox)
+        .where(RecordAssetDeletionOutbox.id == job_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if job is None:
+        raise AssetDeletionLeaseError("asset deletion job not found")
+    if job.state == "authorized":
+        return AssetDeletionAuthorizeResponse(job_id=job.id, state="authorized")
+    if job.state != "pending":
+        raise AssetDeletionLeaseError("asset deletion authorization conflict")
+    if (
+        job.lease_owner != request.worker_id
+        or job.lease_until is None
+        or job.lease_until <= now
+    ):
+        raise AssetDeletionLeaseError("asset deletion lease is not active")
+    _lock_asset_coordination(session, [job.asset_id], now=now)
+    referenced = session.scalar(
+        select(RecordAssetReferenceModel.id)
+        .where(RecordAssetReferenceModel.asset_id == job.asset_id)
+        .limit(1)
+    ) or session.scalar(
+        select(MomentAssetReference.id)
+        .where(MomentAssetReference.asset_id == job.asset_id)
+        .limit(1)
+    )
+    if referenced is not None:
+        job.lease_owner = None
+        job.lease_until = None
+        session.commit()
+        return AssetDeletionAuthorizeResponse(job_id=job.id, state="blocked")
+    job.state = "authorized"
+    job.authorized_at = now
+    session.commit()
+    return AssetDeletionAuthorizeResponse(job_id=job.id, state="authorized")
+
+
+def complete_asset_deletion(
+    session: Session,
+    *,
+    job_id: str,
+    request: AssetDeletionCompleteRequest,
+) -> AssetDeletionCompleteResponse:
+    now = utcnow()
+    job = session.execute(
+        select(RecordAssetDeletionOutbox)
+        .where(RecordAssetDeletionOutbox.id == job_id)
+        .with_for_update()
+    ).scalar_one_or_none()
+    if job is None:
+        raise AssetDeletionLeaseError("asset deletion job not found")
+    expected_state = "completed" if request.outcome == "accepted" else "protected"
+    if job.state in {"completed", "protected"}:
+        if job.state != expected_state or job.outcome != request.outcome:
+            raise AssetDeletionLeaseError("asset deletion outcome conflict")
+        return AssetDeletionCompleteResponse(
+            job_id=job.id, state=job.state, outcome=job.outcome
+        )
+    required_source_states = (
+        {"authorized"} if request.outcome == "accepted" else {"pending", "authorized"}
+    )
+    if job.state not in required_source_states:
+        raise AssetDeletionLeaseError("asset deletion phase conflict")
+    if (
+        job.lease_owner != request.worker_id
+        or job.lease_until is None
+        or job.lease_until <= now
+    ):
+        raise AssetDeletionLeaseError("asset deletion lease is not active")
+    job.state = expected_state
+    job.outcome = request.outcome
+    job.completed_at = now
+    job.lease_owner = None
+    job.lease_until = None
+    if job.retention_operation_id is not None:
+        operation = session.execute(
+            select(RecordRetentionOperation)
+            .where(
+                RecordRetentionOperation.operation_id
+                == job.retention_operation_id
+            )
+            .with_for_update()
+        ).scalar_one_or_none()
+        if operation is None:
+            raise RecordStoreInvariantError(
+                "asset deletion retention operation is missing"
+            )
+        if (
+            operation.asset_jobs_completed_count
+            >= operation.asset_jobs_enqueued_count
+        ):
+            raise RecordStoreInvariantError(
+                "asset deletion operation progress is inconsistent"
+            )
+        operation.asset_jobs_completed_count += 1
+        operation.updated_at = now
+    session.commit()
+    return AssetDeletionCompleteResponse(
+        job_id=job.id, state=job.state, outcome=job.outcome
+    )
 
 
 __all__ = [
@@ -912,14 +1645,21 @@ __all__ = [
     "PositionBeyondConversationError",
     "RecordStoreInvariantError",
     "UnsupportedContentError",
+    "AssetDeletionLeaseError",
+    "RetentionOperationConflictError",
     "advance_position",
     "append_record",
     "apply_retention",
+    "authorize_asset_deletion",
+    "claim_asset_deletions",
+    "complete_asset_deletion",
     "combined_position",
     "delete_records",
+    "get_visible_record",
     "get_user_event_tail",
     "list_records",
     "list_user_events",
     "resume_position",
     "unread_position",
+    "unread_summary",
 ]

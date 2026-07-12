@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from sqlalchemy import String, and_, cast, func, select
+from sqlalchemy import String, and_, cast, func, or_, select
 from sqlalchemy.orm import Session
 
 from ...models.c19 import C19AffiliationRecord, C19ProfileRecord
@@ -37,27 +37,6 @@ def _authoritative_membership_join():
         == cast(C19AffiliationRecord.user_id, String),
         OrgMembershipRecord.org_id == C19AffiliationRecord.org_id,
     )
-
-
-def has_active_affiliation(db: Session, *, user_id: int) -> bool:
-    statement = (
-        select(C19AffiliationRecord.affiliation_id)
-        .join(
-            OrganizationRecord,
-            OrganizationRecord.org_id == C19AffiliationRecord.org_id,
-        )
-        .join(OrgMembershipRecord, _authoritative_membership_join())
-        .join(User, User.id == C19AffiliationRecord.user_id)
-        .where(
-            C19AffiliationRecord.user_id == user_id,
-            User.is_active.is_(True),
-            C19AffiliationRecord.status == "active",
-            OrgMembershipRecord.status == "active",
-            OrganizationRecord.status == "active",
-        )
-        .limit(1)
-    )
-    return db.scalar(statement) is not None
 
 
 def _load_active_profile_bundles(
@@ -111,7 +90,7 @@ def _load_active_profile_bundles(
             affiliations=tuple(affiliations_by_user.get(user_id, ())),
         )
         for user_id in user_ids
-        if user_id in profiles_by_id and affiliations_by_user.get(user_id)
+        if user_id in profiles_by_id
     ]
 
 
@@ -123,32 +102,60 @@ def list_active_profile_bundles(
     limit: int,
     offset: int,
 ) -> tuple[list[C19ProfileBundle], int]:
-    statement = (
-        select(C19ProfileRecord.user_id, C19ProfileRecord.display_name)
-        .join(User, User.id == C19ProfileRecord.user_id)
-        .join(
-            C19AffiliationRecord,
-            C19AffiliationRecord.user_id == C19ProfileRecord.user_id,
-        )
-        .join(
-            OrganizationRecord,
-            OrganizationRecord.org_id == C19AffiliationRecord.org_id,
-        )
-        .join(OrgMembershipRecord, _authoritative_membership_join())
-        .where(
-            User.is_active.is_(True),
-            C19AffiliationRecord.status == "active",
-            OrgMembershipRecord.status == "active",
-            OrganizationRecord.status == "active",
-        )
+    statement = select(
+        C19ProfileRecord.user_id,
+        C19ProfileRecord.display_name,
+    ).join(User, User.id == C19ProfileRecord.user_id).where(
+        User.is_active.is_(True),
     )
     if search:
+        pattern = f"%{search}%"
+        affiliation_match = (
+            select(C19AffiliationRecord.affiliation_id)
+            .join(
+                OrganizationRecord,
+                OrganizationRecord.org_id == C19AffiliationRecord.org_id,
+            )
+            .join(OrgMembershipRecord, _authoritative_membership_join())
+            .where(
+                C19AffiliationRecord.user_id == C19ProfileRecord.user_id,
+                C19AffiliationRecord.status == "active",
+                OrgMembershipRecord.status == "active",
+                OrganizationRecord.status == "active",
+                or_(
+                    OrganizationRecord.org_name.ilike(pattern),
+                    C19AffiliationRecord.role.ilike(pattern),
+                ),
+            )
+            .correlate(C19ProfileRecord)
+            .exists()
+        )
         statement = statement.where(
-            C19ProfileRecord.display_name.ilike(f"%{search}%")
+            or_(
+                C19ProfileRecord.display_name.ilike(pattern),
+                C19ProfileRecord.bio.ilike(pattern),
+                affiliation_match,
+            )
         )
     if affiliation_org_id:
-        statement = statement.where(
-            C19AffiliationRecord.org_id == affiliation_org_id
+        # Organization is an optional directory filter, never a prerequisite
+        # for appearing in the global C19 directory.
+        statement = (
+            statement.join(
+                C19AffiliationRecord,
+                C19AffiliationRecord.user_id == C19ProfileRecord.user_id,
+            )
+            .join(
+                OrganizationRecord,
+                OrganizationRecord.org_id == C19AffiliationRecord.org_id,
+            )
+            .join(OrgMembershipRecord, _authoritative_membership_join())
+            .where(
+                C19AffiliationRecord.org_id == affiliation_org_id,
+                C19AffiliationRecord.status == "active",
+                OrgMembershipRecord.status == "active",
+                OrganizationRecord.status == "active",
+            )
         )
 
     grouped = statement.group_by(
@@ -181,21 +188,9 @@ def get_active_profile_bundle(
     is_visible = db.scalar(
         select(C19ProfileRecord.user_id)
         .join(User, User.id == C19ProfileRecord.user_id)
-        .join(
-            C19AffiliationRecord,
-            C19AffiliationRecord.user_id == C19ProfileRecord.user_id,
-        )
-        .join(
-            OrganizationRecord,
-            OrganizationRecord.org_id == C19AffiliationRecord.org_id,
-        )
-        .join(OrgMembershipRecord, _authoritative_membership_join())
         .where(
             C19ProfileRecord.user_id == user_id,
             User.is_active.is_(True),
-            C19AffiliationRecord.status == "active",
-            OrgMembershipRecord.status == "active",
-            OrganizationRecord.status == "active",
         )
         .limit(1)
     )
@@ -216,23 +211,10 @@ def get_active_profile_bundles(
         db.scalars(
             select(C19ProfileRecord.user_id)
             .join(User, User.id == C19ProfileRecord.user_id)
-            .join(
-                C19AffiliationRecord,
-                C19AffiliationRecord.user_id == C19ProfileRecord.user_id,
-            )
-            .join(
-                OrganizationRecord,
-                OrganizationRecord.org_id == C19AffiliationRecord.org_id,
-            )
-            .join(OrgMembershipRecord, _authoritative_membership_join())
             .where(
                 C19ProfileRecord.user_id.in_(user_ids),
                 User.is_active.is_(True),
-                C19AffiliationRecord.status == "active",
-                OrgMembershipRecord.status == "active",
-                OrganizationRecord.status == "active",
             )
-            .group_by(C19ProfileRecord.user_id)
         )
     )
     active_id_set = set(active_ids)
@@ -248,6 +230,5 @@ __all__ = [
     "C19ProfileBundle",
     "get_active_profile_bundle",
     "get_active_profile_bundles",
-    "has_active_affiliation",
     "list_active_profile_bundles",
 ]

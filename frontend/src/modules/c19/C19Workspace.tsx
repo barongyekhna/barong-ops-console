@@ -2,6 +2,7 @@
 
 import {
   Ban,
+  Camera,
   Check,
   CircleOff,
   ContactRound,
@@ -53,6 +54,7 @@ import {
   updateC19Group,
 } from "./api";
 import { C19ChatPanel } from "./C19ChatPanel";
+import { C19MomentsPanel } from "./C19MomentsPanel";
 import styles from "./C19Workspace.module.css";
 import type {
   C19Affiliation,
@@ -68,12 +70,12 @@ import type {
 } from "./types";
 
 const LOAD_LIMIT = 100;
-type WorkspaceTab = "contacts" | "relationships" | "conversations";
+type WorkspaceTab = "contacts" | "relationships" | "conversations" | "moments";
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
-    if (error.status === 403) return "当前身份无权执行此 C19 操作。";
+    if (error.status === 403) return "该操作被当前会话或关系安全规则拒绝。";
     if (error.status === 404) return "目标成员或控制记录已经不存在。";
     if (error.status === 409) return error.message || "该操作与当前状态冲突。";
     if (error.status >= 500) return "C19 控制服务暂时不可用。";
@@ -133,27 +135,26 @@ function IdentitySelect({
   value: string;
 }) {
   const affiliations = activeAffiliations(profile);
-  const requiresChoice = affiliations.length > 1 && !value;
 
   return (
     <label className={compact ? styles.compactField : styles.field}>
       <span>{label}</span>
       <select
-        aria-invalid={requiresChoice || undefined}
-        disabled={affiliations.length === 0}
         onChange={(event) => onChange(event.target.value)}
         value={value}
       >
-        {affiliations.length !== 1 ? (
-          <option value="">请选择组织身份</option>
-        ) : null}
+        <option value="">基础通讯身份（不绑定组织）</option>
         {affiliations.map((affiliation) => (
           <option key={affiliation.affiliation_id} value={affiliation.affiliation_id}>
             {affiliationLabel(affiliation)}
           </option>
         ))}
       </select>
-      {requiresChoice ? <small>多组织成员必须明确选择，系统不会猜测。</small> : null}
+      <small>
+        {affiliations.length === 0
+          ? "无需加入组织即可使用 C19。"
+          : "组织身份可选；仅在你主动选择时附加到本次会话。"}
+      </small>
     </label>
   );
 }
@@ -178,6 +179,7 @@ export function C19Workspace() {
   const [authenticatedProfile, setAuthenticatedProfile] =
     useState<C19Profile | null>(null);
   const [authenticatedProfileError, setAuthenticatedProfileError] = useState("");
+  const [profileRefreshGeneration, setProfileRefreshGeneration] = useState(0);
   const [friendRequests, setFriendRequests] = useState<C19FriendRequest[]>([]);
   const [friends, setFriends] = useState<C19Friend[]>([]);
   const [blocks, setBlocks] = useState<C19Block[]>([]);
@@ -238,16 +240,6 @@ export function C19Workspace() {
         }
         return next;
       });
-      setAffiliationByUser((current) => {
-        const next = { ...current };
-        for (const profile of directoryPage.items) {
-          const affiliations = activeAffiliations(profile);
-          if (affiliations.length === 1 && !next[profile.user_id]) {
-            next[profile.user_id] = affiliations[0].affiliation_id;
-          }
-        }
-        return next;
-      });
     }
     if (requestResult.status === "fulfilled") setFriendRequests(requestResult.value.items);
     if (friendResult.status === "fulfilled") setFriends(friendResult.value.items);
@@ -282,13 +274,6 @@ export function C19Workspace() {
       .then((profile) => {
         if (!active) return;
         setAuthenticatedProfile(profile);
-        const affiliations = activeAffiliations(profile);
-        if (affiliations.length === 1) {
-          setAffiliationByUser((current) => ({
-            ...current,
-            [profile.user_id]: current[profile.user_id] || affiliations[0].affiliation_id,
-          }));
-        }
       })
       .catch((error) => {
         if (!active) return;
@@ -300,7 +285,7 @@ export function C19Workspace() {
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [profileRefreshGeneration, user]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -321,16 +306,6 @@ export function C19Workspace() {
             for (const profile of page.items) {
               for (const affiliation of activeAffiliations(profile)) {
                 next[affiliation.org_id] = affiliation.org_name;
-              }
-            }
-            return next;
-          });
-          setAffiliationByUser((current) => {
-            const next = { ...current };
-            for (const profile of page.items) {
-              const affiliations = activeAffiliations(profile);
-              if (affiliations.length === 1 && !next[profile.user_id]) {
-                next[profile.user_id] = affiliations[0].affiliation_id;
               }
             }
             return next;
@@ -409,10 +384,12 @@ export function C19Workspace() {
   }, [directory, orgFilter, search]);
 
   const participantFor = useCallback(
-    (profile: C19Profile): C19ParticipantInput | null => {
+    (profile: C19Profile): C19ParticipantInput => {
       const affiliationId = affiliationByUser[profile.user_id];
-      if (!affiliationId) return null;
-      return { affiliation_id: affiliationId, user_id: profile.user_id };
+      return {
+        user_id: profile.user_id,
+        ...(affiliationId ? { affiliation_id: affiliationId } : {}),
+      };
     },
     [affiliationByUser],
   );
@@ -444,18 +421,18 @@ export function C19Workspace() {
       }
       const actor = participantFor(selfProfile);
       const peer = participantFor(profile);
-      if (!actor || !peer) {
-        setActionError("创建会话前必须明确选择双方的组织身份。");
-        return;
-      }
       void runAction(
         `direct:${profile.user_id}`,
         `已创建或打开与 ${profile.display_name} 的会话，可在会话列表中开始聊天。`,
         () =>
           createC19DirectConversation({
-            actor_affiliation_id: actor.affiliation_id,
-            peer_affiliation_id: peer.affiliation_id,
             peer_user_id: peer.user_id,
+            ...(actor.affiliation_id
+              ? { actor_affiliation_id: actor.affiliation_id }
+              : {}),
+            ...(peer.affiliation_id
+              ? { peer_affiliation_id: peer.affiliation_id }
+              : {}),
           }),
       );
     },
@@ -472,15 +449,10 @@ export function C19Workspace() {
       const actor = participantFor(selfProfile);
       const members = [...groupUserIds].flatMap((userId) => {
         const profile = profileByUserId.get(userId);
-        const participant = profile ? participantFor(profile) : null;
-        return participant ? [participant] : [];
+        return profile ? [participantFor(profile)] : [];
       });
-      if (!actor) {
-        setActionError("建群前必须明确选择自己的组织身份。");
-        return;
-      }
       if (members.length !== groupUserIds.size) {
-        setActionError("每位多组织群成员都必须明确选择加入群组的组织身份。");
+        setActionError("部分群成员已不在通讯录中，请刷新后重新选择。");
         return;
       }
       if (members.length < 2) {
@@ -494,7 +466,9 @@ export function C19Workspace() {
       }
       void runAction("create-group", "群组控制记录已创建。", async () => {
         await createC19Group({
-          actor_affiliation_id: actor.affiliation_id,
+          ...(actor.affiliation_id
+            ? { actor_affiliation_id: actor.affiliation_id }
+            : {}),
           members,
           title,
         });
@@ -556,15 +530,19 @@ export function C19Workspace() {
   const canDissolveGroup = selectedMember?.role === "owner";
 
   return (
-    <section className={styles.workspace} aria-labelledby="c19-title">
+    <section
+      aria-busy={isLoading || isDirectorySearching}
+      aria-labelledby="c19-title"
+      className={styles.workspace}
+    >
       <header className={styles.hero}>
         <div>
-          <span className={styles.eyebrow}>C19 · 隐藏控制工作台</span>
-          <h2 id="c19-title">跨组织通讯控制台</h2>
-          <p>管理跨组织通讯关系，并通过可迁移的记录服务交换文字与 Emoji。</p>
+          <span className={styles.eyebrow}>C19 · 基础通讯</span>
+          <h2 id="c19-title">通讯与朋友圈</h2>
+          <p>每位有效用户都可以聊天、建群、管理好友并分享朋友圈。</p>
         </div>
         <div className={styles.heroActions}>
-          <span className={styles.stageBadge}>第三阶段 · 消息运行时</span>
+          <span className={styles.stageBadge}>基础功能 · 全员开放</span>
           <button
             className={styles.secondaryButton}
             disabled={isLoading}
@@ -580,8 +558,8 @@ export function C19Workspace() {
       <div className={styles.storageNotice} role="status">
         <MessageSquareLock aria-hidden="true" size={22} />
         <div>
-          <strong>文字与 Emoji 已接入可迁移的独立记录服务</strong>
-          <span>图片、文件和朋友圈仍未开放；本页面不暴露存储地址、VPS 配置或凭据。</span>
+          <strong>聊天和朋友圈资产经过隔离处理</strong>
+          <span>图片与文件安全直传、扫描并支持中断恢复；页面不会接触存储凭据。</span>
         </div>
       </div>
 
@@ -592,13 +570,13 @@ export function C19Workspace() {
               <ShieldCheck aria-hidden="true" size={18} />
             </span>
             <div>
-              <strong id="identity-title">本次控制操作身份</strong>
+              <strong id="identity-title">我的 C19 通讯身份</strong>
               <span>{selfProfile.display_name}</span>
             </div>
           </div>
           <IdentitySelect
             compact
-            label="组织身份"
+            label="组织身份（可选）"
             onChange={(affiliationId) =>
               setAffiliationByUser((current) => ({
                 ...current,
@@ -611,13 +589,21 @@ export function C19Workspace() {
         </section>
       ) : !isLoading ? (
         <div className={styles.warning} role="alert">
-          当前登录用户不在 C19 通讯录中，创建会话与群组已安全禁用。
+          正在同步当前用户的基础通讯名片。C19 不需要角色、权限或组织归属；请刷新后重试。
         </div>
       ) : null}
 
       {loadError ? <div className={styles.warning} role="alert">{loadError}</div> : null}
       {authenticatedProfileError ? (
-        <div className={styles.warning} role="alert">{authenticatedProfileError}</div>
+        <div className={styles.warning} role="alert">
+          <span>{authenticatedProfileError}</span>
+          <button
+            onClick={() => setProfileRefreshGeneration((current) => current + 1)}
+            type="button"
+          >
+            重试通讯名片同步
+          </button>
+        </div>
       ) : null}
       {actionError ? <div className={styles.error} role="alert">{actionError}</div> : null}
       {notice ? <div className={styles.success} role="status">{notice}</div> : null}
@@ -628,6 +614,7 @@ export function C19Workspace() {
             ["contacts", "全局通讯录", ContactRound],
             ["relationships", "好友与拉黑", ShieldCheck],
             ["conversations", "会话与群组", UsersRound],
+            ["moments", "朋友圈", Camera],
           ] as const
         ).map(([key, label, Icon]) => (
           <button
@@ -653,7 +640,7 @@ export function C19Workspace() {
         <div className={styles.panel}>
           <div className={styles.panelHeading}>
             <div>
-              <h3>所有组织成员</h3>
+              <h3>全局通讯录</h3>
               <p>
                 {directoryCount} 位成员符合当前条件
                 {directoryCount > LOAD_LIMIT ? `，当前显示前 ${LOAD_LIMIT} 位` : ""}。
@@ -664,7 +651,7 @@ export function C19Workspace() {
               <input
                 aria-label="搜索 C19 通讯录"
                 onChange={(event) => setSearch(event.target.value)}
-                placeholder="姓名、组织或角色"
+                placeholder="姓名或可选组织资料"
                 type="search"
                 value={search}
               />
@@ -678,7 +665,7 @@ export function C19Workspace() {
               onClick={() => setOrgFilter("all")}
               type="button"
             >
-              全部组织
+              全部成员
             </button>
             {organizations.map(([orgId, orgName]) => (
               <button
@@ -693,7 +680,7 @@ export function C19Workspace() {
           </div>
 
           {filteredDirectory.length === 0 ? (
-            <EmptyState>没有匹配的内部成员。</EmptyState>
+            <EmptyState>没有匹配的用户。</EmptyState>
           ) : (
             <div className={styles.contactGrid}>
               {filteredDirectory.map((profile) => {
@@ -714,17 +701,21 @@ export function C19Workspace() {
                       {isSelf ? <span className={styles.selfBadge}>本人</span> : null}
                     </div>
                     <div className={styles.affiliationTags}>
-                      {activeAffiliations(profile).map((affiliation) => (
-                        <span key={affiliation.affiliation_id}>
-                          {affiliation.org_name}
-                          <small>{affiliation.role}</small>
-                        </span>
-                      ))}
+                      {activeAffiliations(profile).length === 0 ? (
+                        <span>基础通讯用户<small>无组织也可使用</small></span>
+                      ) : (
+                        activeAffiliations(profile).map((affiliation) => (
+                          <span key={affiliation.affiliation_id}>
+                            {affiliation.org_name}
+                            <small>{affiliation.role}</small>
+                          </span>
+                        ))
+                      )}
                     </div>
                     {!isSelf ? (
                       <IdentitySelect
                         compact
-                        label="对方加入身份"
+                        label="对方组织身份（可选）"
                         onChange={(affiliationId) =>
                           setAffiliationByUser((current) => ({
                             ...current,
@@ -738,12 +729,12 @@ export function C19Workspace() {
                     {!isSelf ? (
                       <div className={styles.cardActions}>
                         <button
-                          disabled={!identityReady || isBlocked || Boolean(busyKey)}
+                          disabled={isBlocked || Boolean(busyKey)}
                           onClick={() => startDirectConversation(profile)}
                           title={
                             identityReady
-                              ? "仅创建会话控制记录，不发送消息"
-                              : "请先明确选择双方组织身份"
+                              ? "使用已选择的可选组织上下文建立会话"
+                              : "建立基础通讯会话，不需要组织身份"
                           }
                           type="button"
                         >
@@ -1061,7 +1052,7 @@ export function C19Workspace() {
                           {selected ? (
                             <IdentitySelect
                               compact
-                              label="加入身份"
+                              label="组织身份（可选）"
                               onChange={(affiliationId) =>
                                 setAffiliationByUser((current) => ({
                                   ...current,
@@ -1078,7 +1069,7 @@ export function C19Workspace() {
                 </div>
                 <button
                   className={styles.primaryButton}
-                  disabled={Boolean(busyKey) || !selfAffiliationId}
+                  disabled={Boolean(busyKey)}
                   type="submit"
                 >
                   <UsersRound aria-hidden="true" size={16} />
@@ -1092,7 +1083,15 @@ export function C19Workspace() {
             {!selectedConversationId ? (
               <EmptyState>选择一个会话读取消息、成员与设置。</EmptyState>
             ) : detailError ? (
-              <div className={styles.error} role="alert">{detailError}</div>
+              <div className={styles.error} role="alert">
+                <span>{detailError}</span>
+                <button
+                  onClick={() => void loadConversationDetail(selectedConversationId)}
+                  type="button"
+                >
+                  重试读取会话
+                </button>
+              </div>
             ) : !conversationDetail || !conversationSettings ? (
               <div className={styles.loading} role="status">正在读取会话控制详情…</div>
             ) : (
@@ -1115,7 +1114,7 @@ export function C19Workspace() {
                     const profile = profileByUserId.get(Number(inviteUserId));
                     const participant = profile ? participantFor(profile) : null;
                     if (!participant) {
-                      setActionError("邀请多组织成员前必须明确选择其加入身份。");
+                      setActionError("该用户已不在通讯录中，请刷新后重新选择。");
                       return;
                     }
                     void runAction(
@@ -1196,6 +1195,14 @@ export function C19Workspace() {
             )}
           </section>
         </div>
+      ) : null}
+
+      {activeTab === "moments" ? (
+        selfProfile && user ? (
+          <C19MomentsPanel profile={selfProfile} userId={user.id} />
+        ) : (
+          <EmptyState>正在同步你的基础通讯名片，完成后即可读取朋友圈。</EmptyState>
+        )
       ) : null}
     </section>
   );
@@ -1322,7 +1329,9 @@ function ConversationControlDetail({
               >
                 <div>
                   <strong>{profile?.display_name ?? `成员 #${member.user_id}`}</strong>
-                  <span>{member.role} · {member.status} · {member.org_id}</span>
+                  <span>
+                    {member.role} · {member.status} · {member.org_id || "基础通讯"}
+                  </span>
                 </div>
                 {conversation.type === "group" && member.user_id !== selfUserId ? (
                   <div className={styles.inlineActions}>
@@ -1381,7 +1390,7 @@ function ConversationControlDetail({
                 {inviteProfile ? (
                   <IdentitySelect
                     compact
-                    label="加入身份"
+                    label="组织身份（可选）"
                     onChange={(affiliationId) =>
                       onIdentityChange(inviteProfile.user_id, affiliationId)
                     }
@@ -1408,7 +1417,7 @@ function ConversationControlDetail({
 
       <div className={styles.readOnlyFooter}>
         <MessageSquareLock aria-hidden="true" size={16} />
-        会话管理与文字消息已开放；图片、文件、朋友圈及音视频仍未开放。
+        会话、图片、文件与朋友圈已经开放；音视频通话不在当前产品范围内。
       </div>
     </div>
   );

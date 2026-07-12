@@ -13,8 +13,8 @@ from .conversation_repository import (
     active_block_exists_across,
     get_conversation,
     get_conversation_member,
-    list_authorized_affiliation_ids_for_users,
-    list_authorized_affiliations,
+    list_active_conversation_ids,
+    list_active_user_ids,
     list_conversation_members,
 )
 from .message_schemas import (
@@ -23,12 +23,18 @@ from .message_schemas import (
     ChatRecordRead,
     ChatResumePositionRead,
     ChatUnreadPositionRead,
+    ChatUnreadSummaryRead,
     ChatUserEventPageRead,
     ChatUserEventRead,
     ChatUserEventTailRead,
     MessageCreateRequest,
 )
 from .storage import (
+    UNCONFIGURED_CHAT_ASSET_STORE,
+    ChatAssetBindingCommitCommandDTO,
+    ChatAssetBindingPrepareCommandDTO,
+    ChatAssetReferenceDTO,
+    ChatAssetStore,
     ChatPositionAdvanceDTO,
     ChatPositionQueryDTO,
     ChatReceiptPositionDTO,
@@ -39,6 +45,7 @@ from .storage import (
     ChatRecordStore,
     ChatResumePositionDTO,
     ChatUnreadPositionDTO,
+    ChatUnreadSummaryQueryDTO,
     ChatUserEventPageDTO,
     ChatUserEventQueryDTO,
 )
@@ -52,11 +59,14 @@ class C19ChatAccessError(RuntimeError):
         super().__init__(message)
 
 
+UNREAD_SUMMARY_BATCH_SIZE = 1000
+
+
 @dataclass(frozen=True, slots=True)
 class AuthorizedConversation:
     conversation_id: str
     actor_user_id: int
-    actor_org_id: str
+    actor_org_id: str | None
     recipient_user_ids: tuple[int, ...]
     recipient_org_ids: tuple[str, ...]
 
@@ -94,16 +104,8 @@ def _actor_user_id(actor: User) -> int:
 
 
 def _require_active_actor(db: Session, *, actor: User) -> int:
-    actor_user_id = _actor_user_id(actor)
-    with without_org_data_isolation():
-        affiliations = list_authorized_affiliations(db, user_id=actor_user_id)
-    if not affiliations:
-        raise C19ChatAccessError(
-            code="c19_access_denied",
-            message="C19 access denied.",
-            status_code=403,
-        )
-    return actor_user_id
+    del db
+    return _actor_user_id(actor)
 
 
 def authorize_conversation(
@@ -127,15 +129,6 @@ def authorize_conversation(
         )
         if actor_member is None or actor_member.status != "active":
             raise _deny_access()
-        actor_affiliations = list_authorized_affiliations(
-            db,
-            user_id=actor_user_id,
-        )
-        if actor_member.affiliation_id not in {
-            affiliation.affiliation_id for affiliation in actor_affiliations
-        }:
-            raise _deny_access()
-
         recipients = ()
         if for_send:
             active_members = list_conversation_members(
@@ -148,14 +141,14 @@ def authorize_conversation(
                 for member in active_members
                 if member.user_id != actor_user_id
             )
-            authorized_affiliation_ids = list_authorized_affiliation_ids_for_users(
+            active_user_ids = list_active_user_ids(
                 db,
                 user_ids={member.user_id for member in candidates},
             )
             recipients = tuple(
                 member
                 for member in candidates
-                if member.affiliation_id in authorized_affiliation_ids
+                if member.user_id in active_user_ids
             )
             if conversation.conversation_type == "direct" and len(recipients) != 1:
                 raise _deny_access()
@@ -175,7 +168,11 @@ def authorize_conversation(
         actor_org_id=actor_member.org_id_at_join,
         recipient_user_ids=tuple(member.user_id for member in recipients),
         recipient_org_ids=tuple(
-            dict.fromkeys(member.org_id_at_join for member in recipients)
+            dict.fromkeys(
+                member.org_id_at_join
+                for member in recipients
+                if member.org_id_at_join is not None
+            )
         ),
     )
 
@@ -196,6 +193,20 @@ def _record_read(record: ChatRecordDTO) -> ChatRecordRead:
         sender_org_id=record.sender_org_id,
         recipient_org_ids=list(record.recipient_org_ids),
         metadata=dict(record.metadata),
+        assets=[
+            {
+                "asset_id": asset.asset_id,
+                "client_asset_id": asset.client_asset_id,
+                "kind": asset.kind,
+                "filename": asset.filename,
+                "media_type": asset.media_type,
+                "size_bytes": asset.size_bytes,
+                "sha256_hex": asset.sha256_hex,
+                "version": asset.version,
+                "ordinal": asset.ordinal,
+            }
+            for asset in record.assets
+        ],
     )
 
 
@@ -245,6 +256,7 @@ async def send_message(
     conversation_id: str,
     payload: MessageCreateRequest,
     store: ChatRecordStore,
+    asset_store: ChatAssetStore = UNCONFIGURED_CHAT_ASSET_STORE,
 ) -> ChatRecordRead:
     access = authorize_conversation(
         db,
@@ -253,6 +265,41 @@ async def send_message(
         for_send=True,
     )
     db.rollback()  # Never hold a control-database transaction across HTTP I/O.
+    assets: tuple[ChatAssetReferenceDTO, ...] = ()
+    if payload.asset is not None:
+        prepared = await asset_store.prepare_binding(
+            ChatAssetBindingPrepareCommandDTO(
+                asset_id=payload.asset.asset_id,
+                owner_user_id=str(access.actor_user_id),
+                conversation_id=conversation_id,
+                client_message_id=payload.client_message_id,
+            )
+        )
+        asset = prepared.asset
+        if (
+            prepared.binding_status not in {"prepared", "committed"}
+            or asset.status != "active"
+            or asset.asset_id != payload.asset.asset_id
+            or asset.owner_user_id != str(access.actor_user_id)
+            or asset.conversation_id != conversation_id
+            or asset.kind != payload.content_type
+        ):
+            from .http_asset_store import ChatAssetStoreProtocolError
+
+            raise ChatAssetStoreProtocolError(operation="prepare_binding")
+        assets = (
+            ChatAssetReferenceDTO(
+                asset_id=asset.asset_id,
+                client_asset_id=asset.client_asset_id,
+                kind=asset.kind,
+                filename=asset.filename,
+                media_type=asset.media_type,
+                size_bytes=asset.size_bytes,
+                sha256_hex=asset.sha256_hex,
+                version=asset.version,
+                ordinal=0,
+            ),
+        )
     command = ChatRecordAppendDTO(
         client_message_id=payload.client_message_id,
         conversation_id=conversation_id,
@@ -263,15 +310,35 @@ async def send_message(
         created_at=datetime.now(UTC),
         sender_org_id=access.actor_org_id,
         recipient_org_ids=access.recipient_org_ids,
+        assets=assets,
     )
     record = await store.append_record(command)
     if (
         record.content_type != command.content_type
         or record.content != command.content
+        or record.assets != command.assets
     ):
         from .http_record_store import ChatRecordStoreProtocolError
 
         raise ChatRecordStoreProtocolError(operation="append_record")
+    if assets:
+        committed = await asset_store.commit_binding(
+            ChatAssetBindingCommitCommandDTO(
+                asset_id=assets[0].asset_id,
+                owner_user_id=str(access.actor_user_id),
+                conversation_id=conversation_id,
+                client_message_id=payload.client_message_id,
+                record_id=record.record_id,
+            )
+        )
+        if (
+            committed.binding_status != "committed"
+            or committed.asset.asset_id != assets[0].asset_id
+            or committed.asset.version != assets[0].version
+        ):
+            from .http_asset_store import ChatAssetStoreProtocolError
+
+            raise ChatAssetStoreProtocolError(operation="commit_binding")
     return _record_read(record)
 
 
@@ -351,6 +418,47 @@ async def get_unread(
         )
     )
     return _unread_read(result)
+
+
+async def get_unread_summary(
+    db: Session,
+    *,
+    actor: User,
+    store: ChatRecordStore,
+) -> ChatUnreadSummaryRead:
+    """Aggregate unread state across the actor's full membership set."""
+
+    actor_user_id = _actor_user_id(actor)
+    with without_org_data_isolation():
+        conversation_ids = list_active_conversation_ids(
+            db,
+            user_id=actor_user_id,
+        )
+    db.rollback()  # Do not retain the control transaction across provider I/O.
+    if not conversation_ids:
+        return ChatUnreadSummaryRead(
+            total_unread_count=0,
+            unread_conversation_count=0,
+        )
+
+    total_unread_count = 0
+    unread_conversation_count = 0
+    for offset in range(0, len(conversation_ids), UNREAD_SUMMARY_BATCH_SIZE):
+        summary = await store.get_unread_summary(
+            ChatUnreadSummaryQueryDTO(
+                user_id=str(actor_user_id),
+                conversation_ids=conversation_ids[
+                    offset : offset + UNREAD_SUMMARY_BATCH_SIZE
+                ],
+            )
+        )
+        total_unread_count += summary.total_unread_count
+        unread_conversation_count += summary.unread_conversation_count
+
+    return ChatUnreadSummaryRead(
+        total_unread_count=total_unread_count,
+        unread_conversation_count=unread_conversation_count,
+    )
 
 
 async def get_resume(
@@ -455,6 +563,7 @@ __all__ = [
     "get_resume",
     "get_user_event_tail",
     "get_unread",
+    "get_unread_summary",
     "list_message_history",
     "list_user_events",
     "send_message",

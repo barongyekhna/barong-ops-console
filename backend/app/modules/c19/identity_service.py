@@ -8,6 +8,7 @@ from ...models.user import User
 from ...services.data_isolation import without_org_data_isolation
 from . import identity_repository
 from .identity_repository import C19ProfileBundle
+from .identity_sync_service import sync_profile_for_user
 from .identity_schemas import (
     C19AffiliationRead,
     C19DirectoryPage,
@@ -31,17 +32,13 @@ class C19ProfileNotFoundError(C19IdentityError):
 def require_active_c19_actor(db: Session, *, actor: User) -> None:
     if not actor.is_active:
         raise C19ActorUnavailableError(
-            "C19 requires an active account and active organization affiliation."
+            "C19 requires an active account."
         )
+    # C19 is a native authenticated-user capability.  Profiles are global and
+    # independent of organization membership, so repair a missing projection
+    # here without requiring or inventing an affiliation.
     with without_org_data_isolation():
-        has_affiliation = identity_repository.has_active_affiliation(
-            db,
-            user_id=actor.id,
-        )
-    if not has_affiliation:
-        raise C19ActorUnavailableError(
-            "C19 requires an active account and active organization affiliation."
-        )
+        sync_profile_for_user(db, user=actor)
 
 
 def profile_summary_from_bundle(

@@ -1,6 +1,11 @@
 import { apiRequest } from "@/lib/api";
 
 import type {
+  C19Asset,
+  C19AssetAccessIntent,
+  C19AssetAccessVariant,
+  C19AssetUploadIntent,
+  C19AssetUploadIntentInput,
   C19Block,
   C19Conversation,
   C19ConversationSummary,
@@ -18,6 +23,21 @@ import type {
   C19MessageEventTail,
   C19MessageHistoryPage,
   C19MessageRecord,
+  C19CreateMomentCommentInput,
+  C19CreateMomentDraftInput,
+  C19Moment,
+  C19MomentAssetUploadIntent,
+  C19MomentCommentDeleteResponse,
+  C19MomentComment,
+  C19MomentCommentPage,
+  C19MomentDeleteResponse,
+  C19MomentDraft,
+  C19MomentEventPage,
+  C19MomentEventTail,
+  C19MomentFeedPage,
+  C19MomentLikeMutation,
+  C19MomentLikePage,
+  C19PublishMomentInput,
   C19Page,
   C19Profile,
   C19ReceiptPosition,
@@ -26,6 +46,7 @@ import type {
   C19SendMessageInput,
   C19TransferGroupOwnerInput,
   C19UnreadPosition,
+  C19UnreadSummary,
   C19UpdateConversationSettingsInput,
   C19UpdateGroupInput,
   C19AddGroupMembersInput,
@@ -33,6 +54,7 @@ import type {
 
 const C19_API_BASE = "/c19";
 const C19_EVENT_PROXY_PATH = "/api/backend/c19/events";
+const C19_MOMENT_EVENT_PROXY_PATH = "/api/backend/c19/moments/events";
 
 function pageQuery(query: C19DirectoryQuery | C19ListQuery = {}) {
   const params = new URLSearchParams();
@@ -119,10 +141,13 @@ export function removeC19Block(userId: number) {
   });
 }
 
-export function listC19Conversations(query: C19ListQuery = {}) {
+export function listC19Conversations(
+  query: C19ListQuery = {},
+  signal?: AbortSignal,
+) {
   return apiRequest<C19Page<C19ConversationSummary>>(
     `${C19_API_BASE}/conversations${pageQuery(query)}`,
-    { method: "GET" },
+    { method: "GET", signal },
   );
 }
 
@@ -245,6 +270,7 @@ export function listC19MessageHistory(
 export function sendC19Message(
   conversationId: string,
   input: C19SendMessageInput,
+  signal?: AbortSignal,
 ) {
   return apiRequest<C19MessageRecord>(
     conversationRuntimePath(conversationId, "messages"),
@@ -252,6 +278,83 @@ export function sendC19Message(
       body: input,
       method: "POST",
       retryLimit: 0,
+      signal,
+    },
+  );
+}
+
+export function createC19AssetUploadIntent(
+  conversationId: string,
+  input: C19AssetUploadIntentInput,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19AssetUploadIntent>(
+    conversationRuntimePath(conversationId, "assets/upload-intents"),
+    {
+      body: input,
+      method: "POST",
+      retryLimit: 0,
+      signal,
+    },
+  );
+}
+
+export function getC19AssetStatus(
+  conversationId: string,
+  assetId: string,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19Asset>(
+    conversationRuntimePath(
+      conversationId,
+      `assets/${encodeURIComponent(assetId)}`,
+    ),
+    {
+      bypassCache: true,
+      method: "GET",
+      retryLimit: 1,
+      signal,
+    },
+  );
+}
+
+export function finalizeC19AssetUpload(
+  conversationId: string,
+  assetId: string,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19Asset>(
+    conversationRuntimePath(
+      conversationId,
+      `assets/${encodeURIComponent(assetId)}/finalize`,
+    ),
+    {
+      method: "POST",
+      retryLimit: 0,
+      signal,
+    },
+  );
+}
+
+export function createC19AssetAccessIntent(
+  conversationId: string,
+  recordId: string,
+  assetId: string,
+  variant: C19AssetAccessVariant,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19AssetAccessIntent>(
+    conversationRuntimePath(
+      conversationId,
+      `records/${encodeURIComponent(recordId)}/assets/${encodeURIComponent(
+        assetId,
+      )}/access-intents`,
+    ),
+    {
+      body: { variant },
+      method: "POST",
+      retryLimit: 0,
+      signal,
     },
   );
 }
@@ -287,11 +390,23 @@ export function advanceC19Read(
   return advanceC19Position(conversationId, "read", throughSequence);
 }
 
-export function getC19UnreadPosition(conversationId: string) {
+export function getC19UnreadPosition(
+  conversationId: string,
+  signal?: AbortSignal,
+) {
   return apiRequest<C19UnreadPosition>(
     conversationRuntimePath(conversationId, "unread"),
-    { bypassCache: true, method: "GET", retryLimit: 1 },
+    { bypassCache: true, method: "GET", retryLimit: 1, signal },
   );
+}
+
+export function getC19UnreadSummary(signal?: AbortSignal) {
+  return apiRequest<C19UnreadSummary>(`${C19_API_BASE}/unread`, {
+    bypassCache: true,
+    method: "GET",
+    retryLimit: 1,
+    signal,
+  });
 }
 
 export function getC19ResumePosition(conversationId: string) {
@@ -326,4 +441,213 @@ export function c19EventStreamUrl(cursor?: string | null) {
   if (!cursor) return C19_EVENT_PROXY_PATH;
   const params = new URLSearchParams({ cursor });
   return `${C19_EVENT_PROXY_PATH}?${params.toString()}`;
+}
+
+function momentRuntimePath(momentId: string, resource = "") {
+  const base = `${C19_API_BASE}/moments/${encodeURIComponent(momentId)}`;
+  return resource ? `${base}/${resource}` : base;
+}
+
+function cursorQuery(query: { cursor?: string | null; limit?: number } = {}) {
+  const params = new URLSearchParams();
+  if (query.limit !== undefined) params.set("limit", String(query.limit));
+  if (query.cursor) params.set("cursor", query.cursor);
+  const serialized = params.toString();
+  return serialized ? `?${serialized}` : "";
+}
+
+export function createC19MomentDraft(
+  input: C19CreateMomentDraftInput,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19MomentDraft>(`${C19_API_BASE}/moments/drafts`, {
+    body: input,
+    method: "POST",
+    retryLimit: 0,
+    signal,
+  });
+}
+
+export function publishC19Moment(
+  momentId: string,
+  input: C19PublishMomentInput,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19Moment>(momentRuntimePath(momentId, "publish"), {
+    body: input,
+    method: "POST",
+    retryLimit: 0,
+    signal,
+  });
+}
+
+export function listC19MomentFeed(
+  query: { cursor?: string | null; limit?: number } = {},
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19MomentFeedPage>(
+    `${C19_API_BASE}/moments/feed${cursorQuery(query)}`,
+    {
+      bypassCache: true,
+      method: "GET",
+      retryLimit: 1,
+      signal,
+    },
+  );
+}
+
+export function getC19Moment(momentId: string, signal?: AbortSignal) {
+  return apiRequest<C19Moment>(momentRuntimePath(momentId), {
+    bypassCache: true,
+    method: "GET",
+    retryLimit: 1,
+    signal,
+  });
+}
+
+export function deleteC19Moment(momentId: string, signal?: AbortSignal) {
+  return apiRequest<C19MomentDeleteResponse>(momentRuntimePath(momentId), {
+    method: "DELETE",
+    retryLimit: 0,
+    signal,
+  });
+}
+
+export function likeC19Moment(momentId: string, signal?: AbortSignal) {
+  return apiRequest<C19MomentLikeMutation>(momentRuntimePath(momentId, "like"), {
+    method: "PUT",
+    retryLimit: 0,
+    signal,
+  });
+}
+
+export function unlikeC19Moment(momentId: string, signal?: AbortSignal) {
+  return apiRequest<C19MomentLikeMutation>(momentRuntimePath(momentId, "like"), {
+    method: "DELETE",
+    retryLimit: 0,
+    signal,
+  });
+}
+
+export function listC19MomentLikes(
+  momentId: string,
+  query: { cursor?: string | null; limit?: number } = {},
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19MomentLikePage>(
+    `${momentRuntimePath(momentId, "likes")}${cursorQuery(query)}`,
+    { bypassCache: true, method: "GET", retryLimit: 1, signal },
+  );
+}
+
+export function listC19MomentComments(
+  momentId: string,
+  query: { cursor?: string | null; limit?: number } = {},
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19MomentCommentPage>(
+    `${momentRuntimePath(momentId, "comments")}${cursorQuery(query)}`,
+    { bypassCache: true, method: "GET", retryLimit: 1, signal },
+  );
+}
+
+export function createC19MomentComment(
+  momentId: string,
+  input: C19CreateMomentCommentInput,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19MomentComment>(
+    momentRuntimePath(momentId, "comments"),
+    { body: input, method: "POST", retryLimit: 0, signal },
+  );
+}
+
+export function deleteC19MomentComment(
+  momentId: string,
+  commentId: string,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19MomentCommentDeleteResponse>(
+    momentRuntimePath(
+      momentId,
+      `comments/${encodeURIComponent(commentId)}`,
+    ),
+    { method: "DELETE", retryLimit: 0, signal },
+  );
+}
+
+export function createC19MomentAssetUploadIntent(
+  momentId: string,
+  input: C19AssetUploadIntentInput,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19MomentAssetUploadIntent>(
+    momentRuntimePath(momentId, "assets/upload-intents"),
+    { body: input, method: "POST", retryLimit: 0, signal },
+  );
+}
+
+export function getC19MomentAssetStatus(
+  momentId: string,
+  assetId: string,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19Asset>(
+    momentRuntimePath(momentId, `assets/${encodeURIComponent(assetId)}`),
+    { bypassCache: true, method: "GET", retryLimit: 1, signal },
+  );
+}
+
+export function finalizeC19MomentAssetUpload(
+  momentId: string,
+  assetId: string,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19Asset>(
+    momentRuntimePath(
+      momentId,
+      `assets/${encodeURIComponent(assetId)}/finalize`,
+    ),
+    { method: "POST", retryLimit: 0, signal },
+  );
+}
+
+export function createC19MomentAssetAccessIntent(
+  momentId: string,
+  assetId: string,
+  variant: C19AssetAccessVariant,
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19AssetAccessIntent>(
+    momentRuntimePath(
+      momentId,
+      `assets/${encodeURIComponent(assetId)}/access-intents`,
+    ),
+    { body: { variant }, method: "POST", retryLimit: 0, signal },
+  );
+}
+
+export function listC19MomentEvents(
+  query: { cursor?: string | null; limit?: number } = {},
+  signal?: AbortSignal,
+) {
+  return apiRequest<C19MomentEventPage>(
+    `${C19_API_BASE}/moments/events${cursorQuery(query)}`,
+    { bypassCache: true, method: "GET", retryLimit: 1, signal },
+  );
+}
+
+export function getC19MomentEventTail(signal?: AbortSignal) {
+  return apiRequest<C19MomentEventTail>(`${C19_API_BASE}/moments/events/tail`, {
+    bypassCache: true,
+    method: "GET",
+    retryLimit: 1,
+    signal,
+  });
+}
+
+export function c19MomentEventStreamUrl(cursor?: string | null) {
+  if (!cursor) return C19_MOMENT_EVENT_PROXY_PATH;
+  const params = new URLSearchParams({ cursor });
+  return `${C19_MOMENT_EVENT_PROXY_PATH}?${params.toString()}`;
 }

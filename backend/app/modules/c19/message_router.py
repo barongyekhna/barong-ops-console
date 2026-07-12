@@ -17,6 +17,15 @@ from ...core.session_cookies import get_session_id_from_request
 from ...db.session import get_db, managed_read_session
 from ...models.user import User
 from ...services.auth_service import InvalidSessionError, validate_session
+from .asset_store_provider import get_chat_asset_store
+from .http_asset_store import (
+    ChatAssetStoreAuthenticationError,
+    ChatAssetStoreConflictError,
+    ChatAssetStoreHttpError,
+    ChatAssetStoreProtocolError,
+    ChatAssetStoreRejectedError,
+    ChatAssetStoreUnavailableError,
+)
 from .http_record_store import (
     ChatRecordStoreAuthenticationError,
     ChatRecordStoreConflictError,
@@ -32,6 +41,7 @@ from .message_schemas import (
     ChatRecordRead,
     ChatResumePositionRead,
     ChatUnreadPositionRead,
+    ChatUnreadSummaryRead,
     ChatUserEventPageRead,
     ChatUserEventTailRead,
     MessageCreateRequest,
@@ -42,17 +52,19 @@ from .message_service import (
     get_resume,
     get_user_event_tail,
     get_unread,
+    get_unread_summary,
     list_message_history,
     list_user_events,
     send_message,
 )
 from .record_store_provider import build_chat_record_store, get_chat_record_store
-from .storage import C19StorageUnconfiguredError, ChatRecordStore
+from .storage import C19StorageUnconfiguredError, ChatAssetStore, ChatRecordStore
 
 
 router = APIRouter(prefix="/c19", tags=["c19-chat-records"])
 ConversationIdPath = Annotated[str, Path(min_length=1, max_length=64)]
 RecordStoreDependency = Annotated[ChatRecordStore, Depends(get_chat_record_store)]
+AssetStoreDependency = Annotated[ChatAssetStore, Depends(get_chat_asset_store)]
 
 
 def _raise_chat_error(db: Session, exc: Exception) -> NoReturn:
@@ -78,19 +90,64 @@ def _raise_chat_error(db: Session, exc: Exception) -> NoReturn:
                 "message": "The client message ID is already used by another payload.",
             },
         ) from None
+    if isinstance(exc, ChatAssetStoreConflictError):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "c19_asset_binding_conflict",
+                "message": "The asset is already bound to another message.",
+            },
+        ) from None
+    if isinstance(exc, C19StorageUnconfiguredError):
+        is_asset = exc.store_name == "chat_asset_store"
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": (
+                    "c19_asset_store_unavailable"
+                    if is_asset
+                    else "c19_record_store_unavailable"
+                ),
+                "message": (
+                    "Chat asset storage is unavailable."
+                    if is_asset
+                    else "Chat record storage is unavailable."
+                ),
+            },
+        ) from None
     if isinstance(
         exc,
-        (
-            C19StorageUnconfiguredError,
-            ChatRecordStoreAuthenticationError,
-            ChatRecordStoreUnavailableError,
-        ),
+        (ChatRecordStoreAuthenticationError, ChatRecordStoreUnavailableError),
     ):
         raise HTTPException(
             status_code=503,
             detail={
                 "code": "c19_record_store_unavailable",
                 "message": "Chat record storage is unavailable.",
+            },
+        ) from None
+    if isinstance(
+        exc,
+        (ChatAssetStoreAuthenticationError, ChatAssetStoreUnavailableError),
+    ):
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "c19_asset_store_unavailable",
+                "message": "Chat asset storage is unavailable.",
+            },
+        ) from None
+    if isinstance(exc, ChatAssetStoreRejectedError):
+        status_code = 410 if exc.status_code == 410 else 422
+        raise HTTPException(
+            status_code=status_code,
+            detail={
+                "code": (
+                    "c19_asset_deleted"
+                    if status_code == 410
+                    else "c19_asset_unavailable"
+                ),
+                "message": "The selected asset is unavailable.",
             },
         ) from None
     if isinstance(exc, ChatRecordStoreRejectedError):
@@ -129,6 +186,22 @@ def _raise_chat_error(db: Session, exc: Exception) -> NoReturn:
                 "message": "Chat record storage returned an invalid response.",
             },
         ) from None
+    if isinstance(exc, ChatAssetStoreProtocolError):
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "c19_asset_store_invalid_response",
+                "message": "Chat asset storage returned an invalid response.",
+            },
+        ) from None
+    if isinstance(exc, ChatAssetStoreHttpError):
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "code": "c19_asset_store_error",
+                "message": "Chat asset storage request failed.",
+            },
+        ) from None
     if isinstance(exc, ChatRecordStoreHttpError):
         raise HTTPException(
             status_code=502,
@@ -148,6 +221,7 @@ async def message_send_endpoint(
     payload: MessageCreateRequest,
     conversation_id: ConversationIdPath,
     store: RecordStoreDependency,
+    asset_store: AssetStoreDependency,
     db: Session = Depends(get_db),
     actor: User = Depends(get_current_user),
 ) -> ChatRecordRead:
@@ -158,6 +232,7 @@ async def message_send_endpoint(
             conversation_id=conversation_id,
             payload=payload,
             store=store,
+            asset_store=asset_store,
         )
     except Exception as exc:
         _raise_chat_error(db, exc)
@@ -253,6 +328,18 @@ async def message_unread_endpoint(
             conversation_id=conversation_id,
             store=store,
         )
+    except Exception as exc:
+        _raise_chat_error(db, exc)
+
+
+@router.get("/unread", response_model=ChatUnreadSummaryRead)
+async def global_unread_endpoint(
+    store: RecordStoreDependency,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> ChatUnreadSummaryRead:
+    try:
+        return await get_unread_summary(db, actor=actor, store=store)
     except Exception as exc:
         _raise_chat_error(db, exc)
 

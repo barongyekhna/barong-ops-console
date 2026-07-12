@@ -36,7 +36,7 @@ def _registered_routes() -> set[tuple[str, str]]:
     }
 
 
-def test_c19_registers_only_durable_control_runtime_routes() -> None:
+def test_c19_registers_only_durable_runtime_routes() -> None:
     routes = _registered_routes()
     expected = {
         ("GET", "/api/app/c19/directory"),
@@ -71,13 +71,29 @@ def test_c19_registers_only_durable_control_runtime_routes() -> None:
         ("GET", "/api/app/c19/conversations/{conversation_id}/resume"),
         ("GET", "/api/app/c19/events"),
         ("GET", "/api/app/c19/events/tail"),
+        ("POST", "/api/app/c19/moments/drafts"),
+        ("GET", "/api/app/c19/moments/feed"),
+        ("GET", "/api/app/c19/moments/events"),
+        ("GET", "/api/app/c19/moments/events/tail"),
+        ("POST", "/api/app/c19/moments/{moment_id}/assets/upload-intents"),
+        ("GET", "/api/app/c19/moments/{moment_id}/assets/{asset_id}"),
+        ("POST", "/api/app/c19/moments/{moment_id}/assets/{asset_id}/finalize"),
+        ("POST", "/api/app/c19/moments/{moment_id}/assets/{asset_id}/access-intents"),
+        ("POST", "/api/app/c19/moments/{moment_id}/publish"),
+        ("GET", "/api/app/c19/moments/{moment_id}"),
+        ("DELETE", "/api/app/c19/moments/{moment_id}"),
+        ("PUT", "/api/app/c19/moments/{moment_id}/like"),
+        ("DELETE", "/api/app/c19/moments/{moment_id}/like"),
+        ("GET", "/api/app/c19/moments/{moment_id}/likes"),
+        ("GET", "/api/app/c19/moments/{moment_id}/comments"),
+        ("POST", "/api/app/c19/moments/{moment_id}/comments"),
+        ("DELETE", "/api/app/c19/moments/{moment_id}/comments/{comment_id}"),
     }
     assert expected <= routes
 
     forbidden_c19_segments = (
         "/attachments",
-        "/moments",
-        "/storage",
+            "/storage",
         "/providers",
         "/vps",
         "/calls",

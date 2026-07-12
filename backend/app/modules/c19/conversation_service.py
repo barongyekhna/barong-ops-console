@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from sqlalchemy.exc import IntegrityError
@@ -30,6 +31,8 @@ from .conversation_repository import (
     get_conversation_member,
     get_conversation_settings,
     get_direct_conversation_by_pair,
+    get_active_user,
+    list_active_user_ids,
     list_actor_conversations,
     list_authorized_affiliations,
     list_conversation_members,
@@ -50,9 +53,16 @@ from .conversation_schemas import (
     GroupOwnerTransferRequest,
     GroupUpdateRequest,
 )
+from .identity_sync_service import sync_profile_for_user
 
 
 MAX_GROUP_PARTICIPANTS = 200
+
+
+@dataclass(frozen=True, slots=True)
+class ResolvedParticipant:
+    user_id: int
+    affiliation: C19AffiliationRecord | None
 
 
 class C19ConversationControlError(RuntimeError):
@@ -110,13 +120,25 @@ def _canonical_pair_key(first_user_id: int, second_user_id: int) -> str:
     return f"{low}:{high}"
 
 
-def _resolve_affiliation(
+def _resolve_participant(
     db: Session,
     *,
     user_id: int,
     requested_affiliation_id: str | None,
     for_update: bool = False,
-) -> C19AffiliationRecord:
+) -> ResolvedParticipant:
+    user = get_active_user(db, user_id=user_id, for_update=for_update)
+    if user is None:
+        raise _error(
+            "c19_access_denied",
+            "C19 access denied.",
+            403,
+        )
+    sync_profile_for_user(db, user=user)
+    # Affiliation is optional descriptive context.  Never infer one merely
+    # because the user currently has exactly one organization membership.
+    if requested_affiliation_id is None:
+        return ResolvedParticipant(user_id=user_id, affiliation=None)
     affiliations = list_authorized_affiliations(
         db,
         user_id=user_id,
@@ -125,25 +147,16 @@ def _resolve_affiliation(
     if requested_affiliation_id is not None:
         for affiliation in affiliations:
             if affiliation.affiliation_id == requested_affiliation_id:
-                return affiliation
+                return ResolvedParticipant(
+                    user_id=user_id,
+                    affiliation=affiliation,
+                )
         raise _error(
             "c19_access_denied",
             "C19 access denied.",
             403,
         )
-    if len(affiliations) == 1:
-        return affiliations[0]
-    if len(affiliations) > 1:
-        raise _error(
-            "c19_affiliation_required",
-            "An explicit active affiliation is required.",
-            409,
-        )
-    raise _error(
-        "c19_access_denied",
-        "C19 access denied.",
-        403,
-    )
+    raise AssertionError("requested affiliation branch must return or raise")
 
 
 def _deny_blocked_relationship() -> None:
@@ -296,14 +309,15 @@ def _summary_from_row(row: ConversationListRow) -> ConversationSummary:
 def _new_member(
     *,
     conversation_id: str,
-    affiliation: C19AffiliationRecord,
+    participant: ResolvedParticipant,
     role: str,
 ) -> C19ConversationMemberRecord:
+    affiliation = participant.affiliation
     return C19ConversationMemberRecord(
         conversation_id=conversation_id,
-        affiliation_id=affiliation.affiliation_id,
-        user_id=affiliation.user_id,
-        org_id_at_join=affiliation.org_id,
+        affiliation_id=(affiliation.affiliation_id if affiliation else None),
+        user_id=participant.user_id,
+        org_id_at_join=(affiliation.org_id if affiliation else None),
         role=role,
         status="active",
         joined_at=_now(),
@@ -343,12 +357,6 @@ def _require_active_member(
     )
     if member is None or member.status != "active":
         raise _error("c19_conversation_not_found", "Conversation not found.", 404)
-    _resolve_affiliation(
-        db,
-        user_id=user_id,
-        requested_affiliation_id=member.affiliation_id,
-        for_update=for_update,
-    )
     return member
 
 
@@ -397,13 +405,9 @@ def list_conversations(
 ) -> ConversationPage:
     actor_user_id = _actor_user_id(actor)
     with without_org_data_isolation():
-        affiliations = list_authorized_affiliations(db, user_id=actor_user_id)
-        if not affiliations:
-            raise _error("c19_access_denied", "C19 access denied.", 403)
         rows, total = list_actor_conversations(
             db,
             user_id=actor_user_id,
-            authorized_affiliation_ids={item.affiliation_id for item in affiliations},
             limit=limit,
             offset=offset,
         )
@@ -459,8 +463,8 @@ def create_direct_conversation(
                 actor_user_id: payload.actor_affiliation_id,
                 peer_user_id: payload.peer_affiliation_id,
             }
-            resolved_affiliations = {
-                user_id: _resolve_affiliation(
+            resolved_participants = {
+                user_id: _resolve_participant(
                     db,
                     user_id=user_id,
                     requested_affiliation_id=requested_affiliations[user_id],
@@ -468,8 +472,8 @@ def create_direct_conversation(
                 )
                 for user_id in sorted(requested_affiliations)
             }
-            actor_affiliation = resolved_affiliations[actor_user_id]
-            peer_affiliation = resolved_affiliations[peer_user_id]
+            actor_participant = resolved_participants[actor_user_id]
+            peer_participant = resolved_participants[peer_user_id]
             _ensure_pair_not_blocked(
                 db,
                 first_user_id=actor_user_id,
@@ -494,15 +498,6 @@ def create_direct_conversation(
                     user_id=peer_user_id,
                     for_update=True,
                 )
-                if (
-                    actor_member.affiliation_id != actor_affiliation.affiliation_id
-                    or peer_member.affiliation_id != peer_affiliation.affiliation_id
-                ):
-                    raise _error(
-                        "c19_conversation_affiliation_conflict",
-                        "Conversation affiliation differs from the existing thread.",
-                        409,
-                    )
                 return _detail_for_actor(
                     db,
                     conversation=existing,
@@ -523,12 +518,12 @@ def create_direct_conversation(
             )
             actor_member = _new_member(
                 conversation_id=conversation_id,
-                affiliation=actor_affiliation,
+                participant=actor_participant,
                 role="member",
             )
             peer_member = _new_member(
                 conversation_id=conversation_id,
-                affiliation=peer_affiliation,
+                participant=peer_participant,
                 role="member",
             )
 
@@ -572,15 +567,6 @@ def create_direct_conversation(
                     user_id=peer_user_id,
                     for_update=True,
                 )
-                if (
-                    actor_member.affiliation_id != actor_affiliation.affiliation_id
-                    or peer_member.affiliation_id != peer_affiliation.affiliation_id
-                ):
-                    raise _error(
-                        "c19_conversation_affiliation_conflict",
-                        "Conversation affiliation differs from the existing thread.",
-                        409,
-                    )
                 return _detail_for_actor(
                     db,
                     conversation=existing,
@@ -596,8 +582,16 @@ def create_direct_conversation(
                 audit=audit,
                 details={
                     "participant_count": 2,
-                    "cross_org": actor_affiliation.org_id
-                    != peer_affiliation.org_id,
+                    "explicit_org_snapshot_count": len(
+                        {
+                            affiliation.org_id
+                            for affiliation in (
+                                actor_participant.affiliation,
+                                peer_participant.affiliation,
+                            )
+                            if affiliation is not None
+                        }
+                    ),
                 },
             )
             db.commit()
@@ -620,7 +614,7 @@ def _resolve_group_participants(
     actor_user_id: int,
     actor_affiliation_id: str | None,
     members: list[ConversationMemberInput],
-) -> tuple[C19AffiliationRecord, list[C19AffiliationRecord]]:
+) -> tuple[ResolvedParticipant, list[ResolvedParticipant]]:
     member_user_ids = [member.user_id for member in members]
     if actor_user_id in member_user_ids or len(member_user_ids) != len(
         set(member_user_ids)
@@ -635,7 +629,7 @@ def _resolve_group_participants(
         **{member.user_id: member.affiliation_id for member in members},
     }
     resolved_by_user_id = {
-        user_id: _resolve_affiliation(
+        user_id: _resolve_participant(
             db,
             user_id=user_id,
             requested_affiliation_id=requested_affiliations[user_id],
@@ -643,7 +637,7 @@ def _resolve_group_participants(
         )
         for user_id in sorted(requested_affiliations)
     }
-    actor_affiliation = resolved_by_user_id[actor_user_id]
+    actor_participant = resolved_by_user_id[actor_user_id]
     resolved_members = [
         resolved_by_user_id[member.user_id]
         for member in members
@@ -654,7 +648,7 @@ def _resolve_group_participants(
         candidate_user_ids=all_user_ids,
         all_participant_user_ids=all_user_ids,
     )
-    return actor_affiliation, resolved_members
+    return actor_participant, resolved_members
 
 
 def create_group(
@@ -667,13 +661,13 @@ def create_group(
     actor_user_id = _actor_user_id(actor)
     try:
         with without_org_data_isolation():
-            actor_affiliation, member_affiliations = _resolve_group_participants(
+            actor_participant, member_participants = _resolve_group_participants(
                 db,
                 actor_user_id=actor_user_id,
                 actor_affiliation_id=payload.actor_affiliation_id,
                 members=payload.members,
             )
-            participant_count = 1 + len(member_affiliations)
+            participant_count = 1 + len(member_participants)
             if participant_count < 3 or participant_count > MAX_GROUP_PARTICIPANTS:
                 raise _error(
                     "c19_group_size_invalid",
@@ -692,7 +686,7 @@ def create_group(
             )
             actor_member = _new_member(
                 conversation_id=conversation_id,
-                affiliation=actor_affiliation,
+                participant=actor_participant,
                 role="owner",
             )
             members = [
@@ -700,10 +694,10 @@ def create_group(
                 *[
                     _new_member(
                         conversation_id=conversation_id,
-                        affiliation=affiliation,
+                        participant=participant,
                         role="member",
                     )
-                    for affiliation in member_affiliations
+                    for participant in member_participants
                 ],
             ]
             add_conversation(db, conversation)
@@ -730,10 +724,14 @@ def create_group(
                 audit=audit,
                 details={
                     "participant_count": participant_count,
-                    "organization_count": len(
+                    "explicit_organization_count": len(
                         {
-                            actor_affiliation.org_id,
-                            *(item.org_id for item in member_affiliations),
+                            participant.affiliation.org_id
+                            for participant in (
+                                actor_participant,
+                                *member_participants,
+                            )
+                            if participant.affiliation is not None
                         }
                     ),
                 },
@@ -853,7 +851,7 @@ def add_group_members(
                 )
 
             resolved = [
-                _resolve_affiliation(
+                _resolve_participant(
                     db,
                     user_id=member.user_id,
                     requested_affiliation_id=member.affiliation_id,
@@ -871,8 +869,9 @@ def add_group_members(
             )
             historical_by_user_id = {member.user_id: member for member in all_members}
             new_settings: list[C19ConversationUserSettingRecord] = []
-            for affiliation in resolved:
-                existing = historical_by_user_id.get(affiliation.user_id)
+            for participant in resolved:
+                affiliation = participant.affiliation
+                existing = historical_by_user_id.get(participant.user_id)
                 if existing is not None:
                     if existing.status == "banned":
                         raise _error(
@@ -880,8 +879,12 @@ def add_group_members(
                             "Group access denied.",
                             403,
                         )
-                    existing.affiliation_id = affiliation.affiliation_id
-                    existing.org_id_at_join = affiliation.org_id
+                    existing.affiliation_id = (
+                        affiliation.affiliation_id if affiliation else None
+                    )
+                    existing.org_id_at_join = (
+                        affiliation.org_id if affiliation else None
+                    )
                     existing.role = "member"
                     existing.status = "active"
                     existing.joined_at = _now()
@@ -890,14 +893,14 @@ def add_group_members(
                 else:
                     new_member = _new_member(
                         conversation_id=conversation_id,
-                        affiliation=affiliation,
+                        participant=participant,
                         role="member",
                     )
                     add_conversation_member(db, new_member)
                     new_settings.append(
                         _new_settings(
                             conversation_id=conversation_id,
-                            user_id=affiliation.user_id,
+                            user_id=participant.user_id,
                         ),
                     )
             conversation.updated_at = _now()
@@ -1095,19 +1098,15 @@ def transfer_group_owner(
             )
             if target is None or target.user_id == actor_user_id:
                 raise _error("c19_group_access_denied", "Group access denied.", 403)
-            try:
-                _resolve_affiliation(
-                    db,
-                    user_id=target.user_id,
-                    requested_affiliation_id=target.affiliation_id,
-                    for_update=True,
-                )
-            except C19ConversationControlError:
+            if target.user_id not in list_active_user_ids(
+                db,
+                user_ids={target.user_id},
+            ):
                 raise _error(
                     "c19_group_access_denied",
                     "Group access denied.",
                     403,
-                ) from None
+                )
 
             actor_member.role = "admin"
             target.role = "owner"

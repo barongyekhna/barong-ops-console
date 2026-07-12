@@ -64,41 +64,35 @@ def list_authorized_affiliations(
     return list(db.scalars(statement))
 
 
-def list_authorized_affiliation_ids_for_users(
+def list_active_user_ids(
     db: Session,
     *,
     user_ids: set[int],
-) -> set[str]:
-    """Bulk-resolve current C18/C19 affiliations for message fan-out."""
+) -> set[int]:
+    """Resolve active C19 users without requiring organization membership."""
 
     if not user_ids:
         return set()
-    statement = (
-        select(C19AffiliationRecord.affiliation_id)
-        .join(User, User.id == C19AffiliationRecord.user_id)
-        .join(
-            OrgMembershipRecord,
-            and_(
-                OrgMembershipRecord.membership_id
-                == C19AffiliationRecord.source_membership_id,
-                OrgMembershipRecord.user_id
-                == cast(C19AffiliationRecord.user_id, String(255)),
-                OrgMembershipRecord.org_id == C19AffiliationRecord.org_id,
-            ),
-        )
-        .join(
-            OrganizationRecord,
-            OrganizationRecord.org_id == C19AffiliationRecord.org_id,
-        )
-        .where(
-            C19AffiliationRecord.user_id.in_(user_ids),
-            C19AffiliationRecord.status == "active",
-            User.is_active.is_(True),
-            OrgMembershipRecord.status == "active",
-            OrganizationRecord.status == "active",
-        )
+    statement = select(User.id).where(
+        User.id.in_(user_ids),
+        User.is_active.is_(True),
     )
-    return set(db.scalars(statement))
+    return {int(value) for value in db.scalars(statement)}
+
+
+def get_active_user(
+    db: Session,
+    *,
+    user_id: int,
+    for_update: bool = False,
+) -> User | None:
+    statement = select(User).where(
+        User.id == user_id,
+        User.is_active.is_(True),
+    )
+    if for_update:
+        statement = statement.with_for_update()
+    return db.scalar(statement)
 
 
 def active_block_exists_between(
@@ -248,7 +242,6 @@ def list_actor_conversations(
     db: Session,
     *,
     user_id: int,
-    authorized_affiliation_ids: set[str],
     limit: int,
     offset: int,
 ) -> tuple[list[ConversationListRow], int]:
@@ -267,7 +260,6 @@ def list_actor_conversations(
     base_filters = (
         actor_member.user_id == user_id,
         actor_member.status == "active",
-        actor_member.affiliation_id.in_(authorized_affiliation_ids),
         C19ConversationRecord.status != "closed",
     )
     total = int(
@@ -321,6 +313,30 @@ def list_actor_conversations(
     return rows, total
 
 
+def list_active_conversation_ids(
+    db: Session,
+    *,
+    user_id: int,
+) -> tuple[str, ...]:
+    """Return the actor's complete active membership set without pagination."""
+
+    statement = (
+        select(C19ConversationMemberRecord.conversation_id)
+        .join(
+            C19ConversationRecord,
+            C19ConversationRecord.conversation_id
+            == C19ConversationMemberRecord.conversation_id,
+        )
+        .where(
+            C19ConversationMemberRecord.user_id == user_id,
+            C19ConversationMemberRecord.status == "active",
+            C19ConversationRecord.status != "closed",
+        )
+        .order_by(C19ConversationMemberRecord.conversation_id)
+    )
+    return tuple(str(value) for value in db.scalars(statement))
+
+
 def add_conversation(db: Session, conversation: C19ConversationRecord) -> None:
     db.add(conversation)
 
@@ -350,8 +366,10 @@ __all__ = [
     "get_conversation_member",
     "get_conversation_settings",
     "get_direct_conversation_by_pair",
+    "get_active_user",
+    "list_active_user_ids",
+    "list_active_conversation_ids",
     "list_actor_conversations",
-    "list_authorized_affiliation_ids_for_users",
     "list_authorized_affiliations",
     "list_conversation_members",
 ]

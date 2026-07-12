@@ -65,7 +65,7 @@ def register_rate_limit_attempt(
     bucket = db.scalar(
         select(SecurityRateLimitBucket).where(
             SecurityRateLimitBucket.bucket_key_hash == bucket_key_hash
-        )
+        ).with_for_update()
     )
     if bucket is None:
         bucket = SecurityRateLimitBucket(

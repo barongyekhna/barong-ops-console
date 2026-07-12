@@ -9,6 +9,10 @@ import {
   isBlockedC19InfrastructurePath,
 } from "../../frontend/src/app/api/backend/[...path]/route.ts";
 
+const momentId = "mom_0123456789abcdef0123456789abcdef";
+const commentId = "cmt_0123456789abcdef0123456789abcdef";
+const assetId = "att_0123456789abcdef0123456789abcdef";
+
 const allowed = [
   ["GET", ["c19", "directory"]],
   ["GET", ["c19", "profiles", "42"]],
@@ -23,6 +27,7 @@ const allowed = [
   ["POST", ["c19", "blocks", "42"]],
   ["DELETE", ["c19", "blocks", "42"]],
   ["GET", ["c19", "conversations"]],
+  ["GET", ["c19", "unread"]],
   ["POST", ["c19", "conversations", "direct"]],
   ["GET", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef"]],
   ["GET", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "settings"]],
@@ -38,10 +43,31 @@ const allowed = [
   ["GET", ["c19", "events", "tail"]],
   ["GET", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "messages"]],
   ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "messages"]],
+  ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "assets", "upload-intents"]],
+  ["GET", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "assets", "att_0123456789abcdef0123456789abcdef"]],
+  ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "assets", "att_0123456789abcdef0123456789abcdef", "finalize"]],
+  ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "records", "record_01", "assets", "att_0123456789abcdef0123456789abcdef", "access-intents"]],
   ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "delivered"]],
   ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "read"]],
   ["GET", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "unread"]],
   ["GET", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "resume"]],
+  ["POST", ["c19", "moments", "drafts"]],
+  ["GET", ["c19", "moments", "feed"]],
+  ["GET", ["c19", "moments", "events"]],
+  ["GET", ["c19", "moments", "events", "tail"]],
+  ["GET", ["c19", "moments", momentId]],
+  ["DELETE", ["c19", "moments", momentId]],
+  ["POST", ["c19", "moments", momentId, "publish"]],
+  ["PUT", ["c19", "moments", momentId, "like"]],
+  ["DELETE", ["c19", "moments", momentId, "like"]],
+  ["GET", ["c19", "moments", momentId, "likes"]],
+  ["GET", ["c19", "moments", momentId, "comments"]],
+  ["POST", ["c19", "moments", momentId, "comments"]],
+  ["DELETE", ["c19", "moments", momentId, "comments", commentId]],
+  ["POST", ["c19", "moments", momentId, "assets", "upload-intents"]],
+  ["GET", ["c19", "moments", momentId, "assets", assetId]],
+  ["POST", ["c19", "moments", momentId, "assets", assetId, "finalize"]],
+  ["POST", ["c19", "moments", momentId, "assets", assetId, "access-intents"]],
 ];
 
 test("C19 proxy exposes only the agreed control and chat-record methods", () => {
@@ -65,9 +91,22 @@ test("C19 proxy rejects unapproved methods and non-record content paths", () => 
     ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "unread"]],
     ["POST", ["c19", "events"]],
     ["POST", ["c19", "events", "tail"]],
+    ["POST", ["c19", "unread"]],
+    ["GET", ["c19", "unread", "details"]],
     ["POST", ["c19", "attachments", "upload"]],
+    ["GET", ["c19", "assets", "transfers", "authorize"]],
+    ["PUT", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "assets", "att_0123456789abcdef0123456789abcdef"]],
+    ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "assets", "not-an-asset", "finalize"]],
+    ["POST", ["c19", "conversations", "conv_0123456789abcdef0123456789abcdef", "records", "bad/record", "assets", "att_0123456789abcdef0123456789abcdef", "access-intents"]],
+    ["PUT", ["c19-assets", "u", "opaque-ticket"]],
+    ["GET", ["c19-assets", "d", "opaque-ticket"]],
     ["POST", ["c19", "moments"]],
-    ["GET", ["c19", "moments", "feed"]],
+    ["PATCH", ["c19", "moments", momentId]],
+    ["POST", ["c19", "moments", "not-a-moment", "publish"]],
+    ["POST", ["c19", "moments", momentId, "likes"]],
+    ["DELETE", ["c19", "moments", momentId, "comments", "not-a-comment"]],
+    ["POST", ["c19", "moments", momentId, "assets", "not-an-asset", "finalize"]],
+    ["GET", ["c19", "moments", "events", "anything"]],
     ["POST", ["c19", "calls", "voice"]],
     ["POST", ["c19", "calls", "video"]],
     ["DELETE", ["c19", "directory"]],
@@ -103,8 +142,15 @@ test("C19 proxy explicitly isolates storage, VPS, provider, and secret paths", (
   }
 });
 
-test("C19 workspace stays hidden and exposes only durable text or Emoji chat", () => {
-  const navigationSource = readFileSync("frontend/src/lib/navigation.ts", "utf8");
+test("C19 is a global authenticated feature with optional organization context", () => {
+  const sidebarSource = readFileSync(
+    "frontend/src/components/capability-sidebar-engine.tsx",
+    "utf8",
+  );
+  const routeGuardSource = readFileSync(
+    "frontend/src/components/permission-route-guard.tsx",
+    "utf8",
+  );
   const pageSource = readFileSync(
     "frontend/src/app/(console)/c19/page.tsx",
     "utf8",
@@ -123,19 +169,42 @@ test("C19 workspace stays hidden and exposes only durable text or Emoji chat", (
     "frontend/src/modules/c19/C19ChatRecovery.ts",
     "utf8",
   );
+  const momentsSource = readFileSync(
+    "frontend/src/modules/c19/C19MomentsPanel.tsx",
+    "utf8",
+  );
+  const composerSource = readFileSync(
+    "frontend/src/modules/c19/C19MomentComposer.tsx",
+    "utf8",
+  );
+  const unreadSource = readFileSync(
+    "frontend/src/modules/c19/C19UnreadStatus.tsx",
+    "utf8",
+  );
 
-  assert.doesNotMatch(navigationSource, /\/c19|c19\.communication/i);
+  assert.match(sidebarSource, /href="\/c19"/);
+  assert.match(sidebarSource, /C19 通讯/);
+  assert.match(sidebarSource, /useC19UnreadCount/);
+  assert.match(routeGuardSource, /pathname === "\/c19"/);
+  assert.match(routeGuardSource, /isC19Route \|\|/);
   assert.match(pageSource, /C19Workspace/);
-  assert.match(workspaceSource, /文字与 Emoji 已接入可迁移的独立记录服务/);
-  assert.match(workspaceSource, /图片、文件和朋友圈仍未开放/);
+  assert.match(workspaceSource, /基础功能 · 全员开放/);
+  assert.match(workspaceSource, /每位有效用户都可以聊天、建群/);
+  assert.match(workspaceSource, /基础通讯身份（不绑定组织）/);
+  assert.match(workspaceSource, /无需加入组织即可使用 C19/);
+  assert.match(workspaceSource, /组织身份可选/);
+  assert.doesNotMatch(workspaceSource, /必须明确选择.*组织身份/);
+  assert.doesNotMatch(workspaceSource, /朋友圈仍未开放/);
   assert.match(workspaceSource, /const LOAD_LIMIT = 100/);
   assert.match(workspaceSource, /getC19Profile\(user\.id\)/);
-  assert.match(workspaceSource, /affiliations\.length === 1/);
-  assert.match(workspaceSource, /多组织成员必须明确选择/);
-  assert.match(workspaceSource, /actor_affiliation_id: actor\.affiliation_id/);
-  assert.match(workspaceSource, /peer_affiliation_id: peer\.affiliation_id/);
+  assert.doesNotMatch(workspaceSource, /affiliations\.length === 1/);
+  assert.match(workspaceSource, /actor\.affiliation_id\s*\? \{ actor_affiliation_id/);
+  assert.match(workspaceSource, /peer\.affiliation_id\s*\? \{ peer_affiliation_id/);
+  assert.match(workspaceSource, /disabled=\{Boolean\(busyKey\)\}/);
   assert.match(apiSource, /conversationRuntimePath\(conversationId, "messages"\)/);
-  assert.doesNotMatch(apiSource, /\/attachments|\/moments|\/storage|\/providers|\/vps/i);
+  assert.doesNotMatch(apiSource, /\/attachments|\/storage|\/providers|\/vps/i);
+  assert.match(apiSource, /createC19MomentDraft/);
+  assert.match(apiSource, /listC19MomentFeed/);
   assert.match(apiSource, /params\.set\("search", query\.search\)/);
   assert.match(
     apiSource,
@@ -144,12 +213,15 @@ test("C19 workspace stays hidden and exposes only durable text or Emoji chat", (
   assert.doesNotMatch(apiSource, /params\.set\("org_id"/);
   assert.match(typeSource, /peer_user_id: number/);
   assert.match(typeSource, /actor_affiliation_id\?: string/);
+  assert.match(typeSource, /C19ParticipantInput = \{\s*user_id: number;\s*affiliation_id\?: string;/);
+  assert.match(typeSource, /actor_org_id: string \| null/);
   assert.doesNotMatch(typeSource, /C19CreateDirectConversationInput = \{\s*actor:/);
   assert.doesNotMatch(workspaceSource, /createC19DirectConversation\(\{\s*actor:/);
-  assert.doesNotMatch(`${workspaceSource}\n${chatSource}`, /type="file"/);
+  assert.match(chatSource, /type="file"/);
+  assert.match(composerSource, /发布朋友圈/);
   assert.doesNotMatch(
-    `${workspaceSource}\n${chatSource}`,
-    />\s*(?:上传文件|发布朋友圈|语音通话|视频通话)\s*</,
+    `${workspaceSource}\n${chatSource}\n${momentsSource}`,
+    />\s*(?:语音通话|视频通话)\s*</,
   );
   assert.match(chatSource, /clientMessageId: makeClientMessageId\(\)/);
   assert.match(chatSource, /transmit\(retryMessage\)/);
@@ -158,6 +230,7 @@ test("C19 workspace stays hidden and exposes only durable text or Emoji chat", (
   assert.match(chatSource, /historyCursor/);
   assert.match(chatSource, /advanceC19Delivery/);
   assert.match(chatSource, /advanceC19Read/);
+  assert.match(chatSource, /announceC19UnreadChanged\(\)/);
   assert.match(chatSource, /getC19UnreadPosition/);
   assert.match(chatSource, /getC19ResumePosition/);
   assert.match(chatSource, /const recoverFromResume = useCallback/);
@@ -189,8 +262,23 @@ test("C19 workspace stays hidden and exposes only durable text or Emoji chat", (
   assert.match(chatSource, /error instanceof ApiError && error\.status === 410/);
   assert.match(chatSource, /原 client_message_id 不能继续重放/);
   assert.match(chatSource, /contentTypeFor/);
-  assert.match(typeSource, /C19MessageContentType = "text" \| "emoji"/);
+  assert.match(typeSource, /C19MessageContentType = "text" \| "emoji" \| "image" \| "file"/);
+  assert.match(typeSource, /assets: C19AssetReference\[\]/);
+  assert.match(chatSource, /putC19AssetBytes/);
+  assert.match(chatSource, /sha256C19File/);
+  assert.match(chatSource, /URL\.createObjectURL/);
+  assert.match(chatSource, /URL\.revokeObjectURL/);
+  assert.match(chatSource, /pagehide/);
+  assert.match(chatSource, /renderWindowMode === "older"/);
   assert.doesNotMatch(chatSource, /dangerouslySetInnerHTML/);
   assert.doesNotMatch(chatSource, /localStorage|sessionStorage|indexedDB/i);
   assert.doesNotMatch(chatSource, /FileReader|FormData|Blob|ArrayBuffer/);
+  assert.match(unreadSource, /getC19UnreadSummary/);
+  assert.match(unreadSource, /summary\.total_unread_count/);
+  assert.match(unreadSource, /Number\.isSafeInteger\(summary\.total_unread_count\)/);
+  assert.match(unreadSource, /summary\.unread_conversation_count/);
+  assert.doesNotMatch(unreadSource, /listC19Conversations|getC19UnreadPosition/);
+  assert.match(unreadSource, /C19_UNREAD_POLL_INTERVAL_MS = 30_000/);
+  assert.match(unreadSource, /activeControllerRef\.current\?\.abort\(\)/);
+  assert.doesNotMatch(unreadSource, /localStorage|sessionStorage|indexedDB/);
 });

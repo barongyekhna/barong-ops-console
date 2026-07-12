@@ -1,12 +1,13 @@
 """Provider-neutral storage contracts for the C19 communication module.
 
-This module performs no HTTP, filesystem, or database I/O.  A separately
-configured HTTP adapter can implement the record boundary; default stores
-reject every content operation when that configuration is absent or invalid.
+This module performs no HTTP, filesystem, or database I/O. Separately
+configured HTTP adapters implement the record and asset boundaries; default
+stores reject every content operation when configuration is absent or invalid.
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal, NoReturn, Protocol, final, runtime_checkable
@@ -15,24 +16,45 @@ from typing import Literal, NoReturn, Protocol, final, runtime_checkable
 StorageCapabilityStatus = Literal["configured", "unconfigured"]
 StorageName = Literal["chat_record_store", "chat_asset_store"]
 ChatRecordStatus = Literal["sent", "delivered", "read"]
-ChatAssetStatus = Literal["active", "quarantined", "deleted"]
+ChatAssetKind = Literal["image", "file"]
+ChatAssetStatus = Literal[
+    "pending_upload",
+    "uploaded",
+    "scanning",
+    "active",
+    "rejected",
+    "quarantined",
+    "delete_pending",
+    "deleted",
+    "expired",
+]
+ChatAssetVariant = Literal["original", "thumbnail"]
+ChatAssetDisposition = Literal["attachment", "inline"]
+ChatAssetTransferDirection = Literal["upload", "download"]
+ChatAssetTransferMethod = Literal["PUT", "GET", "HEAD"]
 
 CHAT_RECORD_STORE_OPERATIONS = (
     "append_record",
+    "get_authorized_record",
     "list_records",
     "list_user_events",
     "get_user_event_tail",
     "advance_delivery",
     "advance_read",
     "get_unread_position",
+    "get_unread_summary",
     "get_resume_position",
     "delete_records",
-    "apply_retention",
+    "apply_retention_batch",
 )
 CHAT_ASSET_STORE_OPERATIONS = (
     "create_upload_intent",
+    "get_asset",
     "finalize_upload",
+    "prepare_binding",
+    "commit_binding",
     "create_download_intent",
+    "inspect_transfer",
     "quarantine_asset",
     "delete_asset",
 )
@@ -62,6 +84,21 @@ class C19StorageCapabilities:
 
 
 @dataclass(frozen=True, slots=True)
+class ChatAssetReferenceDTO:
+    """Immutable provider-neutral asset snapshot persisted with a record."""
+
+    asset_id: str
+    client_asset_id: str
+    kind: ChatAssetKind
+    filename: str
+    media_type: str
+    size_bytes: int
+    sha256_hex: str
+    version: int
+    ordinal: int = 0
+
+
+@dataclass(frozen=True, slots=True)
 class ChatRecordAppendDTO:
     """Idempotent append request for one external chat record.
 
@@ -79,6 +116,7 @@ class ChatRecordAppendDTO:
     sender_org_id: str | None = None
     recipient_org_ids: tuple[str, ...] = ()
     metadata: tuple[tuple[str, str], ...] = ()
+    assets: tuple[ChatAssetReferenceDTO, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -99,6 +137,7 @@ class ChatRecordDTO:
     sender_org_id: str | None = None
     recipient_org_ids: tuple[str, ...] = ()
     metadata: tuple[tuple[str, str], ...] = ()
+    assets: tuple[ChatAssetReferenceDTO, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,6 +240,22 @@ class ChatUnreadPositionDTO:
 
 
 @dataclass(frozen=True, slots=True)
+class ChatUnreadSummaryQueryDTO:
+    """Membership-authorized batch query for global unread totals."""
+
+    user_id: str
+    conversation_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class ChatUnreadSummaryDTO:
+    """Content-free aggregate across an exact conversation ID set."""
+
+    total_unread_count: int
+    unread_conversation_count: int
+
+
+@dataclass(frozen=True, slots=True)
 class ChatResumePositionDTO:
     """Opaque reconnect cursor plus monotonic participant positions."""
 
@@ -224,15 +279,95 @@ class ChatRecordDeleteCommandDTO:
 
 
 @dataclass(frozen=True, slots=True)
-class ChatRetentionCommandDTO:
-    """Auditable retention command; never an implicit local cleanup."""
+class ChatRetentionBatchCommandDTO:
+    """One bounded batch in an explicitly approved retention operation.
 
+    ``operation_id`` is the stable semantic identity of the approval. An exact
+    retry preserves the operation ID, batch ordinal and batch size. A later
+    ordinal may choose a different bounded batch size within the same approved
+    operation limits.
+    """
+
+    operation_id: str
+    batch_ordinal: int
+    approved_maximum_records: int
+    approved_maximum_asset_jobs: int
     requested_by_user_id: str
     reason: str
     requested_at: datetime
     delete_before: datetime
+    maximum_records: int
     conversation_id: str | None = None
-    maximum_records: int | None = None
+
+    def __post_init__(self) -> None:
+        if (
+            not isinstance(self.operation_id, str)
+            or re.fullmatch(r"rtn_[0-9a-f]{64}", self.operation_id) is None
+        ):
+            raise ValueError("retention operation ID is invalid")
+        if (
+            isinstance(self.batch_ordinal, bool)
+            or not isinstance(self.batch_ordinal, int)
+            or not 0 <= self.batch_ordinal <= 100_000
+        ):
+            raise ValueError("retention batch ordinal is invalid")
+        if (
+            isinstance(self.approved_maximum_records, bool)
+            or not isinstance(self.approved_maximum_records, int)
+            or not 1 <= self.approved_maximum_records <= 100_000
+        ):
+            raise ValueError("approved record maximum is invalid")
+        if (
+            isinstance(self.approved_maximum_asset_jobs, bool)
+            or not isinstance(self.approved_maximum_asset_jobs, int)
+            or not 1 <= self.approved_maximum_asset_jobs <= 100_000
+        ):
+            raise ValueError("approved asset-job maximum is invalid")
+        if (
+            isinstance(self.maximum_records, bool)
+            or not isinstance(self.maximum_records, int)
+            or not 1 <= self.maximum_records <= 1_000
+        ):
+            raise ValueError("retention batch maximum is invalid")
+        if (
+            not isinstance(self.requested_by_user_id, str)
+            or not self.requested_by_user_id
+            or self.requested_by_user_id != self.requested_by_user_id.strip()
+            or len(self.requested_by_user_id) > 128
+        ):
+            raise ValueError("retention requester is invalid")
+        if (
+            not isinstance(self.reason, str)
+            or self.reason != self.reason.strip()
+            or not 3 <= len(self.reason) <= 500
+        ):
+            raise ValueError("retention reason is invalid")
+        if self.conversation_id is not None and (
+            not isinstance(self.conversation_id, str)
+            or not self.conversation_id
+            or self.conversation_id != self.conversation_id.strip()
+            or len(self.conversation_id) > 128
+        ):
+            raise ValueError("retention conversation ID is invalid")
+        for value in (self.requested_at, self.delete_before):
+            if (
+                not isinstance(value, datetime)
+                or value.tzinfo is None
+                or value.utcoffset() is None
+            ):
+                raise ValueError("retention timestamps must be timezone-aware")
+
+
+@dataclass(frozen=True, slots=True)
+class ChatRetentionBatchResultDTO:
+    """Durable progress returned for an exact retention batch."""
+
+    operation_id: str
+    batch_ordinal: int
+    affected_count: int
+    cumulative_affected_count: int
+    operation_complete: bool
+    completed_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
@@ -249,51 +384,132 @@ class ChatAssetUploadMetadataDTO:
 
     client_asset_id: str
     owner_user_id: str
+    conversation_id: str
+    kind: ChatAssetKind
     filename: str
     media_type: str
     size_bytes: int
     sha256_hex: str
     requested_at: datetime
-    conversation_id: str | None = None
-    message_id: str | None = None
     metadata: tuple[tuple[str, str], ...] = ()
-
-
-@dataclass(frozen=True, slots=True)
-class ChatAssetUploadHandleDTO:
-    """Short-lived opaque handle; it is not an HTTP or provider contract."""
-
-    opaque_handle: str
-    expires_at: datetime
 
 
 @dataclass(frozen=True, slots=True)
 class ChatAssetDTO:
-    """Metadata-only durable asset reference returned after finalization."""
+    """Authoritative metadata-only asset state; never contains an object key."""
 
     asset_id: str
     client_asset_id: str
     owner_user_id: str
+    conversation_id: str
+    kind: ChatAssetKind
     filename: str
     media_type: str
     size_bytes: int
     sha256_hex: str
+    version: int
     status: ChatAssetStatus
-    created_at: datetime
-    conversation_id: str | None = None
-    message_id: str | None = None
-    metadata: tuple[tuple[str, str], ...] = ()
 
 
-ChatAssetReferenceDTO = ChatAssetDTO
+@dataclass(frozen=True, slots=True)
+class ChatAssetUploadHandleDTO:
+    """Authoritative asset plus one short upload ticket returned exactly once."""
+
+    asset: ChatAssetDTO
+    opaque_ticket: str | None
+    expires_at: datetime | None
+
+    @property
+    def opaque_handle(self) -> str | None:
+        """Compatibility spelling; callers must still treat it as opaque."""
+
+        return self.opaque_ticket
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetLookupDTO:
+    asset_id: str
+    owner_user_id: str
+    conversation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetFinalizeCommandDTO:
+    asset_id: str
+    owner_user_id: str
+    conversation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetBindingPrepareCommandDTO:
+    asset_id: str
+    owner_user_id: str
+    conversation_id: str
+    client_message_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetBindingCommitCommandDTO:
+    asset_id: str
+    owner_user_id: str
+    conversation_id: str
+    client_message_id: str
+    record_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetBindingResultDTO:
+    asset: ChatAssetDTO
+    binding_status: Literal["prepared", "committed"]
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetLifecycleResultDTO:
+    asset_id: str
+    status: Literal["quarantined", "delete_pending", "deleted"]
+    version: int
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetDownloadRequestDTO:
+    asset_id: str
+    owner_user_id: str
+    reader_user_id: str
+    conversation_id: str
+    record_id: str
+    variant: ChatAssetVariant
+    disposition: ChatAssetDisposition
+    asset_version: int
 
 
 @dataclass(frozen=True, slots=True)
 class ChatAssetDownloadIntentDTO:
     """Short-lived opaque locator returned after an authorized read check."""
 
+    opaque_ticket: str
+    expires_at: datetime
+
+    @property
+    def opaque_locator(self) -> str:
+        return self.opaque_ticket
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetTransferInspectDTO:
+    opaque_ticket: str
+    direction: ChatAssetTransferDirection
+    method: ChatAssetTransferMethod
+
+
+@dataclass(frozen=True, slots=True)
+class ChatAssetTransferInspectionDTO:
     asset_id: str
-    opaque_locator: str
+    owner_user_id: str
+    reader_user_id: str | None
+    conversation_id: str
+    record_id: str | None
+    variant: ChatAssetVariant | None
+    version: int
     expires_at: datetime
 
 
@@ -340,6 +556,17 @@ class ChatRecordStore(Protocol):
     async def append_record(self, record: ChatRecordAppendDTO) -> ChatRecordDTO:
         ...
 
+    async def get_authorized_record(
+        self,
+        *,
+        conversation_id: str,
+        record_id: str,
+        user_id: str,
+    ) -> ChatRecordDTO:
+        """Return an exact record only when its durable audience contains user."""
+
+        ...
+
     async def list_records(self, query: ChatRecordQueryDTO) -> ChatRecordPageDTO:
         ...
 
@@ -374,6 +601,12 @@ class ChatRecordStore(Protocol):
     ) -> ChatUnreadPositionDTO:
         ...
 
+    async def get_unread_summary(
+        self,
+        query: ChatUnreadSummaryQueryDTO,
+    ) -> ChatUnreadSummaryDTO:
+        ...
+
     async def get_resume_position(
         self,
         query: ChatPositionQueryDTO,
@@ -386,10 +619,10 @@ class ChatRecordStore(Protocol):
     ) -> ChatRecordMutationResultDTO:
         ...
 
-    async def apply_retention(
+    async def apply_retention_batch(
         self,
-        command: ChatRetentionCommandDTO,
-    ) -> ChatRecordMutationResultDTO:
+        command: ChatRetentionBatchCommandDTO,
+    ) -> ChatRetentionBatchResultDTO:
         ...
 
 
@@ -407,25 +640,49 @@ class ChatAssetStore(Protocol):
     ) -> ChatAssetUploadHandleDTO:
         ...
 
+    async def get_asset(self, query: ChatAssetLookupDTO) -> ChatAssetDTO:
+        ...
+
     async def finalize_upload(
         self,
-        handle: ChatAssetUploadHandleDTO,
+        command: ChatAssetFinalizeCommandDTO,
     ) -> ChatAssetDTO:
+        ...
+
+    async def prepare_binding(
+        self,
+        command: ChatAssetBindingPrepareCommandDTO,
+    ) -> ChatAssetBindingResultDTO:
+        ...
+
+    async def commit_binding(
+        self,
+        command: ChatAssetBindingCommitCommandDTO,
+    ) -> ChatAssetBindingResultDTO:
         ...
 
     async def create_download_intent(
         self,
-        asset_id: str,
+        command: ChatAssetDownloadRequestDTO,
     ) -> ChatAssetDownloadIntentDTO:
+        ...
+
+    async def inspect_transfer(
+        self,
+        command: ChatAssetTransferInspectDTO,
+    ) -> ChatAssetTransferInspectionDTO:
         ...
 
     async def quarantine_asset(
         self,
         command: ChatAssetQuarantineCommandDTO,
-    ) -> ChatAssetDTO:
+    ) -> ChatAssetLifecycleResultDTO:
         ...
 
-    async def delete_asset(self, command: ChatAssetDeleteCommandDTO) -> None:
+    async def delete_asset(
+        self,
+        command: ChatAssetDeleteCommandDTO,
+    ) -> ChatAssetLifecycleResultDTO:
         ...
 
 
@@ -487,6 +744,16 @@ class UnconfiguredChatRecordStore(_UnconfiguredStore):
         del record
         self._fail("append_record")
 
+    async def get_authorized_record(
+        self,
+        *,
+        conversation_id: str,
+        record_id: str,
+        user_id: str,
+    ) -> ChatRecordDTO:
+        del conversation_id, record_id, user_id
+        self._fail("get_authorized_record")
+
     async def list_records(self, query: ChatRecordQueryDTO) -> ChatRecordPageDTO:
         del query
         self._fail("list_records")
@@ -523,6 +790,13 @@ class UnconfiguredChatRecordStore(_UnconfiguredStore):
         del query
         self._fail("get_unread_position")
 
+    async def get_unread_summary(
+        self,
+        query: ChatUnreadSummaryQueryDTO,
+    ) -> ChatUnreadSummaryDTO:
+        del query
+        self._fail("get_unread_summary")
+
     async def get_resume_position(
         self,
         query: ChatPositionQueryDTO,
@@ -537,12 +811,12 @@ class UnconfiguredChatRecordStore(_UnconfiguredStore):
         del command
         self._fail("delete_records")
 
-    async def apply_retention(
+    async def apply_retention_batch(
         self,
-        command: ChatRetentionCommandDTO,
-    ) -> ChatRecordMutationResultDTO:
+        command: ChatRetentionBatchCommandDTO,
+    ) -> ChatRetentionBatchResultDTO:
         del command
-        self._fail("apply_retention")
+        self._fail("apply_retention_batch")
 
 
 @final
@@ -564,28 +838,56 @@ class UnconfiguredChatAssetStore(_UnconfiguredStore):
         del metadata
         self._fail("create_upload_intent")
 
+    async def get_asset(self, query: ChatAssetLookupDTO) -> ChatAssetDTO:
+        del query
+        self._fail("get_asset")
+
     async def finalize_upload(
         self,
-        handle: ChatAssetUploadHandleDTO,
+        command: ChatAssetFinalizeCommandDTO,
     ) -> ChatAssetDTO:
-        del handle
+        del command
         self._fail("finalize_upload")
+
+    async def prepare_binding(
+        self,
+        command: ChatAssetBindingPrepareCommandDTO,
+    ) -> ChatAssetBindingResultDTO:
+        del command
+        self._fail("prepare_binding")
+
+    async def commit_binding(
+        self,
+        command: ChatAssetBindingCommitCommandDTO,
+    ) -> ChatAssetBindingResultDTO:
+        del command
+        self._fail("commit_binding")
 
     async def create_download_intent(
         self,
-        asset_id: str,
+        command: ChatAssetDownloadRequestDTO,
     ) -> ChatAssetDownloadIntentDTO:
-        del asset_id
+        del command
         self._fail("create_download_intent")
+
+    async def inspect_transfer(
+        self,
+        command: ChatAssetTransferInspectDTO,
+    ) -> ChatAssetTransferInspectionDTO:
+        del command
+        self._fail("inspect_transfer")
 
     async def quarantine_asset(
         self,
         command: ChatAssetQuarantineCommandDTO,
-    ) -> ChatAssetDTO:
+    ) -> ChatAssetLifecycleResultDTO:
         del command
         self._fail("quarantine_asset")
 
-    async def delete_asset(self, command: ChatAssetDeleteCommandDTO) -> None:
+    async def delete_asset(
+        self,
+        command: ChatAssetDeleteCommandDTO,
+    ) -> ChatAssetLifecycleResultDTO:
         del command
         self._fail("delete_asset")
 
@@ -599,6 +901,10 @@ def get_c19_storage_capabilities() -> C19StorageCapabilities:
 
     # Local import avoids a module cycle: the HTTP adapter implements the
     # protocol declared here.  Configuration parsing opens no socket/client.
+    from .http_asset_store import (
+        HttpChatAssetStoreConfig,
+        configured_chat_asset_capability,
+    )
     from .http_record_store import (
         HttpChatRecordStoreConfig,
         configured_chat_record_capability,
@@ -613,9 +919,18 @@ def get_c19_storage_capabilities() -> C19StorageCapabilities:
         if config is not None
         else CHAT_RECORD_STORAGE_UNCONFIGURED
     )
+    try:
+        asset_config = HttpChatAssetStoreConfig.from_environment()
+    except (TypeError, ValueError, OverflowError):
+        asset_config = None
+    asset_capability = (
+        configured_chat_asset_capability()
+        if asset_config is not None
+        else CHAT_ASSET_STORAGE_UNCONFIGURED
+    )
     return C19StorageCapabilities(
         record_store=record_capability,
-        asset_store=CHAT_ASSET_STORAGE_UNCONFIGURED,
+        asset_store=asset_capability,
     )
 
 
@@ -633,13 +948,28 @@ __all__ = [
     "C19StorageCapabilities",
     "C19StorageUnconfiguredError",
     "ChatAssetDTO",
+    "ChatAssetBindingCommitCommandDTO",
+    "ChatAssetBindingPrepareCommandDTO",
+    "ChatAssetBindingResultDTO",
     "ChatAssetDeleteCommandDTO",
+    "ChatAssetDisposition",
     "ChatAssetDownloadIntentDTO",
+    "ChatAssetDownloadRequestDTO",
+    "ChatAssetFinalizeCommandDTO",
+    "ChatAssetKind",
+    "ChatAssetLifecycleResultDTO",
+    "ChatAssetLookupDTO",
     "ChatAssetQuarantineCommandDTO",
     "ChatAssetReferenceDTO",
+    "ChatAssetStatus",
     "ChatAssetStore",
+    "ChatAssetTransferDirection",
+    "ChatAssetTransferInspectDTO",
+    "ChatAssetTransferInspectionDTO",
+    "ChatAssetTransferMethod",
     "ChatAssetUploadHandleDTO",
     "ChatAssetUploadMetadataDTO",
+    "ChatAssetVariant",
     "ChatPositionAdvanceDTO",
     "ChatPositionQueryDTO",
     "ChatReceiptPositionDTO",
@@ -651,8 +981,11 @@ __all__ = [
     "ChatRecordQueryDTO",
     "ChatRecordStore",
     "ChatResumePositionDTO",
-    "ChatRetentionCommandDTO",
+    "ChatRetentionBatchCommandDTO",
+    "ChatRetentionBatchResultDTO",
     "ChatUnreadPositionDTO",
+    "ChatUnreadSummaryDTO",
+    "ChatUnreadSummaryQueryDTO",
     "ChatUserEventDTO",
     "ChatUserEventPageDTO",
     "ChatUserEventQueryDTO",

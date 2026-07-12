@@ -37,7 +37,7 @@ server {
 
     client_max_body_size 10m;
 
-    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'none'; upgrade-insecure-requests" always;
+    add_header Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; connect-src 'self'; frame-src 'none'; upgrade-insecure-requests" always;
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Frame-Options "DENY" always;
     add_header X-Content-Type-Options "nosniff" always;
@@ -73,8 +73,23 @@ server {
         proxy_read_timeout 60s;
     }
 
+    # C19 Moment events use a separate content-free cursor stream and the same
+    # bounded session revalidation policy as chat events.
+    location = /api/backend/c19/moments/events {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 60s;
+    }
+
     # A text/emoji message is at most 4,000 characters plus its JSON envelope.
-    location ~ ^/api/backend/c19/conversations/conv_[0-9a-f]{32}/messages$ {
+    location ~ "^/api/backend/c19/conversations/conv_[0-9a-f]{32}/messages$" {
         client_max_body_size 16k;
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
@@ -83,6 +98,109 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_read_timeout 60s;
+    }
+
+    # C19 asset authorization is a body-free subrequest to Barong. The current
+    # login cookie and original opaque transfer path/method are the only browser
+    # inputs. Barong rechecks either current conversation membership or current
+    # Moment visibility on every byte request; neither Next.js nor Barong
+    # receives the file body.
+    location = /_c19_asset_transfer_auth {
+        internal;
+        proxy_pass http://127.0.0.1:8000/api/app/c19/assets/transfers/authorize;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Cookie $http_cookie;
+        # The browser byte plane authenticates only with the normal session
+        # cookie; do not let caller-supplied headers override that identity.
+        proxy_set_header Authorization "";
+        proxy_set_header X-Session-Token "";
+        proxy_set_header X-C19-Transfer-URI $c19_transfer_uri;
+        proxy_set_header X-C19-Transfer-Method $c19_transfer_method;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    # A 32-byte random ticket is encoded as 43 base64url characters. Keep these
+    # locations exact so malformed and provider-shaped paths fall through to the
+    # explicit deny below. Do not enable access logging: the URI is a credential.
+    location ~ "^/api/backend/c19-assets/u/[A-Za-z0-9_-]{43}$" {
+        limit_except PUT { deny all; }
+        access_log off;
+        # auth_request itself is a GET subrequest. Freeze the client request
+        # values before that subrequest so Barong sees the original PUT/path.
+        set $c19_transfer_uri $request_uri;
+        set $c19_transfer_method $request_method;
+        client_max_body_size 64m;
+        client_body_timeout 120s;
+        auth_request /_c19_asset_transfer_auth;
+        proxy_pass http://127.0.0.1:8092;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        # The login credential is consumed only by the auth subrequest above.
+        # The byte gateway receives the opaque transfer ticket, never Barong's
+        # session or an upstream Authorization credential.
+        proxy_set_header Cookie "";
+        proxy_set_header Authorization "";
+        proxy_set_header X-Session-Token "";
+        proxy_set_header Connection "";
+        proxy_request_buffering off;
+        proxy_buffering off;
+        proxy_read_timeout 180s;
+        proxy_send_timeout 180s;
+    }
+
+    location ~ "^/api/backend/c19-assets/d/[A-Za-z0-9_-]{43}$" {
+        limit_except GET HEAD { deny all; }
+        access_log off;
+        set $c19_transfer_uri $request_uri;
+        set $c19_transfer_method $request_method;
+        auth_request /_c19_asset_transfer_auth;
+        proxy_pass http://127.0.0.1:8092;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Cookie "";
+        proxy_set_header Authorization "";
+        proxy_set_header X-Session-Token "";
+        proxy_set_header Connection "";
+        proxy_set_header Range $http_range;
+        proxy_set_header If-Range $http_if_range;
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 180s;
+    }
+
+    # This ordinary prefix is the fallback after the two regex locations above.
+    # Do not add ^~: that modifier would suppress regex matching and deny every
+    # otherwise valid upload/download ticket.
+    location /api/backend/c19-assets/ {
+        access_log off;
+        return 404;
+    }
+
+    location = /api/backend/c19-assets {
+        access_log off;
+        return 404;
+    }
+
+    # Fail closed for pre-cookie-scope locators after the byte plane moved
+    # below /api/backend. Stale clients must obtain a fresh control-plane
+    # intent; never let an old ticket-shaped path fall through to Next.
+    location = /api/c19-assets {
+        access_log off;
+        return 404;
+    }
+
+    location /api/c19-assets/ {
+        access_log off;
+        return 404;
     }
 
     location / {

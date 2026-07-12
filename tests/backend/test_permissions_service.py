@@ -1,10 +1,12 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import sessionmaker
 
 from backend.app.core.permissions import BASE_PERMISSION_REGISTRY_SEED
+from backend.app.db.base import Base
 from backend.app.core.security import hash_password
 from backend.app.db.session import SessionLocal
 from backend.app.models.permission import (
@@ -79,6 +81,67 @@ def test_permission_registry_seed_upsert_is_idempotent(
         )
         with pytest.raises(IntegrityError):
             db.commit()
+
+
+def test_registry_sync_retires_legacy_c19_permissions_and_assignments_are_inert(
+) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:")
+    Base.metadata.create_all(
+        engine,
+        tables=[
+            User.__table__,
+            PermissionRegistry.__table__,
+            UserPermissionAssignment.__table__,
+            RoleDefaultPermission.__table__,
+        ],
+    )
+    permission_key = "c19.messages.send"
+    factory = sessionmaker(bind=engine, expire_on_commit=False)
+    with factory() as db:
+        user = User(
+            username="permission_legacy_c19",
+            password_hash="test-only-hash",
+            role="operator",
+            is_active=True,
+        )
+        db.add(user)
+        db.flush()
+        legacy = PermissionRegistry(
+            permission_key=permission_key,
+            module_key="communication.im",
+            category="core",
+            action="send",
+            label="Legacy C19 send",
+            description="Retained only for assignment audit history.",
+            risk_level="medium",
+            menu_policy="show_locked",
+            is_system=True,
+            is_enabled=True,
+        )
+        db.add(legacy)
+        db.flush()
+        assignment = UserPermissionAssignment(
+            user_id=user.id,
+            permission_key=permission_key,
+            scope_type="global",
+            scope_key="*",
+            is_enabled=True,
+        )
+        db.add(assignment)
+        db.commit()
+
+        upsert_permission_registry(db)
+        db.refresh(legacy)
+        db.refresh(assignment)
+
+        assert legacy.is_enabled is False
+        assert assignment.is_enabled is True
+        assert not user_has_permission(db, user, permission_key)
+        assert permission_key not in resolve_effective_permissions(
+            db,
+            user,
+        ).permissions
+    engine.dispose()
 
 
 def test_owner_has_platform_admin_scope_without_assignments(

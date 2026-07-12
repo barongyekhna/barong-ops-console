@@ -33,6 +33,8 @@ const KNOWN_UNPROXIED = new Set([
   "POST /api/app/notifications/ingest",
   "POST /api/app/p/uploads/{job_id}/result",
   "GET /api/app/p/jobs/{job_id}/media/{asset_id}/file",
+  // C19 byte-plane session authorization is called only by Nginx auth_request.
+  "GET /api/app/c19/assets/transfers/authorize",
   "POST /api/control-plane/n8n-test/callback",
   "POST /api/control-plane/webhook-gateway/ingress",
   "POST /api/control-plane/callback-handler/receiver",
@@ -185,6 +187,16 @@ function candidateValues(paramName) {
     return ["conv_0123456789abcdef0123456789abcdef"];
   if (name === "request_id")
     return ["c19frq_0123456789abcdef0123456789abcdef"];
+  if (name === "asset_id")
+    return [
+      "att_0123456789abcdef0123456789abcdef",
+      UUID_SAMPLE,
+      "12",
+    ];
+  if (name === "moment_id")
+    return ["mom_0123456789abcdef0123456789abcdef"];
+  if (name === "comment_id")
+    return ["cmt_0123456789abcdef0123456789abcdef"];
   if (name === "key_id" || name === "binding_id")
     return ["key_0123456789abcdef0123456789abcdef"];
   if (name.endsWith("user_id") || name === "user_id") return ["12", UUID_SAMPLE];

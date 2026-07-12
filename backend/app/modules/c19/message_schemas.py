@@ -7,8 +7,18 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from .asset_schemas import ASSET_ID_PATTERN, ChatAssetReferenceRead
+
 
 CLIENT_MESSAGE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+
+
+class MessageAssetRequest(BaseModel):
+    """One server-authoritative asset selection; clients send no snapshot fields."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    asset_id: str = Field(pattern=ASSET_ID_PATTERN)
 
 
 class MessageCreateRequest(BaseModel):
@@ -19,20 +29,27 @@ class MessageCreateRequest(BaseModel):
         max_length=128,
         pattern=CLIENT_MESSAGE_ID_PATTERN,
     )
-    content_type: Literal["text", "emoji"]
-    content: str = Field(min_length=1, max_length=4000)
+    content_type: Literal["text", "emoji", "image", "file"]
+    content: str = Field(default="", max_length=4000)
+    asset: MessageAssetRequest | None = None
 
     @field_validator("content")
     @classmethod
     def reject_blank_or_control_content(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Message content must not be blank.")
         if any(ord(character) < 32 and character not in {"\n", "\t"} for character in value):
             raise ValueError("Message content contains control characters.")
         return value
 
     @model_validator(mode="after")
     def enforce_content_type_limit(self) -> Self:
+        has_asset = self.asset is not None
+        if self.content_type in {"text", "emoji"}:
+            if has_asset:
+                raise ValueError("Text and emoji messages cannot contain an asset.")
+            if not self.content.strip():
+                raise ValueError("Message content must not be blank.")
+        elif not has_asset:
+            raise ValueError("Image and file messages require exactly one asset.")
         if self.content_type == "emoji" and (
             len(self.content) > 64 or "\n" in self.content or "\t" in self.content
         ):
@@ -49,7 +66,7 @@ class ChatRecordRead(BaseModel):
     sequence: int = Field(ge=1)
     sender_user_id: str
     recipient_user_ids: list[str]
-    content_type: Literal["text", "emoji"]
+    content_type: Literal["text", "emoji", "image", "file"]
     content: str
     status: Literal["sent", "delivered", "read"]
     created_at: datetime
@@ -57,6 +74,7 @@ class ChatRecordRead(BaseModel):
     sender_org_id: str | None
     recipient_org_ids: list[str]
     metadata: dict[str, str]
+    assets: list[ChatAssetReferenceRead]
 
 
 class ChatRecordPageRead(BaseModel):
@@ -91,6 +109,15 @@ class ChatUnreadPositionRead(BaseModel):
     unread_count: int = Field(ge=0)
     first_unread_sequence: int | None = Field(default=None, ge=1)
     latest_sequence: int = Field(ge=0)
+
+
+class ChatUnreadSummaryRead(BaseModel):
+    """Content-free aggregate across every active conversation membership."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total_unread_count: int = Field(ge=0)
+    unread_conversation_count: int = Field(ge=0)
 
 
 class ChatResumePositionRead(BaseModel):
@@ -139,8 +166,10 @@ __all__ = [
     "ChatRecordRead",
     "ChatResumePositionRead",
     "ChatUnreadPositionRead",
+    "ChatUnreadSummaryRead",
     "ChatUserEventPageRead",
     "ChatUserEventRead",
     "ChatUserEventTailRead",
     "MessageCreateRequest",
+    "MessageAssetRequest",
 ]

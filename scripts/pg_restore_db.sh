@@ -152,8 +152,19 @@ fi
 
 metadata_file="${archive}.metadata"
 backup_revision="$(metadata_value alembic_revision "$metadata_file")"
+backup_sha256="$(metadata_value archive_sha256 "$metadata_file")"
 if [[ -n "$expected_revision" && -n "$backup_revision" && "$backup_revision" != "$expected_revision" ]]; then
     fail "Backup revision $backup_revision does not match expected $expected_revision."
+fi
+if [[ -f "$archive" ]]; then
+    require_command sha256sum
+    actual_sha256="$(sha256sum "$archive" | awk '{print $1}')"
+    if [[ -n "$backup_sha256" && "$backup_sha256" != "$actual_sha256" ]]; then
+        fail "Backup archive checksum does not match its metadata."
+    fi
+fi
+if [[ "$mode" == "execute" && ! "$backup_sha256" =~ ^[0-9a-f]{64}$ ]]; then
+    fail "Executing a restore requires archive_sha256 in backup metadata."
 fi
 
 tmp_list=""

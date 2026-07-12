@@ -13,5 +13,6 @@ backend/__pycache__
 *.pyc
 tests/**/__pycache__
 backups/c19-record/
+backups/c19-asset/
 *.dump
 *.dump.metadata

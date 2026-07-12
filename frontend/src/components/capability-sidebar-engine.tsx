@@ -1,6 +1,12 @@
 "use client";
 
-import { Building2, ChevronDown, ChevronRight, LockKeyhole } from "lucide-react";
+import {
+  Building2,
+  ChevronDown,
+  ChevronRight,
+  LockKeyhole,
+  MessageCircle,
+} from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
@@ -17,6 +23,7 @@ import type {
 } from "@/lib/module-control-api";
 import type { ModuleAccessState } from "@/lib/module-registry";
 import { isOwnerRole, isSuperAdminRole, normalizeRole } from "@/lib/roles";
+import { useC19UnreadCount } from "@/modules/c19/C19UnreadStatus";
 
 const C_SYSTEM_MODULE_ORDER = [
   {
@@ -428,7 +435,7 @@ export function CapabilitySidebarEngine({
   pathname: string;
   onNavigate: () => void;
 }) {
-  const { isOwner, user } = useAuth();
+  const { isOwner, status, user } = useAuth();
   const {
     byModuleKey,
     isLoading,
@@ -437,6 +444,7 @@ export function CapabilitySidebarEngine({
     uiState,
   } = useFrontendCapabilityState();
   const role = normalizeRole(user?.role);
+  const c19UnreadCount = useC19UnreadCount(status === "authenticated");
   const [expandedOrgIds, setExpandedOrgIds] = useState<Set<string>>(
     () => new Set(),
   );
@@ -513,7 +521,7 @@ export function CapabilitySidebarEngine({
     (count, organization) => count + organization.modules.length,
     0,
   );
-  const visibleSidebarCount = cSystemItems.length + organizationModuleCount;
+  const visibleSidebarCount = cSystemItems.length + organizationModuleCount + 1;
   const footerLabel = isLoading
     ? "正在加载工作台"
     : uiState === "fallback"
@@ -536,6 +544,29 @@ export function CapabilitySidebarEngine({
               pathname={pathname}
             />
           ))}
+          <Link
+            aria-current={pathname === "/c19" ? "page" : undefined}
+            aria-label={
+              c19UnreadCount > 0
+                ? `C19 通讯，${c19UnreadCount} 条未读消息`
+                : "C19 通讯"
+            }
+            className={`navigation-link ${pathname === "/c19" ? "active" : ""}`}
+            href="/c19"
+            onClick={onNavigate}
+          >
+            <MessageCircle aria-hidden="true" size={18} />
+            <span>C19 通讯</span>
+            {c19UnreadCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="navigation-status-badge c19-unread-badge"
+                title={`${c19UnreadCount} 条未读消息`}
+              >
+                {c19UnreadCount > 99 ? "99+" : c19UnreadCount}
+              </span>
+            ) : null}
+          </Link>
         </div>
 
         <div className="navigation-divider" role="separator" />

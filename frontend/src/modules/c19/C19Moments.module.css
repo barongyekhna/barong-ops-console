@@ -1,0 +1,654 @@
+.momentsWorkspace {
+  align-items: start;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(300px, 390px) minmax(0, 1fr);
+}
+
+.momentsWorkspace > aside {
+  position: sticky;
+  top: 18px;
+}
+
+.momentComposer,
+.feedColumn,
+.momentCard {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-line, #dbe3ee);
+  border-radius: 18px;
+  box-shadow: 0 14px 36px rgb(15 23 42 / 5%);
+}
+
+.momentComposer {
+  display: grid;
+  gap: 11px;
+  padding: 18px;
+}
+
+.composerHeading,
+.feedHeading,
+.momentHeader,
+.momentActions,
+.feedRuntime,
+.retryNotice,
+.runtimeError,
+.runtimeWarning {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.composerHeading > div,
+.feedHeading > div:first-child,
+.momentHeader > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.composerHeading span,
+.feedHeading > div:first-child > span {
+  color: #0369a1;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.composerHeading h3,
+.feedHeading h3 {
+  color: #0f172a;
+  margin: 0;
+}
+
+.composerHeading h3 { font-size: 18px; }
+.composerHeading > svg { color: #0284c7; }
+
+.momentComposer textarea,
+.commentForm textarea {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 11px;
+  color: #0f172a;
+  font: inherit;
+  line-height: 1.5;
+  outline: none;
+  padding: 10px 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.momentComposer textarea:focus,
+.commentForm textarea:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgb(56 189 248 / 14%);
+}
+
+.momentComposer textarea:disabled,
+.commentForm textarea:disabled {
+  background: #f8fafc;
+  cursor: not-allowed;
+}
+
+.characterCount {
+  color: #64748b;
+  font-size: 10px;
+  margin-top: -8px;
+  text-align: right;
+}
+
+.visibilityPicker,
+.audiencePicker {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin: 0;
+  padding: 10px;
+}
+
+.visibilityPicker legend,
+.audiencePicker legend {
+  color: #475569;
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 4px;
+}
+
+.visibilityPicker label,
+.audiencePicker label {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 9px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 5px;
+  padding: 7px 8px;
+}
+
+.audiencePicker label { flex: 1 1 140px; }
+.audiencePicker small { color: #64748b; }
+
+.visibilityPicker label:has(input:disabled) {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.hiddenFileInput {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.addImagesButton,
+.publishButton,
+.feedRuntime button,
+.momentActions button,
+.likesPanel button,
+.commentForm button,
+.moreCommentsButton,
+.cancelCommentRetry,
+.loadMoreButton,
+.retryNotice button,
+.runtimeError button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 720;
+  gap: 6px;
+  justify-content: center;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.addImagesButton:disabled,
+.publishButton:disabled,
+.feedRuntime button:disabled,
+.momentActions button:disabled,
+.likesPanel button:disabled,
+.commentForm button:disabled,
+.loadMoreButton:disabled,
+.retryNotice button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.addImagesButton { background: #f8fafc; }
+
+.publishButton {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+  width: 100%;
+}
+
+.composerBoundary {
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.45;
+  text-align: center;
+}
+
+.selectedMomentImages {
+  display: grid;
+  gap: 7px;
+}
+
+.selectedMomentImages article {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  padding: 7px;
+}
+
+.selectedMomentImages img {
+  border-radius: 7px;
+  height: 46px;
+  object-fit: cover;
+  width: 46px;
+}
+
+.selectedMomentImages article > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.selectedMomentImages strong {
+  color: #0f172a;
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selectedMomentImages span { color: #64748b; font-size: 9px; }
+.selectedMomentImages progress { height: 5px; width: 100%; }
+
+.selectedMomentImages article > button,
+.deleteMomentButton,
+.commentRow > button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #b91c1c;
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 0;
+  width: 30px;
+}
+
+.selectedMomentImages article > button:disabled,
+.deleteMomentButton:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.retryNotice {
+  align-items: flex-start;
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 10px;
+  color: #9a3412;
+  flex-direction: column;
+  font-size: 10px;
+  padding: 9px;
+}
+
+.feedColumn {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 20px;
+}
+
+.feedHeading {
+  align-items: flex-start;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 15px;
+}
+
+.feedHeading h3 {
+  align-items: center;
+  display: flex;
+  font-size: 22px;
+  gap: 7px;
+}
+
+.feedHeading p {
+  color: #64748b;
+  font-size: 12px;
+  margin: 0;
+}
+
+.feedRuntime {
+  align-items: flex-end;
+  flex-direction: column;
+}
+
+.feedRuntime > span {
+  align-items: center;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  color: #047857;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 800;
+  gap: 5px;
+  padding: 5px 8px;
+}
+
+.feedRuntime > span[data-mode="polling"],
+.feedRuntime > span[data-mode="connecting"] {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.feedRuntime > span[data-mode="offline"] {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.momentList { display: grid; gap: 14px; }
+
+.momentCard {
+  box-shadow: none;
+  display: grid;
+  gap: 13px;
+  padding: 17px;
+}
+
+.momentHeader {
+  justify-content: flex-start;
+}
+
+.momentAvatar {
+  align-items: center;
+  background: linear-gradient(135deg, #e0f2fe, #dbeafe);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  color: #075985;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 850;
+  height: 42px;
+  justify-content: center;
+  width: 42px;
+}
+
+.momentHeader strong { color: #0f172a; font-size: 14px; }
+.momentHeader span { color: #64748b; font-size: 10px; line-height: 1.4; }
+.deleteMomentButton { margin-left: auto; }
+
+.momentContent {
+  color: #1e293b;
+  font-size: 14px;
+  line-height: 1.65;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.momentImageGrid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  max-width: 720px;
+}
+
+.momentImageGrid[data-count="1"] {
+  grid-template-columns: minmax(0, 520px);
+}
+
+.momentImageGrid[data-count="2"],
+.momentImageGrid[data-count="3"],
+.momentImageGrid[data-count="4"] {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 620px;
+}
+
+.momentImage {
+  min-width: 0;
+  position: relative;
+}
+
+.momentImageButton {
+  background: #f1f5f9;
+  border: 0;
+  border-radius: 10px;
+  cursor: pointer;
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  position: relative;
+  width: 100%;
+}
+
+.momentImageButton img {
+  aspect-ratio: 1;
+  display: block;
+  object-fit: cover;
+  width: 100%;
+}
+
+.momentImageGrid[data-count="1"] .momentImageButton img {
+  aspect-ratio: auto;
+  max-height: 520px;
+  object-fit: contain;
+}
+
+.momentImageButton > span {
+  align-items: center;
+  background: rgb(15 23 42 / 72%);
+  bottom: 6px;
+  border-radius: 7px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 9px;
+  gap: 4px;
+  padding: 4px 6px;
+  position: absolute;
+  right: 6px;
+}
+
+.momentImagePlaceholder {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #f1f5f9;
+  border: 1px dashed #cbd5e1;
+  border-radius: 10px;
+  color: #64748b;
+  display: flex;
+  flex-direction: column;
+  font-size: 10px;
+  gap: 6px;
+  justify-content: center;
+  min-height: 110px;
+  padding: 12px;
+}
+
+.momentImagePlaceholder button {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 7px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  gap: 4px;
+  padding: 4px 6px;
+}
+
+.imageLoading,
+.inlineError {
+  color: #64748b;
+  display: block;
+  font-size: 9px;
+  margin-top: 4px;
+}
+
+.inlineError { color: #b45309; }
+
+.lightbox {
+  align-items: center;
+  background: rgb(2 6 23 / 90%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 64px 24px 24px;
+  position: fixed;
+  z-index: 120;
+}
+
+.lightbox > img {
+  max-height: calc(100vh - 100px);
+  max-width: min(1100px, 96vw);
+  object-fit: contain;
+}
+
+.lightboxToolbar {
+  display: flex;
+  gap: 8px;
+  position: absolute;
+  right: 22px;
+  top: 18px;
+}
+
+.lightboxToolbar button {
+  align-items: center;
+  background: rgb(255 255 255 / 94%);
+  border: 0;
+  border-radius: 9px;
+  color: #0f172a;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 11px;
+  gap: 5px;
+  min-height: 34px;
+  padding: 7px 9px;
+}
+
+.momentActions {
+  border-top: 1px solid #e2e8f0;
+  justify-content: flex-start;
+  padding-top: 11px;
+}
+
+.momentActions .likedButton {
+  background: #fff1f2;
+  border-color: #fecdd3;
+  color: #be123c;
+}
+
+.likesPanel,
+.commentsPanel {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 11px;
+  color: #64748b;
+  display: grid;
+  font-size: 11px;
+  gap: 8px;
+  padding: 10px;
+}
+
+.likeNames {
+  align-items: flex-start;
+  color: #334155;
+  display: flex;
+  gap: 6px;
+  line-height: 1.5;
+}
+
+.likeNames svg { color: #e11d48; flex: 0 0 auto; margin-top: 1px; }
+
+.commentRow {
+  align-items: flex-start;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  gap: 9px;
+  justify-content: space-between;
+  padding: 7px 0;
+}
+
+.commentRow:last-of-type { border-bottom: 0; }
+.commentRow > div { display: grid; gap: 2px; min-width: 0; }
+.commentRow strong { color: #0369a1; font-size: 11px; }
+.commentRow p { color: #334155; line-height: 1.5; margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.commentRow time { color: #94a3b8; font-size: 9px; }
+.commentRow > button { flex: 0 0 auto; height: 26px; width: 26px; }
+
+.commentForm {
+  align-items: stretch;
+  display: grid;
+  gap: 7px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.commentForm textarea { min-height: 52px; resize: vertical; }
+.cancelCommentRetry { border-color: #fed7aa; color: #9a3412; justify-self: start; }
+.moreCommentsButton { justify-self: start; }
+
+.runtimeError,
+.runtimeWarning {
+  border: 1px solid;
+  border-radius: 10px;
+  font-size: 11px;
+  line-height: 1.45;
+  padding: 9px 11px;
+}
+
+.runtimeError {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.runtimeWarning {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
+}
+
+.runtimeError button {
+  border-color: currentColor;
+  color: inherit;
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 4px 7px;
+}
+
+.feedState {
+  align-items: center;
+  background: #f8fafc;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  color: #64748b;
+  display: flex;
+  font-size: 12px;
+  gap: 7px;
+  justify-content: center;
+  min-height: 120px;
+  padding: 18px;
+}
+
+.loadMoreButton { justify-self: center; }
+
+.spinner { animation: c19MomentSpin 1s linear infinite; }
+
+@keyframes c19MomentSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+@media (max-width: 1180px) {
+  .momentsWorkspace { grid-template-columns: 1fr; }
+  .momentsWorkspace > aside { position: static; }
+}
+
+@media (max-width: 760px) {
+  .feedColumn,
+  .momentComposer,
+  .momentCard { border-radius: 14px; padding: 13px; }
+  .feedHeading { align-items: stretch; flex-direction: column; }
+  .feedRuntime { align-items: stretch; flex-direction: row; flex-wrap: wrap; }
+  .feedRuntime button { flex: 1; }
+  .momentImageGrid { gap: 5px; }
+  .momentImageGrid[data-count="2"],
+  .momentImageGrid[data-count="3"],
+  .momentImageGrid[data-count="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .momentActions { align-items: stretch; display: grid; grid-template-columns: 1fr 1fr; }
+  .momentActions button:last-child { grid-column: 1 / -1; }
+  .commentForm { grid-template-columns: 1fr; }
+  .commentForm button { width: 100%; }
+  .runtimeError,
+  .runtimeWarning,
+  .retryNotice { align-items: stretch; flex-direction: column; }
+  .lightbox { padding: 60px 10px 10px; }
+  .lightboxToolbar { right: 10px; top: 12px; }
+}

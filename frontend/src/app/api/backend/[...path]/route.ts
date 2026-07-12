@@ -516,6 +516,22 @@ function isC19ConversationId(segment: string | undefined) {
   return Boolean(segment && /^conv_[0-9a-f]{32}$/.test(segment));
 }
 
+function isC19AssetId(segment: string | undefined) {
+  return Boolean(segment && /^att_[0-9a-f]{32}$/.test(segment));
+}
+
+function isC19MomentId(segment: string | undefined) {
+  return Boolean(segment && /^mom_[0-9a-f]{32}$/.test(segment));
+}
+
+function isC19MomentCommentId(segment: string | undefined) {
+  return Boolean(segment && /^cmt_[0-9a-f]{32}$/.test(segment));
+}
+
+function isC19RecordId(segment: string | undefined) {
+  return Boolean(segment && /^[A-Za-z0-9][A-Za-z0-9_-]{0,127}$/.test(segment));
+}
+
 export function isAllowedC19Path(method: string, path: string[]) {
   if (
     path[0] !== "c19" ||
@@ -526,6 +542,10 @@ export function isAllowedC19Path(method: string, path: string[]) {
   }
 
   const resource = path[1];
+
+  if (method === "GET" && path.length === 2 && resource === "unread") {
+    return true;
+  }
 
   if (method === "GET" && path.length === 2 && resource === "events") {
     return true;
@@ -538,6 +558,100 @@ export function isAllowedC19Path(method: string, path: string[]) {
     path[2] === "tail"
   ) {
     return true;
+  }
+
+  if (resource === "moments") {
+    if (
+      path.length === 3 &&
+      ((method === "POST" && path[2] === "drafts") ||
+        (method === "GET" && ["events", "feed"].includes(path[2])))
+    ) {
+      return true;
+    }
+
+    if (
+      method === "GET" &&
+      path.length === 4 &&
+      path[2] === "events" &&
+      path[3] === "tail"
+    ) {
+      return true;
+    }
+
+    if (path.length === 3 && isC19MomentId(path[2])) {
+      return method === "GET" || method === "DELETE";
+    }
+
+    if (
+      path.length === 4 &&
+      isC19MomentId(path[2]) &&
+      path[3] === "publish"
+    ) {
+      return method === "POST";
+    }
+
+    if (
+      path.length === 4 &&
+      isC19MomentId(path[2]) &&
+      path[3] === "like"
+    ) {
+      return method === "PUT" || method === "DELETE";
+    }
+
+    if (
+      path.length === 4 &&
+      isC19MomentId(path[2]) &&
+      path[3] === "likes"
+    ) {
+      return method === "GET";
+    }
+
+    if (
+      path.length === 4 &&
+      isC19MomentId(path[2]) &&
+      path[3] === "comments"
+    ) {
+      return method === "GET" || method === "POST";
+    }
+
+    if (
+      path.length === 5 &&
+      isC19MomentId(path[2]) &&
+      path[3] === "comments" &&
+      isC19MomentCommentId(path[4])
+    ) {
+      return method === "DELETE";
+    }
+
+    if (
+      method === "POST" &&
+      path.length === 5 &&
+      isC19MomentId(path[2]) &&
+      path[3] === "assets" &&
+      path[4] === "upload-intents"
+    ) {
+      return true;
+    }
+
+    if (
+      path.length === 5 &&
+      isC19MomentId(path[2]) &&
+      path[3] === "assets" &&
+      isC19AssetId(path[4])
+    ) {
+      return method === "GET";
+    }
+
+    if (
+      method === "POST" &&
+      path.length === 6 &&
+      isC19MomentId(path[2]) &&
+      path[3] === "assets" &&
+      isC19AssetId(path[4]) &&
+      ["access-intents", "finalize"].includes(path[5])
+    ) {
+      return true;
+    }
   }
 
   if (
@@ -627,6 +741,53 @@ export function isAllowedC19Path(method: string, path: string[]) {
     path[3] === "messages"
   ) {
     return method === "GET" || method === "POST";
+  }
+
+  if (
+    method === "POST" &&
+    path.length === 5 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    path[3] === "assets" &&
+    path[4] === "upload-intents"
+  ) {
+    return true;
+  }
+
+  if (
+    path.length === 5 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    path[3] === "assets" &&
+    isC19AssetId(path[4])
+  ) {
+    return method === "GET";
+  }
+
+  if (
+    method === "POST" &&
+    path.length === 6 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    path[3] === "assets" &&
+    isC19AssetId(path[4]) &&
+    path[5] === "finalize"
+  ) {
+    return true;
+  }
+
+  if (
+    method === "POST" &&
+    path.length === 8 &&
+    resource === "conversations" &&
+    isC19ConversationId(path[2]) &&
+    path[3] === "records" &&
+    isC19RecordId(path[4]) &&
+    path[5] === "assets" &&
+    isC19AssetId(path[6]) &&
+    path[7] === "access-intents"
+  ) {
+    return true;
   }
 
   if (
@@ -1447,7 +1608,7 @@ function getSetCookieHeaders(headers: Headers) {
   return setCookie ? [setCookie] : [];
 }
 
-const C19_MESSAGE_BODY_MAX_BYTES = 16 * 1024;
+const C19_JSON_BODY_MAX_BYTES = 16 * 1024;
 
 class ProxyPayloadTooLargeError extends Error {}
 
@@ -1459,6 +1620,43 @@ function isC19MessageSend(method: string, path: string[]) {
     path[1] === "conversations" &&
     isC19ConversationId(path[2]) &&
     path[3] === "messages"
+  );
+}
+
+function isC19AssetControlWrite(method: string, path: string[]) {
+  if (method !== "POST" || path[0] !== "c19" || path[1] !== "conversations") {
+    return false;
+  }
+  return (
+    (path.length === 5 &&
+      isC19ConversationId(path[2]) &&
+      path[3] === "assets" &&
+      path[4] === "upload-intents") ||
+    (path.length === 6 &&
+      isC19ConversationId(path[2]) &&
+      path[3] === "assets" &&
+      isC19AssetId(path[4]) &&
+      path[5] === "finalize") ||
+    (path.length === 8 &&
+      isC19ConversationId(path[2]) &&
+      path[3] === "records" &&
+      isC19RecordId(path[4]) &&
+      path[5] === "assets" &&
+      isC19AssetId(path[6]) &&
+      path[7] === "access-intents")
+  );
+}
+
+function isC19MomentJsonWrite(method: string, path: string[]) {
+  if (path[0] !== "c19" || path[1] !== "moments") return false;
+  return method !== "GET" && isAllowedC19Path(method, path);
+}
+
+function isC19BoundedJsonWrite(method: string, path: string[]) {
+  return (
+    isC19MessageSend(method, path) ||
+    isC19AssetControlWrite(method, path) ||
+    isC19MomentJsonWrite(method, path)
   );
 }
 
@@ -1532,6 +1730,18 @@ async function proxyRequest(
     });
     const contentType = request.headers.get("content-type");
     const idempotencyKey = request.headers.get("idempotency-key");
+    const isC19JsonWrite = isC19BoundedJsonWrite(request.method, path);
+
+    if (
+      isC19JsonWrite &&
+      request.body !== null &&
+      contentType?.split(";", 1)[0].trim().toLowerCase() !== "application/json"
+    ) {
+      return Response.json(
+        { detail: "C19 控制请求必须使用 JSON；文件字节不能经过此前端代理。" },
+        { status: 415 },
+      );
+    }
 
     applySessionHeaders(headers, request);
     applyForceRefreshHeaders(headers, request);
@@ -1545,8 +1755,8 @@ async function proxyRequest(
     const requestBody =
       request.method === "GET"
         ? undefined
-        : isC19MessageSend(request.method, path)
-          ? await readBodyWithLimit(request, C19_MESSAGE_BODY_MAX_BYTES)
+        : isC19JsonWrite
+          ? await readBodyWithLimit(request, C19_JSON_BODY_MAX_BYTES)
           : await request.arrayBuffer();
     const backendResponse = await fetch(targetUrl, {
       body:
@@ -1594,7 +1804,7 @@ async function proxyRequest(
   } catch (error) {
     if (error instanceof ProxyPayloadTooLargeError) {
       return Response.json(
-        { detail: "消息请求体过大。" },
+        { detail: "C19 JSON 控制请求体过大。" },
         { status: 413 },
       );
     }
@@ -1816,6 +2026,10 @@ export function POST(request: NextRequest, context: RouteContext) {
 }
 
 export function PATCH(request: NextRequest, context: RouteContext) {
+  return proxyRequest(request, context);
+}
+
+export function PUT(request: NextRequest, context: RouteContext) {
   return proxyRequest(request, context);
 }
 

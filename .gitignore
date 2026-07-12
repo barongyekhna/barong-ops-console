@@ -5,6 +5,8 @@
 .env.production
 .env.c19-record.*
 !.env.c19-record.*.example
+.env.c19-asset.*
+!.env.c19-asset.*.example
 .env.*.local
 
 # Secret material must stay outside Git. Commit only explicit *.example files.
@@ -51,6 +53,7 @@ coverage/
 
 # Runtime-only C19 record archives contain private chat content.
 backups/c19-record/
+backups/c19-asset/
 *.dump
 *.dump.metadata
 

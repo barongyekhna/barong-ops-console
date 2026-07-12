@@ -465,6 +465,17 @@ class C19ConversationMemberRecord(Base):
             name="fk_c19_conversation_members_affiliation_scope",
             ondelete="RESTRICT",
         ),
+        ForeignKeyConstraint(
+            ["user_id"],
+            ["c19_profiles.user_id"],
+            name="fk_c19_conversation_members_user_profile",
+            ondelete="RESTRICT",
+        ),
+        CheckConstraint(
+            "(affiliation_id IS NULL AND org_id_at_join IS NULL) OR "
+            "(affiliation_id IS NOT NULL AND org_id_at_join IS NOT NULL)",
+            name="affiliation_snapshot_consistent",
+        ),
         CheckConstraint(
             "role IN ('owner', 'admin', 'member')",
             name="role_valid",
@@ -510,9 +521,9 @@ class C19ConversationMemberRecord(Base):
         ForeignKey("c19_conversations.conversation_id", ondelete="CASCADE"),
         nullable=False,
     )
-    affiliation_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    affiliation_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_id: Mapped[int] = mapped_column(_user_id_type(), nullable=False)
-    org_id_at_join: Mapped[str] = mapped_column(String(40), nullable=False)
+    org_id_at_join: Mapped[str | None] = mapped_column(String(40), nullable=True)
     role: Mapped[str] = mapped_column(
         String(20),
         nullable=False,

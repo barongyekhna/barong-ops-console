@@ -12,15 +12,28 @@ private_network_name="${C19_RECORD_PRIVATE_NETWORK_NAME:-c19-record-private}"
 shared_network_name="${BARONG_SHARED_NETWORK_NAME:-barong-ops-console-prod}"
 archive=""
 mode="dry-run"
+required_revision="c19_record_20260712_04"
 
 required_tables=(
     alembic_version
     chat_participant_positions
     chat_records
     chat_user_record_events
+    moment_asset_references
+    moment_audience_snapshots
+    moment_comments
+    moment_feed_sequence
+    moment_likes
+    moment_user_events
+    moments
+    record_asset_coordination
+    record_asset_deletion_outbox
+    record_asset_references
     record_conversation_sequences
     record_idempotency_ledger
     record_mutation_audits
+    record_retention_batches
+    record_retention_operations
     record_user_event_sequences
 )
 
@@ -115,6 +128,8 @@ archive_format="$(metadata_value format "$metadata")"
     fail "Archive metadata has no valid SHA-256."
 [[ "$expected_revision" =~ ^[A-Za-z0-9_.-]+$ ]] || \
     fail "Archive metadata has no valid Alembic revision."
+[[ "$expected_revision" == "$required_revision" ]] || \
+    fail "Record restore requires Alembic revision $required_revision."
 [[ "$source_dataset_id" =~ ^[A-Za-z0-9][A-Za-z0-9_.-]{2,63}$ ]] || \
     fail "Archive metadata has no valid source dataset identity."
 [[ "$archive_format" == "pg_dump_custom" ]] || \
@@ -533,9 +548,177 @@ ledger_columns="$(
         --no-align \
         --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'record_idempotency_ledger' order by column_name"
 )"
-for column_name in sender_user_id client_message_id intent_sha256 record_id status deleted_at; do
+for column_name in sender_user_id client_message_id intent_sha256 intent_version record_id status deleted_at; do
     grep -Fxq "$column_name" <<<"$ledger_columns" || \
         fail "Restored idempotency ledger is missing column $column_name; record service remains stopped."
+done
+asset_reference_columns="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'record_asset_references' order by column_name"
+)"
+for column_name in record_id asset_id client_asset_id kind filename media_type size_bytes sha256_hex version ordinal; do
+    grep -Fxq "$column_name" <<<"$asset_reference_columns" || \
+        fail "Restored asset reference table is missing column $column_name; record service remains stopped."
+done
+coordination_columns="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'record_asset_coordination' order by column_name"
+)"
+for column_name in asset_id created_at; do
+    grep -Fxq "$column_name" <<<"$coordination_columns" || \
+        fail "Restored asset coordination fence is missing column $column_name; record service remains stopped."
+done
+moment_columns="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'moments' order by column_name"
+)"
+for column_name in id client_moment_id author_user_id author_org_id state visibility audience_org_ids content feed_sequence like_count comment_count publish_intent_sha256 created_at persisted_at published_at delete_pending_at deleted_at; do
+    grep -Fxq "$column_name" <<<"$moment_columns" || \
+        fail "Restored Moment table is missing column $column_name; record service remains stopped."
+done
+moment_asset_columns="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'moment_asset_references' order by column_name"
+)"
+for column_name in moment_id asset_id client_asset_id kind filename media_type size_bytes sha256_hex version ordinal; do
+    grep -Fxq "$column_name" <<<"$moment_asset_columns" || \
+        fail "Restored Moment asset reference table is missing column $column_name; record service remains stopped."
+done
+moment_event_columns="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'moment_user_events' order by column_name"
+)"
+for column_name in user_id event_sequence event_type moment_id actor_user_id comment_id created_at; do
+    grep -Fxq "$column_name" <<<"$moment_event_columns" || \
+        fail "Restored Moment event table is missing column $column_name; record service remains stopped."
+done
+retention_operation_columns="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'record_retention_operations' order by column_name"
+)"
+for column_name in operation_id requested_by_user_id reason delete_before conversation_id approved_maximum_records approved_maximum_asset_jobs affected_count asset_jobs_enqueued_count asset_jobs_completed_count next_batch_ordinal created_at updated_at completed_at; do
+    grep -Fxq "$column_name" <<<"$retention_operation_columns" || \
+        fail "Restored retention operation ledger is missing column $column_name; record service remains stopped."
+done
+retention_batch_columns="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'record_retention_batches' order by column_name"
+)"
+for column_name in operation_id batch_ordinal maximum_records affected_count cumulative_affected_count operation_complete completed_at; do
+    grep -Fxq "$column_name" <<<"$retention_batch_columns" || \
+        fail "Restored retention batch ledger is missing column $column_name; record service remains stopped."
+done
+retention_outbox_columns="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select column_name from information_schema.columns where table_schema = 'public' and table_name = 'record_asset_deletion_outbox' order by column_name"
+)"
+for column_name in id asset_id record_id conversation_id retention_operation_id state attempt_count created_at last_attempt_at authorized_at lease_owner lease_until outcome completed_at; do
+    grep -Fxq "$column_name" <<<"$retention_outbox_columns" || \
+        fail "Restored asset-deletion outbox is missing column $column_name; record service remains stopped."
+done
+retention_constraints="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select table_record.relname || ':' || constraint_record.conname || ':' || constraint_record.contype from pg_constraint as constraint_record join pg_class as table_record on table_record.oid = constraint_record.conrelid join pg_namespace as schema_record on schema_record.oid = table_record.relnamespace where schema_record.nspname = 'public' and table_record.relname in ('record_asset_coordination','record_asset_deletion_outbox','record_retention_operations','record_retention_batches') and constraint_record.convalidated order by table_record.relname, constraint_record.conname"
+)"
+required_retention_constraints=(
+    "record_asset_coordination:pk_record_asset_coordination:p"
+    "record_asset_deletion_outbox:pk_record_asset_deletion_outbox:p"
+    "record_retention_operations:pk_record_retention_operations:p"
+    "record_retention_batches:pk_record_retention_batches:p"
+    "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id_record_retention_operations:f"
+    "record_retention_batches:fk_record_retention_batches_operation_id_record_retention_operations:f"
+    "record_asset_deletion_outbox:uq_record_asset_deletion_outbox_record_asset:u"
+    "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_attempt_count_nonnegative:c"
+    "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_state_supported:c"
+    "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_outcome_supported:c"
+    "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_lease_pair_consistent:c"
+    "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_completion_consistent:c"
+    "record_asset_deletion_outbox:ck_record_asset_deletion_outbox_authorization_consistent:c"
+    "record_retention_operations:ck_record_retention_operations_approved_maximum_supported:c"
+    "record_retention_operations:ck_record_retention_operations_approved_asset_maximum_supported:c"
+    "record_retention_operations:ck_record_retention_operations_asset_jobs_enqueued_within_maximum:c"
+    "record_retention_operations:ck_record_retention_operations_asset_jobs_completed_within_enqueued:c"
+    "record_retention_operations:ck_record_retention_operations_affected_count_nonnegative:c"
+    "record_retention_operations:ck_record_retention_operations_affected_within_approved_maximum:c"
+    "record_retention_operations:ck_record_retention_operations_next_batch_ordinal_nonnegative:c"
+    "record_retention_batches:ck_record_retention_batches_batch_ordinal_nonnegative:c"
+    "record_retention_batches:ck_record_retention_batches_maximum_records_supported:c"
+    "record_retention_batches:ck_record_retention_batches_affected_within_batch_maximum:c"
+    "record_retention_batches:ck_record_retention_batches_cumulative_count_consistent:c"
+)
+for constraint_identity in "${required_retention_constraints[@]}"; do
+    grep -Fxq "$constraint_identity" <<<"$retention_constraints" || \
+        fail "Restored Record v4 retention schema is missing validated constraint $constraint_identity; record service remains stopped."
+done
+retention_foreign_keys="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select child_table.relname || ':' || constraint_record.conname || ':' || child_column.attname || ':' || parent_table.relname || ':' || parent_column.attname || ':' || constraint_record.confdeltype from pg_constraint as constraint_record join pg_class as child_table on child_table.oid = constraint_record.conrelid join pg_class as parent_table on parent_table.oid = constraint_record.confrelid join pg_namespace as schema_record on schema_record.oid = child_table.relnamespace join pg_attribute as child_column on child_column.attrelid = child_table.oid and child_column.attnum = constraint_record.conkey[1] join pg_attribute as parent_column on parent_column.attrelid = parent_table.oid and parent_column.attnum = constraint_record.confkey[1] where schema_record.nspname = 'public' and constraint_record.contype = 'f' and constraint_record.convalidated and array_length(constraint_record.conkey, 1) = 1 and child_table.relname in ('record_asset_deletion_outbox','record_retention_batches') order by child_table.relname, constraint_record.conname"
+)"
+for foreign_key_identity in \
+    "record_asset_deletion_outbox:fk_record_asset_deletion_outbox_retention_operation_id_record_retention_operations:retention_operation_id:record_retention_operations:operation_id:r" \
+    "record_retention_batches:fk_record_retention_batches_operation_id_record_retention_operations:operation_id:record_retention_operations:operation_id:r"; do
+    grep -Fxq "$foreign_key_identity" <<<"$retention_foreign_keys" || \
+        fail "Restored Record v4 retention schema has an invalid foreign key $foreign_key_identity; record service remains stopped."
+done
+retention_indexes="$(
+    "${compose[@]}" exec -T c19-record-postgres psql \
+        --username="$target_user" \
+        --dbname="$restore_database" \
+        --tuples-only \
+        --no-align \
+        --command="select table_record.relname || ':' || index_record.relname from pg_index as index_state join pg_class as index_record on index_record.oid = index_state.indexrelid join pg_class as table_record on table_record.oid = index_state.indrelid join pg_namespace as schema_record on schema_record.oid = table_record.relnamespace where schema_record.nspname = 'public' and table_record.relname in ('record_asset_deletion_outbox','record_retention_operations') and index_state.indisvalid and index_state.indisready order by table_record.relname, index_record.relname"
+)"
+required_retention_indexes=(
+    "record_asset_deletion_outbox:ix_record_asset_deletion_outbox_state_created"
+    "record_asset_deletion_outbox:ix_record_asset_deletion_outbox_retention_operation"
+    "record_asset_deletion_outbox:ix_record_asset_deletion_outbox_asset_state"
+    "record_asset_deletion_outbox:ix_record_asset_deletion_outbox_lease_until"
+    "record_asset_deletion_outbox:ix_record_asset_deletion_outbox_authorized_at"
+    "record_retention_operations:ix_record_retention_operations_completed_at"
+)
+for index_identity in "${required_retention_indexes[@]}"; do
+    grep -Fxq "$index_identity" <<<"$retention_indexes" || \
+        fail "Restored Record v4 retention schema is missing ready index $index_identity; record service remains stopped."
 done
 restore_phase="restored_validated"
 

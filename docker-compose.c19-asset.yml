@@ -1,0 +1,270 @@
+services:
+  c19-asset-postgres:
+    image: postgres:17.5-alpine
+    restart: unless-stopped
+    env_file:
+      - ${C19_ASSET_ENV_FILE:-.env.c19-asset.production}
+    environment:
+      C19_ASSET_DATABASE_URL: ""
+      C19_ASSET_SERVICE_TOKEN: ""
+      C19_ASSET_GATEWAY_TOKEN: ""
+      C19_ASSET_CLAMD_HOST: ""
+    volumes:
+      - c19_asset_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - c19-asset-private
+
+  c19-asset-api:
+    build:
+      context: .
+      dockerfile: c19_asset_service/Dockerfile
+    restart: unless-stopped
+    init: true
+    command:
+      - python
+      - -m
+      - c19_asset_service.start
+      - api
+    env_file:
+      - ${C19_ASSET_ENV_FILE:-.env.c19-asset.production}
+    environment:
+      POSTGRES_DB: ""
+      POSTGRES_USER: ""
+      POSTGRES_PASSWORD: ""
+      C19_ASSET_INCOMING_ROOT: ""
+      C19_ASSET_QUARANTINE_ROOT: ""
+      C19_ASSET_ACTIVE_ROOT: ""
+      C19_ASSET_CLAMD_HOST: ""
+      C19_ASSET_CLAMD_PORT: ""
+    depends_on:
+      c19-asset-postgres:
+        condition: service_healthy
+    expose:
+      - "8091"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8091/healthz', timeout=2).read()"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - c19-asset-private
+      - barong-ops-console-prod
+
+  c19-asset-volume-init:
+    build:
+      context: .
+      dockerfile: c19_asset_service/Dockerfile
+    user: "0:0"
+    command:
+      - sh
+      - -ec
+      - >-
+        mkdir -p /var/lib/c19-assets/incoming /var/lib/c19-assets/quarantine
+        /var/lib/c19-assets/active && chown -R 10001:10001
+        /var/lib/c19-assets/incoming /var/lib/c19-assets/quarantine
+        /var/lib/c19-assets/active && chmod 0700
+        /var/lib/c19-assets/incoming /var/lib/c19-assets/quarantine
+        /var/lib/c19-assets/active
+    restart: "no"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    volumes:
+      - c19_asset_incoming_data:/var/lib/c19-assets/incoming
+      - c19_asset_quarantine_data:/var/lib/c19-assets/quarantine
+      - c19_asset_active_data:/var/lib/c19-assets/active
+    security_opt:
+      - no-new-privileges:true
+    network_mode: "none"
+
+  c19-asset-worker:
+    build:
+      context: .
+      dockerfile: c19_asset_service/Dockerfile
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 180s
+    command:
+      - python
+      - -m
+      - c19_asset_service.start
+      - worker
+    env_file:
+      - ${C19_ASSET_ENV_FILE:-.env.c19-asset.production}
+    environment:
+      POSTGRES_DB: ""
+      POSTGRES_USER: ""
+      POSTGRES_PASSWORD: ""
+      C19_ASSET_SERVICE_TOKEN: ""
+      C19_ASSET_GATEWAY_TOKEN: ""
+    depends_on:
+      c19-asset-postgres:
+        condition: service_healthy
+      c19-asset-api:
+        condition: service_healthy
+      c19-asset-clamd:
+        condition: service_healthy
+      c19-asset-volume-init:
+        condition: service_completed_successfully
+    volumes:
+      - c19_asset_incoming_data:/var/lib/c19-assets/incoming
+      - c19_asset_quarantine_data:/var/lib/c19-assets/quarantine
+      - c19_asset_active_data:/var/lib/c19-assets/active
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    healthcheck:
+      disable: true
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - c19-asset-private
+
+  c19-asset-gateway:
+    build:
+      context: .
+      dockerfile: c19_asset_service/Dockerfile
+    restart: unless-stopped
+    init: true
+    command:
+      - python
+      - -m
+      - c19_asset_service.start
+      - gateway
+    env_file:
+      - ${C19_ASSET_ENV_FILE:-.env.c19-asset.production}
+    environment:
+      POSTGRES_DB: ""
+      POSTGRES_USER: ""
+      POSTGRES_PASSWORD: ""
+      C19_ASSET_DATABASE_URL: ""
+      C19_ASSET_SERVICE_TOKEN: ""
+      C19_ASSET_QUARANTINE_ROOT: ""
+      C19_ASSET_CLAMD_HOST: ""
+      C19_ASSET_CLAMD_PORT: ""
+    depends_on:
+      c19-asset-api:
+        condition: service_healthy
+      c19-asset-volume-init:
+        condition: service_completed_successfully
+    ports:
+      - "127.0.0.1:${C19_ASSET_GATEWAY_HOST_PORT:-8092}:8092"
+    volumes:
+      - c19_asset_incoming_data:/var/lib/c19-assets/incoming
+      - c19_asset_active_data:/var/lib/c19-assets/active:ro
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8092/healthz', timeout=2).read()"
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    networks:
+      - c19-asset-private
+      # Docker does not publish host ports for a container attached only to an
+      # internal network. This single-member bridge exists only to terminate
+      # the 127.0.0.1 port mapping; masqueraded outbound traffic is disabled.
+      - c19-asset-gateway-ingress
+
+  c19-asset-clamd:
+    image: clamav/clamav:1.4
+    restart: unless-stopped
+    # Compose v1 enforces these host limits directly (unlike Swarm-only
+    # deploy.resources). ClamAV's official container guidance calls for 4 GiB.
+    mem_limit: 4g
+    pids_limit: 128
+    environment:
+      CLAMAV_NO_FRESHCLAMD: "false"
+    volumes:
+      - c19_asset_clam_signatures:/var/lib/clamav
+      - ./deploy/clamav/c19-clamd.conf:/etc/clamav/clamd.conf:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - "clamdscan --ping 1 >/dev/null 2>&1"
+      interval: 30s
+      timeout: 5s
+      retries: 20
+      start_period: 120s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "25m"
+        max-file: "3"
+    networks:
+      - c19-asset-private
+      # FreshClam alone needs outbound signature updates. No other C19 service
+      # joins this network and clamd's TCP port is never published to the host.
+      - c19-asset-clam-egress
+
+networks:
+  c19-asset-private:
+    name: ${C19_ASSET_PRIVATE_NETWORK_NAME:-c19-asset-private}
+    internal: true
+  c19-asset-clam-egress:
+    name: ${C19_ASSET_CLAM_EGRESS_NETWORK_NAME:-c19-asset-clam-egress}
+    labels:
+      com.barong.c19.asset-network-role: malware-signature-egress
+  c19-asset-gateway-ingress:
+    name: ${C19_ASSET_GATEWAY_INGRESS_NETWORK_NAME:-c19-asset-gateway-ingress}
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.enable_ip_masquerade: "false"
+    labels:
+      com.barong.c19.asset-network-role: host-loopback-ingress
+  barong-ops-console-prod:
+    name: ${BARONG_SHARED_NETWORK_NAME:-barong-ops-console-prod}
+    external: true
+
+volumes:
+  c19_asset_postgres_data:
+    name: ${C19_ASSET_POSTGRES_VOLUME_NAME:-c19_asset_postgres_data}
+    labels:
+      com.barong.c19.asset-dataset-id: ${C19_ASSET_DATASET_ID:?C19_ASSET_DATASET_ID is required}
+      com.barong.c19.asset-volume-role: metadata
+  c19_asset_incoming_data:
+    name: ${C19_ASSET_INCOMING_VOLUME_NAME:-c19_asset_incoming_data}
+    labels:
+      com.barong.c19.asset-dataset-id: ${C19_ASSET_DATASET_ID:?C19_ASSET_DATASET_ID is required}
+      com.barong.c19.asset-volume-role: incoming
+  c19_asset_quarantine_data:
+    name: ${C19_ASSET_QUARANTINE_VOLUME_NAME:-c19_asset_quarantine_data}
+    labels:
+      com.barong.c19.asset-dataset-id: ${C19_ASSET_DATASET_ID:?C19_ASSET_DATASET_ID is required}
+      com.barong.c19.asset-volume-role: quarantine
+  c19_asset_active_data:
+    name: ${C19_ASSET_ACTIVE_VOLUME_NAME:-c19_asset_active_data}
+    labels:
+      com.barong.c19.asset-dataset-id: ${C19_ASSET_DATASET_ID:?C19_ASSET_DATASET_ID is required}
+      com.barong.c19.asset-volume-role: active
+  c19_asset_clam_signatures:
+    name: ${C19_ASSET_CLAM_VOLUME_NAME:-c19_asset_clam_signatures}
+    labels:
+      com.barong.c19.asset-volume-role: malware-signatures
