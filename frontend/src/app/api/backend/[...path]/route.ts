@@ -1,3 +1,5 @@
+import { isIP } from "node:net";
+
 import type { NextRequest } from "next/server";
 
 const PUBLIC_API_PREFIX = "/api/public";
@@ -275,6 +277,22 @@ function applySessionHeaders(headers: Headers, request: NextRequest) {
   if (sessionToken) {
     headers.set("X-Session-Token", sessionToken);
   }
+}
+
+export function normalizeTrustedClientIp(value: string | null) {
+  if (!value || value !== value.trim() || value.includes(",")) return null;
+  return isIP(value) === 0 ? null : value;
+}
+
+export function applyTrustedClientIp(
+  headers: Headers,
+  sourceHeaders: Pick<Headers, "get">,
+) {
+  // The public Nginx entrypoint overwrites X-Real-IP with $remote_addr. Never
+  // copy the browser-controlled X-Forwarded-For chain through this proxy.
+  headers.delete("X-Forwarded-For");
+  const clientIp = normalizeTrustedClientIp(sourceHeaders.get("x-real-ip"));
+  if (clientIp) headers.set("X-Forwarded-For", clientIp);
 }
 
 function applyForceRefreshHeaders(headers: Headers, request: NextRequest) {
@@ -556,6 +574,15 @@ export function isAllowedC19Path(method: string, path: string[]) {
     path.length === 3 &&
     resource === "events" &&
     path[2] === "tail"
+  ) {
+    return true;
+  }
+
+  if (
+    method === "PATCH" &&
+    path.length === 3 &&
+    resource === "profiles" &&
+    path[2] === "me"
   ) {
     return true;
   }
@@ -1852,6 +1879,7 @@ async function proxyRequest(
     }
 
     applySessionHeaders(headers, request);
+    applyTrustedClientIp(headers, request.headers);
     applyForceRefreshHeaders(headers, request);
     if (contentType) {
       headers.set("Content-Type", contentType);

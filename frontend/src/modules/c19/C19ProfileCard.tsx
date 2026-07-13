@@ -3,6 +3,7 @@
 import {
   Ban,
   Building2,
+  Camera,
   MessageSquareText,
   UserMinus,
   UserPlus,
@@ -10,13 +11,9 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { C19Avatar } from "./C19Avatar";
 import styles from "./C19Workspace.module.css";
 import type { C19Affiliation, C19Profile } from "./types";
-
-function initials(name: string) {
-  const normalized = name.trim();
-  return normalized ? normalized.slice(0, 2).toUpperCase() : "成员";
-}
 
 function roleLabel(affiliation: C19Affiliation) {
   return affiliation.role === "owner"
@@ -38,6 +35,7 @@ export function C19ProfileCard({
   onSendFriendRequest,
   onStartChat,
   onUnblock,
+  onUpdateAvatar,
   profile,
 }: {
   busy: boolean;
@@ -51,10 +49,18 @@ export function C19ProfileCard({
   onSendFriendRequest: (profile: C19Profile, message: string) => void;
   onStartChat: (profile: C19Profile) => void;
   onUnblock: (profile: C19Profile) => void;
+  onUpdateAvatar: (avatarRef: string | null) => Promise<void>;
   profile: C19Profile;
 }) {
+  const [avatarDraft, setAvatarDraft] = useState(profile.avatar_ref ?? "");
+  const [avatarError, setAvatarError] = useState("");
+  const [avatarSaved, setAvatarSaved] = useState("");
   const [requestMessage, setRequestMessage] = useState("");
   const [showRequestForm, setShowRequestForm] = useState(false);
+
+  useEffect(() => {
+    setAvatarDraft(profile.avatar_ref ?? "");
+  }, [profile.avatar_ref]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -63,6 +69,34 @@ export function C19ProfileCard({
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
+
+  const saveAvatar = async (value: string) => {
+    const normalized = value.trim();
+    setAvatarError("");
+    setAvatarSaved("");
+    if (
+      normalized &&
+      (!(
+        normalized.startsWith("https://") ||
+        (normalized.startsWith("/") && !normalized.startsWith("//"))
+      ) ||
+        normalized.length > 512)
+    ) {
+      setAvatarError("请输入 https:// 图片地址或以 / 开头的站内资源路径（最多 512 字符）。");
+      return;
+    }
+    try {
+      await onUpdateAvatar(normalized || null);
+      setAvatarDraft(normalized);
+      setAvatarSaved(normalized ? "头像已更新。" : "已恢复默认头像。");
+    } catch (error) {
+      setAvatarError(
+        error instanceof Error && error.message
+          ? error.message
+          : "头像更新失败，请稍后重试。",
+      );
+    }
+  };
 
   return (
     <div
@@ -87,9 +121,11 @@ export function C19ProfileCard({
         </button>
 
         <header className={styles.profileCardHead}>
-          <span aria-hidden="true" className={styles.profileCardAvatar}>
-            {initials(profile.display_name)}
-          </span>
+          <C19Avatar
+            avatarRef={profile.avatar_ref}
+            className={styles.profileCardAvatar}
+            name={profile.display_name}
+          />
           <div>
             <strong>
               {profile.display_name}
@@ -123,6 +159,52 @@ export function C19ProfileCard({
             ))
           )}
         </section>
+
+        {isSelf ? (
+          <form
+            className={styles.avatarEditor}
+            onSubmit={(event) => {
+              event.preventDefault();
+              void saveAvatar(avatarDraft);
+            }}
+          >
+            <label htmlFor="c19-avatar-ref">
+              <span>
+                <Camera aria-hidden="true" size={15} />
+                更换头像
+              </span>
+              <input
+                autoComplete="url"
+                disabled={busy}
+                id="c19-avatar-ref"
+                maxLength={512}
+                onChange={(event) => {
+                  setAvatarDraft(event.target.value);
+                  setAvatarError("");
+                  setAvatarSaved("");
+                }}
+                placeholder="https://… 或 /站内资源路径"
+                type="text"
+                value={avatarDraft}
+              />
+            </label>
+            <small>支持 HTTPS 图片地址或站内绝对路径；加载失败时自动显示姓名首字。</small>
+            <div className={styles.avatarEditorActions}>
+              <button disabled={busy} type="submit">
+                {busy ? "保存中…" : "保存头像"}
+              </button>
+              <button
+                disabled={busy || !profile.avatar_ref}
+                onClick={() => void saveAvatar("")}
+                type="button"
+              >
+                恢复默认
+              </button>
+            </div>
+            {avatarError ? <p role="alert">{avatarError}</p> : null}
+            {avatarSaved ? <p data-tone="success" role="status">{avatarSaved}</p> : null}
+          </form>
+        ) : null}
 
         {!isSelf ? (
           <div className={styles.profileActions}>

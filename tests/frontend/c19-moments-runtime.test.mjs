@@ -238,7 +238,8 @@ test("Moment UI uses explicit affiliation audiences, sequential direct bytes, an
   assert.match(panelSource, /listC19MomentEvents/);
   assert.match(panelSource, /new EventSource/);
   assert.match(panelSource, /EVENT_POLL_INTERVAL_MS = 4_000/);
-  assert.match(panelSource, /SSE_RECONNECT_INTERVAL_MS = 30_000/);
+  assert.match(panelSource, /SSE_STREAM_REFRESH_INTERVAL_MS = 30_000/);
+  assert.match(panelSource, /c19SseReconnectDelay/);
   assert.match(panelSource, /page\.next_cursor/);
   assert.match(panelSource, /let streamPageFailed = false/);
   assert.match(panelSource, /streamPageFailed = false;[\s\S]{0,120}streamGeneration/);

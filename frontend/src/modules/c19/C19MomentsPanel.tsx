@@ -20,6 +20,7 @@ import {
   removeC19Moment,
   replaceC19Moment,
 } from "./C19MomentRuntime";
+import { c19SseReconnectDelay } from "./C19EventStreamRecovery";
 import styles from "./C19Moments.module.css";
 import type {
   C19Moment,
@@ -32,7 +33,8 @@ const FEED_LIMIT = 30;
 const EVENT_LIMIT = 200;
 const MAX_EVENT_DRAIN_PAGES = 50;
 const EVENT_POLL_INTERVAL_MS = 4_000;
-const SSE_RECONNECT_INTERVAL_MS = 30_000;
+const SSE_HANDSHAKE_TIMEOUT_MS = 12_000;
+const SSE_STREAM_REFRESH_INTERVAL_MS = 30_000;
 const momentEventCursorMemory = new Map<string, string>();
 
 type ConnectionMode = "connecting" | "live" | "polling" | "offline";
@@ -69,6 +71,7 @@ export function C19MomentsPanel({
     useState<ConnectionMode>("connecting");
   const [eventsReady, setEventsReady] = useState(false);
   const activeRef = useRef(true);
+  const bootstrapGenerationRef = useRef(0);
   const feedGenerationRef = useRef(0);
   const feedAbortRef = useRef<AbortController | null>(null);
   const eventCursorRef = useRef<string | null>(
@@ -97,6 +100,7 @@ export function C19MomentsPanel({
   }, []);
 
   const refreshFeed = useCallback(async () => {
+    const bootstrapGeneration = bootstrapGenerationRef.current;
     const generation = feedGenerationRef.current + 1;
     feedGenerationRef.current = generation;
     const controller = new AbortController();
@@ -111,6 +115,7 @@ export function C19MomentsPanel({
       );
       if (
         !activeRef.current ||
+        bootstrapGenerationRef.current !== bootstrapGeneration ||
         controller.signal.aborted ||
         feedGenerationRef.current !== generation
       ) {
@@ -120,13 +125,18 @@ export function C19MomentsPanel({
       setFeedCursor(page.next_cursor);
       return true;
     } catch (error) {
-      if (activeRef.current && !controller.signal.aborted) {
+      if (
+        activeRef.current &&
+        bootstrapGenerationRef.current === bootstrapGeneration &&
+        !controller.signal.aborted
+      ) {
         setFeedError(feedErrorMessage(error));
       }
       return false;
     } finally {
       if (
         activeRef.current &&
+        bootstrapGenerationRef.current === bootstrapGeneration &&
         feedGenerationRef.current === generation &&
         !controller.signal.aborted
       ) {
@@ -137,25 +147,32 @@ export function C19MomentsPanel({
   }, []);
 
   const processEvents = useCallback(
-    async (events: C19MomentEvent[]) => {
+    async (
+      events: C19MomentEvent[],
+      isCurrent: () => boolean = () => activeRef.current,
+    ) => {
       for (const event of events) {
+        if (!activeRef.current || !isCurrent()) return;
         if (seenEventIdsRef.current.has(event.event_id)) continue;
         if (c19MomentEventRequiresRemoval(event)) {
+          if (!isCurrent()) return;
           removeMoment(event.moment_id);
           seenEventIdsRef.current.add(event.event_id);
           continue;
         }
         try {
           const canonical = await getC19Moment(event.moment_id);
-          if (!activeRef.current) return;
+          if (!activeRef.current || !isCurrent()) return;
           if (event.event_type === "published") prependMoment(canonical);
           else replaceMoment(canonical);
+          if (!isCurrent()) return;
           seenEventIdsRef.current.add(event.event_id);
         } catch (error) {
           if (
             error instanceof ApiError &&
             (error.status === 403 || error.status === 404)
           ) {
+            if (!isCurrent()) return;
             removeMoment(event.moment_id);
             seenEventIdsRef.current.add(event.event_id);
             continue;
@@ -173,17 +190,20 @@ export function C19MomentsPanel({
   );
 
   const drainEventPages = useCallback(
-    async (initialCursor: string) => {
+    async (
+      initialCursor: string,
+      isCurrent: () => boolean = () => activeRef.current,
+    ) => {
       let cursor = initialCursor;
       const visited = new Set<string>();
       for (let pageNumber = 0; pageNumber < MAX_EVENT_DRAIN_PAGES; pageNumber += 1) {
-        if (!activeRef.current) return;
+        if (!activeRef.current || !isCurrent()) return;
         if (visited.has(cursor)) throw new Error("朋友圈事件游标发生循环。");
         visited.add(cursor);
         const page = await listC19MomentEvents({ cursor, limit: EVENT_LIMIT });
-        if (!activeRef.current) return;
-        await processEvents(page.events);
-        if (!activeRef.current) return;
+        if (!activeRef.current || !isCurrent()) return;
+        await processEvents(page.events, isCurrent);
+        if (!activeRef.current || !isCurrent()) return;
         if (page.next_cursor) rememberEventCursor(page.next_cursor);
         const lastSequence = page.events.at(-1)?.event_sequence ?? 0;
         if (
@@ -202,22 +222,26 @@ export function C19MomentsPanel({
     [processEvents, rememberEventCursor],
   );
 
-  const resetEventFenceAndFeed = useCallback(async () => {
+  const resetEventFenceAndFeed = useCallback(async (
+    isCurrent: () => boolean = () => activeRef.current,
+  ) => {
+    if (!activeRef.current || !isCurrent()) return;
     eventCursorRef.current = null;
     momentEventCursorMemory.delete(String(userId));
     seenEventIdsRef.current = new Set();
     const tail = await getC19MomentEventTail();
-    if (!activeRef.current) return;
+    if (!activeRef.current || !isCurrent()) return;
     rememberEventCursor(tail.cursor);
     setMoments([]);
     setFeedCursor(null);
     await refreshFeed();
-    if (!activeRef.current) return;
-    await drainEventPages(tail.cursor);
+    if (!activeRef.current || !isCurrent()) return;
+    await drainEventPages(tail.cursor, isCurrent);
   }, [drainEventPages, refreshFeed, rememberEventCursor, userId]);
 
   const loadMore = useCallback(async () => {
     if (!feedCursor || isLoadingMore) return;
+    const requestedBootstrapGeneration = bootstrapGenerationRef.current;
     const requestedCursor = feedCursor;
     const requestedGeneration = feedGenerationRef.current;
     setIsLoadingMore(true);
@@ -229,6 +253,7 @@ export function C19MomentsPanel({
       });
       if (
         !activeRef.current ||
+        bootstrapGenerationRef.current !== requestedBootstrapGeneration ||
         requestedGeneration !== feedGenerationRef.current
       ) {
         return;
@@ -239,7 +264,12 @@ export function C19MomentsPanel({
       setMoments((current) => mergeC19MomentFeed(current, page.moments, "append"));
       setFeedCursor(page.next_cursor);
     } catch (error) {
-      if (!activeRef.current) return;
+      if (
+        !activeRef.current ||
+        bootstrapGenerationRef.current !== requestedBootstrapGeneration
+      ) {
+        return;
+      }
       if (
         error instanceof ApiError &&
         (error.status === 400 || error.status === 422)
@@ -249,12 +279,22 @@ export function C19MomentsPanel({
         setFeedError(feedErrorMessage(error));
       }
     } finally {
-      if (activeRef.current) setIsLoadingMore(false);
+      if (
+        activeRef.current &&
+        bootstrapGenerationRef.current === requestedBootstrapGeneration
+      ) {
+        setIsLoadingMore(false);
+      }
     }
   }, [feedCursor, isLoadingMore, refreshFeed]);
 
   useEffect(() => {
+    const bootstrapGeneration = bootstrapGenerationRef.current + 1;
+    bootstrapGenerationRef.current = bootstrapGeneration;
     activeRef.current = true;
+    const isCurrentBootstrap = () =>
+      activeRef.current &&
+      bootstrapGenerationRef.current === bootstrapGeneration;
     eventCursorRef.current = momentEventCursorMemory.get(String(userId)) ?? null;
     seenEventIdsRef.current = new Set();
     setMoments([]);
@@ -263,42 +303,45 @@ export function C19MomentsPanel({
     setEventError("");
     setConnectionMode("connecting");
     void (async () => {
+      let feedLoaded = false;
       try {
         if (!eventCursorRef.current) {
           const tail = await getC19MomentEventTail();
-          if (!activeRef.current) return;
+          if (!isCurrentBootstrap()) return;
           rememberEventCursor(tail.cursor);
         }
         const cursor = eventCursorRef.current;
-        await refreshFeed();
-        if (!activeRef.current || !cursor) return;
+        feedLoaded = await refreshFeed();
+        if (!isCurrentBootstrap() || !cursor) return;
         try {
-          await drainEventPages(cursor);
+          await drainEventPages(cursor, isCurrentBootstrap);
         } catch (error) {
+          if (!isCurrentBootstrap()) return;
           if (
             error instanceof ApiError &&
             (error.status === 400 || error.status === 422)
           ) {
-            await resetEventFenceAndFeed();
+            await resetEventFenceAndFeed(isCurrentBootstrap);
           } else {
             throw error;
           }
         }
       } catch (error) {
-        if (activeRef.current) {
+        if (isCurrentBootstrap()) {
           setEventError(feedErrorMessage(error));
-          if (moments.length === 0) await refreshFeed();
+          if (!feedLoaded) await refreshFeed();
         }
       } finally {
-        if (activeRef.current) setEventsReady(true);
+        if (isCurrentBootstrap()) setEventsReady(true);
       }
     })();
     return () => {
-      activeRef.current = false;
+      if (bootstrapGenerationRef.current === bootstrapGeneration) {
+        bootstrapGenerationRef.current += 1;
+        activeRef.current = false;
+      }
       feedAbortRef.current?.abort();
     };
-    // `moments` is deliberately excluded: bootstrap owns only the mount/user fence.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [drainEventPages, refreshFeed, rememberEventCursor, resetEventFenceAndFeed, userId]);
 
   useEffect(() => {
@@ -308,20 +351,37 @@ export function C19MomentsPanel({
     let pollTimer: number | null = null;
     let reconnectTimer: number | null = null;
     let cycleTimer: number | null = null;
+    let handshakeTimer: number | null = null;
     let polling = false;
     let eventQueue = Promise.resolve();
+    let eventPageInFlight = false;
+    let pollInFlight = false;
+    let streamConnecting = false;
     let streamPageFailed = false;
     let streamGeneration = 0;
+    let failedReconnectAttempts = 0;
+
+    const clearHandshakeTimer = () => {
+      if (handshakeTimer !== null) {
+        window.clearTimeout(handshakeTimer);
+        handshakeTimer = null;
+      }
+    };
 
     const schedulePoll = () => {
-      if (!stopped && polling) {
-        pollTimer = window.setTimeout(pollEvents, EVENT_POLL_INTERVAL_MS);
+      if (!stopped && polling && !streamConnecting && pollTimer === null) {
+        pollTimer = window.setTimeout(() => {
+          pollTimer = null;
+          void pollEvents();
+        }, EVENT_POLL_INTERVAL_MS);
       }
     };
 
     const recoverCursor = async () => {
       try {
-        await resetEventFenceAndFeed();
+        await resetEventFenceAndFeed(
+          () => !stopped && polling && !streamConnecting,
+        );
       } catch (error) {
         if (!stopped) setEventError(feedErrorMessage(error));
         throw error;
@@ -329,12 +389,20 @@ export function C19MomentsPanel({
     };
 
     const pollEvents = async () => {
-      if (stopped || !polling) return;
+      if (stopped || !polling || streamConnecting || pollInFlight) return;
+      if (eventPageInFlight) {
+        schedulePoll();
+        return;
+      }
+      pollInFlight = true;
       try {
         if (!eventCursorRef.current) await recoverCursor();
         if (!eventCursorRef.current) throw new Error("朋友圈事件尾游标尚未就绪。");
-        await drainEventPages(eventCursorRef.current);
-        if (!stopped) {
+        await drainEventPages(
+          eventCursorRef.current,
+          () => !stopped && polling && !streamConnecting,
+        );
+        if (!stopped && polling) {
           setConnectionMode("polling");
           setEventError("");
         }
@@ -347,64 +415,158 @@ export function C19MomentsPanel({
           try {
             await recoverCursor();
           } catch {
-            if (!stopped) setConnectionMode("offline");
+            if (!stopped && polling) setConnectionMode("offline");
           }
-        } else if (!stopped) {
+        } else if (!stopped && polling) {
           setConnectionMode("offline");
           setEventError(feedErrorMessage(error));
         }
       } finally {
+        pollInFlight = false;
         schedulePoll();
       }
     };
 
     const startPolling = () => {
+      if (polling) return;
       polling = true;
-      if (pollTimer !== null) window.clearTimeout(pollTimer);
       setConnectionMode("polling");
       void pollEvents();
     };
 
-    const acceptEventPage = async (page: C19MomentEventPage) => {
-      if (stopped) return;
+    const scheduleReconnect = (): void => {
+      if (stopped || typeof EventSource === "undefined") return;
+      if (reconnectTimer !== null) return;
+      const delay = c19SseReconnectDelay(failedReconnectAttempts);
+      failedReconnectAttempts += 1;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connect();
+      }, delay);
+    };
+
+    const acceptEventPage = async (
+      page: C19MomentEventPage,
+      generation: number,
+    ) => {
+      if (stopped || generation !== streamGeneration || streamPageFailed) return;
       if (!page.next_cursor) throw new Error("SSE 必须返回带 next_cursor 的朋友圈事件页。");
-      await processEvents(page.events);
-      if (!stopped) {
+      await processEvents(
+        page.events,
+        () =>
+          !stopped &&
+          generation === streamGeneration &&
+          !streamPageFailed,
+      );
+      if (
+        !stopped &&
+        generation === streamGeneration &&
+        !streamPageFailed
+      ) {
         rememberEventCursor(page.next_cursor);
         setEventError("");
       }
     };
 
-    const connect = () => {
+    const connect = (): void => {
       if (stopped || typeof EventSource === "undefined") {
         startPolling();
         return;
       }
+      if (pollInFlight || eventPageInFlight) {
+        if (reconnectTimer === null) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, 250);
+        }
+        return;
+      }
+      streamConnecting = true;
+      clearHandshakeTimer();
       polling = false;
+      if (pollTimer !== null) {
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
       streamPageFailed = false;
       const generation = streamGeneration + 1;
       streamGeneration = generation;
-      if (pollTimer !== null) window.clearTimeout(pollTimer);
-      setConnectionMode("connecting");
-      source = new EventSource(c19MomentEventStreamUrl(eventCursorRef.current), {
-        withCredentials: true,
-      });
-      source.onopen = () => {
-        if (stopped || generation !== streamGeneration) return;
+      if (!polling) setConnectionMode("connecting");
+      let nextSource: EventSource;
+      try {
+        nextSource = new EventSource(c19MomentEventStreamUrl(eventCursorRef.current), {
+          withCredentials: true,
+        });
+      } catch {
+        source = null;
+        streamConnecting = false;
+        startPolling();
+        scheduleReconnect();
+        return;
+      }
+      source = nextSource;
+      nextSource.onopen = () => {
+        if (
+          stopped ||
+          generation !== streamGeneration ||
+          source !== nextSource
+        ) {
+          return;
+        }
+        failedReconnectAttempts = 0;
+        clearHandshakeTimer();
+        streamConnecting = false;
+        polling = false;
+        if (pollTimer !== null) {
+          window.clearTimeout(pollTimer);
+          pollTimer = null;
+        }
         setConnectionMode("live");
         cycleTimer = window.setTimeout(() => {
-          if (stopped || generation !== streamGeneration) return;
-          source?.close();
+          if (
+            stopped ||
+            generation !== streamGeneration ||
+            source !== nextSource
+          ) {
+            return;
+          }
+          streamPageFailed = true;
+          nextSource.close();
           source = null;
+          streamConnecting = false;
+          polling = false;
           startPolling();
-          reconnectTimer = window.setTimeout(connect, 250);
-        }, SSE_RECONNECT_INTERVAL_MS);
+          if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, 250);
+        }, SSE_STREAM_REFRESH_INTERVAL_MS);
       };
-      source.onmessage = (message) => {
+      handshakeTimer = window.setTimeout(() => {
+        if (
+          stopped ||
+          generation !== streamGeneration ||
+          source !== nextSource
+        ) {
+          return;
+        }
+        clearHandshakeTimer();
+        streamPageFailed = true;
+        nextSource.close();
+        source = null;
+        streamConnecting = false;
+        polling = false;
+        startPolling();
+        scheduleReconnect();
+      }, SSE_HANDSHAKE_TIMEOUT_MS);
+      nextSource.onmessage = (message) => {
         if (
           stopped ||
           streamPageFailed ||
-          generation !== streamGeneration
+          generation !== streamGeneration ||
+          source !== nextSource
         ) {
           return;
         }
@@ -422,49 +584,98 @@ export function C19MomentsPanel({
               ) {
                 return;
               }
-              await acceptEventPage(payload);
+              eventPageInFlight = true;
+              try {
+                await acceptEventPage(payload, generation);
+              } finally {
+                eventPageInFlight = false;
+              }
             })
             .catch((error) => {
-              if (!stopped && generation === streamGeneration) {
+              if (
+                !stopped &&
+                generation === streamGeneration &&
+                source === nextSource
+              ) {
                 streamPageFailed = true;
                 setEventError(feedErrorMessage(error));
-                source?.close();
+                nextSource.close();
                 source = null;
+                streamConnecting = false;
+                polling = false;
                 startPolling();
+                scheduleReconnect();
               }
             });
         } catch (error) {
-          if (generation !== streamGeneration) return;
+          if (
+            generation !== streamGeneration ||
+            source !== nextSource
+          ) {
+            return;
+          }
           streamPageFailed = true;
           setEventError(feedErrorMessage(error));
-          source?.close();
+          nextSource.close();
           source = null;
+          streamConnecting = false;
+          polling = false;
           startPolling();
+          scheduleReconnect();
         }
       };
-      source.onerror = () => {
-        if (stopped || generation !== streamGeneration) return;
+      nextSource.onerror = () => {
+        if (
+          stopped ||
+          generation !== streamGeneration ||
+          source !== nextSource
+        ) {
+          return;
+        }
+        clearHandshakeTimer();
         if (cycleTimer !== null) window.clearTimeout(cycleTimer);
-        source?.close();
+        streamPageFailed = true;
+        nextSource.close();
         source = null;
+        streamConnecting = false;
+        polling = false;
         startPolling();
-        reconnectTimer = window.setTimeout(connect, SSE_RECONNECT_INTERVAL_MS);
+        scheduleReconnect();
       };
     };
 
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible" && polling) void pollEvents();
     };
+    const onOnline = () => {
+      if (stopped || typeof EventSource === "undefined") return;
+      failedReconnectAttempts = 0;
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      clearHandshakeTimer();
+      streamPageFailed = true;
+      source?.close();
+      source = null;
+      connect();
+    };
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("online", onOnline);
     connect();
     return () => {
       stopped = true;
       polling = false;
+      streamPageFailed = true;
+      streamGeneration += 1;
       source?.close();
+      source = null;
+      clearHandshakeTimer();
       if (pollTimer !== null) window.clearTimeout(pollTimer);
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
       if (cycleTimer !== null) window.clearTimeout(cycleTimer);
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("online", onOnline);
     };
   }, [drainEventPages, eventsReady, processEvents, rememberEventCursor, resetEventFenceAndFeed]);
 
@@ -528,7 +739,18 @@ export function C19MomentsPanel({
             <C19MomentCard
               currentUserId={userId}
               key={moment.moment_id}
-              moment={moment}
+              moment={
+                String(moment.author.user_id) === String(userId)
+                  ? {
+                      ...moment,
+                      author: {
+                        ...moment.author,
+                        avatar_ref: profile.avatar_ref,
+                        display_name: profile.display_name,
+                      },
+                    }
+                  : moment
+              }
               onChanged={replaceMoment}
               onRemoved={removeMoment}
             />

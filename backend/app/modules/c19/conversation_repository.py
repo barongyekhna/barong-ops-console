@@ -16,6 +16,7 @@ from ...models.c19 import (
 from ...models.org_membership import OrgMembershipRecord
 from ...models.organization import OrganizationRecord
 from ...models.user import User
+from .block_policy import effective_block_target_condition
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,10 @@ def active_block_exists_between(
         .where(
             C19UserBlockRecord.is_active.is_(True),
             C19UserBlockRecord.status == "active",
+            effective_block_target_condition(
+                C19UserBlockRecord.blocker_user_id,
+                C19UserBlockRecord.blocked_user_id,
+            ),
             or_(
                 and_(
                     C19UserBlockRecord.blocker_user_id == first_user_id,
@@ -137,6 +142,10 @@ def active_block_exists_across(
         .where(
             C19UserBlockRecord.is_active.is_(True),
             C19UserBlockRecord.status == "active",
+            effective_block_target_condition(
+                C19UserBlockRecord.blocker_user_id,
+                C19UserBlockRecord.blocked_user_id,
+            ),
             C19UserBlockRecord.blocker_user_id
             != C19UserBlockRecord.blocked_user_id,
             or_(

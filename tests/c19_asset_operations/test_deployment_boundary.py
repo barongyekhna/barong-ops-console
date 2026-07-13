@@ -233,6 +233,7 @@ def test_nginx_has_only_opaque_streaming_routes_with_per_request_auth() -> None:
         assert 'proxy_set_header Authorization "";' not in event_location
         assert 'proxy_set_header X-Session-Token "";' not in event_location
     assert "img-src 'self' data: blob:" in document
+    assert "img-src 'self' data: blob: https:" in document
 
 
 def test_deployment_cookie_path_covers_both_asset_byte_locators() -> None:
@@ -361,6 +362,7 @@ def test_record_backup_and_restore_gates_require_stage6_retention_schema() -> No
 
     next_config = (ROOT / "frontend/next.config.ts").read_text(encoding="utf-8")
     assert "img-src 'self' data: blob:" in next_config
+    assert "img-src 'self' data: blob: https:" in next_config
 
 
 def test_asset_runtime_secrets_archives_and_backup_roles_are_isolated() -> None:

@@ -49,6 +49,7 @@ import type {
   C19UnreadSummary,
   C19UpdateConversationSettingsInput,
   C19UpdateGroupInput,
+  C19UpdateMyProfileInput,
   C19AddGroupMembersInput,
 } from "./types";
 
@@ -78,6 +79,14 @@ export function listC19Directory(query: C19DirectoryQuery = {}) {
 export function getC19Profile(userId: number) {
   return apiRequest<C19Profile>(`${C19_API_BASE}/profiles/${userId}`, {
     method: "GET",
+  });
+}
+
+export function updateC19MyProfile(input: C19UpdateMyProfileInput) {
+  return apiRequest<C19Profile>(`${C19_API_BASE}/profiles/me`, {
+    body: input,
+    method: "PATCH",
+    retryLimit: 0,
   });
 }
 

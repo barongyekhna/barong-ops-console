@@ -55,7 +55,9 @@ import {
   transferC19GroupOwner,
   updateC19ConversationSettings,
   updateC19Group,
+  updateC19MyProfile,
 } from "./api";
+import { C19Avatar } from "./C19Avatar";
 import { C19ChatPanel } from "./C19ChatPanel";
 import { C19MomentsPanel } from "./C19MomentsPanel";
 import { C19ProfileCard } from "./C19ProfileCard";
@@ -101,11 +103,6 @@ function errorMessage(error: unknown, fallback: string) {
     return error.message || fallback;
   }
   return error instanceof Error && error.message ? error.message : fallback;
-}
-
-function initials(name: string) {
-  const normalized = name.trim();
-  return normalized ? normalized.slice(0, 2).toUpperCase() : "成员";
 }
 
 function readableDate(value: string | null | undefined) {
@@ -342,7 +339,7 @@ export function C19Workspace() {
         map.set(block.profile.user_id, block.profile);
       }
     }
-    if (authenticatedProfile && !map.has(authenticatedProfile.user_id)) {
+    if (authenticatedProfile) {
       map.set(authenticatedProfile.user_id, authenticatedProfile);
     }
     return map;
@@ -541,6 +538,80 @@ export function C19Workspace() {
       }
     },
     [busyKey, loadControlData],
+  );
+
+  const updateMyAvatar = useCallback(
+    async (avatarRef: string | null) => {
+      if (busyKey) throw new Error("另一个通讯操作正在进行，请稍后重试。");
+      setBusyKey("avatar");
+      setActionError("");
+      setNotice("");
+      try {
+        const updated = await updateC19MyProfile({ avatar_ref: avatarRef });
+        const replaceProfile = (profile: C19Profile) =>
+          profile.user_id === updated.user_id ? updated : profile;
+        setAuthenticatedProfile(updated);
+        setProfileCard((current) =>
+          current?.user_id === updated.user_id ? updated : current,
+        );
+        setDirectory((current) => current.map(replaceProfile));
+        setFriends((current) =>
+          current.map((friend) => ({
+            ...friend,
+            profile: replaceProfile(friend.profile),
+          })),
+        );
+        setBlocks((current) =>
+          current.map((block) => ({
+            ...block,
+            profile: replaceProfile(block.profile),
+          })),
+        );
+        setFriendRequests((current) =>
+          current.map((request) => ({
+            ...request,
+            addressee:
+              request.addressee.user_id === updated.user_id
+                ? {
+                    ...request.addressee,
+                    avatar_ref: updated.avatar_ref,
+                    display_name: updated.display_name,
+                  }
+                : request.addressee,
+            requester:
+              request.requester.user_id === updated.user_id
+                ? {
+                    ...request.requester,
+                    avatar_ref: updated.avatar_ref,
+                    display_name: updated.display_name,
+                  }
+                : request.requester,
+          })),
+        );
+        setConversations((current) =>
+          current.map((conversation) =>
+            conversation.direct_peer?.user_id === updated.user_id
+              ? {
+                  ...conversation,
+                  direct_peer: {
+                    ...conversation.direct_peer,
+                    avatar_ref: updated.avatar_ref,
+                    display_name: updated.display_name,
+                  },
+                }
+              : conversation,
+          ),
+        );
+        setNotice(avatarRef ? "头像已更新。" : "已恢复默认头像。");
+      } catch (error) {
+        const message = errorMessage(error, "头像更新失败。");
+        setActionError(message);
+        throw new Error(message);
+      } finally {
+        setBusyKey("");
+      }
+    },
+    [busyKey],
   );
 
   const openConversation = useCallback(
@@ -829,6 +900,22 @@ export function C19Workspace() {
               <small>{label}</small>
             </button>
           ))}
+          {selfProfile ? (
+            <button
+              aria-label="查看我的名片并更换头像"
+              className={styles.railProfile}
+              onClick={() => setProfileCard(selfProfile)}
+              title="我的头像"
+              type="button"
+            >
+              <C19Avatar
+                avatarRef={selfProfile.avatar_ref}
+                className={styles.railProfileAvatar}
+                name={selfProfile.display_name}
+              />
+              <small>我的头像</small>
+            </button>
+          ) : null}
           <button
             className={styles.railRefresh}
             disabled={isLoading}
@@ -901,20 +988,20 @@ export function C19Workspace() {
                           onClick={() => void openConversation(conversationId)}
                           type="button"
                         >
-                          <span
-                            aria-hidden="true"
-                            className={
-                              conversation.type === "group"
-                                ? styles.sessionGroupAvatar
-                                : styles.sessionAvatar
-                            }
-                          >
-                            {conversation.type === "group" ? (
+                          {conversation.type === "group" ? (
+                            <span
+                              aria-hidden="true"
+                              className={styles.sessionGroupAvatar}
+                            >
                               <UsersRound aria-hidden="true" size={19} />
-                            ) : (
-                              initials(name)
-                            )}
-                          </span>
+                            </span>
+                          ) : (
+                            <C19Avatar
+                              avatarRef={conversation.direct_peer?.avatar_ref}
+                              className={styles.sessionAvatar}
+                              name={name}
+                            />
+                          )}
                           <span className={styles.sessionMeta}>
                             <span className={styles.sessionTopLine}>
                               <strong>{name}</strong>
@@ -1182,9 +1269,11 @@ export function C19Workspace() {
                             onClick={() => setProfileCard(profile)}
                             type="button"
                           >
-                            <span aria-hidden="true" className={styles.contactAvatar}>
-                              {initials(profile.display_name)}
-                            </span>
+                            <C19Avatar
+                              avatarRef={profile.avatar_ref}
+                              className={styles.contactAvatar}
+                              name={profile.display_name}
+                            />
                             <span className={styles.contactRowMeta}>
                               <strong>
                                 {profile.display_name}
@@ -1417,6 +1506,7 @@ export function C19Workspace() {
               () => removeC19Block(profile.user_id),
             )
           }
+          onUpdateAvatar={updateMyAvatar}
           profile={cardUser}
         />
       ) : null}
@@ -1482,9 +1572,11 @@ export function C19Workspace() {
                         }
                         type="checkbox"
                       />
-                      <span aria-hidden="true" className={styles.contactAvatar}>
-                        {initials(profile.display_name)}
-                      </span>
+                      <C19Avatar
+                        avatarRef={profile.avatar_ref}
+                        className={styles.contactAvatar}
+                        name={profile.display_name}
+                      />
                       <span>{profile.display_name}</span>
                     </label>
                   );
@@ -1583,11 +1675,11 @@ function ConversationInfoDrawer({
           onClick={() => onOpenProfile(peerUserId)}
           type="button"
         >
-          <span aria-hidden="true" className={styles.contactAvatar}>
-            {initials(
-              profileByUserId.get(peerUserId)?.display_name ?? "成员",
-            )}
-          </span>
+          <C19Avatar
+            avatarRef={profileByUserId.get(peerUserId)?.avatar_ref}
+            className={styles.contactAvatar}
+            name={profileByUserId.get(peerUserId)?.display_name ?? "成员"}
+          />
           <span>
             <strong>
               {profileByUserId.get(peerUserId)?.display_name ??
@@ -1679,9 +1771,11 @@ function ConversationInfoDrawer({
                     onClick={() => onOpenProfile(member.user_id)}
                     type="button"
                   >
-                    <span aria-hidden="true" className={styles.contactAvatar}>
-                      {initials(profile?.display_name ?? "成员")}
-                    </span>
+                    <C19Avatar
+                      avatarRef={profile?.avatar_ref}
+                      className={styles.contactAvatar}
+                      name={profile?.display_name ?? "成员"}
+                    />
                     <span>
                       <strong>
                         {profile?.display_name ?? `成员 #${member.user_id}`}

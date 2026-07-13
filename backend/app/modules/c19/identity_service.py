@@ -5,6 +5,8 @@ from __future__ import annotations
 from sqlalchemy.orm import Session
 
 from ...models.user import User
+from ...repositories.operation_logs import create_operation_log
+from ...services.auth_service import AuditContext
 from ...services.data_isolation import without_org_data_isolation
 from . import identity_repository
 from .identity_repository import C19ProfileBundle
@@ -14,6 +16,7 @@ from .identity_schemas import (
     C19DirectoryPage,
     C19ProfileRead,
     C19ProfileSummaryRead,
+    C19ProfileUpdate,
 )
 
 
@@ -118,6 +121,56 @@ def get_profile(
     return profile_read_from_bundle(bundle)
 
 
+def update_own_profile(
+    db: Session,
+    *,
+    actor: User,
+    payload: C19ProfileUpdate,
+    audit: AuditContext,
+) -> C19ProfileRead:
+    require_active_c19_actor(db, actor=actor)
+    with without_org_data_isolation():
+        profile = identity_repository.get_profile_for_update(
+            db,
+            user_id=actor.id,
+        )
+        if profile is None:
+            raise C19ProfileNotFoundError("C19 profile not found.")
+
+        previous_avatar_ref = profile.avatar_ref
+        profile.avatar_ref = payload.avatar_ref
+        db.flush()
+        bundle = identity_repository.get_active_profile_bundle(
+            db,
+            user_id=actor.id,
+        )
+        if bundle is None:
+            raise C19ProfileNotFoundError("C19 profile not found.")
+        response = profile_read_from_bundle(bundle)
+
+        # Keep the potentially sensitive URL/path out of the audit log.  The
+        # durable profile row is authoritative; the log records only lifecycle
+        # state and whether this request changed it.
+        create_operation_log(
+            db,
+            actor_type="user",
+            actor_id=str(actor.id),
+            action="c19.profile.avatar.update",
+            target_type="c19_profile",
+            target_id=str(actor.id),
+            result="success",
+            request_id=audit.request_id,
+            ip_address=audit.ip_address,
+            user_agent=audit.user_agent,
+            details={
+                "changed": previous_avatar_ref != payload.avatar_ref,
+                "cleared": payload.avatar_ref is None,
+            },
+        )
+        db.commit()
+    return response
+
+
 __all__ = [
     "C19ActorUnavailableError",
     "C19IdentityError",
@@ -127,4 +180,5 @@ __all__ = [
     "profile_read_from_bundle",
     "profile_summary_from_bundle",
     "require_active_c19_actor",
+    "update_own_profile",
 ]

@@ -354,11 +354,19 @@
   font-weight: 850;
   height: 42px;
   justify-content: center;
+  overflow: hidden;
   width: 42px;
 }
 
+.momentAvatar img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
 .momentHeader strong { color: #0f172a; font-size: 14px; }
-.momentHeader span { color: #64748b; font-size: 10px; line-height: 1.4; }
+.momentHeader > div > span { color: #64748b; font-size: 10px; line-height: 1.4; }
 .deleteMomentButton { margin-left: auto; }
 
 .momentContent {

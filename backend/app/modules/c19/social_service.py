@@ -17,6 +17,7 @@ from ...repositories.operation_logs import create_operation_log
 from ...services.auth_service import AuditContext
 from ...services.data_isolation import without_org_data_isolation
 from . import identity_repository, social_repository
+from .block_policy import is_protected_block_target
 from .identity_repository import C19ProfileBundle
 from .identity_service import (
     C19ProfileNotFoundError,
@@ -51,6 +52,10 @@ class C19SocialConflictError(C19SocialError):
 
 
 class C19SocialSelfTargetError(C19SocialError):
+    pass
+
+
+class C19SocialProtectedTargetError(C19SocialError):
     pass
 
 
@@ -150,6 +155,26 @@ def _ensure_pair_interaction_available(
     ):
         raise C19SocialInteractionUnavailableError(
             "Social interaction is unavailable."
+        )
+
+
+def _ensure_block_target_allowed(
+    db: Session,
+    *,
+    actor_user_id: int,
+    target_user_id: int,
+) -> None:
+    target = db.get(User, target_user_id)
+    if target is None:
+        raise C19ProfileNotFoundError("C19 profile not found.")
+    if is_protected_block_target(
+        db,
+        blocker_user_id=actor_user_id,
+        blocked_user_id=target_user_id,
+    ):
+        raise C19SocialProtectedTargetError(
+            "The owner, or the super administrator of your organization, "
+            "cannot be blocked."
         )
 
 
@@ -657,6 +682,11 @@ def block_user(
             user_a_id=actor.id,
             user_b_id=user_id,
         )
+        _ensure_block_target_allowed(
+            db,
+            actor_user_id=actor.id,
+            target_user_id=user_id,
+        )
         block = social_repository.get_user_block(
             db,
             blocker_user_id=actor.id,
@@ -775,6 +805,7 @@ __all__ = [
     "C19SocialError",
     "C19SocialInteractionUnavailableError",
     "C19SocialNotFoundError",
+    "C19SocialProtectedTargetError",
     "C19SocialSelfTargetError",
     "accept_friend_request",
     "block_user",

@@ -10,13 +10,18 @@ from sqlalchemy.orm import Session
 from ...api.deps import get_audit_context, get_current_user
 from ...db.session import get_db
 from ...models.user import User
-from .identity_schemas import C19DirectoryPage, C19ProfileRead
+from .identity_schemas import (
+    C19DirectoryPage,
+    C19ProfileRead,
+    C19ProfileUpdate,
+)
 from .identity_service import (
     C19ActorUnavailableError,
     C19IdentityError,
     C19ProfileNotFoundError,
     get_profile,
     list_directory,
+    update_own_profile,
 )
 from .social_schemas import (
     C19BlockPage,
@@ -33,6 +38,7 @@ from .social_service import (
     C19SocialConflictError,
     C19SocialError,
     C19SocialNotFoundError,
+    C19SocialProtectedTargetError,
     C19SocialSelfTargetError,
     accept_friend_request,
     block_user,
@@ -60,7 +66,10 @@ FriendRequestIdPath = Annotated[
 
 def _raise_c19_error(db: Session, exc: Exception) -> None:
     db.rollback()
-    if isinstance(exc, C19ActorUnavailableError):
+    if isinstance(
+        exc,
+        (C19ActorUnavailableError, C19SocialProtectedTargetError),
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
@@ -118,6 +127,24 @@ def profile_endpoint(
 ) -> C19ProfileRead:
     try:
         return get_profile(db, actor=actor, user_id=user_id)
+    except Exception as exc:
+        _raise_c19_error(db, exc)
+
+
+@router.patch("/profiles/me", response_model=C19ProfileRead)
+def own_profile_update_endpoint(
+    payload: C19ProfileUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    actor: User = Depends(get_current_user),
+) -> C19ProfileRead:
+    try:
+        return update_own_profile(
+            db,
+            actor=actor,
+            payload=payload,
+            audit=get_audit_context(request),
+        )
     except Exception as exc:
         _raise_c19_error(db, exc)
 

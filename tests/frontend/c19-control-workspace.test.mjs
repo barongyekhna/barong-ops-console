@@ -16,6 +16,7 @@ const assetId = "att_0123456789abcdef0123456789abcdef";
 const allowed = [
   ["GET", ["c19", "directory"]],
   ["GET", ["c19", "profiles", "42"]],
+  ["PATCH", ["c19", "profiles", "me"]],
   ["GET", ["c19", "friend-requests"]],
   ["POST", ["c19", "friend-requests"]],
   ["POST", ["c19", "friend-requests", "c19frq_0123456789abcdef0123456789abcdef", "accept"]],
@@ -112,6 +113,8 @@ test("C19 proxy rejects unapproved methods and non-record content paths", () => 
     ["DELETE", ["c19", "directory"]],
     ["PATCH", ["c19", "friends", "42"]],
     ["POST", ["c19", "profiles", "42"]],
+    ["PATCH", ["c19", "profiles", "42"]],
+    ["GET", ["c19", "profiles", "me"]],
     ["GET", ["c19", "profiles", "not-a-numeric-user"]],
   ];
 
@@ -155,6 +158,10 @@ test("C19 is a global authenticated feature with optional organization context",
     "frontend/src/app/(console)/c19/page.tsx",
     "utf8",
   );
+  const layoutSource = readFileSync(
+    "frontend/src/app/(console)/c19/layout.tsx",
+    "utf8",
+  );
   const apiSource = readFileSync("frontend/src/modules/c19/api.ts", "utf8");
   const typeSource = readFileSync("frontend/src/modules/c19/types.ts", "utf8");
   const workspaceSource = readFileSync(
@@ -190,6 +197,9 @@ test("C19 is a global authenticated feature with optional organization context",
   assert.match(routeGuardSource, /pathname === "\/c19"/);
   assert.match(routeGuardSource, /isC19Route \|\|/);
   assert.match(pageSource, /C19Workspace/);
+  assert.match(layoutSource, /className="ra-command"/);
+  assert.match(layoutSource, /className="ra-command-space"/);
+  assert.match(layoutSource, /className="ra-command-phoenix"/);
   assert.doesNotMatch(workspaceSource, /必须明确选择.*组织身份/);
   assert.doesNotMatch(workspaceSource, /朋友圈仍未开放/);
   assert.match(workspaceSource, /const LOAD_LIMIT = 100/);
@@ -219,6 +229,10 @@ test("C19 is a global authenticated feature with optional organization context",
     "frontend/src/modules/c19/C19ProfileCard.tsx",
     "utf8",
   );
+  const avatarSource = readFileSync(
+    "frontend/src/modules/c19/C19Avatar.tsx",
+    "utf8",
+  );
   assert.match(profileCardSource, /发消息/);
   assert.match(profileCardSource, /profile\.affiliations\.map/);
   assert.doesNotMatch(
@@ -226,6 +240,13 @@ test("C19 is a global authenticated feature with optional organization context",
     /<select|actor_affiliation_id|peer_affiliation_id/,
   );
   assert.match(profileCardSource, /基础通讯用户 · 未加入任何组织/);
+  assert.match(profileCardSource, /更换头像/);
+  assert.match(profileCardSource, /恢复默认/);
+  assert.match(profileCardSource, /onUpdateAvatar\(normalized \|\| null\)/);
+  assert.match(avatarSource, /onError=\{\(\) => setImageFailed\(true\)\}/);
+  assert.match(avatarSource, /referrerPolicy="no-referrer"/);
+  assert.match(apiSource, /updateC19MyProfile/);
+  assert.match(apiSource, /`\$\{C19_API_BASE\}\/profiles\/me`/);
   assert.match(apiSource, /conversationRuntimePath\(conversationId, "messages"\)/);
   assert.doesNotMatch(apiSource, /\/attachments|\/storage|\/providers|\/vps/i);
   assert.match(apiSource, /createC19MomentDraft/);
@@ -288,6 +309,11 @@ test("C19 is a global authenticated feature with optional organization context",
   assert.match(chatSource, /error instanceof ApiError && error\.status === 410/);
   assert.match(chatSource, /原 client_message_id 不能继续重放/);
   assert.match(chatSource, /contentTypeFor/);
+  assert.match(chatSource, /EMOJI_CATEGORIES/);
+  assert.match(chatSource, /aria-label="打开表情选择器"/);
+  assert.match(chatSource, /aria-label="选择表情"/);
+  assert.match(chatSource, /insertEmoji\(emoji\)/);
+  assert.match(chatSource, /document\.addEventListener\("pointerdown", closeOnOutsideClick\)/);
   assert.match(typeSource, /C19MessageContentType = "text" \| "emoji" \| "image" \| "file"/);
   assert.match(typeSource, /assets: C19AssetReference\[\]/);
   assert.match(chatSource, /putC19AssetBytes/);

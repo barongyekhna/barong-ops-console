@@ -249,4 +249,5 @@ test("asset UI is volatile, viewport-scoped, and never embeds ordinary files", (
   assert.match(proxySource, /C19_JSON|C19_MESSAGE_BODY_MAX_BYTES/);
   assert.match(proxySource, /文件字节不能经过此前端代理/);
   assert.match(nextConfigSource, /img-src 'self' data: blob:/);
+  assert.match(nextConfigSource, /img-src 'self' data: blob: https:/);
 });

@@ -200,6 +200,18 @@ def get_active_profile_bundle(
     return bundles[0] if bundles else None
 
 
+def get_profile_for_update(
+    db: Session,
+    *,
+    user_id: int,
+) -> C19ProfileRecord | None:
+    return db.scalar(
+        select(C19ProfileRecord)
+        .where(C19ProfileRecord.user_id == user_id)
+        .with_for_update()
+    )
+
+
 def get_active_profile_bundles(
     db: Session,
     *,
@@ -230,5 +242,6 @@ __all__ = [
     "C19ProfileBundle",
     "get_active_profile_bundle",
     "get_active_profile_bundles",
+    "get_profile_for_update",
     "list_active_profile_bundles",
 ]

@@ -22,11 +22,19 @@ from backend.app.models.c19 import (
 from backend.app.models.org_membership import OrgMembershipRecord
 from backend.app.models.organization import OrganizationRecord
 from backend.app.models.user import User
-from backend.app.modules.c19 import social_service
+from backend.app.modules.c19 import (
+    conversation_repository,
+    identity_service,
+    moment_repository,
+    social_repository,
+    social_service,
+)
+from backend.app.modules.c19.identity_schemas import C19ProfileUpdate
 from backend.app.modules.c19.identity_service import (
     C19ActorUnavailableError,
     get_profile,
     list_directory,
+    update_own_profile,
 )
 from backend.app.modules.c19.identity_social_router import FriendRequestIdPath, router
 from backend.app.modules.c19.identity_sync_service import (
@@ -40,6 +48,7 @@ from backend.app.modules.c19.social_schemas import (
 from backend.app.modules.c19.social_service import (
     C19SocialConflictError,
     C19SocialInteractionUnavailableError,
+    C19SocialProtectedTargetError,
     accept_friend_request,
     block_user,
     cancel_friend_request,
@@ -123,6 +132,23 @@ def social_audit_events(monkeypatch: pytest.MonkeyPatch) -> list[dict[str, objec
         )
 
     monkeypatch.setattr(social_service, "_write_social_audit", capture_audit)
+    return events
+
+
+@pytest.fixture
+def identity_audit_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[dict[str, object]]:
+    events: list[dict[str, object]] = []
+
+    def capture_audit(
+        db: Session,
+        **event: object,
+    ) -> None:
+        del db
+        events.append(event)
+
+    monkeypatch.setattr(identity_service, "create_operation_log", capture_audit)
     return events
 
 
@@ -217,6 +243,7 @@ def test_router_contract_uses_fixed_paths_and_safe_query_names() -> None:
         methods_by_path.setdefault(route.path, set()).update(route.methods or ())
     assert methods_by_path == {
         "/c19/directory": {"GET"},
+        "/c19/profiles/me": {"PATCH"},
         "/c19/profiles/{user_id}": {"GET"},
         "/c19/friend-requests": {"GET", "POST"},
         "/c19/friend-requests/{request_id}/accept": {"POST"},
@@ -255,6 +282,88 @@ def test_router_contract_uses_fixed_paths_and_safe_query_names() -> None:
     for invalid in ("", "request-1", "c19frq_" + "z" * 32, "x" * 65):
         with pytest.raises(ValidationError):
             request_id_adapter.validate_python(invalid)
+
+
+@pytest.mark.parametrize(
+    "avatar_ref",
+    [
+        "",
+        "   ",
+        "http://cdn.example.test/avatar.png",
+        "//cdn.example.test/avatar.png",
+        "data:image/png;base64,AAAA",
+        "javascript:alert(1)",
+        "images/avatar.png",
+        "https://user@example.test/avatar.png",
+        "https://example.test/avatar\\name.png",
+        "https://example.test/avatar\nname.png",
+        "https://example.test/avatar\u202ename.png",
+        "https://example.test/" + "a" * 500,
+    ],
+)
+def test_profile_update_rejects_unsafe_avatar_references(
+    avatar_ref: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        C19ProfileUpdate(avatar_ref=avatar_ref)
+
+
+def test_profile_update_accepts_https_same_origin_and_clear_values() -> None:
+    assert C19ProfileUpdate(
+        avatar_ref="  https://cdn.example.test/avatar.png  "
+    ).avatar_ref == "https://cdn.example.test/avatar.png"
+    assert (
+        C19ProfileUpdate(
+            avatar_ref=" /api/backend/c19-assets/d/example "
+        ).avatar_ref
+        == "/api/backend/c19-assets/d/example"
+    )
+    assert C19ProfileUpdate(avatar_ref=None).avatar_ref is None
+
+
+def test_current_user_can_update_and_clear_only_their_avatar(
+    db: Session,
+    identity_audit_events: list[dict[str, object]],
+) -> None:
+    actor, target, _, org_one, _ = _seed_people(db)
+    actor_profile = db.get(C19ProfileRecord, actor.id)
+    target_profile = db.get(C19ProfileRecord, target.id)
+    target_profile.avatar_ref = "/assets/existing-target.png"
+    db.commit()
+
+    updated = update_own_profile(
+        db,
+        actor=actor,
+        payload=C19ProfileUpdate(
+            avatar_ref="  https://cdn.example.test/avatars/actor.png  "
+        ),
+        audit=AUDIT,
+    )
+
+    assert updated.user_id == actor.id
+    assert updated.avatar_ref == "https://cdn.example.test/avatars/actor.png"
+    assert {item.org_id for item in updated.affiliations} == {org_one.org_id}
+    assert actor_profile.avatar_ref == updated.avatar_ref
+    assert target_profile.avatar_ref == "/assets/existing-target.png"
+    assert identity_audit_events[0]["action"] == "c19.profile.avatar.update"
+    assert identity_audit_events[0]["target_id"] == str(actor.id)
+    assert identity_audit_events[0]["details"] == {
+        "changed": True,
+        "cleared": False,
+    }
+    assert "cdn.example.test" not in repr(identity_audit_events)
+
+    cleared = update_own_profile(
+        db,
+        actor=actor,
+        payload=C19ProfileUpdate(avatar_ref=None),
+        audit=AUDIT,
+    )
+    assert cleared.avatar_ref is None
+    assert identity_audit_events[-1]["details"] == {
+        "changed": True,
+        "cleared": True,
+    }
 
 
 def test_directory_aggregates_all_affiliations_and_trusts_source_membership(
@@ -658,3 +767,204 @@ def test_friendship_block_privacy_and_removed_accept_regression(
     )
     assert page.count == 2
     assert len(page.items) == 1
+
+
+def test_block_protects_owner_globally_and_same_org_super_admin(
+    db: Session,
+    social_audit_events: list[dict[str, object]],
+) -> None:
+    actor = _user(db, "block-policy-actor")
+    owner = _user(db, "block-policy-owner", role="OWNER")
+    super_admin = _user(
+        db,
+        "block-policy-super-admin",
+        role="super_admin",
+    )
+    outsider_super_admin = _user(
+        db,
+        "block-policy-outsider-super-admin",
+        role="super_admin",
+    )
+    organization = _organization(db, "Protected Org", owner=owner)
+    outsider_org = _organization(db, "Other Org", owner=owner)
+    super_admin.organization_id = organization.org_id
+    outsider_super_admin.organization_id = outsider_org.org_id
+    _membership(db, user=actor, organization=organization, role="member")
+    _membership(db, user=super_admin, organization=organization, role="admin")
+    _membership(
+        db,
+        user=outsider_super_admin,
+        organization=outsider_org,
+        role="admin",
+    )
+    sync_profile_for_user(db, user=owner)
+    db.commit()
+
+    with pytest.raises(
+        C19SocialProtectedTargetError,
+        match="owner",
+    ):
+        block_user(db, actor=actor, user_id=owner.id, audit=AUDIT)
+    db.rollback()
+
+    with pytest.raises(
+        C19SocialProtectedTargetError,
+        match="super administrator",
+    ):
+        block_user(db, actor=actor, user_id=super_admin.id, audit=AUDIT)
+    db.rollback()
+
+    assert db.scalar(select(C19UserBlockRecord)) is None
+    assert social_audit_events == []
+
+    # A global super-admin role alone is insufficient: protection is scoped to
+    # the target's authoritative organization_id and the actor's membership.
+    allowed = block_user(
+        db,
+        actor=actor,
+        user_id=outsider_super_admin.id,
+        audit=AUDIT,
+    )
+    assert allowed.profile.user_id == outsider_super_admin.id
+    assert social_audit_events[-1]["action"] == "c19.block.create"
+
+
+def test_super_admin_block_protection_requires_effective_memberships(
+    db: Session,
+    social_audit_events: list[dict[str, object]],
+) -> None:
+    actor = _user(db, "suspended-block-policy-actor")
+    super_admin = _user(
+        db,
+        "suspended-block-policy-super-admin",
+        role="super_admin",
+    )
+    owner = _user(db, "suspended-block-policy-owner", role="owner")
+    organization = _organization(db, "Suspended Membership Org", owner=owner)
+    super_admin.organization_id = organization.org_id
+    actor_membership = _membership(
+        db,
+        user=actor,
+        organization=organization,
+        role="member",
+        status="suspended",
+    )
+    _membership(
+        db,
+        user=super_admin,
+        organization=organization,
+        role="admin",
+    )
+    db.commit()
+
+    allowed = block_user(
+        db,
+        actor=actor,
+        user_id=super_admin.id,
+        audit=AUDIT,
+    )
+    assert allowed.profile.user_id == super_admin.id
+
+    unblock_user(db, actor=actor, user_id=super_admin.id, audit=AUDIT)
+    actor_membership.status = "active"
+    organization.status = "suspended"
+    db.commit()
+    allowed_for_inactive_org = block_user(
+        db,
+        actor=actor,
+        user_id=super_admin.id,
+        audit=AUDIT,
+    )
+    assert allowed_for_inactive_org.profile.user_id == super_admin.id
+
+
+def test_super_admin_protection_uses_the_targets_own_organization(
+    db: Session,
+    social_audit_events: list[dict[str, object]],
+) -> None:
+    actor = _user(db, "cross-org-block-policy-actor")
+    target = _user(db, "cross-org-block-policy-target", role="super_admin")
+    owner = _user(db, "cross-org-block-policy-owner", role="owner")
+    actor_org = _organization(db, "Actor Shared Org", owner=owner)
+    target_org = _organization(db, "Target Admin Org", owner=owner)
+    target.organization_id = target_org.org_id
+    _membership(db, user=actor, organization=actor_org)
+    _membership(db, user=target, organization=actor_org, role="member")
+    _membership(db, user=target, organization=target_org, role="admin")
+    db.commit()
+
+    allowed = block_user(db, actor=actor, user_id=target.id, audit=AUDIT)
+    assert allowed.profile.user_id == target.id
+    assert social_audit_events[-1]["action"] == "c19.block.create"
+
+
+def test_existing_blocks_become_ineffective_for_currently_protected_targets(
+    db: Session,
+) -> None:
+    actor = _user(db, "existing-policy-actor")
+    target = _user(db, "existing-policy-target")
+    owner = _user(db, "existing-policy-owner", role="owner")
+    organization = _organization(db, "Existing Policy Org", owner=owner)
+    actor_membership = _membership(
+        db,
+        user=actor,
+        organization=organization,
+        status="suspended",
+    )
+    _membership(db, user=target, organization=organization, role="admin")
+    target.organization_id = organization.org_id
+    block = C19UserBlockRecord(
+        blocker_user_id=actor.id,
+        blocked_user_id=target.id,
+        status="active",
+        is_active=True,
+        blocked_at=datetime.now(UTC),
+    )
+    db.add(block)
+    db.commit()
+
+    assert social_repository.has_active_block_between(
+        db,
+        user_a_id=actor.id,
+        user_b_id=target.id,
+    )
+    assert conversation_repository.active_block_exists_between(
+        db,
+        first_user_id=actor.id,
+        second_user_id=target.id,
+    )
+    assert moment_repository.list_blocked_user_ids(db, user_id=actor.id) == {
+        target.id
+    }
+    assert list_blocks(db, actor=actor, limit=10, offset=0).count == 1
+
+    target.role = "owner"
+    db.commit()
+    assert not social_repository.has_active_block_between(
+        db,
+        user_a_id=actor.id,
+        user_b_id=target.id,
+    )
+    assert not conversation_repository.active_block_exists_between(
+        db,
+        first_user_id=actor.id,
+        second_user_id=target.id,
+    )
+    assert moment_repository.list_blocked_user_ids(db, user_id=actor.id) == set()
+    assert list_blocks(db, actor=actor, limit=10, offset=0).count == 0
+
+    target.role = "super_admin"
+    actor_membership.status = "active"
+    db.commit()
+    assert not social_repository.has_active_block_between(
+        db,
+        user_a_id=actor.id,
+        user_b_id=target.id,
+    )
+    assert not conversation_repository.active_block_exists_between(
+        db,
+        first_user_id=actor.id,
+        second_user_id=target.id,
+    )
+    assert moment_repository.list_blocked_user_ids(db, user_id=actor.id) == set()
+    assert list_blocks(db, actor=actor, limit=10, offset=0).count == 0

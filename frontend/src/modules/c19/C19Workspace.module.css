@@ -937,22 +937,102 @@
   color: #64748b;
   display: flex;
   gap: 5px;
-  overflow-x: auto;
+  position: relative;
+  width: fit-content;
 }
 
-.quickEmoji button {
+.emojiTrigger {
+  align-items: center;
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #cbd5e1;
   border-radius: 8px;
   color: #334155;
   cursor: pointer;
-  flex: 0 0 auto;
+  display: inline-flex;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 5px;
+  padding: 6px 9px;
+}
+
+.emojiTrigger:hover:not(:disabled),
+.emojiTrigger[aria-expanded="true"] {
+  background: #e0f2fe;
+  border-color: #7dd3fc;
+  color: #075985;
+}
+
+.emojiTrigger:disabled { cursor: not-allowed; opacity: 0.45; }
+
+.emojiPicker {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 13px;
+  bottom: calc(100% + 8px);
+  box-shadow: 0 16px 38px rgb(15 23 42 / 22%);
+  display: grid;
+  gap: 9px;
+  left: 0;
+  padding: 10px;
+  position: absolute;
+  width: min(360px, calc(100vw - 44px));
+  z-index: 30;
+}
+
+.emojiCategories {
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.emojiCategories button {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #64748b;
+  cursor: pointer;
+  flex: 1;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 750;
+  min-width: 54px;
   padding: 5px 7px;
 }
 
-.quickEmoji button:disabled { cursor: not-allowed; opacity: 0.45; }
+.emojiCategories button[aria-selected="true"] {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #075985;
+}
+
+.emojiGrid {
+  display: grid;
+  gap: 4px;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+}
+
+.emojiGrid button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 20px;
+  height: 34px;
+  justify-content: center;
+  padding: 0;
+}
+
+.emojiGrid button:hover,
+.emojiGrid button:focus-visible {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
 
 .assetPickerRow {
   align-items: center;
@@ -1154,6 +1234,7 @@
   .selectedAssetCard { grid-template-columns: 48px minmax(0, 1fr) auto; }
   .selectedAssetCard > img { height: 48px; width: 48px; }
   .selectedAssetCard > .assetSpinner { display: none; }
+  .emojiGrid { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 }
 
 /* ══════════════════════════════════════════════════════════════════
@@ -1184,7 +1265,8 @@
 
 .railButton,
 .railButtonActive,
-.railRefresh {
+.railRefresh,
+.railProfile {
   align-items: center;
   background: transparent;
   border: 1px solid transparent;
@@ -1201,13 +1283,15 @@
 
 .railButton small,
 .railButtonActive small,
-.railRefresh small {
+.railRefresh small,
+.railProfile small {
   font-size: 11px;
   font-weight: 700;
 }
 
 .railButton:hover,
-.railRefresh:hover:not(:disabled) {
+.railRefresh:hover:not(:disabled),
+.railProfile:hover {
   background: rgb(224 242 254 / 66%);
   color: #0f172a;
 }
@@ -1239,8 +1323,31 @@
   top: -6px;
 }
 
+.railProfile {
+  margin-top: auto;
+}
+
 .railRefresh {
   margin-top: auto;
+}
+
+.railProfile + .railRefresh {
+  margin-top: 0;
+}
+
+.railProfileAvatar {
+  align-items: center;
+  background: linear-gradient(135deg, #38bdf8, #0284c7);
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  color: #fff;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 800;
+  height: 34px;
+  justify-content: center;
+  overflow: hidden;
+  width: 34px;
 }
 
 .railRefresh:disabled {
@@ -1366,7 +1473,18 @@
   font-weight: 800;
   height: 40px;
   justify-content: center;
+  overflow: hidden;
   width: 40px;
+}
+
+.railProfileAvatar img,
+.sessionAvatar img,
+.contactAvatar img,
+.profileCardAvatar img {
+  display: block;
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
 }
 
 .sessionGroupAvatar {
@@ -1872,7 +1990,88 @@
   font-weight: 800;
   height: 58px;
   justify-content: center;
+  overflow: hidden;
   width: 58px;
+}
+
+.avatarEditor {
+  background: #f8fbff;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+}
+
+.avatarEditor label,
+.avatarEditor label > span {
+  display: grid;
+  gap: 7px;
+}
+
+.avatarEditor label > span {
+  align-items: center;
+  color: #334155;
+  display: flex;
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.avatarEditor input {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  color: #0f172a;
+  font: inherit;
+  font-size: 12px;
+  min-width: 0;
+  padding: 9px 10px;
+  width: 100%;
+}
+
+.avatarEditor > small {
+  color: #64748b;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.avatarEditorActions {
+  display: flex;
+  gap: 8px;
+}
+
+.avatarEditorActions button {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  color: #334155;
+  cursor: pointer;
+  flex: 1;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 750;
+  padding: 8px;
+}
+
+.avatarEditorActions button:first-child {
+  background: #0f172a;
+  border-color: #0f172a;
+  color: #fff;
+}
+
+.avatarEditorActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.avatarEditor > p {
+  color: #b91c1c;
+  font-size: 11px;
+  margin: 0;
+}
+
+.avatarEditor > p[data-tone="success"] {
+  color: #047857;
 }
 
 .profileCardHead strong {
@@ -1884,7 +2083,7 @@
   gap: 7px;
 }
 
-.profileCardHead span {
+.profileCardHead > div > span {
   color: #64748b;
   display: block;
   font-size: 13px;
@@ -2094,10 +2293,12 @@
     width: 100%;
   }
 
-  .railRefresh {
+  .railProfile {
     margin-left: auto;
     margin-top: 0;
   }
+
+  .railRefresh { margin-top: 0; }
 
   .chatsLayout {
     flex-direction: column;

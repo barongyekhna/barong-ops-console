@@ -17,6 +17,10 @@ export type C19Profile = {
   updated_at?: string;
 };
 
+export type C19UpdateMyProfileInput = {
+  avatar_ref: string | null;
+};
+
 export type C19Page<T> = {
   items: T[];
   count: number;

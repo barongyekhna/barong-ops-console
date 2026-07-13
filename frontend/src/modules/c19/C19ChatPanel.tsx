@@ -59,6 +59,7 @@ import {
   isC19ReceiptSafetyScopeActive,
   mergeC19MessageWindow,
 } from "./C19ChatRecovery";
+import { c19SseReconnectDelay } from "./C19EventStreamRecovery";
 import { C19MessageAsset } from "./C19MessageAsset";
 import { announceC19UnreadChanged } from "./C19UnreadStatus";
 import styles from "./C19Workspace.module.css";
@@ -83,11 +84,44 @@ const MAX_TRACKED_CURSORS = 5_000;
 const EVENT_LIMIT = 200;
 const MAX_EVENT_DRAIN_PAGES = 50;
 const EVENT_POLL_INTERVAL_MS = 4_000;
-const SSE_RECONNECT_INTERVAL_MS = 30_000;
+const SSE_HANDSHAKE_TIMEOUT_MS = 12_000;
 const STATUS_REFRESH_INTERVAL_MS = 15_000;
 const MESSAGE_MAX_LENGTH = 4_000;
 const ASSET_SCAN_POLL_LIMIT = 120;
-const QUICK_EMOJI = ["👍", "❤️", "😊", "🎉", "收到", "谢谢"] as const;
+const EMOJI_CATEGORIES = [
+  {
+    id: "common",
+    label: "常用",
+    emojis: [
+      "😀", "😂", "😊", "😍", "🥳", "😎", "😭", "😡",
+      "👍", "👏", "🙏", "❤️", "🎉", "🔥", "✅", "💯",
+    ],
+  },
+  {
+    id: "faces",
+    label: "表情",
+    emojis: [
+      "😄", "😁", "😅", "🤣", "🙂", "🙃", "😉", "🥰",
+      "😘", "🤔", "🤗", "🤩", "😴", "🤯", "🥺", "😇",
+    ],
+  },
+  {
+    id: "gestures",
+    label: "手势",
+    emojis: [
+      "👋", "👌", "✌️", "🤞", "🤟", "🤝", "💪", "🙌",
+      "👊", "🤙", "☝️", "👏", "🙏", "👍", "👎", "🫶",
+    ],
+  },
+  {
+    id: "objects",
+    label: "活动",
+    emojis: [
+      "🎈", "🎁", "🎊", "🏆", "🚀", "💡", "📌", "📣",
+      "💬", "⭐", "🌈", "☀️", "🌙", "🍀", "☕", "🍻",
+    ],
+  },
+] as const;
 const eventCursorMemory = new Map<string, string>();
 
 type ConnectionMode = "connecting" | "live" | "polling" | "offline";
@@ -232,6 +266,10 @@ export function C19ChatPanel({
   const [resumePosition, setResumePosition] =
     useState<C19ResumePosition | null>(null);
   const [draft, setDraft] = useState("");
+  const [emojiCategory, setEmojiCategory] = useState<string>(
+    EMOJI_CATEGORIES[0].id,
+  );
+  const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [selectedAsset, setSelectedAsset] = useState<PendingAsset | null>(null);
   const [assetTransfer, setAssetTransfer] =
     useState<AssetTransferState | null>(null);
@@ -265,12 +303,18 @@ export function C19ChatPanel({
   const assetAbortRef = useRef<AbortController | null>(null);
   const assetPreviewUrlRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const composerInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const sendInFlightRef = useRef(false);
   const sendOperationRef = useRef(0);
   const messageHistoryRef = useRef<HTMLDivElement | null>(null);
   const stickToBottomRef = useRef(true);
   const recoveryPromiseRef = useRef<Promise<boolean> | null>(null);
   const recoveryOperationRef = useRef(0);
+  const recoveryRunnerRef = useRef<
+    ((manual?: boolean) => Promise<boolean>) | null
+  >(null);
+  const unreadRefreshRunnerRef = useRef<(() => Promise<void>) | null>(null);
   const automaticRecoveryPausedRef = useRef(false);
   const recoveryCheckpointRef = useRef<RecoveryCheckpoint | null>(null);
   const renderedRecordsRef = useRef<C19MessageRecord[]>([]);
@@ -284,6 +328,27 @@ export function C19ChatPanel({
   });
   activeConversationRef.current = conversationId;
   activeUserIdRef.current = userId;
+
+  useEffect(() => {
+    if (!emojiPickerOpen) return;
+    const closeOnOutsideClick = (event: PointerEvent) => {
+      if (
+        event.target instanceof Node &&
+        !emojiPickerRef.current?.contains(event.target)
+      ) {
+        setEmojiPickerOpen(false);
+      }
+    };
+    const closeOnEscape = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") setEmojiPickerOpen(false);
+    };
+    document.addEventListener("pointerdown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [emojiPickerOpen]);
 
   const revokeAssetPreview = useCallback(() => {
     if (assetPreviewUrlRef.current) {
@@ -676,6 +741,9 @@ export function C19ChatPanel({
     }
   }, [conversationId]);
 
+  recoveryRunnerRef.current = recoverFromResume;
+  unreadRefreshRunnerRef.current = refreshUnread;
+
   useEffect(() => {
     let cancelled = false;
     receiptSafetyScopeRef.current = null;
@@ -695,6 +763,7 @@ export function C19ChatPanel({
     setUnreadPosition(null);
     setResumePosition(null);
     setDraft("");
+    setEmojiPickerOpen(false);
     resetAssetComposer();
     setPendingMessage(null);
     pendingMessageRef.current = null;
@@ -911,22 +980,21 @@ export function C19ChatPanel({
     visibilityTick,
   ]);
 
-  const processEvents = useCallback(
-    (events: C19MessageEvent[]) => {
-      const unseen = events.filter((event) => {
-        if (seenEventIdsRef.current.has(event.event_id)) return false;
-        seenEventIdsRef.current.add(event.event_id);
-        return true;
-      });
-      if (seenEventIdsRef.current.size > 2_000) {
-        seenEventIdsRef.current = new Set(
-          [...seenEventIdsRef.current].slice(-1_000),
-        );
-      }
-      return unseen.some((event) => event.conversation_id === conversationId);
-    },
-    [conversationId],
-  );
+  const processEvents = useCallback((events: C19MessageEvent[]) => {
+    const unseen = events.filter((event) => {
+      if (seenEventIdsRef.current.has(event.event_id)) return false;
+      seenEventIdsRef.current.add(event.event_id);
+      return true;
+    });
+    if (seenEventIdsRef.current.size > 2_000) {
+      seenEventIdsRef.current = new Set(
+        [...seenEventIdsRef.current].slice(-1_000),
+      );
+    }
+    return unseen.some(
+      (event) => event.conversation_id === activeConversationRef.current,
+    );
+  }, []);
 
   useEffect(() => {
     const timer = window.setInterval(() => {
@@ -944,20 +1012,33 @@ export function C19ChatPanel({
     let source: EventSource | null = null;
     let pollTimer: number | null = null;
     let reconnectTimer: number | null = null;
+    let handshakeTimer: number | null = null;
     let pollingActive = false;
-    let sseOpened = false;
+    let pollInFlight = false;
+    let streamConnecting = false;
+    let streamGeneration = 0;
+    let failedReconnectAttempts = 0;
+
+    const clearHandshakeTimer = () => {
+      if (handshakeTimer !== null) {
+        window.clearTimeout(handshakeTimer);
+        handshakeTimer = null;
+      }
+    };
 
     const recoverSelectedConversation = async () => {
+      const recover = recoveryRunnerRef.current;
+      if (!recover) return;
       const recoveryWasAlreadyRunning = recoveryPromiseRef.current !== null;
-      let recovered = await recoverFromResume();
+      let recovered = await recover();
       if (recoveryWasAlreadyRunning && !stopped) {
         // The event may have arrived after the active recovery's resume fence.
         // Run one fresh fenced pass instead of treating the coalesced promise
         // as proof that this event was included.
         await new Promise<void>((resolve) => window.queueMicrotask(resolve));
-        recovered = await recoverFromResume();
+        recovered = await recoveryRunnerRef.current?.() ?? false;
       }
-      if (recovered && !stopped) await refreshUnread();
+      if (recovered && !stopped) await unreadRefreshRunnerRef.current?.();
     };
 
     const drainEventPages = async (
@@ -1010,21 +1091,31 @@ export function C19ChatPanel({
     };
 
     const schedulePoll = () => {
-      if (!stopped && pollingActive) {
-        pollTimer = window.setTimeout(pollEvents, EVENT_POLL_INTERVAL_MS);
+      if (
+        !stopped &&
+        pollingActive &&
+        !streamConnecting &&
+        pollTimer === null
+      ) {
+        pollTimer = window.setTimeout(() => {
+          pollTimer = null;
+          void pollEvents();
+        }, EVENT_POLL_INTERVAL_MS);
       }
     };
 
     const pollEvents = async () => {
-      if (stopped || !pollingActive) return;
+      if (stopped || !pollingActive || streamConnecting || pollInFlight) return;
+      pollInFlight = true;
       try {
         await ensureEventTailBoundary();
         if (!eventCursorRef.current) {
           throw new Error("事件尾游标尚未就绪。");
         }
         await drainEventPages(eventCursorRef.current);
-        if (stopped) return;
+        if (stopped || !pollingActive) return;
         setConnectionMode("polling");
+        if (source === null && reconnectTimer === null) scheduleReconnect();
       } catch (error) {
         if (
           !stopped &&
@@ -1041,46 +1132,132 @@ export function C19ChatPanel({
             }
             await recoverSelectedConversation();
             await drainEventPages(eventCursorRef.current, true);
-            if (!stopped) {
+            if (!stopped && pollingActive) {
               setConnectionMode("polling");
+              if (source === null && reconnectTimer === null) {
+                scheduleReconnect();
+              }
             }
           } catch {
-            if (!stopped) setConnectionMode("offline");
+            if (!stopped && pollingActive) setConnectionMode("offline");
           }
-        } else if (!stopped) {
+        } else if (!stopped && pollingActive) {
           setConnectionMode("offline");
         }
       } finally {
+        pollInFlight = false;
         schedulePoll();
       }
     };
 
     const startPolling = () => {
+      if (pollingActive) return;
       pollingActive = true;
-      if (pollTimer !== null) window.clearTimeout(pollTimer);
       setConnectionMode("polling");
       void pollEvents();
     };
 
-    const connectEventStream = () => {
+    const scheduleReconnect = (): void => {
+      if (
+        stopped ||
+        typeof EventSource === "undefined" ||
+        reconnectTimer !== null
+      ) {
+        return;
+      }
+      const delay = c19SseReconnectDelay(failedReconnectAttempts);
+      failedReconnectAttempts += 1;
+      reconnectTimer = window.setTimeout(() => {
+        reconnectTimer = null;
+        connectEventStream();
+      }, delay);
+    };
+
+    const connectEventStream = (): void => {
       if (stopped || typeof EventSource === "undefined") {
         startPolling();
         return;
       }
-      pollingActive = false;
-      if (pollTimer !== null) window.clearTimeout(pollTimer);
-      setConnectionMode("connecting");
-      source = new EventSource(c19EventStreamUrl(eventCursorRef.current), {
-        withCredentials: true,
-      });
-      source.onopen = () => {
-        if (!stopped) {
-          sseOpened = true;
-          setConnectionMode("live");
+      if (pollInFlight) {
+        if (reconnectTimer === null) {
+          reconnectTimer = window.setTimeout(() => {
+            reconnectTimer = null;
+            connectEventStream();
+          }, 250);
         }
+        return;
+      }
+      streamConnecting = true;
+      clearHandshakeTimer();
+      if (pollTimer !== null) {
+        window.clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+      const generation = streamGeneration + 1;
+      streamGeneration = generation;
+      if (!pollingActive) setConnectionMode("connecting");
+
+      let nextSource: EventSource;
+      try {
+        nextSource = new EventSource(c19EventStreamUrl(eventCursorRef.current), {
+          withCredentials: true,
+        });
+      } catch {
+        streamConnecting = false;
+        pollingActive = false;
+        startPolling();
+        scheduleReconnect();
+        return;
+      }
+      source = nextSource;
+
+      const handleStreamFailure = () => {
+        if (
+          stopped ||
+          generation !== streamGeneration ||
+          source !== nextSource
+        ) {
+          return;
+        }
+        clearHandshakeTimer();
+        nextSource.close();
+        source = null;
+        streamConnecting = false;
+        pollingActive = false;
+        startPolling();
+        scheduleReconnect();
       };
-      source.onmessage = (message) => {
-        if (stopped) return;
+
+      nextSource.onopen = () => {
+        if (
+          stopped ||
+          generation !== streamGeneration ||
+          source !== nextSource
+        ) {
+          return;
+        }
+        failedReconnectAttempts = 0;
+        clearHandshakeTimer();
+        streamConnecting = false;
+        pollingActive = false;
+        if (pollTimer !== null) {
+          window.clearTimeout(pollTimer);
+          pollTimer = null;
+        }
+        setConnectionMode("live");
+      };
+      handshakeTimer = window.setTimeout(
+        handleStreamFailure,
+        SSE_HANDSHAKE_TIMEOUT_MS,
+      );
+      nextSource.onmessage = (message) => {
+        if (
+          stopped ||
+          generation !== streamGeneration ||
+          source !== nextSource
+        ) {
+          return;
+        }
         try {
           const payload = JSON.parse(message.data) as
             | C19MessageEvent
@@ -1095,24 +1272,34 @@ export function C19ChatPanel({
             void recoverSelectedConversation();
           }
         } catch {
-          source?.close();
-          startPolling();
+          handleStreamFailure();
         }
       };
-      source.onerror = () => {
-        const reconnectSse = sseOpened;
-        sseOpened = false;
-        source?.close();
-        source = null;
-        startPolling();
-        if (reconnectSse) {
-          reconnectTimer = window.setTimeout(() => {
-            if (pollTimer !== null) window.clearTimeout(pollTimer);
-            connectEventStream();
-          }, SSE_RECONNECT_INTERVAL_MS);
-        }
-      };
+      nextSource.onerror = handleStreamFailure;
     };
+
+    const onOnline = () => {
+      if (stopped || typeof EventSource === "undefined") return;
+      failedReconnectAttempts = 0;
+      if (reconnectTimer !== null) {
+        window.clearTimeout(reconnectTimer);
+        reconnectTimer = null;
+      }
+      streamGeneration += 1;
+      clearHandshakeTimer();
+      source?.close();
+      source = null;
+      connectEventStream();
+    };
+
+    const onVisibilityChange = () => {
+      if (document.visibilityState !== "visible" || !pollingActive) return;
+      void pollEvents();
+      if (source === null) onOnline();
+    };
+
+    window.addEventListener("online", onOnline);
+    document.addEventListener("visibilitychange", onVisibilityChange);
 
     void ensureEventTailBoundary()
       .then(() => {
@@ -1133,15 +1320,17 @@ export function C19ChatPanel({
     return () => {
       stopped = true;
       pollingActive = false;
+      streamGeneration += 1;
       source?.close();
+      clearHandshakeTimer();
       if (pollTimer !== null) window.clearTimeout(pollTimer);
       if (reconnectTimer !== null) window.clearTimeout(reconnectTimer);
+      window.removeEventListener("online", onOnline);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
     };
   }, [
     ensureEventTailBoundary,
     processEvents,
-    recoverFromResume,
-    refreshUnread,
     userId,
   ]);
 
@@ -1602,10 +1791,29 @@ export function C19ChatPanel({
     }
   };
 
+  const insertEmoji = (emoji: string) => {
+    const textarea = composerInputRef.current;
+    const selectionStart = textarea?.selectionStart ?? draft.length;
+    const selectionEnd = textarea?.selectionEnd ?? selectionStart;
+    const nextDraft = `${draft.slice(0, selectionStart)}${emoji}${draft.slice(
+      selectionEnd,
+    )}`;
+    if (nextDraft.length > MESSAGE_MAX_LENGTH) return;
+    const nextCaret = selectionStart + emoji.length;
+    setDraft(nextDraft);
+    setEmojiPickerOpen(false);
+    window.requestAnimationFrame(() => {
+      composerInputRef.current?.focus();
+      composerInputRef.current?.setSelectionRange(nextCaret, nextCaret);
+    });
+  };
+
+  const selectedEmojiCategory =
+    EMOJI_CATEGORIES.find((category) => category.id === emojiCategory) ??
+    EMOJI_CATEGORIES[0];
+
   const connectionLabel =
-    isRecovering
-      ? "正在补齐断线消息"
-      : connectionMode === "live"
+    connectionMode === "live"
       ? "实时连接"
       : connectionMode === "polling"
         ? "HTTP 恢复模式"
@@ -1624,7 +1832,7 @@ export function C19ChatPanel({
           </h3>
           <span
             aria-live="polite"
-            data-mode={isRecovering ? "connecting" : connectionMode}
+            data-mode={connectionMode}
             role="status"
           >
             {connectionMode === "offline" ? (
@@ -1752,7 +1960,7 @@ export function C19ChatPanel({
       ) : null}
       {isRecovering && !isLoadingHistory ? (
         <div className={styles.chatRuntimeWarning} role="status">
-          正在按恢复游标连续补齐消息；完成前不会推进送达或已读位置。
+          正在按持久化游标校验并补齐消息；完成前不会推进送达或已读位置。
         </div>
       ) : null}
       {recoveryError ? (
@@ -1773,26 +1981,64 @@ export function C19ChatPanel({
       ) : null}
 
       <form className={styles.composer} onSubmit={submitMessage}>
-        <div className={styles.quickEmoji} aria-label="快捷 Emoji">
-          <Smile aria-hidden="true" size={16} />
-          {QUICK_EMOJI.map((emoji) => (
-            <button
-              disabled={
-                renderWindowMode === "older" ||
-                Boolean(pendingMessage) ||
-                conversation.status !== "active"
-              }
-              key={emoji}
-              onClick={() =>
-                setDraft((current) =>
-                  `${current}${current && !current.endsWith(" ") ? " " : ""}${emoji}`,
-                )
-              }
-              type="button"
+        <div className={styles.quickEmoji} ref={emojiPickerRef}>
+          <button
+            aria-expanded={emojiPickerOpen}
+            aria-haspopup="dialog"
+            aria-label="打开表情选择器"
+            className={styles.emojiTrigger}
+            disabled={
+              renderWindowMode === "older" ||
+              Boolean(pendingMessage) ||
+              conversation.status !== "active"
+            }
+            onClick={() => setEmojiPickerOpen((current) => !current)}
+            type="button"
+          >
+            <Smile aria-hidden="true" size={17} />
+            表情
+          </button>
+          {emojiPickerOpen ? (
+            <div
+              aria-label="选择表情"
+              className={styles.emojiPicker}
+              role="dialog"
             >
-              {emoji}
-            </button>
-          ))}
+              <div
+                aria-label="表情分类"
+                className={styles.emojiCategories}
+                role="tablist"
+              >
+                {EMOJI_CATEGORIES.map((category) => (
+                  <button
+                    aria-selected={category.id === selectedEmojiCategory.id}
+                    key={category.id}
+                    onClick={() => setEmojiCategory(category.id)}
+                    role="tab"
+                    type="button"
+                  >
+                    {category.label}
+                  </button>
+                ))}
+              </div>
+              <div
+                aria-label={`${selectedEmojiCategory.label}表情`}
+                className={styles.emojiGrid}
+                role="tabpanel"
+              >
+                {selectedEmojiCategory.emojis.map((emoji) => (
+                  <button
+                    aria-label={`插入表情 ${emoji}`}
+                    key={emoji}
+                    onClick={() => insertEmoji(emoji)}
+                    type="button"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
         <div className={styles.assetPickerRow}>
           <input
@@ -1887,6 +2133,7 @@ export function C19ChatPanel({
               : "该会话已经关闭"
           }
           rows={3}
+          ref={composerInputRef}
           value={draft}
         />
         <div className={styles.composerFooter}>

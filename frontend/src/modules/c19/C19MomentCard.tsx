@@ -23,6 +23,7 @@ import {
   listC19MomentLikes,
   unlikeC19Moment,
 } from "./api";
+import { C19Avatar } from "./C19Avatar";
 import {
   C19_MOMENT_COMMENT_MAX_LENGTH,
   c19MomentVisibilityLabel,
@@ -49,11 +50,6 @@ function readableTime(value: string) {
 
 function sameUser(left: number | string, right: number | string) {
   return String(left) === String(right);
-}
-
-function initials(name: string) {
-  const normalized = name.trim();
-  return normalized ? normalized.slice(0, 2).toUpperCase() : "成员";
 }
 
 function interactionErrorMessage(error: unknown) {
@@ -386,9 +382,11 @@ export function C19MomentCard({
   return (
     <article className={styles.momentCard}>
       <header className={styles.momentHeader}>
-        <span aria-hidden="true" className={styles.momentAvatar}>
-          {initials(moment.author.display_name)}
-        </span>
+        <C19Avatar
+          avatarRef={moment.author.avatar_ref}
+          className={styles.momentAvatar}
+          name={moment.author.display_name}
+        />
         <div>
           <strong>{moment.author.display_name}</strong>
           <span>

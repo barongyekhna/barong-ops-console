@@ -12,6 +12,7 @@ from ...models.c19 import (
     C19UserBlockRecord,
 )
 from ...models.user import User
+from .block_policy import effective_block_target_condition
 
 
 def canonical_pair(user_a_id: int, user_b_id: int) -> tuple[int, int, str]:
@@ -150,6 +151,10 @@ def has_active_block_between(
             select(C19UserBlockRecord.block_id)
             .where(
                 C19UserBlockRecord.is_active.is_(True),
+                effective_block_target_condition(
+                    C19UserBlockRecord.blocker_user_id,
+                    C19UserBlockRecord.blocked_user_id,
+                ),
                 or_(
                     and_(
                         C19UserBlockRecord.blocker_user_id == user_a_id,
@@ -174,6 +179,10 @@ def _no_active_block_for_pair(
     return ~exists(
         select(C19UserBlockRecord.block_id).where(
             C19UserBlockRecord.is_active.is_(True),
+            effective_block_target_condition(
+                C19UserBlockRecord.blocker_user_id,
+                C19UserBlockRecord.blocked_user_id,
+            ),
             or_(
                 and_(
                     C19UserBlockRecord.blocker_user_id == actor_user_id,
@@ -256,6 +265,10 @@ def list_user_blocks(
     statement = select(C19UserBlockRecord).where(
         C19UserBlockRecord.blocker_user_id == blocker_user_id,
         C19UserBlockRecord.is_active.is_(True),
+        effective_block_target_condition(
+            C19UserBlockRecord.blocker_user_id,
+            C19UserBlockRecord.blocked_user_id,
+        ),
         _active_user_exists(C19UserBlockRecord.blocked_user_id),
     )
     total = int(

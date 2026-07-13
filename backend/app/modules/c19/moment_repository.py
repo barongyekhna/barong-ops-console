@@ -19,6 +19,7 @@ from ...models.c19 import (
 from ...models.org_membership import OrgMembershipRecord
 from ...models.organization import OrganizationRecord
 from ...models.user import User
+from .block_policy import effective_block_target_condition
 
 
 def _authoritative_membership_join():
@@ -140,6 +141,10 @@ def list_blocked_user_ids(db: Session, *, user_id: int) -> set[int]:
     statement = select(counterpart).where(
         C19UserBlockRecord.status == "active",
         C19UserBlockRecord.is_active.is_(True),
+        effective_block_target_condition(
+            C19UserBlockRecord.blocker_user_id,
+            C19UserBlockRecord.blocked_user_id,
+        ),
         or_(
             C19UserBlockRecord.blocker_user_id == user_id,
             C19UserBlockRecord.blocked_user_id == user_id,
