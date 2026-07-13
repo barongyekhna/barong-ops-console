@@ -54,7 +54,7 @@ def category_node(db: Session, category_id: str) -> dict[str, Any] | None:
     with without_org_data_isolation():
         row = db.execute(
             text(
-                f"SELECT id, name, full_path, level, is_leaf FROM {_GOOGLE_TREE} "
+                f"SELECT id, name, name_zh, full_path, level, is_leaf FROM {_GOOGLE_TREE} "
                 "WHERE id = :i"
             ),
             {"i": category_id},
@@ -98,7 +98,7 @@ def browse_tree(db: Session, parent_id: str | None) -> list[dict[str, Any]]:
     with without_org_data_isolation():
         rows = db.execute(
             text(
-                f"SELECT id, name, full_path, level, is_leaf FROM {_GOOGLE_TREE} "
+                f"SELECT id, name, name_zh, full_path, level, is_leaf FROM {_GOOGLE_TREE} "
                 f"WHERE {where} ORDER BY name ASC"
             ),
             params,
@@ -131,15 +131,17 @@ def search_tree(db: Session, q: str, limit: int = 30) -> list[dict[str, Any]]:
     with without_org_data_isolation():
         rows = db.execute(
             text(
-                f"SELECT id, name, full_path, level, is_leaf FROM {_GOOGLE_TREE} "
-                "WHERE (:q = '' OR full_path ILIKE :like OR name ILIKE :like) "
+                f"SELECT id, name, name_zh, full_path, level, is_leaf FROM {_GOOGLE_TREE} "
+                "WHERE (:q = '' OR full_path ILIKE :like OR name ILIKE :like "
+                "OR name_zh ILIKE :like) "
                 "ORDER BY is_leaf DESC, level ASC, full_path ASC LIMIT :limit"
             )
             if db.get_bind().dialect.name == "postgresql"
             else text(
-                f"SELECT id, name, full_path, level, is_leaf FROM {_GOOGLE_TREE} "
+                f"SELECT id, name, name_zh, full_path, level, is_leaf FROM {_GOOGLE_TREE} "
                 "WHERE (:q = '' OR lower(full_path) LIKE lower(:like) "
-                "OR lower(name) LIKE lower(:like)) "
+                "OR lower(name) LIKE lower(:like) "
+                "OR lower(COALESCE(name_zh, '')) LIKE lower(:like)) "
                 "ORDER BY is_leaf DESC, level ASC, full_path ASC LIMIT :limit"
             ),
             {"q": q, "like": f"%{q}%", "limit": limit},

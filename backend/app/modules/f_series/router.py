@@ -29,6 +29,7 @@ from ...models.user import User
 from ...services.data_isolation import without_org_data_isolation
 from ...services.permission_service import resolve_current_user_permission_info
 from .enrichment import constants as C
+from .enrichment import profiles as profile_engine
 from .enrichment import runs as run_engine
 from .enrichment import service
 from .enrichment.models import FCategoryCandidate, FCategoryKeyword, FEnrichmentRun
@@ -68,12 +69,25 @@ def _require_f_permission(permission_key: str):
 class TreeNode(BaseModel):
     id: str
     name: str
+    name_zh: str | None = None
     full_path: str
     level: int
     is_leaf: bool
     children_count: int = 0
     keywords_count: int = 0
     candidates_count: int = 0
+
+
+class ProfileProduct(BaseModel):
+    en: str
+    zh: str
+    note_zh: str
+
+
+class ProfileResponse(BaseModel):
+    category_id: str
+    exists: bool
+    products: list[ProfileProduct] = []
 
 
 class TreeResponse(BaseModel):
@@ -252,6 +266,56 @@ def f_categories_search(
     for item in items:
         item.setdefault("children_count", 0)
     return TreeResponse(parent_id=None, items=[TreeNode(**item) for item in items])
+
+
+@router.get("/categories/{category_id}/profile", response_model=ProfileResponse)
+def f_category_profile_get(
+    category_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_f_permission(C.PERMISSION_READ)),
+) -> ProfileResponse:
+    """读类目产品画像缓存；没有缓存时 exists=false（前端显示生成按钮）。"""
+    del user
+    cached = profile_engine.get_profile(db, category_id)
+    if cached is None:
+        return ProfileResponse(category_id=category_id, exists=False)
+    return ProfileResponse(
+        category_id=category_id,
+        exists=True,
+        products=[ProfileProduct(**item) for item in (cached.products_json or [])],
+    )
+
+
+@router.post("/categories/{category_id}/profile", response_model=ProfileResponse)
+def f_category_profile_generate(
+    category_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_f_permission(C.PERMISSION_EXECUTE)),
+) -> ProfileResponse:
+    """生成类目产品画像（DeepSeek 一次、缓存永久；已有缓存直接返回）。"""
+    del user
+    node = service.category_node(db, category_id)
+    if node is None:
+        raise HTTPException(status_code=404, detail="类目不存在。")
+    org_id = run_engine._target_org_id(db)
+    if not org_id:
+        raise HTTPException(status_code=409, detail="目标组织不存在。")
+    try:
+        profile = profile_engine.ensure_profile(
+            db,
+            category_id=str(node["id"]),
+            category_path=str(node["full_path"]),
+            name_zh=(str(node["name_zh"]) if node.get("name_zh") else None),
+            org_id=org_id,
+        )
+    except profile_engine.FProfileUnavailableError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.commit()
+    return ProfileResponse(
+        category_id=category_id,
+        exists=True,
+        products=[ProfileProduct(**item) for item in (profile.products_json or [])],
+    )
 
 
 @router.post("/runs", response_model=RunItem, status_code=status.HTTP_201_CREATED)

@@ -52,6 +52,13 @@ _TREE_ROWS = (
     ),
 )
 
+_ZH_NAMES = {
+    "f988": "体育用品",
+    "f989": "户外休闲",
+    "f990": "露营与徒步",
+    "f991": "便携式淋浴与更衣帐篷",
+}
+
 _SERPER_FIXTURE = {
     "relatedSearches": [
         {"query": "portable camp shower"},
@@ -70,13 +77,14 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
             db.execute(
                 text(
                     "INSERT INTO k_category_google "
-                    "(id, name, full_path, parent_id, level, is_leaf) "
-                    "VALUES (:i, :n, :f, :p, :l, :leaf) "
+                    "(id, name, name_zh, full_path, parent_id, level, is_leaf) "
+                    "VALUES (:i, :n, :zh, :f, :p, :l, :leaf) "
                     "ON CONFLICT (id) DO NOTHING"
                 ),
                 {
                     "i": row[0],
                     "n": row[1],
+                    "zh": _ZH_NAMES.get(row[0]),
                     "f": row[2],
                     "p": row[3],
                     "l": row[4],
@@ -109,6 +117,7 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
     yield owner_client
 
     with SessionLocal() as db:
+        db.execute(text("DELETE FROM f_category_profiles"))
         db.execute(text("DELETE FROM f_category_candidates"))
         db.execute(text("DELETE FROM f_category_keywords"))
         db.execute(text("DELETE FROM f_enrichment_runs"))
@@ -133,7 +142,7 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
 def test_tree_browse_and_search(f_env: TestClient) -> None:
     response = f_env.get("/api/app/f/categories/tree")
     assert response.status_code == 200
-    roots = {item["id"]: item for item in response.json()["items"]}
+    roots = {item["id"]: item for item in response.json()["items"] if item["id"].startswith("f9")}
     assert "f988" in roots
     assert roots["f988"]["children_count"] >= 2
 
@@ -145,6 +154,15 @@ def test_tree_browse_and_search(f_env: TestClient) -> None:
     response = f_env.get("/api/app/f/categories/search", params={"q": "camp show"})
     assert response.status_code == 200
     assert any(item["id"] == "f991" for item in response.json()["items"])
+
+    # 中文名随树返回 + 中文搜索命中
+    roots_zh = {item["id"]: item["name_zh"] for item in roots.values()}
+    assert roots_zh.get("f988") == "体育用品"
+    response = f_env.get("/api/app/f/categories/search", params={"q": "淋浴"})
+    assert response.status_code == 200
+    matched = response.json()["items"]
+    assert any(item["id"] == "f991" for item in matched)
+    assert any(item["name_zh"] == "便携式淋浴与更衣帐篷" for item in matched)
 
 
 def test_run_harvests_keywords_over_subtree(f_env: TestClient) -> None:
@@ -389,6 +407,56 @@ def test_full_run_degrades_gracefully_without_1688_key(f_env: TestClient) -> Non
     assert response.status_code == 201
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
     assert run["status"] == "failed"
+
+
+def test_category_profile_generate_and_cache(
+    f_env: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.app.modules.f_series.enrichment import profiles
+
+    class _FakeSecretManager:
+        def __init__(self, db_session=None) -> None:
+            del db_session
+
+        def get_key(self, service: str, org_id: str) -> str:
+            assert service == "deepseek"
+            return "test-deepseek-key"
+
+    monkeypatch.setattr(profiles, "SecretManager", _FakeSecretManager)
+
+    calls = {"n": 0}
+
+    def fake_deepseek(*, api_key, category_path, name_zh):
+        calls["n"] += 1
+        assert "Camp Showers" in category_path
+        assert name_zh == "便携式淋浴与更衣帐篷"
+        return [
+            {"en": "Solar camp shower bag", "zh": "太阳能淋浴袋", "note_zh": "晒热水洗澡"},
+            {"en": "Privacy shower tent", "zh": "更衣帐篷", "note_zh": "户外更衣遮挡"},
+        ]
+
+    monkeypatch.setattr(profiles, "_call_deepseek_profile", fake_deepseek)
+
+    # 无缓存：GET exists=false
+    response = f_env.get("/api/app/f/categories/f991/profile")
+    assert response.status_code == 200
+    assert response.json()["exists"] is False
+
+    # 生成：POST 调 DeepSeek 一次并落库
+    response = f_env.post("/api/app/f/categories/f991/profile")
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["exists"] is True
+    assert payload["products"][0]["zh"] == "太阳能淋浴袋"
+    assert calls["n"] == 1
+
+    # 缓存命中：GET 直接回、重复 POST 不再调 DeepSeek
+    assert f_env.get("/api/app/f/categories/f991/profile").json()["exists"] is True
+    assert f_env.post("/api/app/f/categories/f991/profile").status_code == 200
+    assert calls["n"] == 1
+
+    # 不存在的类目 → 404
+    assert f_env.post("/api/app/f/categories/nonexistent/profile").status_code == 404
 
 
 def test_run_rejects_oversized_or_unknown_selection(f_env: TestClient) -> None:

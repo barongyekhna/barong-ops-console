@@ -166,6 +166,25 @@ class FCategoryKeyword(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
     )
 
 
+class FCategoryProfile(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
+    """类目产品画像缓存：DeepSeek 生成一次，永久复用。"""
+
+    __tablename__ = "f_category_profiles"
+    __table_args__ = (
+        UniqueConstraint("category_id", name="uq_f_profiles_category"),
+        Index("ix_f_profiles_category", "category_id"),
+    )
+
+    category_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    # [{"en": "...", "zh": "...", "note_zh": "..."}]
+    products_json: Mapped[Any] = mapped_column(json_type(), nullable=False)
+    provider: Mapped[str] = mapped_column(
+        String(50),
+        nullable=False,
+        server_default="deepseek",
+    )
+
+
 class FCategoryCandidate(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
     """类目候选池：1688 货源候选（当前人工贴链接，API 过审后自动填充）。
 

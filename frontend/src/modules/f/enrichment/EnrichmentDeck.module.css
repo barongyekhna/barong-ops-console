@@ -191,6 +191,56 @@
   background: rgb(57 212 255 / 6%);
 }
 
+.expandButton {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  color: rgb(157 199 219 / 85%);
+  cursor: pointer;
+}
+
+.expandButton:hover {
+  color: #eafaff;
+  background: rgb(57 212 255 / 12%);
+}
+
+.expandSpacer {
+  flex: none;
+  width: 22px;
+}
+
+.nodeNameWrap {
+  min-width: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  overflow: hidden;
+}
+
+.nodeNameEn {
+  flex: none;
+  font-size: 0.7rem;
+  color: rgb(157 199 219 / 60%);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 42%;
+}
+
+.titleEn {
+  margin-left: 8px;
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgb(157 199 219 / 70%);
+  letter-spacing: 0;
+}
+
 .nodeCheck {
   display: flex;
   align-items: center;
@@ -301,6 +351,74 @@
   font-size: 0.82rem;
   color: rgb(157 199 219 / 75%);
   line-height: 1.7;
+}
+
+.profileBlock {
+  margin: 12px 18px 0;
+  padding: 12px 14px;
+  border: 1px solid rgb(57 212 255 / 22%);
+  border-radius: 12px;
+  background: rgb(57 212 255 / 4%);
+}
+
+.profileHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 6px;
+}
+
+.sectionTitleInline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgb(178 216 232 / 90%);
+}
+
+.profileList {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.profileItem {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 3px 2px;
+  border-bottom: 1px solid rgb(57 212 255 / 8%);
+  min-width: 0;
+}
+
+.profileZh {
+  flex: none;
+  color: #eafaff;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.profileEn {
+  color: rgb(102 214 255 / 90%);
+  font-size: 0.76rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.profileNote {
+  flex: none;
+  margin-left: auto;
+  color: rgb(157 199 219 / 70%);
+  font-size: 0.72rem;
 }
 
 .addForm {

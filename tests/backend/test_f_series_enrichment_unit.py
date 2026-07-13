@@ -1,12 +1,14 @@
-"""F 类目富化纯函数单元测试：关键词解析 / 红线标记 / 查询词构造。"""
+"""F 类目富化纯函数单元测试：关键词解析 / 红线标记 / 查询词构造 / 中文树解析。"""
 
 import pytest
 
+from backend.app.modules.f_series.enrichment.profiles import _parse_products
 from backend.app.modules.f_series.enrichment.serper_client import extract_keywords
 from backend.app.modules.f_series.enrichment.service import (
     detect_red_flags,
     keyword_query_for_node,
 )
+from scripts.seed_google_taxonomy_zh import parse as parse_taxonomy_zh
 
 pytestmark = pytest.mark.unit
 
@@ -86,3 +88,35 @@ def test_keyword_query_adds_parent_context_for_generic_names() -> None:
         )
         == "Camping Furniture Accessories"
     )
+
+
+def test_taxonomy_zh_parser_takes_leaf_segment() -> None:
+    lines = [
+        "# Google_Product_Taxonomy_Version: 2021-09-21",
+        "632 - 五金/硬件",
+        "500096 - 五金/硬件 > 五金泵",
+        "",
+        "garbage line without separator",
+        "abc - 非数字 id 跳过",
+    ]
+    mapping = parse_taxonomy_zh(lines)
+    assert mapping == {"632": "五金/硬件", "500096": "五金泵"}
+
+
+def test_profile_parser_tolerates_markdown_fence_and_caps() -> None:
+    payload = {
+        "choices": [
+            {
+                "message": {
+                    "content": (
+                        '```json\n{"products": [{"en": "Camp shower", '
+                        '"zh": "露营淋浴", "note_zh": "户外洗澡"}]}\n```'
+                    )
+                }
+            }
+        ]
+    }
+    products = _parse_products(payload)
+    assert products == [
+        {"en": "Camp shower", "zh": "露营淋浴", "note_zh": "户外洗澡"}
+    ]

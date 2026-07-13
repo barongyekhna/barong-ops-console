@@ -7,12 +7,25 @@ const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 export type TreeNode = {
   id: string;
   name: string;
+  name_zh: string | null;
   full_path: string;
   level: number;
   is_leaf: boolean;
   children_count: number;
   keywords_count: number;
   candidates_count: number;
+};
+
+export type ProfileProduct = {
+  en: string;
+  zh: string;
+  note_zh: string;
+};
+
+export type ProfileResponse = {
+  category_id: string;
+  exists: boolean;
+  products: ProfileProduct[];
 };
 
 export type TreeResponse = {
@@ -141,6 +154,24 @@ export async function searchTree(q: string): Promise<TreeResponse> {
     { cache: "no-store", headers: buildHeaders(), method: "GET" },
   );
   return readJson<TreeResponse>(response, "类目搜索失败");
+}
+
+export async function getProfile(categoryId: string): Promise<ProfileResponse> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/f/categories/${encodeURIComponent(categoryId)}/profile`,
+    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  );
+  return readJson<ProfileResponse>(response, "类目画像加载失败");
+}
+
+export async function generateProfile(
+  categoryId: string,
+): Promise<ProfileResponse> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/f/categories/${encodeURIComponent(categoryId)}/profile`,
+    { cache: "no-store", headers: buildHeaders(true), method: "POST" },
+  );
+  return readJson<ProfileResponse>(response, "类目画像生成失败");
 }
 
 export async function createRun(

@@ -3,9 +3,9 @@
 import {
   AlertTriangle,
   ArrowRight,
+  ChevronDown,
   ChevronRight,
   FolderTree,
-  Home,
   ListChecks,
   LoaderCircle,
   PackagePlus,
@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Search,
   ShieldAlert,
+  Sparkles,
   Sprout,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -20,8 +21,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   createCandidate,
   createRun,
+  generateProfile,
   getCandidates,
   getKeywords,
+  getProfile,
   getQuota,
   getRuns,
   getTree,
@@ -31,6 +34,7 @@ import {
   searchTree,
   type CandidateItem,
   type KeywordItem,
+  type ProfileResponse,
   type QuotaResponse,
   type RunItem,
   type TreeNode,
@@ -39,8 +43,26 @@ import styles from "./EnrichmentDeck.module.css";
 
 const RUN_POLL_MS = 5000;
 const IDLE_POLL_MS = 30000;
+const ROOT_KEY = "__root__";
 
-type Crumb = { id: string | null; name: string };
+type TreeRow = { node: TreeNode; depth: number };
+
+function flattenTree(
+  childrenByParent: Map<string, TreeNode[]>,
+  expanded: Set<string>,
+): TreeRow[] {
+  const rows: TreeRow[] = [];
+  const walk = (parentKey: string, depth: number) => {
+    for (const node of childrenByParent.get(parentKey) ?? []) {
+      rows.push({ node, depth });
+      if (expanded.has(node.id)) {
+        walk(node.id, depth + 1);
+      }
+    }
+  };
+  walk(ROOT_KEY, 0);
+  return rows;
+}
 
 function runStatusLabel(status: string) {
   switch (status) {
@@ -111,11 +133,16 @@ function formatTime(value: string | null) {
 }
 
 export function EnrichmentDeck() {
-  const [crumbs, setCrumbs] = useState<Crumb[]>([{ id: null, name: "根类目" }]);
-  const [nodes, setNodes] = useState<TreeNode[]>([]);
+  const [childrenByParent, setChildrenByParent] = useState<
+    Map<string, TreeNode[]>
+  >(new Map());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+  const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
   const [treeLoading, setTreeLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<TreeNode[] | null>(null);
+  const [profile, setProfile] = useState<ProfileResponse | null>(null);
+  const [profileBusy, setProfileBusy] = useState(false);
   const [selected, setSelected] = useState<Map<string, TreeNode>>(new Map());
   const [activeNode, setActiveNode] = useState<TreeNode | null>(null);
   const [keywords, setKeywords] = useState<KeywordItem[]>([]);
@@ -138,12 +165,18 @@ export function EnrichmentDeck() {
   const mounted = useRef(true);
   const pollTimer = useRef<number | null>(null);
 
-  const loadBranch = useCallback(async (parentId: string | null) => {
-    setTreeLoading(true);
+  const loadChildren = useCallback(async (parentId: string | null) => {
+    const key = parentId ?? ROOT_KEY;
+    if (parentId === null) setTreeLoading(true);
+    setLoadingIds((prev) => new Set(prev).add(key));
     try {
       const data = await getTree(parentId ?? undefined);
       if (mounted.current) {
-        setNodes(data.items);
+        setChildrenByParent((prev) => {
+          const next = new Map(prev);
+          next.set(key, data.items);
+          return next;
+        });
         setError(null);
       }
     } catch (loadError) {
@@ -151,9 +184,40 @@ export function EnrichmentDeck() {
         setError(loadError instanceof Error ? loadError.message : "类目树加载失败。");
       }
     } finally {
-      if (mounted.current) setTreeLoading(false);
+      if (mounted.current) {
+        setLoadingIds((prev) => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+        if (parentId === null) setTreeLoading(false);
+      }
     }
   }, []);
+
+  const toggleExpand = useCallback(
+    (node: TreeNode) => {
+      if (expanded.has(node.id)) {
+        setExpanded((prev) => {
+          const next = new Set(prev);
+          next.delete(node.id);
+          return next;
+        });
+        return;
+      }
+      setExpanded((prev) => new Set(prev).add(node.id));
+      if (!childrenByParent.has(node.id)) {
+        void loadChildren(node.id);
+      }
+    },
+    [expanded, childrenByParent, loadChildren],
+  );
+
+  const refreshTree = useCallback(() => {
+    setChildrenByParent(new Map());
+    setExpanded(new Set());
+    void loadChildren(null);
+  }, [loadChildren]);
 
   const loadRunsAndQuota = useCallback(async () => {
     try {
@@ -188,13 +252,13 @@ export function EnrichmentDeck() {
 
   useEffect(() => {
     mounted.current = true;
-    void loadBranch(null);
+    void loadChildren(null);
     void loadRunsAndQuota();
     return () => {
       mounted.current = false;
       if (pollTimer.current !== null) window.clearInterval(pollTimer.current);
     };
-  }, [loadBranch, loadRunsAndQuota]);
+  }, [loadChildren, loadRunsAndQuota]);
 
   const hasActiveRun = useMemo(
     () => runs.some((run) => run.status === "running" || run.status === "queued"),
@@ -212,25 +276,6 @@ export function EnrichmentDeck() {
     };
   }, [hasActiveRun, loadRunsAndQuota]);
 
-  const drillInto = useCallback(
-    (node: TreeNode) => {
-      setSearchResults(null);
-      setSearchQuery("");
-      setCrumbs((prev) => [...prev, { id: node.id, name: node.name }]);
-      void loadBranch(node.id);
-    },
-    [loadBranch],
-  );
-
-  const jumpToCrumb = useCallback(
-    (index: number) => {
-      const target = crumbs[index];
-      setCrumbs(crumbs.slice(0, index + 1));
-      void loadBranch(target.id);
-    },
-    [crumbs, loadBranch],
-  );
-
   const toggleSelect = useCallback((node: TreeNode) => {
     setSelected((prev) => {
       const next = new Map(prev);
@@ -247,10 +292,34 @@ export function EnrichmentDeck() {
     (node: TreeNode) => {
       setActiveNode(node);
       setShowAddForm(false);
+      setProfile(null);
       void loadDetail(node);
+      void getProfile(node.id)
+        .then((data) => {
+          if (mounted.current) setProfile(data);
+        })
+        .catch(() => {
+          // 画像读取失败静默（右栏按钮可重新生成）
+        });
     },
     [loadDetail],
   );
+
+  const handleGenerateProfile = useCallback(async () => {
+    if (!activeNode) return;
+    setProfileBusy(true);
+    setError(null);
+    try {
+      const data = await generateProfile(activeNode.id);
+      setProfile(data);
+    } catch (profileError) {
+      setError(
+        profileError instanceof Error ? profileError.message : "类目画像生成失败。",
+      );
+    } finally {
+      setProfileBusy(false);
+    }
+  }, [activeNode]);
 
   const handleSearch = useCallback(async () => {
     const q = searchQuery.trim();
@@ -403,7 +472,10 @@ export function EnrichmentDeck() {
     }
   }, [activeNode, form, loadDetail]);
 
-  const listToRender = searchResults ?? nodes;
+  const treeRows = useMemo(
+    () => flattenTree(childrenByParent, expanded),
+    [childrenByParent, expanded],
+  );
   const latestRun = runs[0];
 
   return (
@@ -500,26 +572,7 @@ export function EnrichmentDeck() {
             </button>
           </div>
 
-          {searchResults === null ? (
-            <nav aria-label="类目层级" className={styles.crumbs}>
-              {crumbs.map((crumb, index) => (
-                <span className={styles.crumbItem} key={`${crumb.id ?? "root"}`}>
-                  {index > 0 ? (
-                    <ChevronRight aria-hidden="true" size={12} />
-                  ) : (
-                    <Home aria-hidden="true" size={12} />
-                  )}
-                  <button
-                    className={styles.crumbButton}
-                    onClick={() => jumpToCrumb(index)}
-                    type="button"
-                  >
-                    {crumb.name}
-                  </button>
-                </span>
-              ))}
-            </nav>
-          ) : (
+          {searchResults !== null ? (
             <p className={styles.searchHint}>
               搜索结果 {searchResults.length} 条 ·{" "}
               <button
@@ -530,7 +583,18 @@ export function EnrichmentDeck() {
                 }}
                 type="button"
               >
-                返回层级浏览
+                返回类目树
+              </button>
+            </p>
+          ) : (
+            <p className={styles.searchHint}>
+              点 ▸ 原地展开子类目 ·{" "}
+              <button
+                className={styles.linkButton}
+                onClick={refreshTree}
+                type="button"
+              >
+                刷新树
               </button>
             </p>
           )}
@@ -540,14 +604,40 @@ export function EnrichmentDeck() {
               <LoaderCircle aria-hidden="true" className="spin" size={18} />
               <span>正在加载…</span>
             </div>
-          ) : listToRender.length === 0 ? (
+          ) : (searchResults ?? treeRows).length === 0 ? (
             <div className={styles.emptyHint}>
-              <p>这一层没有子类目。</p>
+              <p>{searchResults !== null ? "没有匹配的类目。" : "类目树为空。"}</p>
             </div>
           ) : (
             <ul className={styles.nodeList}>
-              {listToRender.map((node) => (
-                <li className={styles.nodeRow} key={node.id}>
+              {(searchResults !== null
+                ? searchResults.map((node) => ({ node, depth: 0 }))
+                : treeRows
+              ).map(({ node, depth }) => (
+                <li
+                  className={styles.nodeRow}
+                  key={node.id}
+                  style={{ paddingLeft: `${6 + depth * 16}px` }}
+                >
+                  {node.children_count > 0 && searchResults === null ? (
+                    <button
+                      aria-expanded={expanded.has(node.id)}
+                      className={styles.expandButton}
+                      onClick={() => toggleExpand(node)}
+                      title={`${expanded.has(node.id) ? "收起" : "展开"} ${node.children_count} 个子类目`}
+                      type="button"
+                    >
+                      {loadingIds.has(node.id) ? (
+                        <LoaderCircle aria-hidden="true" className="spin" size={13} />
+                      ) : expanded.has(node.id) ? (
+                        <ChevronDown aria-hidden="true" size={13} />
+                      ) : (
+                        <ChevronRight aria-hidden="true" size={13} />
+                      )}
+                    </button>
+                  ) : (
+                    <span className={styles.expandSpacer} />
+                  )}
                   <label className={styles.nodeCheck}>
                     <input
                       checked={selected.has(node.id)}
@@ -561,7 +651,14 @@ export function EnrichmentDeck() {
                     title={node.full_path}
                     type="button"
                   >
-                    <span className={styles.nodeName}>{node.name}</span>
+                    <span className={styles.nodeNameWrap}>
+                      <span className={styles.nodeName}>
+                        {node.name_zh || node.name}
+                      </span>
+                      {node.name_zh ? (
+                        <span className={styles.nodeNameEn}>{node.name}</span>
+                      ) : null}
+                    </span>
                     <span className={styles.nodeChips}>
                       {node.keywords_count > 0 ? (
                         <span className={styles.chip} data-kind="kw">
@@ -576,15 +673,7 @@ export function EnrichmentDeck() {
                     </span>
                   </button>
                   {node.children_count > 0 ? (
-                    <button
-                      className={styles.drillButton}
-                      onClick={() => drillInto(node)}
-                      title={`展开 ${node.children_count} 个子类目`}
-                      type="button"
-                    >
-                      {node.children_count}
-                      <ChevronRight aria-hidden="true" size={13} />
-                    </button>
+                    <span className={styles.leafMark}>{node.children_count}</span>
                   ) : (
                     <span className={styles.leafMark}>叶</span>
                   )}
@@ -608,7 +697,10 @@ export function EnrichmentDeck() {
               <div className={styles.panelHead}>
                 <span className={styles.panelTitle} title={activeNode.full_path}>
                   <Sprout aria-hidden="true" size={16} />
-                  {activeNode.name}
+                  {activeNode.name_zh || activeNode.name}
+                  {activeNode.name_zh ? (
+                    <span className={styles.titleEn}>{activeNode.name}</span>
+                  ) : null}
                 </span>
                 <span className={styles.headActions}>
                   <button
@@ -636,6 +728,51 @@ export function EnrichmentDeck() {
                 </span>
               </div>
               <p className={styles.pathLine}>{activeNode.full_path}</p>
+
+              {/* 类目产品画像：这个类目通常包含哪些产品（中英文） */}
+              <div className={styles.profileBlock}>
+                <div className={styles.profileHead}>
+                  <span className={styles.sectionTitleInline}>
+                    <Sparkles aria-hidden="true" size={13} />
+                    类目产品画像
+                  </span>
+                  {profile?.exists ? null : (
+                    <button
+                      className="secondary-button"
+                      disabled={profileBusy}
+                      onClick={() => void handleGenerateProfile()}
+                      title="AI 生成该类目通常包含的产品清单（一次生成永久缓存）"
+                      type="button"
+                    >
+                      {profileBusy ? (
+                        <LoaderCircle aria-hidden="true" className="spin" size={13} />
+                      ) : (
+                        <Sparkles aria-hidden="true" size={13} />
+                      )}
+                      生成画像
+                    </button>
+                  )}
+                </div>
+                {profile?.exists ? (
+                  <ul className={styles.profileList}>
+                    {profile.products.map((item) => (
+                      <li className={styles.profileItem} key={item.en || item.zh}>
+                        <span className={styles.profileZh}>{item.zh}</span>
+                        <span className={styles.profileEn}>{item.en}</span>
+                        {item.note_zh ? (
+                          <span className={styles.profileNote}>{item.note_zh}</span>
+                        ) : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className={styles.mutedLine}>
+                    {profileBusy
+                      ? "AI 正在分析这个类目…（约 10-30 秒）"
+                      : "还没有画像。点「生成画像」看看这个类目通常应该铺哪些产品。"}
+                  </p>
+                )}
+              </div>
 
               {showAddForm ? (
                 <div className={styles.addForm}>
