@@ -998,6 +998,62 @@ function isAllowedPPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedFPath(method: string, path: string[]) {
+  if (path[0] !== "f") {
+    return false;
+  }
+  // 类目树逐层下钻 / 搜索（共享 K 的谷歌树 + F 标记层统计）
+  if (
+    path.length === 3 &&
+    path[1] === "categories" &&
+    ["tree", "search"].includes(path[2])
+  ) {
+    return method === "GET";
+  }
+  // 富化运行：发起 + 列表 + 单个进度
+  if (path.length === 2 && path[1] === "runs") {
+    return method === "GET" || method === "POST";
+  }
+  if (path.length === 3 && path[1] === "runs" && isUuidPathSegment(path[2])) {
+    return method === "GET";
+  }
+  // 关键词列表 + 审核
+  if (path.length === 2 && path[1] === "keywords") {
+    return method === "GET";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "keywords" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "PATCH";
+  }
+  // 候选池：列表 / 手动新增（过渡期贴 1688 链接）/ 审核 / 进 K
+  if (path.length === 2 && path[1] === "candidates") {
+    return method === "GET" || method === "POST";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "candidates" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "PATCH";
+  }
+  if (
+    path.length === 4 &&
+    path[1] === "candidates" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "import-to-k"
+  ) {
+    return method === "POST";
+  }
+  // 额度视图（Serper / 1688 与 R-A 共账）
+  if (path.length === 2 && path[1] === "quota") {
+    return method === "GET";
+  }
+  return false;
+}
+
 function isAllowedNotificationsPath(method: string, path: string[]) {
   if (path[0] !== "notifications") {
     return false;
@@ -1540,6 +1596,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedUsersPath(method, path) ||
     isAllowedKPath(method, path) ||
     isAllowedIPath(method, path) ||
+    isAllowedFPath(method, path) ||
     isAllowedRPath(method, path) ||
     isAllowedRwPath(method, path) ||
     isAllowedNotificationsPath(method, path) ||

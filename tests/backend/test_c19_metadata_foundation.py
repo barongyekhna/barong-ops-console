@@ -170,10 +170,11 @@ def test_c19_control_metadata_migration_is_in_the_single_alembic_chain() -> None
 
     heads = script.get_heads()
     assert len(heads) == 1
-    assert "20260711_01_c19_control_core" in {
+    chain_revisions = {
         item.revision for item in script.iterate_revisions(heads[0], "base")
     }
-    assert heads == ["20260712_01_c19_native_access"]
+    assert "20260711_01_c19_control_core" in chain_revisions
+    assert "20260712_01_c19_native_access" in chain_revisions
     revision = script.get_revision("20260711_01_c19_control_core")
     assert revision is not None
     assert revision.down_revision == "20260710_05_k_brand_guard"

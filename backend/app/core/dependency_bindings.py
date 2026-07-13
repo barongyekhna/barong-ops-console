@@ -131,6 +131,20 @@ MODULE_SERVICE_BINDINGS_V1: tuple[dict[str, Any], ...] = (
         "reason": "R analysis uses Claude Opus for on-demand deep report review.",
     },
     {
+        "module_key": "f.enrichment",
+        "service_id": "serper",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["data_acquisition"],
+        "reason": "F enrichment harvests per-category keywords through the Serper API.",
+    },
+    {
+        "module_key": "f.enrichment",
+        "service_id": "alibaba1688",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["data_acquisition"],
+        "reason": "F enrichment sources category candidates from 1688 keyword search.",
+    },
+    {
         "module_key": "communication.im",
         "service_id": "chat_record_store",
         "binding_status": "restricted",
@@ -179,6 +193,12 @@ MODULE_CAPABILITY_BINDINGS_V1: tuple[dict[str, Any], ...] = (
         "allowed_capabilities": ["data_acquisition", "reasoning"],
         "binding_status": "restricted",
         "reason": "R analysis is restricted to market data acquisition and AI funnel reasoning.",
+    },
+    {
+        "module_key": "f.enrichment",
+        "allowed_capabilities": ["data_acquisition"],
+        "binding_status": "restricted",
+        "reason": "F enrichment is restricted to keyword and sourcing data acquisition.",
     },
     {
         "module_key": "communication.im",

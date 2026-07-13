@@ -1123,6 +1123,102 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         docs_path="r_system_v2/docs/RA_TASKS.md",
     ),
     _manifest(
+        module_key="f.enrichment",
+        display_name="F 类目富化",
+        description=(
+            "F-series category enrichment: pick Google taxonomy branches "
+            "(shared with K), harvest per-category keywords via Serper, build "
+            "a 1688-sourced candidate pool with red-line flagging, and hand "
+            "manually approved products to the K→I→P chain. 铺类目不选爆款。"
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/f-enrichment",
+        api_namespace="/f",
+        navigation=_navigation(
+            group="Registry",
+            label="F 类目富化",
+            icon="GitBranch",
+            order=14,
+        ),
+        required_permissions=("f.enrichment.read",),
+        permission_manifest=(
+            _permission(
+                module_key="f.enrichment",
+                permission_key="f.enrichment.read",
+                category="business",
+                action="read",
+                label="Read category enrichment",
+                description="View F-series enrichment runs, keywords, and candidates.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="f.enrichment",
+                permission_key="f.enrichment.execute",
+                category="business",
+                action="execute",
+                label="Execute enrichment runs",
+                description=(
+                    "Start Serper keyword harvest runs over selected Google "
+                    "taxonomy branches (consumes daily provider quota)."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+            _permission(
+                module_key="f.enrichment",
+                permission_key="f.enrichment.review",
+                category="business",
+                action="manage",
+                label="Review enrichment candidates",
+                description=(
+                    "Create and review sourcing candidates (approve / reject) "
+                    "and import approved candidates into K."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=("serper", "alibaba1688"),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.f.enrichment",
+        audit_log_actions=(
+            "f.enrichment.run.started",
+            "f.enrichment.candidate.created",
+            "f.enrichment.candidate.reviewed",
+            "f.enrichment.imported_to_k",
+        ),
+        data_boundary=_data_boundary(
+            reads=(
+                "k_category_google",
+                "f_enrichment_runs",
+                "f_category_keywords",
+                "f_category_candidates",
+            ),
+            writes=(
+                "f_enrichment_runs",
+                "f_category_keywords",
+                "f_category_candidates",
+                "k_product_knowledge_products",
+            ),
+            blocked_objects=("cross_module_writes",),
+        ),
+        release_requirements=_release_requirements(
+            required_checks=(
+                "f enrichment api present",
+                "f quota ledger shared with r-a",
+            ),
+        ),
+    ),
+    _manifest(
         module_key="business.approvals",
         display_name="Approvals",
         description="Approval request list and decision surface.",

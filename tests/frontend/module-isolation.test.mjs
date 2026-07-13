@@ -271,6 +271,15 @@ const registryItems = [
     status: "active",
   }),
   manifest({
+    category: "business",
+    denied_behavior: "show_locked",
+    external_dependencies: ["serper", "alibaba1688"],
+    module_key: "f.enrichment",
+    required_permissions: ["f.enrichment.read"],
+    route_namespace: "/f-enrichment",
+    status: "active",
+  }),
+  manifest({
     category: "core",
     denied_behavior: "hide_when_denied",
     module_key: "core.dashboard",
@@ -1193,6 +1202,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "p.upload",
     "r.warehouse",
     "r.analysis",
+    "f.enrichment",
     "business.approvals",
     "business.reviews",
     "core.dashboard",

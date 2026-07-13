@@ -35,6 +35,7 @@ from .api.routes.health import (
     router as health_router,
 )
 from .modules.c19.router import router as c19_router
+from .modules.f_series.router import router as f_enrichment_router
 from .modules.i_series.image_system.router import (
     router as i_image_system_router,
 )
@@ -955,6 +956,7 @@ app.include_router(notifications_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(notifications_router)
 app.include_router(p_upload_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(p_upload_router)
+app.include_router(f_enrichment_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(rw_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(ra_router, prefix=APPLICATION_API_PREFIX)
 
