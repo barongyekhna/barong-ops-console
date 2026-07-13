@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260713_03_f_category_experience",
+  "alembic_head": "20260714_01_w_logistics_hub",
   "environment": "staging",
-  "expected_alembic_head": "20260713_03_f_category_experience",
+  "expected_alembic_head": "20260714_01_w_logistics_hub",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 54,
-  "migration_hash": "0a7f3590cbb379ba7e3d4c9d33f28e7e2c6eeecfdffd45820dbbbcd9daa573b0",
+  "migration_count": 55,
+  "migration_hash": "1392667bc2e6d21a0e822d64887addbecf0ae3b9fe9b97e43443169ebb1571c4",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -61,9 +61,10 @@
     "20260712_02_f_series_enrichment",
     "20260713_01_f_sourcing_mode",
     "20260713_02_w_shipping_hub",
-    "20260713_03_f_category_experience"
+    "20260713_03_f_category_experience",
+    "20260714_01_w_logistics_hub"
   ],
-  "migration_order_checksum": "d3131513fa091aa1bbd84945bf0387ce813175c09436d4c245a4a68d016aa62e",
+  "migration_order_checksum": "ae87a64c4e5b83501f0703e0c93df3511dcfb0f22f2ecd47787017cdf7a5e5ff",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -442,6 +443,13 @@
       "down_revision": "20260713_02_w_shipping_hub",
       "path": "backend/alembic/versions/20260713_03_f_category_experience.py",
       "version": "20260713_03_f_category_experience"
+    },
+    {
+      "applied_at": "2026-07-14T00:00:00Z",
+      "checksum": "9b0064617ca287d92b5ff316f21d8a55b250934d8f62b30a27cebba32036d85e",
+      "down_revision": "20260713_03_f_category_experience",
+      "path": "backend/alembic/versions/20260714_01_w_logistics_hub.py",
+      "version": "20260714_01_w_logistics_hub"
     }
   ]
 }

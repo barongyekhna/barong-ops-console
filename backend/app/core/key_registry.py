@@ -161,6 +161,20 @@ KEY_TYPE_REGISTRY: dict[str, dict[str, Any]] = {
         "runtime_enabled": False,
         "module_ids": ["r.analysis"],
     },
+    "track17": {
+        "type": "track17",
+        "name": "17TRACK",
+        "description": "17TRACK shipment registration and tracking API",
+        "provider": "track17",
+        "auth_type": "api_key",
+        "enabled": True,
+        "scope": ["W-S"],
+        "validation_endpoint": None,
+        "default_url": "https://api.17track.net",
+        "default_alias": "track17",
+        "adapter": None,
+        "module_ids": ["w.site_ops"],
+    },
 }
 
 KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
@@ -174,6 +188,7 @@ KEY_TYPE_MARKERS: dict[str, tuple[str, ...]] = {
     "n8n": ("n8n", "webhook"),
     "rainforest": ("rainforest", "rainforestapi", "api.rainforestapi.com"),
     "google_ads": ("google_ads", "google ads", "googleads", "keyword planner"),
+    "track17": ("track17", "17track", "api.17track.net"),
 }
 
 
@@ -187,6 +202,8 @@ def normalize_key_type(value: str | None) -> str:
         normalized = "alibaba1688"
     if normalized in {"googleads", "google_ads_api", "keyword_planner"}:
         normalized = "google_ads"
+    if normalized in {"17track", "17_track"}:
+        normalized = "track17"
     if normalized not in KEY_TYPE_REGISTRY:
         raise ValueError("unknown_key_type")
     return normalized
@@ -207,6 +224,7 @@ def list_key_type_definitions() -> list[dict[str, Any]]:
         "serp",
         "rainforest",
         "google_ads",
+        "track17",
         "n8n",
         "custom",
     ]

@@ -1,1 +1,1 @@
-"""W-series website operations modules."""
+"""W-series logistics network modules."""

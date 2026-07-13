@@ -1220,19 +1220,19 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
     ),
     _manifest(
         module_key="w.site_ops",
-        display_name="W-A 网站运营中枢",
+        display_name="W-S 物流网络中枢",
         description=(
-            "W-A site operations provides a deterministic, fail-closed "
-            "shipping rule engine for assigning WooCommerce shipping classes."
+            "W-S is a logistics hub for shipping template sync to WooCommerce, "
+            "order tracking, and deterministic shipping-class assignment."
         ),
         category="business",
         status="active",
         lifecycle="production_released",
-        route_namespace="/w-a",
+        route_namespace="/w-s",
         api_namespace="/w",
         navigation=_navigation(
             group="Registry",
-            label="W-A 网站运营中枢",
+            label="W-S 物流网络中枢",
             icon="Boxes",
             order=15,
         ),
@@ -1262,7 +1262,7 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
         denied_behavior="show_locked",
         unavailable_behavior="show_unavailable",
-        external_dependencies=(),
+        external_dependencies=("track17",),
         execution_provider_required=False,
         module_adapter_required=False,
         sandbox_required=False,
@@ -1271,11 +1271,15 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
             reads=(
                 "w_shipping_classes",
                 "w_shipping_rules",
+                "w_sync_jobs",
+                "w_orders",
                 "k_product_knowledge_products",
             ),
             writes=(
                 "w_shipping_classes",
                 "w_shipping_rules",
+                "w_sync_jobs",
+                "w_orders",
                 "k_product_knowledge_products",
             ),
             blocked_objects=("cross_module_writes",),

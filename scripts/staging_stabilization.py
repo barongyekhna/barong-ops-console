@@ -37,7 +37,7 @@ STAGING_INTEGRATION_REPORT_FILE = REPOSITORY_ROOT / "staging_integration_report.
 ROLLBACK_DRILL_REPORT_FILE = REPOSITORY_ROOT / "rollback_drill_report.json"
 STAGING_OBSERVABILITY_REPORT_FILE = REPOSITORY_ROOT / "staging_observability_report.json"
 
-EXPECTED_ALEMBIC_HEAD = "20260713_03_f_category_experience"
+EXPECTED_ALEMBIC_HEAD = "20260714_01_w_logistics_hub"
 PINNED_COMPOSE_VERSION = "1.29.2"
 STAGING_PROJECT = "barong-ops-console-staging"
 STAGING_FRONTEND_URL = "http://127.0.0.1:3100"

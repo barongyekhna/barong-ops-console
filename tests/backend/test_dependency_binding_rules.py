@@ -86,7 +86,7 @@ def test_c14e_default_rules_explicitly_disable_n8n_capabilities() -> None:
     assert n8n_binding.allowed_capabilities == []
     assert validation.valid is True
     assert graph.validation.valid is True
-    assert len(graph.edges) == 25
+    assert len(graph.edges) == 26
     assert {
         (edge.module_key, edge.service_id, edge.capability)
         for edge in graph.edges
@@ -114,6 +114,7 @@ def test_c14e_default_rules_explicitly_disable_n8n_capabilities() -> None:
         ("r.analysis", "claude_opus", "reasoning"),
         ("f.enrichment", "serper", "data_acquisition"),
         ("f.enrichment", "alibaba1688", "data_acquisition"),
+        ("w.site_ops", "track17", "data_acquisition"),
         ("communication.im", "chat_record_store", "record_storage"),
         ("communication.im", "chat_asset_store", "record_storage"),
     }

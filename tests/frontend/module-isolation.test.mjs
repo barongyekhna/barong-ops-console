@@ -282,10 +282,10 @@ const registryItems = [
   manifest({
     category: "business",
     denied_behavior: "show_locked",
-    external_dependencies: [],
+    external_dependencies: ["track17"],
     module_key: "w.site_ops",
     required_permissions: ["w.site_ops.read"],
-    route_namespace: "/w-a",
+    route_namespace: "/w-s",
     status: "active",
   }),
   manifest({
@@ -1205,6 +1205,16 @@ test("API key management stays consolidated inside module control", () => {
   assert.doesNotMatch(legacyRouteSource, /ModuleRegistryProductView/);
 });
 
+test("legacy W-A route redirects to the W-S logistics hub", () => {
+  const legacyRouteSource = readFileSync(
+    "frontend/src/app/(console)/w-a/page.tsx",
+    "utf8",
+  );
+
+  assert.match(legacyRouteSource, /redirect\("\/w-s"\)/);
+  assert.doesNotMatch(legacyRouteSource, /ShippingDeck/);
+});
+
 test("sidebar navigation exposes the full productized capability structure", () => {
   const moduleKeys = navigationItems.map((entry) => entry.module_key);
 
@@ -1248,6 +1258,11 @@ test("sidebar navigation exposes the full productized capability structure", () 
   assert.equal(imageSystem.required_permission, "i.image_system.read");
   assert.equal(imageSystem.denied_behavior, "show_locked");
   assert.equal(imageSystem.category, "business");
+  const logisticsHub = item("w.site_ops");
+  assert.equal(logisticsHub.label, "W-S 物流网络中枢");
+  assert.equal(logisticsHub.href, "/w-s");
+  assert.equal(logisticsHub.route_namespace, "/w-s");
+  assert.equal(logisticsHub.required_permission, "w.site_ops.read");
   const moduleControl = item("admin.modules");
   assert.equal(moduleControl.label, "模块控制");
   assert.equal(moduleControl.href, "/module-control");

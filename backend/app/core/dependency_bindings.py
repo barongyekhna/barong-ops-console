@@ -145,6 +145,13 @@ MODULE_SERVICE_BINDINGS_V1: tuple[dict[str, Any], ...] = (
         "reason": "F enrichment sources category candidates from 1688 keyword search.",
     },
     {
+        "module_key": "w.site_ops",
+        "service_id": "track17",
+        "binding_status": "restricted",
+        "allowed_capabilities": ["data_acquisition"],
+        "reason": "W-S logistics pulls shipment tracking through the 17TRACK API.",
+    },
+    {
         "module_key": "communication.im",
         "service_id": "chat_record_store",
         "binding_status": "restricted",
@@ -199,6 +206,12 @@ MODULE_CAPABILITY_BINDINGS_V1: tuple[dict[str, Any], ...] = (
         "allowed_capabilities": ["data_acquisition"],
         "binding_status": "restricted",
         "reason": "F enrichment is restricted to keyword and sourcing data acquisition.",
+    },
+    {
+        "module_key": "w.site_ops",
+        "allowed_capabilities": ["data_acquisition"],
+        "binding_status": "restricted",
+        "reason": "W-S logistics is restricted to shipment tracking data acquisition.",
     },
     {
         "module_key": "communication.im",
@@ -280,6 +293,12 @@ SERVICE_CAPABILITY_MAPPINGS_V1: tuple[dict[str, Any], ...] = (
         "capabilities": ["data_acquisition"],
         "binding_status": "restricted",
         "reason": "Google Ads keyword planner is restricted to keyword volume acquisition.",
+    },
+    {
+        "service_id": "track17",
+        "capabilities": ["data_acquisition"],
+        "binding_status": "restricted",
+        "reason": "17TRACK is restricted to shipment tracking data acquisition.",
     },
     {
         "service_id": "chat_record_store",

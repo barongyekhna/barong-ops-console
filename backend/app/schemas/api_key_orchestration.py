@@ -24,6 +24,7 @@ class KeyType(str, Enum):
     ALIBABA1688 = "alibaba1688"
     RAINFOREST = "rainforest"
     GOOGLE_ADS = "google_ads"
+    TRACK17 = "track17"
 
 
 def _validate_provider_url(value: str) -> str:

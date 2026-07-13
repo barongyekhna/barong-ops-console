@@ -33,6 +33,10 @@ const KNOWN_UNPROXIED = new Set([
   "POST /api/app/notifications/ingest",
   "POST /api/app/p/uploads/{job_id}/result",
   "GET /api/app/p/jobs/{job_id}/media/{asset_id}/file",
+  // W-S sync callbacks, Woo order ingest and 17TRACK updates are server-to-server only.
+  "POST /api/app/w/sync/{job_id}/result",
+  "POST /api/app/w/orders/ingest",
+  "POST /api/app/w/tracking/webhook",
   // C19 byte-plane session authorization is called only by Nginx auth_request.
   "GET /api/app/c19/assets/transfers/authorize",
   "POST /api/control-plane/n8n-test/callback",

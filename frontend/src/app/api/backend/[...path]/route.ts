@@ -1082,51 +1082,95 @@ function isAllowedFPath(method: string, path: string[]) {
 }
 
 function isAllowedWPath(method: string, path: string[]) {
-  if (path[0] !== "w" || path[1] !== "shipping") {
+  if (path[0] !== "w") {
     return false;
   }
-  if (path.length === 3 && path[2] === "classes") {
+  if (
+    path.length === 3 &&
+    path[1] === "shipping" &&
+    path[2] === "classes"
+  ) {
     return method === "GET" || method === "POST";
   }
   if (
     path.length === 4 &&
+    path[1] === "shipping" &&
     path[2] === "classes" &&
     isUuidPathSegment(path[3])
   ) {
     return method === "PATCH";
   }
-  if (path.length === 3 && path[2] === "rules") {
+  if (
+    path.length === 5 &&
+    path[1] === "shipping" &&
+    path[2] === "classes" &&
+    isUuidPathSegment(path[3]) &&
+    path[4] === "sync"
+  ) {
+    return method === "POST";
+  }
+  if (path.length === 3 && path[1] === "shipping" && path[2] === "rules") {
     return method === "GET" || method === "POST";
   }
   if (
     path.length === 4 &&
+    path[1] === "shipping" &&
     path[2] === "rules" &&
     isUuidPathSegment(path[3])
   ) {
     return method === "PATCH" || method === "DELETE";
   }
-  if (path.length === 3 && path[2] === "simulate") {
+  if (
+    path.length === 3 &&
+    path[1] === "shipping" &&
+    path[2] === "simulate"
+  ) {
     return method === "POST";
   }
   if (
     path.length === 4 &&
+    path[1] === "shipping" &&
     path[2] === "assign" &&
     isUuidPathSegment(path[3])
   ) {
     return method === "POST";
   }
-  if (path.length === 3 && path[2] === "assign-all") {
+  if (
+    path.length === 3 &&
+    path[1] === "shipping" &&
+    path[2] === "assign-all"
+  ) {
     return method === "POST";
   }
-  if (path.length === 3 && path[2] === "board") {
+  if (path.length === 3 && path[1] === "shipping" && path[2] === "board") {
     return method === "GET";
   }
   if (
     path.length === 4 &&
+    path[1] === "shipping" &&
     path[2] === "products" &&
     isUuidPathSegment(path[3])
   ) {
     return method === "PATCH";
+  }
+  if (path.length === 2 && path[1] === "orders") {
+    return method === "GET";
+  }
+  if (
+    path.length === 4 &&
+    path[1] === "orders" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "tracking"
+  ) {
+    return method === "PATCH";
+  }
+  if (
+    path.length === 4 &&
+    path[1] === "orders" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "refresh-tracking"
+  ) {
+    return method === "POST";
   }
   return false;
 }

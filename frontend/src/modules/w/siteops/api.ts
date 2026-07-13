@@ -5,6 +5,7 @@ const ACCESS_TOKEN_STORAGE_KEY = "barong_ops_access_token";
 const AUTH_UNAUTHORIZED_EVENT = "barong-auth-unauthorized";
 
 export type ShippingOrigin = "cn_direct" | "us_stock";
+export type ShippingSyncStatus = "draft" | "pending" | "synced" | "failed";
 export type ShippingRuleType =
   | "us_stock_override"
   | "battery_override"
@@ -19,12 +20,24 @@ export type ShippingClass = {
   id: string;
   slug: string;
   name: string;
+  description: string | null;
+  zone_rates_json: ShippingZoneRate[] | null;
+  sync_status: ShippingSyncStatus;
+  woo_class_id: number | null;
+  synced_at: string | null;
+  sync_error: string | null;
   origin: ShippingOrigin;
   notes: string | null;
   active: boolean;
   sort_order: number;
   created_at: string | null;
   updated_at: string | null;
+};
+
+export type ShippingZoneRate = {
+  zone_name: string;
+  base_cost: string;
+  class_cost: string;
 };
 
 export type ShippingRule = {
@@ -83,6 +96,8 @@ export type ShippingBoardResponse = {
 export type ShippingClassCreatePayload = {
   slug: string;
   name: string;
+  description?: string | null;
+  zone_rates_json?: ShippingZoneRate[] | null;
   origin: ShippingOrigin;
   notes?: string | null;
   sort_order?: number;
@@ -90,10 +105,78 @@ export type ShippingClassCreatePayload = {
 
 export type ShippingClassPatchPayload = {
   name?: string;
+  description?: string | null;
+  zone_rates_json?: ShippingZoneRate[] | null;
   origin?: ShippingOrigin;
   notes?: string | null;
   active?: boolean;
   sort_order?: number;
+};
+
+export type WOrderFilter = "pending" | "tracked" | "all";
+export type TrackingStatus =
+  | "none"
+  | "registered"
+  | "info_received"
+  | "in_transit"
+  | "out_for_delivery"
+  | "delivered"
+  | "exception"
+  | "expired"
+  | "not_found";
+export type WritebackStatus = "none" | "pending" | "success" | "failed";
+
+export type WOrderItem = {
+  name: string;
+  qty: number;
+  sku?: string | null;
+};
+
+export type TrackingEvent = {
+  time: string | null;
+  location: string | null;
+  description: string | null;
+};
+
+export type WOrder = {
+  id: string;
+  woo_order_id: number;
+  order_number: string;
+  woo_status: string;
+  customer_name: string | null;
+  country: string | null;
+  total: string | number | null;
+  currency: string | null;
+  items_json: WOrderItem[] | null;
+  placed_at: string | null;
+  tracking_number: string | null;
+  carrier_code: number | null;
+  tracking_status: TrackingStatus;
+  tracking_events_json: TrackingEvent[] | null;
+  tracking_registered: boolean;
+  last_tracking_update: string | null;
+  writeback_status: WritebackStatus;
+  created_at: string | null;
+  updated_at: string | null;
+};
+
+export type WOrdersResponse = {
+  summary: {
+    pending: number;
+    in_transit: number;
+    delivered: number;
+    exception: number;
+  };
+  orders: WOrder[];
+};
+
+export type TrackingUpdateResponse = {
+  order: WOrder;
+  tracking_warning: string | null;
+};
+
+export type TrackingRefreshResponse = {
+  order: WOrder;
 };
 
 export type ShippingRuleCreatePayload = {
@@ -226,6 +309,56 @@ export async function patchShippingClass(
     method: "PATCH",
   });
   return readJson<ShippingClass>(response, "保存");
+}
+
+export async function syncShippingClass(id: string): Promise<unknown> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/w/shipping/classes/${id}/sync`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(),
+      method: "POST",
+    },
+  );
+  return readJson<unknown>(response, "同步到 Woo");
+}
+
+export async function getOrders(
+  filter: WOrderFilter = "all",
+): Promise<WOrdersResponse> {
+  const query = new URLSearchParams({ filter });
+  const response = await fetch(
+    `${API_PROXY_BASE}/w/orders?${query.toString()}`,
+    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  );
+  return readJson<WOrdersResponse>(response, "订单与物流");
+}
+
+export async function patchOrderTracking(
+  id: string,
+  payload: { tracking_number: string | null; carrier_code: number | null },
+): Promise<TrackingUpdateResponse> {
+  const response = await fetch(`${API_PROXY_BASE}/w/orders/${id}/tracking`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "PATCH",
+  });
+  return readJson<TrackingUpdateResponse>(response, "保存运单号");
+}
+
+export async function refreshOrderTracking(
+  id: string,
+): Promise<TrackingRefreshResponse> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/w/orders/${id}/refresh-tracking`,
+    {
+      cache: "no-store",
+      headers: buildHeaders(),
+      method: "POST",
+    },
+  );
+  return readJson<TrackingRefreshResponse>(response, "刷新轨迹");
 }
 
 export async function getShippingRules(): Promise<ShippingRule[]> {

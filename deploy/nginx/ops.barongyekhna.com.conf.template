@@ -59,6 +59,48 @@ server {
         return 404;
     }
 
+    # W-S machine plane. Keep these locations exact: browser-facing W routes
+    # continue through Next.js, while token/signature-authenticated callbacks
+    # reach FastAPI without entering the frontend proxy allowlist.
+    location ~ "^/w/sync/[0-9a-f]{32}/result$" {
+        limit_except POST { deny all; }
+        client_max_body_size 32k;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_read_timeout 30s;
+    }
+
+    location = /w/orders/ingest {
+        limit_except POST { deny all; }
+        client_max_body_size 2m;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_read_timeout 30s;
+    }
+
+    location = /w/tracking/webhook {
+        limit_except POST { deny all; }
+        client_max_body_size 2m;
+        proxy_pass http://127.0.0.1:8000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header Connection "";
+        proxy_read_timeout 30s;
+    }
+
     # C19 event stream: do not buffer authenticated SSE pages.
     location = /api/backend/c19/events {
         proxy_pass http://127.0.0.1:3000;

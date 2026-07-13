@@ -1,4 +1,4 @@
-"""Database services for W-A shipping-class registry and assignment."""
+"""Database services for W-S shipping-class registry and assignment."""
 
 from __future__ import annotations
 
@@ -49,6 +49,8 @@ def create_shipping_class(
     origin: str,
     notes: str | None,
     sort_order: int,
+    description: str | None = None,
+    zone_rates_json: list[dict[str, str]] | None = None,
 ) -> WShippingClass:
     normalized_slug = slug.strip()
     if get_shipping_class_by_slug(db, normalized_slug) is not None:
@@ -56,6 +58,9 @@ def create_shipping_class(
     row = WShippingClass(
         slug=normalized_slug,
         name=name.strip(),
+        description=description,
+        zone_rates_json=zone_rates_json,
+        sync_status="draft",
         origin=origin,
         notes=notes,
         active=True,
@@ -70,12 +75,26 @@ def update_shipping_class(
     row: WShippingClass,
     changes: dict[str, Any],
 ) -> WShippingClass:
-    for field in ("name", "origin", "notes", "active", "sort_order"):
+    editable_fields = (
+        "name",
+        "description",
+        "zone_rates_json",
+        "origin",
+        "notes",
+        "active",
+        "sort_order",
+    )
+    changed = False
+    for field in editable_fields:
         if field in changes:
             value = changes[field]
             if field == "name" and isinstance(value, str):
                 value = value.strip()
             setattr(row, field, value)
+            changed = True
+    if changed:
+        row.sync_status = "draft"
+        row.sync_error = None
     return row
 
 

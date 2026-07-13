@@ -212,6 +212,7 @@ def test_c14d_external_service_registry_lists_declared_services_only() -> None:
         "alibaba1688",
         "rainforest",
         "serper",
+        "track17",
         "google_ads",
         "chat_record_store",
         "chat_asset_store",

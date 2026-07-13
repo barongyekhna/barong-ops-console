@@ -151,12 +151,12 @@ export const navigationGroups: NavigationGroup[] = [
       {
         category: "business",
         denied_behavior: "show_locked",
-        href: "/w-a",
+        href: "/w-s",
         icon: Boxes,
-        label: "W-A 网站运营中枢",
+        label: "W-S 物流网络中枢",
         module_key: "w.site_ops",
         required_permission: "w.site_ops.read",
-        route_namespace: "/w-a",
+        route_namespace: "/w-s",
         status: "active",
       },
       {

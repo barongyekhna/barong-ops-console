@@ -59,7 +59,7 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
     if (getattr(product, "channel", "") or "").strip().lower() == "dtc" and not (
         getattr(product, "shipping_class", None) or ""
     ).strip():
-        blockers.append("运费模板未分配（去 W-A 运费中枢处理）")
+        blockers.append("运费模板未分配（去 W-S 物流网络中枢处理）")
     # 品牌硬门（fail-closed）：审查必须存在、通过、且内容未变
     blockers.extend(audit_gate_blockers(db, product))
     return blockers

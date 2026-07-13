@@ -11,7 +11,8 @@ export type ApiKeyType =
   | "keepa"
   | "alibaba1688"
   | "rainforest"
-  | "google_ads";
+  | "google_ads"
+  | "track17";
 
 export type ApiKeyTypeOption = {
   type: ApiKeyType;
@@ -72,6 +73,13 @@ export const KEY_TYPE_OPTIONS: ApiKeyTypeOption[] = [
     defaultUrl: "https://googleads.googleapis.com",
     defaultAlias: "google_ads",
     runtimeStatus: "pending_basic_review",
+  },
+  {
+    type: "track17",
+    label: "17TRACK",
+    description: "17TRACK 物流轨迹注册与查询 API",
+    defaultUrl: "https://api.17track.net",
+    defaultAlias: "track17",
   },
   {
     type: "custom",

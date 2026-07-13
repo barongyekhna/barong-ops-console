@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, LoaderCircle } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 
 import {
   assignAllShipping,
@@ -9,13 +9,17 @@ import {
   createShippingClass,
   createShippingRule,
   deleteShippingRule,
+  getOrders,
   getShippingBoard,
   getShippingClasses,
   getShippingRules,
+  patchOrderTracking,
   patchShippingClass,
   patchShippingProduct,
   patchShippingRule,
+  refreshOrderTracking,
   simulateShipping,
+  syncShippingClass,
   type ShippingBoardFilter,
   type ShippingBoardItem,
   type ShippingBoardResponse,
@@ -24,10 +28,17 @@ import {
   type ShippingRule,
   type ShippingRuleType,
   type ShippingSimulationResult,
+  type ShippingSyncStatus,
+  type ShippingZoneRate,
+  type TrackingStatus,
+  type WOrder,
+  type WOrderFilter,
+  type WOrdersResponse,
+  type WritebackStatus,
 } from "./api";
 import styles from "./ShippingDeck.module.css";
 
-type ActiveTab = "board" | "rules" | "classes" | "simulate";
+type ActiveTab = "orders" | "board" | "rules" | "classes" | "simulate";
 
 type RuleDraft = {
   key: string;
@@ -46,6 +57,12 @@ type ClassDraft = {
   id: string | null;
   slug: string;
   name: string;
+  description: string;
+  zone_rates: ShippingZoneRate[];
+  sync_status: ShippingSyncStatus;
+  woo_class_id: number | null;
+  synced_at: string | null;
+  sync_error: string | null;
   origin: ShippingOrigin;
   active: boolean;
   notes: string;
@@ -60,12 +77,51 @@ const EMPTY_SUMMARY: ShippingBoardResponse["summary"] = {
   exported_missing: 0,
 };
 
+const EMPTY_ORDER_SUMMARY: WOrdersResponse["summary"] = {
+  pending: 0,
+  in_transit: 0,
+  delivered: 0,
+  exception: 0,
+};
+
 const BOARD_FILTERS: { key: ShippingBoardFilter; label: string }[] = [
   { key: "all", label: "全部" },
   { key: "unassigned", label: "未分配" },
   { key: "review", label: "待复核" },
   { key: "exported_missing", label: "已上架缺运费" },
 ];
+
+const ORDER_FILTERS: { key: WOrderFilter; label: string }[] = [
+  { key: "pending", label: "待填单号" },
+  { key: "tracked", label: "已填单号" },
+  { key: "all", label: "全部" },
+];
+
+const TRACKING_STATUS_LABELS: Record<TrackingStatus, string> = {
+  none: "待填单号",
+  registered: "已登记",
+  info_received: "已揽收",
+  in_transit: "运输中",
+  out_for_delivery: "派送中",
+  delivered: "已签收",
+  exception: "异常",
+  expired: "查询过期",
+  not_found: "暂无轨迹",
+};
+
+const WRITEBACK_STATUS_LABELS: Record<WritebackStatus, string> = {
+  none: "—",
+  pending: "回传中",
+  success: "已回传",
+  failed: "回传失败",
+};
+
+const SYNC_STATUS_LABELS: Record<ShippingSyncStatus, string> = {
+  draft: "草稿",
+  pending: "同步中",
+  synced: "已同步",
+  failed: "失败",
+};
 
 function ruleTypeLabel(ruleType: ShippingRuleType | "manual" | null) {
   switch (ruleType) {
@@ -104,6 +160,12 @@ function toClassDraft(shippingClass: ShippingClass): ClassDraft {
     id: shippingClass.id,
     slug: shippingClass.slug,
     name: shippingClass.name,
+    description: shippingClass.description ?? "",
+    zone_rates: shippingClass.zone_rates_json ?? [],
+    sync_status: shippingClass.sync_status,
+    woo_class_id: shippingClass.woo_class_id,
+    synced_at: shippingClass.synced_at,
+    sync_error: shippingClass.sync_error,
     origin: shippingClass.origin,
     active: shippingClass.active,
     notes: shippingClass.notes ?? "",
@@ -122,8 +184,35 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : "—";
 }
 
+function formatDateTime(value: string | null) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("zh-CN", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function orderItemsTitle(order: WOrder) {
+  return (order.items_json ?? [])
+    .map((item) => `${item.name} × ${item.qty}`)
+    .join("\n");
+}
+
 export function ShippingDeck() {
-  const [activeTab, setActiveTab] = useState<ActiveTab>("board");
+  const [activeTab, setActiveTab] = useState<ActiveTab>("orders");
+  const [orderFilter, setOrderFilter] = useState<WOrderFilter>("all");
+  const [orderSummary, setOrderSummary] = useState(EMPTY_ORDER_SUMMARY);
+  const [orders, setOrders] = useState<WOrder[]>([]);
+  const [orderLoading, setOrderLoading] = useState(false);
+  const [trackingDrafts, setTrackingDrafts] = useState<Record<string, string>>(
+    {},
+  );
+  const [editingTracking, setEditingTracking] = useState<Set<string>>(
+    new Set(),
+  );
+  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<ShippingBoardFilter>("all");
   const [summary, setSummary] = useState(EMPTY_SUMMARY);
   const [items, setItems] = useState<ShippingBoardItem[]>([]);
@@ -154,6 +243,23 @@ export function ShippingDeck() {
     setItems(board.items);
   }, []);
 
+  const applyOrders = useCallback((data: WOrdersResponse) => {
+    setOrderSummary(data.summary);
+    setOrders(data.orders);
+    setTrackingDrafts(
+      Object.fromEntries(
+        data.orders.map((order) => [order.id, order.tracking_number ?? ""]),
+      ),
+    );
+  }, []);
+
+  const refreshOrders = useCallback(
+    async (nextFilter: WOrderFilter) => {
+      applyOrders(await getOrders(nextFilter));
+    },
+    [applyOrders],
+  );
+
   const refreshClasses = useCallback(async () => {
     const data = await getShippingClasses();
     setShippingClasses(data);
@@ -171,12 +277,14 @@ export function ShippingDeck() {
     const load = async () => {
       setLoading(true);
       try {
-        const [board, classData, ruleData] = await Promise.all([
+        const [orderData, board, classData, ruleData] = await Promise.all([
+          getOrders("all"),
           getShippingBoard("all", 500),
           getShippingClasses(),
           getShippingRules(),
         ]);
         if (!current) return;
+        applyOrders(orderData);
         setSummary(board.summary);
         setItems(board.items);
         setShippingClasses(classData);
@@ -194,7 +302,67 @@ export function ShippingDeck() {
     return () => {
       current = false;
     };
-  }, []);
+  }, [applyOrders]);
+
+  const handleOrderFilter = useCallback(
+    async (nextFilter: WOrderFilter) => {
+      setOrderFilter(nextFilter);
+      setOrderLoading(true);
+      setError(null);
+      try {
+        await refreshOrders(nextFilter);
+      } catch (filterError) {
+        setError(errorMessage(filterError));
+      } finally {
+        setOrderLoading(false);
+      }
+    },
+    [refreshOrders],
+  );
+
+  const handleSaveTracking = useCallback(
+    async (order: WOrder) => {
+      const trackingNumber = (trackingDrafts[order.id] ?? "").trim();
+      if (!trackingNumber && !order.tracking_number) return;
+      setBusy(`tracking:${order.id}`);
+      setError(null);
+      setNotice(null);
+      try {
+        const result = await patchOrderTracking(order.id, {
+          tracking_number: trackingNumber || null,
+          carrier_code: trackingNumber ? order.carrier_code : null,
+        });
+        if (result.tracking_warning) setNotice(result.tracking_warning);
+        setEditingTracking((current) => {
+          const next = new Set(current);
+          next.delete(order.id);
+          return next;
+        });
+        await refreshOrders(orderFilter);
+      } catch (saveError) {
+        setError(errorMessage(saveError));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [orderFilter, refreshOrders, trackingDrafts],
+  );
+
+  const handleRefreshTracking = useCallback(
+    async (orderId: string) => {
+      setBusy(`refresh-tracking:${orderId}`);
+      setError(null);
+      try {
+        await refreshOrderTracking(orderId);
+        await refreshOrders(orderFilter);
+      } catch (refreshError) {
+        setError(errorMessage(refreshError));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [orderFilter, refreshOrders],
+  );
 
   const handleFilter = useCallback(
     async (nextFilter: ShippingBoardFilter) => {
@@ -362,6 +530,59 @@ export function ShippingDeck() {
     [],
   );
 
+  const updateZoneRate = useCallback(
+    (
+      classKey: string,
+      index: number,
+      patch: Partial<ShippingZoneRate>,
+    ) => {
+      setClassDrafts((current) =>
+        current.map((row) =>
+          row.key === classKey
+            ? {
+                ...row,
+                zone_rates: row.zone_rates.map((rate, rateIndex) =>
+                  rateIndex === index ? { ...rate, ...patch } : rate,
+                ),
+              }
+            : row,
+        ),
+      );
+    },
+    [],
+  );
+
+  const addZoneRate = useCallback((classKey: string) => {
+    setClassDrafts((current) =>
+      current.map((row) =>
+        row.key === classKey
+          ? {
+              ...row,
+              zone_rates: [
+                ...row.zone_rates,
+                { zone_name: "", base_cost: "", class_cost: "" },
+              ],
+            }
+          : row,
+      ),
+    );
+  }, []);
+
+  const removeZoneRate = useCallback((classKey: string, index: number) => {
+    setClassDrafts((current) =>
+      current.map((row) =>
+        row.key === classKey
+          ? {
+              ...row,
+              zone_rates: row.zone_rates.filter(
+                (_rate, rateIndex) => rateIndex !== index,
+              ),
+            }
+          : row,
+      ),
+    );
+  }, []);
+
   const handleAddClass = useCallback(() => {
     draftSequence.current += 1;
     setClassDrafts((current) => [
@@ -371,6 +592,12 @@ export function ShippingDeck() {
         id: null,
         slug: "",
         name: "",
+        description: "",
+        zone_rates: [],
+        sync_status: "draft",
+        woo_class_id: null,
+        synced_at: null,
+        sync_error: null,
         origin: "cn_direct",
         active: true,
         notes: "",
@@ -380,13 +607,22 @@ export function ShippingDeck() {
   }, []);
 
   const handleSaveClass = useCallback(
-    async (row: ClassDraft) => {
+    async (row: ClassDraft, shouldSync: boolean) => {
       setBusy(`class:${row.key}`);
       setError(null);
       try {
+        let classId = row.id;
+        const zoneRates = row.zone_rates.filter(
+          (rate) =>
+            rate.zone_name.trim() ||
+            rate.base_cost.trim() ||
+            rate.class_cost.trim(),
+        );
         if (row.id) {
           await patchShippingClass(row.id, {
             name: row.name,
+            description: row.description.trim() || null,
+            zone_rates_json: zoneRates,
             origin: row.origin,
             notes: row.notes.trim() || null,
             active: row.active,
@@ -396,14 +632,18 @@ export function ShippingDeck() {
           const created = await createShippingClass({
             slug: row.slug,
             name: row.name,
+            description: row.description.trim() || null,
+            zone_rates_json: zoneRates,
             origin: row.origin,
             notes: row.notes.trim() || null,
             sort_order: row.sort_order,
           });
+          classId = created.id;
           if (!row.active) {
             await patchShippingClass(created.id, { active: false });
           }
         }
+        if (shouldSync && classId) await syncShippingClass(classId);
         await Promise.all([refreshClasses(), refreshBoard(filter)]);
       } catch (saveError) {
         setError(errorMessage(saveError));
@@ -412,6 +652,22 @@ export function ShippingDeck() {
       }
     },
     [filter, refreshBoard, refreshClasses],
+  );
+
+  const handleRetryClassSync = useCallback(
+    async (classId: string) => {
+      setBusy(`class-sync:${classId}`);
+      setError(null);
+      try {
+        await syncShippingClass(classId);
+        await refreshClasses();
+      } catch (syncError) {
+        setError(errorMessage(syncError));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [refreshClasses],
   );
 
   const handleSimulate = useCallback(async () => {
@@ -450,31 +706,37 @@ export function ShippingDeck() {
   return (
     <div className={styles.deck}>
       <div className={styles.statRow}>
-        <div className={styles.statCard}>
-          <span className={styles.statLabel}>独立站产品</span>
+        <div className={styles.statCard} data-tone="failed">
+          <span className={styles.statLabel}>待填单号</span>
           <span className={styles.statValue}>
-            {loading ? "—" : summary.total_dtc}
-          </span>
-        </div>
-        <div className={styles.statCard} data-tone="success">
-          <span className={styles.statLabel}>已分配</span>
-          <span className={styles.statValue}>
-            {loading ? "—" : summary.assigned}
+            {loading ? "—" : orderSummary.pending}
           </span>
         </div>
         <div className={styles.statCard} data-tone="flight">
-          <span className={styles.statLabel}>待人工复核</span>
+          <span className={styles.statLabel}>运输中</span>
           <span className={styles.statValue}>
-            {loading ? "—" : summary.review_needed}
+            {loading ? "—" : orderSummary.in_transit}
+          </span>
+        </div>
+        <div className={styles.statCard} data-tone="success">
+          <span className={styles.statLabel}>已签收</span>
+          <span className={styles.statValue}>
+            {loading ? "—" : orderSummary.delivered}
           </span>
         </div>
         <div className={styles.statCard} data-tone="failed">
-          <span className={styles.statLabel}>已上架缺运费</span>
+          <span className={styles.statLabel}>异常</span>
           <span className={styles.statValue}>
-            {loading ? "—" : summary.exported_missing}
+            {loading ? "—" : orderSummary.exception}
           </span>
         </div>
       </div>
+
+      {!loading && orderSummary.pending > 0 ? (
+        <p className={styles.notice}>
+          有 {orderSummary.pending} 个订单等待填写运单号——填入后自动注册 17TRACK 轨迹并回传 Woo 订单。
+        </p>
+      ) : null}
 
       {error ? (
         <div className={styles.state} role="alert">
@@ -485,6 +747,20 @@ export function ShippingDeck() {
       {notice ? <p className={styles.notice}>{notice}</p> : null}
 
       <div className={styles.tabs} role="tablist">
+        <button
+          className={`${styles.tab} ${activeTab === "orders" ? styles.tabOn : ""}`}
+          onClick={() => setActiveTab("orders")}
+          role="tab"
+          type="button"
+        >
+          订单与物流{" "}
+          <span className={styles.tabCount}>
+            {orderSummary.pending +
+              orderSummary.in_transit +
+              orderSummary.delivered +
+              orderSummary.exception}
+          </span>
+        </button>
         <button
           className={`${styles.tab} ${activeTab === "board" ? styles.tabOn : ""}`}
           onClick={() => setActiveTab("board")}
@@ -518,6 +794,213 @@ export function ShippingDeck() {
           试算器
         </button>
       </div>
+
+      {activeTab === "orders" ? (
+        <section className={styles.panel} aria-label="订单与物流">
+          <div className={styles.filterRow}>
+            {ORDER_FILTERS.map((option) => (
+              <button
+                className={`secondary-button ${orderFilter === option.key ? styles.tabOn : ""}`}
+                disabled={orderLoading || busy !== null}
+                key={option.key}
+                onClick={() => void handleOrderFilter(option.key)}
+                type="button"
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+          {loading || orderLoading ? (
+            <div className={styles.state}>
+              <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              <span>正在加载…</span>
+            </div>
+          ) : orders.length === 0 ? (
+            <div className={styles.emptyHint}>
+              还没有订单数据。n8n 的订单同步流配置好后，Woo 订单会自动出现在这里。
+            </div>
+          ) : (
+            <div className={styles.tableScroll}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>订单</th>
+                    <th>国家</th>
+                    <th>金额</th>
+                    <th>商品</th>
+                    <th>下单时间</th>
+                    <th>运单号</th>
+                    <th>轨迹</th>
+                    <th>回传</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {orders.map((order) => {
+                    const trackingBusy = busy === `tracking:${order.id}`;
+                    const refreshBusy =
+                      busy === `refresh-tracking:${order.id}`;
+                    const isEditing =
+                      !order.tracking_number || editingTracking.has(order.id);
+                    const isExpanded = expandedOrders.has(order.id);
+                    const itemCount = (order.items_json ?? []).reduce(
+                      (total, item) => total + item.qty,
+                      0,
+                    );
+                    const firstItem = order.items_json?.[0];
+                    return (
+                      <Fragment key={order.id}>
+                        <tr>
+                          <td className={styles.productCell}>
+                            <strong>{order.order_number}</strong>
+                            <span>{order.customer_name ?? "—"}</span>
+                          </td>
+                          <td>{order.country ?? "—"}</td>
+                          <td>
+                            {order.total === null
+                              ? "—"
+                              : `${order.currency ?? ""} ${order.total}`.trim()}
+                          </td>
+                          <td
+                            className={styles.productCell}
+                            title={orderItemsTitle(order) || undefined}
+                          >
+                            <strong>{firstItem?.name ?? "—"}</strong>
+                            {itemCount > 1 ? <span>等 {itemCount} 件</span> : null}
+                          </td>
+                          <td className={styles.timeCell}>
+                            {formatDateTime(order.placed_at)}
+                          </td>
+                          <td>
+                            {isEditing ? (
+                              <span className={styles.trackingEditor}>
+                                <input
+                                  className={styles.formInput}
+                                  disabled={trackingBusy || busy !== null}
+                                  onChange={(event) =>
+                                    setTrackingDrafts((current) => ({
+                                      ...current,
+                                      [order.id]: event.target.value,
+                                    }))
+                                  }
+                                  placeholder="填入运单号，如 YT2513…"
+                                  value={trackingDrafts[order.id] ?? ""}
+                                />
+                                <button
+                                  className="secondary-button"
+                                  disabled={
+                                    trackingBusy ||
+                                    busy !== null ||
+                                    (!(trackingDrafts[order.id] ?? "").trim() &&
+                                      !order.tracking_number)
+                                  }
+                                  onClick={() => void handleSaveTracking(order)}
+                                  type="button"
+                                >
+                                  保存
+                                </button>
+                              </span>
+                            ) : (
+                              <span className={styles.actionRow}>
+                                <button
+                                  className={styles.linkButton}
+                                  disabled={busy !== null}
+                                  onClick={() =>
+                                    setEditingTracking((current) => {
+                                      const next = new Set(current);
+                                      next.add(order.id);
+                                      return next;
+                                    })
+                                  }
+                                  title="更换运单号会重新消耗一次 17TRACK 注册额度"
+                                  type="button"
+                                >
+                                  {order.tracking_number}
+                                </button>
+                                <span
+                                  className={styles.statusBadge}
+                                  data-status={order.tracking_status}
+                                >
+                                  {TRACKING_STATUS_LABELS[order.tracking_status]}
+                                </span>
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            {order.tracking_number ? (
+                              <span className={styles.actionRow}>
+                                <button
+                                  className={styles.linkButton}
+                                  onClick={() =>
+                                    setExpandedOrders((current) => {
+                                      const next = new Set(current);
+                                      if (next.has(order.id)) next.delete(order.id);
+                                      else next.add(order.id);
+                                      return next;
+                                    })
+                                  }
+                                  type="button"
+                                >
+                                  {isExpanded ? "收起" : "查看轨迹"}
+                                </button>
+                                <button
+                                  className="secondary-button"
+                                  disabled={refreshBusy || busy !== null}
+                                  onClick={() =>
+                                    void handleRefreshTracking(order.id)
+                                  }
+                                  type="button"
+                                >
+                                  刷新轨迹
+                                </button>
+                              </span>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                          <td>
+                            <span
+                              className={styles.statusBadge}
+                              data-status={order.writeback_status}
+                            >
+                              {WRITEBACK_STATUS_LABELS[order.writeback_status]}
+                            </span>
+                          </td>
+                        </tr>
+                        {isExpanded ? (
+                          <tr>
+                            <td colSpan={8}>
+                              <div className={styles.trackingTimeline}>
+                                {(order.tracking_events_json ?? []).length > 0 ? (
+                                  (order.tracking_events_json ?? []).map(
+                                    (event, index) => (
+                                      <p
+                                        className={styles.mutedLine}
+                                        key={`${event.time ?? "event"}-${index}`}
+                                      >
+                                        <span className={styles.timeCell}>
+                                          {formatDateTime(event.time)}
+                                        </span>{" "}
+                                        {event.location ? `${event.location} ` : ""}
+                                        {event.description ?? "—"}
+                                      </p>
+                                    ),
+                                  )
+                                ) : (
+                                  <p className={styles.mutedLine}>—</p>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+      ) : null}
 
       {activeTab === "board" ? (
         <section className={styles.panel} aria-label="产品台账">
@@ -874,8 +1357,7 @@ export function ShippingDeck() {
       {activeTab === "classes" ? (
         <section className={styles.panel} aria-label="运费模板">
           <p className={styles.mutedLine}>
-            slug 必须与 WooCommerce 后台的运费类别（shipping class）slug
-            完全一致——这是唯一的对齐点，填错产品会挂错模板。
+            slug 必须与 WooCommerce 后台的运费类别 slug 完全一致；「保存并同步到 Woo」会经 n8n 直接写入 Woo 后台，区域名需与 Woo 配送区域名一致。
           </p>
           {loading ? (
             <div className={styles.state}>
@@ -891,15 +1373,19 @@ export function ShippingDeck() {
                   <tr>
                     <th>slug</th>
                     <th>名称</th>
+                    <th>描述</th>
                     <th>线路</th>
                     <th>启用</th>
                     <th>备注</th>
+                    <th>区域费率</th>
+                    <th>同步状态</th>
                     <th>操作</th>
                   </tr>
                 </thead>
                 <tbody>
                   {classDrafts.map((row) => {
                     const rowBusy = busy === `class:${row.key}`;
+                    const syncInFlight = row.sync_status === "pending";
                     return (
                       <tr key={row.key}>
                         <td>
@@ -917,6 +1403,7 @@ export function ShippingDeck() {
                         <td>
                           <input
                             className={styles.formInput}
+                            disabled={syncInFlight}
                             onChange={(event) =>
                               updateClassDraft(row.key, {
                                 name: event.target.value,
@@ -926,8 +1413,21 @@ export function ShippingDeck() {
                           />
                         </td>
                         <td>
+                          <input
+                            className={styles.formInput}
+                            disabled={syncInFlight}
+                            onChange={(event) =>
+                              updateClassDraft(row.key, {
+                                description: event.target.value,
+                              })
+                            }
+                            value={row.description}
+                          />
+                        </td>
+                        <td>
                           <select
                             className={styles.formInput}
+                            disabled={syncInFlight}
                             onChange={(event) =>
                               updateClassDraft(row.key, {
                                 origin: event.target.value as ShippingOrigin,
@@ -942,7 +1442,7 @@ export function ShippingDeck() {
                         <td>
                           <input
                             checked={row.active}
-                            disabled={row.id === null}
+                            disabled={row.id === null || syncInFlight}
                             onChange={(event) =>
                               updateClassDraft(row.key, {
                                 active: event.target.checked,
@@ -954,6 +1454,7 @@ export function ShippingDeck() {
                         <td>
                           <input
                             className={styles.formInput}
+                            disabled={syncInFlight}
                             onChange={(event) =>
                               updateClassDraft(row.key, {
                                 notes: event.target.value,
@@ -963,19 +1464,125 @@ export function ShippingDeck() {
                           />
                         </td>
                         <td>
-                          <button
-                            className="secondary-button"
-                            disabled={
-                              rowBusy ||
-                              busy !== null ||
-                              !row.slug.trim() ||
-                              !row.name.trim()
-                            }
-                            onClick={() => void handleSaveClass(row)}
-                            type="button"
+                          <span className={styles.zoneRates}>
+                            {row.zone_rates.map((rate, index) => (
+                              <span
+                                className={styles.zoneRateRow}
+                                key={`${row.key}-zone-${index}`}
+                              >
+                                <input
+                                  aria-label="区域名"
+                                  className={styles.formInput}
+                                  disabled={syncInFlight}
+                                  onChange={(event) =>
+                                    updateZoneRate(row.key, index, {
+                                      zone_name: event.target.value,
+                                    })
+                                  }
+                                  placeholder="zone_name"
+                                  value={rate.zone_name}
+                                />
+                                <input
+                                  aria-label="基础运费"
+                                  className={styles.formInput}
+                                  disabled={syncInFlight}
+                                  inputMode="decimal"
+                                  onChange={(event) =>
+                                    updateZoneRate(row.key, index, {
+                                      base_cost: event.target.value,
+                                    })
+                                  }
+                                  placeholder="base_cost"
+                                  value={rate.base_cost}
+                                />
+                                <input
+                                  aria-label="类别运费"
+                                  className={styles.formInput}
+                                  disabled={syncInFlight}
+                                  inputMode="decimal"
+                                  onChange={(event) =>
+                                    updateZoneRate(row.key, index, {
+                                      class_cost: event.target.value,
+                                    })
+                                  }
+                                  placeholder="class_cost"
+                                  value={rate.class_cost}
+                                />
+                                <button
+                                  aria-label="删除区域"
+                                  className={styles.linkButton}
+                                  disabled={syncInFlight}
+                                  onClick={() => removeZoneRate(row.key, index)}
+                                  type="button"
+                                >
+                                  ✕
+                                </button>
+                              </span>
+                            ))}
+                            <button
+                              className={styles.linkButton}
+                              disabled={syncInFlight}
+                              onClick={() => addZoneRate(row.key)}
+                              type="button"
+                            >
+                              + 加区域
+                            </button>
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={styles.statusBadge}
+                            data-status={row.sync_status}
+                            title={row.sync_error ?? undefined}
                           >
-                            保存
-                          </button>
+                            {SYNC_STATUS_LABELS[row.sync_status]}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={styles.actionRow}>
+                            <button
+                              className="secondary-button"
+                              disabled={
+                                rowBusy ||
+                                busy !== null ||
+                                syncInFlight ||
+                                !row.slug.trim() ||
+                                !row.name.trim()
+                              }
+                              onClick={() => void handleSaveClass(row, false)}
+                              type="button"
+                            >
+                              保存草稿
+                            </button>
+                            <button
+                              className="primary-button"
+                              disabled={
+                                rowBusy ||
+                                busy !== null ||
+                                syncInFlight ||
+                                !row.slug.trim() ||
+                                !row.name.trim()
+                              }
+                              onClick={() => void handleSaveClass(row, true)}
+                              type="button"
+                            >
+                              保存并同步到 Woo
+                            </button>
+                            {row.id && row.sync_status === "failed" ? (
+                              <button
+                                className="secondary-button"
+                                disabled={
+                                  busy === `class-sync:${row.id}` || busy !== null
+                                }
+                                onClick={() =>
+                                  void handleRetryClassSync(row.id as string)
+                                }
+                                type="button"
+                              >
+                                重试同步
+                              </button>
+                            ) : null}
+                          </span>
                         </td>
                       </tr>
                     );

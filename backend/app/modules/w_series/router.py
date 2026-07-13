@@ -1,23 +1,35 @@
-"""W-A shipping hub API.
+"""W-S logistics hub API.
 
-All endpoints are human-operated control-plane actions.  The module only
-assigns WooCommerce shipping-class slugs; it never creates orders or performs
-fulfilment.
+Human endpoints manage templates, imported order snapshots, and manually
+entered tracking numbers.  Machine endpoints receive n8n/17TRACK callbacks.
 """
 
 from __future__ import annotations
 
+import json
+import os
+import secrets
 from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    Header,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    status,
+)
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
     field_validator,
 )
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user
@@ -26,10 +38,26 @@ from ...db.session import get_db
 from ...models.user import User
 from ...services.permission_service import resolve_current_user_permission_info
 from ..k_series.product_knowledge.models import KProductKnowledgeProduct
+from . import logistics
+from .logistics_schemas import (
+    OrderItem,
+    OrderListResponse,
+    OrdersIngestRequest,
+    OrdersIngestResponse,
+    ShippingSyncJobResponse,
+    SyncResultRequest,
+    SyncResultResponse,
+    TrackingPatchRequest,
+    TrackingPatchResponse,
+    TrackingRefreshResponse,
+    ZoneRate,
+)
 from .shipping import engine, service
-from .shipping.models import WShippingClass, WShippingRule
+from .shipping.models import WOrder, WShippingClass, WShippingRule, WSyncJob
 
 router = APIRouter(prefix="/w", tags=["w-site-ops"])
+# Server-to-server endpoints are also mounted at bare /w paths in main.py.
+machine_router = APIRouter(prefix="/w", tags=["w-site-ops-machine"])
 
 MODULE_KEY = "w.site_ops"
 PERMISSION_READ = "w.site_ops.read"
@@ -69,6 +97,8 @@ class StrictRequest(BaseModel):
 class ShippingClassCreateRequest(StrictRequest):
     slug: str = Field(min_length=1, max_length=128)
     name: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+    zone_rates_json: list[ZoneRate] | None = None
     origin: Literal["cn_direct", "us_stock"] = "cn_direct"
     notes: str | None = None
     sort_order: int = 100
@@ -84,6 +114,8 @@ class ShippingClassCreateRequest(StrictRequest):
 
 class ShippingClassPatchRequest(StrictRequest):
     name: str | None = Field(default=None, min_length=1, max_length=255)
+    description: str | None = None
+    zone_rates_json: list[ZoneRate] | None = None
     origin: Literal["cn_direct", "us_stock"] | None = None
     notes: str | None = None
     active: bool | None = None
@@ -111,6 +143,12 @@ class ShippingClassItem(BaseModel):
     id: str
     slug: str
     name: str
+    description: str | None
+    zone_rates_json: list[ZoneRate] | None
+    sync_status: str
+    woo_class_id: int | None
+    synced_at: str | None
+    sync_error: str | None
     origin: str
     notes: str | None
     active: bool
@@ -266,12 +304,48 @@ def _class_item(row: WShippingClass) -> ShippingClassItem:
         id=str(row.id),
         slug=row.slug,
         name=row.name,
+        description=row.description,
+        zone_rates_json=row.zone_rates_json,
+        sync_status=row.sync_status,
+        woo_class_id=row.woo_class_id,
+        synced_at=_iso(row.synced_at),
+        sync_error=row.sync_error,
         origin=row.origin,
         notes=row.notes,
         active=row.active,
         sort_order=row.sort_order,
         created_at=_iso(row.created_at),
         updated_at=_iso(row.updated_at),
+    )
+
+
+def _order_item(row: WOrder) -> OrderItem:
+    events = (
+        row.tracking_events_json
+        if isinstance(row.tracking_events_json, list)
+        else None
+    )
+    items = row.items_json if isinstance(row.items_json, list) else None
+    return OrderItem(
+        id=str(row.id),
+        woo_order_id=row.woo_order_id,
+        order_number=row.order_number,
+        woo_status=row.woo_status,
+        customer_name=row.customer_name,
+        country=row.country,
+        total=row.total,
+        currency=row.currency,
+        items_json=items,
+        placed_at=row.placed_at,
+        tracking_number=row.tracking_number,
+        carrier_code=row.carrier_code,
+        tracking_status=row.tracking_status,
+        tracking_events_json=events,
+        tracking_registered=bool(row.tracking_registered),
+        last_tracking_update=row.last_tracking_update,
+        writeback_status=row.writeback_status,
+        created_at=row.created_at,
+        updated_at=row.updated_at,
     )
 
 
@@ -353,13 +427,61 @@ def shipping_class_patch(
     user: User = Depends(_require_w_permission(PERMISSION_MANAGE)),
 ) -> ShippingClassItem:
     del user
-    row = service.get_shipping_class(db, class_id)
+    row = db.scalar(
+        select(WShippingClass)
+        .where(WShippingClass.id == class_id)
+        .with_for_update()
+    )
     if row is None:
         raise HTTPException(status_code=404, detail="运费模板不存在。")
+    in_flight = db.scalar(
+        select(WSyncJob.id)
+        .where(WSyncJob.target_type == "shipping_class")
+        .where(WSyncJob.target_id == row.id)
+        .where(WSyncJob.status.in_(logistics.SYNC_IN_FLIGHT_STATUSES))
+        .limit(1)
+    )
+    if in_flight is not None:
+        raise HTTPException(
+            status_code=409,
+            detail="该模板已有同步任务在执行中。",
+        )
     service.update_shipping_class(row, payload.model_dump(exclude_unset=True))
     db.commit()
     db.refresh(row)
     return _class_item(row)
+
+
+@router.post(
+    "/shipping/classes/{class_id}/sync",
+    response_model=ShippingSyncJobResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def shipping_class_sync(
+    class_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_MANAGE)),
+) -> ShippingSyncJobResponse:
+    del user
+    row = db.scalar(
+        select(WShippingClass)
+        .where(WShippingClass.id == class_id)
+        .with_for_update()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="运费模板不存在。")
+    try:
+        job = logistics.create_shipping_sync_job(db, row)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    # Persist the one-time token before any slow network call.
+    db.commit()
+    job, dispatched = logistics.dispatch_sync_job(db, job.job_id)
+    return ShippingSyncJobResponse(
+        job_id=job.job_id,
+        status=job.status,
+        dispatched=dispatched,
+    )
 
 
 @router.get("/shipping/rules", response_model=list[ShippingRuleItem])
@@ -529,3 +651,318 @@ def shipping_product_patch(
         assignment=assignment if isinstance(assignment, dict) else None,
         review_needed=bool(product.shipping_review_needed),
     )
+
+
+@router.get("/orders", response_model=OrderListResponse)
+def orders_list(
+    filter_name: Literal["pending", "tracked", "all"] = Query(
+        default="pending",
+        alias="filter",
+    ),
+    limit: int = Query(default=500, ge=1, le=500),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_READ)),
+) -> OrderListResponse:
+    del user
+    summary, rows = logistics.list_orders(
+        db,
+        filter_name=filter_name,
+        limit=limit,
+    )
+    return OrderListResponse(
+        summary=summary,
+        orders=[_order_item(row) for row in rows],
+    )
+
+
+@router.patch(
+    "/orders/{order_id}/tracking",
+    response_model=TrackingPatchResponse,
+)
+def order_tracking_patch(
+    order_id: UUID,
+    payload: TrackingPatchRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_MANAGE)),
+) -> TrackingPatchResponse:
+    del user
+    order = db.scalar(
+        select(WOrder).where(WOrder.id == order_id).with_for_update()
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="订单不存在。")
+
+    tracking_number = payload.tracking_number
+    if tracking_number is None:
+        already_clear = order.tracking_number is None and order.carrier_code is None
+        if already_clear and order.writeback_status in ("pending", "success"):
+            pending_job_id = logistics.pending_order_writeback_job_id(db, order.id)
+            response = TrackingPatchResponse(order=_order_item(order))
+            db.commit()
+            if pending_job_id is not None:
+                try:
+                    logistics.dispatch_sync_job(db, pending_job_id)
+                except Exception:  # noqa: BLE001 - the queued job stays durable
+                    db.rollback()
+            return response
+        order.tracking_number = None
+        order.carrier_code = None
+        order.tracking_status = "none"
+        order.tracking_events_json = None
+        order.tracking_registered = False
+        order.last_tracking_update = None
+        writeback_job = logistics.create_order_writeback_job(db, order)
+        writeback_job_id = writeback_job.job_id
+        db.commit()
+        try:
+            logistics.dispatch_sync_job(db, writeback_job_id)
+        except Exception:  # noqa: BLE001 - local clear must remain durable
+            db.rollback()
+        order = db.get(WOrder, order_id)
+        if order is None:
+            raise HTTPException(status_code=404, detail="订单不存在。")
+        return TrackingPatchResponse(order=_order_item(order))
+
+    number_changed = tracking_number != order.tracking_number
+    carrier_changed = payload.carrier_code != order.carrier_code
+    registration_required = (
+        number_changed or carrier_changed or not order.tracking_registered
+    )
+    writeback_required = (
+        number_changed
+        or carrier_changed
+        or order.writeback_status in ("none", "failed")
+    )
+    if (
+        not registration_required
+        and not writeback_required
+    ):
+        pending_job_id = logistics.pending_order_writeback_job_id(db, order.id)
+        response = TrackingPatchResponse(order=_order_item(order))
+        db.commit()
+        if pending_job_id is not None:
+            try:
+                logistics.dispatch_sync_job(db, pending_job_id)
+            except Exception:  # noqa: BLE001 - the queued job stays durable
+                db.rollback()
+        return response
+
+    if number_changed or carrier_changed:
+        logistics.supersede_order_writeback_jobs(db, order.id)
+        order.writeback_status = "none"
+    order.tracking_number = tracking_number
+    order.carrier_code = payload.carrier_code
+    if number_changed or carrier_changed:
+        order.tracking_events_json = None
+        order.last_tracking_update = None
+    if registration_required:
+        order.tracking_registered = False
+        if order.last_tracking_update is None:
+            order.tracking_status = "not_found"
+        # The number must survive even if either downstream integration is down.
+        db.commit()
+
+    warning: str | None = None
+    if registration_required:
+        registered, warning = logistics.register_tracking(
+            db,
+            tracking_number,
+            payload.carrier_code,
+        )
+        order = db.scalar(
+            select(WOrder).where(WOrder.id == order_id).with_for_update()
+        )
+        if order is None:
+            raise HTTPException(status_code=404, detail="订单不存在。")
+        if (
+            order.tracking_number != tracking_number
+            or order.carrier_code != payload.carrier_code
+        ):
+            current = _order_item(order)
+            db.rollback()
+            return TrackingPatchResponse(order=current)
+        if order.last_tracking_update is None:
+            order.tracking_registered = registered
+            order.tracking_status = "registered" if registered else "not_found"
+        else:
+            # A signed webhook may advance the shipment while register is in flight.
+            order.tracking_registered = True
+
+    if writeback_required:
+        writeback_job = logistics.create_order_writeback_job(db, order)
+        writeback_job_id: str | None = writeback_job.job_id
+    else:
+        writeback_job_id = None
+    db.commit()
+
+    if writeback_job_id is not None:
+        try:
+            logistics.dispatch_sync_job(db, writeback_job_id)
+        except Exception:  # noqa: BLE001 - Woo writeback never blocks number entry
+            db.rollback()
+    order = db.get(WOrder, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="订单不存在。")
+    return TrackingPatchResponse(
+        order=_order_item(order),
+        tracking_warning=warning,
+    )
+
+
+@router.post(
+    "/orders/{order_id}/refresh-tracking",
+    response_model=TrackingRefreshResponse,
+)
+def order_tracking_refresh(
+    order_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_READ)),
+) -> TrackingRefreshResponse:
+    del user
+    order = db.get(WOrder, order_id)
+    if order is None:
+        raise HTTPException(status_code=404, detail="订单不存在。")
+    if not order.tracking_number:
+        raise HTTPException(status_code=409, detail="该订单尚未填写运单号。")
+    expected_number = order.tracking_number
+    expected_carrier = order.carrier_code
+    try:
+        record = logistics.get_tracking_info(
+            db,
+            expected_number,
+            expected_carrier,
+        )
+    except RuntimeError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail="17TRACK 密钥未绑定（去密钥管理添加）。",
+        ) from exc
+    except Exception as exc:  # noqa: BLE001 - external response is untrusted
+        raise HTTPException(
+            status_code=502,
+            detail=f"17TRACK 轨迹刷新失败：{logistics._remote_error(exc)}",
+        ) from exc
+    order = db.scalar(
+        select(WOrder).where(WOrder.id == order_id).with_for_update()
+    )
+    if order is None:
+        raise HTTPException(status_code=404, detail="订单不存在。")
+    if (
+        order.tracking_number != expected_number
+        or order.carrier_code != expected_carrier
+    ):
+        current = _order_item(order)
+        db.rollback()
+        return TrackingRefreshResponse(order=current)
+    logistics.apply_tracking_record(order, record, deduplicate=True)
+    db.commit()
+    db.refresh(order)
+    return TrackingRefreshResponse(order=_order_item(order))
+
+
+@machine_router.post("/sync/{job_id}/result", response_model=SyncResultResponse)
+def sync_result(
+    job_id: str,
+    payload: SyncResultRequest,
+    x_job_token: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> SyncResultResponse:
+    try:
+        job = logistics.record_sync_result(
+            db,
+            job_id=job_id,
+            token=x_job_token,
+            result_status=payload.status,
+            woo_class_id=payload.woo_class_id,
+            error=payload.error,
+        )
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail="job token 无效。") from exc
+    if job is None:
+        raise HTTPException(status_code=404, detail="job 不存在。")
+    response_job_id = job.job_id
+    response_status = job.status
+    next_job_id: str | None = None
+    if job.target_type == "order_tracking":
+        next_job_id = logistics.pending_order_writeback_job_id(db, job.target_id)
+    db.commit()
+    if next_job_id is not None and next_job_id != response_job_id:
+        try:
+            logistics.dispatch_sync_job(db, next_job_id)
+        except Exception:  # noqa: BLE001 - callback acknowledgement must be stable
+            db.rollback()
+    return SyncResultResponse(job_id=response_job_id, status=response_status)
+
+
+@machine_router.post("/orders/ingest", response_model=OrdersIngestResponse)
+def orders_ingest(
+    payload: OrdersIngestRequest,
+    x_ingest_token: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> OrdersIngestResponse:
+    expected = os.getenv("W_ORDERS_INGEST_TOKEN") or ""
+    supplied = x_ingest_token or ""
+    if not expected or not supplied or not secrets.compare_digest(
+        expected.encode("utf-8"),
+        supplied.encode("utf-8"),
+    ):
+        raise HTTPException(status_code=401, detail="ingest token 无效。")
+    rows = [
+        item.model_dump(mode="python", exclude_unset=True)
+        for item in payload.orders
+    ]
+    created, updated = logistics.upsert_orders(db, rows)
+    db.commit()
+    return OrdersIngestResponse(
+        accepted=len(rows),
+        created=created,
+        updated=updated,
+    )
+
+
+@machine_router.post("/tracking/webhook")
+async def tracking_webhook(
+    request: Request,
+    sign: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+) -> dict[str, int]:
+    raw_body = await request.body()
+    try:
+        payload = json.loads(raw_body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as exc:
+        raise HTTPException(status_code=400, detail="webhook JSON 无效。") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="webhook JSON 无效。")
+
+    if logistics.track17_sign_mode() == "sha256":
+        try:
+            key = logistics.track17_key(db)
+        except RuntimeError as exc:
+            raise HTTPException(status_code=401, detail="webhook 签名无法验证。") from exc
+        if not logistics.verify_track17_signature(raw_body, sign, key):
+            raise HTTPException(status_code=401, detail="webhook 签名无效。")
+
+    updated = 0
+    ignored = 0
+    for record in logistics.tracking_records_from_webhook(payload):
+        number = str(record.get("number") or "").strip()
+        if not number:
+            ignored += 1
+            continue
+        orders = list(
+            db.scalars(
+                select(WOrder)
+                .where(WOrder.tracking_number == number)
+                .with_for_update()
+            ).all()
+        )
+        if not orders:
+            ignored += 1
+            continue
+        for order in orders:
+            if logistics.apply_tracking_record(order, record, deduplicate=True):
+                updated += 1
+            else:
+                ignored += 1
+    db.commit()
+    return {"updated": updated, "ignored": ignored}

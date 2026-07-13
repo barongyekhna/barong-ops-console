@@ -20,6 +20,7 @@ from r_system_v2.core.secret_event_bus import (
 from r_system_v2.core.secret_manager import (
     K_PRODUCT_KNOWLEDGE_MODULE_ID,
     R_WAREHOUSE_MODULE_ID,
+    W_SITE_OPS_MODULE_ID,
     SecretManager,
     SecretManagerError,
     SecretNotFoundError,
@@ -151,6 +152,36 @@ def test_secret_manager_resolves_deepseek_from_k_series_binding_without_touching
     )
 
     assert SecretManager(db_session=db).get_key("deepseek", "org_a") == "deepseek-from-existing-binding"
+
+
+def test_secret_manager_requires_track17_key_type_before_external_use():
+    db = _session()
+    _bind_key(
+        db,
+        org_id="org_track17_wrong_type",
+        module_id=W_SITE_OPS_MODULE_ID,
+        key_alias="track17",
+        key_type="custom",
+        value="must-not-leak-to-track17",
+    )
+    with pytest.raises(SecretNotFoundError, match="wrong_key_type:custom"):
+        SecretManager(db_session=db).get_key(
+            "track17",
+            "org_track17_wrong_type",
+        )
+
+    _bind_key(
+        db,
+        org_id="org_track17_valid",
+        module_id=W_SITE_OPS_MODULE_ID,
+        key_alias="track17",
+        key_type="track17",
+        value="valid-track17-key",
+    )
+    assert (
+        SecretManager(db_session=db).get_key("17track", "org_track17_valid")
+        == "valid-track17-key"
+    )
 
 
 def test_secret_manager_does_not_cross_org_from_cache():

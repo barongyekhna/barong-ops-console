@@ -25,6 +25,7 @@ SUPPORTED_SERVICES = frozenset(
         "alibaba1688",
         "rainforest",
         "google_ads",
+        "track17",
     }
 )
 TARGET_ORGANIZATION_NAME = "涌龙麟（深圳）国际贸易有限公司"
@@ -33,6 +34,7 @@ R_WAREHOUSE_MODULE_ID = "r.warehouse"
 K_PRODUCT_KNOWLEDGE_MODULE_ID = "k.product_knowledge"
 I_IMAGE_SYSTEM_MODULE_ID = "i.image_system"
 R_ANALYSIS_MODULE_ID = "r.analysis"
+W_SITE_OPS_MODULE_ID = "w.site_ops"
 
 SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
     "keepa": (
@@ -74,6 +76,14 @@ SERVICE_BINDING_CANDIDATES: dict[str, tuple[tuple[str, str], ...]] = {
         (R_ANALYSIS_MODULE_ID, "googleads"),
         (R_ANALYSIS_MODULE_ID, "keyword_planner"),
     ),
+    "track17": (
+        (W_SITE_OPS_MODULE_ID, "track17"),
+        (W_SITE_OPS_MODULE_ID, "17track"),
+    ),
+}
+
+SERVICE_KEY_TYPE_REQUIREMENTS: dict[str, frozenset[str]] = {
+    "track17": frozenset({"track17"}),
 }
 
 
@@ -239,6 +249,8 @@ class SecretManager:
                 normalized_service = "rainforest"
             if normalized_service in {"googleads", "google_ads_api", "keyword_planner"}:
                 normalized_service = "google_ads"
+            if normalized_service in {"17track", "17_track"}:
+                normalized_service = "track17"
 
         keys = list(cls._cache)
         removed = 0
@@ -347,6 +359,8 @@ class SecretManager:
             normalized = "rainforest"
         if normalized in {"googleads", "google_ads_api", "keyword_planner"}:
             normalized = "google_ads"
+        if normalized in {"17track", "17_track"}:
+            normalized = "track17"
         if normalized not in SUPPORTED_SERVICES:
             raise SecretManagerError(f"unsupported_service:{service}")
         return normalized
@@ -430,6 +444,15 @@ class SecretManager:
                 )
             except (isolation_error, orchestration_error) as exc:  # type: ignore[misc]
                 errors.append(f"{module_id}:{key_alias}:{exc}")
+                continue
+            context_key_type = str(
+                getattr(context, "key_type", "") or ""
+            ).strip().lower()
+            required_key_types = SERVICE_KEY_TYPE_REQUIREMENTS.get(service)
+            if required_key_types and context_key_type not in required_key_types:
+                errors.append(
+                    f"{module_id}:{key_alias}:wrong_key_type:{context_key_type or 'unknown'}"
+                )
                 continue
             raw_key = _raw_key_from_injection_context(context)
             if not raw_key:

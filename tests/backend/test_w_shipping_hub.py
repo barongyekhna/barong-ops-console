@@ -1,4 +1,4 @@
-"""W-A 运费中枢集成测试：规则查表、人工台账、P 硬门与上架契约。"""
+"""W-S 物流网络中枢集成测试：规则查表、人工台账、P 硬门与上架契约。"""
 
 from __future__ import annotations
 
@@ -405,16 +405,16 @@ def test_p_shipping_gate_only_blocks_dtc(
     )
     with SessionLocal() as db:
         blockers = assemble.gate_blockers(db, product)
-        assert "运费模板未分配（去 W-A 运费中枢处理）" in blockers
+        assert "运费模板未分配（去 W-S 物流网络中枢处理）" in blockers
 
         product.shipping_class = "w-test-small"
         blockers = assemble.gate_blockers(db, product)
-        assert "运费模板未分配（去 W-A 运费中枢处理）" not in blockers
+        assert "运费模板未分配（去 W-S 物流网络中枢处理）" not in blockers
 
         product.shipping_class = None
         product.channel = "amazon"
         blockers = assemble.gate_blockers(db, product)
-        assert "运费模板未分配（去 W-A 运费中枢处理）" not in blockers
+        assert "运费模板未分配（去 W-S 物流网络中枢处理）" not in blockers
 
 
 def test_upload_package_contains_shipping_class(

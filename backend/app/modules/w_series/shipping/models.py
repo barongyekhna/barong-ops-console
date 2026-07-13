@@ -1,4 +1,4 @@
-"""SQLAlchemy models for the W-A shipping hub."""
+"""SQLAlchemy models for the W-S logistics hub."""
 
 from __future__ import annotations
 
@@ -7,15 +7,18 @@ from decimal import Decimal
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    BigInteger,
     Boolean,
     CheckConstraint,
     DateTime,
     Index,
     Integer,
+    JSON,
     Numeric,
     String,
     Text,
     UniqueConstraint,
+    false,
     func,
     true,
 )
@@ -58,6 +61,22 @@ class WShippingClass(WUUIDPrimaryKeyMixin, WTimestampMixin, Base):
 
     slug: Mapped[str] = mapped_column(String(128), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    zone_rates_json: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    sync_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="draft",
+    )
+    woo_class_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    synced_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
     origin: Mapped[str] = mapped_column(
         String(20),
         nullable=False,
@@ -73,6 +92,102 @@ class WShippingClass(WUUIDPrimaryKeyMixin, WTimestampMixin, Base):
         Integer,
         nullable=False,
         server_default="100",
+    )
+
+
+class WSyncJob(WTimestampMixin, Base):
+    """One-time-token dispatch record for W-to-n8n synchronization."""
+
+    __tablename__ = "w_sync_jobs"
+    __table_args__ = (
+        UniqueConstraint("job_id", name="uq_w_sync_jobs_job_id"),
+        Index("ix_w_sync_jobs_status", "status"),
+        Index("ix_w_sync_jobs_target", "target_type", "target_id"),
+    )
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer, "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    job_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    target_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    target_id: Mapped[UUID] = mapped_column(Uuid, nullable=False)
+    token: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(16),
+        nullable=False,
+        server_default="pending",
+    )
+    payload_json: Mapped[dict[str, object] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dispatched_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+
+class WOrder(WUUIDPrimaryKeyMixin, WTimestampMixin, Base):
+    """Woo order snapshot with console-owned shipment tracking state."""
+
+    __tablename__ = "w_orders"
+    __table_args__ = (
+        UniqueConstraint("woo_order_id", name="uq_w_orders_woo_order_id"),
+        Index("ix_w_orders_tracking_status", "tracking_status"),
+        Index("ix_w_orders_tracking_number", "tracking_number"),
+        Index("ix_w_orders_woo_status", "woo_status"),
+        Index("ix_w_orders_placed_at", "placed_at"),
+    )
+
+    woo_order_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    order_number: Mapped[str] = mapped_column(String(64), nullable=False)
+    woo_status: Mapped[str] = mapped_column(String(30), nullable=False)
+    customer_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    country: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    total: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
+    currency: Mapped[str | None] = mapped_column(String(8), nullable=True)
+    items_json: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    placed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    tracking_number: Mapped[str | None] = mapped_column(
+        String(128),
+        nullable=True,
+    )
+    carrier_code: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tracking_status: Mapped[str] = mapped_column(
+        String(30),
+        nullable=False,
+        server_default="none",
+    )
+    tracking_events_json: Mapped[list[dict[str, object]] | None] = mapped_column(
+        JSON,
+        nullable=True,
+    )
+    tracking_registered: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
+    )
+    last_tracking_update: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+    writeback_status: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="none",
     )
 
 

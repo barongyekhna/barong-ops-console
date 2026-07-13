@@ -116,14 +116,20 @@
 
 .statusBadge[data-status="succeeded"],
 .statusBadge[data-status="approved"],
-.statusBadge[data-status="imported_to_k"] {
+.statusBadge[data-status="imported_to_k"],
+.statusBadge[data-status="synced"],
+.statusBadge[data-status="delivered"],
+.statusBadge[data-status="success"] {
   color: rgb(97 240 175);
   border-color: rgb(61 220 151 / 45%);
   background: rgb(61 220 151 / 10%);
 }
 
 .statusBadge[data-status="failed"],
-.statusBadge[data-status="rejected"] {
+.statusBadge[data-status="rejected"],
+.statusBadge[data-status="exception"],
+.statusBadge[data-status="expired"],
+.statusBadge[data-status="not_found"] {
   color: rgb(255 138 138);
   border-color: rgb(255 107 107 / 45%);
   background: rgb(255 107 107 / 10%);
@@ -131,13 +137,20 @@
 
 .statusBadge[data-status="running"],
 .statusBadge[data-status="pending_review"],
-.statusBadge[data-status="quota_exhausted"] {
+.statusBadge[data-status="quota_exhausted"],
+.statusBadge[data-status="pending"],
+.statusBadge[data-status="registered"],
+.statusBadge[data-status="info_received"],
+.statusBadge[data-status="in_transit"],
+.statusBadge[data-status="out_for_delivery"] {
   color: rgb(255 205 118);
   border-color: rgb(255 184 76 / 45%);
   background: rgb(255 184 76 / 10%);
 }
 
-.statusBadge[data-status="queued"] {
+.statusBadge[data-status="queued"],
+.statusBadge[data-status="draft"],
+.statusBadge[data-status="none"] {
   color: rgb(140 190 255);
   border-color: rgb(120 170 255 / 45%);
   background: rgb(120 170 255 / 10%);
@@ -294,6 +307,16 @@
   box-shadow: 0 0 0 3px rgb(57 212 255 / 15%);
 }
 
+.linkButton {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: rgb(102 214 255);
+  cursor: pointer;
+  font-size: 0.78rem;
+  border-bottom: 1px dashed rgb(102 214 255 / 55%);
+}
+
 .headActions {
   display: flex;
   flex-wrap: wrap;
@@ -311,6 +334,32 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.trackingEditor {
+  display: grid;
+  grid-template-columns: minmax(150px, 1fr) auto;
+  gap: 8px;
+  min-width: 270px;
+}
+
+.trackingTimeline {
+  display: grid;
+  gap: 8px;
+  padding: 6px 0;
+}
+
+.zoneRates {
+  display: grid;
+  gap: 8px;
+  min-width: 440px;
+}
+
+.zoneRateRow {
+  display: grid;
+  grid-template-columns: minmax(130px, 1.4fr) minmax(95px, 1fr) minmax(95px, 1fr) auto;
+  gap: 6px;
+  align-items: center;
 }
 
 .calculatorRow {

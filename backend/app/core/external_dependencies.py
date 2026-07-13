@@ -82,6 +82,17 @@ EXTERNAL_SERVICE_REGISTRY_V1: tuple[dict[str, Any], ...] = (
         "metadata": {"scope": "r_analysis_channel_signals"},
     },
     {
+        "service_id": "track17",
+        "service_type": "custom",
+        "status": "active",
+        "trust_level": "medium",
+        "metadata": {
+            "display_name": "17TRACK",
+            "category": "data_acquisition",
+            "scope": "w_logistics_tracking",
+        },
+    },
+    {
         "service_id": "google_ads",
         "service_type": "custom",
         "status": "active",

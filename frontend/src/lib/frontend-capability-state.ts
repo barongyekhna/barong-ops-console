@@ -222,7 +222,7 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["r.analysis", "R-A 产品分析中心"],
   ["r.warehouse", "R-W 产品数据仓库"],
   ["f.enrichment", "F 类目富化"],
-  ["w.site_ops", "W-A 网站运营中枢"],
+  ["w.site_ops", "W-S 物流网络中枢"],
   ["business.approvals", "审批"],
   ["business.reviews", "审批审计"],
   ["core.dashboard", "控制台"],
