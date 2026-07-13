@@ -1037,6 +1037,15 @@ function isAllowedFPath(method: string, path: string[]) {
   ) {
     return method === "GET";
   }
+  // 类目产品画像（谷歌类目 id 是短数字串，非 UUID）
+  if (
+    path.length === 4 &&
+    path[1] === "categories" &&
+    /^[A-Za-z0-9_-]{1,32}$/.test(path[2]) &&
+    path[3] === "profile"
+  ) {
+    return method === "GET" || method === "POST";
+  }
   // 富化运行：发起 + 列表 + 单个进度
   if (path.length === 2 && path[1] === "runs") {
     return method === "GET" || method === "POST";
