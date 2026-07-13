@@ -57,6 +57,7 @@ const ORGANIZATION_MODULE_PREFIXES = [
   "k.",
   "i.",
   "p.",
+  "f.",
   "w.",
   "seo.",
   "gmc.",
@@ -154,7 +155,8 @@ function isRestrictedProductModule(moduleId: string) {
     normalized.startsWith("k.") ||
     normalized.startsWith("i.") ||
     normalized.startsWith("p.") ||
-    // W 系列与产品系列同规：只在国际贸易组织下展示。
+    // F/W 系列与产品系列同规：只在国际贸易组织下展示（死命令）。
+    normalized.startsWith("f.") ||
     normalized.startsWith("w.") ||
     normalized === "business.products" ||
     normalized.includes("product")

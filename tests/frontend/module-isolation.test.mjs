@@ -555,12 +555,12 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
   assert.match(
     sidebarSource,
-    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"w\.",\s*"seo\.",\s*"gmc\.",?\s*\]/,
+    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"w\.",\s*"seo\.",\s*"gmc\.",?\s*\]/,
   );
   assert.match(sidebarSource, /normalized\.startsWith\("i\."\)/);
-  // W 系列与产品系列同规：进组织树，且只在国际贸易组织下展示。F 不进树（用户指令：不碰 F）。
+  // F/W 系列与产品系列同规：进组织树，且只在国际贸易组织下展示（死命令）。
   assert.match(sidebarSource, /normalized\.startsWith\("w\."\)/);
-  assert.doesNotMatch(sidebarSource, /ORGANIZATION_MODULE_PREFIXES = \[[^\]]*"f\."/);
+  assert.match(sidebarSource, /normalized\.startsWith\("f\."\)/);
   assert.match(sidebarSource, /function capabilitySidebarVisible/);
   assert.match(sidebarSource, /return capabilitySidebarVisible\(fallbackItem\);/);
   assert.match(sidebarSource, /return capabilitySidebarVisible\(item\);/);
