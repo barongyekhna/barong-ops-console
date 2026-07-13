@@ -22,8 +22,10 @@ from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 from r_system_v2.ra.quota_ledger import (
+    PROVIDER_1688_APP_CALLS,
     PROVIDER_SERPER,
     RAQuotaExhaustedError,
+    refund,
     try_consume,
 )
 
@@ -33,8 +35,11 @@ from ....models.user import User
 from ....services.data_isolation import without_org_data_isolation
 from . import constants as C
 from . import serper_client
+from . import sourcing
 from .models import FCategoryKeyword, FEnrichmentRun
 from .service import expand_selection, keyword_query_for_node
+
+RUN_MODES = ("full", "keywords_only", "sourcing_only")
 
 
 def _now() -> datetime:
@@ -70,7 +75,10 @@ def create_run(
     *,
     category_ids: list[str],
     user: User | None,
+    mode: str = "full",
 ) -> tuple[FEnrichmentRun, list[dict[str, Any]]]:
+    if mode not in RUN_MODES:
+        raise ValueError(f"未知的运行模式：{mode}")
     nodes = expand_selection(db, category_ids)
     run = FEnrichmentRun(
         id=uuid4(),
@@ -79,6 +87,7 @@ def create_run(
             for n in nodes
         ],
         status="queued",
+        mode=mode,
         categories_total=len(nodes),
         requested_by_user_id=user.id if user is not None else None,
         requested_by_username=user.username if user is not None else None,
@@ -112,41 +121,71 @@ def execute_run(run_id: UUID) -> None:
         run.started_at = run.started_at or _now()
         db.commit()
 
-        try:
-            api_key = _serper_key(db)
-        except Exception as exc:  # noqa: BLE001 - 密钥/组织问题直接失败收账
-            db.rollback()
-            run = db.get(FEnrichmentRun, run_id)
-            run.status = "failed"
-            run.error = str(exc)[:500]
-            run.finished_at = _now()
-            db.commit()
-            return
-
-        nodes = list(run.selection_json or [])
+        mode = run.mode or "keywords_only"
+        do_keywords = mode in ("full", "keywords_only")
+        do_sourcing = mode in ("full", "sourcing_only")
         node_errors: list[str] = []
-        for node in nodes[run.categories_done :]:
+
+        api_key = ""
+        if do_keywords:
             try:
-                try_consume(db, PROVIDER_SERPER)  # 内部自带 commit
-            except RAQuotaExhaustedError as exc:
+                api_key = _serper_key(db)
+            except Exception as exc:  # noqa: BLE001 - 密钥/组织问题直接失败收账
+                db.rollback()
                 run = db.get(FEnrichmentRun, run_id)
-                run.status = "quota_exhausted"
-                run.error = str(exc)
+                run.status = "failed"
+                run.error = str(exc)[:500]
                 run.finished_at = _now()
                 db.commit()
                 return
 
-            keywords: list[dict[str, Any]] = []
+        provider = None
+        org_id = ""
+        if do_sourcing:
             try:
-                # Serper 最长 12s：先结束打开的 SQL 事务（R-A 踩过的坑）。
-                db.rollback()
-                raw = serper_client.serper_search(
-                    api_key=api_key,
-                    query=keyword_query_for_node(node),
-                )
-                keywords = serper_client.extract_keywords(raw)
-            except Exception as exc:  # noqa: BLE001 - 单节点失败不阻断整批
-                node_errors.append(f"{node.get('name')}: {str(exc)[:120]}")
+                org_id = _target_org_id(db) or ""
+                if not org_id:
+                    raise sourcing.FSourcingUnavailableError(
+                        f"目标组织不存在：{C.TARGET_ORGANIZATION_NAME}"
+                    )
+                provider = sourcing.build_provider(db, org_id=org_id)
+            except sourcing.FSourcingUnavailableError as exc:
+                if mode == "sourcing_only":
+                    db.rollback()
+                    run = db.get(FEnrichmentRun, run_id)
+                    run.status = "failed"
+                    run.error = str(exc)[:500]
+                    run.finished_at = _now()
+                    db.commit()
+                    return
+                # full 模式优雅降级：词照收，找货段跳过并记提示。
+                do_sourcing = False
+                node_errors.append(f"1688 找货段已跳过：{str(exc)[:160]}")
+
+        nodes = list(run.selection_json or [])
+        for node in nodes[run.categories_done :]:
+            # ---- 关键词段（Serper）----
+            keywords: list[dict[str, Any]] = []
+            if do_keywords:
+                try:
+                    try_consume(db, PROVIDER_SERPER)  # 内部自带 commit
+                except RAQuotaExhaustedError as exc:
+                    run = db.get(FEnrichmentRun, run_id)
+                    run.status = "quota_exhausted"
+                    run.error = str(exc)
+                    run.finished_at = _now()
+                    db.commit()
+                    return
+                try:
+                    # Serper 最长 12s：先结束打开的 SQL 事务（R-A 踩过的坑）。
+                    db.rollback()
+                    raw = serper_client.serper_search(
+                        api_key=api_key,
+                        query=keyword_query_for_node(node),
+                    )
+                    keywords = serper_client.extract_keywords(raw)
+                except Exception as exc:  # noqa: BLE001 - 单节点失败不阻断整批
+                    node_errors.append(f"{node.get('name')}: {str(exc)[:120]}")
 
             run = db.get(FEnrichmentRun, run_id)
             if run is None or run.status == "cancelled":
@@ -172,9 +211,58 @@ def execute_run(run_id: UUID) -> None:
                     )
                 )
                 added += 1
-            run.categories_done += 1
-            run.serper_calls += 1
+            if do_keywords:
+                run.serper_calls += 1
             run.keywords_found += added
+            db.commit()
+
+            # ---- 找货段（1688 词搜，App 总闸按 ~4 次/类目预扣）----
+            if do_sourcing and provider is not None:
+                try:
+                    try_consume(
+                        db,
+                        PROVIDER_1688_APP_CALLS,
+                        amount=sourcing.ESTIMATED_CALLS_PER_CATEGORY,
+                    )
+                except RAQuotaExhaustedError as exc:
+                    run = db.get(FEnrichmentRun, run_id)
+                    run.status = "quota_exhausted"
+                    run.error = str(exc)
+                    run.finished_at = _now()
+                    db.commit()
+                    return
+                try:
+                    # DeepSeek + 1688 都是慢 HTTP：先结束打开的 SQL 事务。
+                    db.rollback()
+                    result = sourcing.source_category(
+                        db,
+                        node=node,
+                        provider=provider,
+                        org_id=org_id,
+                        run_id=run_id,
+                    )
+                    run = db.get(FEnrichmentRun, run_id)
+                    if run is None or run.status == "cancelled":
+                        db.rollback()
+                        return
+                    run.candidates_found += result["candidates_created"]
+                    run.alibaba_calls += sourcing.ESTIMATED_CALLS_PER_CATEGORY
+                except Exception as exc:  # noqa: BLE001 - 单节点失败不阻断整批
+                    db.rollback()
+                    refund(
+                        db,
+                        PROVIDER_1688_APP_CALLS,
+                        amount=sourcing.ESTIMATED_CALLS_PER_CATEGORY,
+                    )
+                    node_errors.append(
+                        f"{node.get('name')} 找货: {str(exc)[:120]}"
+                    )
+                    run = db.get(FEnrichmentRun, run_id)
+                    if run is None or run.status == "cancelled":
+                        db.rollback()
+                        return
+
+            run.categories_done += 1
             if node_errors:
                 run.error = "；".join(node_errors)[:500]
             db.commit()

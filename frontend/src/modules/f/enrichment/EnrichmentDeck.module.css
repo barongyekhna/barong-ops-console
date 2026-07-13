@@ -353,12 +353,51 @@
   min-width: 0;
   display: grid;
   gap: 3px;
+  flex: 1;
 }
 
 .candidateMain strong {
   color: #eafaff;
   font-size: 0.86rem;
   font-weight: 650;
+}
+
+.headActions {
+  display: inline-flex;
+  gap: 8px;
+  flex: none;
+}
+
+.thumb {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid rgb(57 212 255 / 25%);
+  background: rgb(6 12 22 / 65%);
+}
+
+.sourceBadge {
+  margin-left: 8px;
+  font-size: 0.66rem;
+  font-weight: 750;
+  padding: 1px 7px;
+  border-radius: 999px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+
+.sourceBadge[data-source="alibaba1688"] {
+  color: rgb(255 178 102);
+  background: rgb(255 140 50 / 12%);
+  border: 1px solid rgb(255 140 50 / 40%);
+}
+
+.sourceBadge[data-source="manual"] {
+  color: rgb(157 199 219);
+  background: rgb(157 199 219 / 10%);
+  border: 1px solid rgb(157 199 219 / 30%);
 }
 
 .candidateMeta {

@@ -20,13 +20,18 @@ export type TreeResponse = {
   items: TreeNode[];
 };
 
+export type RunMode = "full" | "keywords_only" | "sourcing_only";
+
 export type RunItem = {
   run_id: string;
   status: string;
+  mode: RunMode;
   categories_total: number;
   categories_done: number;
   keywords_found: number;
   serper_calls: number;
+  candidates_found: number;
+  alibaba_calls: number;
   selection: { id: string; name: string; full_path: string }[];
   error: string | null;
   requested_by: string | null;
@@ -138,9 +143,12 @@ export async function searchTree(q: string): Promise<TreeResponse> {
   return readJson<TreeResponse>(response, "类目搜索失败");
 }
 
-export async function createRun(categoryIds: string[]): Promise<RunItem> {
+export async function createRun(
+  categoryIds: string[],
+  mode: RunMode = "full",
+): Promise<RunItem> {
   const response = await fetch(`${API_PROXY_BASE}/f/runs`, {
-    body: JSON.stringify({ category_ids: categoryIds }),
+    body: JSON.stringify({ category_ids: categoryIds, mode }),
     cache: "no-store",
     headers: buildHeaders(true),
     method: "POST",

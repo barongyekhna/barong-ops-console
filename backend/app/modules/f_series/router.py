@@ -83,15 +83,20 @@ class TreeResponse(BaseModel):
 
 class RunCreateRequest(BaseModel):
     category_ids: list[str] = Field(min_length=1, max_length=50)
+    # full = 爬词+1688找货（默认一键全链）；keywords_only；sourcing_only（只补货源）
+    mode: str = Field(default="full", pattern="^(full|keywords_only|sourcing_only)$")
 
 
 class RunItem(BaseModel):
     run_id: str
     status: str
+    mode: str
     categories_total: int
     categories_done: int
     keywords_found: int
     serper_calls: int
+    candidates_found: int
+    alibaba_calls: int
     selection: list[dict[str, Any]]
     error: str | None
     requested_by: str | None
@@ -180,10 +185,13 @@ def _run_item(run: FEnrichmentRun) -> RunItem:
     return RunItem(
         run_id=str(run.id),
         status=run.status,
+        mode=run.mode,
         categories_total=run.categories_total,
         categories_done=run.categories_done,
         keywords_found=run.keywords_found,
         serper_calls=run.serper_calls,
+        candidates_found=run.candidates_found,
+        alibaba_calls=run.alibaba_calls,
         selection=list(run.selection_json or [])[:20],
         error=run.error,
         requested_by=run.requested_by_username,
@@ -252,10 +260,10 @@ def f_run_create(
     db: Session = Depends(get_db),
     user: User = Depends(_require_f_permission(C.PERMISSION_EXECUTE)),
 ) -> RunItem:
-    """选段发起富化运行：展开子树 → 逐类目 Serper 收割（后台跑，轮询进度）。"""
+    """选段发起富化运行：展开子树 → 逐类目 Serper 收割 (+1688 找货)。"""
     try:
         run, _nodes = run_engine.create_run(
-            db, category_ids=payload.category_ids, user=user
+            db, category_ids=payload.category_ids, user=user, mode=payload.mode
         )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc

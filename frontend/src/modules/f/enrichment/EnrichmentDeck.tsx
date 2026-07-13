@@ -61,6 +61,19 @@ function runStatusLabel(status: string) {
   }
 }
 
+function runModeLabel(mode: string) {
+  switch (mode) {
+    case "full":
+      return "爬词+找货";
+    case "keywords_only":
+      return "只爬词";
+    case "sourcing_only":
+      return "只找货";
+    default:
+      return mode;
+  }
+}
+
 function keywordTypeLabel(type: string) {
   switch (type) {
     case "related":
@@ -264,10 +277,11 @@ export function EnrichmentDeck() {
     setError(null);
     setNotice(null);
     try {
-      const run = await createRun([...selected.keys()]);
+      const run = await createRun([...selected.keys()], "full");
       setNotice(
-        `富化运行已发起：${run.categories_total} 个类目节点排队爬取关键词，` +
-          "进度看下方台账（额度用尽会温和暂停，明天重跑自动去重续上）。",
+        `富化运行已发起：${run.categories_total} 个类目节点排队「爬词 + 1688 找货」，` +
+          "进度看下方台账（额度用尽会温和暂停，明天重跑自动去重续上；" +
+          "1688 密钥未绑时找货段自动跳过、词照收）。",
       );
       setSelected(new Map());
       await loadRunsAndQuota();
@@ -277,6 +291,27 @@ export function EnrichmentDeck() {
       setBusy(null);
     }
   }, [selected, loadRunsAndQuota]);
+
+  const handleSourceCategory = useCallback(async () => {
+    if (!activeNode) return;
+    setBusy("__source__");
+    setError(null);
+    setNotice(null);
+    try {
+      await createRun([activeNode.id], "sourcing_only");
+      setNotice(
+        `「${activeNode.name}」已排队 1688 找货（用该类目现有关键词生成中文采购词），` +
+          "完成后候选自动出现在下方候选池。",
+      );
+      await loadRunsAndQuota();
+    } catch (sourceError) {
+      setError(
+        sourceError instanceof Error ? sourceError.message : "1688 找货发起失败。",
+      );
+    } finally {
+      setBusy(null);
+    }
+  }, [activeNode, loadRunsAndQuota]);
 
   const handleKeywordReview = useCallback(
     async (keyword: KeywordItem, status: "approved" | "rejected") => {
@@ -431,7 +466,7 @@ export function EnrichmentDeck() {
               onClick={() => void handleStartRun()}
               title={
                 selected.size
-                  ? `对 ${selected.size} 个选中节点（含全部子类目）爬取关键词`
+                  ? `对 ${selected.size} 个选中节点（含全部子类目）爬词 + 1688 找货`
                   : "先勾选类目节点"
               }
               type="button"
@@ -441,7 +476,7 @@ export function EnrichmentDeck() {
               ) : (
                 <Play aria-hidden="true" size={15} />
               )}
-              爬取关键词（{selected.size}）
+              富化（{selected.size}）
             </button>
           </div>
 
@@ -575,14 +610,30 @@ export function EnrichmentDeck() {
                   <Sprout aria-hidden="true" size={16} />
                   {activeNode.name}
                 </span>
-                <button
-                  className="secondary-button"
-                  onClick={() => setShowAddForm((value) => !value)}
-                  type="button"
-                >
-                  <PackagePlus aria-hidden="true" size={14} />
-                  贴 1688 货源
-                </button>
+                <span className={styles.headActions}>
+                  <button
+                    className="secondary-button"
+                    disabled={busy !== null}
+                    onClick={() => void handleSourceCategory()}
+                    title="用该类目的关键词自动去 1688 找 3-5 个货源候选"
+                    type="button"
+                  >
+                    {busy === "__source__" ? (
+                      <LoaderCircle aria-hidden="true" className="spin" size={14} />
+                    ) : (
+                      <Search aria-hidden="true" size={14} />
+                    )}
+                    1688 找货
+                  </button>
+                  <button
+                    className="secondary-button"
+                    onClick={() => setShowAddForm((value) => !value)}
+                    type="button"
+                  >
+                    <PackagePlus aria-hidden="true" size={14} />
+                    手动贴货源
+                  </button>
+                </span>
               </div>
               <p className={styles.pathLine}>{activeNode.full_path}</p>
 
@@ -666,14 +717,33 @@ export function EnrichmentDeck() {
               </h3>
               {candidates.length === 0 ? (
                 <p className={styles.mutedLine}>
-                  还没有候选。1688 API 过审前先手动贴链接；过审后自动填充。
+                  还没有候选。点上方「1688 找货」自动拉 3-5 个货源，或手动贴链接。
                 </p>
               ) : (
                 <ul className={styles.candidateList}>
                   {candidates.map((candidate) => (
                     <li className={styles.candidateRow} key={candidate.id}>
+                      {candidate.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          alt=""
+                          className={styles.thumb}
+                          loading="lazy"
+                          src={candidate.image_url}
+                        />
+                      ) : null}
                       <div className={styles.candidateMain}>
-                        <strong>{candidate.title}</strong>
+                        <strong>
+                          {candidate.title}
+                          <span
+                            className={styles.sourceBadge}
+                            data-source={candidate.source}
+                          >
+                            {candidate.source === "alibaba1688"
+                              ? "1688 自动"
+                              : "手动"}
+                          </span>
+                        </strong>
                         <span className={styles.candidateMeta}>
                           {candidate.price_cny ? `¥${candidate.price_cny}` : null}
                           {candidate.moq ? ` · MOQ ${candidate.moq}` : null}
@@ -863,8 +933,10 @@ export function EnrichmentDeck() {
                 <tr>
                   <th>时间</th>
                   <th>选段</th>
+                  <th>模式</th>
                   <th>进度</th>
                   <th>新词</th>
+                  <th>新候选</th>
                   <th>状态</th>
                   <th>备注</th>
                 </tr>
@@ -882,10 +954,12 @@ export function EnrichmentDeck() {
                         ? ` 等 ${run.categories_total} 节点`
                         : ""}
                     </td>
+                    <td>{runModeLabel(run.mode)}</td>
                     <td>
                       {run.categories_done}/{run.categories_total}
                     </td>
                     <td>{run.keywords_found}</td>
+                    <td>{run.candidates_found}</td>
                     <td>
                       <span className={styles.statusBadge} data-status={run.status}>
                         {runStatusLabel(run.status)}

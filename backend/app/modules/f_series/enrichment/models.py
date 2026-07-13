@@ -64,6 +64,10 @@ class FEnrichmentRun(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
             ")",
             name=conv("ck_f_runs_valid_status"),
         ),
+        CheckConstraint(
+            "mode IN ('full', 'keywords_only', 'sourcing_only')",
+            name=conv("ck_f_runs_valid_mode"),
+        ),
         Index("ix_f_runs_status", "status"),
         Index("ix_f_runs_created", "created_at"),
     )
@@ -75,6 +79,12 @@ class FEnrichmentRun(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
         nullable=False,
         server_default="queued",
     )
+    # full = 爬词+1688找货（默认一键全链）；历史行是纯爬词。
+    mode: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        server_default="keywords_only",
+    )
     categories_total: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
@@ -85,6 +95,12 @@ class FEnrichmentRun(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
         Integer, nullable=False, server_default="0"
     )
     serper_calls: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    candidates_found: Mapped[int] = mapped_column(
+        Integer, nullable=False, server_default="0"
+    )
+    alibaba_calls: Mapped[int] = mapped_column(
         Integer, nullable=False, server_default="0"
     )
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
