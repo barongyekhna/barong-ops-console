@@ -280,6 +280,10 @@ def test_direct_conversation_is_unique_and_survives_new_sessions(
         assert reverse.conversation_id == conversation_id
         assert page.count == 1
         assert [item.conversation_id for item in page.items] == [conversation_id]
+        peer_card = page.items[0].direct_peer
+        assert peer_card is not None
+        assert peer_card.user_id == 1
+        assert peer_card.display_name == "User 1"
         assert restarted_db.scalar(select(func.count(C19ConversationRecord.conversation_id))) == 1
         stored = restarted_db.get(C19ConversationRecord, conversation_id)
         assert stored is not None

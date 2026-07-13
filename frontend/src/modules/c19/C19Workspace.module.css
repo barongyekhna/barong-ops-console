@@ -1155,3 +1155,966 @@
   .selectedAssetCard > img { height: 48px; width: 48px; }
   .selectedAssetCard > .assetSpinner { display: none; }
 }
+
+/* ══════════════════════════════════════════════════════════════════
+   微信式通讯布局层（追加层：写在文件末尾，覆盖前面的默认样式）
+   ══════════════════════════════════════════════════════════════════ */
+
+.appShell {
+  background: var(--color-surface, #fff);
+  border: 1px solid var(--color-line, #dbe3ee);
+  border-radius: 18px;
+  box-shadow: 0 14px 36px rgb(15 23 42 / 5%);
+  display: flex;
+  height: clamp(560px, calc(100vh - 170px), 940px);
+  overflow: hidden;
+}
+
+.sideRail {
+  align-items: center;
+  background: linear-gradient(180deg, #f8fbff, #eef6ff);
+  border-right: 1px solid #dbe3ee;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 8px;
+  width: 78px;
+}
+
+.railButton,
+.railButtonActive,
+.railRefresh {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  color: #475569;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  font: inherit;
+  gap: 3px;
+  padding: 9px 0 7px;
+  width: 62px;
+}
+
+.railButton small,
+.railButtonActive small,
+.railRefresh small {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.railButton:hover,
+.railRefresh:hover:not(:disabled) {
+  background: rgb(224 242 254 / 66%);
+  color: #0f172a;
+}
+
+.railButtonActive {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #075985;
+}
+
+.railIconWrap {
+  display: inline-flex;
+  position: relative;
+}
+
+.railBadge {
+  background: #ef4444;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 16px;
+  padding: 3px 4px;
+  position: absolute;
+  right: -11px;
+  text-align: center;
+  top: -6px;
+}
+
+.railRefresh {
+  margin-top: auto;
+}
+
+.railRefresh:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.appBody {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── 聊天页 ─────────────────────────────────────────────── */
+
+.chatsLayout {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+}
+
+.sessionRail {
+  background: #fbfdff;
+  border-right: 1px solid #dbe3ee;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  width: clamp(240px, 27%, 330px);
+}
+
+.sessionRailHead {
+  align-items: center;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+}
+
+.sessionSearch {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  color: #64748b;
+  display: flex;
+  flex: 1;
+  gap: 6px;
+  min-width: 0;
+  padding: 7px 10px;
+}
+
+.sessionSearch input {
+  background: transparent;
+  border: none;
+  color: #0f172a;
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  min-width: 0;
+  outline: none;
+}
+
+.newGroupButton {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  height: 34px;
+  justify-content: center;
+  width: 36px;
+}
+
+.newGroupButton:hover {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #075985;
+}
+
+.sessionList {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.sessionRow,
+.sessionRowActive {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #eef2f7;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 10px;
+  padding: 11px 12px;
+  text-align: left;
+  width: 100%;
+}
+
+.sessionRow:hover {
+  background: #f1f8ff;
+}
+
+.sessionRowActive {
+  background: #e0f2fe;
+}
+
+.sessionAvatar,
+.sessionGroupAvatar,
+.contactAvatar {
+  align-items: center;
+  background: linear-gradient(135deg, #38bdf8, #0284c7);
+  border-radius: 11px;
+  color: #fff;
+  display: inline-flex;
+  flex: none;
+  font-size: 13px;
+  font-weight: 800;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
+}
+
+.sessionGroupAvatar {
+  background: linear-gradient(135deg, #a5b4fc, #6366f1);
+}
+
+.sessionMeta {
+  display: grid;
+  flex: 1;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sessionTopLine {
+  align-items: baseline;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.sessionTopLine strong {
+  color: #0f172a;
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionTopLine time {
+  color: #94a3b8;
+  flex: none;
+  font-size: 11px;
+}
+
+.sessionBottomLine {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 17px;
+}
+
+.sessionBottomLine small {
+  color: #64748b;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sessionFlags {
+  align-items: center;
+  color: #94a3b8;
+  display: inline-flex;
+  flex: none;
+  gap: 5px;
+}
+
+.unreadBadge,
+.unreadBadgeMuted,
+.entryBadge {
+  background: #ef4444;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  min-width: 17px;
+  padding: 3px 5px;
+  text-align: center;
+}
+
+.unreadBadgeMuted {
+  background: #94a3b8;
+}
+
+.entryBadgePlain {
+  background: #e2e8f0;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 3px 7px;
+}
+
+/* ── 聊天舞台 ───────────────────────────────────────────── */
+
+.chatStage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+.chatStageEmpty {
+  align-items: center;
+  color: #94a3b8;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  font-size: 14px;
+  gap: 12px;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+}
+
+.chatStage .chatPanel {
+  border: none;
+  border-radius: 0;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.chatStage .messageHistory {
+  flex: 1;
+  max-height: none;
+  min-height: 0;
+}
+
+.chatStage > .error,
+.chatStage > .loading {
+  margin: 18px;
+}
+
+.stageMenuButton {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  width: 32px;
+}
+
+.stageMenuButton:hover {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+  color: #075985;
+}
+
+/* 连接状态胶囊移到标题下方后重定义（覆盖旧的 eyebrow 样式） */
+.chatHeading > div:first-child {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.chatHeading > div:first-child > span {
+  align-items: center;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 999px;
+  color: #047857;
+  display: inline-flex;
+  font-size: 11px;
+  font-weight: 750;
+  gap: 5px;
+  justify-self: start;
+  letter-spacing: normal;
+  padding: 4px 8px;
+  text-transform: none;
+}
+
+.chatHeading > div:first-child > span[data-mode="polling"],
+.chatHeading > div:first-child > span[data-mode="connecting"] {
+  background: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.chatHeading > div:first-child > span[data-mode="offline"] {
+  background: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.chatHeading h3 {
+  font-size: 16px;
+  margin-top: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chatRuntimeState {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+/* ── 会话信息抽屉 ────────────────────────────────────────── */
+
+.infoDrawer {
+  background: #fff;
+  border-left: 1px solid #dbe3ee;
+  bottom: 0;
+  box-shadow: -18px 0 36px rgb(15 23 42 / 8%);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  overflow-y: auto;
+  padding: 16px;
+  position: absolute;
+  right: 0;
+  top: 0;
+  width: min(340px, 86%);
+  z-index: 6;
+}
+
+.drawerPeerCard {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid #dbe3ee;
+  border-radius: 12px;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 10px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.drawerPeerCard:hover {
+  background: #e0f2fe;
+}
+
+.drawerPeerCard strong {
+  color: #0f172a;
+  display: block;
+  font-size: 14px;
+}
+
+.drawerPeerCard small {
+  color: #0369a1;
+  font-size: 12px;
+}
+
+.memberNameBtn {
+  align-items: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 9px;
+  padding: 0;
+  text-align: left;
+}
+
+.memberNameBtn .contactAvatar {
+  border-radius: 9px;
+  font-size: 11px;
+  height: 32px;
+  width: 32px;
+}
+
+.memberNameBtn strong {
+  align-items: center;
+  color: #0f172a;
+  display: flex;
+  font-size: 13px;
+  gap: 5px;
+}
+
+.memberNameBtn small {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+/* ── 通讯录 ─────────────────────────────────────────────── */
+
+.contactsLayout {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px 16px 18px;
+}
+
+.contactsHead {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.contactsCount {
+  color: #94a3b8;
+  flex: none;
+  font-size: 12px;
+}
+
+.contactEntries {
+  display: grid;
+  gap: 6px;
+}
+
+.contactEntryRow {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  color: #0f172a;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  gap: 10px;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.contactEntryRow:hover {
+  background: #e0f2fe;
+  border-color: #bae6fd;
+}
+
+.contactEntryRow em {
+  margin-left: auto;
+}
+
+.entryIconNew,
+.entryIconBlock {
+  align-items: center;
+  background: linear-gradient(135deg, #34d399, #059669);
+  border-radius: 10px;
+  color: #fff;
+  display: inline-flex;
+  flex: none;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.entryIconBlock {
+  background: linear-gradient(135deg, #94a3b8, #475569);
+}
+
+.contactList {
+  display: flex;
+  flex-direction: column;
+}
+
+.contactRowBtn {
+  align-items: center;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #eef2f7;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 11px;
+  padding: 10px 6px;
+  text-align: left;
+  width: 100%;
+}
+
+.contactRowBtn:hover {
+  background: #f1f8ff;
+}
+
+.contactRowMeta {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.contactRowMeta strong {
+  align-items: center;
+  color: #0f172a;
+  display: flex;
+  font-size: 14px;
+  gap: 6px;
+}
+
+.contactRowMeta small {
+  color: #94a3b8;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.contactsSubview {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.subviewHead {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+}
+
+.subviewHead h3 {
+  align-items: center;
+  color: #0f172a;
+  display: flex;
+  gap: 7px;
+  margin: 0;
+}
+
+.backBtn {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  flex: none;
+  height: 30px;
+  justify-content: center;
+  width: 32px;
+}
+
+.backBtn:hover {
+  background: #e0f2fe;
+}
+
+/* ── 名片弹层 ───────────────────────────────────────────── */
+
+.profileMask {
+  align-items: center;
+  backdrop-filter: blur(3px);
+  background: rgb(15 23 42 / 42%);
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 20px;
+  position: fixed;
+  z-index: 60;
+}
+
+.profileCardModal,
+.groupComposerCard {
+  background: #fff;
+  border: 1px solid #dbe3ee;
+  border-radius: 18px;
+  box-shadow: 0 28px 70px rgb(15 23 42 / 26%);
+  display: grid;
+  gap: 16px;
+  max-height: 86vh;
+  overflow-y: auto;
+  padding: 22px;
+  position: relative;
+  width: min(420px, 94vw);
+}
+
+.groupComposerCard {
+  width: min(480px, 94vw);
+}
+
+.profileClose {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  position: absolute;
+  right: 12px;
+  top: 12px;
+  width: 32px;
+  z-index: 2;
+}
+
+.profileClose:hover {
+  background: #e0f2fe;
+}
+
+.profileCardHead {
+  align-items: center;
+  display: flex;
+  gap: 14px;
+}
+
+.profileCardAvatar {
+  align-items: center;
+  background: linear-gradient(135deg, #38bdf8, #0284c7);
+  border-radius: 15px;
+  color: #fff;
+  display: inline-flex;
+  flex: none;
+  font-size: 18px;
+  font-weight: 800;
+  height: 58px;
+  justify-content: center;
+  width: 58px;
+}
+
+.profileCardHead strong {
+  align-items: center;
+  color: #0f172a;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 19px;
+  gap: 7px;
+}
+
+.profileCardHead span {
+  color: #64748b;
+  display: block;
+  font-size: 13px;
+  margin-top: 3px;
+}
+
+.profileSelfTag,
+.profileFriendTag {
+  background: #e0f2fe;
+  border: 1px solid #bae6fd;
+  border-radius: 999px;
+  color: #075985;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  padding: 2px 8px;
+}
+
+.profileFriendTag {
+  background: #ecfdf5;
+  border-color: #a7f3d0;
+  color: #047857;
+}
+
+.profileOrgList {
+  display: grid;
+  gap: 6px;
+}
+
+.profileOrgRow {
+  align-items: center;
+  background: #f8fbff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  color: #334155;
+  display: flex;
+  font-size: 13px;
+  font-weight: 700;
+  gap: 8px;
+  padding: 8px 11px;
+}
+
+.profileOrgRow small {
+  background: #e2e8f0;
+  border-radius: 999px;
+  color: #475569;
+  font-size: 11px;
+  margin-left: auto;
+  padding: 2px 8px;
+}
+
+.profileOrgEmpty {
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.profileActions {
+  display: grid;
+  gap: 10px;
+}
+
+.profilePrimaryAction {
+  align-items: center;
+  background: #0f172a;
+  border: 1px solid #0f172a;
+  border-radius: 12px;
+  color: #fff;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 800;
+  gap: 8px;
+  justify-content: center;
+  min-height: 46px;
+  width: 100%;
+}
+
+.profilePrimaryAction:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.profilePrimaryAction:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.profileSecondaryActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.profileSecondaryActions button {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  color: #334155;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  gap: 6px;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 12px;
+}
+
+.profileSecondaryActions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+.profileRequestForm {
+  display: flex;
+  gap: 8px;
+}
+
+.profileRequestForm input {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  flex: 1;
+  font: inherit;
+  font-size: 13px;
+  min-width: 0;
+  padding: 9px 11px;
+}
+
+.profileRequestForm button {
+  background: #fff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  color: #334155;
+  cursor: pointer;
+  flex: none;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  padding: 8px 12px;
+}
+
+.profileRequestForm button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}
+
+/* ── 发起群聊 ───────────────────────────────────────────── */
+
+.groupMemberList {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.memberCheckRow,
+.memberCheckRowActive {
+  align-items: center;
+  border-bottom: 1px solid #eef2f7;
+  cursor: pointer;
+  display: flex;
+  gap: 10px;
+  padding: 9px 11px;
+}
+
+.memberCheckRowActive {
+  background: #e0f2fe;
+}
+
+.memberCheckRow .contactAvatar,
+.memberCheckRowActive .contactAvatar {
+  border-radius: 9px;
+  font-size: 11px;
+  height: 30px;
+  width: 30px;
+}
+
+/* ── 朋友圈宿主 ─────────────────────────────────────────── */
+
+.momentsHost {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+/* ── 响应式 ─────────────────────────────────────────────── */
+
+@media (max-width: 900px) {
+  .appShell {
+    flex-direction: column;
+    height: auto;
+    min-height: 72vh;
+  }
+
+  .sideRail {
+    border-bottom: 1px solid #dbe3ee;
+    border-right: none;
+    flex-direction: row;
+    justify-content: center;
+    padding: 8px;
+    width: 100%;
+  }
+
+  .railRefresh {
+    margin-left: auto;
+    margin-top: 0;
+  }
+
+  .chatsLayout {
+    flex-direction: column;
+  }
+
+  .sessionRail {
+    border-bottom: 1px solid #dbe3ee;
+    border-right: none;
+    max-height: 38vh;
+    width: 100%;
+  }
+
+  .chatStage {
+    min-height: 55vh;
+  }
+
+  .infoDrawer {
+    width: 100%;
+  }
+}

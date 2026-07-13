@@ -109,6 +109,12 @@ export type C19Conversation = {
   updated_at: string;
 };
 
+export type C19DirectPeer = {
+  user_id: number;
+  display_name: string;
+  avatar_ref: string | null;
+};
+
 export type C19ConversationSummary = {
   conversation_id: string;
   type: C19ConversationType;
@@ -117,6 +123,7 @@ export type C19ConversationSummary = {
   actor_role: C19ConversationMemberRole;
   actor_org_id: string | null;
   active_member_count: number;
+  direct_peer?: C19DirectPeer | null;
   settings: C19ConversationSettings;
   created_at: string;
   updated_at: string;

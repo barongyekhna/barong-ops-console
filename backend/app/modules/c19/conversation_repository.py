@@ -10,6 +10,7 @@ from ...models.c19 import (
     C19ConversationMemberRecord,
     C19ConversationRecord,
     C19ConversationUserSettingRecord,
+    C19ProfileRecord,
     C19UserBlockRecord,
 )
 from ...models.org_membership import OrgMembershipRecord
@@ -23,6 +24,7 @@ class ConversationListRow:
     actor_member: C19ConversationMemberRecord
     settings: C19ConversationUserSettingRecord | None
     active_member_count: int
+    direct_peer_profile: C19ProfileRecord | None
 
 
 def list_authorized_affiliations(
@@ -274,12 +276,14 @@ def list_actor_conversations(
         )
         or 0
     )
+    peer_member = aliased(C19ConversationMemberRecord)
     statement = (
         select(
             C19ConversationRecord,
             actor_member,
             C19ConversationUserSettingRecord,
             active_count.label("active_member_count"),
+            C19ProfileRecord,
         )
         .join(
             actor_member,
@@ -292,6 +296,19 @@ def list_actor_conversations(
                 == C19ConversationRecord.conversation_id,
                 C19ConversationUserSettingRecord.user_id == user_id,
             ),
+        )
+        .outerjoin(
+            peer_member,
+            and_(
+                C19ConversationRecord.conversation_type == "direct",
+                peer_member.conversation_id
+                == C19ConversationRecord.conversation_id,
+                peer_member.user_id != user_id,
+            ),
+        )
+        .outerjoin(
+            C19ProfileRecord,
+            C19ProfileRecord.user_id == peer_member.user_id,
         )
         .where(*base_filters)
         .order_by(
@@ -307,6 +324,7 @@ def list_actor_conversations(
             actor_member=row[1],
             settings=row[2],
             active_member_count=int(row[3]),
+            direct_peer_profile=row[4],
         )
         for row in db.execute(statement).all()
     ]

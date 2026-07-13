@@ -1846,7 +1846,7 @@ async function proxyRequest(
       contentType?.split(";", 1)[0].trim().toLowerCase() !== "application/json"
     ) {
       return Response.json(
-        { detail: "C19 控制请求必须使用 JSON；文件字节不能经过此前端代理。" },
+        { detail: "通讯控制请求必须使用 JSON；文件字节不能经过此前端代理。" },
         { status: 415 },
       );
     }
@@ -1912,7 +1912,7 @@ async function proxyRequest(
   } catch (error) {
     if (error instanceof ProxyPayloadTooLargeError) {
       return Response.json(
-        { detail: "C19 JSON 控制请求体过大。" },
+        { detail: "通讯 JSON 控制请求体过大。" },
         { status: 413 },
       );
     }

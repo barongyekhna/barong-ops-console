@@ -548,15 +548,15 @@ export function CapabilitySidebarEngine({
             aria-current={pathname === "/c19" ? "page" : undefined}
             aria-label={
               c19UnreadCount > 0
-                ? `C19 通讯，${c19UnreadCount} 条未读消息`
-                : "C19 通讯"
+                ? `通讯，${c19UnreadCount} 条未读消息`
+                : "通讯"
             }
             className={`navigation-link ${pathname === "/c19" ? "active" : ""}`}
             href="/c19"
             onClick={onNavigate}
           >
             <MessageCircle aria-hidden="true" size={18} />
-            <span>C19 通讯</span>
+            <span>通讯</span>
             {c19UnreadCount > 0 ? (
               <span
                 aria-hidden="true"

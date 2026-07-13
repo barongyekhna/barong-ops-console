@@ -179,7 +179,7 @@ test("Moment PUT writes are capped by the 16 KiB JSON proxy boundary", async () 
       params: Promise.resolve({ path }),
     });
     assert.equal(response.status, 413);
-    assert.match(await response.text(), /C19 JSON 控制请求体过大/);
+    assert.match(await response.text(), /通讯 JSON 控制请求体过大/);
   } finally {
     if (previousBaseUrl === undefined) delete process.env.BACKEND_API_URL;
     else process.env.BACKEND_API_URL = previousBaseUrl;

@@ -4,15 +4,16 @@ import {
   Ban,
   Camera,
   Check,
+  ChevronLeft,
   CircleOff,
   ContactRound,
-  MessageSquareLock,
+  MessageSquareText,
+  MoreHorizontal,
   Pin,
+  Plus,
   RefreshCcw,
   Search,
   Settings2,
-  ShieldCheck,
-  UserMinus,
   UserPlus,
   UsersRound,
   VolumeX,
@@ -23,6 +24,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 
@@ -38,14 +40,15 @@ import {
   createC19Group,
   dissolveC19Group,
   getC19Conversation,
-  getC19ConversationSettings,
   getC19Profile,
+  getC19UnreadPosition,
   leaveC19Group,
   listC19Blocks,
   listC19Conversations,
   listC19Directory,
   listC19FriendRequests,
   listC19Friends,
+  listC19MessageHistory,
   removeC19Block,
   removeC19Friend,
   removeC19GroupMember,
@@ -55,30 +58,46 @@ import {
 } from "./api";
 import { C19ChatPanel } from "./C19ChatPanel";
 import { C19MomentsPanel } from "./C19MomentsPanel";
+import { C19ProfileCard } from "./C19ProfileCard";
+import {
+  C19_UNREAD_CHANGED_EVENT,
+  normalizeC19UnreadCount,
+} from "./C19UnreadStatus";
 import styles from "./C19Workspace.module.css";
 import type {
-  C19Affiliation,
   C19Block,
   C19Conversation,
-  C19ConversationSummary,
   C19ConversationMember,
   C19ConversationSettings,
+  C19ConversationSummary,
   C19Friend,
   C19FriendRequest,
-  C19ParticipantInput,
+  C19MessageContentType,
   C19Profile,
 } from "./types";
 
 const LOAD_LIMIT = 100;
-type WorkspaceTab = "contacts" | "relationships" | "conversations" | "moments";
+const SESSION_HINT_LIMIT = 30;
+const SESSION_HINT_CONCURRENCY = 4;
+const SESSION_HINT_REFRESH_MS = 30_000;
+
+type WorkspaceTab = "chats" | "contacts" | "moments";
+type ContactsView = "list" | "requests" | "blocks";
+
+type SessionPreview = {
+  at: string;
+  content: string;
+  contentType: C19MessageContentType;
+  senderUserId: number | string;
+};
 
 function errorMessage(error: unknown, fallback: string) {
   if (error instanceof ApiError) {
     if (error.status === 401) return "登录状态已失效，请重新登录。";
     if (error.status === 403) return "该操作被当前会话或关系安全规则拒绝。";
-    if (error.status === 404) return "目标成员或控制记录已经不存在。";
+    if (error.status === 404) return "目标成员或会话已经不存在。";
     if (error.status === 409) return error.message || "该操作与当前状态冲突。";
-    if (error.status >= 500) return "C19 控制服务暂时不可用。";
+    if (error.status >= 500) return "通讯服务暂时不可用。";
     return error.message || fallback;
   }
   return error instanceof Error && error.message ? error.message : fallback;
@@ -99,64 +118,40 @@ function readableDate(value: string | null | undefined) {
   }).format(date);
 }
 
-function activeAffiliations(profile: C19Profile | null | undefined) {
-  return profile?.affiliations ?? [];
+function sessionTimeLabel(value: string | null | undefined) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  const stamp = date.getTime();
+  if (stamp >= startOfToday) {
+    return new Intl.DateTimeFormat("zh-CN", {
+      hour: "2-digit",
+      minute: "2-digit",
+    }).format(date);
+  }
+  if (stamp >= startOfToday - 86_400_000) return "昨天";
+  if (date.getFullYear() === now.getFullYear()) {
+    return `${date.getMonth() + 1}月${date.getDate()}日`;
+  }
+  return `${date.getFullYear()}/${date.getMonth() + 1}/${date.getDate()}`;
 }
 
-function affiliationLabel(affiliation: C19Affiliation) {
-  const role =
-    affiliation.role === "owner"
-      ? "Owner"
-      : affiliation.role === "admin"
-        ? "管理员"
-        : "成员";
-  return `${affiliation.org_name} · ${role}`;
+function previewBody(preview: SessionPreview) {
+  if (preview.contentType === "image") return "[图片]";
+  if (preview.contentType === "file") return "[文件]";
+  return preview.content;
 }
 
-function ProfileAvatar({ profile }: { profile: C19Profile }) {
-  return (
-    <span aria-hidden="true" className={styles.avatar}>
-      {initials(profile.display_name)}
-    </span>
-  );
-}
-
-function IdentitySelect({
-  compact = false,
-  label,
-  onChange,
-  profile,
-  value,
-}: {
-  compact?: boolean;
-  label: string;
-  onChange: (affiliationId: string) => void;
-  profile: C19Profile;
-  value: string;
-}) {
-  const affiliations = activeAffiliations(profile);
-
-  return (
-    <label className={compact ? styles.compactField : styles.field}>
-      <span>{label}</span>
-      <select
-        onChange={(event) => onChange(event.target.value)}
-        value={value}
-      >
-        <option value="">基础通讯身份（不绑定组织）</option>
-        {affiliations.map((affiliation) => (
-          <option key={affiliation.affiliation_id} value={affiliation.affiliation_id}>
-            {affiliationLabel(affiliation)}
-          </option>
-        ))}
-      </select>
-      <small>
-        {affiliations.length === 0
-          ? "无需加入组织即可使用 C19。"
-          : "组织身份可选；仅在你主动选择时附加到本次会话。"}
-      </small>
-    </label>
-  );
+function memberRoleLabel(member: C19ConversationMember) {
+  if (member.role === "owner") return "群主";
+  if (member.role === "admin") return "管理员";
+  return "成员";
 }
 
 function EmptyState({ children }: { children: string }) {
@@ -169,7 +164,8 @@ function EmptyState({ children }: { children: string }) {
 
 export function C19Workspace() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<WorkspaceTab>("contacts");
+  const [activeTab, setActiveTab] = useState<WorkspaceTab>("chats");
+  const [contactsView, setContactsView] = useState<ContactsView>("list");
   const [directory, setDirectory] = useState<C19Profile[]>([]);
   const [directoryCount, setDirectoryCount] = useState(0);
   const [isDirectorySearching, setIsDirectorySearching] = useState(false);
@@ -184,6 +180,10 @@ export function C19Workspace() {
   const [friends, setFriends] = useState<C19Friend[]>([]);
   const [blocks, setBlocks] = useState<C19Block[]>([]);
   const [conversations, setConversations] = useState<C19ConversationSummary[]>([]);
+  const [unreadById, setUnreadById] = useState<Record<string, number>>({});
+  const [previewById, setPreviewById] = useState<
+    Record<string, SessionPreview | null>
+  >({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState("");
   const [actionError, setActionError] = useState("");
@@ -191,22 +191,25 @@ export function C19Workspace() {
   const [busyKey, setBusyKey] = useState("");
   const [search, setSearch] = useState("");
   const [orgFilter, setOrgFilter] = useState("all");
-  const [affiliationByUser, setAffiliationByUser] = useState<Record<number, string>>(
-    {},
-  );
-  const [requestMessageByUser, setRequestMessageByUser] = useState<
-    Record<number, string>
-  >({});
-  const [groupTitle, setGroupTitle] = useState("");
-  const [groupUserIds, setGroupUserIds] = useState<Set<number>>(() => new Set());
+  const [sessionFilter, setSessionFilter] = useState("");
+  const [profileCard, setProfileCard] = useState<C19Profile | null>(null);
   const [selectedConversationId, setSelectedConversationId] = useState("");
   const [conversationDetail, setConversationDetail] =
     useState<C19Conversation | null>(null);
   const [conversationSettings, setConversationSettings] =
     useState<C19ConversationSettings | null>(null);
   const [detailError, setDetailError] = useState("");
+  const [showConversationInfo, setShowConversationInfo] = useState(false);
+  const [groupComposerOpen, setGroupComposerOpen] = useState(false);
+  const [groupTitle, setGroupTitle] = useState("");
+  const [groupUserIds, setGroupUserIds] = useState<Set<number>>(() => new Set());
   const [renameTitle, setRenameTitle] = useState("");
   const [inviteUserId, setInviteUserId] = useState("");
+
+  const conversationsRef = useRef<C19ConversationSummary[]>([]);
+  conversationsRef.current = conversations;
+  const hintsGenerationRef = useRef(0);
+  const activeConversationRequestRef = useRef("");
 
   const loadControlData = useCallback(async (background = false) => {
     if (!background) setIsLoading(true);
@@ -234,7 +237,7 @@ export function C19Workspace() {
       setKnownOrganizations((current) => {
         const next = { ...current };
         for (const profile of directoryPage.items) {
-          for (const affiliation of activeAffiliations(profile)) {
+          for (const affiliation of profile.affiliations) {
             next[affiliation.org_id] = affiliation.org_name;
           }
         }
@@ -251,8 +254,8 @@ export function C19Workspace() {
     if (failures.length > 0) {
       setLoadError(
         failures.length === results.length
-          ? errorMessage(failures[0].reason, "C19 控制数据加载失败。")
-          : `${failures.length} 组控制数据暂未同步，其余内容仍可操作。`,
+          ? errorMessage(failures[0].reason, "通讯数据加载失败。")
+          : `${failures.length} 组数据暂未同步，其余内容仍可操作。`,
       );
     }
     setIsLoading(false);
@@ -279,7 +282,7 @@ export function C19Workspace() {
         if (!active) return;
         setAuthenticatedProfile(null);
         setAuthenticatedProfileError(
-          errorMessage(error, "当前用户的 C19 通讯身份读取失败。"),
+          errorMessage(error, "当前用户的通讯名片读取失败。"),
         );
       });
     return () => {
@@ -304,7 +307,7 @@ export function C19Workspace() {
           setKnownOrganizations((current) => {
             const next = { ...current };
             for (const profile of page.items) {
-              for (const affiliation of activeAffiliations(profile)) {
+              for (const affiliation of profile.affiliations) {
                 next[affiliation.org_id] = affiliation.org_name;
               }
             }
@@ -326,13 +329,30 @@ export function C19Workspace() {
     };
   }, [orgFilter, search]);
 
-  const profileByUserId = useMemo(
-    () => new Map(directory.map((profile) => [profile.user_id, profile])),
-    [directory],
-  );
+  const profileByUserId = useMemo(() => {
+    const map = new Map<number, C19Profile>();
+    for (const profile of directory) map.set(profile.user_id, profile);
+    for (const friend of friends) {
+      if (!map.has(friend.profile.user_id)) {
+        map.set(friend.profile.user_id, friend.profile);
+      }
+    }
+    for (const block of blocks) {
+      if (!map.has(block.profile.user_id)) {
+        map.set(block.profile.user_id, block.profile);
+      }
+    }
+    if (authenticatedProfile && !map.has(authenticatedProfile.user_id)) {
+      map.set(authenticatedProfile.user_id, authenticatedProfile);
+    }
+    return map;
+  }, [authenticatedProfile, blocks, directory, friends]);
   const selfProfile =
     authenticatedProfile ?? (user ? profileByUserId.get(user.id) ?? null : null);
-  const selfAffiliationId = user ? affiliationByUser[user.id] ?? "" : "";
+  const chatProfiles = useMemo(
+    () => [...profileByUserId.values()],
+    [profileByUserId],
+  );
   const blockedUserIds = useMemo(
     () => new Set(blocks.map((block) => block.profile.user_id)),
     [blocks],
@@ -353,6 +373,15 @@ export function C19Workspace() {
     }
     return values;
   }, [friendRequests, user?.id]);
+  const incomingPendingCount = useMemo(
+    () =>
+      friendRequests.filter(
+        (request) =>
+          request.status === "pending" &&
+          request.addressee.user_id === user?.id,
+      ).length,
+    [friendRequests, user?.id],
+  );
   const organizations = useMemo(() => {
     return Object.entries(knownOrganizations).sort((left, right) =>
       left[1].localeCompare(right[1], "zh-CN"),
@@ -360,11 +389,10 @@ export function C19Workspace() {
   }, [knownOrganizations]);
   const filteredDirectory = useMemo(() => {
     const normalizedSearch = search.trim().toLowerCase();
-    return directory.filter((profile) => {
-      const affiliations = activeAffiliations(profile);
+    const matches = directory.filter((profile) => {
       if (
         orgFilter !== "all" &&
-        !affiliations.some((affiliation) => affiliation.org_id === orgFilter)
+        !profile.affiliations.some((affiliation) => affiliation.org_id === orgFilter)
       ) {
         return false;
       }
@@ -372,7 +400,7 @@ export function C19Workspace() {
       const haystack = [
         profile.display_name,
         profile.bio ?? "",
-        ...affiliations.flatMap((affiliation) => [
+        ...profile.affiliations.flatMap((affiliation) => [
           affiliation.org_name,
           affiliation.role,
         ]),
@@ -381,17 +409,119 @@ export function C19Workspace() {
         .toLowerCase();
       return haystack.includes(normalizedSearch);
     });
+    return matches.sort((left, right) =>
+      left.display_name.localeCompare(right.display_name, "zh-CN"),
+    );
   }, [directory, orgFilter, search]);
 
-  const participantFor = useCallback(
-    (profile: C19Profile): C19ParticipantInput => {
-      const affiliationId = affiliationByUser[profile.user_id];
-      return {
-        user_id: profile.user_id,
-        ...(affiliationId ? { affiliation_id: affiliationId } : {}),
-      };
+  const refreshSessionHints = useCallback(async (items: C19ConversationSummary[]) => {
+    const generation = ++hintsGenerationRef.current;
+    const queue = items.slice(0, SESSION_HINT_LIMIT);
+    let cursor = 0;
+    const worker = async () => {
+      for (;;) {
+        if (hintsGenerationRef.current !== generation) return;
+        const target = queue[cursor];
+        cursor += 1;
+        if (!target) return;
+        const conversationId = target.conversation_id;
+        try {
+          const [unread, history] = await Promise.all([
+            getC19UnreadPosition(conversationId),
+            listC19MessageHistory(conversationId, { limit: 1 }),
+          ]);
+          if (hintsGenerationRef.current !== generation) return;
+          setUnreadById((current) => ({
+            ...current,
+            [conversationId]: normalizeC19UnreadCount(unread.unread_count),
+          }));
+          const record =
+            history.records.length > 0
+              ? history.records[history.records.length - 1]
+              : null;
+          setPreviewById((current) => ({
+            ...current,
+            [conversationId]: record
+              ? {
+                  at: record.persisted_at,
+                  content: record.content,
+                  contentType: record.content_type,
+                  senderUserId: record.sender_user_id,
+                }
+              : null,
+          }));
+        } catch {
+          // 未读与预览是装饰性信息，读取失败不阻塞会话列表。
+        }
+      }
+    };
+    await Promise.all(
+      Array.from({ length: SESSION_HINT_CONCURRENCY }, () => worker()),
+    );
+  }, []);
+
+  const conversationHintKey = useMemo(
+    () =>
+      conversations
+        .map((conversation) => conversation.conversation_id)
+        .join(","),
+    [conversations],
+  );
+
+  useEffect(() => {
+    if (!conversationHintKey) return;
+    void refreshSessionHints(conversationsRef.current);
+  }, [conversationHintKey, refreshSessionHints]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (conversationsRef.current.length === 0) return;
+      void refreshSessionHints(conversationsRef.current);
+    };
+    const interval = window.setInterval(refresh, SESSION_HINT_REFRESH_MS);
+    window.addEventListener(C19_UNREAD_CHANGED_EVENT, refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener(C19_UNREAD_CHANGED_EVENT, refresh);
+    };
+  }, [refreshSessionHints]);
+
+  const sessionName = useCallback(
+    (conversation: C19ConversationSummary) => {
+      if (conversation.type === "group") {
+        return conversation.title || "群聊";
+      }
+      return conversation.direct_peer?.display_name ?? conversation.title ?? "单聊";
     },
-    [affiliationByUser],
+    [],
+  );
+
+  const orderedConversations = useMemo(() => {
+    const timeOf = (conversation: C19ConversationSummary) => {
+      const preview = previewById[conversation.conversation_id];
+      const stamp = new Date(preview?.at ?? conversation.updated_at).getTime();
+      return Number.isNaN(stamp) ? 0 : stamp;
+    };
+    const filter = sessionFilter.trim().toLowerCase();
+    const items = conversations.filter((conversation) =>
+      filter ? sessionName(conversation).toLowerCase().includes(filter) : true,
+    );
+    return items.sort((left, right) => {
+      if (left.settings.is_pinned !== right.settings.is_pinned) {
+        return left.settings.is_pinned ? -1 : 1;
+      }
+      return timeOf(right) - timeOf(left);
+    });
+  }, [conversations, previewById, sessionFilter, sessionName]);
+
+  const totalUnread = useMemo(
+    () =>
+      conversations.reduce(
+        (sum, conversation) =>
+          sum + (unreadById[conversation.conversation_id] ?? 0),
+        0,
+      ),
+    [conversations, unreadById],
   );
 
   const runAction = useCallback(
@@ -405,7 +535,7 @@ export function C19Workspace() {
         await loadControlData(true);
         setNotice(success);
       } catch (error) {
-        setActionError(errorMessage(error, "C19 控制操作未完成。"));
+        setActionError(errorMessage(error, "通讯操作未完成。"));
       } finally {
         setBusyKey("");
       }
@@ -413,96 +543,181 @@ export function C19Workspace() {
     [busyKey, loadControlData],
   );
 
-  const startDirectConversation = useCallback(
-    (profile: C19Profile) => {
-      if (!selfProfile) {
-        setActionError("当前用户尚未生成 C19 通讯身份。");
+  const openConversation = useCallback(
+    async (conversationId: string) => {
+      activeConversationRequestRef.current = conversationId;
+      setSelectedConversationId(conversationId);
+      setShowConversationInfo(false);
+      setConversationDetail(null);
+      setConversationSettings(null);
+      setDetailError("");
+      setUnreadById((current) => ({ ...current, [conversationId]: 0 }));
+      try {
+        const conversation = await getC19Conversation(conversationId);
+        if (activeConversationRequestRef.current !== conversationId) return;
+        setConversationDetail(conversation);
+        setConversationSettings(conversation.settings);
+        setRenameTitle(conversation.title ?? "");
+      } catch (error) {
+        if (activeConversationRequestRef.current !== conversationId) return;
+        setDetailError(errorMessage(error, "会话读取失败。"));
+      }
+    },
+    [],
+  );
+
+  const adoptConversation = useCallback(
+    (conversation: C19Conversation) => {
+      activeConversationRequestRef.current = conversation.conversation_id;
+      setActiveTab("chats");
+      setSelectedConversationId(conversation.conversation_id);
+      setConversationDetail(conversation);
+      setConversationSettings(conversation.settings);
+      setRenameTitle(conversation.title ?? "");
+      setDetailError("");
+      setShowConversationInfo(false);
+      setConversations((current) => {
+        if (
+          current.some(
+            (item) => item.conversation_id === conversation.conversation_id,
+          )
+        ) {
+          return current;
+        }
+        const actorMember = conversation.members.find(
+          (member) => member.user_id === user?.id,
+        );
+        const peerMember =
+          conversation.type === "direct"
+            ? conversation.members.find((member) => member.user_id !== user?.id)
+            : null;
+        const peerProfile = peerMember
+          ? profileByUserId.get(peerMember.user_id)
+          : null;
+        const optimistic: C19ConversationSummary = {
+          active_member_count: conversation.members.filter(
+            (member) => member.status === "active",
+          ).length,
+          actor_org_id: actorMember?.org_id ?? null,
+          actor_role: actorMember?.role ?? "member",
+          conversation_id: conversation.conversation_id,
+          created_at: conversation.created_at,
+          direct_peer:
+            peerMember && peerProfile
+              ? {
+                  avatar_ref: peerProfile.avatar_ref,
+                  display_name: peerProfile.display_name,
+                  user_id: peerProfile.user_id,
+                }
+              : null,
+          settings: conversation.settings,
+          status: conversation.status,
+          title: conversation.title,
+          type: conversation.type,
+          updated_at: conversation.updated_at,
+        };
+        return [optimistic, ...current];
+      });
+    },
+    [profileByUserId, user?.id],
+  );
+
+  const startChatWith = useCallback(
+    async (profile: C19Profile) => {
+      if (busyKey) return;
+      setBusyKey(`direct:${profile.user_id}`);
+      setActionError("");
+      setNotice("");
+      try {
+        const conversation = await createC19DirectConversation({
+          peer_user_id: profile.user_id,
+        });
+        setProfileCard(null);
+        adoptConversation(conversation);
+        void loadControlData(true);
+      } catch (error) {
+        setActionError(errorMessage(error, "会话建立失败。"));
+      } finally {
+        setBusyKey("");
+      }
+    },
+    [adoptConversation, busyKey, loadControlData],
+  );
+
+  const openProfileCard = useCallback(
+    async (userId: number) => {
+      const existing = profileByUserId.get(userId);
+      if (existing) {
+        setProfileCard(existing);
         return;
       }
-      const actor = participantFor(selfProfile);
-      const peer = participantFor(profile);
-      void runAction(
-        `direct:${profile.user_id}`,
-        `已创建或打开与 ${profile.display_name} 的会话，可在会话列表中开始聊天。`,
-        () =>
-          createC19DirectConversation({
-            peer_user_id: peer.user_id,
-            ...(actor.affiliation_id
-              ? { actor_affiliation_id: actor.affiliation_id }
-              : {}),
-            ...(peer.affiliation_id
-              ? { peer_affiliation_id: peer.affiliation_id }
-              : {}),
-          }),
-      );
+      try {
+        setProfileCard(await getC19Profile(userId));
+      } catch (error) {
+        setActionError(errorMessage(error, "名片读取失败。"));
+      }
     },
-    [participantFor, runAction, selfProfile],
+    [profileByUserId],
   );
 
   const submitGroup = useCallback(
     (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (!selfProfile) {
-        setActionError("当前用户尚未生成 C19 通讯身份。");
-        return;
-      }
-      const actor = participantFor(selfProfile);
-      const members = [...groupUserIds].flatMap((userId) => {
+      if (busyKey) return;
+      const selectedProfiles = [...groupUserIds].flatMap((userId) => {
         const profile = profileByUserId.get(userId);
-        return profile ? [participantFor(profile)] : [];
+        return profile ? [profile] : [];
       });
-      if (members.length !== groupUserIds.size) {
+      if (selectedProfiles.length !== groupUserIds.size) {
         setActionError("部分群成员已不在通讯录中，请刷新后重新选择。");
         return;
       }
-      if (members.length < 2) {
-        setActionError("群组至少还需要选择两位成员。所有参与者总数不得少于三人。");
+      if (selectedProfiles.length < 2) {
+        setActionError("发起群聊至少还需要选择两位成员。");
         return;
       }
-      const title = groupTitle.trim();
-      if (!title) {
-        setActionError("请填写群组名称。");
-        return;
-      }
-      void runAction("create-group", "群组控制记录已创建。", async () => {
-        await createC19Group({
-          ...(actor.affiliation_id
-            ? { actor_affiliation_id: actor.affiliation_id }
-            : {}),
-          members,
-          title,
-        });
-        setGroupTitle("");
-        setGroupUserIds(new Set());
-      });
+      const names = [
+        ...(selfProfile ? [selfProfile.display_name] : []),
+        ...selectedProfiles.map((profile) => profile.display_name),
+      ];
+      const autoTitle = `${names.slice(0, 3).join("、")}${
+        names.length > 3 ? "等" : ""
+      }的群聊`;
+      const title = (groupTitle.trim() || autoTitle).slice(0, 255);
+      setBusyKey("create-group");
+      setActionError("");
+      setNotice("");
+      void (async () => {
+        try {
+          const conversation = await createC19Group({
+            members: selectedProfiles.map((profile) => ({
+              user_id: profile.user_id,
+            })),
+            title,
+          });
+          setGroupComposerOpen(false);
+          setGroupTitle("");
+          setGroupUserIds(new Set());
+          adoptConversation(conversation);
+          void loadControlData(true);
+          setNotice("群聊已创建。");
+        } catch (error) {
+          setActionError(errorMessage(error, "群聊创建失败。"));
+        } finally {
+          setBusyKey("");
+        }
+      })();
     },
     [
+      adoptConversation,
+      busyKey,
       groupTitle,
       groupUserIds,
-      participantFor,
+      loadControlData,
       profileByUserId,
-      runAction,
       selfProfile,
     ],
   );
-
-  const loadConversationDetail = useCallback(async (conversationId: string) => {
-    setSelectedConversationId(conversationId);
-    setConversationDetail(null);
-    setConversationSettings(null);
-    setDetailError("");
-    try {
-      const [conversation, settings] = await Promise.all([
-        getC19Conversation(conversationId),
-        getC19ConversationSettings(conversationId),
-      ]);
-      setConversationDetail(conversation);
-      setConversationSettings(settings);
-      setRenameTitle(conversation.title ?? "");
-    } catch (error) {
-      setDetailError(errorMessage(error, "会话控制详情加载失败。"));
-    }
-  }, []);
 
   const updateSettings = useCallback(
     (patch: Partial<C19ConversationSettings>) => {
@@ -529,70 +744,46 @@ export function C19Workspace() {
     selectedMember?.role === "owner" || selectedMember?.role === "admin";
   const canDissolveGroup = selectedMember?.role === "owner";
 
+  const selectedSummary = useMemo(
+    () =>
+      conversations.find(
+        (conversation) =>
+          conversation.conversation_id === selectedConversationId,
+      ) ?? null,
+    [conversations, selectedConversationId],
+  );
+  const stagePeerUserId = useMemo(() => {
+    if (!conversationDetail || conversationDetail.type !== "direct") return null;
+    const peer = conversationDetail.members.find(
+      (member) => member.user_id !== user?.id,
+    );
+    return peer?.user_id ?? null;
+  }, [conversationDetail, user?.id]);
+  const stageTitle = useMemo(() => {
+    if (!conversationDetail) return "";
+    if (conversationDetail.type === "group") {
+      const activeCount = conversationDetail.members.filter(
+        (member) => member.status === "active",
+      ).length;
+      return `${conversationDetail.title || "群聊"}（${activeCount}）`;
+    }
+    if (selectedSummary?.direct_peer?.display_name) {
+      return selectedSummary.direct_peer.display_name;
+    }
+    const peerProfile =
+      stagePeerUserId !== null ? profileByUserId.get(stagePeerUserId) : null;
+    return peerProfile?.display_name ?? "单聊";
+  }, [conversationDetail, profileByUserId, selectedSummary, stagePeerUserId]);
+
+  const cardUser = profileCard;
+  const cardIsSelf = cardUser?.user_id === user?.id;
+
   return (
     <section
       aria-busy={isLoading || isDirectorySearching}
-      aria-labelledby="c19-title"
+      aria-label="通讯"
       className={styles.workspace}
     >
-      <header className={styles.hero}>
-        <div>
-          <span className={styles.eyebrow}>C19 · 基础通讯</span>
-          <h2 id="c19-title">通讯与朋友圈</h2>
-          <p>每位有效用户都可以聊天、建群、管理好友并分享朋友圈。</p>
-        </div>
-        <div className={styles.heroActions}>
-          <span className={styles.stageBadge}>基础功能 · 全员开放</span>
-          <button
-            className={styles.secondaryButton}
-            disabled={isLoading}
-            onClick={() => void loadControlData()}
-            type="button"
-          >
-            <RefreshCcw aria-hidden="true" size={16} />
-            {isLoading ? "同步中" : "刷新"}
-          </button>
-        </div>
-      </header>
-
-      <div className={styles.storageNotice} role="status">
-        <MessageSquareLock aria-hidden="true" size={22} />
-        <div>
-          <strong>聊天和朋友圈资产经过隔离处理</strong>
-          <span>图片与文件安全直传、扫描并支持中断恢复；页面不会接触存储凭据。</span>
-        </div>
-      </div>
-
-      {selfProfile ? (
-        <section className={styles.identityBar} aria-labelledby="identity-title">
-          <div>
-            <span className={styles.identityIcon}>
-              <ShieldCheck aria-hidden="true" size={18} />
-            </span>
-            <div>
-              <strong id="identity-title">我的 C19 通讯身份</strong>
-              <span>{selfProfile.display_name}</span>
-            </div>
-          </div>
-          <IdentitySelect
-            compact
-            label="组织身份（可选）"
-            onChange={(affiliationId) =>
-              setAffiliationByUser((current) => ({
-                ...current,
-                [selfProfile.user_id]: affiliationId,
-              }))
-            }
-            profile={selfProfile}
-            value={selfAffiliationId}
-          />
-        </section>
-      ) : !isLoading ? (
-        <div className={styles.warning} role="alert">
-          正在同步当前用户的基础通讯名片。C19 不需要角色、权限或组织归属；请刷新后重试。
-        </div>
-      ) : null}
-
       {loadError ? <div className={styles.warning} role="alert">{loadError}</div> : null}
       {authenticatedProfileError ? (
         <div className={styles.warning} role="alert">
@@ -607,688 +798,840 @@ export function C19Workspace() {
       ) : null}
       {actionError ? <div className={styles.error} role="alert">{actionError}</div> : null}
       {notice ? <div className={styles.success} role="status">{notice}</div> : null}
-
-      <nav aria-label="C19 功能区" className={styles.tabs}>
-        {(
-          [
-            ["contacts", "全局通讯录", ContactRound],
-            ["relationships", "好友与拉黑", ShieldCheck],
-            ["conversations", "会话与群组", UsersRound],
-            ["moments", "朋友圈", Camera],
-          ] as const
-        ).map(([key, label, Icon]) => (
-          <button
-            aria-current={activeTab === key ? "page" : undefined}
-            className={activeTab === key ? styles.activeTab : ""}
-            key={key}
-            onClick={() => setActiveTab(key)}
-            type="button"
-          >
-            <Icon aria-hidden="true" size={17} />
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      {isLoading && directory.length === 0 ? (
-        <div className={styles.loading} role="status">
-          正在读取 C19 控制元数据…
+      {!selfProfile && !isLoading ? (
+        <div className={styles.warning} role="alert">
+          正在同步当前用户的基础通讯名片，请稍后刷新重试。
         </div>
       ) : null}
 
-      {activeTab === "contacts" ? (
-        <div className={styles.panel}>
-          <div className={styles.panelHeading}>
-            <div>
-              <h3>全局通讯录</h3>
-              <p>
-                {directoryCount} 位成员符合当前条件
-                {directoryCount > LOAD_LIMIT ? `，当前显示前 ${LOAD_LIMIT} 位` : ""}。
-              </p>
-            </div>
-            <label className={styles.search}>
-              <Search aria-hidden="true" size={16} />
-              <input
-                aria-label="搜索 C19 通讯录"
-                onChange={(event) => setSearch(event.target.value)}
-                placeholder="姓名或可选组织资料"
-                type="search"
-                value={search}
-              />
-              {isDirectorySearching ? <span className={styles.searching}>同步中</span> : null}
-            </label>
-          </div>
-
-          <div className={styles.orgFilters} aria-label="按组织筛选">
+      <div className={styles.appShell}>
+        <nav aria-label="通讯功能区" className={styles.sideRail}>
+          {(
+            [
+              ["chats", "聊天", MessageSquareText, totalUnread],
+              ["contacts", "通讯录", ContactRound, incomingPendingCount],
+              ["moments", "朋友圈", Camera, 0],
+            ] as const
+          ).map(([key, label, Icon, badge]) => (
             <button
-              className={orgFilter === "all" ? styles.selectedFilter : ""}
-              onClick={() => setOrgFilter("all")}
+              aria-current={activeTab === key ? "page" : undefined}
+              className={activeTab === key ? styles.railButtonActive : styles.railButton}
+              key={key}
+              onClick={() => setActiveTab(key)}
               type="button"
             >
-              全部成员
+              <span className={styles.railIconWrap}>
+                <Icon aria-hidden="true" size={21} />
+                {badge > 0 ? (
+                  <em className={styles.railBadge}>{badge > 99 ? "99+" : badge}</em>
+                ) : null}
+              </span>
+              <small>{label}</small>
             </button>
-            {organizations.map(([orgId, orgName]) => (
-              <button
-                className={orgFilter === orgId ? styles.selectedFilter : ""}
-                key={orgId}
-                onClick={() => setOrgFilter(orgId)}
-                type="button"
-              >
-                {orgName}
-              </button>
-            ))}
-          </div>
+          ))}
+          <button
+            className={styles.railRefresh}
+            disabled={isLoading}
+            onClick={() => void loadControlData()}
+            title="刷新"
+            type="button"
+          >
+            <RefreshCcw aria-hidden="true" size={17} />
+            <small>{isLoading ? "同步中" : "刷新"}</small>
+          </button>
+        </nav>
 
-          {filteredDirectory.length === 0 ? (
-            <EmptyState>没有匹配的用户。</EmptyState>
-          ) : (
-            <div className={styles.contactGrid}>
-              {filteredDirectory.map((profile) => {
-                const isSelf = profile.user_id === user?.id;
-                const isBlocked = blockedUserIds.has(profile.user_id);
-                const isFriend = friendUserIds.has(profile.user_id);
-                const isPending = pendingRequestUserIds.has(profile.user_id);
-                const peerAffiliationId = affiliationByUser[profile.user_id] ?? "";
-                const identityReady = Boolean(selfAffiliationId && peerAffiliationId);
-                return (
-                  <article className={styles.contactCard} key={profile.user_id}>
-                    <div className={styles.contactHeader}>
-                      <ProfileAvatar profile={profile} />
-                      <div>
-                        <strong>{profile.display_name}</strong>
-                        <span>{profile.bio || "内部成员"}</span>
-                      </div>
-                      {isSelf ? <span className={styles.selfBadge}>本人</span> : null}
+        <div className={styles.appBody}>
+          {activeTab === "chats" ? (
+            <div className={styles.chatsLayout}>
+              <aside className={styles.sessionRail}>
+                <div className={styles.sessionRailHead}>
+                  <label className={styles.sessionSearch}>
+                    <Search aria-hidden="true" size={14} />
+                    <input
+                      aria-label="搜索会话"
+                      onChange={(event) => setSessionFilter(event.target.value)}
+                      placeholder="搜索"
+                      type="search"
+                      value={sessionFilter}
+                    />
+                  </label>
+                  <button
+                    aria-label="发起群聊"
+                    className={styles.newGroupButton}
+                    onClick={() => setGroupComposerOpen(true)}
+                    title="发起群聊"
+                    type="button"
+                  >
+                    <Plus aria-hidden="true" size={17} />
+                  </button>
+                </div>
+                <div className={styles.sessionList}>
+                  {isLoading && conversations.length === 0 ? (
+                    <div className={styles.loading} role="status">
+                      正在读取会话…
                     </div>
-                    <div className={styles.affiliationTags}>
-                      {activeAffiliations(profile).length === 0 ? (
-                        <span>基础通讯用户<small>无组织也可使用</small></span>
-                      ) : (
-                        activeAffiliations(profile).map((affiliation) => (
-                          <span key={affiliation.affiliation_id}>
-                            {affiliation.org_name}
-                            <small>{affiliation.role}</small>
+                  ) : orderedConversations.length === 0 ? (
+                    <EmptyState>
+                      还没有会话。到通讯录里点一个人，就能直接开聊。
+                    </EmptyState>
+                  ) : (
+                    orderedConversations.map((conversation) => {
+                      const conversationId = conversation.conversation_id;
+                      const name = sessionName(conversation);
+                      const preview = previewById[conversationId];
+                      const unread = unreadById[conversationId] ?? 0;
+                      const previewText = preview
+                        ? conversation.type === "group" &&
+                          String(preview.senderUserId) !== String(user?.id)
+                          ? `${
+                              profileByUserId.get(Number(preview.senderUserId))
+                                ?.display_name ?? "成员"
+                            }：${previewBody(preview)}`
+                          : previewBody(preview)
+                        : "";
+                      return (
+                        <button
+                          className={
+                            selectedConversationId === conversationId
+                              ? styles.sessionRowActive
+                              : styles.sessionRow
+                          }
+                          key={conversationId}
+                          onClick={() => void openConversation(conversationId)}
+                          type="button"
+                        >
+                          <span
+                            aria-hidden="true"
+                            className={
+                              conversation.type === "group"
+                                ? styles.sessionGroupAvatar
+                                : styles.sessionAvatar
+                            }
+                          >
+                            {conversation.type === "group" ? (
+                              <UsersRound aria-hidden="true" size={19} />
+                            ) : (
+                              initials(name)
+                            )}
                           </span>
-                        ))
-                      )}
-                    </div>
-                    {!isSelf ? (
-                      <IdentitySelect
-                        compact
-                        label="对方组织身份（可选）"
-                        onChange={(affiliationId) =>
-                          setAffiliationByUser((current) => ({
-                            ...current,
-                            [profile.user_id]: affiliationId,
-                          }))
-                        }
-                        profile={profile}
-                        value={peerAffiliationId}
-                      />
-                    ) : null}
-                    {!isSelf ? (
-                      <div className={styles.cardActions}>
-                        <button
-                          disabled={isBlocked || Boolean(busyKey)}
-                          onClick={() => startDirectConversation(profile)}
-                          title={
-                            identityReady
-                              ? "使用已选择的可选组织上下文建立会话"
-                              : "建立基础通讯会话，不需要组织身份"
-                          }
-                          type="button"
-                        >
-                          <ContactRound aria-hidden="true" size={15} />
-                          建立会话
+                          <span className={styles.sessionMeta}>
+                            <span className={styles.sessionTopLine}>
+                              <strong>{name}</strong>
+                              <time>
+                                {sessionTimeLabel(
+                                  preview?.at ?? conversation.updated_at,
+                                )}
+                              </time>
+                            </span>
+                            <span className={styles.sessionBottomLine}>
+                              <small>{previewText}</small>
+                              <span className={styles.sessionFlags}>
+                                {conversation.settings.is_pinned ? (
+                                  <Pin aria-hidden="true" size={12} />
+                                ) : null}
+                                {conversation.settings.is_muted ? (
+                                  <VolumeX aria-hidden="true" size={12} />
+                                ) : null}
+                                {unread > 0 ? (
+                                  <em
+                                    className={
+                                      conversation.settings.is_muted
+                                        ? styles.unreadBadgeMuted
+                                        : styles.unreadBadge
+                                    }
+                                  >
+                                    {unread > 99 ? "99+" : unread}
+                                  </em>
+                                ) : null}
+                              </span>
+                            </span>
+                          </span>
                         </button>
-                        <button
-                          disabled={
-                            isFriend || isPending || isBlocked || Boolean(busyKey)
-                          }
-                          onClick={() =>
-                            void runAction(
-                              `friend:${profile.user_id}`,
-                              `已向 ${profile.display_name} 提交好友申请。`,
-                              () =>
-                                createC19FriendRequest({
-                                  addressee_user_id: profile.user_id,
-                                  request_message:
-                                    requestMessageByUser[profile.user_id]?.trim() ||
-                                    undefined,
-                                }),
-                            )
-                          }
-                          type="button"
-                        >
-                          <UserPlus aria-hidden="true" size={15} />
-                          {isFriend ? "已是好友" : isPending ? "申请处理中" : "加好友"}
-                        </button>
-                        <button
-                          className={styles.dangerButton}
-                          disabled={isBlocked || Boolean(busyKey)}
-                          onClick={() =>
-                            void runAction(
-                              `block:${profile.user_id}`,
-                              `已将 ${profile.display_name} 加入黑名单。`,
-                              () => createC19Block(profile.user_id),
-                            )
-                          }
-                          type="button"
-                        >
-                          <Ban aria-hidden="true" size={15} />
-                          {isBlocked ? "已拉黑" : "拉黑"}
-                        </button>
-                      </div>
-                    ) : null}
-                    {!isSelf && !isFriend && !isPending && !isBlocked ? (
-                      <input
-                        aria-label={`给 ${profile.display_name} 的好友申请说明`}
-                        className={styles.requestNote}
-                        maxLength={500}
-                        onChange={(event) =>
-                          setRequestMessageByUser((current) => ({
-                            ...current,
-                            [profile.user_id]: event.target.value,
-                          }))
-                        }
-                        placeholder="好友申请说明（可选）"
-                        value={requestMessageByUser[profile.user_id] ?? ""}
-                      />
-                    ) : null}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      ) : null}
+                      );
+                    })
+                  )}
+                </div>
+              </aside>
 
-      {activeTab === "relationships" ? (
-        <div className={styles.relationshipColumns}>
-          <section className={styles.panel}>
-            <div className={styles.panelHeading}>
-              <div>
-                <h3>好友申请</h3>
-                <p>申请操作由当前登录身份决定。</p>
-              </div>
-              <span className={styles.countBadge}>{friendRequests.length}</span>
-            </div>
-            {friendRequests.length === 0 ? (
-              <EmptyState>暂无好友申请。</EmptyState>
-            ) : (
-              <div className={styles.stack}>
-                {friendRequests.map((request) => {
-                  const incoming = request.addressee.user_id === user?.id;
-                  const otherUserId = incoming
-                    ? request.requester.user_id
-                    : request.addressee.user_id;
-                  const profile = profileByUserId.get(otherUserId);
-                  const profileName = incoming
-                    ? request.requester.display_name
-                    : request.addressee.display_name;
-                  return (
-                    <article className={styles.rowCard} key={request.request_id}>
-                      <div>
-                        <strong>{profile?.display_name ?? profileName}</strong>
-                        <span>
-                          {incoming ? "向你发起申请" : "你发出的申请"} · {request.status}
-                        </span>
-                        {request.request_message ? <p>{request.request_message}</p> : null}
-                      </div>
-                      {request.status === "pending" ? (
-                        <div className={styles.inlineActions}>
-                          {incoming ? (
-                            <>
-                              <button
-                                disabled={Boolean(busyKey)}
-                                onClick={() =>
-                                  void runAction(
-                                    `accept:${request.request_id}`,
-                                    "好友申请已接受。",
-                                    () => actOnC19FriendRequest(request.request_id, "accept"),
-                                  )
-                                }
-                                type="button"
-                              >
-                                <Check aria-hidden="true" size={15} />接受
-                              </button>
-                              <button
-                                disabled={Boolean(busyKey)}
-                                onClick={() =>
-                                  void runAction(
-                                    `reject:${request.request_id}`,
-                                    "好友申请已拒绝。",
-                                    () => actOnC19FriendRequest(request.request_id, "reject"),
-                                  )
-                                }
-                                type="button"
-                              >
-                                <X aria-hidden="true" size={15} />拒绝
-                              </button>
-                            </>
-                          ) : (
-                            <button
-                              disabled={Boolean(busyKey)}
-                              onClick={() =>
-                                void runAction(
-                                  `cancel:${request.request_id}`,
-                                  "好友申请已取消。",
-                                  () => actOnC19FriendRequest(request.request_id, "cancel"),
-                                )
-                              }
-                              type="button"
-                            >
-                              <CircleOff aria-hidden="true" size={15} />取消
-                            </button>
-                          )}
-                        </div>
-                      ) : null}
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className={styles.panel}>
-            <div className={styles.panelHeading}>
-              <div><h3>好友</h3><p>好友关系不授予组织业务数据权限。</p></div>
-              <span className={styles.countBadge}>{friends.length}</span>
-            </div>
-            {friends.length === 0 ? (
-              <EmptyState>暂无好友关系。</EmptyState>
-            ) : (
-              <div className={styles.stack}>
-                {friends.map((friend) => {
-                  const profile = friend.profile;
-                  return (
-                    <article className={styles.rowCard} key={friend.relationship_id}>
-                      <div>
-                        <strong>{profile.display_name}</strong>
-                        <span>建立于 {readableDate(friend.established_at)}</span>
-                      </div>
-                      <button
-                        className={styles.dangerButton}
-                        disabled={Boolean(busyKey)}
-                        onClick={() =>
-                          void runAction(
-                            `remove-friend:${friend.profile.user_id}`,
-                            "好友关系已解除。",
-                            () => removeC19Friend(friend.profile.user_id),
-                          )
-                        }
-                        type="button"
-                      >
-                        <UserMinus aria-hidden="true" size={15} />解除
-                      </button>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className={styles.panel}>
-            <div className={styles.panelHeading}>
-              <div><h3>我的黑名单</h3><p>黑名单仅对当前用户可见。</p></div>
-              <span className={styles.countBadge}>{blocks.length}</span>
-            </div>
-            {blocks.length === 0 ? (
-              <EmptyState>黑名单为空。</EmptyState>
-            ) : (
-              <div className={styles.stack}>
-                {blocks.map((block) => {
-                  const profile = block.profile;
-                  return (
-                    <article className={styles.rowCard} key={block.block_id}>
-                      <div>
-                        <strong>{profile.display_name}</strong>
-                        <span>拉黑于 {readableDate(block.blocked_at)}</span>
-                      </div>
-                      <button
-                        disabled={Boolean(busyKey)}
-                        onClick={() =>
-                          void runAction(
-                            `unblock:${block.profile.user_id}`,
-                            "已解除拉黑。",
-                            () => removeC19Block(block.profile.user_id),
-                          )
-                        }
-                        type="button"
-                      >
-                        解除拉黑
-                      </button>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-      ) : null}
-
-      {activeTab === "conversations" ? (
-        <div className={styles.conversationLayout}>
-          <div className={styles.conversationRail}>
-            <section className={styles.panel}>
-              <div className={styles.panelHeading}>
-                <div><h3>会话</h3><p>选择会话读取持久化消息并开始聊天。</p></div>
-                <span className={styles.countBadge}>{conversations.length}</span>
-              </div>
-              {conversations.length === 0 ? (
-                <EmptyState>暂无会话控制记录。</EmptyState>
-              ) : (
-                <div className={styles.conversationList}>
-                  {conversations.map((conversation) => (
+              <section className={styles.chatStage}>
+                {!selectedConversationId ? (
+                  <div className={styles.chatStageEmpty}>
+                    <MessageSquareText aria-hidden="true" size={42} />
+                    <p>选择左侧会话，或到通讯录点一个人直接开聊。</p>
+                  </div>
+                ) : detailError ? (
+                  <div className={styles.error} role="alert">
+                    <span>{detailError}</span>
                     <button
-                      className={
-                        selectedConversationId === conversation.conversation_id
-                          ? styles.selectedConversation
-                          : ""
-                      }
-                      key={conversation.conversation_id}
-                      onClick={() => void loadConversationDetail(conversation.conversation_id)}
+                      onClick={() => void openConversation(selectedConversationId)}
                       type="button"
                     >
-                      <span>
-                        {conversation.type === "group" ? (
-                          <UsersRound aria-hidden="true" size={17} />
-                        ) : (
-                          <ContactRound aria-hidden="true" size={17} />
-                        )}
-                      </span>
-                      <div>
-                        <strong>
-                          {conversation.title ||
-                            (conversation.type === "group" ? "未命名群组" : "单聊会话")}
-                        </strong>
-                        <small>
-                          {conversation.type === "group" ? "群组" : "单聊"} · {conversation.status}
-                        </small>
-                      </div>
+                      重试读取会话
                     </button>
-                  ))}
-                </div>
-              )}
-            </section>
-
-            <section className={styles.panel}>
-              <div className={styles.panelHeading}>
-                <div><h3>建立群组</h3><p>选择至少两位其他成员。</p></div>
-                <UserPlus aria-hidden="true" size={19} />
-              </div>
-              <form className={styles.groupForm} onSubmit={submitGroup}>
-                <label className={styles.field}>
-                  <span>群组名称</span>
-                  <input
-                    maxLength={255}
-                    onChange={(event) => setGroupTitle(event.target.value)}
-                    placeholder="例如：跨组织选品协作"
-                    value={groupTitle}
-                  />
-                </label>
-                <div className={styles.memberPicker}>
-                  {directory
-                    .filter((profile) => profile.user_id !== user?.id)
-                    .map((profile) => {
-                      const selected = groupUserIds.has(profile.user_id);
-                      return (
-                        <div className={styles.memberOption} key={profile.user_id}>
-                          <label>
-                            <input
-                              checked={selected}
-                              onChange={(event) =>
-                                setGroupUserIds((current) => {
-                                  const next = new Set(current);
-                                  if (event.target.checked) next.add(profile.user_id);
-                                  else next.delete(profile.user_id);
-                                  return next;
-                                })
-                              }
-                              type="checkbox"
-                            />
-                            <span>{profile.display_name}</span>
-                          </label>
-                          {selected ? (
-                            <IdentitySelect
-                              compact
-                              label="组织身份（可选）"
-                              onChange={(affiliationId) =>
-                                setAffiliationByUser((current) => ({
-                                  ...current,
-                                  [profile.user_id]: affiliationId,
-                                }))
-                              }
-                              profile={profile}
-                              value={affiliationByUser[profile.user_id] ?? ""}
-                            />
-                          ) : null}
-                        </div>
-                      );
-                    })}
-                </div>
-                <button
-                  className={styles.primaryButton}
-                  disabled={Boolean(busyKey)}
-                  type="submit"
-                >
-                  <UsersRound aria-hidden="true" size={16} />
-                  创建群组控制记录
-                </button>
-              </form>
-            </section>
-          </div>
-
-          <section className={`${styles.panel} ${styles.detailPanel}`}>
-            {!selectedConversationId ? (
-              <EmptyState>选择一个会话读取消息、成员与设置。</EmptyState>
-            ) : detailError ? (
-              <div className={styles.error} role="alert">
-                <span>{detailError}</span>
-                <button
-                  onClick={() => void loadConversationDetail(selectedConversationId)}
-                  type="button"
-                >
-                  重试读取会话
-                </button>
-              </div>
-            ) : !conversationDetail || !conversationSettings ? (
-              <div className={styles.loading} role="status">正在读取会话控制详情…</div>
-            ) : (
-              <div className={styles.conversationDetailStack}>
-                {user ? (
-                  <C19ChatPanel
-                    conversation={conversationDetail}
-                    profiles={directory}
-                    userId={user.id}
-                  />
+                  </div>
+                ) : !conversationDetail || !conversationSettings ? (
+                  <div className={styles.loading} role="status">
+                    正在读取会话…
+                  </div>
+                ) : user ? (
+                  <>
+                    <C19ChatPanel
+                      conversation={conversationDetail}
+                      headerActions={
+                        <button
+                          aria-expanded={showConversationInfo}
+                          aria-label="会话信息与设置"
+                          className={styles.stageMenuButton}
+                          onClick={() =>
+                            setShowConversationInfo((current) => !current)
+                          }
+                          type="button"
+                        >
+                          <MoreHorizontal aria-hidden="true" size={19} />
+                        </button>
+                      }
+                      profiles={chatProfiles}
+                      title={stageTitle}
+                      userId={user.id}
+                    />
+                    {showConversationInfo ? (
+                      <ConversationInfoDrawer
+                        busy={Boolean(busyKey)}
+                        canDissolveGroup={canDissolveGroup}
+                        canManageGroup={canManageGroup}
+                        conversation={conversationDetail}
+                        directory={directory}
+                        inviteUserId={inviteUserId}
+                        onAddMember={() => {
+                          const profile = profileByUserId.get(Number(inviteUserId));
+                          if (!profile) {
+                            setActionError(
+                              "该用户已不在通讯录中，请刷新后重新选择。",
+                            );
+                            return;
+                          }
+                          void runAction(
+                            "add-member",
+                            "成员已加入群聊。",
+                            async () => {
+                              const updated = await addC19GroupMembers(
+                                conversationDetail.conversation_id,
+                                { members: [{ user_id: profile.user_id }] },
+                              );
+                              setConversationDetail(updated);
+                              setInviteUserId("");
+                            },
+                          );
+                        }}
+                        onClose={() => setShowConversationInfo(false)}
+                        onDissolve={() => {
+                          if (!window.confirm("确定解散这个群聊吗？")) return;
+                          void runAction("dissolve", "群聊已解散。", async () => {
+                            await dissolveC19Group(
+                              conversationDetail.conversation_id,
+                            );
+                            setSelectedConversationId("");
+                            setConversationDetail(null);
+                            setShowConversationInfo(false);
+                          });
+                        }}
+                        onInviteUserChange={setInviteUserId}
+                        onLeave={() => {
+                          if (!window.confirm("确定退出这个群聊吗？")) return;
+                          void runAction("leave", "你已退出群聊。", async () => {
+                            await leaveC19Group(conversationDetail.conversation_id);
+                            setSelectedConversationId("");
+                            setConversationDetail(null);
+                            setShowConversationInfo(false);
+                          });
+                        }}
+                        onOpenProfile={(userId) => void openProfileCard(userId)}
+                        onRemoveMember={(member) =>
+                          void runAction(
+                            `remove-member:${member.user_id}`,
+                            "成员已移出群聊。",
+                            async () => {
+                              const updated = await removeC19GroupMember(
+                                conversationDetail.conversation_id,
+                                member.user_id,
+                              );
+                              setConversationDetail(updated);
+                            },
+                          )
+                        }
+                        onRename={(event) => {
+                          event.preventDefault();
+                          if (!renameTitle.trim()) return;
+                          void runAction("rename", "群名已更新。", async () => {
+                            const updated = await updateC19Group(
+                              conversationDetail.conversation_id,
+                              { title: renameTitle.trim() },
+                            );
+                            setConversationDetail(updated);
+                          });
+                        }}
+                        onRenameTitleChange={setRenameTitle}
+                        onSettingsChange={updateSettings}
+                        onTransferOwner={(member) => {
+                          if (!window.confirm("确定把群主转让给这位成员吗？")) return;
+                          void runAction("transfer-owner", "群主已转让。", async () => {
+                            const updated = await transferC19GroupOwner(
+                              conversationDetail.conversation_id,
+                              { new_owner_user_id: member.user_id },
+                            );
+                            setConversationDetail(updated);
+                          });
+                        }}
+                        peerUserId={stagePeerUserId}
+                        profileByUserId={profileByUserId}
+                        renameTitle={renameTitle}
+                        selfUserId={user.id}
+                        settings={conversationSettings}
+                      />
+                    ) : null}
+                  </>
                 ) : null}
-                <ConversationControlDetail
-                  affiliationByUser={affiliationByUser}
-                  canDissolveGroup={canDissolveGroup}
-                  canManageGroup={canManageGroup}
-                  conversation={conversationDetail}
-                  directory={directory}
-                  inviteUserId={inviteUserId}
-                  onAddMember={() => {
-                    const profile = profileByUserId.get(Number(inviteUserId));
-                    const participant = profile ? participantFor(profile) : null;
-                    if (!participant) {
-                      setActionError("该用户已不在通讯录中，请刷新后重新选择。");
-                      return;
-                    }
-                    void runAction(
-                      "add-member",
-                      "群成员已加入控制记录。",
-                      async () => {
-                        const updated = await addC19GroupMembers(
-                          conversationDetail.conversation_id,
-                          { members: [participant] },
+              </section>
+            </div>
+          ) : null}
+
+          {activeTab === "contacts" ? (
+            <div className={styles.contactsLayout}>
+              {contactsView === "list" ? (
+                <>
+                  <div className={styles.contactsHead}>
+                    <label className={styles.sessionSearch}>
+                      <Search aria-hidden="true" size={14} />
+                      <input
+                        aria-label="搜索通讯录"
+                        onChange={(event) => setSearch(event.target.value)}
+                        placeholder="搜索成员"
+                        type="search"
+                        value={search}
+                      />
+                    </label>
+                    {isDirectorySearching ? (
+                      <span className={styles.searching}>同步中</span>
+                    ) : (
+                      <span className={styles.contactsCount}>
+                        {directoryCount} 位成员
+                      </span>
+                    )}
+                  </div>
+
+                  <div aria-label="按组织筛选" className={styles.orgFilters}>
+                    <button
+                      className={orgFilter === "all" ? styles.selectedFilter : ""}
+                      onClick={() => setOrgFilter("all")}
+                      type="button"
+                    >
+                      全部成员
+                    </button>
+                    {organizations.map(([orgId, orgName]) => (
+                      <button
+                        className={orgFilter === orgId ? styles.selectedFilter : ""}
+                        key={orgId}
+                        onClick={() => setOrgFilter(orgId)}
+                        type="button"
+                      >
+                        {orgName}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className={styles.contactEntries}>
+                    <button
+                      className={styles.contactEntryRow}
+                      onClick={() => setContactsView("requests")}
+                      type="button"
+                    >
+                      <span aria-hidden="true" className={styles.entryIconNew}>
+                        <UserPlus aria-hidden="true" size={17} />
+                      </span>
+                      新的朋友
+                      {incomingPendingCount > 0 ? (
+                        <em className={styles.entryBadge}>{incomingPendingCount}</em>
+                      ) : null}
+                    </button>
+                    <button
+                      className={styles.contactEntryRow}
+                      onClick={() => setContactsView("blocks")}
+                      type="button"
+                    >
+                      <span aria-hidden="true" className={styles.entryIconBlock}>
+                        <Ban aria-hidden="true" size={16} />
+                      </span>
+                      黑名单
+                      {blocks.length > 0 ? (
+                        <em className={styles.entryBadgePlain}>{blocks.length}</em>
+                      ) : null}
+                    </button>
+                  </div>
+
+                  <div className={styles.contactList}>
+                    {filteredDirectory.length === 0 ? (
+                      <EmptyState>没有匹配的成员。</EmptyState>
+                    ) : (
+                      filteredDirectory.map((profile) => {
+                        const isSelf = profile.user_id === user?.id;
+                        return (
+                          <button
+                            className={styles.contactRowBtn}
+                            key={profile.user_id}
+                            onClick={() => setProfileCard(profile)}
+                            type="button"
+                          >
+                            <span aria-hidden="true" className={styles.contactAvatar}>
+                              {initials(profile.display_name)}
+                            </span>
+                            <span className={styles.contactRowMeta}>
+                              <strong>
+                                {profile.display_name}
+                                {isSelf ? (
+                                  <em className={styles.profileSelfTag}>本人</em>
+                                ) : null}
+                                {friendUserIds.has(profile.user_id) && !isSelf ? (
+                                  <em className={styles.profileFriendTag}>好友</em>
+                                ) : null}
+                              </strong>
+                              <small>
+                                {profile.affiliations.length > 0
+                                  ? profile.affiliations
+                                      .map((affiliation) => affiliation.org_name)
+                                      .join(" · ")
+                                  : profile.bio || "基础通讯用户"}
+                              </small>
+                            </span>
+                          </button>
                         );
-                        setConversationDetail(updated);
-                        setInviteUserId("");
-                      },
-                    );
-                  }}
-                  onDissolve={() => {
-                    if (!window.confirm("确定解散这个群组控制记录吗？")) return;
-                    void runAction("dissolve", "群组控制记录已解散。", async () => {
-                      await dissolveC19Group(conversationDetail.conversation_id);
-                      setSelectedConversationId("");
-                      setConversationDetail(null);
-                    });
-                  }}
-                  onIdentityChange={(userId, affiliationId) =>
-                    setAffiliationByUser((current) => ({
-                      ...current,
-                      [userId]: affiliationId,
-                    }))
-                  }
-                  onInviteUserChange={setInviteUserId}
-                  onLeave={() =>
-                    void runAction("leave", "你已退出群组控制记录。", async () => {
-                      await leaveC19Group(conversationDetail.conversation_id);
-                      setSelectedConversationId("");
-                      setConversationDetail(null);
-                    })
-                  }
-                  onRemoveMember={(member) =>
-                    void runAction(
-                      `remove-member:${member.user_id}`,
-                      "群成员已移除。",
-                      async () => {
-                        const updated = await removeC19GroupMember(
-                          conversationDetail.conversation_id,
-                          member.user_id,
+                      })
+                    )}
+                  </div>
+                </>
+              ) : null}
+
+              {contactsView === "requests" ? (
+                <div className={styles.contactsSubview}>
+                  <div className={styles.subviewHead}>
+                    <button
+                      aria-label="返回通讯录"
+                      className={styles.backBtn}
+                      onClick={() => setContactsView("list")}
+                      type="button"
+                    >
+                      <ChevronLeft aria-hidden="true" size={17} />
+                    </button>
+                    <h3>新的朋友</h3>
+                    <span className={styles.countBadge}>{friendRequests.length}</span>
+                  </div>
+                  {friendRequests.length === 0 ? (
+                    <EmptyState>暂无好友申请。</EmptyState>
+                  ) : (
+                    <div className={styles.stack}>
+                      {friendRequests.map((request) => {
+                        const incoming = request.addressee.user_id === user?.id;
+                        const summary = incoming
+                          ? request.requester
+                          : request.addressee;
+                        return (
+                          <article className={styles.rowCard} key={request.request_id}>
+                            <div>
+                              <strong>{summary.display_name}</strong>
+                              <span>
+                                {incoming ? "向你发起申请" : "你发出的申请"} ·{" "}
+                                {request.status}
+                              </span>
+                              {request.request_message ? (
+                                <p>{request.request_message}</p>
+                              ) : null}
+                            </div>
+                            {request.status === "pending" ? (
+                              <div className={styles.inlineActions}>
+                                {incoming ? (
+                                  <>
+                                    <button
+                                      disabled={Boolean(busyKey)}
+                                      onClick={() =>
+                                        void runAction(
+                                          `accept:${request.request_id}`,
+                                          "好友申请已接受。",
+                                          () =>
+                                            actOnC19FriendRequest(
+                                              request.request_id,
+                                              "accept",
+                                            ),
+                                        )
+                                      }
+                                      type="button"
+                                    >
+                                      <Check aria-hidden="true" size={15} />接受
+                                    </button>
+                                    <button
+                                      disabled={Boolean(busyKey)}
+                                      onClick={() =>
+                                        void runAction(
+                                          `reject:${request.request_id}`,
+                                          "好友申请已拒绝。",
+                                          () =>
+                                            actOnC19FriendRequest(
+                                              request.request_id,
+                                              "reject",
+                                            ),
+                                        )
+                                      }
+                                      type="button"
+                                    >
+                                      <X aria-hidden="true" size={15} />拒绝
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button
+                                    disabled={Boolean(busyKey)}
+                                    onClick={() =>
+                                      void runAction(
+                                        `cancel:${request.request_id}`,
+                                        "好友申请已取消。",
+                                        () =>
+                                          actOnC19FriendRequest(
+                                            request.request_id,
+                                            "cancel",
+                                          ),
+                                      )
+                                    }
+                                    type="button"
+                                  >
+                                    <CircleOff aria-hidden="true" size={15} />取消
+                                  </button>
+                                )}
+                              </div>
+                            ) : null}
+                          </article>
                         );
-                        setConversationDetail(updated);
-                      },
-                    )
-                  }
-                  onRename={(event) => {
-                    event.preventDefault();
-                    if (!renameTitle.trim()) return;
-                    void runAction("rename", "群组名称已更新。", async () => {
-                      const updated = await updateC19Group(
-                        conversationDetail.conversation_id,
-                        { title: renameTitle.trim() },
-                      );
-                      setConversationDetail(updated);
-                    });
-                  }}
-                  onRenameTitleChange={setRenameTitle}
-                  onSettingsChange={updateSettings}
-                  onTransferOwner={(member) =>
-                    void runAction("transfer-owner", "群主已转让。", async () => {
-                      const updated = await transferC19GroupOwner(
-                        conversationDetail.conversation_id,
-                        { new_owner_user_id: member.user_id },
-                      );
-                      setConversationDetail(updated);
-                    })
-                  }
-                  renameTitle={renameTitle}
-                  selfUserId={user?.id ?? null}
-                  settings={conversationSettings}
-                />
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {contactsView === "blocks" ? (
+                <div className={styles.contactsSubview}>
+                  <div className={styles.subviewHead}>
+                    <button
+                      aria-label="返回通讯录"
+                      className={styles.backBtn}
+                      onClick={() => setContactsView("list")}
+                      type="button"
+                    >
+                      <ChevronLeft aria-hidden="true" size={17} />
+                    </button>
+                    <h3>黑名单</h3>
+                    <span className={styles.countBadge}>{blocks.length}</span>
+                  </div>
+                  {blocks.length === 0 ? (
+                    <EmptyState>黑名单为空。</EmptyState>
+                  ) : (
+                    <div className={styles.stack}>
+                      {blocks.map((block) => (
+                        <article className={styles.rowCard} key={block.block_id}>
+                          <div>
+                            <strong>{block.profile.display_name}</strong>
+                            <span>拉黑于 {readableDate(block.blocked_at)}</span>
+                          </div>
+                          <button
+                            disabled={Boolean(busyKey)}
+                            onClick={() =>
+                              void runAction(
+                                `unblock:${block.profile.user_id}`,
+                                "已解除拉黑。",
+                                () => removeC19Block(block.profile.user_id),
+                              )
+                            }
+                            type="button"
+                          >
+                            解除拉黑
+                          </button>
+                        </article>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {activeTab === "moments" ? (
+            selfProfile && user ? (
+              <div className={styles.momentsHost}>
+                <C19MomentsPanel profile={selfProfile} userId={user.id} />
               </div>
-            )}
-          </section>
+            ) : (
+              <EmptyState>正在同步你的基础通讯名片，完成后即可读取朋友圈。</EmptyState>
+            )
+          ) : null}
         </div>
+      </div>
+
+      {cardUser ? (
+        <C19ProfileCard
+          busy={Boolean(busyKey)}
+          isBlocked={blockedUserIds.has(cardUser.user_id)}
+          isFriend={friendUserIds.has(cardUser.user_id)}
+          isPending={pendingRequestUserIds.has(cardUser.user_id)}
+          isSelf={Boolean(cardIsSelf)}
+          onBlock={(profile) => {
+            if (!window.confirm(`确定拉黑 ${profile.display_name} 吗？`)) return;
+            void runAction(
+              `block:${profile.user_id}`,
+              `已将 ${profile.display_name} 加入黑名单。`,
+              () => createC19Block(profile.user_id),
+            );
+          }}
+          onClose={() => setProfileCard(null)}
+          onRemoveFriend={(profile) => {
+            if (!window.confirm(`确定解除与 ${profile.display_name} 的好友关系吗？`)) {
+              return;
+            }
+            void runAction(
+              `remove-friend:${profile.user_id}`,
+              "好友关系已解除。",
+              () => removeC19Friend(profile.user_id),
+            );
+          }}
+          onSendFriendRequest={(profile, message) =>
+            void runAction(
+              `friend:${profile.user_id}`,
+              `已向 ${profile.display_name} 提交好友申请。`,
+              () =>
+                createC19FriendRequest({
+                  addressee_user_id: profile.user_id,
+                  request_message: message || undefined,
+                }),
+            )
+          }
+          onStartChat={(profile) => void startChatWith(profile)}
+          onUnblock={(profile) =>
+            void runAction(
+              `unblock:${profile.user_id}`,
+              "已解除拉黑。",
+              () => removeC19Block(profile.user_id),
+            )
+          }
+          profile={cardUser}
+        />
       ) : null}
 
-      {activeTab === "moments" ? (
-        selfProfile && user ? (
-          <C19MomentsPanel profile={selfProfile} userId={user.id} />
-        ) : (
-          <EmptyState>正在同步你的基础通讯名片，完成后即可读取朋友圈。</EmptyState>
-        )
+      {groupComposerOpen ? (
+        <div
+          aria-modal="true"
+          className={styles.profileMask}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setGroupComposerOpen(false);
+          }}
+          role="dialog"
+        >
+          <form
+            aria-label="发起群聊"
+            className={styles.groupComposerCard}
+            onSubmit={submitGroup}
+          >
+            <div className={styles.subviewHead}>
+              <h3>
+                <UsersRound aria-hidden="true" size={18} />
+                发起群聊
+              </h3>
+              <button
+                aria-label="关闭"
+                className={styles.backBtn}
+                onClick={() => setGroupComposerOpen(false)}
+                type="button"
+              >
+                <X aria-hidden="true" size={16} />
+              </button>
+            </div>
+            <label className={styles.field}>
+              <span>群聊名称（可留空，自动按成员命名）</span>
+              <input
+                maxLength={255}
+                onChange={(event) => setGroupTitle(event.target.value)}
+                placeholder="例如：跨组织选品协作"
+                value={groupTitle}
+              />
+            </label>
+            <div className={styles.groupMemberList}>
+              {directory
+                .filter((profile) => profile.user_id !== user?.id)
+                .map((profile) => {
+                  const selected = groupUserIds.has(profile.user_id);
+                  return (
+                    <label
+                      className={
+                        selected ? styles.memberCheckRowActive : styles.memberCheckRow
+                      }
+                      key={profile.user_id}
+                    >
+                      <input
+                        checked={selected}
+                        onChange={(event) =>
+                          setGroupUserIds((current) => {
+                            const next = new Set(current);
+                            if (event.target.checked) next.add(profile.user_id);
+                            else next.delete(profile.user_id);
+                            return next;
+                          })
+                        }
+                        type="checkbox"
+                      />
+                      <span aria-hidden="true" className={styles.contactAvatar}>
+                        {initials(profile.display_name)}
+                      </span>
+                      <span>{profile.display_name}</span>
+                    </label>
+                  );
+                })}
+            </div>
+            <button
+              className={styles.primaryButton}
+              disabled={Boolean(busyKey) || groupUserIds.size < 2}
+              type="submit"
+            >
+              <UsersRound aria-hidden="true" size={16} />
+              {groupUserIds.size < 2
+                ? "至少再选择两位成员"
+                : `创建群聊（${groupUserIds.size + 1} 人）`}
+            </button>
+          </form>
+        </div>
       ) : null}
     </section>
   );
 }
 
-function ConversationControlDetail({
-  affiliationByUser,
+function ConversationInfoDrawer({
+  busy,
   canDissolveGroup,
   canManageGroup,
   conversation,
   directory,
   inviteUserId,
   onAddMember,
+  onClose,
   onDissolve,
-  onIdentityChange,
   onInviteUserChange,
   onLeave,
+  onOpenProfile,
   onRemoveMember,
   onRename,
   onRenameTitleChange,
   onSettingsChange,
   onTransferOwner,
+  peerUserId,
+  profileByUserId,
   renameTitle,
   selfUserId,
   settings,
 }: {
-  affiliationByUser: Record<number, string>;
+  busy: boolean;
   canDissolveGroup: boolean;
   canManageGroup: boolean;
   conversation: C19Conversation;
   directory: C19Profile[];
   inviteUserId: string;
   onAddMember: () => void;
+  onClose: () => void;
   onDissolve: () => void;
-  onIdentityChange: (userId: number, affiliationId: string) => void;
   onInviteUserChange: (userId: string) => void;
   onLeave: () => void;
+  onOpenProfile: (userId: number) => void;
   onRemoveMember: (member: C19ConversationMember) => void;
   onRename: (event: FormEvent<HTMLFormElement>) => void;
   onRenameTitleChange: (title: string) => void;
   onSettingsChange: (patch: Partial<C19ConversationSettings>) => void;
   onTransferOwner: (member: C19ConversationMember) => void;
+  peerUserId: number | null;
+  profileByUserId: Map<number, C19Profile>;
   renameTitle: string;
-  selfUserId: number | null;
+  selfUserId: number;
   settings: C19ConversationSettings;
 }) {
+  const isGroup = conversation.type === "group";
+  const activeMembers = conversation.members.filter(
+    (member) => member.status === "active",
+  );
   const memberIds = new Set(conversation.members.map((member) => member.user_id));
-  const availableProfiles = directory.filter((profile) => !memberIds.has(profile.user_id));
-  const inviteProfile = availableProfiles.find(
-    (profile) => profile.user_id === Number(inviteUserId),
+  const availableProfiles = directory.filter(
+    (profile) => !memberIds.has(profile.user_id),
   );
 
   return (
-    <div className={styles.detailContent}>
-      <div className={styles.detailHeading}>
-        <div>
-          <span>{conversation.type === "group" ? "群组" : "单聊"}</span>
-          <h3>{conversation.title || "会话控制记录"}</h3>
-          <p>{conversation.conversation_id}</p>
-        </div>
-        <span className={styles.statusBadge}>{conversation.status}</span>
+    <aside aria-label="会话信息与设置" className={styles.infoDrawer}>
+      <div className={styles.subviewHead}>
+        <h3>{isGroup ? "群聊信息" : "会话信息"}</h3>
+        <button
+          aria-label="关闭会话信息"
+          className={styles.backBtn}
+          onClick={onClose}
+          type="button"
+        >
+          <X aria-hidden="true" size={16} />
+        </button>
       </div>
 
+      {!isGroup && peerUserId !== null ? (
+        <button
+          className={styles.drawerPeerCard}
+          onClick={() => onOpenProfile(peerUserId)}
+          type="button"
+        >
+          <span aria-hidden="true" className={styles.contactAvatar}>
+            {initials(
+              profileByUserId.get(peerUserId)?.display_name ?? "成员",
+            )}
+          </span>
+          <span>
+            <strong>
+              {profileByUserId.get(peerUserId)?.display_name ??
+                `成员 #${peerUserId}`}
+            </strong>
+            <small>查看名片</small>
+          </span>
+        </button>
+      ) : null}
+
       <section className={styles.settingsSection}>
-        <h4><Settings2 aria-hidden="true" size={17} />我的会话设置</h4>
+        <h4>
+          <Settings2 aria-hidden="true" size={16} />
+          我的会话设置
+        </h4>
         <div className={styles.settingGrid}>
           <label>
             <input
               checked={settings.is_pinned}
-              onChange={(event) => onSettingsChange({ is_pinned: event.target.checked })}
+              onChange={(event) =>
+                onSettingsChange({ is_pinned: event.target.checked })
+              }
               type="checkbox"
             />
-            <Pin aria-hidden="true" size={15} />置顶
+            <Pin aria-hidden="true" size={15} />
+            置顶
           </label>
           <label>
             <input
               checked={settings.is_muted}
-              onChange={(event) => onSettingsChange({ is_muted: event.target.checked })}
+              onChange={(event) =>
+                onSettingsChange({ is_muted: event.target.checked })
+              }
               type="checkbox"
             />
-            <VolumeX aria-hidden="true" size={15} />静音
+            <VolumeX aria-hidden="true" size={15} />
+            静音
           </label>
           <label>
             <input
               checked={settings.is_archived}
-              onChange={(event) => onSettingsChange({ is_archived: event.target.checked })}
+              onChange={(event) =>
+                onSettingsChange({ is_archived: event.target.checked })
+              }
               type="checkbox"
             />
             归档
@@ -1314,63 +1657,87 @@ function ConversationControlDetail({
         </div>
       </section>
 
-      <section className={styles.membersSection}>
-        <div className={styles.sectionHeading}>
-          <h4><UsersRound aria-hidden="true" size={17} />成员</h4>
-          <span>{conversation.members.length}</span>
-        </div>
-        <div className={styles.stack}>
-          {conversation.members.map((member) => {
-            const profile = directory.find((item) => item.user_id === member.user_id);
-            return (
-              <article
-                className={styles.memberRow}
-                key={`${conversation.conversation_id}:${member.user_id}`}
-              >
-                <div>
-                  <strong>{profile?.display_name ?? `成员 #${member.user_id}`}</strong>
-                  <span>
-                    {member.role} · {member.status} · {member.org_id || "基础通讯"}
-                  </span>
-                </div>
-                {conversation.type === "group" && member.user_id !== selfUserId ? (
-                  <div className={styles.inlineActions}>
-                    {canDissolveGroup && member.status === "active" ? (
-                      <button onClick={() => onTransferOwner(member)} type="button">
-                        转让群主
-                      </button>
-                    ) : null}
-                    {canManageGroup && member.status === "active" ? (
-                      <button
-                        className={styles.dangerButton}
-                        onClick={() => onRemoveMember(member)}
-                        type="button"
-                      >
-                        移除
-                      </button>
-                    ) : null}
-                  </div>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </section>
+      {isGroup ? (
+        <section className={styles.membersSection}>
+          <div className={styles.sectionHeading}>
+            <h4>
+              <UsersRound aria-hidden="true" size={16} />
+              成员
+            </h4>
+            <span>{activeMembers.length}</span>
+          </div>
+          <div className={styles.stack}>
+            {activeMembers.map((member) => {
+              const profile = profileByUserId.get(member.user_id);
+              return (
+                <article
+                  className={styles.memberRow}
+                  key={`${conversation.conversation_id}:${member.user_id}`}
+                >
+                  <button
+                    className={styles.memberNameBtn}
+                    onClick={() => onOpenProfile(member.user_id)}
+                    type="button"
+                  >
+                    <span aria-hidden="true" className={styles.contactAvatar}>
+                      {initials(profile?.display_name ?? "成员")}
+                    </span>
+                    <span>
+                      <strong>
+                        {profile?.display_name ?? `成员 #${member.user_id}`}
+                        {member.user_id === selfUserId ? (
+                          <em className={styles.profileSelfTag}>我</em>
+                        ) : null}
+                      </strong>
+                      <small>{memberRoleLabel(member)}</small>
+                    </span>
+                  </button>
+                  {member.user_id !== selfUserId ? (
+                    <div className={styles.inlineActions}>
+                      {canDissolveGroup ? (
+                        <button
+                          disabled={busy}
+                          onClick={() => onTransferOwner(member)}
+                          type="button"
+                        >
+                          转让群主
+                        </button>
+                      ) : null}
+                      {canManageGroup ? (
+                        <button
+                          className={styles.dangerButton}
+                          disabled={busy}
+                          onClick={() => onRemoveMember(member)}
+                          type="button"
+                        >
+                          移除
+                        </button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : null}
 
-      {conversation.type === "group" ? (
+      {isGroup ? (
         <section className={styles.groupControls}>
           {canManageGroup ? (
             <>
               <form onSubmit={onRename}>
                 <label className={styles.field}>
-                  <span>群组名称</span>
+                  <span>群聊名称</span>
                   <input
                     maxLength={255}
                     onChange={(event) => onRenameTitleChange(event.target.value)}
                     value={renameTitle}
                   />
                 </label>
-                <button type="submit">保存名称</button>
+                <button disabled={busy} type="submit">
+                  保存名称
+                </button>
               </form>
               <div className={styles.inviteControl}>
                 <label className={styles.field}>
@@ -1387,38 +1754,33 @@ function ConversationControlDetail({
                     ))}
                   </select>
                 </label>
-                {inviteProfile ? (
-                  <IdentitySelect
-                    compact
-                    label="组织身份（可选）"
-                    onChange={(affiliationId) =>
-                      onIdentityChange(inviteProfile.user_id, affiliationId)
-                    }
-                    profile={inviteProfile}
-                    value={affiliationByUser[inviteProfile.user_id] ?? ""}
-                  />
-                ) : null}
-                <button disabled={!inviteProfile} onClick={onAddMember} type="button">
+                <button
+                  disabled={busy || !inviteUserId}
+                  onClick={onAddMember}
+                  type="button"
+                >
                   邀请加入
                 </button>
               </div>
             </>
           ) : null}
           <div className={styles.destructiveActions}>
-            <button onClick={onLeave} type="button">退出群组</button>
+            <button disabled={busy} onClick={onLeave} type="button">
+              退出群聊
+            </button>
             {canDissolveGroup ? (
-              <button className={styles.dangerButton} onClick={onDissolve} type="button">
-                解散群组
+              <button
+                className={styles.dangerButton}
+                disabled={busy}
+                onClick={onDissolve}
+                type="button"
+              >
+                解散群聊
               </button>
             ) : null}
           </div>
         </section>
       ) : null}
-
-      <div className={styles.readOnlyFooter}>
-        <MessageSquareLock aria-hidden="true" size={16} />
-        会话、图片、文件与朋友圈已经开放；音视频通话不在当前产品范围内。
-      </div>
-    </div>
+    </aside>
   );
 }

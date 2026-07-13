@@ -175,6 +175,16 @@ class ConversationMemberView(BaseModel):
     left_at: datetime | None
 
 
+class DirectPeerView(BaseModel):
+    """Read-only card of the other participant in a direct conversation."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: int
+    display_name: str
+    avatar_ref: str | None
+
+
 class ConversationSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -185,6 +195,7 @@ class ConversationSummary(BaseModel):
     actor_role: ConversationMemberRole
     actor_org_id: str | None
     active_member_count: int = Field(ge=0)
+    direct_peer: DirectPeerView | None = None
     settings: ConversationSettingsView
     created_at: datetime
     updated_at: datetime
@@ -245,6 +256,7 @@ __all__ = [
     "ConversationSettingsView",
     "ConversationSummary",
     "DirectConversationCreateRequest",
+    "DirectPeerView",
     "GroupCreateRequest",
     "GroupDeleteResponse",
     "GroupLeaveResponse",

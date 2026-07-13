@@ -45,6 +45,7 @@ from .conversation_schemas import (
     ConversationSettingsUpdateRequest,
     ConversationSettingsView,
     ConversationSummary,
+    DirectPeerView,
     DirectConversationCreateRequest,
     GroupCreateRequest,
     GroupDeleteResponse,
@@ -287,6 +288,7 @@ def _detail_for_actor(
 
 
 def _summary_from_row(row: ConversationListRow) -> ConversationSummary:
+    peer_profile = row.direct_peer_profile
     return ConversationSummary(
         conversation_id=row.conversation.conversation_id,
         type=row.conversation.conversation_type,
@@ -295,6 +297,15 @@ def _summary_from_row(row: ConversationListRow) -> ConversationSummary:
         actor_role=row.actor_member.role,
         actor_org_id=row.actor_member.org_id_at_join,
         active_member_count=row.active_member_count,
+        direct_peer=(
+            DirectPeerView(
+                user_id=peer_profile.user_id,
+                display_name=peer_profile.display_name,
+                avatar_ref=peer_profile.avatar_ref,
+            )
+            if peer_profile is not None
+            else None
+        ),
         settings=_settings_view(
             conversation_id=row.conversation.conversation_id,
             user_id=row.actor_member.user_id,

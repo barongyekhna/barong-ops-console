@@ -5,7 +5,6 @@ import {
   FileText,
   ImageIcon,
   LoaderCircle,
-  MessageSquareText,
   Paperclip,
   RefreshCcw,
   Send,
@@ -18,6 +17,7 @@ import {
   type ChangeEvent,
   type FormEvent,
   type KeyboardEvent,
+  type ReactNode,
   useCallback,
   useEffect,
   useMemo,
@@ -211,11 +211,15 @@ function isSameUser(left: number | string, right: number | string) {
 
 export function C19ChatPanel({
   conversation,
+  headerActions,
   profiles,
+  title,
   userId,
 }: {
   conversation: C19Conversation;
+  headerActions?: ReactNode;
   profiles: C19Profile[];
+  title?: string;
   userId: number;
 }) {
   const conversationId = conversation.conversation_id;
@@ -1613,13 +1617,11 @@ export function C19ChatPanel({
     <section className={styles.chatPanel} aria-labelledby="c19-chat-title">
       <header className={styles.chatHeading}>
         <div>
-          <span>文字、Emoji、图片与文件</span>
           <h3 id="c19-chat-title">
-            <MessageSquareText aria-hidden="true" size={20} />
-            {conversation.title || (conversation.type === "group" ? "群组聊天" : "单聊")}
+            {title ||
+              conversation.title ||
+              (conversation.type === "group" ? "群组聊天" : "单聊")}
           </h3>
-        </div>
-        <div className={styles.chatRuntimeState}>
           <span
             aria-live="polite"
             data-mode={isRecovering ? "connecting" : connectionMode}
@@ -1632,9 +1634,12 @@ export function C19ChatPanel({
             )}
             {connectionLabel}
           </span>
+        </div>
+        <div className={styles.chatRuntimeState}>
           {unreadPosition?.unread_count ? (
             <strong>{unreadPosition.unread_count} 条未读</strong>
           ) : null}
+          {headerActions}
         </div>
       </header>
 
@@ -1863,7 +1868,7 @@ export function C19ChatPanel({
           </div>
         ) : null}
         <textarea
-          aria-label="C19 消息内容"
+          aria-label="消息内容"
           disabled={
             renderWindowMode === "older" ||
             Boolean(pendingMessage) ||
@@ -1886,7 +1891,7 @@ export function C19ChatPanel({
         />
         <div className={styles.composerFooter}>
           <span>
-            {draft.length}/{MESSAGE_MAX_LENGTH} · 原始字节直传隔离资产服务，不经过 JSON 代理
+            {draft.length}/{MESSAGE_MAX_LENGTH}
           </span>
           <button
             className={styles.sendButton}

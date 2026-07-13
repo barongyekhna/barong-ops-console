@@ -183,24 +183,49 @@ test("C19 is a global authenticated feature with optional organization context",
   );
 
   assert.match(sidebarSource, /href="\/c19"/);
-  assert.match(sidebarSource, /C19 通讯/);
+  // 前端界面不出现 C19 字样：侧边导航与页面只叫「通讯」。
+  assert.match(sidebarSource, />通讯</);
+  assert.doesNotMatch(sidebarSource, /C19 通讯/);
   assert.match(sidebarSource, /useC19UnreadCount/);
   assert.match(routeGuardSource, /pathname === "\/c19"/);
   assert.match(routeGuardSource, /isC19Route \|\|/);
   assert.match(pageSource, /C19Workspace/);
-  assert.match(workspaceSource, /基础功能 · 全员开放/);
-  assert.match(workspaceSource, /每位有效用户都可以聊天、建群/);
-  assert.match(workspaceSource, /基础通讯身份（不绑定组织）/);
-  assert.match(workspaceSource, /无需加入组织即可使用 C19/);
-  assert.match(workspaceSource, /组织身份可选/);
   assert.doesNotMatch(workspaceSource, /必须明确选择.*组织身份/);
   assert.doesNotMatch(workspaceSource, /朋友圈仍未开放/);
   assert.match(workspaceSource, /const LOAD_LIMIT = 100/);
   assert.match(workspaceSource, /getC19Profile\(user\.id\)/);
   assert.doesNotMatch(workspaceSource, /affiliations\.length === 1/);
-  assert.match(workspaceSource, /actor\.affiliation_id\s*\? \{ actor_affiliation_id/);
-  assert.match(workspaceSource, /peer\.affiliation_id\s*\? \{ peer_affiliation_id/);
+  // 微信式动线：点名字直接开聊，永远使用基础通讯身份，
+  // 界面上不存在任何组织身份选择器。
+  assert.match(
+    workspaceSource,
+    /createC19DirectConversation\(\{\s*peer_user_id: profile\.user_id,\s*\}\)/,
+  );
+  assert.doesNotMatch(
+    workspaceSource,
+    /actor_affiliation_id|peer_affiliation_id|IdentitySelect/,
+  );
+  assert.doesNotMatch(workspaceSource, /affiliation_id:/);
+  assert.match(workspaceSource, /adoptConversation\(conversation\)/);
+  assert.match(workspaceSource, /getC19UnreadPosition/);
+  assert.match(workspaceSource, /listC19MessageHistory\(conversationId, \{ limit: 1 \}\)/);
+  assert.match(workspaceSource, /C19_UNREAD_CHANGED_EVENT/);
+  assert.match(workspaceSource, /direct_peer\?\.display_name/);
+  assert.match(workspaceSource, /的群聊/);
   assert.match(workspaceSource, /disabled=\{Boolean\(busyKey\)\}/);
+
+  // 名片：组织身份只读展示，不是选择器；主动作是「发消息」。
+  const profileCardSource = readFileSync(
+    "frontend/src/modules/c19/C19ProfileCard.tsx",
+    "utf8",
+  );
+  assert.match(profileCardSource, /发消息/);
+  assert.match(profileCardSource, /profile\.affiliations\.map/);
+  assert.doesNotMatch(
+    profileCardSource,
+    /<select|actor_affiliation_id|peer_affiliation_id/,
+  );
+  assert.match(profileCardSource, /基础通讯用户 · 未加入任何组织/);
   assert.match(apiSource, /conversationRuntimePath\(conversationId, "messages"\)/);
   assert.doesNotMatch(apiSource, /\/attachments|\/storage|\/providers|\/vps/i);
   assert.match(apiSource, /createC19MomentDraft/);
@@ -215,6 +240,7 @@ test("C19 is a global authenticated feature with optional organization context",
   assert.match(typeSource, /actor_affiliation_id\?: string/);
   assert.match(typeSource, /C19ParticipantInput = \{\s*user_id: number;\s*affiliation_id\?: string;/);
   assert.match(typeSource, /actor_org_id: string \| null/);
+  assert.match(typeSource, /direct_peer\?: C19DirectPeer \| null/);
   assert.doesNotMatch(typeSource, /C19CreateDirectConversationInput = \{\s*actor:/);
   assert.doesNotMatch(workspaceSource, /createC19DirectConversation\(\{\s*actor:/);
   assert.match(chatSource, /type="file"/);
