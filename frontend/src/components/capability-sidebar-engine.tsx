@@ -52,7 +52,15 @@ const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set(
   C_SYSTEM_MODULE_ORDER.map((item) => item.module_key),
 );
 
-const ORGANIZATION_MODULE_PREFIXES = ["r.", "k.", "i.", "p.", "seo.", "gmc."] as const;
+const ORGANIZATION_MODULE_PREFIXES = [
+  "r.",
+  "k.",
+  "i.",
+  "p.",
+  "w.",
+  "seo.",
+  "gmc.",
+] as const;
 const SIDEBAR_ORG_SNAPSHOT_PREFIX = "barong:sidebar-orgs";
 const PRODUCT_KNOWLEDGE_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
 const R_SERIES_ORG_NAME = "涌龙麟（深圳）国际贸易有限公司";
@@ -146,6 +154,8 @@ function isRestrictedProductModule(moduleId: string) {
     normalized.startsWith("k.") ||
     normalized.startsWith("i.") ||
     normalized.startsWith("p.") ||
+    // W 系列与产品系列同规：只在国际贸易组织下展示。
+    normalized.startsWith("w.") ||
     normalized === "business.products" ||
     normalized.includes("product")
   );
