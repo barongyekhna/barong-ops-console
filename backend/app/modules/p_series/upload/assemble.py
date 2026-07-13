@@ -25,6 +25,7 @@ from ..contract.upload_package import (
     Price,
     Product,
     Seo,
+    Shipping,
     Stock,
     UploadPackage,
     Variant,
@@ -55,6 +56,10 @@ def gate_blockers(db: Session, product: Any) -> list[str]:
         blockers.append("未绑定类目")
     if getattr(product, "regular_price", None) is None:
         blockers.append("价格缺失")
+    if (getattr(product, "channel", "") or "").strip().lower() == "dtc" and not (
+        getattr(product, "shipping_class", None) or ""
+    ).strip():
+        blockers.append("运费模板未分配（去 W-A 运费中枢处理）")
     # 品牌硬门（fail-closed）：审查必须存在、通过、且内容未变
     blockers.extend(audit_gate_blockers(db, product))
     return blockers
@@ -327,4 +332,5 @@ def assemble_upload_package(
             variants=_variants(db, product),
             item_group_id=product.product_key,
         ),
+        shipping=Shipping(shipping_class=product.shipping_class),
     )

@@ -185,6 +185,25 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     moq: Mapped[int | None] = mapped_column(Integer, nullable=True)
     lead_time: Mapped[str | None] = mapped_column(String(255), nullable=True)
     shipping_class: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    contains_battery: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
+    )
+    us_stock: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
+    )
+    shipping_assignment_json: Mapped[Any | None] = mapped_column(
+        json_type(),
+        nullable=True,
+    )
+    shipping_review_needed: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=false(),
+    )
     tax_class: Mapped[str | None] = mapped_column(String(128), nullable=True)
     materials_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
     dimensions_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)

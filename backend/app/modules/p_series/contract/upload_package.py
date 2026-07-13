@@ -26,6 +26,8 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v2"
+# n8n barongPupload001 must write ``shipping.shipping_class`` to the Woo
+# product's shipping_class; the n8n workflow change is intentionally external.
 
 Availability = Literal["in_stock", "out_of_stock", "preorder"]
 Channel = Literal["woocommerce"]  # Amazon/GMC/SEO get their own channels later.
@@ -43,6 +45,11 @@ class Stock(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Availability = "in_stock"
     qty: int | None = None
+
+
+class Shipping(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    shipping_class: str | None = None
 
 
 class Category(BaseModel):
@@ -169,6 +176,7 @@ class UploadPackage(BaseModel):
     generated_at: datetime
     gate: Gate
     product: Product
+    shipping: Shipping = Field(default_factory=Shipping)
 
 
 # --- GMC bridge -----------------------------------------------------------

@@ -1054,6 +1054,56 @@ function isAllowedFPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedWPath(method: string, path: string[]) {
+  if (path[0] !== "w" || path[1] !== "shipping") {
+    return false;
+  }
+  if (path.length === 3 && path[2] === "classes") {
+    return method === "GET" || method === "POST";
+  }
+  if (
+    path.length === 4 &&
+    path[2] === "classes" &&
+    isUuidPathSegment(path[3])
+  ) {
+    return method === "PATCH";
+  }
+  if (path.length === 3 && path[2] === "rules") {
+    return method === "GET" || method === "POST";
+  }
+  if (
+    path.length === 4 &&
+    path[2] === "rules" &&
+    isUuidPathSegment(path[3])
+  ) {
+    return method === "PATCH" || method === "DELETE";
+  }
+  if (path.length === 3 && path[2] === "simulate") {
+    return method === "POST";
+  }
+  if (
+    path.length === 4 &&
+    path[2] === "assign" &&
+    isUuidPathSegment(path[3])
+  ) {
+    return method === "POST";
+  }
+  if (path.length === 3 && path[2] === "assign-all") {
+    return method === "POST";
+  }
+  if (path.length === 3 && path[2] === "board") {
+    return method === "GET";
+  }
+  if (
+    path.length === 4 &&
+    path[2] === "products" &&
+    isUuidPathSegment(path[3])
+  ) {
+    return method === "PATCH";
+  }
+  return false;
+}
+
 function isAllowedNotificationsPath(method: string, path: string[]) {
   if (path[0] !== "notifications") {
     return false;
@@ -1597,6 +1647,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedKPath(method, path) ||
     isAllowedIPath(method, path) ||
     isAllowedFPath(method, path) ||
+    isAllowedWPath(method, path) ||
     isAllowedRPath(method, path) ||
     isAllowedRwPath(method, path) ||
     isAllowedNotificationsPath(method, path) ||

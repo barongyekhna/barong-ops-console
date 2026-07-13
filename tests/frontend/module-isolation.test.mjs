@@ -280,6 +280,15 @@ const registryItems = [
     status: "active",
   }),
   manifest({
+    category: "business",
+    denied_behavior: "show_locked",
+    external_dependencies: [],
+    module_key: "w.site_ops",
+    required_permissions: ["w.site_ops.read"],
+    route_namespace: "/w-a",
+    status: "active",
+  }),
+  manifest({
     category: "core",
     denied_behavior: "hide_when_denied",
     module_key: "core.dashboard",
@@ -1203,6 +1212,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "r.warehouse",
     "r.analysis",
     "f.enrichment",
+    "w.site_ops",
     "business.approvals",
     "business.reviews",
     "core.dashboard",

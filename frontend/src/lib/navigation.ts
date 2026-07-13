@@ -151,6 +151,17 @@ export const navigationGroups: NavigationGroup[] = [
       {
         category: "business",
         denied_behavior: "show_locked",
+        href: "/w-a",
+        icon: Boxes,
+        label: "W-A 网站运营中枢",
+        module_key: "w.site_ops",
+        required_permission: "w.site_ops.read",
+        route_namespace: "/w-a",
+        status: "active",
+      },
+      {
+        category: "business",
+        denied_behavior: "show_locked",
         href: "/approvals",
         icon: ClipboardCheck,
         label: "审批",
