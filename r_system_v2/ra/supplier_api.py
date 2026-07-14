@@ -40,6 +40,11 @@ DEFAULT_1688_CPS_IMAGE_SEARCH_API_NAME = "alibaba.cps.similar.offer.search"
 # 返回选品中心陈列品/严选品池（一件代发包邮、48h 发货、moq=1），带图可比对。
 DEFAULT_1688_KEYWORD_SEARCH_NAMESPACE = "com.alibaba.fenxiao"
 DEFAULT_1688_KEYWORD_SEARCH_API_NAME = "product.keywords.search"
+# 跨境全站词搜（跨境数字化选品/寻源通）：池子比分销选品中心大几个量级。
+# 2026-07-14 实测本应用整个 crossborder 命名空间 ACL 拒——需在开放平台给
+# 应用订购该权限组；F 找货做双通道，权限一开自动切换（is_acl_denied 判定）。
+DEFAULT_1688_CROSSBORDER_KEYWORD_NAMESPACE = "com.alibaba.fenxiao.crossborder"
+DEFAULT_1688_CROSSBORDER_KEYWORD_API_NAME = "product.search.keywordQuery"
 DEFAULT_1688_PRODUCT_INFO_NAMESPACE = "com.alibaba.product"
 DEFAULT_1688_PRODUCT_INFO_API_NAME = "alibaba.cross.productInfo"
 DEFAULT_1688_FREIGHT_NAMESPACE = "com.alibaba.fenxiao.crossborder"
@@ -48,6 +53,12 @@ DEFAULT_1688_FREIGHT_API_NAME = "product.freight.estimate"
 
 class RASupplierApiError(RuntimeError):
     pass
+
+
+def is_acl_denied(exc: BaseException) -> bool:
+    """网关按 API 权限组拒绝（应用未订购该 API）——与业务失败区分开。"""
+    text = str(exc)
+    return "APIACLDecline" in text or "not allowed(acl)" in text
 
 
 @dataclass(frozen=True)
@@ -339,6 +350,49 @@ class Alibaba1688OfficialApiProvider:
         if not offers and last_error is not None:
             raise last_error
         return _dedupe_offers(offers, limit=limit)
+
+    def search_offers_keyword_crossborder(
+        self,
+        *,
+        keyword: str,
+        limit: int,
+    ) -> list[SupplierApiOffer]:
+        """跨境全站词搜（product.search.keywordQuery，寻源通权限组）。
+
+        池子=1688 全站跨境货盘，比分销选品中心大几个量级；无一件代发
+        精选属性，MOQ 可能更高——交给 F 的评分（MOQ 越小分越高）压序。
+        应用未订购权限组时网关 ACL 拒（调用方用 is_acl_denied 判定降级）。
+        """
+        if not self.credentials.ready:
+            raise RASupplierApiError("1688 官方 API 密钥尚未完整绑定。")
+        keyword = (keyword or "").strip()
+        if not keyword:
+            raise RASupplierApiError("1688 跨境词搜关键词为空。")
+        api_name = os.getenv(
+            "RA_1688_CROSSBORDER_KEYWORD_API_NAME",
+            DEFAULT_1688_CROSSBORDER_KEYWORD_API_NAME,
+        ).strip()
+        namespace = os.getenv(
+            "RA_1688_CROSSBORDER_KEYWORD_NAMESPACE",
+            DEFAULT_1688_CROSSBORDER_KEYWORD_NAMESPACE,
+        ).strip()
+        payload = self._call_openapi(
+            namespace=namespace,
+            api_name=api_name,
+            params={
+                "offerQueryParam": {
+                    "keyword": keyword,
+                    "beginPage": 1,
+                    "pageSize": max(10, min(int(limit or 5) * 4, 50)),
+                    "country": os.getenv(
+                        "RA_1688_CROSSBORDER_COUNTRY", "en"
+                    ).strip()
+                    or "en",
+                }
+            },
+            error_label="1688 跨境词搜",
+        )
+        return _normalize_crossborder_keyword_offers(payload, limit=limit)
 
     def _call_image_search(
         self,
@@ -1016,6 +1070,112 @@ def _normalize_cps_offers(
                     "category_id": item.get("categoryId"),
                     "raw_price_cent": item.get("price"),
                     "raw_old_price_cent": item.get("oldPrice"),
+                },
+            )
+        )
+    return output
+
+
+def _crossborder_items(payload: dict[str, Any]) -> list[Any]:
+    """keywordQuery 出参：result.result.data[]（防御其余包裹层写法）。"""
+    block: Any = payload.get("result")
+    for _ in range(3):
+        if isinstance(block, list):
+            return block
+        if not isinstance(block, dict):
+            break
+        block = block.get("data") or block.get("list") or block.get("result")
+    return _extract_offer_items(payload)
+
+
+def _crossborder_price_cny(item: dict[str, Any]) -> Decimal | None:
+    """priceInfo 里的价格是"元"字符串；精选价优先于普通价。"""
+    price_info = _dict_value(item.get("priceInfo"))
+    for key_source, key in (
+        (price_info, "jxhyPrice"),
+        (price_info, "price"),
+        (price_info, "consignPrice"),
+        (item, "price"),
+    ):
+        raw = _optional_string(key_source.get(key) if isinstance(key_source, dict) else None)
+        if not raw:
+            continue
+        try:
+            parsed = Decimal(raw)
+        except Exception:
+            continue
+        if parsed > 0:
+            return _money(parsed)
+    return None
+
+
+def _normalize_crossborder_keyword_offers(
+    payload: dict[str, Any],
+    *,
+    limit: int,
+) -> list[SupplierApiOffer]:
+    items = _crossborder_items(payload)
+    output: list[SupplierApiOffer] = []
+    seen: set[str] = set()
+    min_unit_price = _min_official_unit_price_cny()
+    for index, item in enumerate(items):
+        if len(output) >= max(1, min(int(limit or 5), 20)):
+            break
+        if not isinstance(item, dict):
+            continue
+        offer_id = _optional_string(item.get("offerId") or item.get("offer_id"))
+        detail_url = _optional_string(item.get("detailUrl") or item.get("detail_url"))
+        if not detail_url and offer_id:
+            detail_url = f"https://detail.1688.com/offer/{offer_id}.html"
+        if not detail_url:
+            continue
+        dedupe_key = offer_id or detail_url
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        price = _crossborder_price_cny(item)
+        if price is None or price < min_unit_price:
+            continue
+        title = _optional_string(item.get("subject") or item.get("subjectTrans"))
+        moq = _int_value(
+            item.get("minOrderQuantity")
+            or item.get("quantityBegin")
+            or item.get("beginNum")
+        )
+        monthly_sales = _int_value(
+            item.get("monthlySold") or item.get("monthlySales")
+        )
+        one_piece = item.get("isOnePsale") is True or (moq or 0) == 1
+        output.append(
+            SupplierApiOffer(
+                supplier_name=_optional_string(
+                    item.get("sellerName") or item.get("sellerLoginId")
+                )
+                or "1688跨境货源",
+                supplier_url=detail_url,
+                title=title or "1688 跨境词搜商品",
+                unit_price_cny=price,
+                domestic_shipping_cny=None,
+                moq=moq,
+                rating=None,
+                match_score=max(60, 94 - index * 2),
+                stock=None,
+                monthly_sales=monthly_sales,
+                one_piece_hint=one_piece,
+                platform="1688",
+                platform_label="1688",
+                source="alibaba1688_crossborder_keyword_search",
+                payload={
+                    "official_api": True,
+                    "api_family": "1688_crossborder_keyword_search",
+                    "offer_id": offer_id,
+                    "title": title,
+                    "subject_trans": _optional_string(item.get("subjectTrans")),
+                    "image_url": item.get("imageUrl"),
+                    "is_jxhy": item.get("isJxhy") is True,
+                    "is_one_psale": item.get("isOnePsale") is True,
+                    "repurchase_rate": _optional_string(item.get("repurchaseRate")),
+                    "monthly_sold": monthly_sales,
                 },
             )
         )

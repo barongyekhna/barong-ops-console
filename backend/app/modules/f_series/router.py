@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,6 +29,7 @@ from ...models.user import User
 from ...services.data_isolation import without_org_data_isolation
 from ...services.permission_service import resolve_current_user_permission_info
 from .enrichment import constants as C
+from .enrichment import images
 from .enrichment import profiles as profile_engine
 from .enrichment import runs as run_engine
 from .enrichment import service
@@ -169,6 +170,11 @@ class CandidateItem(BaseModel):
     automation_blocked: bool
     status: str
     notes: str | None
+    profile_product_zh: str | None
+    profile_product_en: str | None
+    score: int | None
+    score_json: dict[str, Any] | None
+    recommended_rank: int | None
     k_product_id: str | None
     created_at: str | None
 
@@ -231,6 +237,11 @@ def _candidate_item(candidate: FCategoryCandidate) -> CandidateItem:
         automation_blocked=candidate.automation_blocked,
         status=candidate.status,
         notes=candidate.notes,
+        profile_product_zh=candidate.profile_product_zh,
+        profile_product_en=candidate.profile_product_en,
+        score=candidate.score,
+        score_json=dict(candidate.score_json) if candidate.score_json else None,
+        recommended_rank=candidate.recommended_rank,
         k_product_id=str(candidate.k_product_id) if candidate.k_product_id else None,
         created_at=_iso(candidate.created_at),
     )
@@ -450,6 +461,34 @@ def f_candidates_list(
     return CandidatesResponse(
         items=[_candidate_item(row) for row in rows],
         total=len(rows),
+    )
+
+
+@router.get("/candidates/{candidate_id}/image")
+def f_candidate_image(
+    candidate_id: UUID,
+    variant: str = Query(default="thumb", pattern="^(thumb|full)$"),
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_f_permission(C.PERMISSION_READ)),
+) -> Response:
+    """候选图片代理：服务端回源阿里 CDN（绕防盗链）+ 磁盘缓存提速。
+
+    thumb=310px 缩略图（列表）；full=原图（悬浮放大预览 / K 参考图）。
+    """
+    del user
+    candidate = db.get(FCategoryCandidate, candidate_id)
+    if candidate is None or not candidate.image_url:
+        raise HTTPException(status_code=404, detail="候选或其图源不存在。")
+    try:
+        data, media_type = images.get_candidate_image(
+            str(candidate.id), candidate.image_url, variant
+        )
+    except images.FImageUnavailableError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Cache-Control": "private, max-age=604800, immutable"},
     )
 
 

@@ -244,6 +244,9 @@ def create_candidate(
     notes: str | None = None,
     run_id: UUID | None = None,
     source: str = "manual",
+    profile_product_zh: str | None = None,
+    profile_product_en: str | None = None,
+    score_json: dict[str, Any] | None = None,
 ) -> FCategoryCandidate:
     node = category_node(db, category_id)
     if node is None:
@@ -273,6 +276,9 @@ def create_candidate(
         automation_blocked=bool(flags),
         status="pending_review",
         notes=(notes or None),
+        profile_product_zh=(profile_product_zh or None),
+        profile_product_en=(profile_product_en or None),
+        score_json=score_json,
         created_by_user_id=user.id if user is not None else None,
     )
     db.add(candidate)

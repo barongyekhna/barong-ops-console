@@ -32,15 +32,24 @@ from r_system_v2.ra.quota_ledger import (
 from r_system_v2.ra.supplier_api import (
     Alibaba1688Credentials,
     Alibaba1688OfficialApiProvider,
+    RASupplierApiError,
+    is_acl_denied,
 )
 
 from . import profiles as profile_engine
+from . import scoring
 from . import service
 from .models import FCategoryCandidate
 
 # 每个画像产品收多少个 offer；每产品预扣的 App 调用数（词搜1次+余量）。
 OFFERS_PER_PRODUCT = 5
 CALLS_PER_PRODUCT = 2
+
+# 跨境权限未开通时降级分销池，并把开通指引带回运行台账（只记一次）。
+CROSSBORDER_ACL_NOTE = (
+    "跨境全站词搜权限未开通（1688 开放平台给应用订购「跨境数字化选品」"
+    "权限组后自动切换大池），本轮已用分销选品池"
+)
 
 
 class SourcingProvider(Protocol):
@@ -49,6 +58,13 @@ class SourcingProvider(Protocol):
         *,
         product: dict[str, Any],
         keyword_profile: dict[str, Any],
+        limit: int,
+    ) -> list[Any]: ...
+
+    def search_offers_keyword_crossborder(
+        self,
+        *,
+        keyword: str,
         limit: int,
     ) -> list[Any]: ...
 
@@ -124,9 +140,25 @@ def _search_offers_for_product(
     *,
     product_zh: str,
     product_en: str,
-) -> list[Any]:
-    """按单个画像产品名词搜（供应商词搜通道的候选词=该产品中文名）。"""
-    return provider.search_offers_keyword_only(
+) -> tuple[list[Any], str]:
+    """按单个画像产品名词搜，返回 (offers, 实际通道)。
+
+    双通道：先试跨境全站词搜（大池）；应用权限组未开通（ACL 拒）就
+    整轮降级分销选品池——降级状态挂在 provider 实例上（一次运行只浪费
+    一次探测调用），权限一开自动回到大池。
+    """
+    if not getattr(provider, "_f_crossborder_denied", False):
+        try:
+            offers = provider.search_offers_keyword_crossborder(
+                keyword=product_zh or product_en,
+                limit=OFFERS_PER_PRODUCT,
+            )
+            return offers, "crossborder"
+        except RASupplierApiError as exc:
+            if not is_acl_denied(exc):
+                raise
+            provider._f_crossborder_denied = True  # noqa: SLF001 - 运行级降级标记
+    offers = provider.search_offers_keyword_only(
         product={"title": product_zh or product_en, "title_zh": product_zh},
         keyword_profile={
             "product_type_zh": product_zh,
@@ -134,6 +166,7 @@ def _search_offers_for_product(
         },
         limit=OFFERS_PER_PRODUCT,
     )
+    return offers, "fenxiao"
 
 
 def source_category(
@@ -172,6 +205,7 @@ def source_category(
     duplicates = 0
     offers_seen = 0
     calls_used = 0
+    channels_used: set[str] = set()
     search_errors: list[str] = []
 
     for item in products:
@@ -182,7 +216,7 @@ def source_category(
         try:
             # 1688 词搜最长十余秒：先结束打开的 SQL 事务。
             db.rollback()
-            offers = _search_offers_for_product(
+            offers, channel = _search_offers_for_product(
                 provider, product_zh=product_zh, product_en=product_en
             )
         except Exception as exc:  # noqa: BLE001 - 单产品失败不阻断本类目
@@ -191,7 +225,9 @@ def source_category(
             search_errors.append(f"{product_zh}: {str(exc)[:80]}")
             continue
 
+        channels_used.add(channel)
         offers_seen += len(offers)
+        product_created = 0
         for offer in offers[:OFFERS_PER_PRODUCT]:
             title = str(getattr(offer, "title", "") or "")
             if not offer_matches_product(title, product_zh):
@@ -205,6 +241,8 @@ def source_category(
             payload = getattr(offer, "payload", None) or {}
             image_url = str(payload.get("image_url") or "").strip() or None
             moq_value = getattr(offer, "moq", None)
+            moq_int = int(moq_value) if moq_value is not None else None
+            sales_value = getattr(offer, "monthly_sales", None)
             service.create_candidate(
                 db,
                 category_id=str(node["id"]),
@@ -213,14 +251,32 @@ def source_category(
                 source_url=source_url,
                 image_url=image_url,
                 price_cny=getattr(offer, "unit_price_cny", None),
-                moq=int(moq_value) if moq_value is not None else None,
+                moq=moq_int,
                 supplier_name=str(getattr(offer, "supplier_name", "") or "") or None,
                 notes=f"画像产品: {product_zh}"
                 + (f" ({product_en})" if product_en else ""),
                 run_id=run_id,
                 source="alibaba1688",
+                profile_product_zh=product_zh or None,
+                profile_product_en=product_en or None,
+                score_json=scoring.base_components(
+                    moq=moq_int,
+                    monthly_sales=(
+                        int(sales_value) if sales_value is not None else None
+                    ),
+                    one_piece_hint=bool(getattr(offer, "one_piece_hint", False)),
+                ),
             )
             created += 1
+            product_created += 1
+
+        if product_created and product_zh:
+            # 组内价格分依赖全组，本产品落库后立即重算该组总分与 top3。
+            scoring.rescore_product_group(
+                db,
+                category_id=str(node["id"]),
+                profile_product_zh=product_zh,
+            )
 
     if created == 0:
         detail = f"；搜索失败 {len(search_errors)} 个产品" if search_errors else ""
@@ -235,4 +291,9 @@ def source_category(
         "filtered_irrelevant": filtered,
         "products_searched": len(products),
         "calls_used": calls_used,
+        "channel_note": (
+            CROSSBORDER_ACL_NOTE
+            if channels_used and "crossborder" not in channels_used
+            else None
+        ),
     }

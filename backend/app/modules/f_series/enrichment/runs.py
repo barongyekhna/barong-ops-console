@@ -232,6 +232,9 @@ def execute_run(run_id: UUID) -> None:
                         return
                     run.candidates_found += result["candidates_created"]
                     run.alibaba_calls += result["calls_used"]
+                    note = result.get("channel_note")
+                    if note and note not in node_errors:
+                        node_errors.append(note)
                 except RAQuotaExhaustedError as exc:
                     db.rollback()
                     run = db.get(FEnrichmentRun, run_id)

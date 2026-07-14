@@ -203,6 +203,11 @@ class FCategoryCandidate(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
         Index("ix_f_candidates_category_status", "category_id", "status"),
         Index("ix_f_candidates_run", "run_id"),
         Index("ix_f_candidates_created", "created_at"),
+        Index(
+            "ix_f_candidates_category_product",
+            "category_id",
+            "profile_product_zh",
+        ),
     )
 
     run_id: Mapped[UUID | None] = mapped_column(
@@ -238,6 +243,16 @@ class FCategoryCandidate(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
         server_default="pending_review",
     )
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # 对比进阶档：来源画像产品（分组键）+ 推荐分 + 组内 top3 名次
+    profile_product_zh: Mapped[str | None] = mapped_column(
+        String(200), nullable=True
+    )
+    profile_product_en: Mapped[str | None] = mapped_column(
+        String(200), nullable=True
+    )
+    score: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    score_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    recommended_rank: Mapped[int | None] = mapped_column(Integer, nullable=True)
     k_product_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
     created_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     reviewed_by_user_id: Mapped[int | None] = mapped_column(BigInteger, nullable=True)

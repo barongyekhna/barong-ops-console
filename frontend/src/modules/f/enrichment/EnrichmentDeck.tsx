@@ -17,10 +17,12 @@ import {
   Sprout,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { MouseEvent as ReactMouseEvent } from "react";
 
 import {
   createCandidate,
   createRun,
+  fetchCandidateImage,
   generateProfile,
   getCandidates,
   getKeywords,
@@ -132,6 +134,124 @@ function formatTime(value: string | null) {
   ).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
 }
 
+function scoreTooltip(parts: Record<string, number | null> | null): string {
+  if (!parts) return "推荐分";
+  return [
+    `MOQ ${parts.moq_pts ?? 0}`,
+    `月销 ${parts.sales_pts ?? 0}`,
+    `一件代发 ${parts.opa_pts ?? 0}`,
+    `价格 ${parts.price_pts ?? 0}`,
+  ].join(" · ");
+}
+
+/** 候选缩略图：走后端代理（缓存提速）+ 悬浮放大预览（移走即消失）。 */
+function CandidateImage({
+  candidateId,
+  hasImage,
+}: {
+  candidateId: string;
+  hasImage: boolean;
+}) {
+  const [thumbUrl, setThumbUrl] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    url: string;
+    top: number;
+    left: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!hasImage) return;
+    let cancelled = false;
+    void fetchCandidateImage(candidateId, "thumb").then((url) => {
+      if (!cancelled && url) setThumbUrl(url);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [candidateId, hasImage]);
+
+  if (!hasImage) return null;
+
+  const showPreview = (event: ReactMouseEvent<HTMLElement>) => {
+    const rect = event.currentTarget.getBoundingClientRect();
+    const top = Math.max(8, Math.min(rect.top - 80, window.innerHeight - 340));
+    const left = Math.min(rect.right + 14, window.innerWidth - 340);
+    setPreview({ url: thumbUrl ?? "", top, left });
+    // 大图按需拉取；鼠标已移走（preview 置空）就不再弹出。
+    void fetchCandidateImage(candidateId, "full").then((url) => {
+      if (url) {
+        setPreview((current) => (current ? { ...current, url } : current));
+      }
+    });
+  };
+
+  return (
+    <span
+      className={styles.thumbWrap}
+      onMouseEnter={showPreview}
+      onMouseLeave={() => setPreview(null)}
+    >
+      {thumbUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img alt="" className={styles.thumb} src={thumbUrl} />
+      ) : (
+        <span className={styles.thumbLoading} />
+      )}
+      {preview && preview.url ? (
+        <span
+          className={styles.previewPop}
+          style={{ left: preview.left, top: preview.top }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img alt="" src={preview.url} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+type CandidateGroup = {
+  key: string;
+  zh: string | null;
+  en: string | null;
+  items: CandidateItem[];
+};
+
+const UNGROUPED_KEY = "__ungrouped__";
+
+function groupCandidates(candidates: CandidateItem[]): CandidateGroup[] {
+  const map = new Map<string, CandidateGroup>();
+  for (const candidate of candidates) {
+    const key = candidate.profile_product_zh || UNGROUPED_KEY;
+    let group = map.get(key);
+    if (!group) {
+      group = {
+        key,
+        zh: candidate.profile_product_zh,
+        en: candidate.profile_product_en,
+        items: [],
+      };
+      map.set(key, group);
+    }
+    group.items.push(candidate);
+  }
+  const groups = [...map.values()];
+  for (const group of groups) {
+    group.items.sort((a, b) => {
+      const rankA = a.recommended_rank ?? 99;
+      const rankB = b.recommended_rank ?? 99;
+      if (rankA !== rankB) return rankA - rankB;
+      return (b.score ?? -1) - (a.score ?? -1);
+    });
+  }
+  groups.sort((a, b) => {
+    if (a.key === UNGROUPED_KEY) return 1;
+    if (b.key === UNGROUPED_KEY) return -1;
+    return (b.items[0]?.score ?? -1) - (a.items[0]?.score ?? -1);
+  });
+  return groups;
+}
+
 export function EnrichmentDeck() {
   const [childrenByParent, setChildrenByParent] = useState<
     Map<string, TreeNode[]>
@@ -147,6 +267,7 @@ export function EnrichmentDeck() {
   const [activeNode, setActiveNode] = useState<TreeNode | null>(null);
   const [keywords, setKeywords] = useState<KeywordItem[]>([]);
   const [candidates, setCandidates] = useState<CandidateItem[]>([]);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const [runs, setRuns] = useState<RunItem[]>([]);
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -858,7 +979,7 @@ export function EnrichmentDeck() {
                 </div>
               ) : null}
 
-              {/* 候选池 */}
+              {/* 候选池：按画像产品分组，组内推荐 top3，其余折叠 */}
               <h3 className={styles.sectionTitle}>
                 货源候选（{candidates.length}）
               </h3>
@@ -867,133 +988,205 @@ export function EnrichmentDeck() {
                   还没有候选。点上方「1688 找货」自动拉 3-5 个货源，或手动贴链接。
                 </p>
               ) : (
-                <ul className={styles.candidateList}>
-                  {candidates.map((candidate) => (
-                    <li className={styles.candidateRow} key={candidate.id}>
-                      {candidate.image_url ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          alt=""
-                          className={styles.thumb}
-                          loading="lazy"
-                          referrerPolicy="no-referrer"
-                          src={candidate.image_url}
+                <div className={styles.productGroups}>
+                  {groupCandidates(candidates).map((group) => {
+                    const recommended = group.items.filter(
+                      (item) => item.recommended_rank != null,
+                    );
+                    const isOpen = expandedGroups.has(group.key);
+                    const defaultVisible =
+                      recommended.length > 0
+                        ? recommended
+                        : group.items.slice(0, 3);
+                    const visible = isOpen ? group.items : defaultVisible;
+                    const hiddenCount = group.items.length - visible.length;
+                    const renderCandidate = (candidate: CandidateItem) => (
+                      <li className={styles.candidateRow} key={candidate.id}>
+                        <CandidateImage
+                          candidateId={candidate.id}
+                          hasImage={Boolean(candidate.image_url)}
                         />
-                      ) : null}
-                      <div className={styles.candidateMain}>
-                        <strong>
-                          {candidate.title}
-                          <span
-                            className={styles.sourceBadge}
-                            data-source={candidate.source}
-                          >
-                            {candidate.source === "alibaba1688"
-                              ? "1688 自动"
-                              : "手动"}
-                          </span>
-                        </strong>
-                        <span className={styles.candidateMeta}>
-                          {candidate.price_cny ? `¥${candidate.price_cny}` : null}
-                          {candidate.moq ? ` · MOQ ${candidate.moq}` : null}
-                          {candidate.supplier_name
-                            ? ` · ${candidate.supplier_name}`
-                            : null}
-                          {candidate.source_url ? (
-                            <>
-                              {" · "}
-                              <a
-                                href={candidate.source_url}
-                                rel="noreferrer"
-                                target="_blank"
+                        <div className={styles.candidateMain}>
+                          <strong>
+                            {candidate.recommended_rank != null ? (
+                              <span
+                                className={styles.rankBadge}
+                                data-rank={candidate.recommended_rank}
                               >
-                                货源
-                              </a>
+                                推荐 #{candidate.recommended_rank}
+                              </span>
+                            ) : null}
+                            {candidate.title}
+                            <span
+                              className={styles.sourceBadge}
+                              data-source={candidate.source}
+                            >
+                              {candidate.source === "alibaba1688"
+                                ? "1688 自动"
+                                : "手动"}
+                            </span>
+                            {candidate.score != null ? (
+                              <span
+                                className={styles.scoreBadge}
+                                title={scoreTooltip(candidate.score_json)}
+                              >
+                                {candidate.score} 分
+                              </span>
+                            ) : null}
+                          </strong>
+                          <span className={styles.candidateMeta}>
+                            {candidate.price_cny
+                              ? `¥${candidate.price_cny}`
+                              : null}
+                            {candidate.moq ? ` · MOQ ${candidate.moq}` : null}
+                            {candidate.supplier_name
+                              ? ` · ${candidate.supplier_name}`
+                              : null}
+                            {candidate.source_url ? (
+                              <>
+                                {" · "}
+                                <a
+                                  href={candidate.source_url}
+                                  rel="noreferrer"
+                                  target="_blank"
+                                >
+                                  货源
+                                </a>
+                              </>
+                            ) : null}
+                          </span>
+                          {candidate.red_flags.length > 0 ? (
+                            <span
+                              className={styles.redFlag}
+                              title={candidate.red_flags
+                                .map((flag) => flag.reason)
+                                .join("；")}
+                            >
+                              <ShieldAlert aria-hidden="true" size={12} />
+                              红线标记 · 已断自动链，仅可人工放行
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className={styles.candidateActions}>
+                          <span
+                            className={styles.statusBadge}
+                            data-status={candidate.status}
+                          >
+                            {candidateStatusLabel(candidate.status)}
+                          </span>
+                          {candidate.status === "pending_review" ? (
+                            <>
+                              <button
+                                className="secondary-button"
+                                disabled={busy !== null}
+                                onClick={() =>
+                                  void handleCandidateAction(
+                                    candidate,
+                                    "approve",
+                                  )
+                                }
+                                type="button"
+                              >
+                                放行
+                              </button>
+                              <button
+                                className="secondary-button"
+                                disabled={busy !== null}
+                                onClick={() =>
+                                  void handleCandidateAction(
+                                    candidate,
+                                    "reject",
+                                  )
+                                }
+                                type="button"
+                              >
+                                删除
+                              </button>
                             </>
                           ) : null}
-                        </span>
-                        {candidate.notes ? (
-                          <span className={styles.candidateMeta}>
-                            {candidate.notes}
-                          </span>
-                        ) : null}
-                        {candidate.red_flags.length > 0 ? (
-                          <span
-                            className={styles.redFlag}
-                            title={candidate.red_flags
-                              .map((flag) => flag.reason)
-                              .join("；")}
-                          >
-                            <ShieldAlert aria-hidden="true" size={12} />
-                            红线标记 · 已断自动链，仅可人工放行
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className={styles.candidateActions}>
-                        <span
-                          className={styles.statusBadge}
-                          data-status={candidate.status}
-                        >
-                          {candidateStatusLabel(candidate.status)}
-                        </span>
-                        {candidate.status === "pending_review" ? (
-                          <>
+                          {candidate.status === "approved" ? (
+                            <button
+                              className="primary-button"
+                              disabled={busy !== null}
+                              onClick={() => void handleImportToK(candidate)}
+                              type="button"
+                            >
+                              {busy === candidate.id ? (
+                                <LoaderCircle
+                                  aria-hidden="true"
+                                  className="spin"
+                                  size={13}
+                                />
+                              ) : (
+                                <ArrowRight aria-hidden="true" size={13} />
+                              )}
+                              进 K
+                            </button>
+                          ) : null}
+                          {candidate.status === "rejected" ? (
                             <button
                               className="secondary-button"
                               disabled={busy !== null}
                               onClick={() =>
-                                void handleCandidateAction(candidate, "approve")
+                                void handleCandidateAction(candidate, "reopen")
                               }
                               type="button"
                             >
-                              放行
+                              恢复
                             </button>
-                            <button
-                              className="secondary-button"
-                              disabled={busy !== null}
-                              onClick={() =>
-                                void handleCandidateAction(candidate, "reject")
-                              }
-                              type="button"
-                            >
-                              删除
-                            </button>
-                          </>
-                        ) : null}
-                        {candidate.status === "approved" ? (
+                          ) : null}
+                        </div>
+                      </li>
+                    );
+                    return (
+                      <div className={styles.productGroup} key={group.key}>
+                        <div className={styles.groupHead}>
+                          <PackagePlus aria-hidden="true" size={14} />
+                          <strong>{group.zh ?? "其他 / 手动添加"}</strong>
+                          {group.en ? (
+                            <span className={styles.groupEn}>{group.en}</span>
+                          ) : null}
+                          <span className={styles.groupCount}>
+                            {group.items.length} 家
+                          </span>
+                        </div>
+                        <ul className={styles.candidateList}>
+                          {visible.map(renderCandidate)}
+                        </ul>
+                        {hiddenCount > 0 ? (
                           <button
-                            className="primary-button"
-                            disabled={busy !== null}
-                            onClick={() => void handleImportToK(candidate)}
-                            type="button"
-                          >
-                            {busy === candidate.id ? (
-                              <LoaderCircle
-                                aria-hidden="true"
-                                className="spin"
-                                size={13}
-                              />
-                            ) : (
-                              <ArrowRight aria-hidden="true" size={13} />
-                            )}
-                            进 K
-                          </button>
-                        ) : null}
-                        {candidate.status === "rejected" ? (
-                          <button
-                            className="secondary-button"
-                            disabled={busy !== null}
+                            className={styles.expandGroupBtn}
                             onClick={() =>
-                              void handleCandidateAction(candidate, "reopen")
+                              setExpandedGroups((current) =>
+                                new Set(current).add(group.key),
+                              )
                             }
                             type="button"
                           >
-                            恢复
+                            <ChevronDown aria-hidden="true" size={13} />
+                            展开其余 {hiddenCount} 家对比
+                          </button>
+                        ) : null}
+                        {isOpen && group.items.length > defaultVisible.length ? (
+                          <button
+                            className={styles.expandGroupBtn}
+                            onClick={() =>
+                              setExpandedGroups((current) => {
+                                const next = new Set(current);
+                                next.delete(group.key);
+                                return next;
+                              })
+                            }
+                            type="button"
+                          >
+                            <ChevronRight aria-hidden="true" size={13} />
+                            收起，只看推荐
                           </button>
                         ) : null}
                       </div>
-                    </li>
-                  ))}
-                </ul>
+                    );
+                  })}
+                </div>
               )}
 
               {/* 关键词 */}

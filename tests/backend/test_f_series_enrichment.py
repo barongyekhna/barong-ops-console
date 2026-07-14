@@ -309,31 +309,48 @@ class _FakeSourcingProvider:
     相关性把关必须滤掉）。URL 按产品名确定性生成：类目内重跑必撞
     （供去重验证）；跨类目撞也无碍（去重是类目内的）。"""
 
-    def __init__(self) -> None:
+    def __init__(self, crossborder: str = "acl") -> None:
         self.calls: list[str] = []
+        self.crossborder_calls: list[str] = []
+        # "acl" = 跨境权限未开通（默认，验证自动降级）；"offers" = 权限已开通
+        self.crossborder = crossborder
+
+    def search_offers_keyword_crossborder(self, *, keyword, limit):
+        from r_system_v2.ra.supplier_api import RASupplierApiError
+
+        self.crossborder_calls.append(str(keyword))
+        if self.crossborder == "acl":
+            raise RASupplierApiError(
+                '1688 跨境词搜请求失败：HTTP 400 {"error_code":"gw.APIACLDecline"}'
+            )
+        return self._build_offers(str(keyword), limit)
 
     def search_offers_keyword_only(self, *, product, keyword_profile, limit):
+        del product
+        product_zh = str(keyword_profile.get("product_type_zh") or "")
+        self.calls.append(product_zh)
+        return self._build_offers(product_zh, limit)
+
+    def _build_offers(self, product_zh: str, limit: int):
         from decimal import Decimal
 
         from r_system_v2.ra.supplier_api import SupplierApiOffer
 
-        del product
-        product_zh = str(keyword_profile.get("product_type_zh") or "")
-        self.calls.append(product_zh)
-
-        def _offer(index: int, title: str, url_key: str) -> SupplierApiOffer:
+        def _offer(
+            index: int, title: str, url_key: str, moq: int
+        ) -> SupplierApiOffer:
             return SupplierApiOffer(
                 supplier_name=f"{product_zh}源头工厂{index + 1}",
                 supplier_url=f"https://detail.1688.com/offer/{url_key}.html",
                 title=title,
                 unit_price_cny=Decimal("38.50"),
                 domestic_shipping_cny=None,
-                moq=2,
+                moq=moq,
                 rating=None,
                 match_score=90,
                 stock=100,
                 monthly_sales=500,
-                one_piece_hint=False,
+                one_piece_hint=moq <= 1,
                 source="alibaba1688_official_keyword_search",
                 payload={
                     "offer_id": url_key,
@@ -341,16 +358,20 @@ class _FakeSourcingProvider:
                 },
             )
 
+        # 两条相关 offer 拉开 MOQ 差（1 vs 100）——MOQ 小者评分必须更高
         offers = [
             _offer(
                 index,
                 f"{product_zh}工厂直供 现货 一件代发 {index + 1}",
                 f"{product_zh}-{index}",
+                moq=1 if index == 0 else 100,
             )
             for index in range(2)
         ]
         # 1688 分销池的兜底垃圾（不含产品词）——相关性把关必须滤掉它
-        offers.append(_offer(2, "外贸剁骨刀家用砍骨头刀加厚锰钢", f"junk-{product_zh}"))
+        offers.append(
+            _offer(2, "外贸剁骨刀家用砍骨头刀加厚锰钢", f"junk-{product_zh}", moq=2)
+        )
         return offers[:limit]
 
 
@@ -390,8 +411,11 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     assert run["candidates_found"] == 8
     # 每产品预扣 CALLS_PER_PRODUCT=2：2 节点 × 2 产品 × 2
     assert run["alibaba_calls"] == 8
-    # 按画像产品名逐个搜（每节点一轮）
+    # 双通道：跨境只探一次（ACL 拒后整轮降级），其余全走分销池
+    assert fake.crossborder_calls == ["露营淋浴袋"]
     assert fake.calls == ["露营淋浴袋", "折叠水桶"] * 2
+    # 降级提示带回台账（含开放平台开通指引）
+    assert "跨境全站词搜权限未开通" in (run["error"] or "")
 
     response = f_env.get(
         "/api/app/f/candidates", params={"category_id": "f991", "status": "pending_review"}
@@ -408,6 +432,17 @@ def test_full_run_harvests_keywords_and_sources_candidates(
         "画像产品: 露营淋浴袋 (Camp Shower Bag)",
         "画像产品: 折叠水桶 (Folding Bucket)",
     }
+    # 对比进阶档：分组键+评分+组内名次都落库；MOQ=1 者必须压过 MOQ=100
+    for product_zh in ("露营淋浴袋", "折叠水桶"):
+        group = [
+            item for item in items if item["profile_product_zh"] == product_zh
+        ]
+        assert len(group) == 2
+        group.sort(key=lambda item: item["recommended_rank"])
+        assert [item["recommended_rank"] for item in group] == [1, 2]
+        assert group[0]["moq"] == 1
+        assert group[0]["score"] > group[1]["score"]
+        assert group[0]["score_json"]["moq_pts"] == 50
 
     # 同类目重跑 sourcing_only：offer URL 相同 → 全部去重 → 记「无新增货源」
     response = f_env.post(
@@ -423,6 +458,32 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     # F 独立总闸记账：3 轮找货 × 每轮 2 产品 × 2 = 12
     quota = f_env.get("/api/app/f/quota").json()
     assert quota["alibaba1688_app_calls"]["used"] == 12
+
+
+def test_sourcing_uses_crossborder_pool_when_authorized(
+    f_env: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """权限组一开通：全程走跨境大池，不再碰分销池、不再报开通提示。"""
+    from backend.app.modules.f_series.enrichment import sourcing
+
+    fake = _FakeSourcingProvider(crossborder="offers")
+    monkeypatch.setattr(sourcing, "build_provider", lambda db, org_id: fake)
+    monkeypatch.setattr(
+        sourcing.profile_engine,
+        "ensure_profile",
+        lambda db, **kwargs: _FakeProfile(),
+    )
+
+    response = f_env.post(
+        "/api/app/f/runs", json={"category_ids": ["f991"], "mode": "sourcing_only"}
+    )
+    assert response.status_code == 201
+    run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
+    assert run["status"] == "succeeded"
+    assert run["candidates_found"] == 4
+    assert run["error"] is None
+    assert fake.crossborder_calls == ["露营淋浴袋", "折叠水桶"]
+    assert fake.calls == []  # 分销池一次没碰
 
 
 def test_sourcing_stops_when_f_quota_exhausted(
@@ -447,6 +508,7 @@ def test_sourcing_stops_when_f_quota_exhausted(
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
     assert run["status"] == "quota_exhausted"
     assert "预算已用完" in (run["error"] or "")
+    assert fake.crossborder_calls == ["露营淋浴袋"]
     assert fake.calls == ["露营淋浴袋"]
     # 额度尽前已搜完的产品成果保留在候选池（run 计数器停在中断点）
     items = f_env.get(
@@ -525,6 +587,58 @@ def test_category_profile_generate_and_cache(
 
     # 不存在的类目 → 404
     assert f_env.post("/api/app/f/categories/nonexistent/profile").status_code == 404
+
+
+def test_candidate_image_proxy_caches_and_gates_hosts(
+    f_env: TestClient, monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    """图片代理：回源一次落盘，二次命中缓存；白名单外域名 404。"""
+    from backend.app.modules.f_series.enrichment import images
+
+    monkeypatch.setenv("F_IMAGE_CACHE_DIR", str(tmp_path))
+    calls = {"n": 0}
+    fake_jpeg = b"\xff\xd8\xff" + b"fakeimg" * 8
+
+    def fake_download(url: str) -> bytes:
+        calls["n"] += 1
+        return fake_jpeg
+
+    monkeypatch.setattr(images, "_download", fake_download)
+
+    created = f_env.post(
+        "/api/app/f/candidates",
+        json={
+            "category_id": "f991",
+            "title": "带图候选",
+            "image_url": "https://cbu01.alicdn.com/img/test.jpg",
+        },
+    )
+    assert created.status_code == 201, created.text
+    candidate_id = created.json()["id"]
+
+    first = f_env.get(
+        f"/api/app/f/candidates/{candidate_id}/image", params={"variant": "thumb"}
+    )
+    assert first.status_code == 200
+    assert first.headers["content-type"] == "image/jpeg"
+    assert first.content == fake_jpeg
+    second = f_env.get(
+        f"/api/app/f/candidates/{candidate_id}/image", params={"variant": "thumb"}
+    )
+    assert second.status_code == 200
+    assert calls["n"] == 1  # 第二次命中磁盘缓存，不再回源
+
+    bad = f_env.post(
+        "/api/app/f/candidates",
+        json={
+            "category_id": "f991",
+            "title": "白名单外图源",
+            "image_url": "https://evil.example.com/x.jpg",
+        },
+    )
+    assert bad.status_code == 201
+    response = f_env.get(f"/api/app/f/candidates/{bad.json()['id']}/image")
+    assert response.status_code == 404
 
 
 def test_run_rejects_oversized_or_unknown_selection(f_env: TestClient) -> None:

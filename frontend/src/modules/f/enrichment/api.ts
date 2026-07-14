@@ -78,6 +78,11 @@ export type CandidateItem = {
   automation_blocked: boolean;
   status: string;
   notes: string | null;
+  profile_product_zh: string | null;
+  profile_product_en: string | null;
+  score: number | null;
+  score_json: Record<string, number | null> | null;
+  recommended_rank: number | null;
   k_product_id: string | null;
   created_at: string | null;
 };
@@ -275,6 +280,39 @@ export async function importCandidateToK(
     { cache: "no-store", headers: buildHeaders(), method: "POST" },
   );
   return readJson(response, "搬进 K 失败");
+}
+
+// 候选图片走后端代理（服务端回源 alicdn + 磁盘缓存，绕防盗链并提速）。
+// objectURL 模块级缓存：列表刷新/分组开合不重复拉图。
+const imageUrlCache = new Map<string, string>();
+const imageInflight = new Map<string, Promise<string | null>>();
+
+export function fetchCandidateImage(
+  candidateId: string,
+  variant: "thumb" | "full",
+): Promise<string | null> {
+  const cacheKey = `${candidateId}:${variant}`;
+  const cached = imageUrlCache.get(cacheKey);
+  if (cached) return Promise.resolve(cached);
+  const inflight = imageInflight.get(cacheKey);
+  if (inflight) return inflight;
+  const promise = fetch(
+    `${API_PROXY_BASE}/f/candidates/${candidateId}/image?variant=${variant}`,
+    { headers: buildHeaders(), method: "GET" },
+  )
+    .then(async (response) => {
+      if (!response.ok) return null;
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      imageUrlCache.set(cacheKey, url);
+      return url;
+    })
+    .catch(() => null)
+    .finally(() => {
+      imageInflight.delete(cacheKey);
+    });
+  imageInflight.set(cacheKey, promise);
+  return promise;
 }
 
 export async function getQuota(): Promise<QuotaResponse> {

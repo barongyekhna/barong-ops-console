@@ -68,6 +68,8 @@ services:
       RA_DEEPSEEK_KEYWORD_TIMEOUT_SECONDS: "60"
       # F 系列 1688 独立总闸：全量 10 万/天里 R-A 占 9 万，剩 1 万归 F 批量找货
       F_1688_APP_CALLS_DAILY_BUDGET: "10000"
+      # F 候选图片代理缓存（绕 alicdn 防盗链 + 提速）
+      F_IMAGE_CACHE_DIR: "/var/lib/barong/f-media"
       DB_POOL_SIZE: "10"
       DB_MAX_OVERFLOW: "20"
       DB_POOL_RECYCLE_SECONDS: "600"
@@ -80,6 +82,7 @@ services:
     volumes:
       - console_i_media_data:/var/lib/barong/i-media
       - console_k_media_data:/var/lib/barong/k-media
+      - console_f_media_data:/var/lib/barong/f-media
     depends_on:
       console_postgres:
         condition: service_healthy
@@ -135,6 +138,7 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    init: true
     env_file:
       - .env.production
     environment:
@@ -309,3 +313,5 @@ volumes:
     name: console_i_media_data
   console_k_media_data:
     name: console_k_media_data
+  console_f_media_data:
+    name: console_f_media_data

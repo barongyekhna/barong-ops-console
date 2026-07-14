@@ -135,3 +135,86 @@ def test_profile_parser_tolerates_markdown_fence_and_caps() -> None:
     assert products == [
         {"en": "Camp shower", "zh": "露营淋浴", "note_zh": "户外洗澡"}
     ]
+
+
+def test_scoring_moq_dominates_and_smaller_is_higher() -> None:
+    """MOQ 是最重加分项（0-50）：越小分越高；未知 MOQ 不得压过已知小单。"""
+    from backend.app.modules.f_series.enrichment.scoring import base_components
+
+    tiny = base_components(moq=1, monthly_sales=None, one_piece_hint=True)
+    big = base_components(moq=500, monthly_sales=None, one_piece_hint=False)
+    unknown = base_components(moq=None, monthly_sales=None, one_piece_hint=False)
+    assert tiny["moq_pts"] == 50
+    assert tiny["moq_pts"] > unknown["moq_pts"] > big["moq_pts"] >= 0
+    assert tiny["opa_pts"] == 10
+    assert big["opa_pts"] == 0
+
+
+def test_scoring_sales_log_scale_caps() -> None:
+    from backend.app.modules.f_series.enrichment.scoring import base_components
+
+    zero = base_components(moq=1, monthly_sales=0, one_piece_hint=False)
+    mid = base_components(moq=1, monthly_sales=1000, one_piece_hint=False)
+    top = base_components(moq=1, monthly_sales=100000, one_piece_hint=False)
+    assert zero["sales_pts"] == 0
+    assert 0 < mid["sales_pts"] < top["sales_pts"] <= 25
+
+
+def test_price_points_relative_within_group() -> None:
+    from decimal import Decimal
+
+    from backend.app.modules.f_series.enrichment.scoring import _price_points
+
+    low, high = Decimal("10"), Decimal("50")
+    assert _price_points(Decimal("10"), low, high) == 15
+    assert _price_points(Decimal("50"), low, high) == 0
+    assert _price_points(None, low, high) == 8  # 无价给中位
+    assert _price_points(Decimal("30"), low, low) == 8  # 组内同价给中位
+
+
+def test_crossborder_keyword_normalizer_parses_doc_shape() -> None:
+    """跨境词搜 keywordQuery 出参（result.result.data[]）防御性解析。"""
+    from decimal import Decimal
+
+    from r_system_v2.ra.supplier_api import _normalize_crossborder_keyword_offers
+
+    payload = {
+        "result": {
+            "result": {
+                "totalRecords": 3,
+                "data": [
+                    {
+                        "offerId": 111,
+                        "subject": "钛合金叉勺户外餐具",
+                        "subjectTrans": "Titanium spork",
+                        "imageUrl": "https://cbu01.alicdn.com/x.jpg",
+                        "priceInfo": {"price": "12.50", "consignPrice": "15.00"},
+                        "monthlySold": 320,
+                        "isOnePsale": True,
+                        "minOrderQuantity": 2,
+                    },
+                    {"subject": "无 offerId 无链接应跳过"},
+                    {"offerId": 222, "subject": "低价拦截", "priceInfo": {"price": "0.5"}},
+                ],
+            }
+        }
+    }
+    offers = _normalize_crossborder_keyword_offers(payload, limit=5)
+    assert len(offers) == 1
+    offer = offers[0]
+    assert offer.supplier_url == "https://detail.1688.com/offer/111.html"
+    assert offer.unit_price_cny == Decimal("12.50")
+    assert offer.moq == 2
+    assert offer.monthly_sales == 320
+    assert offer.one_piece_hint is True
+    assert offer.payload["image_url"] == "https://cbu01.alicdn.com/x.jpg"
+
+
+def test_acl_denied_detection() -> None:
+    from r_system_v2.ra.supplier_api import RASupplierApiError, is_acl_denied
+
+    assert is_acl_denied(
+        RASupplierApiError('请求失败：HTTP 400 {"error_code":"gw.APIACLDecline"}')
+    )
+    assert is_acl_denied(RASupplierApiError("AppKey is not allowed(acl)"))
+    assert not is_acl_denied(RASupplierApiError("read timeout"))
