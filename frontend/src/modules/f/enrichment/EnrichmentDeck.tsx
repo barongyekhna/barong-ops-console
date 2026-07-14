@@ -616,6 +616,7 @@ export function EnrichmentDeck() {
               ).map(({ node, depth }) => (
                 <li
                   className={styles.nodeRow}
+                  data-selected={selected.has(node.id) || undefined}
                   key={node.id}
                   style={{ paddingLeft: `${6 + depth * 16}px` }}
                 >
@@ -1083,10 +1084,31 @@ export function EnrichmentDeck() {
                   <tr key={run.run_id}>
                     <td className={styles.timeCell}>{formatTime(run.created_at)}</td>
                     <td className={styles.selectionCell}>
-                      {run.selection
-                        .slice(0, 3)
-                        .map((node) => node.name)
-                        .join("、")}
+                      {run.selection.slice(0, 3).map((item, index) => (
+                        <span key={item.id}>
+                          {index > 0 ? "、" : ""}
+                          <button
+                            className={styles.linkButton}
+                            onClick={() =>
+                              openDetail({
+                                id: item.id,
+                                name: item.name,
+                                name_zh: null,
+                                full_path: item.full_path,
+                                level: 0,
+                                is_leaf: false,
+                                children_count: 0,
+                                keywords_count: 0,
+                                candidates_count: 0,
+                              })
+                            }
+                            title="打开该类目详情（关键词与货源候选都在里面）"
+                            type="button"
+                          >
+                            {item.name}
+                          </button>
+                        </span>
+                      ))}
                       {run.selection.length > 3
                         ? ` 等 ${run.categories_total} 节点`
                         : ""}

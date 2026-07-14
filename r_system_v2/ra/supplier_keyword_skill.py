@@ -1276,7 +1276,9 @@ def _deepseek_timeout_seconds() -> float:
         parsed = float(value)
     except ValueError:
         return 12.0
-    return max(3.0, min(parsed, 30.0))
+    # 上限 90：deepseek-v4-pro 常规响应可超 12s；R-A 夜巡不配 env 仍走 12s
+    # 快速失败，F 手动找货在 compose 里显式配大值（用户在场等得起）。
+    return max(3.0, min(parsed, 90.0))
 
 
 def _deepseek_match_timeout_seconds() -> float:

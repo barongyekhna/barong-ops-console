@@ -244,12 +244,24 @@
 .nodeCheck {
   display: flex;
   align-items: center;
-  padding: 6px 2px;
+  padding: 8px 6px;
+  cursor: pointer;
 }
 
 .nodeCheck input {
   accent-color: #39d4ff;
   cursor: pointer;
+  width: 16px;
+  height: 16px;
+}
+
+.nodeRow[data-selected] {
+  background: rgb(57 212 255 / 10%);
+  box-shadow: inset 2px 0 0 rgb(57 212 255 / 70%);
+}
+
+.nodeRow[data-selected] .nodeName {
+  color: #eafaff;
 }
 
 .nodeMain {
