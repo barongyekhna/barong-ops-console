@@ -276,6 +276,15 @@ export function EnrichmentDeck() {
     };
   }, [hasActiveRun, loadRunsAndQuota]);
 
+  // 运行结束沿（running→idle）自动刷新右栏详情——找货/爬词完成后结果自己出现
+  const prevActiveRun = useRef(false);
+  useEffect(() => {
+    if (prevActiveRun.current && !hasActiveRun && activeNode) {
+      void loadDetail(activeNode);
+    }
+    prevActiveRun.current = hasActiveRun;
+  }, [hasActiveRun, activeNode, loadDetail]);
+
   const toggleSelect = useCallback((node: TreeNode) => {
     setSelected((prev) => {
       const next = new Map(prev);
@@ -369,8 +378,8 @@ export function EnrichmentDeck() {
     try {
       await createRun([activeNode.id], "sourcing_only");
       setNotice(
-        `「${activeNode.name}」已排队 1688 找货（用该类目现有关键词生成中文采购词），` +
-          "完成后候选自动出现在下方候选池。",
+        `「${activeNode.name_zh || activeNode.name}」已排队 1688 找货` +
+          "（用该类目现有关键词生成中文采购词，约 1-2 分钟）——完成后本页自动刷新，候选出现在下方候选池。",
       );
       await loadRunsAndQuota();
     } catch (sourceError) {
