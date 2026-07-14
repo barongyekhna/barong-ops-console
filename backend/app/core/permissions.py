@@ -265,6 +265,42 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        "permission_key": "f.enrichment.read",
+        "module_key": "f.enrichment",
+        "category": "business",
+        "action": "read",
+        "label": "Read category enrichment",
+        "description": "View F-series enrichment runs, keywords, and candidates.",
+        "risk_level": RISK_LEVEL_LOW,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "f.enrichment.execute",
+        "module_key": "f.enrichment",
+        "category": "business",
+        "action": "execute",
+        "label": "Execute enrichment runs",
+        "description": (
+            "Start keyword harvest and 1688 sourcing runs over selected "
+            "Google taxonomy branches (consumes daily provider quota)."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "f.enrichment.review",
+        "module_key": "f.enrichment",
+        "category": "business",
+        "action": "manage",
+        "label": "Review enrichment candidates",
+        "description": (
+            "Create and review sourcing candidates (approve / reject) and "
+            "import approved candidates into K."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "operation_logs.read",
         "module_key": "operation_logs",
         "category": "system",
