@@ -13,7 +13,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, text
 
 from r_system_v2.core.secret_manager import SecretManager
 
@@ -757,6 +757,123 @@ def test_manual_refresh_updates_tracking_and_missing_key_is_409(
     )
     assert response.status_code == 409
     assert response.json()["detail"] == "17TRACK 密钥未绑定（去密钥管理添加）。"
+
+
+def test_shipping_template_delete_lifecycle(
+    logistics_env: dict[str, object],
+) -> None:
+    """删除三态：草稿直删；已同步派 n8n 回调后删；有产品挂靠拒绝。"""
+    client = logistics_env["client"]
+    calls = logistics_env["calls"]
+    assert isinstance(client, TestClient)
+    assert isinstance(calls, list)
+
+    # ① 草稿（无 woo_class_id）：直接删本地，不派 n8n
+    response = client.post(
+        "/api/app/w/shipping/classes",
+        json={"slug": "ws-del-draft", "name": "Draft only", "origin": "cn_direct"},
+    )
+    assert response.status_code == 201
+    draft_id = response.json()["id"]
+    calls_before = len(calls)
+    response = client.delete(f"/api/app/w/shipping/classes/{draft_id}")
+    assert response.status_code == 202
+    assert response.json() == {"deleted": True, "dispatched": False}
+    assert len(calls) == calls_before  # 没有 n8n 派单
+    response = client.get("/api/app/w/shipping/classes")
+    assert all(item["slug"] != "ws-del-draft" for item in response.json())
+
+    # ② 已同步（有 woo_class_id）：派 delete_shipping_class，回调 success 后行删除
+    with SessionLocal() as db:
+        synced = WShippingClass(
+            slug="ws-del-synced",
+            name="Synced template",
+            origin="cn_direct",
+            active=True,
+            sort_order=998,
+            sync_status="synced",
+            woo_class_id=881,
+        )
+        db.add(synced)
+        db.commit()
+        synced_id = str(synced.id)
+
+    response = client.delete(f"/api/app/w/shipping/classes/{synced_id}")
+    assert response.status_code == 202, response.text
+    body = response.json()
+    assert body["deleted"] is False
+    assert body["dispatched"] is True
+    job_id = body["job_id"]
+
+    dispatch = next(
+        call
+        for call in calls
+        if call["url"] == _N8N_WEBHOOK and call["payload"]["job_id"] == job_id
+    )
+    assert dispatch["payload"]["action"] == "delete_shipping_class"
+    assert dispatch["payload"]["payload"] == {
+        "slug": "ws-del-synced",
+        "woo_class_id": 881,
+    }
+
+    with SessionLocal() as db:
+        job = db.scalar(select(WSyncJob).where(WSyncJob.job_id == job_id))
+        assert job is not None
+        token = job.token
+
+    response = client.post(
+        f"/w/sync/{job_id}/result",
+        headers={"X-Job-Token": token},
+        json={"status": "success"},
+    )
+    assert response.status_code == 200
+    with SessionLocal() as db:
+        assert db.get(WShippingClass, UUID(synced_id)) is None  # 行已删
+
+    # ③ 有产品挂靠：拒绝删除
+    with SessionLocal() as db:
+        referenced = WShippingClass(
+            slug="ws-del-referenced",
+            name="Referenced template",
+            origin="cn_direct",
+            active=True,
+            sort_order=997,
+        )
+        db.add(referenced)
+        db.flush()
+        referenced_id = str(referenced.id)
+        from backend.app.modules.k_series.product_knowledge.models import (
+            KProductKnowledgeProduct,
+        )
+        from backend.app.modules.k_series.product_knowledge.service import (
+            _generate_unique_product_key,
+        )
+
+        db.add(
+            KProductKnowledgeProduct(
+                product_key=_generate_unique_product_key(db),
+                product_name_en="WS delete guard product",
+                channel="dtc",
+                shipping_class="ws-del-referenced",
+            )
+        )
+        db.commit()
+
+    response = client.delete(f"/api/app/w/shipping/classes/{referenced_id}")
+    assert response.status_code == 409
+    assert "个产品挂在此模板上" in response.json()["detail"]
+
+    with SessionLocal() as db:
+        db.execute(
+            text(
+                "DELETE FROM k_product_knowledge_products "
+                "WHERE shipping_class = 'ws-del-referenced'"
+            )
+        )
+        db.execute(
+            text("DELETE FROM w_shipping_classes WHERE slug LIKE 'ws-del-%'")
+        )
+        db.commit()
 
 
 def test_new_human_endpoints_require_w_permissions(

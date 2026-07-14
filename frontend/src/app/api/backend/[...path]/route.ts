@@ -1107,7 +1107,7 @@ function isAllowedWPath(method: string, path: string[]) {
     path[2] === "classes" &&
     isUuidPathSegment(path[3])
   ) {
-    return method === "PATCH";
+    return method === "PATCH" || method === "DELETE";
   }
   if (
     path.length === 5 &&

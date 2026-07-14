@@ -14,6 +14,7 @@ import {
   getShippingClasses,
   getShippingRules,
   patchOrderTracking,
+  deleteShippingClass,
   patchShippingClass,
   patchShippingProduct,
   patchShippingRule,
@@ -663,6 +664,28 @@ export function ShippingDeck() {
         await refreshClasses();
       } catch (syncError) {
         setError(errorMessage(syncError));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [refreshClasses],
+  );
+
+  const handleDeleteClass = useCallback(
+    async (classId: string) => {
+      setBusy(`class-delete:${classId}`);
+      setError(null);
+      setNotice(null);
+      try {
+        const result = await deleteShippingClass(classId);
+        setNotice(
+          result.deleted
+            ? "本地草稿模板已删除（未同步过 Woo，无需远端操作）。"
+            : "删除任务已派给 n8n——Woo 侧删除成功回报后，本地模板会自动消失。",
+        );
+        await refreshClasses();
+      } catch (deleteError) {
+        setError(errorMessage(deleteError));
       } finally {
         setBusy(null);
       }
@@ -1580,6 +1603,19 @@ export function ShippingDeck() {
                                 type="button"
                               >
                                 重试同步
+                              </button>
+                            ) : null}
+                            {row.id ? (
+                              <button
+                                className="secondary-button"
+                                disabled={rowBusy || busy !== null || syncInFlight}
+                                onClick={() =>
+                                  void handleDeleteClass(row.id as string)
+                                }
+                                title="已同步过的会先删 Woo 侧（经 n8n），回报成功后本地删除；有产品挂靠时会被拒绝"
+                                type="button"
+                              >
+                                删除
                               </button>
                             ) : null}
                           </span>

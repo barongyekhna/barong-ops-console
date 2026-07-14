@@ -323,6 +323,17 @@ export async function syncShippingClass(id: string): Promise<unknown> {
   return readJson<unknown>(response, "同步到 Woo");
 }
 
+export async function deleteShippingClass(
+  id: string,
+): Promise<{ deleted: boolean; dispatched: boolean }> {
+  const response = await fetch(`${API_PROXY_BASE}/w/shipping/classes/${id}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "DELETE",
+  });
+  return readJson(response, "删除模板");
+}
+
 export async function getOrders(
   filter: WOrderFilter = "all",
 ): Promise<WOrdersResponse> {

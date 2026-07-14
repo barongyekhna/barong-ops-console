@@ -12,7 +12,7 @@ import os
 import secrets
 import urllib.error
 import urllib.request
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -66,6 +66,11 @@ def _public_base() -> str:
     return (
         os.getenv("PUBLIC_BASE_URL") or "https://ops.barongyekhna.com"
     ).strip().rstrip("/")
+
+
+def _callback_base() -> str:
+    """n8n 回调控制台用的 base（照 P 的口径：内网直连优先，公网回退）。"""
+    return (os.getenv("W_CALLBACK_BASE") or _public_base()).strip().rstrip("/")
 
 
 def _track17_base() -> str:
@@ -171,7 +176,7 @@ def _n8n_envelope(job: WSyncJob) -> dict[str, Any]:
         "action": _job_action(job),
         "token": job.token,
         "payload": _job_payload(job),
-        "callback_url": f"{_public_base()}/w/sync/{job.job_id}/result",
+        "callback_url": f"{_callback_base()}/w/sync/{job.job_id}/result",
     }
 
 
@@ -221,6 +226,43 @@ def _lock_job_and_target(
         .execution_options(populate_existing=True)
     )
     return job, target
+
+
+SYNC_STALE_MINUTES = 15
+
+
+def reap_stale_sync_jobs(db: Session) -> int:
+    """惰性收尸（照 P 队列语义）：dispatched 超过 15 分钟无回调按失联标 failed，
+    连带把卡在 pending 的模板/回传状态放回 failed，让「重试同步」按钮有出口。"""
+
+    deadline = _now() - timedelta(minutes=SYNC_STALE_MINUTES)
+    stale = list(
+        db.scalars(
+            select(WSyncJob)
+            .where(WSyncJob.status == "dispatched")
+            .where(WSyncJob.dispatched_at < deadline)
+            .with_for_update(skip_locked=True)
+        ).all()
+    )
+    for job in stale:
+        job.status = "failed"
+        job.error = (
+            f"n8n 超过 {SYNC_STALE_MINUTES} 分钟未回传，按失联处理"
+            "（检查 n8n 执行记录后可重试）"
+        )
+        job.finished_at = _now()
+        if job.target_type == "shipping_class":
+            row = db.get(WShippingClass, job.target_id)
+            if row is not None and row.sync_status == "pending":
+                row.sync_status = "failed"
+                row.sync_error = job.error
+        elif job.target_type == "order_tracking":
+            order = db.get(WOrder, job.target_id)
+            if order is not None and order.writeback_status == "pending":
+                order.writeback_status = "failed"
+    if stale:
+        db.flush()
+    return len(stale)
 
 
 def dispatch_sync_job(db: Session, job_id: str) -> tuple[WSyncJob, bool]:
@@ -350,6 +392,47 @@ def create_shipping_sync_job(
     return job
 
 
+def create_shipping_delete_job(
+    db: Session,
+    shipping_class: WShippingClass,
+) -> WSyncJob:
+    """派 n8n 删除 Woo 侧运费模板；回调 success 后本地行才真正删除。
+
+    未来 GMC 同步走同一形状：action 命名空间预留 *_shipping_class 系列
+    （upsert/delete），执行端按 action 分发即可扩展。
+    """
+
+    existing = db.scalar(
+        select(WSyncJob.id)
+        .where(WSyncJob.target_type == "shipping_class")
+        .where(WSyncJob.target_id == shipping_class.id)
+        .where(WSyncJob.status.in_(SYNC_IN_FLIGHT_STATUSES))
+        .limit(1)
+    )
+    if existing is not None:
+        raise RuntimeError("该模板已有同步任务在执行中。")
+
+    job = WSyncJob(
+        job_id=uuid4().hex,
+        target_type="shipping_class",
+        target_id=shipping_class.id,
+        token=secrets.token_urlsafe(32),
+        status="pending",
+        payload_json={
+            "action": "delete_shipping_class",
+            "payload": {
+                "slug": shipping_class.slug,
+                "woo_class_id": shipping_class.woo_class_id,
+            },
+        },
+    )
+    shipping_class.sync_status = "pending"
+    shipping_class.sync_error = None
+    db.add(job)
+    db.flush()
+    return job
+
+
 def supersede_order_writeback_jobs(db: Session, order_id: UUID) -> None:
     """Drop obsolete queued values without cancelling an already running flow."""
 
@@ -419,8 +502,13 @@ def record_sync_result(
     job.finished_at = _now()
     if job.target_type == "shipping_class":
         row = target if isinstance(target, WShippingClass) else None
+        stored = job.payload_json if isinstance(job.payload_json, dict) else {}
+        job_action = str(stored.get("action") or "upsert_shipping_class")
         if row is not None:
-            if result_status == "success":
+            if result_status == "success" and job_action == "delete_shipping_class":
+                # Woo 侧已删，本地行随之删除（删除同步的最终一致点）。
+                db.delete(row)
+            elif result_status == "success":
                 row.sync_status = "synced"
                 if woo_class_id is not None:
                     row.woo_class_id = woo_class_id

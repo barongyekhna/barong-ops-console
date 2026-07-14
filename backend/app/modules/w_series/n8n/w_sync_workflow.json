@@ -1,0 +1,353 @@
+{
+  "name": "barong控制台-W系列-运费与物流同步",
+  "active": true,
+  "settings": {},
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "barong-w-shipping",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "b1111111-1111-4111-8111-111111111111",
+      "name": "Webhook 触发",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [0, 400],
+      "webhookId": "barong-w-shipping-webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// 控制台派单信封：{job_id, action, token, payload, callback_url}\nconst body = $input.first().json.body || $input.first().json;\nreturn [{ json: {\n  job_id: body.job_id,\n  action: body.action,\n  token: body.token,\n  callback_url: body.callback_url,\n  p: body.payload || {},\n} }];"
+      },
+      "id": "b2222222-2222-4222-8222-222222222222",
+      "name": "解析任务",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [200, 400]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "version": 2, "typeValidation": "strict"},
+                "combinator": "and",
+                "conditions": [
+                  {"leftValue": "={{ $json.action }}", "rightValue": "upsert_shipping_class", "operator": {"type": "string", "operation": "equals"}}
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "upsert"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "version": 2, "typeValidation": "strict"},
+                "combinator": "and",
+                "conditions": [
+                  {"leftValue": "={{ $json.action }}", "rightValue": "delete_shipping_class", "operator": {"type": "string", "operation": "equals"}}
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "delete"
+            },
+            {
+              "conditions": {
+                "options": {"caseSensitive": true, "version": 2, "typeValidation": "strict"},
+                "combinator": "and",
+                "conditions": [
+                  {"leftValue": "={{ $json.action }}", "rightValue": "order_tracking", "operator": {"type": "string", "operation": "equals"}}
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "tracking"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b3333333-3333-4333-8333-333333333333",
+      "name": "按动作分流",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [400, 400]
+    },
+
+    {
+      "parameters": {
+        "url": "={{ 'https://barongyekhna.com/wp-json/wc/v3/products/shipping_classes?per_page=100&search=' + encodeURIComponent($json.p.slug) }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "id": "b4444444-4444-4444-8444-444444444444",
+      "name": "查已有模板",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 160],
+      "alwaysOutputData": true,
+      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "// 存在同 slug 则 PUT，否则 POST（编辑=upsert 天然覆盖）\nconst task = $('解析任务').first().json;\nconst found = ($input.all() || []).map(i => i.json).filter(j => j && j.slug === task.p.slug);\nconst existingId = task.p.woo_class_id || (found.length ? found[0].id : null);\nconst base = 'https://barongyekhna.com/wp-json/wc/v3/products/shipping_classes';\nreturn [{ json: {\n  ...task,\n  woo_method: existingId ? 'PUT' : 'POST',\n  woo_url: existingId ? `${base}/${existingId}` : base,\n  woo_body: { name: task.p.name, slug: task.p.slug, description: task.p.description || '' },\n} }];"
+      },
+      "id": "b5555555-5555-4555-8555-555555555555",
+      "name": "定建改",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 160]
+    },
+    {
+      "parameters": {
+        "method": "={{ $json.woo_method }}",
+        "url": "={{ $json.woo_url }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.woo_body) }}",
+        "options": {}
+      },
+      "id": "b6666666-6666-4666-8666-666666666666",
+      "name": "写模板",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1060, 160],
+      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "// 记下 Woo class id；把区域费率摊平成待办（无费率则空跑直达回报）\nconst task = $('解析任务').first().json;\nconst wooClass = $input.first().json;\nconst wooClassId = wooClass.id || task.p.woo_class_id;\nconst rates = Array.isArray(task.p.zone_rates) ? task.p.zone_rates : [];\nreturn [{ json: { ...task, woo_class_id: wooClassId, zone_rates: rates, has_rates: rates.length > 0 } }];"
+      },
+      "id": "b7777777-7777-4777-8777-777777777777",
+      "name": "记模板ID",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1280, 160]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {"caseSensitive": true, "version": 2, "typeValidation": "strict"},
+          "combinator": "and",
+          "conditions": [
+            {"leftValue": "={{ $json.has_rates }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true", "singleValue": true}}
+          ]
+        },
+        "options": {}
+      },
+      "id": "b8888888-8888-4888-8888-888888888888",
+      "name": "有区域费率?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [1500, 160]
+    },
+    {
+      "parameters": {
+        "url": "https://barongyekhna.com/wp-json/wc/v3/shipping/zones",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "id": "b9999999-9999-4999-8999-999999999999",
+      "name": "查区域",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1720, 60],
+      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "// zone_name（大小写不敏感）→ zone_id；未匹配的记 warning 跳过\nconst task = $('记模板ID').first().json;\nconst zones = $input.all().map(i => i.json);\nconst out = [];\nconst warnings = [];\nfor (const rate of task.zone_rates) {\n  const zone = zones.find(z => String(z.name || '').trim().toLowerCase() === String(rate.zone_name || '').trim().toLowerCase());\n  if (!zone) { warnings.push(`区域未找到: ${rate.zone_name}`); continue; }\n  out.push({ json: { job_id: task.job_id, token: task.token, callback_url: task.callback_url, woo_class_id: task.woo_class_id, zone_id: zone.id, base_cost: rate.base_cost, class_cost: rate.class_cost, warnings } });\n}\nif (!out.length) {\n  out.push({ json: { job_id: task.job_id, token: task.token, callback_url: task.callback_url, woo_class_id: task.woo_class_id, zone_id: null, warnings } });\n}\nreturn out;"
+      },
+      "id": "ba111111-1111-4111-8111-11111111111a",
+      "name": "匹配区域",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1940, 60]
+    },
+    {
+      "parameters": {
+        "url": "={{ 'https://barongyekhna.com/wp-json/wc/v3/shipping/zones/' + $json.zone_id + '/methods' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "id": "ba222222-2222-4222-8222-22222222222a",
+      "name": "查区域方法",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2160, 60],
+      "alwaysOutputData": true,
+      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "// 找 flat_rate 实例 → 组 settings（基础运费 + 本类别附加 class_cost_{classId}）\nconst rateTask = $('匹配区域').first().json;\nconst methods = $input.all().map(i => i.json);\nconst flat = methods.find(m => m.method_id === 'flat_rate');\nif (!rateTask.zone_id || !flat) {\n  return [{ json: { ...rateTask, skip: true } }];\n}\nconst settings = {};\nif (rateTask.base_cost !== undefined && rateTask.base_cost !== null && rateTask.base_cost !== '') settings.cost = String(rateTask.base_cost);\nif (rateTask.class_cost !== undefined && rateTask.class_cost !== null && rateTask.class_cost !== '') settings['class_cost_' + rateTask.woo_class_id] = String(rateTask.class_cost);\nreturn [{ json: { ...rateTask, skip: false, instance_id: flat.instance_id, settings_body: { settings } } }];"
+      },
+      "id": "ba333333-3333-4333-8333-33333333333a",
+      "name": "组费率更新",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2380, 60]
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ 'https://barongyekhna.com/wp-json/wc/v3/shipping/zones/' + $json.zone_id + '/methods/' + $json.instance_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.settings_body) }}",
+        "options": {}
+      },
+      "id": "ba444444-4444-4444-8444-44444444444a",
+      "name": "写区域费率",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [2600, 60],
+      "alwaysOutputData": true,
+      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "// 多区域 item 收拢成一次回报\nconst first = $('记模板ID').first().json;\nreturn [{ json: { callback_url: first.callback_url, token: first.token, report: { status: 'success', woo_class_id: first.woo_class_id } } }];"
+      },
+      "id": "ba555555-5555-4555-8555-55555555555a",
+      "name": "组回报-模板",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [2820, 160],
+      "executeOnce": true
+    },
+
+    {
+      "parameters": {
+        "method": "DELETE",
+        "url": "={{ 'https://barongyekhna.com/wp-json/wc/v3/products/shipping_classes/' + $json.p.woo_class_id + '?force=true' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "options": {}
+      },
+      "id": "bb111111-1111-4111-8111-11111111111b",
+      "name": "删Woo模板",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 400],
+      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const task = $('解析任务').first().json;\nreturn [{ json: { callback_url: task.callback_url, token: task.token, report: { status: 'success' } } }];"
+      },
+      "id": "bb222222-2222-4222-8222-22222222222b",
+      "name": "组回报-删除",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [840, 400],
+      "executeOnce": true
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ 'https://barongyekhna.com/wp-json/wc/v3/orders/' + $json.p.woo_order_id + '/notes' }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ note: '物流单号：' + $json.p.tracking_number + ($json.p.carrier_label ? '（承运商代码 ' + $json.p.carrier_label + '）' : '') + '，可在 17TRACK 查询轨迹。', customer_note: true }) }}",
+        "options": {}
+      },
+      "id": "bc111111-1111-4111-8111-11111111111c",
+      "name": "写订单备注",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [620, 640],
+      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+    },
+    {
+      "parameters": {
+        "method": "PUT",
+        "url": "={{ 'https://barongyekhna.com/wp-json/wc/v3/orders/' + $('解析任务').first().json.p.woo_order_id }}",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBasicAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ meta_data: [ { key: '_barong_tracking_number', value: $('解析任务').first().json.p.tracking_number }, { key: '_barong_tracking_carrier', value: String($('解析任务').first().json.p.carrier_label || '') } ] }) }}",
+        "options": {}
+      },
+      "id": "bc222222-2222-4222-8222-22222222222c",
+      "name": "写订单元数据",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [840, 640],
+      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+    },
+    {
+      "parameters": {
+        "jsCode": "const task = $('解析任务').first().json;\nreturn [{ json: { callback_url: task.callback_url, token: task.token, report: { status: 'success' } } }];"
+      },
+      "id": "bc333333-3333-4333-8333-33333333333c",
+      "name": "组回报-单号",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1060, 640],
+      "executeOnce": true
+    },
+
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.callback_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {"name": "X-Job-Token", "value": "={{ $json.token }}"}
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.report) }}",
+        "options": {}
+      },
+      "id": "bd111111-1111-4111-8111-11111111111d",
+      "name": "回报控制台",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [3040, 400]
+    }
+  ],
+  "connections": {
+    "Webhook 触发": {"main": [[{"node": "解析任务", "type": "main", "index": 0}]]},
+    "解析任务": {"main": [[{"node": "按动作分流", "type": "main", "index": 0}]]},
+    "按动作分流": {"main": [
+      [{"node": "查已有模板", "type": "main", "index": 0}],
+      [{"node": "删Woo模板", "type": "main", "index": 0}],
+      [{"node": "写订单备注", "type": "main", "index": 0}]
+    ]},
+    "查已有模板": {"main": [[{"node": "定建改", "type": "main", "index": 0}]]},
+    "定建改": {"main": [[{"node": "写模板", "type": "main", "index": 0}]]},
+    "写模板": {"main": [[{"node": "记模板ID", "type": "main", "index": 0}]]},
+    "记模板ID": {"main": [[{"node": "有区域费率?", "type": "main", "index": 0}]]},
+    "有区域费率?": {"main": [
+      [{"node": "查区域", "type": "main", "index": 0}],
+      [{"node": "组回报-模板", "type": "main", "index": 0}]
+    ]},
+    "查区域": {"main": [[{"node": "匹配区域", "type": "main", "index": 0}]]},
+    "匹配区域": {"main": [[{"node": "查区域方法", "type": "main", "index": 0}]]},
+    "查区域方法": {"main": [[{"node": "组费率更新", "type": "main", "index": 0}]]},
+    "组费率更新": {"main": [[{"node": "写区域费率", "type": "main", "index": 0}]]},
+    "写区域费率": {"main": [[{"node": "组回报-模板", "type": "main", "index": 0}]]},
+    "组回报-模板": {"main": [[{"node": "回报控制台", "type": "main", "index": 0}]]},
+    "删Woo模板": {"main": [[{"node": "组回报-删除", "type": "main", "index": 0}]]},
+    "组回报-删除": {"main": [[{"node": "回报控制台", "type": "main", "index": 0}]]},
+    "写订单备注": {"main": [[{"node": "写订单元数据", "type": "main", "index": 0}]]},
+    "写订单元数据": {"main": [[{"node": "组回报-单号", "type": "main", "index": 0}]]},
+    "组回报-单号": {"main": [[{"node": "回报控制台", "type": "main", "index": 0}]]}
+  }
+}

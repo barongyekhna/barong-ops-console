@@ -13,6 +13,7 @@ const allowed = [
   ["GET", ["w", "shipping", "classes"]],
   ["POST", ["w", "shipping", "classes"]],
   ["PATCH", ["w", "shipping", "classes", uuid]],
+  ["DELETE", ["w", "shipping", "classes", uuid]],
   ["POST", ["w", "shipping", "classes", uuid, "sync"]],
   ["GET", ["w", "shipping", "rules"]],
   ["POST", ["w", "shipping", "rules"]],
@@ -29,7 +30,6 @@ const allowed = [
 ];
 
 const denied = [
-  ["DELETE", ["w", "shipping", "classes", uuid]],
   ["PATCH", ["w", "shipping", "classes"]],
   ["GET", ["w", "shipping", "simulate"]],
   ["GET", ["w", "shipping", "assign", uuid]],

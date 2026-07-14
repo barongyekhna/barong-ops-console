@@ -29,7 +29,7 @@ from pydantic import (
     Field,
     field_validator,
 )
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ...api.deps import get_current_user
@@ -396,6 +396,8 @@ def shipping_classes_list(
     user: User = Depends(_require_w_permission(PERMISSION_READ)),
 ) -> list[ShippingClassItem]:
     del user
+    if logistics.reap_stale_sync_jobs(db):
+        db.commit()
     return [_class_item(row) for row in service.list_shipping_classes(db)]
 
 
@@ -450,6 +452,49 @@ def shipping_class_patch(
     db.commit()
     db.refresh(row)
     return _class_item(row)
+
+
+@router.delete("/shipping/classes/{class_id}", status_code=status.HTTP_202_ACCEPTED)
+def shipping_class_delete(
+    class_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_w_permission(PERMISSION_MANAGE)),
+) -> dict[str, Any]:
+    """删除运费模板：有产品挂靠先拒绝；已同步过的派 n8n 删 Woo 侧，
+    回调成功后本地行才删除；从未同步过的（无 woo_class_id）直接删本地。"""
+    del user
+    row = db.scalar(
+        select(WShippingClass)
+        .where(WShippingClass.id == class_id)
+        .with_for_update()
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="运费模板不存在。")
+
+    referencing = db.scalar(
+        select(func.count())
+        .select_from(KProductKnowledgeProduct)
+        .where(KProductKnowledgeProduct.shipping_class == row.slug)
+    )
+    if referencing:
+        raise HTTPException(
+            status_code=409,
+            detail=f"有 {referencing} 个产品挂在此模板上，先重算或改挂其他模板再删除。",
+        )
+
+    if row.woo_class_id is None:
+        # 从未同步进 Woo：本地草稿直接删，不派 n8n。
+        db.delete(row)
+        db.commit()
+        return {"deleted": True, "dispatched": False}
+
+    try:
+        job = logistics.create_shipping_delete_job(db, row)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    db.commit()
+    _job, dispatched = logistics.dispatch_sync_job(db, job.job_id)
+    return {"deleted": False, "dispatched": dispatched, "job_id": job.job_id}
 
 
 @router.post(
@@ -664,6 +709,8 @@ def orders_list(
     user: User = Depends(_require_w_permission(PERMISSION_READ)),
 ) -> OrderListResponse:
     del user
+    if logistics.reap_stale_sync_jobs(db):
+        db.commit()
     summary, rows = logistics.list_orders(
         db,
         filter_name=filter_name,
