@@ -7,6 +7,22 @@
   "nodes": [
     {
       "parameters": {
+        "content": "## barong控制台-W系列-订单同步（barongWorders001）\n\n**这个工作流是干嘛的**：每 15 分钟自动拉取 WooCommerce 最近 50 个订单，推送到控制台 W-S 物流网络中枢的「订单与物流」台账。推送是 upsert 幂等的——重复推同一订单只更新 Woo 归属字段，**绝不覆盖**控制台侧的运单号、轨迹状态等字段。\n\n**配置说明**：\n- 定时：每 15 分钟一轮（Schedule Trigger）\n- 拉单：`GET /wp-json/wc/v3/orders?per_page=50`，Woo 凭证 httpBasicAuth「WooCommerce」\n- 推送：`POST http://console_backend:8000/w/orders/ingest`（Docker 内网直连，不走公网）\n- 鉴权：请求头 `X-Ingest-Token`，值与控制台 docker-compose 的 `W_ORDERS_INGEST_TOKEN` 环境变量一致——**改 token 时两边要同步改**\n- 字段映射：woo_order_id / order_number / woo_status / customer_name（收件人优先）/ country / total / currency / items_json（商品名+数量+SKU）/ placed_at（下单时间 GMT）\n\n订单进控制台后：在 W-S 页面填运单号 → 自动注册 17TRACK 轨迹 + 回传 Woo 订单（走运费与物流同步流的 order_tracking 分支）\n\n由 Claude 编写并自动导入（2026-07-14），契约详见控制台仓库 docs/W_S_LOGISTICS_CODEX_SPEC.md §10",
+        "height": 620,
+        "width": 560,
+        "color": 5
+      },
+      "id": "ce111111-1111-4111-8111-11111111111e",
+      "name": "说明便签",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        80
+      ]
+    },
+    {
+      "parameters": {
         "rule": {
           "interval": [
             {

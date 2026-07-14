@@ -7,6 +7,22 @@
   "nodes": [
     {
       "parameters": {
+        "content": "## barong控制台-W系列-运费与物流同步（barongWshipping001）\n\n**这个工作流是干嘛的**：接收控制台 W-S 物流网络中枢的派单（Webhook 入口：`POST /webhook/barong-w-shipping`），按 `action` 字段分流三种任务：\n\n1. **upsert_shipping_class**（新建/编辑运费模板）：先按 slug 查 Woo 已有运费类别 → 存在则 PUT 更新、不存在则 POST 创建 → 再把区域费率写进对应配送区域的 flat_rate 方法（基础运费 `cost` + 本类别附加费 `class_cost_{类别id}`）\n2. **delete_shipping_class**（删除运费模板）：DELETE Woo 侧运费类别（force=true）；控制台收到成功回报后才会删除本地记录\n3. **order_tracking**（运单号回传）：把控制台里人工填写的运单号写进 Woo 订单——客户可见备注一条 + meta_data 两个字段（_barong_tracking_number / _barong_tracking_carrier）\n\n**配置说明**：\n- Woo 凭证：httpBasicAuth「WooCommerce」（consumer key/secret，与 P 系列上架流共用）\n- 每单必须回报：`POST callback_url`，请求头 `X-Job-Token`（派单时一单一钥），body `{\"status\":\"success|failed\",\"woo_class_id\":…}`\n- 控制台侧 15 分钟收不到回调会按失联标失败（W-S 页面可点重试）\n- ⚠️ 区域费率的 `zone_name` 必须与 Woo 后台配送区域名完全一致，否则该区域费率被跳过\n- 未来 GMC 同步沿同一 action 命名空间扩展（*_shipping_class 系列）\n\n由 Claude 编写并自动导入（2026-07-14），契约详见控制台仓库 docs/W_S_LOGISTICS_CODEX_SPEC.md §10",
+        "height": 720,
+        "width": 560,
+        "color": 4
+      },
+      "id": "be111111-1111-4111-8111-11111111111e",
+      "name": "说明便签",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -560,
+        120
+      ]
+    },
+    {
+      "parameters": {
         "httpMethod": "POST",
         "path": "barong-w-shipping",
         "responseMode": "onReceived",
