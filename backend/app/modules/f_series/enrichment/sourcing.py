@@ -1,14 +1,18 @@
-"""F 1688 直连找货段：每类目词搜 3-5 个货源候选，自动进候选池。
+"""F 1688 找货段 v2：画像驱动——拿类目画像里的每个产品名去 1688 找货。
 
-复用 R-A 的现成件：
-- ``build_supplier_keyword_profile``：DeepSeek 把英文类目/关键词抽成中文采购
-  词（1688 分销池是国内池，必须中文搜；无 DeepSeek 密钥时启发式降级）。
-- ``Alibaba1688OfficialApiProvider.search_offers_keyword_only``：词搜-only 通道，
-  候选词从具体到宽泛逐个重试，零图搜成本。
-- 额度：App 全局调用总闸（与 R-A 共账），每类目按 ~4 次调用预扣
-  （词搜最多 4 个候选词重试）；F 手动触发天然优先。
+v1 的教训（2026-07-14）：拿类目泛称（如"公文包"）搜 1688 分销选品池，
+池内无匹配时 API 退化成单字模糊匹配+热销兜底（回来的是茶包盒/菜刀/湿巾）。
+用户拍板的 v2 设计：**类目画像（DeepSeek 生成的"这个类目通常有哪些产品"）
+就是找货的弹药库**——"野营炊具套装""钛合金叉勺"这种具体产品名一搜一个准。
 
-红线照旧只标记不毙掉——``service.create_candidate`` 统一处理。
+流程（每类目）：
+1. 确保画像存在（无则生成一次，永久缓存）
+2. 遍历画像每个产品的中文名 → 1688 词搜 → 每产品收 3-5 个 offer
+3. 相关性把关（2-gram 子串，见 offer_matches_product）→ 落候选池
+   （notes 记来源产品名，按 offer URL 类目内去重）
+
+额度：F 独立总闸 f_1688_app_calls（默认 1 万/天，用户拍板 R-A 9万/F 1万），
+逐产品记账，额度尽温和抛 RAQuotaExhaustedError（运行引擎停批明天续）。
 """
 
 from __future__ import annotations
@@ -20,18 +24,23 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
+from r_system_v2.ra.quota_ledger import (
+    PROVIDER_F_1688_APP_CALLS,
+    refund,
+    try_consume,
+)
 from r_system_v2.ra.supplier_api import (
     Alibaba1688Credentials,
     Alibaba1688OfficialApiProvider,
 )
-from r_system_v2.ra.supplier_keyword_skill import build_supplier_keyword_profile
 
+from . import profiles as profile_engine
 from . import service
-from .models import FCategoryCandidate, FCategoryKeyword
+from .models import FCategoryCandidate
 
-# 每类目候选目标数（用户定的 3-5 个）与预扣的 App 调用数（词搜重试上限）。
-OFFERS_PER_CATEGORY = 5
-ESTIMATED_CALLS_PER_CATEGORY = 4
+# 每个画像产品收多少个 offer；每产品预扣的 App 调用数（词搜1次+余量）。
+OFFERS_PER_PRODUCT = 5
+CALLS_PER_PRODUCT = 2
 
 
 class SourcingProvider(Protocol):
@@ -49,7 +58,7 @@ class FSourcingUnavailableError(RuntimeError):
 
 
 class FSourcingNoMatchError(RuntimeError):
-    """分销选品池没有该品类的相关货源（兜底热销货已全部过滤）。
+    """分销选品池没有该类目任何画像产品的相关货源（兜底垃圾已全部过滤）。
 
     单节点级错误：运行引擎按节点错误收账继续，不阻断整批。"""
 
@@ -68,60 +77,37 @@ def build_provider(db: Session, *, org_id: str) -> SourcingProvider:
     return Alibaba1688OfficialApiProvider(credentials=credentials)
 
 
-def _pseudo_product(db: Session, node: dict[str, Any]) -> dict[str, Any]:
-    """类目 → 伪产品档案（给 DeepSeek 抽中文采购词用）。
+def _cjk_bigrams(text: str) -> set[str]:
+    """中文 2-gram 集合（只保留双字都含中文的窗口）。"""
+    grams: set[str] = set()
+    for i in range(len(text) - 1):
+        pair = text[i : i + 2]
+        if all("一" <= ch <= "鿿" for ch in pair):
+            grams.add(pair)
+    return grams
 
-    title = 类目名 + 该类目最优英文关键词（放行的优先、related 优先），
-    让采购词落在类目里的具体商品上而不是类目泛称。
+
+def offer_matches_product(
+    title: str,
+    product_zh: str,
+    extra_terms: list[str] | None = None,
+) -> bool:
+    """相关性把关：offer 标题须与画像产品名共享至少一个中文 2-gram。
+
+    1688 分销池在无匹配时会退化成单字碰瓷+热销兜底（"公文包"的"包"命中
+    茶包收纳盒），所以按 2 字滑窗判定：
+    - "公文包"{公文,文包} vs "茶包收纳盒" → 无共享 → 拦
+    - "野营炊具套装"{野营,营炊,炊具,具套,套装} vs "户外厨具套装" → "套装"
+      命中 → 放（1688 对同类货的叫法差异是常态，宽一点是对的）
     """
-    rows = db.execute(
-        select(FCategoryKeyword.keyword_text)
-        .where(FCategoryKeyword.category_id == str(node["id"]))
-        .where(FCategoryKeyword.status.in_(["approved", "candidate"]))
-        .where(FCategoryKeyword.keyword_type == "related")
-        .order_by(
-            (FCategoryKeyword.status == "approved").desc(),
-            FCategoryKeyword.rank.asc().nulls_last(),
-        )
-        .limit(3)
-    ).all()
-    keywords = [str(row[0]) for row in rows]
-    title = " ".join([str(node.get("name") or ""), *keywords]).strip()
-    return {
-        "title": title or str(node.get("name") or ""),
-        "category": str(node.get("name") or ""),
-        "category_path": str(node.get("full_path") or ""),
-    }
-
-
-def _relevance_terms(keyword_profile: dict[str, Any]) -> list[str]:
-    """采购词 → 相关性判定词表（去掉英文残留和过短词）。"""
-    raw = [
-        keyword_profile.get("product_type_zh"),
-        *(keyword_profile.get("core_keywords_zh") or []),
-    ]
-    terms: list[str] = []
-    for value in raw:
-        term = str(value or "").strip()
-        # 只认含中文的词（英文残留如 "supplier product" 不能当判据）
+    grams = _cjk_bigrams(str(product_zh or ""))
+    for term in extra_terms or []:
+        term = str(term or "").strip()
         if len(term) >= 2 and any("一" <= ch <= "鿿" for ch in term):
-            if term not in terms:
-                terms.append(term)
-    return terms
-
-
-def offer_matches_category(title: str, keyword_profile: dict[str, Any]) -> bool:
-    """确定性相关性把关：offer 标题必须真实包含任一采购词。
-
-    1688 分销选品池（product.keywords.search）在池内无匹配时会退化成
-    单字模糊匹配 + 热销兜底（搜"公文包"回来茶包收纳盒/菜刀/湿巾），
-    所以标题不含完整采购词的一律丢弃——宁可空着报无匹配，不让垃圾
-    污染候选池。
-    """
-    terms = _relevance_terms(keyword_profile)
-    if not terms:
-        return True  # 没有可用中文判据时不拦（避免全灭在自己手里）
-    return any(term in title for term in terms)
+            grams.update(_cjk_bigrams(term))
+    if not grams:
+        return True  # 无中文判据时不拦（避免全灭在自己手里）
+    return any(gram in title for gram in grams)
 
 
 def _existing_source_urls(db: Session, category_id: str) -> set[str]:
@@ -133,6 +119,23 @@ def _existing_source_urls(db: Session, category_id: str) -> set[str]:
     return {str(row[0]).strip() for row in rows if row[0]}
 
 
+def _search_offers_for_product(
+    provider: SourcingProvider,
+    *,
+    product_zh: str,
+    product_en: str,
+) -> list[Any]:
+    """按单个画像产品名词搜（供应商词搜通道的候选词=该产品中文名）。"""
+    return provider.search_offers_keyword_only(
+        product={"title": product_zh or product_en, "title_zh": product_zh},
+        keyword_profile={
+            "product_type_zh": product_zh,
+            "core_keywords_zh": [product_zh] if product_zh else [],
+        },
+        limit=OFFERS_PER_PRODUCT,
+    )
+
+
 def source_category(
     db: Session,
     *,
@@ -140,60 +143,96 @@ def source_category(
     provider: SourcingProvider,
     org_id: str,
     run_id: UUID | None = None,
-    limit: int = OFFERS_PER_CATEGORY,
 ) -> dict[str, int]:
-    """一个类目找货：中文采购词 → 1688 词搜 → 去重落候选池。"""
-    product = _pseudo_product(db, node)
-    keyword_profile = build_supplier_keyword_profile(
-        db, org_id=org_id, product=product
+    """一个类目找货：画像的每个产品名各搜一轮，全部落候选池。
+
+    额度在本函数内逐产品记账（F 独立总闸）；RAQuotaExhaustedError 向上抛，
+    运行引擎按额度尽停批。
+    """
+    profile = profile_engine.ensure_profile(
+        db,
+        category_id=str(node["id"]),
+        category_path=str(node["full_path"]),
+        name_zh=(str(node["name_zh"]) if node.get("name_zh") else None),
+        org_id=org_id,
     )
-    # RASupplierApiError（词搜业务失败）向上抛，由运行引擎按单节点错误收账，
-    # 不阻断整批——只有密钥问题才是 FSourcingUnavailableError（build_provider）。
-    offers = provider.search_offers_keyword_only(
-        product=product,
-        keyword_profile=keyword_profile,
-        limit=limit,
-    )
+    products = [
+        item
+        for item in (profile.products_json or [])
+        if str(item.get("zh") or "").strip()
+    ]
+    if not products:
+        raise FSourcingNoMatchError(
+            f"类目「{node.get('name_zh') or node.get('name')}」画像为空，无从找货。"
+        )
 
     seen_urls = _existing_source_urls(db, str(node["id"]))
     created = 0
     filtered = 0
-    for offer in offers[:limit]:
-        title = str(getattr(offer, "title", "") or "")
-        if not offer_matches_category(title, keyword_profile):
-            filtered += 1
+    duplicates = 0
+    offers_seen = 0
+    calls_used = 0
+    search_errors: list[str] = []
+
+    for item in products:
+        product_zh = str(item.get("zh") or "").strip()
+        product_en = str(item.get("en") or "").strip()
+        try_consume(db, PROVIDER_F_1688_APP_CALLS, amount=CALLS_PER_PRODUCT)
+        calls_used += CALLS_PER_PRODUCT
+        try:
+            # 1688 词搜最长十余秒：先结束打开的 SQL 事务。
+            db.rollback()
+            offers = _search_offers_for_product(
+                provider, product_zh=product_zh, product_en=product_en
+            )
+        except Exception as exc:  # noqa: BLE001 - 单产品失败不阻断本类目
+            refund(db, PROVIDER_F_1688_APP_CALLS, amount=1)
+            calls_used -= 1
+            search_errors.append(f"{product_zh}: {str(exc)[:80]}")
             continue
-        source_url = str(getattr(offer, "supplier_url", "") or "").strip()
-        if not source_url or source_url in seen_urls:
-            continue
-        seen_urls.add(source_url)
-        payload = getattr(offer, "payload", None) or {}
-        image_url = str(payload.get("image_url") or "").strip() or None
-        moq_value = getattr(offer, "moq", None)
-        service.create_candidate(
-            db,
-            category_id=str(node["id"]),
-            title=str(getattr(offer, "title", "") or "1688 货源候选"),
-            user=None,
-            source_url=source_url,
-            image_url=image_url,
-            price_cny=getattr(offer, "unit_price_cny", None),
-            moq=int(moq_value) if moq_value is not None else None,
-            supplier_name=str(getattr(offer, "supplier_name", "") or "") or None,
-            notes=None,
-            run_id=run_id,
-            source="alibaba1688",
-        )
-        created += 1
-    if created == 0 and filtered > 0:
-        # 全部被相关性把关拦下：分销选品池没有这个品类的真货。
+
+        offers_seen += len(offers)
+        for offer in offers[:OFFERS_PER_PRODUCT]:
+            title = str(getattr(offer, "title", "") or "")
+            if not offer_matches_product(title, product_zh):
+                filtered += 1
+                continue
+            source_url = str(getattr(offer, "supplier_url", "") or "").strip()
+            if not source_url or source_url in seen_urls:
+                duplicates += 1
+                continue
+            seen_urls.add(source_url)
+            payload = getattr(offer, "payload", None) or {}
+            image_url = str(payload.get("image_url") or "").strip() or None
+            moq_value = getattr(offer, "moq", None)
+            service.create_candidate(
+                db,
+                category_id=str(node["id"]),
+                title=title or "1688 货源候选",
+                user=None,
+                source_url=source_url,
+                image_url=image_url,
+                price_cny=getattr(offer, "unit_price_cny", None),
+                moq=int(moq_value) if moq_value is not None else None,
+                supplier_name=str(getattr(offer, "supplier_name", "") or "") or None,
+                notes=f"画像产品: {product_zh}"
+                + (f" ({product_en})" if product_en else ""),
+                run_id=run_id,
+                source="alibaba1688",
+            )
+            created += 1
+
+    if created == 0:
+        detail = f"；搜索失败 {len(search_errors)} 个产品" if search_errors else ""
         raise FSourcingNoMatchError(
-            f"1688 分销池无「{_relevance_terms(keyword_profile)[0] if _relevance_terms(keyword_profile) else node.get('name')}」"
-            f"相关货源（返回 {len(offers)} 条均与类目无关，已全部过滤）——"
-            "可到候选池手动贴 1688 全站链接"
+            f"类目「{node.get('name_zh') or node.get('name')}」按 {len(products)} 个"
+            f"画像产品逐一搜索，无新增货源（不相关 {filtered} 条、重复 {duplicates} 条"
+            f"{detail}）——可到候选池手动贴 1688 全站链接"
         )
     return {
-        "offers_seen": len(offers),
+        "offers_seen": offers_seen,
         "candidates_created": created,
         "filtered_irrelevant": filtered,
+        "products_searched": len(products),
+        "calls_used": calls_used,
     }

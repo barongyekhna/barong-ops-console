@@ -22,10 +22,8 @@ from sqlalchemy.orm import Session
 
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 from r_system_v2.ra.quota_ledger import (
-    PROVIDER_1688_APP_CALLS,
     PROVIDER_SERPER,
     RAQuotaExhaustedError,
-    refund,
     try_consume,
 )
 
@@ -216,23 +214,10 @@ def execute_run(run_id: UUID) -> None:
             run.keywords_found += added
             db.commit()
 
-            # ---- 找货段（1688 词搜，App 总闸按 ~4 次/类目预扣）----
+            # ---- 找货段 v2（画像驱动，F 独立总闸在 sourcing 内逐产品记账）----
             if do_sourcing and provider is not None:
                 try:
-                    try_consume(
-                        db,
-                        PROVIDER_1688_APP_CALLS,
-                        amount=sourcing.ESTIMATED_CALLS_PER_CATEGORY,
-                    )
-                except RAQuotaExhaustedError as exc:
-                    run = db.get(FEnrichmentRun, run_id)
-                    run.status = "quota_exhausted"
-                    run.error = str(exc)
-                    run.finished_at = _now()
-                    db.commit()
-                    return
-                try:
-                    # DeepSeek + 1688 都是慢 HTTP：先结束打开的 SQL 事务。
+                    # DeepSeek 画像 + 逐产品 1688 词搜都是慢 HTTP：先结束事务。
                     db.rollback()
                     result = sourcing.source_category(
                         db,
@@ -246,16 +231,19 @@ def execute_run(run_id: UUID) -> None:
                         db.rollback()
                         return
                     run.candidates_found += result["candidates_created"]
-                    run.alibaba_calls += sourcing.ESTIMATED_CALLS_PER_CATEGORY
+                    run.alibaba_calls += result["calls_used"]
+                except RAQuotaExhaustedError as exc:
+                    db.rollback()
+                    run = db.get(FEnrichmentRun, run_id)
+                    run.status = "quota_exhausted"
+                    run.error = str(exc)
+                    run.finished_at = _now()
+                    db.commit()
+                    return
                 except Exception as exc:  # noqa: BLE001 - 单节点失败不阻断整批
                     db.rollback()
-                    refund(
-                        db,
-                        PROVIDER_1688_APP_CALLS,
-                        amount=sourcing.ESTIMATED_CALLS_PER_CATEGORY,
-                    )
                     node_errors.append(
-                        f"{node.get('name')} 找货: {str(exc)[:120]}"
+                        f"{node.get('name')} 找货: {str(exc)[:160]}"
                     )
                     run = db.get(FEnrichmentRun, run_id)
                     if run is None or run.status == "cancelled":

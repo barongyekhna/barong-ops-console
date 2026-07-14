@@ -103,7 +103,8 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
         db.execute(
             text(
                 "DELETE FROM ra_provider_quota_usage "
-                "WHERE provider IN ('serper_search', 'alibaba1688_app_calls')"
+                "WHERE provider IN ('serper_search', 'alibaba1688_app_calls', "
+                "'f_1688_app_calls')"
             )
         )
         db.commit()
@@ -133,7 +134,8 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
         db.execute(
             text(
                 "DELETE FROM ra_provider_quota_usage "
-                "WHERE provider IN ('serper_search', 'alibaba1688_app_calls')"
+                "WHERE provider IN ('serper_search', 'alibaba1688_app_calls', "
+                "'f_1688_app_calls')"
             )
         )
         db.commit()
@@ -301,7 +303,11 @@ def test_candidate_red_flag_review_and_import_to_k(f_env: TestClient) -> None:
 
 
 class _FakeSourcingProvider:
-    """替身 1688 词搜通道：每类目回两个 offer（一个重复 URL 供去重验证）。"""
+    """替身 1688 词搜通道（v2 画像驱动）：按画像产品名逐个被调用。
+
+    每个产品回 3 条：2 条相关（标题含产品名）+ 1 条兜底垃圾（剁骨刀，
+    相关性把关必须滤掉）。URL 按产品名确定性生成：类目内重跑必撞
+    （供去重验证）；跨类目撞也无碍（去重是类目内的）。"""
 
     def __init__(self) -> None:
         self.calls: list[str] = []
@@ -311,12 +317,13 @@ class _FakeSourcingProvider:
 
         from r_system_v2.ra.supplier_api import SupplierApiOffer
 
-        self.calls.append(str(product.get("category")))
-        slug = str(product.get("category") or "cat").replace(" ", "-").lower()
+        del product
+        product_zh = str(keyword_profile.get("product_type_zh") or "")
+        self.calls.append(product_zh)
 
         def _offer(index: int, title: str, url_key: str) -> SupplierApiOffer:
             return SupplierApiOffer(
-                supplier_name=f"{slug}源头工厂{index + 1}",
+                supplier_name=f"{product_zh}源头工厂{index + 1}",
                 supplier_url=f"https://detail.1688.com/offer/{url_key}.html",
                 title=title,
                 unit_price_cny=Decimal("38.50"),
@@ -337,14 +344,23 @@ class _FakeSourcingProvider:
         offers = [
             _offer(
                 index,
-                f"露营淋浴袋 {product.get('category')} 现货 一件代发 {index + 1}",
-                f"{slug}-{index}",
+                f"{product_zh}工厂直供 现货 一件代发 {index + 1}",
+                f"{product_zh}-{index}",
             )
             for index in range(2)
         ]
-        # 1688 分销池的兜底垃圾（不含采购词）——相关性把关必须滤掉它
-        offers.append(_offer(2, "外贸剁骨刀家用砍骨头刀加厚锰钢", f"junk-{slug}"))
+        # 1688 分销池的兜底垃圾（不含产品词）——相关性把关必须滤掉它
+        offers.append(_offer(2, "外贸剁骨刀家用砍骨头刀加厚锰钢", f"junk-{product_zh}"))
         return offers[:limit]
+
+
+class _FakeProfile:
+    """替身类目画像：两个具体产品名（v2 找货的弹药库）。"""
+
+    products_json = [
+        {"zh": "露营淋浴袋", "en": "Camp Shower Bag", "note_zh": "户外洗澡"},
+        {"zh": "折叠水桶", "en": "Folding Bucket", "note_zh": "取水储水"},
+    ]
 
 
 def test_full_run_harvests_keywords_and_sources_candidates(
@@ -355,12 +371,9 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     fake = _FakeSourcingProvider()
     monkeypatch.setattr(sourcing, "build_provider", lambda db, org_id: fake)
     monkeypatch.setattr(
-        sourcing,
-        "build_supplier_keyword_profile",
-        lambda db, *, org_id, product: {
-            "product_type_zh": "露营淋浴袋",
-            "core_keywords_zh": ["露营 淋浴", "户外 洗澡袋"],
-        },
+        sourcing.profile_engine,
+        "ensure_profile",
+        lambda db, **kwargs: _FakeProfile(),
     )
 
     response = f_env.post(
@@ -373,22 +386,30 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     # f990 子树 = f990 + f991 两个节点
     assert run["categories_done"] == 2
     assert run["keywords_found"] == 8
-    assert run["candidates_found"] == 4  # 每节点 2 个 offer
-    assert run["alibaba_calls"] > 0
-    assert fake.calls == ["Camping & Hiking", "Camp Showers"]
+    # 每节点：2 个画像产品 × 各 2 条相关 offer（垃圾 offer 被拦）
+    assert run["candidates_found"] == 8
+    # 每产品预扣 CALLS_PER_PRODUCT=2：2 节点 × 2 产品 × 2
+    assert run["alibaba_calls"] == 8
+    # 按画像产品名逐个搜（每节点一轮）
+    assert fake.calls == ["露营淋浴袋", "折叠水桶"] * 2
 
     response = f_env.get(
         "/api/app/f/candidates", params={"category_id": "f991", "status": "pending_review"}
     )
     items = response.json()["items"]
-    assert len(items) == 2
+    assert len(items) == 4
     assert all(item["source"] == "alibaba1688" for item in items)
     assert all(item["image_url"] for item in items)
     assert all(item["price_cny"] == "38.50" for item in items)
     # 兜底垃圾（剁骨刀）被相关性把关拦下，不进候选池
     assert all("剁骨刀" not in item["title"] for item in items)
+    # notes 记来源画像产品，前端展示「画像产品: xx」
+    assert {item["notes"] for item in items} == {
+        "画像产品: 露营淋浴袋 (Camp Shower Bag)",
+        "画像产品: 折叠水桶 (Folding Bucket)",
+    }
 
-    # 同类目重跑 sourcing_only：offer URL 相同 → 全部去重
+    # 同类目重跑 sourcing_only：offer URL 相同 → 全部去重 → 记「无新增货源」
     response = f_env.post(
         "/api/app/f/runs", json={"category_ids": ["f991"], "mode": "sourcing_only"}
     )
@@ -397,6 +418,42 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     assert rerun["status"] == "succeeded"
     assert rerun["candidates_found"] == 0
     assert rerun["keywords_found"] == 0  # sourcing_only 不动词
+    assert "无新增货源" in (rerun["error"] or "")
+
+    # F 独立总闸记账：3 轮找货 × 每轮 2 产品 × 2 = 12
+    quota = f_env.get("/api/app/f/quota").json()
+    assert quota["alibaba1688_app_calls"]["used"] == 12
+
+
+def test_sourcing_stops_when_f_quota_exhausted(
+    f_env: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from backend.app.modules.f_series.enrichment import sourcing
+
+    fake = _FakeSourcingProvider()
+    monkeypatch.setattr(sourcing, "build_provider", lambda db, org_id: fake)
+    monkeypatch.setattr(
+        sourcing.profile_engine,
+        "ensure_profile",
+        lambda db, **kwargs: _FakeProfile(),
+    )
+    # 只够第一个节点第一个产品（2 次）——第二个产品预扣时额度尽
+    monkeypatch.setenv("F_1688_APP_CALLS_DAILY_BUDGET", "3")
+
+    response = f_env.post(
+        "/api/app/f/runs", json={"category_ids": ["f990"], "mode": "sourcing_only"}
+    )
+    assert response.status_code == 201
+    run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
+    assert run["status"] == "quota_exhausted"
+    assert "预算已用完" in (run["error"] or "")
+    assert fake.calls == ["露营淋浴袋"]
+    # 额度尽前已搜完的产品成果保留在候选池（run 计数器停在中断点）
+    items = f_env.get(
+        "/api/app/f/candidates", params={"category_id": "f990"}
+    ).json()["items"]
+    assert len(items) == 2
+    assert all("露营淋浴袋" in item["title"] for item in items)
 
 
 def test_full_run_degrades_gracefully_without_1688_key(f_env: TestClient) -> None:

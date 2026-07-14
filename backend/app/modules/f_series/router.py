@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from r_system_v2.ra.quota_ledger import (
-    PROVIDER_1688_APP_CALLS,
+    PROVIDER_F_1688_APP_CALLS,
     PROVIDER_SERPER,
     usage_today,
 )
@@ -539,5 +539,5 @@ def f_quota(
         payload = usage_today(db)
     return {
         "serper": payload.get(PROVIDER_SERPER),
-        "alibaba1688_app_calls": payload.get(PROVIDER_1688_APP_CALLS),
+        "alibaba1688_app_calls": payload.get(PROVIDER_F_1688_APP_CALLS),
     }

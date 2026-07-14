@@ -500,7 +500,7 @@ export function EnrichmentDeck() {
           </span>
         </div>
         <div className={styles.statCard}>
-          <span className={styles.statLabel}>1688 今日额度</span>
+          <span className={styles.statLabel}>1688 今日额度（F 专属）</span>
           <span className={styles.statValue}>
             {quota?.alibaba1688_app_calls
               ? `${quota.alibaba1688_app_calls.used}/${
@@ -910,6 +910,11 @@ export function EnrichmentDeck() {
                             </>
                           ) : null}
                         </span>
+                        {candidate.notes ? (
+                          <span className={styles.candidateMeta}>
+                            {candidate.notes}
+                          </span>
+                        ) : null}
                         {candidate.red_flags.length > 0 ? (
                           <span
                             className={styles.redFlag}
@@ -1058,7 +1063,7 @@ export function EnrichmentDeck() {
         <div className={styles.panelHead}>
           <span className={styles.panelTitle}>
             <ListChecks aria-hidden="true" size={16} />
-            富化运行台账 · 额度与 R-A 共账，F 手动触发天然优先
+            富化运行台账 · 1688 为 F 独立额度（1 万/天），放心批量找货
           </span>
           <button
             className="secondary-button"
