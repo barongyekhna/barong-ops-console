@@ -916,3 +916,56 @@
   object-fit: contain;
   border-radius: 8px;
 }
+
+/* ---- 市场参考行（组头下方）：竞品定价/变体研究外链 ---- */
+
+.marketRefRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 6px 12px;
+  border-bottom: 1px dashed rgb(57 212 255 / 12%);
+  background: rgb(255 200 60 / 4%);
+}
+
+.marketRefLabel {
+  font-size: 0.68rem;
+  font-weight: 750;
+  color: rgb(255 224 120 / 90%);
+  white-space: nowrap;
+}
+
+.marketRefLink {
+  font-size: 0.72rem;
+  color: rgb(102 214 255);
+  text-decoration: none;
+  border: 1px solid rgb(57 212 255 / 25%);
+  border-radius: 999px;
+  padding: 1px 9px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.marketRefLink:hover {
+  background: rgb(57 212 255 / 10%);
+  border-color: rgb(57 212 255 / 50%);
+}
+
+/* 独立站参考链接高亮（用户硬规则：独立站优先），平台/内容站压暗 */
+.marketRefLink[data-site-type="independent"] {
+  color: rgb(120 255 190);
+  border-color: rgb(60 230 140 / 45%);
+  font-weight: 700;
+}
+
+.marketRefLink[data-site-type="independent"]:hover {
+  background: rgb(60 230 140 / 10%);
+}
+
+.marketRefLink[data-site-type="content"] {
+  color: rgb(157 199 219 / 70%);
+  border-color: rgb(157 199 219 / 25%);
+}

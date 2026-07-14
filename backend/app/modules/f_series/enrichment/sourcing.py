@@ -45,7 +45,7 @@ from . import profiles as profile_engine
 from . import scoring
 from . import serper_client
 from . import service
-from .models import FCategoryCandidate
+from .models import FCategoryCandidate, FProductMarketRef
 
 # 单次搜索调用最多收多少个 offer（词搜/图搜同口径）。
 OFFERS_PER_PRODUCT = 5
@@ -157,6 +157,53 @@ def offer_matches_product(
     if not grams:
         return True  # 无中文判据时不拦（避免全灭在自己手里）
     return any(gram in title for gram in grams)
+
+
+def _store_market_refs(
+    db: Session,
+    *,
+    category_id: str,
+    product_zh: str,
+    product_en: str,
+    refs: list[dict[str, str]],
+    run_id: UUID | None,
+) -> None:
+    """市场参考页落库：(类目, 产品, 页面URL) 去重，自兜底绝不阻断找货。"""
+    if not refs or not product_zh:
+        return
+    from uuid import uuid4
+
+    try:
+        existing = {
+            str(row[0])
+            for row in db.execute(
+                select(FProductMarketRef.page_url)
+                .where(FProductMarketRef.category_id == category_id)
+                .where(FProductMarketRef.profile_product_zh == product_zh)
+            ).all()
+        }
+        for ref in refs:
+            page_url = str(ref.get("page_url") or "").strip()
+            if not page_url or page_url in existing:
+                continue
+            existing.add(page_url)
+            db.add(
+                FProductMarketRef(
+                    id=uuid4(),
+                    category_id=category_id,
+                    profile_product_zh=product_zh,
+                    profile_product_en=product_en or None,
+                    title=str(ref.get("title") or "") or None,
+                    page_url=page_url,
+                    source_domain=str(ref.get("source_domain") or "") or None,
+                    site_type=str(ref.get("site_type") or "") or None,
+                    image_url=str(ref.get("image_url") or "") or None,
+                    run_id=run_id,
+                )
+            )
+        db.flush()
+    except Exception:  # noqa: BLE001 - 参考页是锦上添花，出错回滚跳过
+        db.rollback()
 
 
 def _existing_source_urls(db: Session, category_id: str) -> set[str]:
@@ -333,6 +380,15 @@ def source_category(
                     api_key=serper_api_key, query=product_zh or product_en
                 )
                 seed_urls = serper_client.extract_image_urls(raw, limit=images_cap)
+                # 顺手收割图片来源网页（竞品定价/变体研究，组头展示）
+                _store_market_refs(
+                    db,
+                    category_id=str(node["id"]),
+                    product_zh=product_zh,
+                    product_en=product_en,
+                    refs=serper_client.extract_market_refs(raw, limit=3),
+                    run_id=run_id,
+                )
             except RAQuotaExhaustedError:
                 raise
             except Exception as exc:  # noqa: BLE001 - 种子图失败只跳过接力

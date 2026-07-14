@@ -1060,6 +1060,15 @@ function isAllowedFPath(method: string, path: string[]) {
   ) {
     return method === "GET" || method === "POST";
   }
+  // 市场参考页（图搜种子图的来源网页，组头展示竞品定价/变体）
+  if (
+    path.length === 4 &&
+    path[1] === "categories" &&
+    /^[A-Za-z0-9_-]{1,32}$/.test(path[2]) &&
+    path[3] === "market-refs"
+  ) {
+    return method === "GET";
+  }
   // 富化运行：发起 + 列表 + 单个进度
   if (path.length === 2 && path[1] === "runs") {
     return method === "GET" || method === "POST";

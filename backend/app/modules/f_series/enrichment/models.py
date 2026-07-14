@@ -185,6 +185,32 @@ class FCategoryProfile(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
     )
 
 
+class FProductMarketRef(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
+    """市场参考页：图搜接力拿种子图时顺手收割的图片来源网页。
+
+    用途（2026-07-14 用户需求）：看竞品怎么定价、怎么配变体（多个装等），
+    展示在候选池每个画像产品分组上方。每产品每轮最多存 3 条，
+    (category, product, page_url) 去重。"""
+
+    __tablename__ = "f_product_market_refs"
+    __table_args__ = (
+        Index("ix_f_market_refs_group", "category_id", "profile_product_zh"),
+    )
+
+    category_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    profile_product_zh: Mapped[str] = mapped_column(String(200), nullable=False)
+    profile_product_en: Mapped[str | None] = mapped_column(
+        String(200), nullable=True
+    )
+    title: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    page_url: Mapped[str] = mapped_column(String(2048), nullable=False)
+    source_domain: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # independent（独立站，用户硬规则：优先且至少一条）/ platform / content
+    site_type: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    image_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    run_id: Mapped[UUID | None] = mapped_column(Uuid, nullable=True)
+
+
 class FCategoryCandidate(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
     """类目候选池：1688 货源候选（当前人工贴链接，API 过审后自动填充）。
 

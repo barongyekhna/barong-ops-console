@@ -316,6 +316,23 @@ export function fetchCandidateImage(
   return promise;
 }
 
+export type MarketRef = {
+  title: string | null;
+  page_url: string;
+  source_domain: string | null;
+  site_type: "independent" | "platform" | "content" | null;
+};
+
+export async function getMarketRefs(
+  categoryId: string,
+): Promise<{ category_id: string; groups: Record<string, MarketRef[]> }> {
+  const response = await fetch(
+    `${API_PROXY_BASE}/f/categories/${encodeURIComponent(categoryId)}/market-refs`,
+    { cache: "no-store", headers: buildHeaders(), method: "GET" },
+  );
+  return readJson(response, "市场参考加载失败");
+}
+
 export async function getQuota(): Promise<QuotaResponse> {
   const response = await fetch(`${API_PROXY_BASE}/f/quota`, {
     cache: "no-store",

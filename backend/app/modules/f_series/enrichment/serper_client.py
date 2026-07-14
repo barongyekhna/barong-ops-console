@@ -71,6 +71,114 @@ def extract_image_urls(raw: dict[str, Any], *, limit: int) -> list[str]:
     return urls
 
 
+# 市场参考页分层（用户硬规则 2026-07-14）：独立站 > 平台 > 社媒/内容站。
+# 用户做独立站，参考对象首选同行独立站的定价/变体配置；平台只当补位。
+_PLATFORM_DOMAIN_HINTS = (
+    "amazon.",
+    "walmart.",
+    "ebay.",
+    "etsy.",
+    "aliexpress.",
+    "alibaba.",
+    "1688.",
+    "temu.",
+    "shein.",
+    "wish.",
+    "target.",
+    "homedepot.",
+    "lowes.",
+    "wayfair.",
+    "costco.",
+    "bestbuy.",
+    "taobao.",
+    "tmall.",
+    "jd.",
+    "rakuten.",
+    "coupang.",
+    "lazada.",
+    "shopee.",
+    "mercadolibre.",
+)
+_CONTENT_DOMAIN_HINTS = (
+    "pinterest.",
+    "youtube.",
+    "facebook.",
+    "instagram.",
+    "reddit.",
+    "tiktok.",
+    "x.com",
+    "twitter.",
+    "wikipedia.",
+    "wikihow.",
+    "quora.",
+    "medium.",
+)
+
+# 独立站有多的就多拿（用户原话）；平台只补到最低条数。
+_INDIE_REFS_CAP = 6
+_MIN_REFS = 3
+
+
+def _ref_site_type(domain: str) -> str:
+    if any(hint in domain for hint in _PLATFORM_DOMAIN_HINTS):
+        return "platform"
+    if any(hint in domain for hint in _CONTENT_DOMAIN_HINTS):
+        return "content"
+    return "independent"
+
+
+def extract_market_refs(
+    raw: dict[str, Any], *, limit: int = _MIN_REFS
+) -> list[dict[str, str]]:
+    """从谷歌图片结果里收割图片来源网页（竞品定价/变体研究用）。
+
+    硬规则：独立站优先于平台（≥1 条独立站只要它存在就必然满足——独立站
+    全部排前）；独立站最多拿 _INDIE_REFS_CAP 条，平台/内容站只在独立站
+    不足 limit 时补位。同域只取一条（要不同商家的样本，不是同店三链接）。
+    """
+    images = raw.get("images")
+    if not isinstance(images, list):
+        return []
+
+    buckets: dict[str, list[dict[str, str]]] = {
+        "independent": [],
+        "platform": [],
+        "content": [],
+    }
+    seen_domains: set[str] = set()
+    for entry in images:
+        if not isinstance(entry, dict):
+            continue
+        link = str(entry.get("link") or "").strip()
+        if not link.startswith(("http://", "https://")):
+            continue
+        domain = (
+            str(entry.get("domain") or entry.get("source") or "").strip().lower()
+            or link.split("/")[2].lower()
+        )
+        if domain in seen_domains:
+            continue
+        seen_domains.add(domain)
+        site_type = _ref_site_type(domain)
+        buckets[site_type].append(
+            {
+                "title": str(entry.get("title") or "").strip()[:512],
+                "page_url": link[:2048],
+                "source_domain": domain[:255],
+                "image_url": str(entry.get("imageUrl") or "").strip()[:2048],
+                "site_type": site_type,
+            }
+        )
+
+    minimum = max(1, limit)
+    refs = buckets["independent"][:_INDIE_REFS_CAP]
+    for filler in (buckets["platform"], buckets["content"]):
+        if len(refs) >= minimum:
+            break
+        refs.extend(filler[: minimum - len(refs)])
+    return refs
+
+
 def extract_keywords(raw: dict[str, Any]) -> list[dict[str, Any]]:
     """把 Serper 原始响应拍成 [{keyword_text, keyword_type, rank}]（已去重）。"""
     items: list[dict[str, Any]] = []

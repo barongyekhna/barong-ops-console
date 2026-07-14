@@ -247,3 +247,49 @@ def test_extract_image_urls_filters_and_dedupes() -> None:
     ]
     assert extract_image_urls({}, limit=5) == []
     assert extract_image_urls({"images": "junk"}, limit=5) == []
+
+
+def test_extract_market_refs_independent_sites_first() -> None:
+    """市场参考页硬规则：独立站优先于平台、有多的多拿、平台只补位。"""
+    from backend.app.modules.f_series.enrichment.serper_client import (
+        extract_market_refs,
+    )
+
+    raw = {
+        "images": [
+            {"title": "Amazon listing", "link": "https://www.amazon.com/dp/B0X", "domain": "www.amazon.com"},
+            {"title": "独立站A 2-pack $29.99", "link": "https://campgear.co/products/cookset", "domain": "campgear.co"},
+            {"title": "同店第二条", "link": "https://campgear.co/products/other", "domain": "campgear.co"},
+            {"title": "独立站B", "link": "https://wildkitchen.com/cook-set", "domain": "wildkitchen.com"},
+            {"title": "独立站C", "link": "https://trailchef.shop/bundle", "domain": "trailchef.shop"},
+            {"title": "独立站D", "link": "https://outdoorpro.store/set", "domain": "outdoorpro.store"},
+            {"title": "Pinterest", "link": "https://www.pinterest.com/pin/1", "domain": "www.pinterest.com"},
+            {"title": "坏链接", "link": "javascript:void(0)"},
+        ]
+    }
+    refs = extract_market_refs(raw, limit=3)
+    # 独立站有 4 家（同域去重后）→ 全拿，平台一条不占位
+    assert [r["source_domain"] for r in refs] == [
+        "campgear.co",
+        "wildkitchen.com",
+        "trailchef.shop",
+        "outdoorpro.store",
+    ]
+    assert all(r["site_type"] == "independent" for r in refs)
+
+    # 独立站只有 1 家：它必须排第一，平台补足到 3（≥1 独立站硬规则天然满足）
+    scarce = {
+        "images": [
+            {"title": "Amazon", "link": "https://www.amazon.com/dp/1", "domain": "www.amazon.com"},
+            {"title": "Walmart", "link": "https://www.walmart.com/ip/2", "domain": "www.walmart.com"},
+            {"title": "唯一独立站", "link": "https://indie.shop/p/3", "domain": "indie.shop"},
+        ]
+    }
+    refs = extract_market_refs(scarce, limit=3)
+    assert refs[0]["source_domain"] == "indie.shop"
+    assert refs[0]["site_type"] == "independent"
+    assert {r["source_domain"] for r in refs[1:]} == {
+        "www.amazon.com",
+        "www.walmart.com",
+    }
+    assert extract_market_refs({}, limit=3) == []

@@ -34,7 +34,12 @@ from .enrichment import images
 from .enrichment import profiles as profile_engine
 from .enrichment import runs as run_engine
 from .enrichment import service
-from .enrichment.models import FCategoryCandidate, FCategoryKeyword, FEnrichmentRun
+from .enrichment.models import (
+    FCategoryCandidate,
+    FCategoryKeyword,
+    FEnrichmentRun,
+    FProductMarketRef,
+)
 
 router = APIRouter(prefix="/f", tags=["f-enrichment"])
 
@@ -463,6 +468,42 @@ def f_candidates_list(
         items=[_candidate_item(row) for row in rows],
         total=len(rows),
     )
+
+
+@router.get("/categories/{category_id}/market-refs")
+def f_market_refs(
+    category_id: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(_require_f_permission(C.PERMISSION_READ)),
+) -> dict[str, Any]:
+    """市场参考页（按画像产品分组）：竞品怎么定价/怎么配变体，组头展示。
+
+    用户硬规则：独立站排平台前面（独立站可多至 6 条，平台只是补位）。
+    """
+    del user
+    rows = db.scalars(
+        select(FProductMarketRef)
+        .where(FProductMarketRef.category_id == category_id)
+        .order_by(FProductMarketRef.created_at.desc())
+        .limit(400)
+    ).all()
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        bucket = groups.setdefault(row.profile_product_zh, [])
+        if len(bucket) >= 6:
+            continue
+        bucket.append(
+            {
+                "title": row.title,
+                "page_url": row.page_url,
+                "source_domain": row.source_domain,
+                "site_type": row.site_type,
+            }
+        )
+    order = {"independent": 0, "platform": 1, "content": 2}
+    for bucket in groups.values():
+        bucket.sort(key=lambda ref: order.get(str(ref.get("site_type")), 1))
+    return {"category_id": category_id, "groups": groups}
 
 
 @router.get("/candidates/{candidate_id}/image")

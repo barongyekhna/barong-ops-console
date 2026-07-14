@@ -125,6 +125,7 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
 
     with SessionLocal() as db:
         db.execute(text("DELETE FROM f_category_profiles"))
+        db.execute(text("DELETE FROM f_product_market_refs"))
         db.execute(text("DELETE FROM f_category_candidates"))
         db.execute(text("DELETE FROM f_category_keywords"))
         db.execute(text("DELETE FROM f_enrichment_runs"))
@@ -529,6 +530,13 @@ def test_sourcing_image_relay_tops_up_from_cps_pool(
                 {
                     "imageUrl": f"https://img.example.com/{query}/seed-{i}.jpg",
                     "imageWidth": 800,
+                    "title": f"{query} retail listing {i}",
+                    "link": f"https://www.amazon.com/dp/{query}{i}"
+                    if i == 0
+                    else f"https://shop{i}.example.com/{query}",
+                    "domain": "www.amazon.com"
+                    if i == 0
+                    else f"shop{i}.example.com",
                 }
                 for i in range(4)
             ]
@@ -561,6 +569,14 @@ def test_sourcing_image_relay_tops_up_from_cps_pool(
     ranked = [i for i in group if i["recommended_rank"] is not None]
     assert sorted(i["recommended_rank"] for i in ranked) == [1, 2, 3]
     assert all(i["score"] is not None for i in group)
+
+    # 市场参考页随种子图顺手收割：独立站优先（3 家独立站在，amazon 不占位）
+    refs = f_env.get("/api/app/f/categories/f991/market-refs").json()["groups"]
+    assert set(refs.keys()) == {"露营淋浴袋", "折叠水桶"}
+    shower_refs = refs["露营淋浴袋"]
+    assert len(shower_refs) == 3
+    assert all(r["site_type"] == "independent" for r in shower_refs)
+    assert all("amazon" not in (r["source_domain"] or "") for r in shower_refs)
 
 
 def test_sourcing_stops_when_f_quota_exhausted(

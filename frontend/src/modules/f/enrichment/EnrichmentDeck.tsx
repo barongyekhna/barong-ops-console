@@ -26,6 +26,7 @@ import {
   generateProfile,
   getCandidates,
   getKeywords,
+  getMarketRefs,
   getProfile,
   getQuota,
   getRuns,
@@ -36,6 +37,7 @@ import {
   searchTree,
   type CandidateItem,
   type KeywordItem,
+  type MarketRef,
   type ProfileResponse,
   type QuotaResponse,
   type RunItem,
@@ -268,6 +270,7 @@ export function EnrichmentDeck() {
   const [keywords, setKeywords] = useState<KeywordItem[]>([]);
   const [candidates, setCandidates] = useState<CandidateItem[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [marketRefs, setMarketRefs] = useState<Record<string, MarketRef[]>>({});
   const [runs, setRuns] = useState<RunItem[]>([]);
   const [quota, setQuota] = useState<QuotaResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -368,6 +371,13 @@ export function EnrichmentDeck() {
           detailError instanceof Error ? detailError.message : "类目详情加载失败。",
         );
       }
+    }
+    // 市场参考静默加载：拿不到不影响主流程
+    try {
+      const refs = await getMarketRefs(node.id);
+      if (mounted.current) setMarketRefs(refs.groups);
+    } catch {
+      if (mounted.current) setMarketRefs({});
     }
   }, []);
 
@@ -1163,6 +1173,27 @@ export function EnrichmentDeck() {
                             {group.items.length} 家
                           </span>
                         </div>
+                        {group.zh && (marketRefs[group.zh]?.length ?? 0) > 0 ? (
+                          <div className={styles.marketRefRow}>
+                            <span className={styles.marketRefLabel}>
+                              市场参考
+                            </span>
+                            {marketRefs[group.zh].map((ref) => (
+                              <a
+                                className={styles.marketRefLink}
+                                data-site-type={ref.site_type ?? "platform"}
+                                href={ref.page_url}
+                                key={ref.page_url}
+                                rel="noreferrer"
+                                target="_blank"
+                                title={ref.title ?? ref.page_url}
+                              >
+                                {ref.site_type === "independent" ? "独立站 · " : ""}
+                                {ref.source_domain ?? "链接"} ↗
+                              </a>
+                            ))}
+                          </div>
+                        ) : null}
                         <ul className={styles.candidateList}>
                           {visible.map(renderCandidate)}
                         </ul>
