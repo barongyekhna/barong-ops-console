@@ -313,28 +313,37 @@ class _FakeSourcingProvider:
 
         self.calls.append(str(product.get("category")))
         slug = str(product.get("category") or "cat").replace(" ", "-").lower()
-        offers = []
-        for index in range(2):
-            offers.append(
-                SupplierApiOffer(
-                    supplier_name=f"{slug}源头工厂{index + 1}",
-                    supplier_url=f"https://detail.1688.com/offer/{slug}-{index}.html",
-                    title=f"{product.get('category')} 现货 一件代发 {index + 1}",
-                    unit_price_cny=Decimal("38.50"),
-                    domestic_shipping_cny=None,
-                    moq=2,
-                    rating=None,
-                    match_score=90,
-                    stock=100,
-                    monthly_sales=500,
-                    one_piece_hint=False,
-                    source="alibaba1688_official_keyword_search",
-                    payload={
-                        "offer_id": f"{slug}-{index}",
-                        "image_url": f"https://cbu01.alicdn.com/{slug}-{index}.jpg",
-                    },
-                )
+
+        def _offer(index: int, title: str, url_key: str) -> SupplierApiOffer:
+            return SupplierApiOffer(
+                supplier_name=f"{slug}源头工厂{index + 1}",
+                supplier_url=f"https://detail.1688.com/offer/{url_key}.html",
+                title=title,
+                unit_price_cny=Decimal("38.50"),
+                domestic_shipping_cny=None,
+                moq=2,
+                rating=None,
+                match_score=90,
+                stock=100,
+                monthly_sales=500,
+                one_piece_hint=False,
+                source="alibaba1688_official_keyword_search",
+                payload={
+                    "offer_id": url_key,
+                    "image_url": f"https://cbu01.alicdn.com/{url_key}.jpg",
+                },
             )
+
+        offers = [
+            _offer(
+                index,
+                f"露营淋浴袋 {product.get('category')} 现货 一件代发 {index + 1}",
+                f"{slug}-{index}",
+            )
+            for index in range(2)
+        ]
+        # 1688 分销池的兜底垃圾（不含采购词）——相关性把关必须滤掉它
+        offers.append(_offer(2, "外贸剁骨刀家用砍骨头刀加厚锰钢", f"junk-{slug}"))
         return offers[:limit]
 
 
@@ -376,6 +385,8 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     assert all(item["source"] == "alibaba1688" for item in items)
     assert all(item["image_url"] for item in items)
     assert all(item["price_cny"] == "38.50" for item in items)
+    # 兜底垃圾（剁骨刀）被相关性把关拦下，不进候选池
+    assert all("剁骨刀" not in item["title"] for item in items)
 
     # 同类目重跑 sourcing_only：offer URL 相同 → 全部去重
     response = f_env.post(

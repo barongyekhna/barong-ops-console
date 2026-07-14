@@ -48,6 +48,12 @@ class FSourcingUnavailableError(RuntimeError):
     """1688 密钥未绑定/不完整——full 模式跳过找货段，sourcing_only 直接失败。"""
 
 
+class FSourcingNoMatchError(RuntimeError):
+    """分销选品池没有该品类的相关货源（兜底热销货已全部过滤）。
+
+    单节点级错误：运行引擎按节点错误收账继续，不阻断整批。"""
+
+
 def build_provider(db: Session, *, org_id: str) -> SourcingProvider:
     """从密钥编排取 1688 凭证并构建官方 API 词搜通道。"""
     try:
@@ -88,6 +94,36 @@ def _pseudo_product(db: Session, node: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _relevance_terms(keyword_profile: dict[str, Any]) -> list[str]:
+    """采购词 → 相关性判定词表（去掉英文残留和过短词）。"""
+    raw = [
+        keyword_profile.get("product_type_zh"),
+        *(keyword_profile.get("core_keywords_zh") or []),
+    ]
+    terms: list[str] = []
+    for value in raw:
+        term = str(value or "").strip()
+        # 只认含中文的词（英文残留如 "supplier product" 不能当判据）
+        if len(term) >= 2 and any("一" <= ch <= "鿿" for ch in term):
+            if term not in terms:
+                terms.append(term)
+    return terms
+
+
+def offer_matches_category(title: str, keyword_profile: dict[str, Any]) -> bool:
+    """确定性相关性把关：offer 标题必须真实包含任一采购词。
+
+    1688 分销选品池（product.keywords.search）在池内无匹配时会退化成
+    单字模糊匹配 + 热销兜底（搜"公文包"回来茶包收纳盒/菜刀/湿巾），
+    所以标题不含完整采购词的一律丢弃——宁可空着报无匹配，不让垃圾
+    污染候选池。
+    """
+    terms = _relevance_terms(keyword_profile)
+    if not terms:
+        return True  # 没有可用中文判据时不拦（避免全灭在自己手里）
+    return any(term in title for term in terms)
+
+
 def _existing_source_urls(db: Session, category_id: str) -> set[str]:
     rows = db.execute(
         select(FCategoryCandidate.source_url).where(
@@ -121,7 +157,12 @@ def source_category(
 
     seen_urls = _existing_source_urls(db, str(node["id"]))
     created = 0
+    filtered = 0
     for offer in offers[:limit]:
+        title = str(getattr(offer, "title", "") or "")
+        if not offer_matches_category(title, keyword_profile):
+            filtered += 1
+            continue
         source_url = str(getattr(offer, "supplier_url", "") or "").strip()
         if not source_url or source_url in seen_urls:
             continue
@@ -144,4 +185,15 @@ def source_category(
             source="alibaba1688",
         )
         created += 1
-    return {"offers_seen": len(offers), "candidates_created": created}
+    if created == 0 and filtered > 0:
+        # 全部被相关性把关拦下：分销选品池没有这个品类的真货。
+        raise FSourcingNoMatchError(
+            f"1688 分销池无「{_relevance_terms(keyword_profile)[0] if _relevance_terms(keyword_profile) else node.get('name')}」"
+            f"相关货源（返回 {len(offers)} 条均与类目无关，已全部过滤）——"
+            "可到候选池手动贴 1688 全站链接"
+        )
+    return {
+        "offers_seen": len(offers),
+        "candidates_created": created,
+        "filtered_irrelevant": filtered,
+    }
