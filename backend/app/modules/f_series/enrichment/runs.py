@@ -142,14 +142,20 @@ def execute_run(run_id: UUID) -> None:
         if do_sourcing:
             # 图搜接力的种子图靠 Serper：sourcing_only 模式也要钥匙。
             # 拿不到只跳过接力段（词搜照跑），不毙运行。
+            # 冷进程首跑时编排层惰性导入可达数秒，事务空转会被 8s 闸掐线
+            # ——先清事务，失败重试一次（第二次走热路径，毫秒级）。
             if not api_key:
-                try:
-                    api_key = _serper_key(db)
-                except Exception:  # noqa: BLE001
-                    db.rollback()
-                    node_errors.append(
-                        "图搜接力已跳过：Serper 密钥未配置（词搜段照常）"
-                    )
+                for attempt in (1, 2):
+                    try:
+                        db.rollback()
+                        api_key = _serper_key(db)
+                        break
+                    except Exception:  # noqa: BLE001
+                        db.rollback()
+                        if attempt == 2:
+                            node_errors.append(
+                                "图搜接力已跳过：Serper 密钥获取失败（词搜段照常）"
+                            )
             try:
                 org_id = _target_org_id(db) or ""
                 if not org_id:
@@ -254,6 +260,17 @@ def execute_run(run_id: UUID) -> None:
                     run.finished_at = _now()
                     db.commit()
                     return
+                except sourcing.FSourcingNoMatchError as exc:
+                    # 无新增 ≠ 没花钱：调用数随异常带回，台账不丢账。
+                    db.rollback()
+                    node_errors.append(
+                        f"{node.get('name')} 找货: {str(exc)[:160]}"
+                    )
+                    run = db.get(FEnrichmentRun, run_id)
+                    if run is None or run.status == "cancelled":
+                        db.rollback()
+                        return
+                    run.alibaba_calls += exc.calls_used
                 except Exception as exc:  # noqa: BLE001 - 单节点失败不阻断整批
                     db.rollback()
                     node_errors.append(

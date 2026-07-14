@@ -102,9 +102,14 @@ class FSourcingUnavailableError(RuntimeError):
 
 
 class FSourcingNoMatchError(RuntimeError):
-    """分销选品池没有该类目任何画像产品的相关货源（兜底垃圾已全部过滤）。
+    """词搜+图搜接力都没有该类目任何画像产品的新增货源。
 
-    单节点级错误：运行引擎按节点错误收账继续，不阻断整批。"""
+    单节点级错误：运行引擎按节点错误收账继续，不阻断整批。
+    calls_used 随异常带回（额度已真实消耗，台账不能丢账）。"""
+
+    def __init__(self, message: str, *, calls_used: int = 0) -> None:
+        super().__init__(message)
+        self.calls_used = calls_used
 
 
 def build_provider(db: Session, *, org_id: str) -> SourcingProvider:
@@ -369,7 +374,8 @@ def source_category(
         raise FSourcingNoMatchError(
             f"类目「{node.get('name_zh') or node.get('name')}」按 {len(products)} 个"
             f"画像产品词搜+图搜接力，无新增货源（不相关 {filtered} 条、重复"
-            f" {duplicates} 条{detail}）——可到候选池手动贴 1688 全站链接"
+            f" {duplicates} 条{detail}）——可到候选池手动贴 1688 全站链接",
+            calls_used=calls_used,
         )
     return {
         "offers_seen": offers_seen,
