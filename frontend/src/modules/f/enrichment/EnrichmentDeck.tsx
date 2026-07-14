@@ -876,6 +876,7 @@ export function EnrichmentDeck() {
                           alt=""
                           className={styles.thumb}
                           loading="lazy"
+                          referrerPolicy="no-referrer"
                           src={candidate.image_url}
                         />
                       ) : null}
