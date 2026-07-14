@@ -121,8 +121,12 @@ def get_candidate_image(candidate_id: str, image_url: str, variant: str) -> tupl
     if len(data) > _MAX_BYTES:
         raise FImageUnavailableError("图片超过 20MB 上限。")
 
-    cache_dir.mkdir(parents=True, exist_ok=True)
-    tmp_file = cache_file.with_suffix(".tmp")
-    tmp_file.write_bytes(data)
-    tmp_file.replace(cache_file)
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        tmp_file = cache_file.with_suffix(".tmp")
+        tmp_file.write_bytes(data)
+        tmp_file.replace(cache_file)
+    except OSError:
+        # 缓存写不进（卷属主/磁盘问题）不影响出图——牺牲缓存直接回图。
+        pass
     return data, sniff_media_type(data)

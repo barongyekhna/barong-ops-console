@@ -13,7 +13,7 @@ RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
     && python -m playwright install --with-deps chromium \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app \
-    && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media \
+    && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media /var/lib/barong/f-media \
     && chown -R app:app /app /var/lib/barong /ms-playwright
 
 COPY --chown=app:app backend ./backend
