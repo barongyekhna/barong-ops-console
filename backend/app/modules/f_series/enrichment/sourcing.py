@@ -376,8 +376,11 @@ def source_category(
             try:
                 try_consume(db, PROVIDER_SERPER)
                 db.rollback()
+                # 用英文名搜种子图（用户拍板 2026-07-15）：独立站卖欧美市场，
+                # 中文名搜出来的产品风格偏中文圈；英文种子图 → 1688 图搜
+                # 找到的才是欧美风格的同款。
                 raw = serper_client.serper_images(
-                    api_key=serper_api_key, query=product_zh or product_en
+                    api_key=serper_api_key, query=product_en or product_zh
                 )
                 seed_urls = serper_client.extract_image_urls(raw, limit=images_cap)
                 # 顺手收割图片来源网页（竞品定价/变体研究，组头展示）

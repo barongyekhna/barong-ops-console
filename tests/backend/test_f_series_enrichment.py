@@ -339,13 +339,20 @@ class _FakeSourcingProvider:
         self.calls.append(product_zh)
         return self._build_offers(product_zh, limit)
 
+    # 种子图搜索现在用英文名（欧美风格）；1688 回来的标题仍是中文
+    _SEED_EN_TO_ZH = {
+        "Camp Shower Bag": "露营淋浴袋",
+        "Folding Bucket": "折叠水桶",
+    }
+
     def search_offers_cps_image(self, *, image_url, limit):
-        """图搜接力通道：种子图 URL 形如 .../{产品名}/seed-{n}.jpg。"""
+        """图搜接力通道：种子图 URL 形如 .../{英文产品名}/seed-{n}.jpg。"""
         import re as _re
 
         self.cps_calls.append(str(image_url))
         match = _re.search(r"example\.com/([^/]+)/seed-(\d+)", str(image_url))
-        product_zh = match.group(1) if match else "未知"
+        seed_name = match.group(1) if match else "未知"
+        product_zh = self._SEED_EN_TO_ZH.get(seed_name, seed_name)
         seed = match.group(2) if match else "0"
         return self._build_offers(product_zh, limit, url_prefix=f"cps-{seed}-")
 
@@ -525,6 +532,8 @@ def test_sourcing_image_relay_tops_up_from_cps_pool(
 
     def fake_images(*, api_key: str, query: str, num: int = 100):
         assert api_key == "test-key"
+        # 种子图搜索必须用画像英文名（欧美市场风格）
+        assert query in ("Camp Shower Bag", "Folding Bucket")
         return {
             "images": [
                 {

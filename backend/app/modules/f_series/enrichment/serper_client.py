@@ -36,8 +36,17 @@ def serper_search(*, api_key: str, query: str) -> dict[str, Any]:
 
 
 def serper_images(*, api_key: str, query: str, num: int = 100) -> dict[str, Any]:
-    """谷歌图片搜索（图搜接力的种子图来源）：一次调用最多回 100 张。"""
-    payload = {"q": query, "num": max(10, min(int(num or 100), 100))}
+    """谷歌图片搜索（图搜接力的种子图来源）：一次调用最多回 100 张。
+
+    锁美区英文结果（gl/hl）：种子图要长成欧美市场在卖的样子，
+    市场参考页也要是英文世界的独立站。
+    """
+    payload = {
+        "q": query,
+        "num": max(10, min(int(num or 100), 100)),
+        "gl": "us",
+        "hl": "en",
+    }
     request = Request(
         os.getenv("F_SERPER_IMAGES_URL", SERPER_IMAGES_URL),
         data=json.dumps(payload).encode("utf-8"),
