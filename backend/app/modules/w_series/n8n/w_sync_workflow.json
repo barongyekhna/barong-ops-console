@@ -1,4 +1,6 @@
 {
+  "id": "barongWshipping001",
+  "versionId": "c5000000-0000-4000-8000-000000000001",
   "name": "barong控制台-W系列-运费与物流同步",
   "active": true,
   "settings": {},
@@ -14,7 +16,10 @@
       "name": "Webhook 触发",
       "type": "n8n-nodes-base.webhook",
       "typeVersion": 2,
-      "position": [0, 400],
+      "position": [
+        0,
+        400
+      ],
       "webhookId": "barong-w-shipping-webhook"
     },
     {
@@ -25,7 +30,10 @@
       "name": "解析任务",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [200, 400]
+      "position": [
+        200,
+        400
+      ]
     },
     {
       "parameters": {
@@ -33,10 +41,21 @@
           "values": [
             {
               "conditions": {
-                "options": {"caseSensitive": true, "version": 2, "typeValidation": "strict"},
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2,
+                  "typeValidation": "strict"
+                },
                 "combinator": "and",
                 "conditions": [
-                  {"leftValue": "={{ $json.action }}", "rightValue": "upsert_shipping_class", "operator": {"type": "string", "operation": "equals"}}
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "upsert_shipping_class",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
                 ]
               },
               "renameOutput": true,
@@ -44,10 +63,21 @@
             },
             {
               "conditions": {
-                "options": {"caseSensitive": true, "version": 2, "typeValidation": "strict"},
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2,
+                  "typeValidation": "strict"
+                },
                 "combinator": "and",
                 "conditions": [
-                  {"leftValue": "={{ $json.action }}", "rightValue": "delete_shipping_class", "operator": {"type": "string", "operation": "equals"}}
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "delete_shipping_class",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
                 ]
               },
               "renameOutput": true,
@@ -55,10 +85,21 @@
             },
             {
               "conditions": {
-                "options": {"caseSensitive": true, "version": 2, "typeValidation": "strict"},
+                "options": {
+                  "caseSensitive": true,
+                  "version": 2,
+                  "typeValidation": "strict"
+                },
                 "combinator": "and",
                 "conditions": [
-                  {"leftValue": "={{ $json.action }}", "rightValue": "order_tracking", "operator": {"type": "string", "operation": "equals"}}
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "order_tracking",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
                 ]
               },
               "renameOutput": true,
@@ -72,9 +113,11 @@
       "name": "按动作分流",
       "type": "n8n-nodes-base.switch",
       "typeVersion": 3,
-      "position": [400, 400]
+      "position": [
+        400,
+        400
+      ]
     },
-
     {
       "parameters": {
         "url": "={{ 'https://barongyekhna.com/wp-json/wc/v3/products/shipping_classes?per_page=100&search=' + encodeURIComponent($json.p.slug) }}",
@@ -86,9 +129,17 @@
       "name": "查已有模板",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [620, 160],
+      "position": [
+        620,
+        160
+      ],
       "alwaysOutputData": true,
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -98,7 +149,10 @@
       "name": "定建改",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [840, 160]
+      "position": [
+        840,
+        160
+      ]
     },
     {
       "parameters": {
@@ -115,8 +169,16 @@
       "name": "写模板",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1060, 160],
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "position": [
+        1060,
+        160
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -126,15 +188,30 @@
       "name": "记模板ID",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1280, 160]
+      "position": [
+        1280,
+        160
+      ]
     },
     {
       "parameters": {
         "conditions": {
-          "options": {"caseSensitive": true, "version": 2, "typeValidation": "strict"},
+          "options": {
+            "caseSensitive": true,
+            "version": 2,
+            "typeValidation": "strict"
+          },
           "combinator": "and",
           "conditions": [
-            {"leftValue": "={{ $json.has_rates }}", "rightValue": true, "operator": {"type": "boolean", "operation": "true", "singleValue": true}}
+            {
+              "leftValue": "={{ $json.has_rates }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
           ]
         },
         "options": {}
@@ -143,7 +220,10 @@
       "name": "有区域费率?",
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.2,
-      "position": [1500, 160]
+      "position": [
+        1500,
+        160
+      ]
     },
     {
       "parameters": {
@@ -156,8 +236,16 @@
       "name": "查区域",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [1720, 60],
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "position": [
+        1720,
+        60
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -167,7 +255,10 @@
       "name": "匹配区域",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1940, 60]
+      "position": [
+        1940,
+        60
+      ]
     },
     {
       "parameters": {
@@ -180,9 +271,17 @@
       "name": "查区域方法",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2160, 60],
+      "position": [
+        2160,
+        60
+      ],
       "alwaysOutputData": true,
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -192,7 +291,10 @@
       "name": "组费率更新",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2380, 60]
+      "position": [
+        2380,
+        60
+      ]
     },
     {
       "parameters": {
@@ -209,9 +311,17 @@
       "name": "写区域费率",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [2600, 60],
+      "position": [
+        2600,
+        60
+      ],
       "alwaysOutputData": true,
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -221,10 +331,12 @@
       "name": "组回报-模板",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [2820, 160],
+      "position": [
+        2820,
+        160
+      ],
       "executeOnce": true
     },
-
     {
       "parameters": {
         "method": "DELETE",
@@ -237,8 +349,16 @@
       "name": "删Woo模板",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [620, 400],
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "position": [
+        620,
+        400
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -248,10 +368,12 @@
       "name": "组回报-删除",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [840, 400],
+      "position": [
+        840,
+        400
+      ],
       "executeOnce": true
     },
-
     {
       "parameters": {
         "method": "POST",
@@ -267,8 +389,16 @@
       "name": "写订单备注",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [620, 640],
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "position": [
+        620,
+        640
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -285,8 +415,16 @@
       "name": "写订单元数据",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [840, 640],
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "position": [
+        840,
+        640
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -296,10 +434,12 @@
       "name": "组回报-单号",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [1060, 640],
+      "position": [
+        1060,
+        640
+      ],
       "executeOnce": true
     },
-
     {
       "parameters": {
         "method": "POST",
@@ -307,7 +447,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "X-Job-Token", "value": "={{ $json.token }}"}
+            {
+              "name": "X-Job-Token",
+              "value": "={{ $json.token }}"
+            }
           ]
         },
         "sendBody": true,
@@ -319,35 +462,242 @@
       "name": "回报控制台",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [3040, 400]
+      "position": [
+        3040,
+        400
+      ]
     }
   ],
   "connections": {
-    "Webhook 触发": {"main": [[{"node": "解析任务", "type": "main", "index": 0}]]},
-    "解析任务": {"main": [[{"node": "按动作分流", "type": "main", "index": 0}]]},
-    "按动作分流": {"main": [
-      [{"node": "查已有模板", "type": "main", "index": 0}],
-      [{"node": "删Woo模板", "type": "main", "index": 0}],
-      [{"node": "写订单备注", "type": "main", "index": 0}]
-    ]},
-    "查已有模板": {"main": [[{"node": "定建改", "type": "main", "index": 0}]]},
-    "定建改": {"main": [[{"node": "写模板", "type": "main", "index": 0}]]},
-    "写模板": {"main": [[{"node": "记模板ID", "type": "main", "index": 0}]]},
-    "记模板ID": {"main": [[{"node": "有区域费率?", "type": "main", "index": 0}]]},
-    "有区域费率?": {"main": [
-      [{"node": "查区域", "type": "main", "index": 0}],
-      [{"node": "组回报-模板", "type": "main", "index": 0}]
-    ]},
-    "查区域": {"main": [[{"node": "匹配区域", "type": "main", "index": 0}]]},
-    "匹配区域": {"main": [[{"node": "查区域方法", "type": "main", "index": 0}]]},
-    "查区域方法": {"main": [[{"node": "组费率更新", "type": "main", "index": 0}]]},
-    "组费率更新": {"main": [[{"node": "写区域费率", "type": "main", "index": 0}]]},
-    "写区域费率": {"main": [[{"node": "组回报-模板", "type": "main", "index": 0}]]},
-    "组回报-模板": {"main": [[{"node": "回报控制台", "type": "main", "index": 0}]]},
-    "删Woo模板": {"main": [[{"node": "组回报-删除", "type": "main", "index": 0}]]},
-    "组回报-删除": {"main": [[{"node": "回报控制台", "type": "main", "index": 0}]]},
-    "写订单备注": {"main": [[{"node": "写订单元数据", "type": "main", "index": 0}]]},
-    "写订单元数据": {"main": [[{"node": "组回报-单号", "type": "main", "index": 0}]]},
-    "组回报-单号": {"main": [[{"node": "回报控制台", "type": "main", "index": 0}]]}
+    "Webhook 触发": {
+      "main": [
+        [
+          {
+            "node": "解析任务",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析任务": {
+      "main": [
+        [
+          {
+            "node": "按动作分流",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "按动作分流": {
+      "main": [
+        [
+          {
+            "node": "查已有模板",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "删Woo模板",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "写订单备注",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查已有模板": {
+      "main": [
+        [
+          {
+            "node": "定建改",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "定建改": {
+      "main": [
+        [
+          {
+            "node": "写模板",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "写模板": {
+      "main": [
+        [
+          {
+            "node": "记模板ID",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "记模板ID": {
+      "main": [
+        [
+          {
+            "node": "有区域费率?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "有区域费率?": {
+      "main": [
+        [
+          {
+            "node": "查区域",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "组回报-模板",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查区域": {
+      "main": [
+        [
+          {
+            "node": "匹配区域",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "匹配区域": {
+      "main": [
+        [
+          {
+            "node": "查区域方法",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "查区域方法": {
+      "main": [
+        [
+          {
+            "node": "组费率更新",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "组费率更新": {
+      "main": [
+        [
+          {
+            "node": "写区域费率",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "写区域费率": {
+      "main": [
+        [
+          {
+            "node": "组回报-模板",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "组回报-模板": {
+      "main": [
+        [
+          {
+            "node": "回报控制台",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "删Woo模板": {
+      "main": [
+        [
+          {
+            "node": "组回报-删除",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "组回报-删除": {
+      "main": [
+        [
+          {
+            "node": "回报控制台",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "写订单备注": {
+      "main": [
+        [
+          {
+            "node": "写订单元数据",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "写订单元数据": {
+      "main": [
+        [
+          {
+            "node": "组回报-单号",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "组回报-单号": {
+      "main": [
+        [
+          {
+            "node": "回报控制台",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   }
 }

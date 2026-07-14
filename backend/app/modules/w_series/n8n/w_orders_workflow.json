@@ -1,4 +1,6 @@
 {
+  "id": "barongWorders001",
+  "versionId": "c5000000-0000-4000-8000-000000000002",
   "name": "barong控制台-W系列-订单同步",
   "active": true,
   "settings": {},
@@ -7,7 +9,10 @@
       "parameters": {
         "rule": {
           "interval": [
-            {"field": "minutes", "minutesInterval": 15}
+            {
+              "field": "minutes",
+              "minutesInterval": 15
+            }
           ]
         }
       },
@@ -15,7 +20,10 @@
       "name": "定时触发",
       "type": "n8n-nodes-base.scheduleTrigger",
       "typeVersion": 1.2,
-      "position": [0, 300]
+      "position": [
+        0,
+        300
+      ]
     },
     {
       "parameters": {
@@ -28,8 +36,16 @@
       "name": "拉Woo订单",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [220, 300],
-      "credentials": {"httpBasicAuth": {"id": "aPB82hXe9Rxdvyfo", "name": "WooCommerce"}}
+      "position": [
+        220,
+        300
+      ],
+      "credentials": {
+        "httpBasicAuth": {
+          "id": "aPB82hXe9Rxdvyfo",
+          "name": "WooCommerce"
+        }
+      }
     },
     {
       "parameters": {
@@ -39,7 +55,10 @@
       "name": "转ingest格式",
       "type": "n8n-nodes-base.code",
       "typeVersion": 2,
-      "position": [440, 300]
+      "position": [
+        440,
+        300
+      ]
     },
     {
       "parameters": {
@@ -48,7 +67,10 @@
         "sendHeaders": true,
         "headerParameters": {
           "parameters": [
-            {"name": "X-Ingest-Token", "value": "__W_ORDERS_INGEST_TOKEN__"}
+            {
+              "name": "X-Ingest-Token",
+              "value": "__W_ORDERS_INGEST_TOKEN__"
+            }
           ]
         },
         "sendBody": true,
@@ -60,12 +82,45 @@
       "name": "推控制台",
       "type": "n8n-nodes-base.httpRequest",
       "typeVersion": 4.2,
-      "position": [660, 300]
+      "position": [
+        660,
+        300
+      ]
     }
   ],
   "connections": {
-    "定时触发": {"main": [[{"node": "拉Woo订单", "type": "main", "index": 0}]]},
-    "拉Woo订单": {"main": [[{"node": "转ingest格式", "type": "main", "index": 0}]]},
-    "转ingest格式": {"main": [[{"node": "推控制台", "type": "main", "index": 0}]]}
+    "定时触发": {
+      "main": [
+        [
+          {
+            "node": "拉Woo订单",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "拉Woo订单": {
+      "main": [
+        [
+          {
+            "node": "转ingest格式",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "转ingest格式": {
+      "main": [
+        [
+          {
+            "node": "推控制台",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
   }
 }
