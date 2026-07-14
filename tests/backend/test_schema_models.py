@@ -7,6 +7,7 @@ CORE_TABLES = {
     "agent_memory_access_logs",
     "agent_registry",
     "anomaly_events",
+    "arcade_high_scores",
     "approval_decisions",
     "approval_requests",
     "approval_workflows",
@@ -85,6 +86,16 @@ STABLE_ID_FIELDS = {
 }
 
 MINIMUM_FIELDS = {
+    "arcade_high_scores": {
+        "id",
+        "org_id",
+        "game_id",
+        "score",
+        "holder_user_id",
+        "username_snapshot",
+        "created_at",
+        "updated_at",
+    },
     "users": {
         "id",
         "username",

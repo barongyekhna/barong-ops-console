@@ -16,6 +16,7 @@ from backend.app.models.approval import (
     ApprovalRequestRecord,
     ApprovalWorkflowRecord,
 )
+from backend.app.models.arcade import ArcadeHighScoreRecord
 from backend.app.models.api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
 from backend.app.models.artifact import Artifact
 from backend.app.models.auth_session import AuthSession
@@ -274,6 +275,7 @@ def clear_auth_tables() -> None:
             pytest.skip(_integration_db_skip_reason())
         Base.metadata.create_all(bind=engine, checkfirst=True)
     with SessionLocal() as db:
+        db.execute(delete(ArcadeHighScoreRecord))
         db.execute(delete(AgentMemoryAccessLog))
         db.execute(delete(ContextPacket))
         db.execute(delete(MemorySummary))

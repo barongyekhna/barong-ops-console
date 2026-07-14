@@ -18,7 +18,13 @@ const NUM_COLORS = ["", "#39d4ff", "#4dffa1", "#ffd23b", "#ff9a5f", "#ff6b8a", "
 type Cell = { mine: boolean; count: number; revealed: boolean; flagged: boolean };
 function initBoard(): Cell[][] { return Array.from({ length: ROWS }, () => Array.from({ length: COLS }, () => ({ mine: false, count: 0, revealed: false, flagged: false }))); }
 
-export function MinesGame({ onExit }: { onExit: () => void }) {
+export function MinesGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const boardRef = useRef<Cell[][]>(initBoard());
   const curRef = useRef({ r: Math.floor(ROWS / 2), c: Math.floor(COLS / 2) });
@@ -28,6 +34,7 @@ export function MinesGame({ onExit }: { onExit: () => void }) {
   const [tick, setTick] = useState(0);
   const [over, setOver] = useState<null | "win" | "lose">(null);
   const [flags, setFlags] = useState(0);
+  const [score, setScore] = useState(0);
 
   const place = useCallback((sr: number, sc: number) => {
     const b = boardRef.current;
@@ -54,14 +61,16 @@ export function MinesGame({ onExit }: { onExit: () => void }) {
       const [cr, cc] = stack.pop()!;
       const cell = b[cr][cc];
       if (cell.revealed || cell.flagged) continue;
-      cell.revealed = true; revealedRef.current += 1;
+      cell.revealed = true;
       if (cell.mine) { overRef.current = "lose"; setOver("lose"); for (const row of b) for (const cl of row) if (cl.mine) cl.revealed = true; return; }
+      revealedRef.current += 1;
       if (cell.count === 0) for (let dr = -1; dr <= 1; dr += 1) for (let dc = -1; dc <= 1; dc += 1) { const nr = cr + dr, nc = cc + dc; if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS && !b[nr][nc].revealed) stack.push([nr, nc]); }
     }
+    setScore(revealedRef.current);
     if (revealedRef.current >= ROWS * COLS - MINES) { overRef.current = "win"; setOver("win"); }
   }, [place]);
 
-  const restart = useCallback(() => { boardRef.current = initBoard(); curRef.current = { r: Math.floor(ROWS / 2), c: Math.floor(COLS / 2) }; placedRef.current = false; revealedRef.current = 0; overRef.current = null; setOver(null); setFlags(0); setTick((t) => t + 1); }, []);
+  const restart = useCallback(() => { boardRef.current = initBoard(); curRef.current = { r: Math.floor(ROWS / 2), c: Math.floor(COLS / 2) }; placedRef.current = false; revealedRef.current = 0; overRef.current = null; setOver(null); setFlags(0); setScore(0); setTick((t) => t + 1); }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -103,13 +112,17 @@ export function MinesGame({ onExit }: { onExit: () => void }) {
     ctx.strokeStyle = "#39d4ff"; ctx.lineWidth = 2.5; ctx.strokeRect(BX + cur.c * CELL + 1, BY + cur.r * CELL + 1, CELL - 2, CELL - 2);
     // HUD
     ctx.fillStyle = "#7d95ae"; ctx.font = "700 12px ui-monospace, monospace"; ctx.textAlign = "left"; ctx.textBaseline = "top";
-    ctx.fillText(`剩余雷 ${MINES - flags}`, BX, 14); ctx.fillText("空格 挖 · F 旗", BX + 140, 14);
-  }, [tick, flags]);
+    ctx.fillText(`剩余雷 ${MINES - flags}`, BX, 14); ctx.fillText(`已排除 ${score}`, BX + 140, 14); ctx.fillText("空格 挖 · F 旗", BX + 270, 14);
+  }, [tick, flags, score]);
+
+  useEffect(() => {
+    onScoreChange?.(score);
+  }, [onScoreChange, score]);
 
   return (
     <div className="cc-arcade-stage">
       <canvas className="cc-arcade-canvas" height={H} ref={canvasRef} width={W} />
-      <div className="cc-arcade-hudbar"><span>剩余雷 {MINES - flags}</span><span>WASD 移动 · 空格挖 · F 旗</span></div>
+      <div className="cc-arcade-hudbar"><span>已排除 {score}</span><span>剩余雷 {MINES - flags}</span><span>WASD 移动 · 空格挖 · F 旗</span></div>
       {over ? (
         <div className="cc-arcade-overlay">
           <strong className="cc-arcade-big">{over === "win" ? "全部排除 🎉" : "踩雷了 💥"}</strong>

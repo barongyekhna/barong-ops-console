@@ -16,6 +16,7 @@ from .api.routes.api_key_orchestration import router as api_key_orchestration_ro
 from .api.routes.ai_execution_bindings import router as ai_execution_bindings_router
 from .api.routes.approval import plural_router as approvals_router
 from .api.routes.approval import router as approval_router
+from .api.routes.arcade import router as arcade_router
 from .api.routes.auth import router as auth_router
 from .api.routes.callback_handler import router as callback_handler_router
 from .api.routes.capability_bindings import router as capability_bindings_router
@@ -937,6 +938,7 @@ app.include_router(auth_router, prefix=PUBLIC_API_PREFIX)
 
 app.include_router(users_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(dashboard_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(arcade_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approval_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(approvals_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(reviews_router, prefix=APPLICATION_API_PREFIX)

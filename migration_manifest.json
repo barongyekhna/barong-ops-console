@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260714_01_w_logistics_hub",
+  "alembic_head": "20260714_03_arcade_high_scores",
   "environment": "staging",
-  "expected_alembic_head": "20260714_01_w_logistics_hub",
+  "expected_alembic_head": "20260714_03_arcade_high_scores",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 55,
-  "migration_hash": "1392667bc2e6d21a0e822d64887addbecf0ae3b9fe9b97e43443169ebb1571c4",
+  "migration_count": 57,
+  "migration_hash": "7ce7c7c57f6b7db80d3be4ecf6a69f80b134f16a308d899029f38ae0ab631fb3",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -62,9 +62,11 @@
     "20260713_01_f_sourcing_mode",
     "20260713_02_w_shipping_hub",
     "20260713_03_f_category_experience",
-    "20260714_01_w_logistics_hub"
+    "20260714_01_w_logistics_hub",
+    "20260714_02_f_candidate_compare",
+    "20260714_03_arcade_high_scores"
   ],
-  "migration_order_checksum": "ae87a64c4e5b83501f0703e0c93df3511dcfb0f22f2ecd47787017cdf7a5e5ff",
+  "migration_order_checksum": "a212eded974598dd8ffaf2b248fe329b6b393596d387091febaca17bf3bc0942",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -450,6 +452,20 @@
       "down_revision": "20260713_03_f_category_experience",
       "path": "backend/alembic/versions/20260714_01_w_logistics_hub.py",
       "version": "20260714_01_w_logistics_hub"
+    },
+    {
+      "applied_at": "2026-07-14T00:00:00Z",
+      "checksum": "81ce763c632cd9144cfb52653fd3a42315915d0edb74ccf0802c846ba92026f5",
+      "down_revision": "20260714_01_w_logistics_hub",
+      "path": "backend/alembic/versions/20260714_02_f_candidate_compare.py",
+      "version": "20260714_02_f_candidate_compare"
+    },
+    {
+      "applied_at": "2026-07-14T00:00:00Z",
+      "checksum": "cbc59912b141a370a5b71c9b5a9b61cbb23f235505fbed0cf6e302dd2a4a898c",
+      "down_revision": "20260714_02_f_candidate_compare",
+      "path": "backend/alembic/versions/20260714_03_arcade_high_scores.py",
+      "version": "20260714_03_arcade_high_scores"
     }
   ]
 }

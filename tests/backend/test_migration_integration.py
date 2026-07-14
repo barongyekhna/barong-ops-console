@@ -11,6 +11,7 @@ ALEMBIC_CONFIG = "backend/alembic.ini"
 
 REQUIRED_ALEMBIC_TABLES = {
     "alembic_version",
+    "arcade_high_scores",
     "users",
     "auth_sessions",
     "organizations",

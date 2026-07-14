@@ -17,7 +17,13 @@ function makeState(): State {
   return { py: H / 2 - PH / 2, ay: H / 2 - PH / 2, bx: W / 2, by: H / 2, bvx: Math.random() < 0.5 ? -5.5 : 5.5, bvy: (Math.random() - 0.5) * 5, ps: 0, as: 0, serve: 0 };
 }
 
-export function PongGame({ onExit }: { onExit: () => void }) {
+export function PongGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stRef = useRef<State>(makeState());
   const keysRef = useRef<Set<string>>(new Set());
@@ -84,6 +90,10 @@ export function PongGame({ onExit }: { onExit: () => void }) {
     window.addEventListener("keydown", down); window.addEventListener("keyup", up); start();
     return () => { runningRef.current = false; if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, [start]);
+
+  useEffect(() => {
+    onScoreChange?.(hud.ps);
+  }, [hud.ps, onScoreChange]);
 
   return (
     <div className="cc-arcade-stage">

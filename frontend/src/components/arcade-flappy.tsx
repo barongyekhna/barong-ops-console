@@ -19,7 +19,13 @@ function makeState(): State {
   return { y: H / 2, vy: 0, gates: [], stars: Array.from({ length: 46 }, () => ({ x: Math.random() * W, y: Math.random() * H, z: 0.4 + Math.random() * 1.5 })), next: 260, score: 0, started: false };
 }
 
-export function FlappyGame({ onExit }: { onExit: () => void }) {
+export function FlappyGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stRef = useRef<State>(makeState());
   const rafRef = useRef<number | null>(null);
@@ -83,6 +89,10 @@ export function FlappyGame({ onExit }: { onExit: () => void }) {
     window.addEventListener("keydown", down); start();
     return () => { runningRef.current = false; if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); window.removeEventListener("keydown", down); };
   }, [start, flap]);
+
+  useEffect(() => {
+    onScoreChange?.(score);
+  }, [onScoreChange, score]);
 
   return (
     <div className="cc-arcade-stage">

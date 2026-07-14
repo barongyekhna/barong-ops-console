@@ -44,7 +44,13 @@ function boom(s: State, x: number, y: number, color: string, n: number) {
   for (let i = 0; i < n; i += 1) { const a = Math.random() * Math.PI * 2; const sp = 0.5 + Math.random() * 2.4; s.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 1, color }); }
 }
 
-export function AsteroidsGame({ onExit }: { onExit: () => void }) {
+export function AsteroidsGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stRef = useRef<State>(makeState());
   const keysRef = useRef<Set<string>>(new Set());
@@ -81,6 +87,7 @@ export function AsteroidsGame({ onExit }: { onExit: () => void }) {
         if (r.size > 0 && Math.hypot(b.x - r.x, b.y - r.y) < r.r) {
           b.life = -1; r.size = -1;
           s.score += r.r > 40 ? 20 : r.r > 24 ? 50 : 100;
+          setHud({ score: s.score, lives: s.lives });
           boom(s, r.x, r.y, "#ffb13b", 12);
           if (r.r > 20) { for (let i = 0; i < 2; i += 1) { const nr = makeRock(r.x, r.y, Math.max(1, Math.round(r.r / 16) - 1)); s.rocks.push(nr); } }
           break;
@@ -144,6 +151,10 @@ export function AsteroidsGame({ onExit }: { onExit: () => void }) {
     window.addEventListener("keydown", down); window.addEventListener("keyup", up); start();
     return () => { runningRef.current = false; if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, [start]);
+
+  useEffect(() => {
+    onScoreChange?.(hud.score);
+  }, [hud.score, onScoreChange]);
 
   return (
     <div className="cc-arcade-stage">

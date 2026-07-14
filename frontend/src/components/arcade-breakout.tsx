@@ -38,7 +38,13 @@ function makeState(level = 1): State {
   return { pad, padW: 96, wideT: 0, balls: [newBall(pad, 5 + level * 0.4)], bricks: makeBricks(level), powers: [], lives: 3, score: 0, level, launched: false };
 }
 
-export function BreakoutGame({ onExit }: { onExit: () => void }) {
+export function BreakoutGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stRef = useRef<State>(makeState());
   const keysRef = useRef<Set<string>>(new Set());
@@ -86,6 +92,7 @@ export function BreakoutGame({ onExit }: { onExit: () => void }) {
             const oy = Math.min(b.y - (br.y - R), br.y + BH + R - b.y);
             if (ox < oy) b.vx = -b.vx; else b.vy = -b.vy;
             br.alive = false; s.score += 10;
+            setHud({ score: s.score, lives: s.lives, level: s.level });
             if (Math.random() < 0.13) { const roll = Math.random(); const kind: Power["kind"] = roll < 0.4 ? "multi" : roll < 0.72 ? "wide" : "slow"; s.powers.push({ x: br.x + BW / 2, y: br.y + BH, kind }); }
             break;
           }
@@ -108,6 +115,7 @@ export function BreakoutGame({ onExit }: { onExit: () => void }) {
         else if (p.kind === "wide") { s.padW = 150; s.wideT = 9000; }
         else for (const b of s.balls) { b.vx *= 0.72; b.vy *= 0.72; }
         s.score += 5;
+        setHud({ score: s.score, lives: s.lives, level: s.level });
         return false;
       }
       return p.y < H + 10;
@@ -140,6 +148,10 @@ export function BreakoutGame({ onExit }: { onExit: () => void }) {
     window.addEventListener("keydown", down); window.addEventListener("keyup", up); start();
     return () => { runningRef.current = false; if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); window.removeEventListener("keydown", down); window.removeEventListener("keyup", up); };
   }, [start]);
+
+  useEffect(() => {
+    onScoreChange?.(hud.score);
+  }, [hud.score, onScoreChange]);
 
   return (
     <div className="cc-arcade-stage">

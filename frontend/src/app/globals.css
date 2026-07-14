@@ -7109,8 +7109,65 @@ textarea:focus-visible {
 .cc-game-card strong { color: #eafaff; font-size: 15px; }
 .cc-game-en { color: var(--accent, #39d4ff); font: 700 9px ui-monospace, monospace; letter-spacing: 0.22em; }
 .cc-game-card small { color: var(--sh-dim, #7d95ae); font-size: 11px; line-height: 1.45; }
+.cc-game-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 18px;
+  margin-top: 5px;
+  color: var(--sh-amber, #ffb13b);
+  font: 700 10px ui-monospace, monospace;
+}
+.cc-game-record svg { flex: none; }
 .cc-game-play { margin-top: 5px; color: #eafaff; font: 700 11px ui-monospace, monospace; opacity: 0.65; }
 .cc-game-card:hover .cc-game-play { opacity: 1; color: var(--accent, #39d4ff); }
+
+.cc-arcade-record {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(34vw, 330px);
+  padding: 7px 10px;
+  border: 1px solid rgb(255 177 59 / 22%);
+  border-radius: 9px;
+  background: rgb(255 177 59 / 7%);
+  color: var(--sh-amber, #ffb13b);
+  font: 600 10px ui-monospace, monospace;
+  white-space: nowrap;
+}
+.cc-arcade-record > span { color: var(--sh-dim, #7d95ae); }
+.cc-arcade-record > strong {
+  min-width: 0;
+  overflow: hidden;
+  color: #ffe1ac;
+  text-overflow: ellipsis;
+}
+.cc-arcade-record > em {
+  color: #ffb96a;
+  font-size: 9px;
+  font-style: normal;
+}
+.cc-arcade-record-pending {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.cc-arcade-record-loading { animation: cc-record-spin 0.8s linear infinite; }
+@keyframes cc-record-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .cc-arcade-record-loading { animation: none; }
+}
+
+.cc-arcade-sync-note {
+  grid-column: 1 / -1;
+  padding: 10px 12px;
+  border: 1px solid rgb(255 177 59 / 18%);
+  border-radius: 9px;
+  background: rgb(255 177 59 / 6%);
+  color: var(--sh-dim, #7d95ae);
+  font-size: 11px;
+  line-height: 1.5;
+}
 
 .cc-arcade-hudbar {
   display: flex;
@@ -7149,6 +7206,12 @@ textarea:focus-visible {
 .cc-arcade-chev { transition: transform 0.18s; }
 .cc-arcade-chev.up { transform: rotate(180deg); }
 .cc-arcade.collapsed .cc-arcade-head { border-bottom: 0; }
+
+@media (max-width: 760px) {
+  .cc-arcade-head { align-items: flex-start; }
+  .cc-arcade-head-right { justify-content: flex-end; flex-wrap: wrap; }
+  .cc-arcade-record { max-width: 100%; order: 3; }
+}
 
 /* R-W 数据仓库命令中心标题头 */
 .r-w-page .rw-eyebrow {

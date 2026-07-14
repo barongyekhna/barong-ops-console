@@ -46,7 +46,13 @@ function resolve(b: Board): number {
   return total;
 }
 
-export function Match3Game({ onExit }: { onExit: () => void }) {
+export function Match3Game({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const boardRef = useRef<Board>(makeBoard());
   const curRef = useRef({ r: 4, c: 4 });
@@ -113,6 +119,10 @@ export function Match3Game({ onExit }: { onExit: () => void }) {
     ctx.fillText("SCORE", 30, BY); ctx.fillStyle = "#eafaff"; ctx.font = "800 24px ui-monospace, monospace"; ctx.fillText(String(score), 30, BY + 16);
     ctx.fillStyle = "#39d4ff"; ctx.font = "700 11px ui-monospace, monospace"; ctx.fillText("MOVES", 30, BY + 64); ctx.fillStyle = "#eafaff"; ctx.font = "800 24px ui-monospace, monospace"; ctx.fillText(String(moves), 30, BY + 80);
   }, [tick, score, moves]);
+
+  useEffect(() => {
+    onScoreChange?.(score);
+  }, [onScoreChange, score]);
 
   return (
     <div className="cc-arcade-stage">

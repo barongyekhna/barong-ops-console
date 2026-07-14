@@ -30,7 +30,13 @@ function makeState(): State {
   return { snake, dir: { x: 1, y: 0 }, nextDir: { x: 1, y: 0 }, food: randFood(snake), score: 0, gap: 130, acc: 0 };
 }
 
-export function SnakeGame({ onExit }: { onExit: () => void }) {
+export function SnakeGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stRef = useRef<State>(makeState());
   const rafRef = useRef<number | null>(null);
@@ -120,6 +126,10 @@ export function SnakeGame({ onExit }: { onExit: () => void }) {
       window.removeEventListener("keydown", onKey);
     };
   }, [start]);
+
+  useEffect(() => {
+    onScoreChange?.(score);
+  }, [onScoreChange, score]);
 
   return (
     <div className="cc-arcade-stage">

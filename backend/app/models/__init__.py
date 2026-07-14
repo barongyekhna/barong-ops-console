@@ -5,6 +5,7 @@ from .approval import (
     ApprovalRequestRecord,
     ApprovalWorkflowRecord,
 )
+from .arcade import ArcadeHighScoreRecord
 from .api_keys import ApiKeyModuleBindingRecord, ApiKeyRecord
 from .c19 import (
     C19AffiliationRecord,
@@ -83,6 +84,7 @@ __all__ = [
     "ApprovalDecisionRecord",
     "ApprovalRequestRecord",
     "ApprovalWorkflowRecord",
+    "ArcadeHighScoreRecord",
     "Artifact",
     "AuditLogRecord",
     "AuthSession",

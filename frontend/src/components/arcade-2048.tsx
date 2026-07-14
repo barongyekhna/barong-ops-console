@@ -44,7 +44,13 @@ function canMove(g: Grid): boolean {
   return false;
 }
 
-export function Game2048({ onExit }: { onExit: () => void }) {
+export function Game2048({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [grid, setGrid] = useState<Grid>(newGrid);
   const [score, setScore] = useState(0);
@@ -103,6 +109,10 @@ export function Game2048({ onExit }: { onExit: () => void }) {
     ctx.fillStyle = "#7d95ae"; ctx.font = "600 12px ui-monospace, monospace";
     ctx.fillText("WASD 滑动", 40, 168); ctx.fillText("合并相同数字", 40, 188);
   }, [grid, score]);
+
+  useEffect(() => {
+    onScoreChange?.(score);
+  }, [onScoreChange, score]);
 
   return (
     <div className="cc-arcade-stage">

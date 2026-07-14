@@ -206,6 +206,7 @@ function candidateValues(paramName) {
   if (name.endsWith("user_id") || name === "user_id") return ["12", UUID_SAMPLE];
   if (name === "entry_key") return ["modules.example.entry"];
   if (name === "module_id") return ["k.product_knowledge", UUID_SAMPLE, "12"];
+  if (name === "game_id") return ["snake"];
   if (name.endsWith("_id")) return [UUID_SAMPLE, "12"];
   return PARAM_CANDIDATES.default;
 }

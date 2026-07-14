@@ -75,7 +75,13 @@ function canMove(s: State, x: number, y: number): boolean {
   return true;
 }
 
-export function TankGame({ onExit }: { onExit: () => void }) {
+export function TankGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stRef = useRef<State>(makeState());
   const keysRef = useRef<Set<string>>(new Set());
@@ -233,6 +239,10 @@ export function TankGame({ onExit }: { onExit: () => void }) {
       window.removeEventListener("keyup", up);
     };
   }, [start]);
+
+  useEffect(() => {
+    onScoreChange?.(hud.score);
+  }, [hud.score, onScoreChange]);
 
   return (
     <div className="cc-arcade-stage">

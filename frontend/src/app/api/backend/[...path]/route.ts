@@ -44,6 +44,20 @@ const ALLOWED_APP_CREATE_RESOURCE_PATHS = new Set([
   "errors",
   "memory-events",
 ]);
+const ALLOWED_ARCADE_GAME_IDS = new Set([
+  "shmup",
+  "snake",
+  "tetris",
+  "tank",
+  "asteroids",
+  "breakout",
+  "2048",
+  "runner",
+  "match3",
+  "mines",
+  "flappy",
+  "pong",
+]);
 const ALLOWED_CONTROL_PLANE_RESOURCE_PATHS = new Set([
   "agents",
   "modules",
@@ -1083,7 +1097,16 @@ function isAllowedFPath(method: string, path: string[]) {
   ) {
     return method === "POST";
   }
-  // 额度视图（Serper / 1688 与 R-A 共账）
+  // 候选图片代理（后端回源 alicdn + 磁盘缓存；thumb/full 由 query 定）
+  if (
+    path.length === 4 &&
+    path[1] === "candidates" &&
+    isUuidPathSegment(path[2]) &&
+    path[3] === "image"
+  ) {
+    return method === "GET";
+  }
+  // 额度视图（Serper / F 独立 1688 总闸）
   if (path.length === 2 && path[1] === "quota") {
     return method === "GET";
   }
@@ -1681,6 +1704,22 @@ function isAllowedRwPath(method: string, path: string[]) {
   );
 }
 
+function isAllowedArcadePath(method: string, path: string[]) {
+  if (path[0] !== "arcade" || path[1] !== "high-scores") {
+    return false;
+  }
+
+  if (method === "GET") {
+    return path.length === 2;
+  }
+
+  return (
+    method === "POST" &&
+    path.length === 3 &&
+    ALLOWED_ARCADE_GAME_IDS.has(path[2])
+  );
+}
+
 type BackendApiLayer = "public" | "app" | "control-plane";
 
 function apiLayerPrefix(layer: BackendApiLayer) {
@@ -1730,6 +1769,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedWPath(method, path) ||
     isAllowedRPath(method, path) ||
     isAllowedRwPath(method, path) ||
+    isAllowedArcadePath(method, path) ||
     isAllowedNotificationsPath(method, path) ||
     isAllowedPPath(method, path)
   ) {

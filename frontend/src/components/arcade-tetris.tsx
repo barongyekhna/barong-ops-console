@@ -54,7 +54,13 @@ function makeState(): State {
   return { board: emptyBoard(), piece: spawnPiece(Math.floor(Math.random() * 7)), nextIdx: Math.floor(Math.random() * 7), score: 0, lines: 0, level: 1, gap: 800, acc: 0 };
 }
 
-export function TetrisGame({ onExit }: { onExit: () => void }) {
+export function TetrisGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stRef = useRef<State>(makeState());
   const softRef = useRef(false);
@@ -178,6 +184,10 @@ export function TetrisGame({ onExit }: { onExit: () => void }) {
       window.removeEventListener("keyup", up);
     };
   }, [start, lockAndNext]);
+
+  useEffect(() => {
+    onScoreChange?.(hud.score);
+  }, [hud.score, onScoreChange]);
 
   return (
     <div className="cc-arcade-stage">

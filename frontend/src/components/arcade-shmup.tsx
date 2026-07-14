@@ -40,7 +40,13 @@ function boom(g: Game, x: number, y: number, color: string, n: number) {
   }
 }
 
-export function ShmupGame({ onExit }: { onExit: () => void }) {
+export function ShmupGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const gameRef = useRef<Game>(makeGame());
   const keysRef = useRef<Set<string>>(new Set());
@@ -105,6 +111,7 @@ export function ShmupGame({ onExit }: { onExit: () => void }) {
           e.hp -= 1; b.y = -999; boom(g, b.x, b.y, "#39d4ff", 3);
           if (e.hp <= 0) {
             g.score += e.kind === 1 ? 30 : 10;
+            setHud({ score: g.score, lives: g.lives, lanes: g.lanes });
             boom(g, e.x, e.y, e.kind === 1 ? "#ffb13b" : "#ff8a5f", 14);
             if (Math.random() < (e.kind === 1 ? 0.55 : 0.16)) {
               const roll = Math.random();
@@ -218,6 +225,10 @@ export function ShmupGame({ onExit }: { onExit: () => void }) {
       window.removeEventListener("keyup", up);
     };
   }, [start]);
+
+  useEffect(() => {
+    onScoreChange?.(hud.score);
+  }, [hud.score, onScoreChange]);
 
   return (
     <div className="cc-arcade-stage">

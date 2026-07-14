@@ -23,12 +23,19 @@ function makeState(): State {
   };
 }
 
-export function RunnerGame({ onExit }: { onExit: () => void }) {
+export function RunnerGame({
+  onExit,
+  onScoreChange,
+}: {
+  onExit: () => void;
+  onScoreChange?: (score: number) => void;
+}) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const stRef = useRef<State>(makeState());
   const rafRef = useRef<number | null>(null);
   const lastRef = useRef(0);
   const runningRef = useRef(false);
+  const bestRef = useRef(0);
   const [over, setOver] = useState(false);
   const [score, setScore] = useState(0);
   const [best, setBest] = useState(0);
@@ -62,7 +69,9 @@ export function RunnerGame({ onExit }: { onExit: () => void }) {
     // 碰撞
     for (const r of s.rocks) {
       if (SHIP_X + SHIP_W - 5 > r.x + 3 && SHIP_X + 5 < r.x + r.w - 3 && s.y + SHIP_H - 3 > r.y + 3) {
-        runningRef.current = false; setOver(true); setBest((b) => Math.max(b, Math.floor(s.dist / 10)));
+        const finalScore = Math.floor(s.dist / 10);
+        runningRef.current = false; setScore(finalScore); setOver(true);
+        setBest((b) => { const next = Math.max(b, finalScore); bestRef.current = next; return next; });
         break;
       }
     }
@@ -88,11 +97,11 @@ export function RunnerGame({ onExit }: { onExit: () => void }) {
       // HUD
       ctx.fillStyle = "#7d95ae"; ctx.font = "700 12px ui-monospace, monospace"; ctx.textAlign = "left"; ctx.textBaseline = "top";
       ctx.fillText(`距离 ${Math.floor(s.dist / 10)}`, 14, 12);
-      ctx.textAlign = "right"; ctx.fillText(`最远 ${best}`, W - 14, 12);
+      ctx.textAlign = "right"; ctx.fillText(`最远 ${bestRef.current}`, W - 14, 12);
     }
     if (Math.floor(ts / 120) % 2 === 0) { const sc = Math.floor(s.dist / 10); setScore((prev) => (prev === sc ? prev : sc)); }
     rafRef.current = requestAnimationFrame(step);
-  }, [best]);
+  }, []);
 
   const start = useCallback(() => { stRef.current = makeState(); setScore(0); setOver(false); runningRef.current = true; lastRef.current = 0; rafRef.current = requestAnimationFrame(step); }, [step]);
 
@@ -101,6 +110,10 @@ export function RunnerGame({ onExit }: { onExit: () => void }) {
     window.addEventListener("keydown", down); start();
     return () => { runningRef.current = false; if (rafRef.current !== null) cancelAnimationFrame(rafRef.current); window.removeEventListener("keydown", down); };
   }, [start, jump]);
+
+  useEffect(() => {
+    onScoreChange?.(score);
+  }, [onScoreChange, score]);
 
   return (
     <div className="cc-arcade-stage">
