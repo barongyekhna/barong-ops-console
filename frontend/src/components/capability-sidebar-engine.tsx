@@ -46,6 +46,10 @@ const C_SYSTEM_MODULE_ORDER = [
     label: "控制台",
     module_key: "core.dashboard",
   },
+  {
+    label: "VPN",
+    module_key: "core.vpn",
+  },
 ] as const;
 
 const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set(

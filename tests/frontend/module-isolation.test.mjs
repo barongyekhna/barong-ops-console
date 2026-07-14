@@ -296,6 +296,13 @@ const registryItems = [
     status: "sealed",
   }),
   manifest({
+    category: "core",
+    denied_behavior: "hide_when_denied",
+    module_key: "core.vpn",
+    route_namespace: "/vpn",
+    status: "sealed",
+  }),
+  manifest({
     category: "admin",
     denied_behavior: "hide_when_denied",
     module_key: "admin.modules",
@@ -548,7 +555,7 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.match(sidebarSource, /const C_SYSTEM_MODULE_ORDER = \[/);
   assert.match(
     sidebarSource,
-    /admin\.modules[\s\S]*admin\.key_health[\s\S]*admin\.permissions[\s\S]*admin\.users[\s\S]*core\.dashboard/,
+    /admin\.modules[\s\S]*admin\.key_health[\s\S]*admin\.permissions[\s\S]*admin\.users[\s\S]*core\.dashboard[\s\S]*core\.vpn/,
   );
   assert.doesNotMatch(sidebarSource, /admin\.key_management/);
   assert.match(sidebarSource, /const C_SYSTEM_MODULE_KEYS: ReadonlySet<string> = new Set/);
@@ -653,7 +660,23 @@ test("productized routes are visible while diagnostics stay out of navigation", 
   assert.equal(item("business.jobs"), undefined);
   assert.equal(item("admin.workflows"), undefined);
   assert.equal(item("core.dashboard").href, "/dashboard");
+  assert.equal(item("core.vpn").href, "/vpn");
   assert.equal(item("admin.settings").href, "/settings");
+});
+
+test("VPN route reuses the unchanged operations dashboard", () => {
+  const vpnRouteSource = readFileSync(
+    "frontend/src/app/(console)/vpn/page.tsx",
+    "utf8",
+  );
+
+  assert.match(vpnRouteSource, /DashboardAccessControl/);
+  assert.match(vpnRouteSource, /OperationsDashboard/);
+  assert.match(
+    vpnRouteSource,
+    /<DashboardAccessControl>[\s\S]*<OperationsDashboard \/>[\s\S]*<\/DashboardAccessControl>/,
+  );
+  assert.doesNotMatch(vpnRouteSource, /className=|style=|globals\.css/);
 });
 
 test("owner full access bypasses unavailable route guard decisions", () => {
@@ -1232,6 +1255,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "business.approvals",
     "business.reviews",
     "core.dashboard",
+    "core.vpn",
     "admin.modules",
     "admin.key_health",
     "admin.settings",

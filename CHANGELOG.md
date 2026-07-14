@@ -6,6 +6,9 @@
 
 ### Added
 
+- 新增全局 `VPN` 模块壳：注册 `core.vpn` 与 `/vpn` 入口，不绑定组织、角色或
+  额外权限，所有已登录用户均可访问；页面直接复用现有火凤凰驾驶舱
+  `OperationsDashboard`，未修改任何驾驶舱组件或 CSS，本轮不接入 VPN 运行逻辑。
 - K 系列：基于当前测试基本通过状态提交封板记录；同步将 C 系列运行时、
   前端 banner、release manifest、production lock report 和 system metadata
   版本号从 `C-SERIES-V1.0.0` 提升为 `C-SERIES-V1.1.0`。

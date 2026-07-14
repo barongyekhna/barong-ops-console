@@ -214,9 +214,12 @@ def test_modules_registry_api_requires_login_and_owner_can_read(
     registry_payload = registry.json()
     assert registry_payload["count"] == len(registry_payload["items"])
     module_keys = {item["module_key"] for item in registry_payload["items"]}
-    assert {"admin.users", "admin.permissions", "core.dashboard"}.issubset(
-        module_keys
-    )
+    assert {
+        "admin.users",
+        "admin.permissions",
+        "core.dashboard",
+        "core.vpn",
+    }.issubset(module_keys)
     assert "k.product_knowledge" in module_keys
     assert "password_hash" not in json.dumps(registry_payload, sort_keys=True)
     me_payload = me.json()
@@ -240,9 +243,12 @@ def test_modules_registry_api_requires_login_and_owner_can_read(
     fallback_payload = fallback_me.json()
     assert fallback_payload["degraded"] is True
     assert fallback_payload["source"] == "snapshot"
-    assert {"admin.users", "admin.permissions", "core.dashboard"}.issubset(
-        {item["module_key"] for item in fallback_payload["items"]}
-    )
+    assert {
+        "admin.users",
+        "admin.permissions",
+        "core.dashboard",
+        "core.vpn",
+    }.issubset({item["module_key"] for item in fallback_payload["items"]})
     assert "k.product_knowledge" in {
         item["module_key"] for item in fallback_payload["items"]
     }
@@ -328,6 +334,20 @@ def test_static_module_registry_validation_rules() -> None:
                 "automation",
                 "manage_all",
             }
+
+
+def test_vpn_module_is_global_and_permission_free() -> None:
+    vpn_manifest = next(
+        manifest
+        for manifest in MODULE_MANIFESTS_V1
+        if manifest["module_key"] == "core.vpn"
+    )
+
+    assert vpn_manifest["route_namespace"] == "/vpn"
+    assert vpn_manifest["allowed_scope_types"] == ["global"]
+    assert vpn_manifest["required_permissions"] == []
+    assert vpn_manifest["permission_manifest"] == []
+    assert vpn_manifest["no_api"] is True
 
 
 def test_module_manifest_contract_rejects_invalid_shapes() -> None:
@@ -699,6 +719,12 @@ def test_owner_and_non_owner_module_access_states(
     assert viewer_items["business.reviews"]["access_state"] == "locked"
     assert "reviews.read" in viewer_items["business.reviews"]["missing_permissions"]
     assert viewer_items["core.dashboard"]["access_state"] == "available"
+    for items in (owner_items, viewer_items):
+        assert items["core.vpn"]["visible"] is True
+        assert items["core.vpn"]["hidden"] is False
+        assert items["core.vpn"]["locked"] is False
+        assert items["core.vpn"]["missing_permissions"] == []
+        assert items["core.vpn"]["access_state"] == "available"
 
 
 def test_planned_adapter_pending_and_unavailable_modules_are_not_executable(

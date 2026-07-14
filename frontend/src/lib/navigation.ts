@@ -197,6 +197,16 @@ export const navigationGroups: NavigationGroup[] = [
         status: "sealed",
       },
       {
+        category: "core",
+        denied_behavior: "hide_when_denied",
+        href: "/vpn",
+        icon: ShieldCheck,
+        label: "VPN",
+        module_key: "core.vpn",
+        route_namespace: "/vpn",
+        status: "sealed",
+      },
+      {
         category: "admin",
         denied_behavior: "hide_when_denied",
         href: "/module-control",

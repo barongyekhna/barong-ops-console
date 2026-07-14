@@ -183,6 +183,32 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         operation_log_policy=_operation_log_policy(write="none"),
     ),
     _manifest(
+        module_key="core.vpn",
+        display_name="VPN",
+        description=(
+            "Global VPN console shell available to every active authenticated "
+            "user without organization or role-based permission requirements."
+        ),
+        category="core",
+        status="sealed",
+        lifecycle="sealed",
+        route_namespace="/vpn",
+        api_namespace="no_api",
+        no_api=True,
+        navigation=_navigation(
+            group="Overview",
+            label="VPN",
+            icon="ShieldCheck",
+            order=15,
+        ),
+        required_permissions=(),
+        permission_manifest=(),
+        denied_behavior="hide_when_denied",
+        unavailable_behavior="hide",
+        operation_log_policy=_operation_log_policy(write="none"),
+        allowed_scope_types=("global",),
+    ),
+    _manifest(
         module_key="communication.im",
         display_name="C19 Communication",
         description=(
