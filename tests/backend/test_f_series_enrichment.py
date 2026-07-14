@@ -104,15 +104,21 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
             text(
                 "DELETE FROM ra_provider_quota_usage "
                 "WHERE provider IN ('serper_search', 'alibaba1688_app_calls', "
-                "'f_1688_app_calls')"
+                "'f_1688_app_calls', 'f_1688_image_search')"
             )
         )
         db.commit()
 
     monkeypatch.setenv("F_ENRICHMENT_INLINE", "1")
+    # 默认目标=2：词搜两条相关 offer 即吃饱，不触发图搜接力（接力专项测试自行调大）
+    monkeypatch.setenv("F_CANDIDATES_PER_PRODUCT", "2")
     monkeypatch.setattr(run_engine, "_serper_key", lambda db: "test-key")
     monkeypatch.setattr(
         serper_client, "serper_search", lambda **kwargs: dict(_SERPER_FIXTURE)
+    )
+    # 默认无种子图（防测试环境真打 serper；接力专项测试自行替换）
+    monkeypatch.setattr(
+        serper_client, "serper_images", lambda **kwargs: {"images": []}
     )
 
     yield owner_client
@@ -135,7 +141,7 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
             text(
                 "DELETE FROM ra_provider_quota_usage "
                 "WHERE provider IN ('serper_search', 'alibaba1688_app_calls', "
-                "'f_1688_app_calls')"
+                "'f_1688_app_calls', 'f_1688_image_search')"
             )
         )
         db.commit()
@@ -312,6 +318,7 @@ class _FakeSourcingProvider:
     def __init__(self, crossborder: str = "acl") -> None:
         self.calls: list[str] = []
         self.crossborder_calls: list[str] = []
+        self.cps_calls: list[str] = []
         # "acl" = 跨境权限未开通（默认，验证自动降级）；"offers" = 权限已开通
         self.crossborder = crossborder
 
@@ -331,7 +338,17 @@ class _FakeSourcingProvider:
         self.calls.append(product_zh)
         return self._build_offers(product_zh, limit)
 
-    def _build_offers(self, product_zh: str, limit: int):
+    def search_offers_cps_image(self, *, image_url, limit):
+        """图搜接力通道：种子图 URL 形如 .../{产品名}/seed-{n}.jpg。"""
+        import re as _re
+
+        self.cps_calls.append(str(image_url))
+        match = _re.search(r"example\.com/([^/]+)/seed-(\d+)", str(image_url))
+        product_zh = match.group(1) if match else "未知"
+        seed = match.group(2) if match else "0"
+        return self._build_offers(product_zh, limit, url_prefix=f"cps-{seed}-")
+
+    def _build_offers(self, product_zh: str, limit: int, url_prefix: str = ""):
         from decimal import Decimal
 
         from r_system_v2.ra.supplier_api import SupplierApiOffer
@@ -363,14 +380,16 @@ class _FakeSourcingProvider:
             _offer(
                 index,
                 f"{product_zh}工厂直供 现货 一件代发 {index + 1}",
-                f"{product_zh}-{index}",
+                f"{url_prefix}{product_zh}-{index}",
                 moq=1 if index == 0 else 100,
             )
             for index in range(2)
         ]
         # 1688 分销池的兜底垃圾（不含产品词）——相关性把关必须滤掉它
         offers.append(
-            _offer(2, "外贸剁骨刀家用砍骨头刀加厚锰钢", f"junk-{product_zh}", moq=2)
+            _offer(
+                2, "外贸剁骨刀家用砍骨头刀加厚锰钢", f"junk-{url_prefix}{product_zh}", moq=2
+            )
         )
         return offers[:limit]
 
@@ -409,8 +428,8 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     assert run["keywords_found"] == 8
     # 每节点：2 个画像产品 × 各 2 条相关 offer（垃圾 offer 被拦）
     assert run["candidates_found"] == 8
-    # 每产品预扣 CALLS_PER_PRODUCT=2：2 节点 × 2 产品 × 2
-    assert run["alibaba_calls"] == 8
+    # 逐调用记账：每产品 1 次词搜（跨境探测被拒即退款）× 2 产品 × 2 节点
+    assert run["alibaba_calls"] == 4
     # 双通道：跨境只探一次（ACL 拒后整轮降级），其余全走分销池
     assert fake.crossborder_calls == ["露营淋浴袋"]
     assert fake.calls == ["露营淋浴袋", "折叠水桶"] * 2
@@ -455,9 +474,9 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     assert rerun["keywords_found"] == 0  # sourcing_only 不动词
     assert "无新增货源" in (rerun["error"] or "")
 
-    # F 独立总闸记账：3 轮找货 × 每轮 2 产品 × 2 = 12
+    # F 独立总闸记账：3 轮找货 × 每轮 2 产品 × 1 次词搜 = 6
     quota = f_env.get("/api/app/f/quota").json()
-    assert quota["alibaba1688_app_calls"]["used"] == 12
+    assert quota["alibaba1688_app_calls"]["used"] == 6
 
 
 def test_sourcing_uses_crossborder_pool_when_authorized(
@@ -486,6 +505,64 @@ def test_sourcing_uses_crossborder_pool_when_authorized(
     assert fake.calls == []  # 分销池一次没碰
 
 
+def test_sourcing_image_relay_tops_up_from_cps_pool(
+    f_env: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """图搜接力：词搜没吃饱 → serper 种子图 → CPS 大池图搜，凑够目标即停。"""
+    from backend.app.modules.f_series.enrichment import sourcing
+
+    fake = _FakeSourcingProvider()  # 默认 acl：词搜走分销池
+    monkeypatch.setattr(sourcing, "build_provider", lambda db, org_id: fake)
+    monkeypatch.setattr(
+        sourcing.profile_engine,
+        "ensure_profile",
+        lambda db, **kwargs: _FakeProfile(),
+    )
+    # 目标 6 家：词搜 2 家 + 每张种子图 2 家 → 第二张图后吃饱即停
+    monkeypatch.setenv("F_CANDIDATES_PER_PRODUCT", "6")
+    monkeypatch.setenv("F_IMAGES_PER_PRODUCT", "5")
+
+    def fake_images(*, api_key: str, query: str, num: int = 100):
+        assert api_key == "test-key"
+        return {
+            "images": [
+                {
+                    "imageUrl": f"https://img.example.com/{query}/seed-{i}.jpg",
+                    "imageWidth": 800,
+                }
+                for i in range(4)
+            ]
+        }
+
+    monkeypatch.setattr(serper_client, "serper_images", fake_images)
+
+    response = f_env.post(
+        "/api/app/f/runs", json={"category_ids": ["f991"], "mode": "sourcing_only"}
+    )
+    assert response.status_code == 201
+    run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
+    assert run["status"] == "succeeded"
+    # 每产品：词搜 2 + 种子图1 ×2 + 种子图2 ×2 = 6（凑够即停）；2 产品 = 12
+    assert run["candidates_found"] == 12
+    # 每产品只喂了 2 张种子图（第 3、4 张省下）
+    assert len(fake.cps_calls) == 4
+    # 记账：词搜 2 + 图搜 4 = 6 进 F 总闸；图搜 4 进 CPS 日闸；种子图 2 进 serper
+    assert run["alibaba_calls"] == 6
+    quota = f_env.get("/api/app/f/quota").json()
+    assert quota["cps_image_search"]["used"] == 4
+    assert quota["serper"]["used"] == 2
+
+    # 图搜候选与词搜候选同组同评分体系（组内 top3 名次覆盖全组）
+    items = f_env.get(
+        "/api/app/f/candidates", params={"category_id": "f991", "limit": 50}
+    ).json()["items"]
+    group = [i for i in items if i["profile_product_zh"] == "露营淋浴袋"]
+    assert len(group) == 6
+    ranked = [i for i in group if i["recommended_rank"] is not None]
+    assert sorted(i["recommended_rank"] for i in ranked) == [1, 2, 3]
+    assert all(i["score"] is not None for i in group)
+
+
 def test_sourcing_stops_when_f_quota_exhausted(
     f_env: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -498,8 +575,8 @@ def test_sourcing_stops_when_f_quota_exhausted(
         "ensure_profile",
         lambda db, **kwargs: _FakeProfile(),
     )
-    # 只够第一个节点第一个产品（2 次）——第二个产品预扣时额度尽
-    monkeypatch.setenv("F_1688_APP_CALLS_DAILY_BUDGET", "3")
+    # 只够第一个产品的 1 次词搜——第二个产品记账时额度尽
+    monkeypatch.setenv("F_1688_APP_CALLS_DAILY_BUDGET", "1")
 
     response = f_env.post(
         "/api/app/f/runs", json={"category_ids": ["f990"], "mode": "sourcing_only"}

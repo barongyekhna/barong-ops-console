@@ -23,9 +23,14 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+import os
+
 from r_system_v2.core.secret_manager import SecretManager, SecretManagerError
 from r_system_v2.ra.quota_ledger import (
     PROVIDER_F_1688_APP_CALLS,
+    PROVIDER_F_1688_IMAGE_SEARCH,
+    PROVIDER_SERPER,
+    RAQuotaExhaustedError,
     refund,
     try_consume,
 )
@@ -38,18 +43,34 @@ from r_system_v2.ra.supplier_api import (
 
 from . import profiles as profile_engine
 from . import scoring
+from . import serper_client
 from . import service
 from .models import FCategoryCandidate
 
-# 每个画像产品收多少个 offer；每产品预扣的 App 调用数（词搜1次+余量）。
+# 单次搜索调用最多收多少个 offer（词搜/图搜同口径）。
 OFFERS_PER_PRODUCT = 5
-CALLS_PER_PRODUCT = 2
 
 # 跨境权限未开通时降级分销池，并把开通指引带回运行台账（只记一次）。
 CROSSBORDER_ACL_NOTE = (
     "跨境全站词搜权限未开通（1688 开放平台给应用订购「跨境数字化选品」"
-    "权限组后自动切换大池），本轮已用分销选品池"
+    "权限组后自动切换大池），词搜段已用分销选品池（仅 1196 件的样板间）"
 )
+
+
+def _candidates_target() -> int:
+    """每个画像产品要凑够几家货源（凑够即停，保护 CPS credit 池）。"""
+    try:
+        return max(1, int(os.getenv("F_CANDIDATES_PER_PRODUCT", "10")))
+    except ValueError:
+        return 10
+
+
+def _images_per_product() -> int:
+    """图搜接力每产品最多喂多少张种子图（用户拍板"几十上百都可以"）。"""
+    try:
+        return max(1, int(os.getenv("F_IMAGES_PER_PRODUCT", "30")))
+    except ValueError:
+        return 30
 
 
 class SourcingProvider(Protocol):
@@ -65,6 +86,13 @@ class SourcingProvider(Protocol):
         self,
         *,
         keyword: str,
+        limit: int,
+    ) -> list[Any]: ...
+
+    def search_offers_cps_image(
+        self,
+        *,
+        image_url: str,
         limit: int,
     ) -> list[Any]: ...
 
@@ -135,29 +163,39 @@ def _existing_source_urls(db: Session, category_id: str) -> set[str]:
     return {str(row[0]).strip() for row in rows if row[0]}
 
 
-def _search_offers_for_product(
+def _keyword_search_for_product(
+    db: Session,
     provider: SourcingProvider,
     *,
     product_zh: str,
     product_en: str,
-) -> tuple[list[Any], str]:
-    """按单个画像产品名词搜，返回 (offers, 实际通道)。
+) -> tuple[list[Any], str, int]:
+    """词搜段（前置，命中免费直接算数）。返回 (offers, 通道, 消耗调用数)。
 
     双通道：先试跨境全站词搜（大池）；应用权限组未开通（ACL 拒）就
     整轮降级分销选品池——降级状态挂在 provider 实例上（一次运行只浪费
-    一次探测调用），权限一开自动回到大池。
+    一次探测调用，且退款），权限一开自动回到大池。
     """
+    calls = 0
     if not getattr(provider, "_f_crossborder_denied", False):
+        try_consume(db, PROVIDER_F_1688_APP_CALLS)
+        calls += 1
         try:
+            db.rollback()
             offers = provider.search_offers_keyword_crossborder(
                 keyword=product_zh or product_en,
                 limit=OFFERS_PER_PRODUCT,
             )
-            return offers, "crossborder"
+            return offers, "crossborder", calls
         except RASupplierApiError as exc:
             if not is_acl_denied(exc):
                 raise
             provider._f_crossborder_denied = True  # noqa: SLF001 - 运行级降级标记
+            refund(db, PROVIDER_F_1688_APP_CALLS)
+            calls -= 1
+    try_consume(db, PROVIDER_F_1688_APP_CALLS)
+    calls += 1
+    db.rollback()
     offers = provider.search_offers_keyword_only(
         product={"title": product_zh or product_en, "title_zh": product_zh},
         keyword_profile={
@@ -166,7 +204,7 @@ def _search_offers_for_product(
         },
         limit=OFFERS_PER_PRODUCT,
     )
-    return offers, "fenxiao"
+    return offers, "fenxiao", calls
 
 
 def source_category(
@@ -176,11 +214,14 @@ def source_category(
     provider: SourcingProvider,
     org_id: str,
     run_id: UUID | None = None,
-) -> dict[str, int]:
-    """一个类目找货：画像的每个产品名各搜一轮，全部落候选池。
+    serper_api_key: str | None = None,
+) -> dict[str, Any]:
+    """一个类目找货：画像的每个产品 = 词搜前置 + 图搜接力，凑够目标即停。
 
-    额度在本函数内逐产品记账（F 独立总闸）；RAQuotaExhaustedError 向上抛，
-    运行引擎按额度尽停批。
+    图搜接力（2026-07-14 用户拍板）：词搜池只有 1196 件样板间，没吃饱就用
+    serper 谷歌图片拿一批种子图，逐张喂 CPS 分销大池图搜（已付费 50 万次
+    credit 池）。额度逐调用记账（F 双闸 + serper）；RAQuotaExhaustedError
+    向上抛，运行引擎按额度尽停批。serper_api_key 缺失时只跑词搜段。
     """
     profile = profile_engine.ensure_profile(
         db,
@@ -205,70 +246,115 @@ def source_category(
     duplicates = 0
     offers_seen = 0
     calls_used = 0
+    image_calls = 0
     channels_used: set[str] = set()
     search_errors: list[str] = []
+    target = _candidates_target()
+    images_cap = _images_per_product()
 
     for item in products:
         product_zh = str(item.get("zh") or "").strip()
         product_en = str(item.get("en") or "").strip()
-        try_consume(db, PROVIDER_F_1688_APP_CALLS, amount=CALLS_PER_PRODUCT)
-        calls_used += CALLS_PER_PRODUCT
-        try:
-            # 1688 词搜最长十余秒：先结束打开的 SQL 事务。
-            db.rollback()
-            offers, channel = _search_offers_for_product(
-                provider, product_zh=product_zh, product_en=product_en
-            )
-        except Exception as exc:  # noqa: BLE001 - 单产品失败不阻断本类目
-            refund(db, PROVIDER_F_1688_APP_CALLS, amount=1)
-            calls_used -= 1
-            search_errors.append(f"{product_zh}: {str(exc)[:80]}")
-            continue
-
-        channels_used.add(channel)
-        offers_seen += len(offers)
         product_created = 0
-        for offer in offers[:OFFERS_PER_PRODUCT]:
-            title = str(getattr(offer, "title", "") or "")
-            if not offer_matches_product(title, product_zh):
-                filtered += 1
-                continue
-            source_url = str(getattr(offer, "supplier_url", "") or "").strip()
-            if not source_url or source_url in seen_urls:
-                duplicates += 1
-                continue
-            seen_urls.add(source_url)
-            payload = getattr(offer, "payload", None) or {}
-            image_url = str(payload.get("image_url") or "").strip() or None
-            moq_value = getattr(offer, "moq", None)
-            moq_int = int(moq_value) if moq_value is not None else None
-            sales_value = getattr(offer, "monthly_sales", None)
-            service.create_candidate(
-                db,
-                category_id=str(node["id"]),
-                title=title or "1688 货源候选",
-                user=None,
-                source_url=source_url,
-                image_url=image_url,
-                price_cny=getattr(offer, "unit_price_cny", None),
-                moq=moq_int,
-                supplier_name=str(getattr(offer, "supplier_name", "") or "") or None,
-                notes=f"画像产品: {product_zh}"
-                + (f" ({product_en})" if product_en else ""),
-                run_id=run_id,
-                source="alibaba1688",
-                profile_product_zh=product_zh or None,
-                profile_product_en=product_en or None,
-                score_json=scoring.base_components(
+
+        def ingest(offers: list[Any]) -> None:
+            """把关+去重+落池（词搜/图搜同口径）。"""
+            nonlocal created, filtered, duplicates, offers_seen, product_created
+            offers_seen += len(offers)
+            for offer in offers[:OFFERS_PER_PRODUCT]:
+                title = str(getattr(offer, "title", "") or "")
+                if not offer_matches_product(title, product_zh):
+                    filtered += 1
+                    continue
+                source_url = str(getattr(offer, "supplier_url", "") or "").strip()
+                if not source_url or source_url in seen_urls:
+                    duplicates += 1
+                    continue
+                seen_urls.add(source_url)
+                payload = getattr(offer, "payload", None) or {}
+                image_url = str(payload.get("image_url") or "").strip() or None
+                moq_value = getattr(offer, "moq", None)
+                moq_int = int(moq_value) if moq_value is not None else None
+                sales_value = getattr(offer, "monthly_sales", None)
+                service.create_candidate(
+                    db,
+                    category_id=str(node["id"]),
+                    title=title or "1688 货源候选",
+                    user=None,
+                    source_url=source_url,
+                    image_url=image_url,
+                    price_cny=getattr(offer, "unit_price_cny", None),
                     moq=moq_int,
-                    monthly_sales=(
-                        int(sales_value) if sales_value is not None else None
+                    supplier_name=str(getattr(offer, "supplier_name", "") or "")
+                    or None,
+                    notes=f"画像产品: {product_zh}"
+                    + (f" ({product_en})" if product_en else ""),
+                    run_id=run_id,
+                    source="alibaba1688",
+                    profile_product_zh=product_zh or None,
+                    profile_product_en=product_en or None,
+                    score_json=scoring.base_components(
+                        moq=moq_int,
+                        monthly_sales=(
+                            int(sales_value) if sales_value is not None else None
+                        ),
+                        one_piece_hint=bool(getattr(offer, "one_piece_hint", False)),
                     ),
-                    one_piece_hint=bool(getattr(offer, "one_piece_hint", False)),
-                ),
+                )
+                created += 1
+                product_created += 1
+
+        # ---- A. 词搜段（免费池前置，命中直接算数）----
+        try:
+            offers, channel, kw_calls = _keyword_search_for_product(
+                db, provider, product_zh=product_zh, product_en=product_en
             )
-            created += 1
-            product_created += 1
+            calls_used += kw_calls
+            channels_used.add(channel)
+            ingest(offers)
+        except RAQuotaExhaustedError:
+            raise
+        except Exception as exc:  # noqa: BLE001 - 单产品词搜失败不阻断
+            refund(db, PROVIDER_F_1688_APP_CALLS)
+            search_errors.append(f"{product_zh} 词搜: {str(exc)[:80]}")
+
+        # ---- B. 图搜接力（没吃饱才发动：serper 种子图 → CPS 大池）----
+        if product_created < target and serper_api_key:
+            seed_urls: list[str] = []
+            try:
+                try_consume(db, PROVIDER_SERPER)
+                db.rollback()
+                raw = serper_client.serper_images(
+                    api_key=serper_api_key, query=product_zh or product_en
+                )
+                seed_urls = serper_client.extract_image_urls(raw, limit=images_cap)
+            except RAQuotaExhaustedError:
+                raise
+            except Exception as exc:  # noqa: BLE001 - 种子图失败只跳过接力
+                refund(db, PROVIDER_SERPER)
+                search_errors.append(f"{product_zh} 种子图: {str(exc)[:80]}")
+
+            for seed_url in seed_urls:
+                if product_created >= target:
+                    break
+                try_consume(db, PROVIDER_F_1688_IMAGE_SEARCH)
+                try_consume(db, PROVIDER_F_1688_APP_CALLS)
+                calls_used += 1
+                image_calls += 1
+                try:
+                    db.rollback()
+                    offers = provider.search_offers_cps_image(
+                        image_url=seed_url, limit=OFFERS_PER_PRODUCT
+                    )
+                except Exception as exc:  # noqa: BLE001 - 单图失败换下一张
+                    refund(db, PROVIDER_F_1688_IMAGE_SEARCH)
+                    refund(db, PROVIDER_F_1688_APP_CALLS)
+                    calls_used -= 1
+                    image_calls -= 1
+                    search_errors.append(f"{product_zh} 图搜: {str(exc)[:60]}")
+                    continue
+                channels_used.add("cps_image")
+                ingest(offers)
 
         if product_created and product_zh:
             # 组内价格分依赖全组，本产品落库后立即重算该组总分与 top3。
@@ -282,8 +368,8 @@ def source_category(
         detail = f"；搜索失败 {len(search_errors)} 个产品" if search_errors else ""
         raise FSourcingNoMatchError(
             f"类目「{node.get('name_zh') or node.get('name')}」按 {len(products)} 个"
-            f"画像产品逐一搜索，无新增货源（不相关 {filtered} 条、重复 {duplicates} 条"
-            f"{detail}）——可到候选池手动贴 1688 全站链接"
+            f"画像产品词搜+图搜接力，无新增货源（不相关 {filtered} 条、重复"
+            f" {duplicates} 条{detail}）——可到候选池手动贴 1688 全站链接"
         )
     return {
         "offers_seen": offers_seen,
@@ -291,6 +377,7 @@ def source_category(
         "filtered_irrelevant": filtered,
         "products_searched": len(products),
         "calls_used": calls_used,
+        "image_calls": image_calls,
         "channel_note": (
             CROSSBORDER_ACL_NOTE
             if channels_used and "crossborder" not in channels_used

@@ -27,6 +27,9 @@ PROVIDER_SERPER = "serper_search"
 # F 系列独立 1688 总闸：全局 10 万/天中划 1 万给 F（用户 2026-07-14 拍板，
 # R-A 用 9 万）。F 是低频人工触发功能，额度敞开用。
 PROVIDER_F_1688_APP_CALLS = "f_1688_app_calls"
+# F 图搜接力台账：只记数不设闸（用户 2026-07-14 拍板——F 半年用不上两次，
+# 不限量；CPS credit 池的真正守门人是"凑够即停"early-stop）。
+PROVIDER_F_1688_IMAGE_SEARCH = "f_1688_image_search"
 
 DEFAULT_DAILY_BUDGETS = {
     PROVIDER_1688_IMAGE_SEARCH: 330,
@@ -35,6 +38,7 @@ DEFAULT_DAILY_BUDGETS = {
     PROVIDER_RAINFOREST: 330,
     PROVIDER_SERPER: 2000,
     PROVIDER_F_1688_APP_CALLS: 10000,
+    PROVIDER_F_1688_IMAGE_SEARCH: 0,
 }
 
 BUDGET_ENV_NAMES = {
@@ -44,6 +48,7 @@ BUDGET_ENV_NAMES = {
     PROVIDER_RAINFOREST: "RA_RAINFOREST_DAILY_BUDGET",
     PROVIDER_SERPER: "RA_SERPER_DAILY_BUDGET",
     PROVIDER_F_1688_APP_CALLS: "F_1688_APP_CALLS_DAILY_BUDGET",
+    PROVIDER_F_1688_IMAGE_SEARCH: "F_1688_IMAGE_SEARCH_DAILY_BUDGET",
 }
 
 
@@ -66,6 +71,7 @@ def provider_label(provider: str) -> str:
         PROVIDER_1688_CPS_IMAGE_SEARCH: "1688 分销图搜",
         PROVIDER_1688_APP_CALLS: "1688 应用总调用",
         PROVIDER_F_1688_APP_CALLS: "F系列 1688 找货",
+        PROVIDER_F_1688_IMAGE_SEARCH: "F系列 CPS 图搜",
         PROVIDER_RAINFOREST: "Rainforest",
         PROVIDER_SERPER: "Serper",
     }.get(provider, provider)
@@ -202,6 +208,7 @@ def usage_today(db: Session) -> dict[str, dict[str, Any]]:
         PROVIDER_1688_CPS_IMAGE_SEARCH,
         PROVIDER_1688_APP_CALLS,
         PROVIDER_F_1688_APP_CALLS,
+        PROVIDER_F_1688_IMAGE_SEARCH,
         PROVIDER_RAINFOREST,
         PROVIDER_SERPER,
     ):

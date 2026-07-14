@@ -140,6 +140,16 @@ def execute_run(run_id: UUID) -> None:
         provider = None
         org_id = ""
         if do_sourcing:
+            # 图搜接力的种子图靠 Serper：sourcing_only 模式也要钥匙。
+            # 拿不到只跳过接力段（词搜照跑），不毙运行。
+            if not api_key:
+                try:
+                    api_key = _serper_key(db)
+                except Exception:  # noqa: BLE001
+                    db.rollback()
+                    node_errors.append(
+                        "图搜接力已跳过：Serper 密钥未配置（词搜段照常）"
+                    )
             try:
                 org_id = _target_org_id(db) or ""
                 if not org_id:
@@ -225,6 +235,7 @@ def execute_run(run_id: UUID) -> None:
                         provider=provider,
                         org_id=org_id,
                         run_id=run_id,
+                        serper_api_key=api_key or None,
                     )
                     run = db.get(FEnrichmentRun, run_id)
                     if run is None or run.status == "cancelled":

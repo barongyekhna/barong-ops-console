@@ -394,6 +394,25 @@ class Alibaba1688OfficialApiProvider:
         )
         return _normalize_crossborder_keyword_offers(payload, limit=limit)
 
+    def search_offers_cps_image(
+        self,
+        *,
+        image_url: str,
+        limit: int,
+    ) -> list[SupplierApiOffer]:
+        """CPS 分销图搜的公开封装（F 图搜接力主通道）。
+
+        分销联盟大池（¥1500 功能包 50 万次/6 个月）只吃图不吃字——调用方
+        拿谷歌图片当种子逐张喂进来。额度记账由调用方负责。
+        """
+        if not self.credentials.ready:
+            raise RASupplierApiError("1688 官方 API 密钥尚未完整绑定。")
+        image_url = (image_url or "").strip()
+        if not image_url:
+            raise RASupplierApiError("CPS 图搜缺少种子图 URL。")
+        payload = self._call_cps_image_search(image_url=image_url, limit=limit)
+        return _normalize_cps_offers(payload, limit=limit)
+
     def _call_image_search(
         self,
         *,

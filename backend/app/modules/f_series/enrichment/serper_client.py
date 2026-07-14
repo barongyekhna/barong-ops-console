@@ -14,6 +14,7 @@ from typing import Any
 from urllib.request import Request, urlopen
 
 SERPER_SEARCH_URL = "https://google.serper.dev/search"
+SERPER_IMAGES_URL = "https://google.serper.dev/images"
 _TIMEOUT_SECONDS = 12
 
 # 每路关键词的收割上限（一个类目 ~20 词以内，防洪）
@@ -32,6 +33,42 @@ def serper_search(*, api_key: str, query: str) -> dict[str, Any]:
     )
     with urlopen(request, timeout=_TIMEOUT_SECONDS) as response:  # noqa: S310
         return json.loads(response.read().decode("utf-8"))
+
+
+def serper_images(*, api_key: str, query: str, num: int = 100) -> dict[str, Any]:
+    """谷歌图片搜索（图搜接力的种子图来源）：一次调用最多回 100 张。"""
+    payload = {"q": query, "num": max(10, min(int(num or 100), 100))}
+    request = Request(
+        os.getenv("F_SERPER_IMAGES_URL", SERPER_IMAGES_URL),
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "X-API-KEY": api_key},
+        method="POST",
+    )
+    with urlopen(request, timeout=_TIMEOUT_SECONDS) as response:  # noqa: S310
+        return json.loads(response.read().decode("utf-8"))
+
+
+def extract_image_urls(raw: dict[str, Any], *, limit: int) -> list[str]:
+    """种子图清单：http(s) 直链、去重、太小的缩略不要（<200px 多为图标）。"""
+    urls: list[str] = []
+    seen: set[str] = set()
+    images = raw.get("images")
+    if not isinstance(images, list):
+        return urls
+    for entry in images:
+        if len(urls) >= max(1, limit):
+            break
+        if not isinstance(entry, dict):
+            continue
+        url = str(entry.get("imageUrl") or "").strip()
+        if not url.startswith(("http://", "https://")) or url in seen:
+            continue
+        width = entry.get("imageWidth")
+        if isinstance(width, (int, float)) and width < 200:
+            continue
+        seen.add(url)
+        urls.append(url)
+    return urls
 
 
 def extract_keywords(raw: dict[str, Any]) -> list[dict[str, Any]]:

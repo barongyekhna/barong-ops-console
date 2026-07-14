@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from r_system_v2.ra.quota_ledger import (
     PROVIDER_F_1688_APP_CALLS,
+    PROVIDER_F_1688_IMAGE_SEARCH,
     PROVIDER_SERPER,
     usage_today,
 )
@@ -571,7 +572,7 @@ def f_quota(
     db: Session = Depends(get_db),
     user: User = Depends(_require_f_permission(C.PERMISSION_READ)),
 ) -> dict[str, Any]:
-    """F 关心的两条额度（与 R-A 共账，F 手动触发天然优先）。"""
+    """F 关心的三条额度（serper 共账、1688 词搜与 CPS 图搜为 F 独立闸）。"""
     del user
     # 额度台账是全局计数器（无 org 列），豁免 C18G 裸 SQL 隔离检查。
     with without_org_data_isolation():
@@ -579,4 +580,5 @@ def f_quota(
     return {
         "serper": payload.get(PROVIDER_SERPER),
         "alibaba1688_app_calls": payload.get(PROVIDER_F_1688_APP_CALLS),
+        "cps_image_search": payload.get(PROVIDER_F_1688_IMAGE_SEARCH),
     }

@@ -218,3 +218,32 @@ def test_acl_denied_detection() -> None:
     )
     assert is_acl_denied(RASupplierApiError("AppKey is not allowed(acl)"))
     assert not is_acl_denied(RASupplierApiError("read timeout"))
+
+
+def test_extract_image_urls_filters_and_dedupes() -> None:
+    """种子图清单：只收 http(s) 直链、去重、<200px 的图标不要、按上限截断。"""
+    from backend.app.modules.f_series.enrichment.serper_client import (
+        extract_image_urls,
+    )
+
+    raw = {
+        "images": [
+            {"imageUrl": "https://a.com/1.jpg", "imageWidth": 800},
+            {"imageUrl": "https://a.com/1.jpg", "imageWidth": 800},  # 重复
+            {"imageUrl": "https://a.com/icon.png", "imageWidth": 64},  # 太小
+            {"imageUrl": "data:image/png;base64,xxx"},  # 非 http
+            {"imageUrl": "https://b.com/2.jpg"},  # 无宽度信息 → 收
+            {"imageUrl": "https://c.com/3.jpg", "imageWidth": 500},
+        ]
+    }
+    assert extract_image_urls(raw, limit=10) == [
+        "https://a.com/1.jpg",
+        "https://b.com/2.jpg",
+        "https://c.com/3.jpg",
+    ]
+    assert extract_image_urls(raw, limit=2) == [
+        "https://a.com/1.jpg",
+        "https://b.com/2.jpg",
+    ]
+    assert extract_image_urls({}, limit=5) == []
+    assert extract_image_urls({"images": "junk"}, limit=5) == []

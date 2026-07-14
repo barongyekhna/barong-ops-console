@@ -632,6 +632,18 @@ export function EnrichmentDeck() {
               : "—"}
           </span>
         </div>
+        <div className={styles.statCard}>
+          <span className={styles.statLabel}>CPS 图搜今日额度（F）</span>
+          <span className={styles.statValue}>
+            {quota?.cps_image_search
+              ? `${quota.cps_image_search.used}/${
+                  quota.cps_image_search.unlimited
+                    ? "∞"
+                    : quota.cps_image_search.budget
+                }`
+              : "—"}
+          </span>
+        </div>
         <div className={styles.statCard} data-tone={latestRun?.status === "running" ? "flight" : undefined}>
           <span className={styles.statLabel}>最近运行</span>
           <span className={styles.statValue}>
@@ -985,7 +997,8 @@ export function EnrichmentDeck() {
               </h3>
               {candidates.length === 0 ? (
                 <p className={styles.mutedLine}>
-                  还没有候选。点上方「1688 找货」自动拉 3-5 个货源，或手动贴链接。
+                  还没有候选。点上方「1688 找货」——每个画像产品词搜 +
+                  谷歌图搜接力 1688 大池，自动凑齐 10 家；也可手动贴链接。
                 </p>
               ) : (
                 <div className={styles.productGroups}>

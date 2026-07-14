@@ -68,6 +68,11 @@ services:
       RA_DEEPSEEK_KEYWORD_TIMEOUT_SECONDS: "60"
       # F 系列 1688 独立总闸：全量 10 万/天里 R-A 占 9 万，剩 1 万归 F 批量找货
       F_1688_APP_CALLS_DAILY_BUDGET: "10000"
+      # F 图搜接力：serper 种子图 → CPS 分销大池（50万次/6mo credit 池）。
+      # 图搜不设日闸（F 低频，只记数）；守门靠"每产品凑够 10 家即停"。
+      F_1688_IMAGE_SEARCH_DAILY_BUDGET: "0"
+      F_IMAGES_PER_PRODUCT: "30"
+      F_CANDIDATES_PER_PRODUCT: "10"
       # F 候选图片代理缓存（绕 alicdn 防盗链 + 提速）
       F_IMAGE_CACHE_DIR: "/var/lib/barong/f-media"
       DB_POOL_SIZE: "10"

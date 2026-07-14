@@ -98,6 +98,7 @@ export type QuotaEntry = {
 export type QuotaResponse = {
   serper: QuotaEntry;
   alibaba1688_app_calls: QuotaEntry;
+  cps_image_search: QuotaEntry;
 };
 
 export type CandidateCreatePayload = {
