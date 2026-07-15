@@ -245,6 +245,8 @@ server {
         return 404;
     }
 
+    include /opt/barong-ops-console/deploy/nginx/vpn-status-location.conf;
+
     location / {
         proxy_pass http://127.0.0.1:3000;
         proxy_http_version 1.1;
