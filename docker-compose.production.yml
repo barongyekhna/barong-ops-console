@@ -148,6 +148,9 @@ services:
       dockerfile: backend/Dockerfile
     restart: unless-stopped
     init: true
+    # CPU 软限制：机器空闲时照样全速，但控制台(backend/前端)要 CPU 时优先让路。
+    # 火力全开不牺牲吞吐，只治「巡库全速时后台操作卡」。
+    cpu_shares: 512
     env_file:
       - .env.production
     environment:
