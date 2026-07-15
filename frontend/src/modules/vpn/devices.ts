@@ -24,6 +24,19 @@ export type CreatedVpnDevice = {
   one_time: true;
 };
 
+export type NativeVpnProvisioning = {
+  address: string;
+  device_id: string;
+  preshared_key: string;
+  schema_version: 1;
+};
+
+export type NativeVpnEnrollment = {
+  device: VpnDevice;
+  one_time: true;
+  provisioning: NativeVpnProvisioning;
+};
+
 const DEVICE_ID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
 const ADDRESS_PATTERN =
@@ -35,6 +48,7 @@ const PLATFORMS = new Set<VpnDevicePlatform>([
   "android",
   "other",
 ]);
+const KEY_PATTERN = /^[A-Za-z0-9+/]{43}=$/;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -123,6 +137,45 @@ export function normalizeCreatedVpnDevice(
     return null;
   }
   return { configuration, device, one_time: true };
+}
+
+export function normalizeNativeVpnEnrollment(
+  payload: unknown,
+): NativeVpnEnrollment | null {
+  if (!isRecord(payload) || payload.one_time !== true) {
+    return null;
+  }
+  const device = normalizeVpnDevice(payload.device);
+  const provisioning = payload.provisioning;
+  if (!device || !isRecord(provisioning)) {
+    return null;
+  }
+  const deviceId = safeString(provisioning.device_id, 36);
+  const address = safeString(provisioning.address, 32);
+  const presharedKey = safeString(provisioning.preshared_key, 64);
+  if (
+    provisioning.schema_version !== 1 ||
+    !deviceId ||
+    !DEVICE_ID_PATTERN.test(deviceId) ||
+    deviceId !== device.id ||
+    !address ||
+    !ADDRESS_PATTERN.test(address) ||
+    address !== device.address ||
+    !presharedKey ||
+    !KEY_PATTERN.test(presharedKey)
+  ) {
+    return null;
+  }
+  return {
+    device,
+    one_time: true,
+    provisioning: {
+      address,
+      device_id: deviceId,
+      preshared_key: presharedKey,
+      schema_version: 1,
+    },
+  };
 }
 
 export function platformLabel(platform: VpnDevicePlatform): string {

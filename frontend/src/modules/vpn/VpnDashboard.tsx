@@ -18,6 +18,7 @@ import { ApiRequestAbortedError, isApiAbortError } from "@/lib/api";
 
 import {
   createVpnDevice,
+  enrollNativeVpnDevice,
   getVpnDevices,
   getVpnStatus,
   setVpnDeviceEnabled,
@@ -28,6 +29,12 @@ import {
   type VpnDevice,
   type VpnDevicePlatform,
 } from "./devices";
+import {
+  getNativeVpnBridge,
+  normalizeNativeVpnIdentity,
+  normalizeNativeVpnStatus,
+  type NativeVpnStatus,
+} from "./native";
 import {
   formatBytes,
   formatStatusTime,
@@ -48,7 +55,9 @@ type StageCardProps = {
   actionLabel: string;
   badge: string;
   description: string;
+  disabled?: boolean;
   name: string;
+  onAction?: () => void;
   status: ModuleCardStatus;
 };
 
@@ -56,7 +65,9 @@ function StageCard({
   actionLabel,
   badge,
   description,
+  disabled = false,
   name,
+  onAction,
   status,
 }: StageCardProps) {
   return (
@@ -72,7 +83,12 @@ function StageCard({
         <span className="subtle-badge">{badge}</span>
       </div>
       <p>{description}</p>
-      <button className="module-card-action" disabled type="button">
+      <button
+        className="module-card-action"
+        disabled={disabled || !onAction}
+        onClick={onAction}
+        type="button"
+      >
         {actionLabel}
       </button>
     </article>
@@ -101,8 +117,30 @@ export function VpnDashboard() {
   const [oneTimeDevice, setOneTimeDevice] =
     useState<CreatedVpnDevice | null>(null);
   const [copyMessage, setCopyMessage] = useState("");
+  const [nativeStatus, setNativeStatus] = useState<NativeVpnStatus | null>(null);
+  const [nativeError, setNativeError] = useState("");
+  const [nativeBusy, setNativeBusy] = useState(false);
   const requestGenerationRef = useRef(0);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  const loadNative = useCallback(async () => {
+    const bridge = getNativeVpnBridge();
+    if (!bridge) {
+      setNativeStatus(null);
+      setNativeError("");
+      return;
+    }
+    try {
+      const nextStatus = normalizeNativeVpnStatus(await bridge.status());
+      if (!nextStatus) {
+        throw new Error("本机 VPN 状态格式异常。");
+      }
+      setNativeStatus(nextStatus);
+      setNativeError("");
+    } catch (error) {
+      setNativeError(errorMessage(error, "本机 VPN 状态暂时无法读取。"));
+    }
+  }, []);
 
   const load = useCallback(
     async ({ silent = false }: { silent?: boolean } = {}) => {
@@ -155,9 +193,11 @@ export function VpnDashboard() {
 
   useEffect(() => {
     void load();
+    void loadNative();
     const refreshWhenVisible = () => {
       if (document.visibilityState === "visible") {
         void load({ silent: true });
+        void loadNative();
       }
     };
     const intervalId = window.setInterval(refreshWhenVisible, POLL_INTERVAL_MS);
@@ -174,7 +214,53 @@ export function VpnDashboard() {
       }
       abortControllerRef.current = null;
     };
-  }, [load]);
+  }, [load, loadNative]);
+
+  const controlNativeVpn = async () => {
+    const bridge = getNativeVpnBridge();
+    if (!bridge) {
+      setNativeError("请在 Windows 控制台 App 中使用一键连接。");
+      return;
+    }
+    setNativeBusy(true);
+    setNativeError("");
+    try {
+      let current = nativeStatus;
+      if (!current?.installed) {
+        const installed = normalizeNativeVpnStatus(await bridge.install());
+        if (!installed?.installed) {
+          throw new Error("VPN 组件尚未完成安装，请允许管理员权限后重试。");
+        }
+        current = installed;
+      }
+      if (!current.provisioned) {
+        const identity = normalizeNativeVpnIdentity(await bridge.enrollment());
+        if (!identity) {
+          throw new Error("本机设备身份格式异常。");
+        }
+        const enrollment = await enrollNativeVpnDevice(identity);
+        await bridge.provision(enrollment.provisioning);
+        setDevices((devicesBeforeEnrollment) => {
+          const withoutCurrent = devicesBeforeEnrollment.filter(
+            (device) => device.id !== enrollment.device.id,
+          );
+          return [...withoutCurrent, enrollment.device];
+        });
+        await bridge.connect();
+      } else if (current.connected || current.desired_connected) {
+        await bridge.disconnect();
+      } else {
+        await bridge.connect();
+      }
+      await Promise.all([load({ silent: true }), loadNative()]);
+    } catch (error) {
+      const message = errorMessage(error, "本机 VPN 操作失败，请稍后重试。");
+      await loadNative();
+      setNativeError(message);
+    } finally {
+      setNativeBusy(false);
+    }
+  };
 
   const openCreateDrawer = () => {
     setOneTimeDevice(null);
@@ -268,6 +354,27 @@ export function VpnDashboard() {
         : online
           ? "服务在线"
           : "服务异常";
+  const nativeBridgeAvailable = getNativeVpnBridge() !== null;
+  const nativeActionLabel = !nativeBridgeAvailable
+    ? "请使用控制台 App"
+    : nativeBusy
+      ? "正在处理…"
+      : !nativeStatus?.installed
+        ? "安装并启用"
+        : !nativeStatus.provisioned
+          ? "启用本机 VPN"
+          : nativeStatus.connected || nativeStatus.desired_connected
+            ? "断开 VPN"
+            : "连接 VPN";
+  const nativeDescription = !nativeBridgeAvailable
+    ? "普通浏览器没有本机系统权限，请在 Windows 控制台 App 中直接连接。"
+    : nativeError
+      ? nativeError
+      : nativeStatus?.connected
+        ? `本机已通过 ${nativeStatus.address ?? "专属地址"} 连接；关闭控制台不会断开。`
+        : nativeStatus?.provisioned
+          ? "本机 VPN 已配置完成，可以直接连接。"
+          : "第一次启用会申请一次管理员权限，并自动安装和登记 VPN 组件。";
 
   return (
     <div className="dashboard-page cc-dash">
@@ -283,7 +390,7 @@ export function VpnDashboard() {
           <button
             className="cc-customize"
             disabled={isLoading}
-            onClick={() => void load()}
+            onClick={() => void Promise.all([load(), loadNative()])}
             type="button"
           >
             {isLoading ? "↻ 同步中" : "↻ 刷新"}
@@ -354,11 +461,13 @@ export function VpnDashboard() {
           </div>
           <div className="cc-card">
             <StageCard
-              actionLabel="等待控制台 App"
-              badge="NEXT STAGE"
-              description="设备授权接口已经准备好，控制台 App 接入后即可实现内置一键连接。"
+              actionLabel={nativeActionLabel}
+              badge={nativeBridgeAvailable ? "WINDOWS APP" : "APP REQUIRED"}
+              description={nativeDescription}
+              disabled={!nativeBridgeAvailable || nativeBusy}
               name="一键连接"
-              status="disabled"
+              onAction={() => void controlNativeVpn()}
+              status={nativeError ? "error" : nativeBridgeAvailable ? "active" : "disabled"}
             />
           </div>
 

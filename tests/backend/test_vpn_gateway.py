@@ -10,10 +10,12 @@ from backend.vpn_gateway import (
     UpstreamUnavailable,
     create_authenticated_device,
     dependency_health,
+    enroll_authenticated_device,
     get_authenticated_devices,
     get_authenticated_vpn_status,
     sanitize_created_device,
     sanitize_device_list,
+    sanitize_native_enrollment,
     sanitize_vpn_status,
     update_authenticated_device,
 )
@@ -21,6 +23,8 @@ from backend.vpn_gateway import (
 
 DEVICE_ID = "2f6fcb65-b51f-4b29-bc65-85f71437c2ac"
 AGENT_TOKEN = "agent-token-that-is-never-returned"
+PUBLIC_KEY = f"{'E' * 43}="
+PRESHARED_KEY = f"{'F' * 43}="
 
 
 def agent_status_payload() -> dict[str, object]:
@@ -181,6 +185,57 @@ class VpnGatewayTests(unittest.TestCase):
         self.assertEqual(calls[1][2]["X-Barong-User-ID"], "user-123")
         self.assertFalse(result["device"]["enabled"])
 
+    def test_native_enrollment_forwards_public_identity_but_never_accepts_owner(self) -> None:
+        calls: list[tuple[str, str, dict[str, str], object]] = []
+
+        def fake_fetcher(url, method, headers, payload, _timeout):
+            calls.append((url, method, dict(headers), payload))
+            if url == AUTH_URL:
+                return 200, {"id": "user-123"}
+            if url == f"{VPN_AGENT_DEVICES_URL}/enroll":
+                return 201, {
+                    "device": agent_device(),
+                    "provisioning": {
+                        "schema_version": 1,
+                        "device_id": DEVICE_ID,
+                        "address": "10.66.66.2/32",
+                        "preshared_key": PRESHARED_KEY,
+                    },
+                    "one_time": True,
+                    "private_key": "must-never-exist",
+                }
+            raise AssertionError(url)
+
+        result = enroll_authenticated_device(
+            "session=opaque",
+            {
+                "name": "  办公电脑  ",
+                "platform": "windows",
+                "device_id": DEVICE_ID,
+                "public_key": PUBLIC_KEY,
+                "architecture": "amd64",
+                "agent_version": "0.2.0-pilot",
+                "owner_id": "attacker",
+                "private_key": "attacker-private-key",
+            },
+            agent_token=AGENT_TOKEN,
+            fetcher=fake_fetcher,
+        )
+        self.assertEqual(
+            calls[1][3],
+            {
+                "name": "办公电脑",
+                "platform": "windows",
+                "device_id": DEVICE_ID,
+                "public_key": PUBLIC_KEY,
+                "architecture": "amd64",
+                "agent_version": "0.2.0-pilot",
+            },
+        )
+        self.assertEqual(calls[1][2]["X-Barong-User-ID"], "user-123")
+        self.assertEqual(result["provisioning"]["preshared_key"], PRESHARED_KEY)
+        self.assertNotIn("private_key", repr(result))
+
     def test_invalid_session_never_reaches_the_agent(self) -> None:
         def fake_fetcher(url, _method, _headers, _payload, _timeout):
             if url == AUTH_URL:
@@ -206,12 +261,26 @@ class VpnGatewayTests(unittest.TestCase):
                 "private_key": "drop-me",
             }
         )
-        serialized = repr((status, devices, created))
+        enrollment = sanitize_native_enrollment(
+            {
+                "device": agent_device(),
+                "provisioning": {
+                    "schema_version": 1,
+                    "device_id": DEVICE_ID,
+                    "address": "10.66.66.2/32",
+                    "preshared_key": PRESHARED_KEY,
+                    "private_key": "drop-me",
+                },
+                "one_time": True,
+                "unknown": "drop-me",
+            }
+        )
+        serialized = repr((status, devices, created, enrollment))
         self.assertNotIn("public_key", serialized)
-        self.assertNotIn("preshared_key", serialized)
         self.assertNotIn("owner_id", serialized)
         self.assertNotIn("drop-me", serialized)
         self.assertEqual(status["vpn"]["interface"], "awg0")
+        self.assertEqual(enrollment["provisioning"]["preshared_key"], PRESHARED_KEY)
 
     def test_agent_outage_returns_generic_unavailable_error(self) -> None:
         def fake_fetcher(url, _method, _headers, _payload, _timeout):

@@ -14,7 +14,7 @@ from urllib.parse import urlsplit
 from urllib.request import ProxyHandler, Request, build_opener
 
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 AUTH_URL = "http://127.0.0.1:8000/api/public/auth/me"
 VPN_AGENT_HEALTH_URL = "http://127.0.0.1:18765/health"
 VPN_AGENT_STATUS_URL = "http://127.0.0.1:18765/v1/status"
@@ -23,6 +23,7 @@ BACKEND_HEALTH_URL = "http://127.0.0.1:8000/health"
 
 STATUS_PATH = "/api/backend/vpn/status"
 DEVICES_PATH = "/api/backend/vpn/devices"
+NATIVE_ENROLL_PATH = f"{DEVICES_PATH}/enroll"
 DEVICE_PATH_PREFIX = f"{DEVICES_PATH}/"
 HEALTH_PATH = "/health"
 MAX_COOKIE_BYTES = 8192
@@ -35,6 +36,8 @@ DEVICE_ID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
 ADDRESS_PATTERN = re.compile(r"^10\.66\.66\.(?:[2-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-4])/32$")
+KEY_PATTERN = re.compile(r"^[A-Za-z0-9+/]{43}=$")
+AGENT_FIELD_PATTERN = re.compile(r"^[A-Za-z0-9._+-]{1,32}$")
 
 LOGGER = logging.getLogger("barong_vpn_gateway")
 _OPENER = build_opener(ProxyHandler({}))
@@ -219,6 +222,37 @@ def sanitize_created_device(payload: object) -> dict[str, object]:
     }
 
 
+def sanitize_native_enrollment(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict) or payload.get("one_time") is not True:
+        raise GatewayError(503, "VPN device service temporarily unavailable.")
+    provisioning = payload.get("provisioning")
+    if not isinstance(provisioning, dict):
+        raise GatewayError(503, "VPN device service temporarily unavailable.")
+    device_id = _safe_string(provisioning.get("device_id"), max_length=36)
+    address = provisioning.get("address")
+    preshared_key = provisioning.get("preshared_key")
+    if (
+        provisioning.get("schema_version") != 1
+        or device_id is None
+        or DEVICE_ID_PATTERN.fullmatch(device_id) is None
+        or not isinstance(address, str)
+        or ADDRESS_PATTERN.fullmatch(address) is None
+        or not isinstance(preshared_key, str)
+        or KEY_PATTERN.fullmatch(preshared_key) is None
+    ):
+        raise GatewayError(503, "VPN device service temporarily unavailable.")
+    return {
+        "device": sanitize_device(payload.get("device")),
+        "provisioning": {
+            "schema_version": 1,
+            "device_id": device_id,
+            "address": address,
+            "preshared_key": preshared_key,
+        },
+        "one_time": True,
+    }
+
+
 def _authenticate(cookie: str | None, *, fetcher: FetchJson) -> str:
     if not cookie or len(cookie.encode("utf-8")) > MAX_COOKIE_BYTES:
         raise GatewayError(401, "Not authenticated.")
@@ -332,6 +366,58 @@ def create_authenticated_device(
     if status_code != 201:
         raise _agent_error(status_code)
     return sanitize_created_device(payload)
+
+
+def enroll_authenticated_device(
+    cookie: str | None,
+    request_payload: object,
+    *,
+    agent_token: str,
+    fetcher: FetchJson = fetch_json,
+) -> dict[str, object]:
+    owner_id = _authenticate(cookie, fetcher=fetcher)
+    if not isinstance(request_payload, dict):
+        raise GatewayError(400, "设备信息不正确。")
+    name = _safe_string(request_payload.get("name"), max_length=64)
+    platform = request_payload.get("platform")
+    device_id = request_payload.get("device_id")
+    public_key = request_payload.get("public_key")
+    architecture = request_payload.get("architecture")
+    agent_version = request_payload.get("agent_version")
+    if (
+        name is None
+        or platform not in PLATFORMS
+        or not isinstance(device_id, str)
+        or DEVICE_ID_PATTERN.fullmatch(device_id) is None
+        or not isinstance(public_key, str)
+        or KEY_PATTERN.fullmatch(public_key) is None
+        or not isinstance(architecture, str)
+        or AGENT_FIELD_PATTERN.fullmatch(architecture) is None
+        or not isinstance(agent_version, str)
+        or AGENT_FIELD_PATTERN.fullmatch(agent_version) is None
+    ):
+        raise GatewayError(400, "设备信息不正确。")
+    forwarded = {
+        "name": name,
+        "platform": platform,
+        "device_id": device_id,
+        "public_key": public_key,
+        "architecture": architecture,
+        "agent_version": agent_version,
+    }
+    try:
+        status_code, payload = fetcher(
+            f"{VPN_AGENT_DEVICES_URL}/enroll",
+            "POST",
+            _agent_headers(owner_id, agent_token),
+            forwarded,
+            VPN_TIMEOUT_SECONDS,
+        )
+    except UpstreamUnavailable as exc:
+        raise GatewayError(503, "VPN device service temporarily unavailable.") from exc
+    if status_code != 201:
+        raise _agent_error(status_code)
+    return sanitize_native_enrollment(payload)
 
 
 def update_authenticated_device(
@@ -498,15 +584,24 @@ class VpnGatewayHandler(BaseHTTPRequestHandler):
         self._handle_read(head_only=True)
 
     def do_POST(self) -> None:
-        if urlsplit(self.path).path != DEVICES_PATH:
+        path = urlsplit(self.path).path
+        if path not in {DEVICES_PATH, NATIVE_ENROLL_PATH}:
             self._send_json(405, {"detail": "Method not allowed."})
             return
         try:
-            payload = create_authenticated_device(
-                self.headers.get("Cookie"),
-                self._read_json(),
-                agent_token=self.gateway_server.agent_token,
-            )
+            request_payload = self._read_json()
+            if path == NATIVE_ENROLL_PATH:
+                payload = enroll_authenticated_device(
+                    self.headers.get("Cookie"),
+                    request_payload,
+                    agent_token=self.gateway_server.agent_token,
+                )
+            else:
+                payload = create_authenticated_device(
+                    self.headers.get("Cookie"),
+                    request_payload,
+                    agent_token=self.gateway_server.agent_token,
+                )
         except GatewayError as exc:
             self._send_gateway_error(exc)
             return

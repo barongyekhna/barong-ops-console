@@ -1,0 +1,147 @@
+import type { NativeVpnProvisioning } from "./devices";
+
+export type NativeVpnStatus = {
+  address: string | null;
+  agent_version: string | null;
+  available: boolean;
+  connected: boolean;
+  desired_connected: boolean;
+  device_id: string | null;
+  installed: boolean;
+  provisioned: boolean;
+  tunnel_service_state: string;
+};
+
+export type NativeVpnIdentity = {
+  agent_version: string;
+  architecture: string;
+  device_id: string;
+  platform: "windows";
+  public_key: string;
+  schema_version: 1;
+  suggested_name: string;
+};
+
+export type NativeVpnBridge = {
+  connect: () => Promise<unknown>;
+  disconnect: () => Promise<unknown>;
+  enrollment: () => Promise<unknown>;
+  install: () => Promise<unknown>;
+  provision: (provisioning: NativeVpnProvisioning) => Promise<unknown>;
+  status: () => Promise<unknown>;
+};
+
+const DEVICE_ID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+const ADDRESS_PATTERN =
+  /^10\.66\.66\.(?:[2-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-4])\/32$/;
+const KEY_PATTERN = /^[A-Za-z0-9+/]{43}=$/;
+const AGENT_FIELD_PATTERN = /^[A-Za-z0-9._+-]{1,32}$/;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function safeString(value: unknown, maxLength: number): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const normalized = value.trim();
+  return normalized.length > 0 && normalized.length <= maxLength
+    ? normalized
+    : null;
+}
+
+export function getNativeVpnBridge(): NativeVpnBridge | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+  const candidate = (window as Window & { barongVPN?: unknown }).barongVPN;
+  if (!isRecord(candidate)) {
+    return null;
+  }
+  for (const method of [
+    "connect",
+    "disconnect",
+    "enrollment",
+    "install",
+    "provision",
+    "status",
+  ]) {
+    if (typeof candidate[method] !== "function") {
+      return null;
+    }
+  }
+  return candidate as NativeVpnBridge;
+}
+
+export function normalizeNativeVpnStatus(payload: unknown): NativeVpnStatus | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+  const available = payload.available === true;
+  const installed = payload.installed === true;
+  const deviceId = payload.device_id === undefined || payload.device_id === null
+    ? null
+    : safeString(payload.device_id, 36);
+  const address = payload.address === undefined || payload.address === null
+    ? null
+    : safeString(payload.address, 32);
+  const agentVersion = payload.agent_version === undefined || payload.agent_version === null
+    ? null
+    : safeString(payload.agent_version, 32);
+  const tunnelState = safeString(payload.tunnel_service_state, 32) ?? "unavailable";
+  if (
+    (deviceId !== null && !DEVICE_ID_PATTERN.test(deviceId)) ||
+    (address !== null && !ADDRESS_PATTERN.test(address)) ||
+    (agentVersion !== null && !AGENT_FIELD_PATTERN.test(agentVersion)) ||
+    typeof payload.provisioned !== "boolean" ||
+    typeof payload.desired_connected !== "boolean" ||
+    typeof payload.connected !== "boolean"
+  ) {
+    return null;
+  }
+  return {
+    address,
+    agent_version: agentVersion,
+    available,
+    connected: payload.connected,
+    desired_connected: payload.desired_connected,
+    device_id: deviceId,
+    installed,
+    provisioned: payload.provisioned,
+    tunnel_service_state: tunnelState,
+  };
+}
+
+export function normalizeNativeVpnIdentity(payload: unknown): NativeVpnIdentity | null {
+  if (!isRecord(payload) || payload.schema_version !== 1 || payload.platform !== "windows") {
+    return null;
+  }
+  const deviceId = safeString(payload.device_id, 36);
+  const publicKey = safeString(payload.public_key, 64);
+  const architecture = safeString(payload.architecture, 32);
+  const agentVersion = safeString(payload.agent_version, 32);
+  const suggestedName = safeString(payload.suggested_name, 64) ?? "Windows 电脑";
+  if (
+    !deviceId ||
+    !DEVICE_ID_PATTERN.test(deviceId) ||
+    !publicKey ||
+    !KEY_PATTERN.test(publicKey) ||
+    !architecture ||
+    !AGENT_FIELD_PATTERN.test(architecture) ||
+    !agentVersion ||
+    !AGENT_FIELD_PATTERN.test(agentVersion)
+  ) {
+    return null;
+  }
+  return {
+    agent_version: agentVersion,
+    architecture,
+    device_id: deviceId,
+    platform: "windows",
+    public_key: publicKey,
+    schema_version: 1,
+    suggested_name: suggestedName,
+  };
+}

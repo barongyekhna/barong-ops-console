@@ -4,12 +4,15 @@ import { apiRequest } from "@/lib/api";
 
 import {
   normalizeCreatedVpnDevice,
+  normalizeNativeVpnEnrollment,
   normalizeVpnDevice,
   normalizeVpnDeviceList,
   type CreatedVpnDevice,
+  type NativeVpnEnrollment,
   type VpnDevice,
   type VpnDevicePlatform,
 } from "./devices";
+import type { NativeVpnIdentity } from "./native";
 import { normalizeVpnStatus, type VpnStatus } from "./status";
 
 export async function getVpnStatus(signal?: AbortSignal): Promise<VpnStatus> {
@@ -59,6 +62,29 @@ export async function createVpnDevice(input: {
     throw new Error("VPN 设备创建结果格式异常。");
   }
   return created;
+}
+
+export async function enrollNativeVpnDevice(
+  identity: NativeVpnIdentity,
+): Promise<NativeVpnEnrollment> {
+  const payload = await apiRequest<unknown>("/vpn/devices/enroll", {
+    body: {
+      agent_version: identity.agent_version,
+      architecture: identity.architecture,
+      device_id: identity.device_id,
+      name: identity.suggested_name,
+      platform: identity.platform,
+      public_key: identity.public_key,
+    },
+    method: "POST",
+    retryLimit: 0,
+    timeoutMs: 12_000,
+  });
+  const enrollment = normalizeNativeVpnEnrollment(payload);
+  if (!enrollment) {
+    throw new Error("本机 VPN 登记结果格式异常。");
+  }
+  return enrollment;
 }
 
 export async function setVpnDeviceEnabled(

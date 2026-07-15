@@ -19,7 +19,7 @@ from typing import Any, Optional
 from urllib.parse import urlsplit
 
 
-VERSION = "0.2.0"
+VERSION = "0.3.0"
 BIND_HOST = "127.0.0.1"
 BIND_PORT = 8765
 INTERFACE = "awg0"
@@ -36,6 +36,7 @@ RECONCILE_INTERVAL_SECONDS = 30
 PLATFORMS = {"windows", "macos", "ios", "android", "other"}
 KEY_PATTERN = re.compile(r"^[A-Za-z0-9+/]{43}=$")
 OWNER_PATTERN = re.compile(r"^[A-Za-z0-9._:@-]{1,128}$")
+AGENT_FIELD_PATTERN = re.compile(r"^[A-Za-z0-9._+-]{1,32}$")
 DEVICE_ID_PATTERN = re.compile(
     r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
 )
@@ -271,6 +272,24 @@ def _validated_platform(value: object) -> str:
     return value
 
 
+def _validated_device_id(value: object) -> str:
+    if not isinstance(value, str) or DEVICE_ID_PATTERN.fullmatch(value) is None:
+        raise DeviceError(400, "invalid_device_id", "Invalid device ID.")
+    return value
+
+
+def _validated_public_key(value: object) -> str:
+    if not _valid_key(value):
+        raise DeviceError(400, "invalid_public_key", "Invalid device public key.")
+    return value
+
+
+def _validated_agent_field(value: object, field: str) -> str:
+    if not isinstance(value, str) or AGENT_FIELD_PATTERN.fullmatch(value) is None:
+        raise DeviceError(400, f"invalid_{field}", f"Invalid {field}.")
+    return value
+
+
 def _parse_peer_metrics(
     handshakes: str, transfer: str
 ) -> dict[str, tuple[str | None, int | None, int | None]]:
@@ -376,6 +395,12 @@ class DeviceManager:
         if not all(_valid_key(item) for item in (private_key, public_key, preshared_key)):
             raise DeviceError(503, "key_generation_failed", "VPN key generation failed.")
         return private_key, public_key, preshared_key
+
+    def _generate_preshared_key(self) -> str:
+        preshared_key = self._run(("/usr/bin/awg", "genpsk"))
+        if not _valid_key(preshared_key):
+            raise DeviceError(503, "key_generation_failed", "VPN key generation failed.")
+        return preshared_key
 
     def _apply_peer(self, public_key: str, preshared_key: str, address: str) -> None:
         if not _valid_key(public_key) or not _valid_key(preshared_key):
@@ -577,6 +602,94 @@ class DeviceManager:
                 "one_time": True,
             }
 
+    def enroll_native_device(
+        self,
+        owner_id: object,
+        *,
+        name: object,
+        platform: object,
+        device_id: object,
+        public_key: object,
+        architecture: object,
+        agent_version: object,
+    ) -> dict[str, Any]:
+        owner = _validated_owner(owner_id)
+        device_name = _validated_name(name)
+        device_platform = _validated_platform(platform)
+        native_device_id = _validated_device_id(device_id)
+        native_public_key = _validated_public_key(public_key)
+        native_architecture = _validated_agent_field(architecture, "architecture")
+        native_agent_version = _validated_agent_field(agent_version, "agent_version")
+        with self._lock:
+            devices = self._load()
+            existing = next(
+                (item for item in devices if item.get("id") == native_device_id),
+                None,
+            )
+            if existing is not None:
+                if (
+                    existing.get("owner_id") != owner
+                    or existing.get("public_key") != native_public_key
+                    or existing.get("platform") != device_platform
+                ):
+                    raise DeviceError(409, "device_conflict", "Device identity conflict.")
+                address = existing.get("address")
+                preshared_key = existing.get("preshared_key")
+                if not isinstance(address, str) or not _valid_key(preshared_key):
+                    raise DeviceError(503, "invalid_state", "Stored device state is invalid.")
+                return {
+                    "device": self._public_device(existing, self._metrics()),
+                    "provisioning": {
+                        "schema_version": 1,
+                        "device_id": native_device_id,
+                        "address": address,
+                        "preshared_key": preshared_key,
+                    },
+                    "one_time": True,
+                    "idempotent_replay": True,
+                }
+            if sum(item.get("owner_id") == owner for item in devices) >= MAX_DEVICES_PER_OWNER:
+                raise DeviceError(409, "device_limit_reached", "Device limit reached.")
+            if any(item.get("public_key") == native_public_key for item in devices):
+                raise DeviceError(409, "public_key_conflict", "Device public key conflict.")
+            address = self._next_address(devices)
+            preshared_key = self._generate_preshared_key()
+            now = iso_utc()
+            device = {
+                "id": native_device_id,
+                "owner_id": owner,
+                "name": device_name,
+                "platform": device_platform,
+                "architecture": native_architecture,
+                "agent_version": native_agent_version,
+                "address": address,
+                "public_key": native_public_key,
+                "preshared_key": preshared_key,
+                "enabled": True,
+                "created_at": now,
+                "updated_at": now,
+            }
+            self._apply_peer(native_public_key, preshared_key, address)
+            try:
+                self._save([*devices, device])
+            except DeviceError:
+                try:
+                    self._remove_peer(native_public_key)
+                except DeviceError:
+                    LOGGER.error("failed to roll back newly enrolled native peer")
+                raise
+            return {
+                "device": self._public_device(device, {}),
+                "provisioning": {
+                    "schema_version": 1,
+                    "device_id": native_device_id,
+                    "address": address,
+                    "preshared_key": preshared_key,
+                },
+                "one_time": True,
+                "idempotent_replay": False,
+            }
+
     def set_device_enabled(
         self, owner_id: object, device_id: object, *, enabled: object
     ) -> dict[str, Any]:
@@ -774,17 +887,29 @@ class AgentHandler(BaseHTTPRequestHandler):
         self._send_json(200 if payload["status"] == "ok" else 503, payload, head_only=True)
 
     def do_POST(self) -> None:  # noqa: N802
-        if urlsplit(self.path).path != "/v1/devices":
+        path = urlsplit(self.path).path
+        if path not in {"/v1/devices", "/v1/devices/enroll"}:
             self._send_json(405, {"error": "method_not_allowed"})
             return
         try:
             owner = self._authorized_owner()
             payload = self._read_json()
-            result = self.agent_server.manager.create_device(
-                owner,
-                name=payload.get("name"),
-                platform=payload.get("platform"),
-            )
+            if path == "/v1/devices/enroll":
+                result = self.agent_server.manager.enroll_native_device(
+                    owner,
+                    name=payload.get("name"),
+                    platform=payload.get("platform"),
+                    device_id=payload.get("device_id"),
+                    public_key=payload.get("public_key"),
+                    architecture=payload.get("architecture"),
+                    agent_version=payload.get("agent_version"),
+                )
+            else:
+                result = self.agent_server.manager.create_device(
+                    owner,
+                    name=payload.get("name"),
+                    platform=payload.get("platform"),
+                )
         except DeviceError as exc:
             self._handle_device_error(exc)
             return

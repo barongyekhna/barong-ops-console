@@ -12,6 +12,8 @@ PRIVATE_KEY = f"{'A' * 43}="
 PUBLIC_KEY = f"{'B' * 43}="
 PRESHARED_KEY = f"{'C' * 43}="
 SERVER_PUBLIC_KEY = f"{'D' * 43}="
+NATIVE_PUBLIC_KEY = f"{'E' * 43}="
+NATIVE_DEVICE_ID = "71a13b3b-5db0-4bda-9a8f-a2225fdd3d72"
 
 
 class FakeAwg:
@@ -141,6 +143,70 @@ class DeviceManagerTests(unittest.TestCase):
         self.assertTrue(
             any(command[:4] == ("/usr/bin/awg", "set", "awg0", "peer") for command in after_commands)
         )
+
+    def test_native_enrollment_uses_client_public_key_and_never_generates_private_key(self) -> None:
+        result = self.manager.enroll_native_device(
+            "user-one",
+            name="Windows 办公电脑",
+            platform="windows",
+            device_id=NATIVE_DEVICE_ID,
+            public_key=NATIVE_PUBLIC_KEY,
+            architecture="amd64",
+            agent_version="0.2.0-pilot",
+        )
+        provisioning = result["provisioning"]
+        self.assertEqual(result["device"]["id"], NATIVE_DEVICE_ID)
+        self.assertEqual(provisioning["device_id"], NATIVE_DEVICE_ID)
+        self.assertEqual(provisioning["preshared_key"], PRESHARED_KEY)
+        state_text = (self.root / "state" / "devices.json").read_text("utf-8")
+        self.assertIn(NATIVE_PUBLIC_KEY, state_text)
+        commands = [command for command, _input in self.runner.commands]
+        self.assertNotIn(("/usr/bin/awg", "genkey"), commands)
+        self.assertNotIn(("/usr/bin/awg", "pubkey"), commands)
+        self.assertIn(NATIVE_PUBLIC_KEY, self.runner.peers)
+        self.assertFalse(any("wg0" in command for command in commands))
+
+    def test_native_enrollment_retry_is_idempotent_for_the_same_owner_and_key(self) -> None:
+        arguments = {
+            "name": "Windows 办公电脑",
+            "platform": "windows",
+            "device_id": NATIVE_DEVICE_ID,
+            "public_key": NATIVE_PUBLIC_KEY,
+            "architecture": "amd64",
+            "agent_version": "0.2.0-pilot",
+        }
+        first = self.manager.enroll_native_device("user-one", **arguments)
+        before = len(self.runner.commands)
+        second = self.manager.enroll_native_device("user-one", **arguments)
+        self.assertFalse(first["idempotent_replay"])
+        self.assertTrue(second["idempotent_replay"])
+        self.assertEqual(first["provisioning"], second["provisioning"])
+        repeated_commands = self.runner.commands[before:]
+        self.assertFalse(
+            any(command[:4] == ("/usr/bin/awg", "set", "awg0", "peer") for command, _ in repeated_commands)
+        )
+
+    def test_native_device_identity_cannot_be_claimed_by_another_owner(self) -> None:
+        self.manager.enroll_native_device(
+            "user-one",
+            name="Windows 办公电脑",
+            platform="windows",
+            device_id=NATIVE_DEVICE_ID,
+            public_key=NATIVE_PUBLIC_KEY,
+            architecture="amd64",
+            agent_version="0.2.0-pilot",
+        )
+        with self.assertRaises(DeviceError) as context:
+            self.manager.enroll_native_device(
+                "user-two",
+                name="冒用设备",
+                platform="windows",
+                device_id=NATIVE_DEVICE_ID,
+                public_key=NATIVE_PUBLIC_KEY,
+                architecture="amd64",
+                agent_version="0.2.0-pilot",
+            )
+        self.assertEqual(context.exception.status_code, 409)
 
 
 if __name__ == "__main__":

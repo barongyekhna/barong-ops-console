@@ -4,8 +4,13 @@ import test from "node:test";
 
 import {
   normalizeCreatedVpnDevice,
+  normalizeNativeVpnEnrollment,
   normalizeVpnDeviceList,
 } from "../../frontend/src/modules/vpn/devices.ts";
+import {
+  normalizeNativeVpnIdentity,
+  normalizeNativeVpnStatus,
+} from "../../frontend/src/modules/vpn/native.ts";
 import {
   formatBytes,
   isVpnOnline,
@@ -115,6 +120,56 @@ test("one-time configuration is accepted only with a valid safe device", () => {
   assert.doesNotMatch(JSON.stringify(created.device), /owner_id|public_key/);
 });
 
+test("native enrollment keeps the private key local and accepts only bounded provisioning", () => {
+  const publicKey = `${"E".repeat(43)}=`;
+  const presharedKey = `${"F".repeat(43)}=`;
+  const identity = normalizeNativeVpnIdentity({
+    schema_version: 1,
+    device_id: "2f6fcb65-b51f-4b29-bc65-85f71437c2ac",
+    public_key: publicKey,
+    platform: "windows",
+    architecture: "amd64",
+    agent_version: "0.2.0-pilot",
+    suggested_name: "Windows 办公电脑",
+    private_key: "must-not-cross-the-bridge",
+  });
+  assert.notEqual(identity, null);
+  assert.doesNotMatch(JSON.stringify(identity), /private_key/);
+
+  const enrollment = normalizeNativeVpnEnrollment({
+    device: devicePayload(),
+    provisioning: {
+      schema_version: 1,
+      device_id: "2f6fcb65-b51f-4b29-bc65-85f71437c2ac",
+      address: "10.66.66.2/32",
+      preshared_key: presharedKey,
+      private_key: "must-not-arrive-from-server",
+    },
+    one_time: true,
+  });
+  assert.notEqual(enrollment, null);
+  assert.equal(enrollment.provisioning.preshared_key, presharedKey);
+  assert.doesNotMatch(JSON.stringify(enrollment), /private_key/);
+});
+
+test("native status accepts only safe local tunnel state", () => {
+  const status = normalizeNativeVpnStatus({
+    available: true,
+    installed: true,
+    agent_version: "0.2.0-pilot",
+    device_id: "2f6fcb65-b51f-4b29-bc65-85f71437c2ac",
+    provisioned: true,
+    address: "10.66.66.2/32",
+    desired_connected: true,
+    connected: true,
+    tunnel_service_state: "running",
+    private_key: "drop-me",
+  });
+  assert.notEqual(status, null);
+  assert.equal(status.connected, true);
+  assert.doesNotMatch(JSON.stringify(status), /private_key|drop-me/);
+});
+
 test("VPN page keeps the Fire Phoenix cockpit classes without adding CSS", () => {
   const dashboard = readFileSync(
     "frontend/src/modules/vpn/VpnDashboard.tsx",
@@ -133,6 +188,8 @@ test("VPN page keeps the Fire Phoenix cockpit classes without adding CSS", () =>
   assert.match(dashboard, /className="cc-card wide"/);
   assert.match(dashboard, /className="cc-drawer"/);
   assert.match(dashboard, /我的 VPN 设备/);
+  assert.match(dashboard, /controlNativeVpn/);
+  assert.match(dashboard, /关闭控制台不会断开/);
   assert.doesNotMatch(dashboard, /ActivityFeed|活动记录/);
   assert.doesNotMatch(dashboard, /\.module\.css|globals\.css/);
   assert.match(api, /apiRequest<unknown>\("\/vpn\/status"/);
@@ -140,9 +197,12 @@ test("VPN page keeps the Fire Phoenix cockpit classes without adding CSS", () =>
   assert.match(api, /apiRequest<unknown>\("\/vpn\/devices"/);
   assert.match(api, /method: "POST"/);
   assert.match(api, /method: "PATCH"/);
+  assert.match(api, /"\/vpn\/devices\/enroll"/);
   assert.match(nginx, /location = \/api\/backend\/vpn\/status/);
   assert.match(nginx, /limit_except GET HEAD \{ deny all; \}/);
   assert.match(nginx, /location = \/api\/backend\/vpn\/devices/);
   assert.match(nginx, /limit_except GET POST \{ deny all; \}/);
   assert.match(nginx, /limit_except PATCH \{ deny all; \}/);
+  assert.match(nginx, /location = \/api\/backend\/vpn\/devices\/enroll/);
+  assert.match(nginx, /limit_except POST \{ deny all; \}/);
 });
