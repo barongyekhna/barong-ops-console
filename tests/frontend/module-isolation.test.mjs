@@ -282,6 +282,15 @@ const registryItems = [
   manifest({
     category: "business",
     denied_behavior: "show_locked",
+    external_dependencies: [],
+    module_key: "h.site_health",
+    required_permissions: ["h.site_health.read"],
+    route_namespace: "/h-site-health",
+    status: "active",
+  }),
+  manifest({
+    category: "business",
+    denied_behavior: "show_locked",
     external_dependencies: ["track17"],
     module_key: "w.site_ops",
     required_permissions: ["w.site_ops.read"],
@@ -440,6 +449,31 @@ test("backend proxy precisely allows C07B module registry paths", () => {
     ]),
     true,
   );
+  const healthId = "123e4567-e89b-12d3-a456-426614174000";
+  assert.equal(isAllowedBackendProxyPath("GET", ["h", "runs"]), true);
+  assert.equal(isAllowedBackendProxyPath("POST", ["h", "runs"]), false);
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["h", "runs", healthId]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("POST", ["h", "runs", "trigger"]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["h", "runs", "trigger"]),
+    false,
+  );
+  assert.equal(isAllowedBackendProxyPath("GET", ["h", "findings"]), true);
+  assert.equal(
+    isAllowedBackendProxyPath("PATCH", ["h", "findings", healthId]),
+    true,
+  );
+  assert.equal(
+    isAllowedBackendProxyPath("GET", ["h", "findings", healthId]),
+    false,
+  );
+  assert.equal(isAllowedBackendProxyPath("POST", ["h", "ingest"]), false);
   assert.equal(
     isAllowedBackendProxyPath("POST", ["modules", "registry"]),
     false,
@@ -562,12 +596,13 @@ test("sidebar keeps C system modules at root and organizations as secondary laye
   assert.match(sidebarSource, /C_SYSTEM_MODULE_KEYS\.has\(moduleId\)/);
   assert.match(
     sidebarSource,
-    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"w\.",\s*"seo\.",\s*"gmc\.",?\s*\]/,
+    /ORGANIZATION_MODULE_PREFIXES = \[\s*"r\.",\s*"k\.",\s*"i\.",\s*"p\.",\s*"f\.",\s*"h\.",\s*"w\.",\s*"seo\.",\s*"gmc\.",?\s*\]/,
   );
   assert.match(sidebarSource, /normalized\.startsWith\("i\."\)/);
-  // F/W 系列与产品系列同规：进组织树，且只在国际贸易组织下展示（死命令）。
+  // F/H/W 系列与产品系列同规：进组织树，且只在国际贸易组织下展示（死命令）。
   assert.match(sidebarSource, /normalized\.startsWith\("w\."\)/);
   assert.match(sidebarSource, /normalized\.startsWith\("f\."\)/);
+  assert.match(sidebarSource, /normalized\.startsWith\("h\."\)/);
   assert.match(sidebarSource, /function capabilitySidebarVisible/);
   assert.match(sidebarSource, /return capabilitySidebarVisible\(fallbackItem\);/);
   assert.match(sidebarSource, /return capabilitySidebarVisible\(item\);/);
@@ -1252,6 +1287,7 @@ test("sidebar navigation exposes the full productized capability structure", () 
     "r.warehouse",
     "r.analysis",
     "f.enrichment",
+    "h.site_health",
     "w.site_ops",
     "business.approvals",
     "business.reviews",
@@ -1283,6 +1319,11 @@ test("sidebar navigation exposes the full productized capability structure", () 
   assert.equal(imageSystem.required_permission, "i.image_system.read");
   assert.equal(imageSystem.denied_behavior, "show_locked");
   assert.equal(imageSystem.category, "business");
+  const siteHealth = item("h.site_health");
+  assert.equal(siteHealth.label, "H 站点健康");
+  assert.equal(siteHealth.href, "/h-site-health");
+  assert.equal(siteHealth.route_namespace, "/h-site-health");
+  assert.equal(siteHealth.required_permission, "h.site_health.read");
   const logisticsHub = item("w.site_ops");
   assert.equal(logisticsHub.label, "W-S 物流网络中枢");
   assert.equal(logisticsHub.href, "/w-s");

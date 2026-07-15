@@ -1312,6 +1312,63 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         ),
     ),
     _manifest(
+        module_key="h.site_health",
+        display_name="H 站点健康",
+        description=(
+            "H-series site health control plane for run ledgers, findings, "
+            "manual n8n dispatch, and health alerts."
+        ),
+        category="business",
+        status="active",
+        lifecycle="production_released",
+        route_namespace="/h-site-health",
+        api_namespace="/h",
+        navigation=_navigation(
+            group="Registry",
+            label="H 站点健康",
+            icon="Activity",
+            order=15,
+        ),
+        required_permissions=("h.site_health.read",),
+        permission_manifest=(
+            _permission(
+                module_key="h.site_health",
+                permission_key="h.site_health.read",
+                category="business",
+                action="read",
+                label="Read site health",
+                description="View site health runs, findings, and statistics.",
+                risk_level="low",
+                menu_policy="show_locked",
+            ),
+            _permission(
+                module_key="h.site_health",
+                permission_key="h.site_health.manage",
+                category="business",
+                action="manage",
+                label="Manage site health",
+                description=(
+                    "Trigger health runs and acknowledge or resolve findings."
+                ),
+                risk_level="medium",
+                menu_policy="show_locked",
+                operation_log_required=True,
+            ),
+        ),
+        denied_behavior="show_locked",
+        unavailable_behavior="show_unavailable",
+        external_dependencies=(),
+        execution_provider_required=False,
+        module_adapter_required=False,
+        sandbox_required=False,
+        feature_flag_key="modules.h.site_health",
+        data_boundary=_data_boundary(
+            reads=("h_health_runs", "h_health_findings", "p_notifications"),
+            writes=("h_health_runs", "h_health_findings", "p_notifications"),
+            blocked_objects=("cross_module_writes",),
+        ),
+    ),
+    _manifest(
         module_key="business.approvals",
         display_name="Approvals",
         description="Approval request list and decision surface.",

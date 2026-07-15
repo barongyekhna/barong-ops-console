@@ -51,6 +51,7 @@ ORG_CONTEXT_EXEMPT_PATHS = frozenset(
         "/api/app/module/shared/update-orgs",
         "/api/app/module/shared/list",
         "/api/app/permissions/me",
+        "/api/app/h/ingest",
     )
 )
 # C19 is native to every active authenticated user and has no organization

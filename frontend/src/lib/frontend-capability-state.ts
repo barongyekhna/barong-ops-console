@@ -202,6 +202,7 @@ const PRODUCT_NAVIGATION_GROUPS = new Map<string, string>([
   ["r.analysis", "业务处理"],
   ["r.warehouse", "业务处理"],
   ["f.enrichment", "业务处理"],
+  ["h.site_health", "业务处理"],
   ["w.site_ops", "业务处理"],
   ["business.approvals", "业务处理"],
   ["business.reviews", "业务处理"],
@@ -223,6 +224,7 @@ const PRODUCT_NAVIGATION_LABELS = new Map<string, string>([
   ["r.analysis", "R-A 产品分析中心"],
   ["r.warehouse", "R-W 产品数据仓库"],
   ["f.enrichment", "F 类目富化"],
+  ["h.site_health", "H 站点健康"],
   ["w.site_ops", "W-S 物流网络中枢"],
   ["business.approvals", "审批"],
   ["business.reviews", "审批审计"],
@@ -244,6 +246,7 @@ const PRODUCT_NAVIGATION_ORDER = new Map<string, number>([
   ["r.warehouse", 12],
   ["r.analysis", 13],
   ["f.enrichment", 14],
+  ["h.site_health", 15],
   ["w.site_ops", 15],
   ["business.approvals", 10],
   ["business.reviews", 20],
@@ -266,6 +269,7 @@ const I_IMAGE_SYSTEM_MODULE_KEY = "i.image_system";
 const P_UPLOAD_MODULE_KEY = "p.upload";
 const R_ANALYSIS_MODULE_KEY = "r.analysis";
 const F_ENRICHMENT_MODULE_KEY = "f.enrichment";
+const H_SITE_HEALTH_MODULE_KEY = "h.site_health";
 const W_SITE_OPS_MODULE_KEY = "w.site_ops";
 const OWNER_ONLY_ADMIN_MODULE_KEYS = new Set([
   "admin.modules",
@@ -685,6 +689,7 @@ const ACTION_SCOPED_EXECUTION_GATE_MODULE_KEYS = new Set([
   I_IMAGE_SYSTEM_MODULE_KEY,
   P_UPLOAD_MODULE_KEY,
   F_ENRICHMENT_MODULE_KEY,
+  H_SITE_HEALTH_MODULE_KEY,
   W_SITE_OPS_MODULE_KEY,
 ]);
 

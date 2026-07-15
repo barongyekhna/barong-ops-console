@@ -1122,6 +1122,40 @@ function isAllowedFPath(method: string, path: string[]) {
   return false;
 }
 
+function isAllowedHPath(method: string, path: string[]) {
+  if (path[0] !== "h") {
+    return false;
+  }
+  if (path.length === 2 && path[1] === "runs") {
+    return method === "GET";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "runs" &&
+    path[2] === "trigger"
+  ) {
+    return method === "POST";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "runs" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "GET";
+  }
+  if (path.length === 2 && path[1] === "findings") {
+    return method === "GET";
+  }
+  if (
+    path.length === 3 &&
+    path[1] === "findings" &&
+    isUuidPathSegment(path[2])
+  ) {
+    return method === "PATCH";
+  }
+  return false;
+}
+
 function isAllowedWPath(method: string, path: string[]) {
   if (path[0] !== "w") {
     return false;
@@ -1775,6 +1809,7 @@ export function getBackendApiPath(method: string, path: string[]) {
     isAllowedKPath(method, path) ||
     isAllowedIPath(method, path) ||
     isAllowedFPath(method, path) ||
+    isAllowedHPath(method, path) ||
     isAllowedWPath(method, path) ||
     isAllowedRPath(method, path) ||
     isAllowedRwPath(method, path) ||

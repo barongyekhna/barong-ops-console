@@ -1,4 +1,5 @@
 import {
+  Activity,
   Bot,
   Building2,
   Boxes,
@@ -146,6 +147,17 @@ export const navigationGroups: NavigationGroup[] = [
         module_key: "f.enrichment",
         required_permission: "f.enrichment.read",
         route_namespace: "/f-enrichment",
+        status: "active",
+      },
+      {
+        category: "business",
+        denied_behavior: "show_locked",
+        href: "/h-site-health",
+        icon: Activity,
+        label: "H 站点健康",
+        module_key: "h.site_health",
+        required_permission: "h.site_health.read",
+        route_namespace: "/h-site-health",
         status: "active",
       },
       {

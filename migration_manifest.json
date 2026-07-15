@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260714_04_f_market_refs",
+  "alembic_head": "20260715_01_h_site_health",
   "environment": "staging",
-  "expected_alembic_head": "20260714_04_f_market_refs",
+  "expected_alembic_head": "20260715_01_h_site_health",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 58,
-  "migration_hash": "3ac3435c733bf8d5d60a86d2bb72e798b7c210c36021d1657921607bdaa2875e",
+  "migration_count": 59,
+  "migration_hash": "2d7668437f0f295e192b3f1792fa5ecf8b9ff88a2fa7ab5a03cb5ff9964d2c02",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -65,9 +65,10 @@
     "20260714_01_w_logistics_hub",
     "20260714_02_f_candidate_compare",
     "20260714_03_arcade_high_scores",
-    "20260714_04_f_market_refs"
+    "20260714_04_f_market_refs",
+    "20260715_01_h_site_health"
   ],
-  "migration_order_checksum": "0cff9188d5546893e9cdcc2d0ff4627847a0d2e2580efa5487d4eb96126ff1f1",
+  "migration_order_checksum": "753d2c206b4e4757abdcb5be9da5399a757fa1a119852777e4faff0559a35f68",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -474,6 +475,13 @@
       "down_revision": "20260714_03_arcade_high_scores",
       "path": "backend/alembic/versions/20260714_04_f_market_refs.py",
       "version": "20260714_04_f_market_refs"
+    },
+    {
+      "applied_at": "2026-07-15T00:00:00Z",
+      "checksum": "af669bd6afce42026089b9ec7a4a04f01c7b3ef96dfea30575d8308ca5f6d87c",
+      "down_revision": "20260714_04_f_market_refs",
+      "path": "backend/alembic/versions/20260715_01_h_site_health.py",
+      "version": "20260715_01_h_site_health"
     }
   ]
 }

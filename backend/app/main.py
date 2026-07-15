@@ -37,6 +37,7 @@ from .api.routes.health import (
 )
 from .modules.c19.router import router as c19_router
 from .modules.f_series.router import router as f_enrichment_router
+from .modules.h_series.router import router as h_site_health_router
 from .modules.w_series.router import machine_router as w_siteops_machine_router
 from .modules.w_series.router import router as w_siteops_router
 from .modules.i_series.image_system.router import (
@@ -961,6 +962,7 @@ app.include_router(notifications_router)
 app.include_router(p_upload_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(p_upload_router)
 app.include_router(f_enrichment_router, prefix=APPLICATION_API_PREFIX)
+app.include_router(h_site_health_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(w_siteops_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(w_siteops_machine_router, prefix=APPLICATION_API_PREFIX)
 app.include_router(w_siteops_machine_router)

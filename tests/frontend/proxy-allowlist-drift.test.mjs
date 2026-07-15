@@ -31,6 +31,9 @@ const repoRoot = path.resolve(
 const KNOWN_UNPROXIED = new Set([
   // -- server-to-server callbacks and ingest (must never be browser-reachable)
   "POST /api/app/notifications/ingest",
+  // H health ingest is a machine endpoint routed directly by Nginx,
+  // never through Next.
+  "POST /api/app/h/ingest",
   "POST /api/app/p/uploads/{job_id}/result",
   "GET /api/app/p/jobs/{job_id}/media/{asset_id}/file",
   // W-S sync callbacks, Woo order ingest and 17TRACK updates are server-to-server only.

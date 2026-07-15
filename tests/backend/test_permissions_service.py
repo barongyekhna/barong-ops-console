@@ -61,6 +61,8 @@ def test_permission_registry_seed_upsert_is_idempotent(
             "modules.read",
             "w.site_ops.read",
             "w.site_ops.manage",
+            "h.site_health.read",
+            "h.site_health.manage",
         }
 
         assert permission_count == len(BASE_PERMISSION_REGISTRY_SEED)

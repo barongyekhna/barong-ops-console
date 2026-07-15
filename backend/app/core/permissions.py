@@ -321,6 +321,28 @@ BASE_PERMISSION_REGISTRY_SEED: tuple[PermissionDefinition, ...] = (
         "menu_policy": MENU_POLICY_SHOW_LOCKED,
     },
     {
+        "permission_key": "h.site_health.read",
+        "module_key": "h.site_health",
+        "category": "business",
+        "action": "read",
+        "label": "Read site health",
+        "description": "View site health runs, findings, and statistics.",
+        "risk_level": RISK_LEVEL_LOW,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
+        "permission_key": "h.site_health.manage",
+        "module_key": "h.site_health",
+        "category": "business",
+        "action": "manage",
+        "label": "Manage site health",
+        "description": (
+            "Trigger health runs and acknowledge or resolve findings."
+        ),
+        "risk_level": RISK_LEVEL_MEDIUM,
+        "menu_policy": MENU_POLICY_SHOW_LOCKED,
+    },
+    {
         "permission_key": "operation_logs.read",
         "module_key": "operation_logs",
         "category": "system",
