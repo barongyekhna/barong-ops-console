@@ -184,7 +184,7 @@ def selling_points_instruction() -> str:
 
 AMAZON_COPY_SKILL_VERSION = "k-amazon-listing-copywriting-v1"
 DTC_COPY_SKILL_VERSION = "k-independent-site-seo-copywriting-v1"
-IMAGE_ART_DIRECTION_SKILL_VERSION = "k-product-image-art-direction-v1"
+IMAGE_ART_DIRECTION_SKILL_VERSION = "k-product-image-art-direction-v2-house-rule"
 
 
 def _load_skill_markdown(folder: str, filename: str = "SKILL.md") -> tuple[str, str]:

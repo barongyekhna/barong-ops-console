@@ -5,6 +5,32 @@ description: 【通用 · 产品图风格指令生成】读取一份已完成的
 
 # 产品图风格指令生成（文案 → Art Direction → image 模型 prompt）
 
+## 0. 品牌视觉家规（Barong Yekhna · 硬约束 · 覆盖下方 Step 2 的风格原型选择）
+
+本项目（Barong Yekhna 独立站 / everything store）**全线共用同一套视觉家规**，不再"一个产品挑一个风格原型"。原因：品类会无限扩张（今天冷疗机、明天水杯、后天露营灯），只有"呈现方式绝对统一"才能让多品类看起来是**一个有格调的品牌**而不是杂货铺。**秩序不来自统一颜色，来自统一画框——除了产品本身，一切都是常量。**
+
+**遇到 Barong Yekhna 的产品时，Step 2 直接锁定为下面的家规，不做六选一。**
+
+### 心法（一句话）
+让"呈现方式"绝对刚性，"产品"才可以绝对自由。背景 / 打光 / 构图 / 阴影全部写死，产品的**形状与颜色是页面上唯一允许变化的变量**。
+
+### 两种镜头（只有这两种，共享同一套光与色的语法）
+
+**A. 干净产品图（主图 + 画廊图 / gallery）——管 CTR、网格陈列。** 固定英文风格块（每条此类 prompt 末尾必拼，一字不改）：
+```
+STYLE BLOCK (Barong Yekhna house rule — clean product shot): Premium e-commerce product photography. Single product centered on a seamless BRIGHT warm off-white studio background (near #F7F6F4), the background lit two stops brighter than the product so the ground is clean bright white, never grey. Soft, even, diffused light from the upper left; a soft subtle contact shadow directly beneath the product. Generous negative space, product centered at a consistent scale. Crisp focus, true-to-life vivid saturated product colour. Clean, airy, high-end catalog aesthetic. No props, no text, no clutter.
+CONSISTENCY: same product as the reference image — do not alter product shape, colour, or markings.
+```
+
+**B. 生活场景图（scene / description）——管"想要"、告诉陌生顾客怎么用。** 产品放进真实环境，但**必须共享同一套"明亮、暖、柔"的光与色**：明亮通透的室内/场景、上方左侧柔和自然光、暖调中性色、浅景深、克制不杂乱、真实产品颜色。禁止暗调、禁止冷调、禁止杂乱道具。目标：场景图和干净产品图放一起像"同一个摄影师、同一天拍的"。
+
+### 家规红线（高于下方"红线"，最高优先级）
+- 干净产品图背景**永远明亮暖白**（#F7F6F4 档），**绝不允许发灰**（灰=打光没到位、背景没比产品亮 2 档，不是风格）。
+- 全线**不切换风格原型**：不管什么品类都用这套家规。
+- 产品颜色**据实、鲜艳、饱和**——它是唯一变量，别压灰压暗。
+
+> 技术备注：本家规已在代码层强制——K→I 出图前，主图/画廊图的 prompt 会自动追加上面的 STYLE BLOCK 作兜底（AI 跑偏也拉回）。你写 prompt 时也照家规写，双保险。
+
 ## 为什么需要这份 Art Direction（原理一页纸）
 
 1. **每个图位都有唯一使命，按漏斗排序**：主图管点击（CTR）→ 信息图管看懂 → 场景图管想要 → 尺寸/对比图管打消疑虑 → 开箱/UGC 图管信任。一张图干两件事 = 两件都干不好。

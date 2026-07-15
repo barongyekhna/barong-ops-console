@@ -65,6 +65,27 @@ ASSET_ROLE_MAIN = "main"
 ASSET_ROLE_GALLERY = "gallery"
 ASSET_ROLE_DESCRIPTION = "description"
 
+# Barong Yekhna 视觉家规（代码层强制）：干净产品图（主图/画廊图）背景必须是
+# 明亮暖白、背景比产品亮 2 档、左上柔光、接触阴影、产品是唯一变量——绝不发灰。
+# 出图前对这两类角色的 prompt 无条件追加，作为 AI 作图指令跑偏时的兜底。
+# 场景图（description）保留其环境镜头，不套此白底块。详见
+# skills/product-image-art-direction/SKILL.md §0。
+_HOUSE_STYLE_ROLES = (ASSET_ROLE_MAIN, ASSET_ROLE_GALLERY)
+_HOUSE_STYLE_MARKER = "Barong Yekhna house rule"
+HOUSE_STYLE_BLOCK = (
+    "\n\nSTYLE BLOCK (Barong Yekhna house rule — clean product shot, "
+    "non-negotiable): Premium e-commerce product photography. Single product "
+    "centered on a seamless BRIGHT warm off-white studio background (near "
+    "#F7F6F4), the background lit two stops brighter than the product so the "
+    "ground is clean bright white, never grey. Soft, even, diffused light from "
+    "the upper left; a soft subtle contact shadow directly beneath the product. "
+    "Generous negative space, product centered at a consistent scale. Crisp "
+    "focus, true-to-life vivid saturated product colour. Clean, airy, high-end "
+    "catalog aesthetic. No props, no text, no clutter. CONSISTENCY: same "
+    "product as the reference image — do not alter product shape, colour, or "
+    "markings."
+)
+
 # R->K 参考图外链只可能来自这些图源 (Amazon CDN 现在, 1688/alicdn 之后).
 REFERENCE_URL_HOST_SUFFIXES = (
     "media-amazon.com",
@@ -410,6 +431,10 @@ def enqueue_image_render_jobs(
             asset_role = ASSET_ROLE_MAIN
         else:
             asset_role = ASSET_ROLE_GALLERY
+        # 视觉家规兜底：干净产品图（主图/画廊图）无条件套明亮暖白家规块，
+        # 保证全线出图统一、绝不发灰——即便 AI 作图指令漂移到别的风格。
+        if asset_role in _HOUSE_STYLE_ROLES and _HOUSE_STYLE_MARKER not in prompt:
+            prompt += HOUSE_STYLE_BLOCK
         job_id = uuid4()
         db.execute(
             text(
