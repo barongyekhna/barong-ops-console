@@ -664,17 +664,18 @@ test("productized routes are visible while diagnostics stay out of navigation", 
   assert.equal(item("admin.settings").href, "/settings");
 });
 
-test("VPN route reuses the unchanged operations dashboard", () => {
+test("VPN route uses its dedicated cockpit inside the normal login guard", () => {
   const vpnRouteSource = readFileSync(
     "frontend/src/app/(console)/vpn/page.tsx",
     "utf8",
   );
 
   assert.match(vpnRouteSource, /DashboardAccessControl/);
-  assert.match(vpnRouteSource, /OperationsDashboard/);
+  assert.match(vpnRouteSource, /VpnDashboard/);
+  assert.doesNotMatch(vpnRouteSource, /OperationsDashboard/);
   assert.match(
     vpnRouteSource,
-    /<DashboardAccessControl>[\s\S]*<OperationsDashboard \/>[\s\S]*<\/DashboardAccessControl>/,
+    /<DashboardAccessControl>[\s\S]*<VpnDashboard \/>[\s\S]*<\/DashboardAccessControl>/,
   );
   assert.doesNotMatch(vpnRouteSource, /className=|style=|globals\.css/);
 });

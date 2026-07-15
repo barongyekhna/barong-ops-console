@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 
 import { DashboardAccessControl } from "@/components/dashboard-access-control";
-import { OperationsDashboard } from "@/components/operations-dashboard";
+import { VpnDashboard } from "@/modules/vpn/VpnDashboard";
 
 export const metadata: Metadata = {
   title: "VPN",
@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 export default function VpnPage() {
   return (
     <DashboardAccessControl>
-      <OperationsDashboard />
+      <VpnDashboard />
     </DashboardAccessControl>
   );
 }
