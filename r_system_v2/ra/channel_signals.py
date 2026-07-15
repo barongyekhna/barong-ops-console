@@ -451,6 +451,23 @@ def _google_keyword_planner_state(
     }
     if not (gate["runtime_enabled"] and keyword and google_ads_value):
         return state
+    # 记账闸：Basic 套餐 15000/天，额度尽 → 优雅降级不发请求（SEO 数据缺失
+    # 不影响漏斗，明天自动恢复），绝不打超额请求。
+    try:
+        from r_system_v2.ra.quota_ledger import (
+            PROVIDER_GOOGLE_ADS_PLANNER,
+            RAQuotaExhaustedError,
+            try_consume,
+        )
+
+        try_consume(db, PROVIDER_GOOGLE_ADS_PLANNER, amount=1)
+    except RAQuotaExhaustedError as exc:
+        state["detail"] = f"{state['detail']}（{exc}）"
+        return state
+    try:
+        db.rollback()  # 即将发 OAuth+API 两跳 HTTP，先结束事务防 idle 超时。
+    except Exception:
+        pass
     # 过审 + 显式开启后才发真请求；失败降级为门控态，不影响漏斗。
     try:
         from r_system_v2.ra.google_keyword_planner import GoogleKeywordPlannerClient

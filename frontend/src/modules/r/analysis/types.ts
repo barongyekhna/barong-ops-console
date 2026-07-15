@@ -609,6 +609,20 @@ export type RaOpusReview = {
   reviewed_at?: string | null;
 };
 
+export type RaGoogleAdsData = {
+  status?: string | null;
+  avg_monthly_searches?: number | null;
+  competition_index?: number | null;
+  cpc_low_micros?: number | null;
+  cpc_high_micros?: number | null;
+  ideas?: Array<{
+    keyword?: string | null;
+    avg_monthly_searches?: number | null;
+    competition_index?: number | null;
+  }>;
+  backfilled_at?: string | null;
+};
+
 export type RaDeepEnrichment = {
   keepa?: {
     history_days?: number | null;
@@ -707,7 +721,7 @@ export type RaReportDetail = {
     google_seo: {
       related_searches: string[];
       people_also_ask: string[];
-      google_ads: Record<string, unknown>;
+      google_ads: RaGoogleAdsData;
       source: string;
     };
   };

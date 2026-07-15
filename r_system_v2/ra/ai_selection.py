@@ -824,6 +824,8 @@ def _layer_request_payload(
         "competition": _competition_payload(context),
         "channel_signals": _channel_signals_payload(context),
         "deep_enrichment": _deep_enrichment_payload(context),
+        "google_ads_planner": _google_ads_planner_payload(context),
+        "channel_principles": CHANNEL_PRINCIPLES,
         "previous_layers": [layer_decision.payload.get("model_output") for layer_decision in previous_layers],
     }
 
@@ -857,6 +859,9 @@ def _opus_layer_request_payload(
         "instruction": (
             "只做最终结论，不展开推理过程。必须只输出一个 JSON 对象。"
             "如果 Rainforest/销量/供应商数据无效或冲突，优先 review，不要强行通过或淘汰。"
+            "route_recommendations 必须严格按 channel_principles 的三托盘原则逐渠道独立判定："
+            "亚马逊=备货最严标准；独立站广告=用 google_ads_planner 的 CPC 日常价算获客经济账；"
+            "独立站SEO=看月搜索量与CPC含金量及时间匹配。一个渠道的问题不得连坐其他渠道。"
         ),
         "skill": _skill_payload(skill_bundle),
         "skill_rules_summary": _opus_skill_summary(skill_bundle),
@@ -866,11 +871,74 @@ def _opus_layer_request_payload(
         "competition": _competition_payload(context),
         "channel_signals": _compact_value(_channel_signals_payload(context), max_chars=2200),
         "deep_enrichment": _compact_value(_deep_enrichment_payload(context), max_chars=2600),
+        # planner 精华块独立传：不走 compact，防止被 2200 字符截断吃掉。
+        "google_ads_planner": _google_ads_planner_payload(context),
+        "channel_principles": CHANNEL_PRINCIPLES,
         "previous_layers": [
             _compact_value(layer_decision.payload.get("model_output"), max_chars=1400)
             for layer_decision in previous_layers
         ],
     }
+
+
+def _google_ads_planner_payload(context: dict[str, Any]) -> dict[str, Any]:
+    """Google Keyword Planner 精华块：独立传给模型，绝不被 compact 截断。
+
+    日常价估算口径：实际成交均价通常贴低位区间走，取 low + (high-low)*0.25。
+    """
+    signals = _dict_value(context.get("channel_signals"))
+    planner = _dict_value(_dict_value(signals.get("dtc_seo")).get("keyword_planner"))
+    if not planner:
+        return {}
+    low = planner.get("cpc_low_micros")
+    high = planner.get("cpc_high_micros")
+    low_usd = round(low / 1e6, 2) if isinstance(low, (int, float)) and low else None
+    high_usd = round(high / 1e6, 2) if isinstance(high, (int, float)) and high else None
+    typical_usd = (
+        round((low + (high - low) * 0.25) / 1e6, 2)
+        if isinstance(low, (int, float)) and isinstance(high, (int, float)) and low and high
+        else low_usd
+    )
+    ideas = []
+    for idea in (planner.get("keyword_ideas") or [])[:8]:
+        if isinstance(idea, dict) and idea.get("keyword"):
+            ideas.append(
+                {
+                    "keyword": idea.get("keyword"),
+                    "avg_monthly_searches": idea.get("avg_monthly_searches"),
+                    "competition_index": idea.get("competition_index"),
+                }
+            )
+    return {
+        "status": planner.get("runtime_status"),
+        "keyword": signals.get("keyword"),
+        "avg_monthly_searches": planner.get("avg_monthly_searches"),
+        "competition_index": planner.get("competition_index"),
+        "cpc_low_usd": low_usd,
+        "cpc_typical_usd_estimate": typical_usd,
+        "cpc_high_usd": high_usd,
+        "cpc_note": "CPC高=流量被市场验证值钱=SEO含金量高；广告经济性用日常价估算CAC",
+        "top_ideas": ideas,
+    }
+
+
+# 三托盘审核原则：终审/复核模型必须按渠道分别判，不许一票否决拖累其他托盘。
+CHANNEL_PRINCIPLES = {
+    "amazon": (
+        "亚马逊备货托盘=真金压货，标准最严：必须有12个月稳定需求、无价格战"
+        "（价格地板未持续下跌）、竞争可入；证据不足或存疑必须 reject，绝不赌。"
+    ),
+    "dtc_ad": (
+        "独立站广告托盘=零库存但花钱买流量：核心是广告经济性——用 CPC 日常价"
+        "估算获客成本（CPC÷转化率3-5%）对比单件毛利；毛利扛不住 CAC 就 reject。"
+        "爆款/短历史品适合此通道（当天见效，时间匹配）。"
+    ),
+    "dtc_seo": (
+        "独立站SEO托盘=零成本自然流量：看 Google 月搜索量、CPC 含金量"
+        "（CPC 越高说明流量越值钱、SEO 越有肉吃）、SERP 弱位。"
+        "SEO 见效需数月：昙花款/历史过短的品不适合此通道（排名起来风口已过）。"
+    ),
+}
 
 
 def _deep_enrichment_payload(context: dict[str, Any]) -> dict[str, Any]:
@@ -1431,6 +1499,7 @@ def _report_keywords_block(context: dict[str, Any]) -> dict[str, Any]:
         "google_ads": {
             "status": planner.get("runtime_status"),
             "avg_monthly_searches": planner.get("avg_monthly_searches"),
+            "competition_index": planner.get("competition_index"),
             "cpc_low_micros": planner.get("cpc_low_micros"),
             "cpc_high_micros": planner.get("cpc_high_micros"),
             "ideas": google_ideas[:10],

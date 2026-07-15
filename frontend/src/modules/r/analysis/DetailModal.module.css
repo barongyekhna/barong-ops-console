@@ -598,3 +598,120 @@
   line-height: 1.55;
   color: #b9cde0;
 }
+
+/* ---- Google Ads 实测数据 ---- */
+.gadsBig {
+  font-size: 0.92rem;
+  font-weight: 800;
+  color: #39d4ff;
+  font-variant-numeric: tabular-nums;
+}
+
+.gadsBig[data-hot="true"] {
+  color: #ff9d3b;
+}
+
+.gadsCards {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.gadsCard {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid rgb(120 200 255 / 18%);
+  border-radius: 8px;
+  background: rgb(120 200 255 / 4%);
+  align-content: start;
+}
+
+.gadsCard[data-kind="typical"] {
+  border-color: rgb(77 255 161 / 45%);
+  background: rgb(77 255 161 / 6%);
+}
+
+.gadsCardLabel {
+  font-size: 0.64rem;
+  font-weight: 700;
+  color: #7d95ae;
+  letter-spacing: 0.04em;
+}
+
+.gadsCard[data-kind="typical"] .gadsCardLabel {
+  color: #4dffa1;
+}
+
+.gadsCardValue {
+  font-size: 1.3rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: #e8f4ff;
+}
+
+.gadsCard[data-kind="typical"] .gadsCardValue {
+  color: #4dffa1;
+}
+
+.gadsCardNote {
+  font-size: 0.62rem;
+  color: #7d95ae;
+  line-height: 1.45;
+}
+
+.gadsHint {
+  margin: 8px 0 0;
+  font-size: 0.7rem;
+  color: #ffd9a0;
+  line-height: 1.5;
+}
+
+.gadsTableWrap {
+  margin-top: 12px;
+  overflow-x: auto;
+  border: 1px solid rgb(120 200 255 / 14%);
+  border-radius: 8px;
+}
+
+.gadsTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.72rem;
+}
+
+.gadsTable th {
+  text-align: left;
+  padding: 7px 10px;
+  color: #7d95ae;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border-bottom: 1px solid rgb(120 200 255 / 14%);
+  background: rgb(120 200 255 / 5%);
+  white-space: nowrap;
+}
+
+.gadsTable td {
+  padding: 6px 10px;
+  border-bottom: 1px dashed rgb(120 200 255 / 8%);
+  color: #b9cde0;
+  font-variant-numeric: tabular-nums;
+}
+
+.gadsTable tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.gadsTable td:nth-child(2),
+.gadsTable td:nth-child(3) {
+  white-space: nowrap;
+  color: #39d4ff;
+}
+
+@media (max-width: 560px) {
+  .gadsCards {
+    grid-template-columns: 1fr;
+  }
+}

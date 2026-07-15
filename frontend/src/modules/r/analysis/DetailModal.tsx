@@ -45,6 +45,34 @@ const TREND_LABELS: Record<string, string> = {
   unknown: "数据不足",
 };
 
+function fmtSearches(value: number | null | undefined): string {
+  if (typeof value !== "number" || !Number.isFinite(value)) {
+    return "—";
+  }
+  return value >= 10000
+    ? `${(value / 10000).toFixed(1).replace(/\.0$/, "")}万`
+    : value.toLocaleString();
+}
+
+function usdFromMicros(micros: number | null | undefined): string {
+  if (typeof micros !== "number" || !Number.isFinite(micros) || micros <= 0) {
+    return "—";
+  }
+  return `$${(micros / 1e6).toFixed(2)}`;
+}
+
+// 日常价估算:实际点击均价通常贴低位区间走,取 low + (high-low)*0.25。
+function typicalCpcMicros(
+  gads: { cpc_low_micros?: number | null; cpc_high_micros?: number | null } | null | undefined,
+): number | null {
+  const low = gads?.cpc_low_micros;
+  const high = gads?.cpc_high_micros;
+  if (typeof low === "number" && low > 0 && typeof high === "number" && high > 0) {
+    return low + (high - low) * 0.25;
+  }
+  return typeof low === "number" && low > 0 ? low : null;
+}
+
 export function DetailModal({
   reportId,
   onClose,
@@ -167,6 +195,7 @@ export function DetailModal({
   const competition = (detail?.competition ?? {}) as Record<string, unknown>;
   const kw = detail?.keyword_channels;
   const deep = detail?.deep_enrichment;
+  const gads = kw?.google_seo?.google_ads ?? null;
 
   return (
     <div className={styles.overlay} onClick={onClose} role="presentation">
@@ -548,13 +577,108 @@ export function DetailModal({
                     {kw.google_seo.related_searches.length === 0 &&
                     kw.google_seo.people_also_ask.length === 0 ? (
                       <p className={styles.kwSource}>
-                        （本产品 SERP 未返回相关词；Google Ads 过审后将补充搜索量数据）
+                        （本产品 SERP 未返回相关词）
                       </p>
                     ) : null}
                   </div>
                 </div>
               </section>
             ) : null}
+
+            {/* Google Ads 实测数据（Keyword Planner） */}
+            <section className={styles.section}>
+              <h4>Google Ads 实测数据（Keyword Planner）</h4>
+              {gads && (gads.avg_monthly_searches !== null &&
+                gads.avg_monthly_searches !== undefined) ||
+              (gads?.ideas?.length ?? 0) > 0 ? (
+                <>
+                  <div className={styles.statRow}>
+                    <span>
+                      主词 Google 月搜索量{" "}
+                      <strong className={styles.gadsBig}>
+                        {fmtSearches(gads?.avg_monthly_searches)}
+                      </strong>
+                    </span>
+                    <span>
+                      广告竞争度{" "}
+                      <strong
+                        className={styles.gadsBig}
+                        data-hot={(gads?.competition_index ?? 0) >= 80}
+                      >
+                        {gads?.competition_index ?? "—"}/100
+                      </strong>
+                    </span>
+                  </div>
+                  {gads?.cpc_low_micros || gads?.cpc_high_micros ? (
+                    <>
+                      <div className={styles.gadsCards}>
+                        <div className={styles.gadsCard}>
+                          <span className={styles.gadsCardLabel}>CPC 最低价</span>
+                          <span className={styles.gadsCardValue}>
+                            {usdFromMicros(gads?.cpc_low_micros)}
+                          </span>
+                          <span className={styles.gadsCardNote}>页首出价低位</span>
+                        </div>
+                        <div className={styles.gadsCard} data-kind="typical">
+                          <span className={styles.gadsCardLabel}>日常价（估算）</span>
+                          <span className={styles.gadsCardValue}>
+                            {usdFromMicros(typicalCpcMicros(gads))}
+                          </span>
+                          <span className={styles.gadsCardNote}>
+                            实际点击价通常贴此价走 · 算广告账用这个
+                          </span>
+                        </div>
+                        <div className={styles.gadsCard}>
+                          <span className={styles.gadsCardLabel}>CPC 最高价</span>
+                          <span className={styles.gadsCardValue}>
+                            {usdFromMicros(gads?.cpc_high_micros)}
+                          </span>
+                          <span className={styles.gadsCardNote}>
+                            页首出价高位 · 旺季天花板
+                          </span>
+                        </div>
+                      </div>
+                      <p className={styles.gadsHint}>
+                        💡 CPC 越高 = 这个流量被市场标价越贵 = SEO 自然位含金量越高
+                      </p>
+                    </>
+                  ) : null}
+                  {(gads?.ideas?.length ?? 0) > 0 ? (
+                    <div className={styles.gadsTableWrap}>
+                      <table className={styles.gadsTable}>
+                        <thead>
+                          <tr>
+                            <th>相关关键词（Google 官方推荐）</th>
+                            <th>月搜索量</th>
+                            <th>竞争度</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(gads?.ideas ?? []).slice(0, 10).map((idea, index) => (
+                            <tr key={index}>
+                              <td>{idea.keyword}</td>
+                              <td>{fmtSearches(idea.avg_monthly_searches)}</td>
+                              <td>
+                                {idea.competition_index !== null &&
+                                idea.competition_index !== undefined
+                                  ? `${idea.competition_index}/100`
+                                  : "—"}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className={styles.deepGap}>
+                  {gads?.status === "enabled" || gads?.backfilled_at
+                    ? "该主词过于长尾,Google 无搜索量数据（相关近似词见上方关键词列表）。"
+                    : "Google Ads 数据将在下次审核时自动拉取。"}
+                </p>
+              )}
+            </section>
 
             {/* 1688 供应商 */}
             <section className={styles.section}>

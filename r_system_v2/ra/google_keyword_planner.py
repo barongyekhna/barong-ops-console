@@ -21,7 +21,9 @@ from urllib.request import Request, urlopen
 
 
 GOOGLE_OAUTH_TOKEN_URL = "https://oauth2.googleapis.com/token"
-DEFAULT_GOOGLE_ADS_API_VERSION = "v18"
+# Google 一年退役一轮 API 版本：v18 已死(404 HTML)，2026-07 实测 v21/v22 在役。
+# 若再遇 404 HTML 就是版本又退役了，改这里或设 RA_GOOGLE_ADS_API_VERSION。
+DEFAULT_GOOGLE_ADS_API_VERSION = "v22"
 DEFAULT_TIMEOUT_SECONDS = 20.0
 
 

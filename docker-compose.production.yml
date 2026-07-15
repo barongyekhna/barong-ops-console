@@ -64,6 +64,10 @@ services:
       W_ORDERS_INGEST_TOKEN: "XDDlIDdhCupSE3Fs2Bkd9tYC6Pg-YbkyuI8f7NQRsiY"
       P_CALLBACK_BASE: "http://console_backend:8000"
       W_CALLBACK_BASE: "http://console_backend:8000"
+      # Google Ads gate 状态与额度显示要和 r-a-worker 一致（设置页/额度页读这里）。
+      RA_GOOGLE_ADS_BASIC_REVIEW_STATUS: "approved"
+      RA_GOOGLE_ADS_ENABLE_REAL_CALLS: "true"
+      RA_GOOGLE_ADS_PLANNER_DAILY_BUDGET: "13500"
       # deepseek-v4-pro 响应常超默认 12s；F 找货的中文采购词提取给足 60s
       RA_DEEPSEEK_KEYWORD_TIMEOUT_SECONDS: "60"
       # F 系列 1688 独立总闸：全量 10 万/天里 R-A 占 9 万，剩 1 万归 F 批量找货
@@ -177,6 +181,10 @@ services:
       RA_1688_CPS_IMAGE_SEARCH_DAILY_BUDGET: "2600"
       # 1688 应用总调用闸：2026-07-11 发布审核通过，正式额度 10 万/天（留余 10% 防撞顶）。
       RA_1688_APP_CALLS_DAILY_BUDGET: "90000"
+      # Google Ads Keyword Planner：2026-07-14 Basic 过审（15000 ops/天，留余 10%）。
+      RA_GOOGLE_ADS_BASIC_REVIEW_STATUS: "approved"
+      RA_GOOGLE_ADS_ENABLE_REAL_CALLS: "true"
+      RA_GOOGLE_ADS_PLANNER_DAILY_BUDGET: "13500"
     command:
       - python
       - -m

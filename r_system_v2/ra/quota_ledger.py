@@ -24,6 +24,9 @@ PROVIDER_1688_CPS_IMAGE_SEARCH = "alibaba1688_cps_image_search"
 PROVIDER_1688_APP_CALLS = "alibaba1688_app_calls"
 PROVIDER_RAINFOREST = "rainforest_search"
 PROVIDER_SERPER = "serper_search"
+# Google Ads Keyword Planner：Basic 套餐 15000 operations/天（2026-07-14 过审），
+# 留余 10% 防撞顶（用户死命令：不要超）。
+PROVIDER_GOOGLE_ADS_PLANNER = "google_ads_planner"
 # F 系列独立 1688 总闸：全局 10 万/天中划 1 万给 F（用户 2026-07-14 拍板，
 # R-A 用 9 万）。F 是低频人工触发功能，额度敞开用。
 PROVIDER_F_1688_APP_CALLS = "f_1688_app_calls"
@@ -37,6 +40,7 @@ DEFAULT_DAILY_BUDGETS = {
     PROVIDER_1688_APP_CALLS: 4500,
     PROVIDER_RAINFOREST: 330,
     PROVIDER_SERPER: 2000,
+    PROVIDER_GOOGLE_ADS_PLANNER: 13500,
     PROVIDER_F_1688_APP_CALLS: 10000,
     PROVIDER_F_1688_IMAGE_SEARCH: 0,
 }
@@ -47,6 +51,7 @@ BUDGET_ENV_NAMES = {
     PROVIDER_1688_APP_CALLS: "RA_1688_APP_CALLS_DAILY_BUDGET",
     PROVIDER_RAINFOREST: "RA_RAINFOREST_DAILY_BUDGET",
     PROVIDER_SERPER: "RA_SERPER_DAILY_BUDGET",
+    PROVIDER_GOOGLE_ADS_PLANNER: "RA_GOOGLE_ADS_PLANNER_DAILY_BUDGET",
     PROVIDER_F_1688_APP_CALLS: "F_1688_APP_CALLS_DAILY_BUDGET",
     PROVIDER_F_1688_IMAGE_SEARCH: "F_1688_IMAGE_SEARCH_DAILY_BUDGET",
 }
@@ -74,6 +79,7 @@ def provider_label(provider: str) -> str:
         PROVIDER_F_1688_IMAGE_SEARCH: "F系列 CPS 图搜",
         PROVIDER_RAINFOREST: "Rainforest",
         PROVIDER_SERPER: "Serper",
+        PROVIDER_GOOGLE_ADS_PLANNER: "Google Ads 关键词规划",
     }.get(provider, provider)
 
 
@@ -211,6 +217,7 @@ def usage_today(db: Session) -> dict[str, dict[str, Any]]:
         PROVIDER_F_1688_IMAGE_SEARCH,
         PROVIDER_RAINFOREST,
         PROVIDER_SERPER,
+        PROVIDER_GOOGLE_ADS_PLANNER,
     ):
         budget = daily_budget(provider)
         used = used_map.get(provider, 0)
