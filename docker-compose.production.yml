@@ -64,6 +64,10 @@ services:
       W_ORDERS_INGEST_TOKEN: "XDDlIDdhCupSE3Fs2Bkd9tYC6Pg-YbkyuI8f7NQRsiY"
       P_CALLBACK_BASE: "http://console_backend:8000"
       W_CALLBACK_BASE: "http://console_backend:8000"
+      # H-S 站点健康：巡检派单 webhook + 回传 ingest 鉴权（n8n 侧同一 token）
+      N8N_H_HEALTH_WEBHOOK: "https://n8n.barongyekhna.com/webhook/barong-h-sitehealth"
+      H_INGEST_TOKEN: "fzL94VyhMsEyYNlQqLYy0nXMYBeqm1KRgTC-xYlK3HA"
+      H_CALLBACK_BASE: "http://console_backend:8000"
       # Google Ads gate 状态与额度显示要和 r-a-worker 一致（设置页/额度页读这里）。
       RA_GOOGLE_ADS_BASIC_REVIEW_STATUS: "approved"
       RA_GOOGLE_ADS_ENABLE_REAL_CALLS: "true"

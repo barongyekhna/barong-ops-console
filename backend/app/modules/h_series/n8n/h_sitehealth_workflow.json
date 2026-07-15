@@ -1,0 +1,108 @@
+{
+  "id": "barongHsitehealth001",
+  "name": "barong控制台-H系列-站点健康巡检",
+  "nodes": [
+    {
+      "parameters": {
+        "content": "## barong控制台-H系列-站点健康巡检（barongHsitehealth001）\n\n**这个工作流是干嘛的**：接收控制台 H 系列的巡检派单（Webhook 入口：`POST /webhook/barong-h-sitehealth`），对独立站 barongyekhna.com 做一轮健康巡检，把结果回传控制台入账+异常告警。\n\n**流程**：\n1. **立即响应**：Webhook 收到即回 200（控制台派单不等巡检跑完，避免 10s 超时）\n2. **巡检**（Code 节点后台跑）：拉 `/wp-sitemap.xml` 索引 → 逐子图取全部 URL（上限 150）→ 逐个 GET 记状态码+耗时 → 死链(≥400/超时)标 broken_link、慢页(>3000ms)标 slow_page → 首页校验(200 且含品牌名 Barong Yekhna，否则 homepage_error) → sitemap 拉取失败标 sitemap_error → 算 urls_ok/broken/slow + avg/p95 耗时\n3. **回报**：`POST {ingest_url}`（控制台派单里带的地址，形如 http://console_backend:8000/api/app/h/ingest），请求头 `X-H-Ingest-Token`；控制台落库+异常进通知收件箱\n\n**配置说明**：\n- 派单来源：控制台 env `N8N_H_HEALTH_WEBHOOK` 指向本流\n- 鉴权：`X-H-Ingest-Token` = 控制台 env `H_INGEST_TOKEN`（同一 token）\n- 巡检目标站写死 barongyekhna.com（控制台不传站点，执行面自己知道）\n- 慢页阈值 3000ms、URL 上限 150，改这两个值在 Code 节点顶部\n- 定时巡检（每日）由 n8n 的 Schedule 触发另配，或手动在控制台 H 系列点「立即巡检」\n\n由控制台团队维护；契约详见 backend/app/modules/h_series/sitehealth/router.py",
+        "height": 460,
+        "width": 520
+      },
+      "id": "hhh00001-0000-4000-8000-000000000001",
+      "name": "说明便签",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -40
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "barong-h-sitehealth",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "id": "hhh00001-0000-4000-8000-000000000002",
+      "name": "Webhook 触发",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        420,
+        240
+      ],
+      "webhookId": "barong-h-sitehealth"
+    },
+    {
+      "parameters": {
+        "jsCode": "// H 系列站点健康巡检：拉 sitemap → 逐 URL 查状态/耗时 → 首页品牌校验 → 汇总\n// 结果由下一节点回传控制台 /h/ingest。webhook 已立即响应，此处为后台执行。\nconst helpers = this.helpers;\nconst input = $input.first().json;\nconst body = input.body || input;\nconst runId = body.run_id || null;\nconst ingestUrl = body.ingest_url;\n\nconst SITE = 'https://barongyekhna.com';\nconst SLOW = 3000;      // 慢页阈值 ms\nconst CAP = 150;        // 单轮最多巡检 URL 数\nconst BRAND = 'Barong Yekhna';\n\nasync function grab(url, tmo) {\n  const t = Date.now();\n  try {\n    const r = await helpers.httpRequest({\n      method: 'GET', url, timeout: tmo || 15000,\n      returnFullResponse: true, ignoreHttpStatusErrors: true,\n      headers: { 'User-Agent': 'BarongYekhna-HealthBot/1.0' },\n    });\n    let b = r.body;\n    if (typeof b !== 'string') { try { b = JSON.stringify(b); } catch (e) { b = ''; } }\n    return { status: r.statusCode || 0, ms: Date.now() - t, body: b };\n  } catch (e) {\n    return { status: 0, ms: Date.now() - t, body: '', err: String(e).slice(0, 140) };\n  }\n}\nconst locs = (xml) => [...String(xml).matchAll(/<loc>([^<]+)<\\/loc>/g)].map(m => m[1].trim());\n\n// ---- 1. sitemap ----\nlet urls = [], sitemapOk = true;\nconst idx = await grab(SITE + '/wp-sitemap.xml');\nif (idx.status >= 200 && idx.status < 300 && idx.body) {\n  for (const sub of locs(idx.body)) {\n    if (!/\\.xml/i.test(sub)) { urls.push(sub); continue; }\n    const s = await grab(sub);\n    if (s.body) locs(s.body).forEach(u => urls.push(u));\n  }\n} else {\n  const sm2 = await grab(SITE + '/sitemap.xml');\n  if (sm2.status >= 200 && sm2.status < 300 && sm2.body) {\n    locs(sm2.body).forEach(u => { if (!/\\.xml/i.test(u)) urls.push(u); });\n  } else { sitemapOk = false; }\n}\nurls = [...new Set(urls)].filter(u => /^https?:\\/\\//.test(u)).slice(0, CAP);\nif (!urls.includes(SITE + '/') && !urls.includes(SITE)) urls.unshift(SITE + '/');\n\n// ---- 2. 逐 URL 巡检 ----\nconst findings = [], times = [];\nlet ok = 0, broken = 0, slow = 0;\nfor (const u of urls) {\n  const r = await grab(u, 20000);\n  if (r.status > 0 && r.status < 400) {\n    ok++; times.push(r.ms);\n    if (r.ms > SLOW) { slow++; findings.push({ finding_type: 'slow_page', url: u, status_code: r.status, response_ms: r.ms, detail: '超过 ' + SLOW + 'ms 阈值' }); }\n  } else {\n    broken++; findings.push({ finding_type: 'broken_link', url: u, status_code: r.status || null, response_ms: r.ms, detail: r.err || ('HTTP ' + r.status) });\n  }\n}\n\n// ---- 3. 首页品牌校验 ----\nconst home = await grab(SITE + '/', 20000);\nconst homepageOk = home.status >= 200 && home.status < 300 && home.body.includes(BRAND);\nif (!homepageOk) findings.push({ finding_type: 'homepage_error', url: SITE + '/', status_code: home.status || null, response_ms: home.ms, detail: (home.status >= 200 && home.status < 300) ? '首页未包含品牌名 Barong Yekhna' : ('首页不可达 HTTP ' + home.status) });\nif (!sitemapOk) findings.push({ finding_type: 'sitemap_error', url: SITE + '/wp-sitemap.xml', status_code: null, response_ms: null, detail: 'sitemap 拉取或解析失败' });\n\n// ---- 4. 统计 ----\ntimes.sort((a, b) => a - b);\nconst avg = times.length ? Math.round(times.reduce((s, x) => s + x, 0) / times.length) : null;\nconst p95 = times.length ? times[Math.min(times.length - 1, Math.floor(times.length * 0.95))] : null;\n\nreturn [{ json: {\n  ingest_url: ingestUrl,\n  payload: {\n    run_id: runId,\n    status: 'completed',\n    summary: { urls_total: urls.length, urls_ok: ok, urls_broken: broken, urls_slow: slow, avg_response_ms: avg, p95_response_ms: p95, sitemap_ok: sitemapOk, homepage_ok: homepageOk },\n    findings: findings.slice(0, 200),\n  },\n} }];"
+      },
+      "id": "hhh00001-0000-4000-8000-000000000003",
+      "name": "巡检站点",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        640,
+        240
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.ingest_url }}",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-H-Ingest-Token",
+              "value": "__H_INGEST_TOKEN__"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.payload) }}",
+        "options": {
+          "timeout": 20000
+        }
+      },
+      "id": "hhh00001-0000-4000-8000-000000000004",
+      "name": "回报控制台",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        860,
+        240
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook 触发": {
+      "main": [
+        [
+          {
+            "node": "巡检站点",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "巡检站点": {
+      "main": [
+        [
+          {
+            "node": "回报控制台",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "active": false
+}
