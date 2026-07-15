@@ -152,6 +152,23 @@ test("native enrollment keeps the private key local and accepts only bounded pro
   assert.doesNotMatch(JSON.stringify(enrollment), /private_key/);
 });
 
+test("native enrollment accepts the integrated Android console app", () => {
+  const identity = normalizeNativeVpnIdentity({
+    schema_version: 1,
+    device_id: "2f6fcb65-b51f-4b29-bc65-85f71437c2ac",
+    public_key: `${"E".repeat(43)}=`,
+    platform: "android",
+    architecture: "arm64-v8a",
+    agent_version: "0.2.0-pilot",
+    suggested_name: "Android Pixel",
+    private_key: "must-not-cross-the-bridge",
+  });
+  assert.notEqual(identity, null);
+  assert.equal(identity.platform, "android");
+  assert.equal(identity.suggested_name, "Android Pixel");
+  assert.doesNotMatch(JSON.stringify(identity), /private_key/);
+});
+
 test("native status accepts only safe local tunnel state", () => {
   const status = normalizeNativeVpnStatus({
     available: true,
@@ -163,10 +180,12 @@ test("native status accepts only safe local tunnel state", () => {
     desired_connected: true,
     connected: true,
     tunnel_service_state: "running",
+    platform: "android",
     private_key: "drop-me",
   });
   assert.notEqual(status, null);
   assert.equal(status.connected, true);
+  assert.equal(status.platform, "android");
   assert.doesNotMatch(JSON.stringify(status), /private_key|drop-me/);
 });
 
@@ -190,6 +209,8 @@ test("VPN page keeps the Fire Phoenix cockpit classes without adding CSS", () =>
   assert.match(dashboard, /我的 VPN 设备/);
   assert.match(dashboard, /controlNativeVpn/);
   assert.match(dashboard, /关闭控制台不会断开/);
+  assert.match(dashboard, /ANDROID APP/);
+  assert.match(dashboard, /barong-vpn-ready/);
   assert.doesNotMatch(dashboard, /ActivityFeed|活动记录/);
   assert.doesNotMatch(dashboard, /\.module\.css|globals\.css/);
   assert.match(api, /apiRequest<unknown>\("\/vpn\/status"/);

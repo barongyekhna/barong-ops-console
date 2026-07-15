@@ -1,4 +1,6 @@
-import type { NativeVpnProvisioning } from "./devices";
+import type { NativeVpnProvisioning, VpnDevicePlatform } from "./devices";
+
+export type NativeVpnPlatform = Exclude<VpnDevicePlatform, "other">;
 
 export type NativeVpnStatus = {
   address: string | null;
@@ -8,6 +10,7 @@ export type NativeVpnStatus = {
   desired_connected: boolean;
   device_id: string | null;
   installed: boolean;
+  platform: NativeVpnPlatform;
   provisioned: boolean;
   tunnel_service_state: string;
 };
@@ -16,7 +19,7 @@ export type NativeVpnIdentity = {
   agent_version: string;
   architecture: string;
   device_id: string;
-  platform: "windows";
+  platform: NativeVpnPlatform;
   public_key: string;
   schema_version: 1;
   suggested_name: string;
@@ -37,6 +40,12 @@ const ADDRESS_PATTERN =
   /^10\.66\.66\.(?:[2-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-4])\/32$/;
 const KEY_PATTERN = /^[A-Za-z0-9+/]{43}=$/;
 const AGENT_FIELD_PATTERN = /^[A-Za-z0-9._+-]{1,32}$/;
+const NATIVE_PLATFORMS = new Set<NativeVpnPlatform>([
+  "android",
+  "ios",
+  "macos",
+  "windows",
+]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -91,10 +100,17 @@ export function normalizeNativeVpnStatus(payload: unknown): NativeVpnStatus | nu
     ? null
     : safeString(payload.agent_version, 32);
   const tunnelState = safeString(payload.tunnel_service_state, 32) ?? "unavailable";
+  const platform = payload.platform === undefined || payload.platform === null
+    ? "windows"
+    : typeof payload.platform === "string" &&
+        NATIVE_PLATFORMS.has(payload.platform as NativeVpnPlatform)
+      ? payload.platform as NativeVpnPlatform
+      : null;
   if (
     (deviceId !== null && !DEVICE_ID_PATTERN.test(deviceId)) ||
     (address !== null && !ADDRESS_PATTERN.test(address)) ||
     (agentVersion !== null && !AGENT_FIELD_PATTERN.test(agentVersion)) ||
+    platform === null ||
     typeof payload.provisioned !== "boolean" ||
     typeof payload.desired_connected !== "boolean" ||
     typeof payload.connected !== "boolean"
@@ -109,20 +125,32 @@ export function normalizeNativeVpnStatus(payload: unknown): NativeVpnStatus | nu
     desired_connected: payload.desired_connected,
     device_id: deviceId,
     installed,
+    platform,
     provisioned: payload.provisioned,
     tunnel_service_state: tunnelState,
   };
 }
 
 export function normalizeNativeVpnIdentity(payload: unknown): NativeVpnIdentity | null {
-  if (!isRecord(payload) || payload.schema_version !== 1 || payload.platform !== "windows") {
+  if (!isRecord(payload) || payload.schema_version !== 1) {
     return null;
   }
   const deviceId = safeString(payload.device_id, 36);
   const publicKey = safeString(payload.public_key, 64);
   const architecture = safeString(payload.architecture, 32);
   const agentVersion = safeString(payload.agent_version, 32);
-  const suggestedName = safeString(payload.suggested_name, 64) ?? "Windows 电脑";
+  const platform = typeof payload.platform === "string" &&
+    NATIVE_PLATFORMS.has(payload.platform as NativeVpnPlatform)
+    ? payload.platform as NativeVpnPlatform
+    : null;
+  const defaultNames: Record<NativeVpnPlatform, string> = {
+    android: "Android 手机",
+    ios: "iPhone",
+    macos: "Mac",
+    windows: "Windows 电脑",
+  };
+  const suggestedName = safeString(payload.suggested_name, 64) ??
+    (platform ? defaultNames[platform] : "本机设备");
   if (
     !deviceId ||
     !DEVICE_ID_PATTERN.test(deviceId) ||
@@ -131,7 +159,8 @@ export function normalizeNativeVpnIdentity(payload: unknown): NativeVpnIdentity 
     !architecture ||
     !AGENT_FIELD_PATTERN.test(architecture) ||
     !agentVersion ||
-    !AGENT_FIELD_PATTERN.test(agentVersion)
+    !AGENT_FIELD_PATTERN.test(agentVersion) ||
+    !platform
   ) {
     return null;
   }
@@ -139,7 +168,7 @@ export function normalizeNativeVpnIdentity(payload: unknown): NativeVpnIdentity 
     agent_version: agentVersion,
     architecture,
     device_id: deviceId,
-    platform: "windows",
+    platform,
     public_key: publicKey,
     schema_version: 1,
     suggested_name: suggestedName,

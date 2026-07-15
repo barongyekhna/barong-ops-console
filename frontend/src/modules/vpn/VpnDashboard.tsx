@@ -200,12 +200,17 @@ export function VpnDashboard() {
         void loadNative();
       }
     };
+    const refreshWhenNativeReady = () => {
+      void loadNative();
+    };
     const intervalId = window.setInterval(refreshWhenVisible, POLL_INTERVAL_MS);
     window.addEventListener("focus", refreshWhenVisible);
+    window.addEventListener("barong-vpn-ready", refreshWhenNativeReady);
     document.addEventListener("visibilitychange", refreshWhenVisible);
     return () => {
       window.clearInterval(intervalId);
       window.removeEventListener("focus", refreshWhenVisible);
+      window.removeEventListener("barong-vpn-ready", refreshWhenNativeReady);
       document.removeEventListener("visibilitychange", refreshWhenVisible);
       requestGenerationRef.current += 1;
       const controller = abortControllerRef.current;
@@ -219,7 +224,7 @@ export function VpnDashboard() {
   const controlNativeVpn = async () => {
     const bridge = getNativeVpnBridge();
     if (!bridge) {
-      setNativeError("请在 Windows 控制台 App 中使用一键连接。");
+      setNativeError("请在控制台 App 中使用一键连接。");
       return;
     }
     setNativeBusy(true);
@@ -355,6 +360,15 @@ export function VpnDashboard() {
           ? "服务在线"
           : "服务异常";
   const nativeBridgeAvailable = getNativeVpnBridge() !== null;
+  const nativePlatform = nativeStatus?.platform ?? "windows";
+  const nativeBadge = nativeBridgeAvailable
+    ? {
+        android: "ANDROID APP",
+        ios: "IPHONE APP",
+        macos: "MAC APP",
+        windows: "WINDOWS APP",
+      }[nativePlatform]
+    : "APP REQUIRED";
   const nativeActionLabel = !nativeBridgeAvailable
     ? "请使用控制台 App"
     : nativeBusy
@@ -367,14 +381,18 @@ export function VpnDashboard() {
             ? "断开 VPN"
             : "连接 VPN";
   const nativeDescription = !nativeBridgeAvailable
-    ? "普通浏览器没有本机系统权限，请在 Windows 控制台 App 中直接连接。"
+    ? "普通浏览器没有本机系统权限，请在控制台 App 中直接连接。"
     : nativeError
       ? nativeError
       : nativeStatus?.connected
         ? `本机已通过 ${nativeStatus.address ?? "专属地址"} 连接；关闭控制台不会断开。`
+        : nativeStatus?.desired_connected
+          ? "本机正在建立安全连接；关闭控制台不会取消连接。"
         : nativeStatus?.provisioned
           ? "本机 VPN 已配置完成，可以直接连接。"
-          : "第一次启用会申请一次管理员权限，并自动安装和登记 VPN 组件。";
+          : nativePlatform === "android"
+            ? "第一次启用会申请一次 Android 系统 VPN 权限，并自动登记本机。"
+            : "第一次启用会申请一次管理员权限，并自动安装和登记 VPN 组件。";
 
   return (
     <div className="dashboard-page cc-dash">
@@ -462,7 +480,7 @@ export function VpnDashboard() {
           <div className="cc-card">
             <StageCard
               actionLabel={nativeActionLabel}
-              badge={nativeBridgeAvailable ? "WINDOWS APP" : "APP REQUIRED"}
+              badge={nativeBadge}
               description={nativeDescription}
               disabled={!nativeBridgeAvailable || nativeBusy}
               name="一键连接"
