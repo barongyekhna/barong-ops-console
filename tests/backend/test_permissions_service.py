@@ -55,15 +55,17 @@ def test_permission_registry_seed_upsert_is_idempotent(
         permission_keys = list(
             db.scalars(select(PermissionRegistry.permission_key))
         )
-        core_permissions = {
+        expected_permissions = {
             "users.manage",
             "permissions.manage",
             "modules.read",
+            "w.site_ops.read",
+            "w.site_ops.manage",
         }
 
         assert permission_count == len(BASE_PERMISSION_REGISTRY_SEED)
         assert len(permission_keys) == len(set(permission_keys))
-        assert core_permissions.issubset(set(permission_keys))
+        assert expected_permissions.issubset(set(permission_keys))
 
         db.add(
             PermissionRegistry(

@@ -17,6 +17,7 @@ import type {
   ProductKnowledgeDetail,
   ProductKnowledgeListResponse,
   ProductKnowledgeUpdatePayload,
+  WShippingClassOption,
 } from "./types";
 import type { ProductSellingPoints } from "@/modules/k14/selling-points/types";
 import { translateKBackendError } from "@/lib/i18n";
@@ -192,6 +193,49 @@ export async function getProduct(
   });
 
   return readJson<ProductKnowledgeDetail>(response, path);
+}
+
+export async function getShippingClasses(): Promise<WShippingClassOption[]> {
+  const path = "/w/shipping/classes";
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    cache: "no-store",
+    headers: buildHeaders(),
+    method: "GET",
+  });
+
+  return readJson<WShippingClassOption[]>(response, path);
+}
+
+export async function assignProductShipping(productId: string): Promise<unknown> {
+  const path = `/w/shipping/assign/${encodeURIComponent(productId)}`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify({ force: true }),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "POST",
+  });
+
+  return readJson<unknown>(response, path);
+}
+
+export async function patchProductShipping(
+  productId: string,
+  payload:
+    | {
+        clear_review: boolean;
+        shipping_class_slug: string | null;
+      }
+    | { contains_battery: boolean },
+): Promise<unknown> {
+  const path = `/w/shipping/products/${encodeURIComponent(productId)}`;
+  const response = await fetch(`${API_PROXY_BASE}${path}`, {
+    body: JSON.stringify(payload),
+    cache: "no-store",
+    headers: buildHeaders(true),
+    method: "PATCH",
+  });
+
+  return readJson<unknown>(response, path);
 }
 
 export async function createProduct(

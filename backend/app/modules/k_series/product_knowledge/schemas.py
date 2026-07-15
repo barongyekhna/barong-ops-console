@@ -299,6 +299,10 @@ class ProductKnowledgeRead(BaseModel):
     sku: str | None
     parent_sku: str | None = None
     target_market: str | None = None
+    shipping_class: str | None = None
+    shipping_review_needed: bool = False
+    shipping_assignment: dict[str, Any] | None = None
+    contains_battery: bool = False
     workspace_key: str
     business_context: str
     scope_mode: str

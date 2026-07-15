@@ -40,6 +40,7 @@ from backend.app.modules.k_series.product_knowledge.router import (
     _discard_product_create_idempotency,
     download_media_asset_file,
     _gate_error,
+    _product_read,
     _product_readiness,
     _require_k_permission,
     _selling_points_snapshot,
@@ -133,6 +134,45 @@ def test_variable_product_creates_parent_sku_and_variant_skus() -> None:
     assert len(variants) == 2
     assert all(item.variant_sku.startswith("PUMP-FAMILY-") for item in variants)
     assert all(item.image_folder.startswith(f"images/{product.product_key}/") for item in variants)
+
+
+def test_product_detail_read_exposes_shipping_assignment_fields() -> None:
+    db = _session()
+    product = create_product(
+        db,
+        payload=ProductKnowledgeCreate(
+            parent_sku="shipping family",
+            product_name_en="Shipping family",
+            raw_input_text="Shipping family description",
+            target_market="US",
+        ),
+        scope_context=_scope(),
+    )
+    product.shipping_class = "cn-standard"
+    product.shipping_review_needed = True
+    product.shipping_assignment_json = {
+        "rule_type": "weight_band",
+        "used_kg": 1.2,
+    }
+    product.contains_battery = True
+    db.add(product)
+    db.flush()
+
+    detail = _product_read(db, product).model_dump(mode="json")
+
+    assert detail["shipping_class"] == "cn-standard"
+    assert detail["shipping_review_needed"] is True
+    assert detail["shipping_assignment"] == {
+        "rule_type": "weight_band",
+        "used_kg": 1.2,
+    }
+    assert detail["contains_battery"] is True
+
+    product.shipping_assignment_json = ["unexpected"]
+    db.add(product)
+    db.flush()
+
+    assert _product_read(db, product).shipping_assignment is None
 
 
 def test_media_upload_persists_real_image_bytes_and_downloads_inline(

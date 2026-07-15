@@ -46,6 +46,21 @@ export type ProductKnowledgeDetail = ProductKnowledgeListItem & {
   marketing_copy_zh?: string | null;
   image_instruction_zh?: string | null;
   reference_image_url?: string | null;
+  shipping_class?: string | null;
+  shipping_review_needed?: boolean;
+  shipping_assignment?: {
+    rule_type?: string | null;
+    used_kg?: number | null;
+    review_reason?: string | null;
+  } | null;
+  contains_battery?: boolean;
+};
+
+export type WShippingClassOption = {
+  id: string;
+  slug: string;
+  name: string;
+  active: boolean;
 };
 
 export type ProductKnowledgeListResponse = {

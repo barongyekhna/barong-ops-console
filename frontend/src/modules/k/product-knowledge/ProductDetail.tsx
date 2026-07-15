@@ -31,7 +31,14 @@ import {
 } from "@/modules/k19/keywords/api";
 import type { KeywordEntry } from "@/modules/k19/keywords/types";
 
-import { mediaAssetFileUrl, mediaAssetThumbnailUrl } from "./api";
+import {
+  assignProductShipping,
+  getProduct,
+  getShippingClasses,
+  mediaAssetFileUrl,
+  mediaAssetThumbnailUrl,
+  patchProductShipping,
+} from "./api";
 import { CopyArtDirection } from "./CopyArtDirection";
 import styles from "./ProductKnowledge.module.css";
 import {
@@ -46,9 +53,11 @@ import type {
   KRiskReviewDecision,
   KWorkflowExecution,
   KWorkflowStartPayload,
+  ProductKnowledgeDetail,
   ProductKnowledgeListItem,
   ProductKnowledgeVariant,
   ProductReadinessState,
+  WShippingClassOption,
 } from "./types";
 
 const TARGET_ORGANIZATION = "涌龙麟（深圳）国际贸易有限公司";
@@ -85,6 +94,7 @@ const WORKFLOW_STEP_INDEX = new Map<string, number>(
     ),
   ),
 );
+const SHIPPING_SELECTION_UNSET = "__shipping-selection-unset__";
 
 type RiskDecisionValue = "approve" | "reject";
 type KeywordReviewItem = {
@@ -137,6 +147,10 @@ type ProductDetailProps = {
 
 function displayValue(value: string | null | undefined) {
   return value && value.trim().length > 0 ? value : "未设置";
+}
+
+function shippingOperationError(error: unknown) {
+  return `运费操作失败：${error instanceof Error ? error.message : ""}`;
 }
 
 function formatDate(value: string | null | undefined) {
@@ -505,6 +519,26 @@ export function ProductDetail({
   const [sellingPointsTouched, setSellingPointsTouched] = useState(false);
   const [isEditingSellingPoints, setIsEditingSellingPoints] = useState(false);
   const [sellingPointsCopyStatus, setSellingPointsCopyStatus] = useState("");
+  const [shippingProduct, setShippingProduct] =
+    useState<ProductKnowledgeDetail | null>(null);
+  const [shippingClasses, setShippingClasses] = useState<WShippingClassOption[]>([]);
+  const [shippingSelection, setShippingSelection] = useState(
+    SHIPPING_SELECTION_UNSET,
+  );
+  const [shippingError, setShippingError] = useState("");
+  const [shippingBusy, setShippingBusy] = useState<
+    "save" | "assign" | "battery" | null
+  >(null);
+  const activeProductIdRef = useRef<string | null>(product?.id ?? null);
+  activeProductIdRef.current = product?.id ?? null;
+
+  const refreshProductDetail = useCallback(async (productId: string) => {
+    const detail = await getProduct(productId);
+    if (activeProductIdRef.current === productId) {
+      setShippingProduct(detail);
+    }
+    return detail;
+  }, []);
 
   const riskKeywords = useMemo(() => normalizeRiskKeywords(workflow), [workflow]);
   const activeMediaAssets = useMemo(
@@ -623,6 +657,59 @@ export function ProductDetail({
     workflow?.status === "running" ||
     workflow?.status === "in_progress";
 
+  useEffect(() => {
+    const productId = product?.id ?? null;
+    activeProductIdRef.current = productId;
+    setShippingProduct(null);
+    setShippingClasses([]);
+    setShippingSelection(SHIPPING_SELECTION_UNSET);
+    setShippingError("");
+    setShippingBusy(null);
+
+    if (!productId) {
+      return;
+    }
+
+    void refreshProductDetail(productId).catch((error) => {
+      if (activeProductIdRef.current === productId) {
+        setShippingError(shippingOperationError(error));
+      }
+    });
+
+    return () => {
+      if (activeProductIdRef.current === productId) {
+        activeProductIdRef.current = null;
+      }
+    };
+  }, [product?.id, refreshProductDetail]);
+
+  useEffect(() => {
+    if (
+      !shippingProduct ||
+      shippingProduct.id !== product?.id ||
+      shippingProduct.channel !== "dtc"
+    ) {
+      return;
+    }
+
+    let cancelled = false;
+    void getShippingClasses()
+      .then((items) => {
+        if (!cancelled) {
+          setShippingClasses(items.filter((item) => item.active));
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setShippingError(shippingOperationError(error));
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.id, shippingProduct?.channel, shippingProduct?.id]);
+
   const loadKeywordEntries = useCallback(async () => {
     if (!product) {
       setKeywordEntries([]);
@@ -725,6 +812,96 @@ export function ProductDetail({
     );
   }
   const currentProduct = product;
+  const currentShippingProduct =
+    shippingProduct?.id === currentProduct.id ? shippingProduct : null;
+  const shippingClassName = currentShippingProduct?.shipping_class
+    ? shippingClasses.find(
+        (shippingClass) =>
+          shippingClass.slug === currentShippingProduct.shipping_class,
+      )?.name ?? currentShippingProduct.shipping_class
+    : null;
+
+  async function saveShippingAssignment() {
+    if (!currentShippingProduct || shippingSelection === SHIPPING_SELECTION_UNSET) {
+      return;
+    }
+
+    const productId = currentShippingProduct.id;
+    setShippingBusy("save");
+    setShippingError("");
+    try {
+      await patchProductShipping(
+        productId,
+        shippingSelection
+          ? {
+              clear_review: true,
+              shipping_class_slug: shippingSelection,
+            }
+          : {
+              clear_review: false,
+              shipping_class_slug: null,
+            },
+      );
+      await refreshProductDetail(productId);
+      if (activeProductIdRef.current === productId) {
+        setShippingSelection(SHIPPING_SELECTION_UNSET);
+      }
+    } catch (error) {
+      if (activeProductIdRef.current === productId) {
+        setShippingError(shippingOperationError(error));
+      }
+    } finally {
+      if (activeProductIdRef.current === productId) {
+        setShippingBusy(null);
+      }
+    }
+  }
+
+  async function reassignShipping() {
+    if (!currentShippingProduct) {
+      return;
+    }
+
+    const productId = currentShippingProduct.id;
+    setShippingBusy("assign");
+    setShippingError("");
+    try {
+      await assignProductShipping(productId);
+      await refreshProductDetail(productId);
+    } catch (error) {
+      if (activeProductIdRef.current === productId) {
+        setShippingError(shippingOperationError(error));
+      }
+    } finally {
+      if (activeProductIdRef.current === productId) {
+        setShippingBusy(null);
+      }
+    }
+  }
+
+  async function setContainsBattery(containsBattery: boolean) {
+    if (!currentShippingProduct) {
+      return;
+    }
+
+    const productId = currentShippingProduct.id;
+    setShippingBusy("battery");
+    setShippingError("");
+    try {
+      await patchProductShipping(productId, {
+        contains_battery: containsBattery,
+      });
+      await refreshProductDetail(productId);
+    } catch (error) {
+      if (activeProductIdRef.current === productId) {
+        setShippingError(shippingOperationError(error));
+      }
+    } finally {
+      if (activeProductIdRef.current === productId) {
+        setShippingBusy(null);
+      }
+    }
+  }
 
   function buildWorkflowPayload(): KWorkflowStartPayload {
     const mainKeyword =
@@ -1154,6 +1331,120 @@ export function ProductDetail({
           <dd>{formatDate(product.updated_at)}</dd>
         </div>
       </dl>
+
+      {currentShippingProduct?.channel === "dtc" ? (
+        <section className={styles.workflowSection} aria-labelledby="k-shipping">
+          <div className={styles.sellingPointsHeading}>
+            <div>
+              <h4 id="k-shipping">运费（独立站）</h4>
+            </div>
+          </div>
+
+          <div className={styles.workflowMetrics}>
+            <div>
+              <dd>
+                {shippingClassName ? (
+                  <>
+                    {shippingClassName}{" "}
+                    <span className={styles.statusBadge}>
+                      {currentShippingProduct.shipping_assignment?.rule_type
+                        ? "规则判定"
+                        : "手动指定"}
+                    </span>
+                  </>
+                ) : (
+                  "未分配——P 系列上架前必须解决"
+                )}
+              </dd>
+            </div>
+            {currentShippingProduct.shipping_review_needed ? (
+              <div>
+                <dd>
+                  待复核：
+                  {currentShippingProduct.shipping_assignment?.review_reason ||
+                    "缺少判定依据"}
+                </dd>
+              </div>
+            ) : null}
+          </div>
+
+          {currentShippingProduct.shipping_assignment?.used_kg != null ? (
+            <p className={styles.sellingPointsEmpty}>
+              判定重量 {currentShippingProduct.shipping_assignment.used_kg} kg
+            </p>
+          ) : null}
+
+          <div className={styles.workflowStartGrid}>
+            <label className={styles.field}>
+              <select
+                aria-label="选择运费类…"
+                disabled={shippingBusy !== null}
+                onChange={(event) => setShippingSelection(event.target.value)}
+                value={shippingSelection}
+              >
+                <option disabled value={SHIPPING_SELECTION_UNSET}>
+                  选择运费类…
+                </option>
+                <option value="">（清除指定）</option>
+                {shippingClasses.map((shippingClass) => (
+                  <option key={shippingClass.id} value={shippingClass.slug}>
+                    {shippingClass.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button
+              className="secondary-button"
+              disabled={
+                shippingBusy !== null ||
+                shippingSelection === SHIPPING_SELECTION_UNSET
+              }
+              onClick={() => void saveShippingAssignment()}
+              type="button"
+            >
+              {shippingBusy === "save" ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              ) : (
+                <Save aria-hidden="true" size={16} />
+              )}
+              保存指定
+            </button>
+            <button
+              className="secondary-button"
+              disabled={shippingBusy !== null}
+              onClick={() => void reassignShipping()}
+              type="button"
+            >
+              {shippingBusy === "assign" ? (
+                <LoaderCircle aria-hidden="true" className="spin" size={16} />
+              ) : (
+                <RotateCcw aria-hidden="true" size={16} />
+              )}
+              按规则重判
+            </button>
+          </div>
+
+          <div className={styles.workflowMetrics}>
+            <div>
+              <label>
+                <input
+                  checked={Boolean(currentShippingProduct.contains_battery)}
+                  disabled={shippingBusy !== null}
+                  onChange={(event) =>
+                    void setContainsBattery(event.target.checked)
+                  }
+                  type="checkbox"
+                />{" "}
+                含电池（命中电池规则）
+              </label>
+            </div>
+          </div>
+
+          {shippingError ? (
+            <p className={styles.sellingPointsError}>{shippingError}</p>
+          ) : null}
+        </section>
+      ) : null}
 
       <section className={styles.workflowSection} aria-labelledby="k-keywords">
         <div className={styles.sellingPointsHeading}>

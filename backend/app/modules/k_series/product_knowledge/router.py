@@ -652,6 +652,14 @@ def _product_read(
     return ProductKnowledgeRead.model_validate(product).model_copy(
         update={
             "main_keyword": product.primary_keyword,
+            "shipping_class": product.shipping_class,
+            "shipping_review_needed": product.shipping_review_needed,
+            "shipping_assignment": (
+                product.shipping_assignment_json
+                if isinstance(product.shipping_assignment_json, dict)
+                else None
+            ),
+            "contains_battery": product.contains_battery,
             "variant_count": len(variants),
             "variants": [
                 ProductKnowledgeVariantRead.model_validate(variant)
