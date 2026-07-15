@@ -1,0 +1,44 @@
+[Unit]
+Description=Barong AmneziaWG member device agent
+After=network-online.target awg-quick@awg0.service
+Wants=network-online.target awg-quick@awg0.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+LoadCredential=control-token:/etc/barong-vpn-agent/control-token
+ExecStart=/usr/bin/python3 -B -I /opt/barong-vpn-agent/agent.py --state-file /var/lib/barong-vpn-agent/devices.json --runtime-dir /run/barong-vpn-agent
+Restart=on-failure
+RestartSec=2s
+TimeoutStartSec=10s
+TimeoutStopSec=10s
+UMask=0077
+StateDirectory=barong-vpn-agent
+StateDirectoryMode=0700
+RuntimeDirectory=barong-vpn-agent
+RuntimeDirectoryMode=0700
+
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+ProtectHostname=true
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+CapabilityBoundingSet=CAP_NET_ADMIN
+AmbientCapabilities=CAP_NET_ADMIN
+RestrictAddressFamilies=AF_UNIX AF_INET AF_NETLINK
+IPAddressDeny=any
+IPAddressAllow=localhost
+
+[Install]
+WantedBy=multi-user.target

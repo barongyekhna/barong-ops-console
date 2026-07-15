@@ -1,5 +1,5 @@
 [Unit]
-Description=Barong authenticated read-only VPN status gateway
+Description=Barong authenticated VPN member gateway
 After=network-online.target barong-vpn-bridge.service
 Wants=network-online.target barong-vpn-bridge.service
 
@@ -8,6 +8,7 @@ Type=simple
 User=barong-vpn-gateway
 Group=barong-vpn-gateway
 WorkingDirectory=/opt/barong-ops-console
+LoadCredential=agent-token:/etc/barong-vpn-gateway/agent-token
 Environment=PYTHONDONTWRITEBYTECODE=1
 Environment=PYTHONUNBUFFERED=1
 ExecStart=/usr/bin/python3 /opt/barong-ops-console/backend/vpn_gateway.py --host 127.0.0.1 --port 18766

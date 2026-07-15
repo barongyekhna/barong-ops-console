@@ -3,6 +3,10 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
+  normalizeCreatedVpnDevice,
+  normalizeVpnDeviceList,
+} from "../../frontend/src/modules/vpn/devices.ts";
+import {
   formatBytes,
   isVpnOnline,
   normalizeVpnStatus,
@@ -39,6 +43,25 @@ function statusPayload(overrides = {}) {
   };
 }
 
+function devicePayload(overrides = {}) {
+  return {
+    id: "2f6fcb65-b51f-4b29-bc65-85f71437c2ac",
+    owner_id: "must-not-reach-the-ui",
+    name: "办公电脑",
+    platform: "windows",
+    address: "10.66.66.2/32",
+    enabled: true,
+    created_at: "2026-07-15T01:00:00Z",
+    updated_at: "2026-07-15T01:00:00Z",
+    last_handshake_at: null,
+    received_bytes: 0,
+    sent_bytes: 0,
+    public_key: "must-not-reach-the-ui",
+    preshared_key: "must-not-reach-the-ui",
+    ...overrides,
+  };
+}
+
 test("VPN status parser accepts awg0 aggregate status and drops unknown fields", () => {
   const status = normalizeVpnStatus(statusPayload());
   assert.notEqual(status, null);
@@ -69,6 +92,29 @@ test("VPN transfer values use compact human-readable units", () => {
   assert.equal(formatBytes(1536), "1.5 KB");
 });
 
+test("VPN device parser scopes output to safe member-device fields", () => {
+  const devices = normalizeVpnDeviceList({ devices: [devicePayload()] });
+  assert.notEqual(devices, null);
+  assert.equal(devices.length, 1);
+  assert.equal(devices[0].name, "办公电脑");
+  assert.doesNotMatch(
+    JSON.stringify(devices),
+    /owner_id|public_key|preshared_key/,
+  );
+});
+
+test("one-time configuration is accepted only with a valid safe device", () => {
+  const created = normalizeCreatedVpnDevice({
+    device: devicePayload(),
+    configuration: "[Interface]\nPrivateKey = one-time-only\n",
+    one_time: true,
+    unknown: "drop-me",
+  });
+  assert.notEqual(created, null);
+  assert.match(created.configuration, /PrivateKey/);
+  assert.doesNotMatch(JSON.stringify(created.device), /owner_id|public_key/);
+});
+
 test("VPN page keeps the Fire Phoenix cockpit classes without adding CSS", () => {
   const dashboard = readFileSync(
     "frontend/src/modules/vpn/VpnDashboard.tsx",
@@ -85,9 +131,18 @@ test("VPN page keeps the Fire Phoenix cockpit classes without adding CSS", () =>
   assert.match(dashboard, /className="cc-head"/);
   assert.match(dashboard, /className="cc-grid"/);
   assert.match(dashboard, /className="cc-card wide"/);
+  assert.match(dashboard, /className="cc-drawer"/);
+  assert.match(dashboard, /我的 VPN 设备/);
+  assert.doesNotMatch(dashboard, /ActivityFeed|活动记录/);
   assert.doesNotMatch(dashboard, /\.module\.css|globals\.css/);
   assert.match(api, /apiRequest<unknown>\("\/vpn\/status"/);
   assert.match(api, /method: "GET"/);
+  assert.match(api, /apiRequest<unknown>\("\/vpn\/devices"/);
+  assert.match(api, /method: "POST"/);
+  assert.match(api, /method: "PATCH"/);
   assert.match(nginx, /location = \/api\/backend\/vpn\/status/);
   assert.match(nginx, /limit_except GET HEAD \{ deny all; \}/);
+  assert.match(nginx, /location = \/api\/backend\/vpn\/devices/);
+  assert.match(nginx, /limit_except GET POST \{ deny all; \}/);
+  assert.match(nginx, /limit_except PATCH \{ deny all; \}/);
 });
