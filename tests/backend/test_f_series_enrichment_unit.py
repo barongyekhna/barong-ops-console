@@ -192,6 +192,9 @@ def test_crossborder_keyword_normalizer_parses_doc_shape() -> None:
                         "monthlySold": 320,
                         "isOnePsale": True,
                         "minOrderQuantity": 2,
+                        "attributes": [
+                            {"attributeName": "防护等级", "attributeValue": "IP65"}
+                        ],
                     },
                     {"subject": "无 offerId 无链接应跳过"},
                     {"offerId": 222, "subject": "低价拦截", "priceInfo": {"price": "0.5"}},
@@ -208,6 +211,9 @@ def test_crossborder_keyword_normalizer_parses_doc_shape() -> None:
     assert offer.monthly_sales == 320
     assert offer.one_piece_hint is True
     assert offer.payload["image_url"] == "https://cbu01.alicdn.com/x.jpg"
+    assert offer.payload["structured_attributes"] == [
+        {"name": "防护等级", "value": "IP65"}
+    ]
 
 
 def test_acl_denied_detection() -> None:

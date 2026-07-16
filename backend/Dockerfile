@@ -11,6 +11,9 @@ WORKDIR /app
 COPY backend/requirements.txt ./backend/requirements.txt
 RUN python -m pip install --no-cache-dir -r backend/requirements.txt \
     && python -m playwright install --with-deps chromium \
+    && apt-get update \
+    && apt-get install --yes --no-install-recommends fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/* \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app app \
     && mkdir -p /var/lib/barong/i-media /var/lib/barong/k-media /var/lib/barong/f-media \

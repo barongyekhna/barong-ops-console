@@ -167,7 +167,10 @@ def selling_points_instruction() -> str:
         "Generate conversion-first ecommerce selling points from the full product data. "
         "Use the supplied selling_points_skill exactly. Base every claim on product facts, "
         "approved keywords, variant data, or manual product information. Translate into "
-        "the target market language and keep copy clear enough for a shopper to decide. "
+        "the target market language. `structured_specs_json` contains verified supplier "
+        "specifications: quote its exact values and units when they support a useful benefit. "
+        "If a specification key is absent, omit that claim; never infer, estimate, or fill it. "
+        "Keep copy clear enough for a shopper to decide. "
         "Return only valid JSON with bullets, marketing_copy, translated_version, "
         "chinese_translation, target_language, seo_keywords, market_tags, and "
         "confidence_score. bullets must "
@@ -240,6 +243,12 @@ def marketing_copy_instruction(channel: str) -> str:
         "keywords, selling points, variant data, and manual product information; "
         "never fabricate specs, numbers, certifications, or reviews. Respect every "
         "红线 (hard rule) in the skill.\n"
+        "VERIFIED SPEC RULE (absolute): `product.structured_specs_json` is the "
+        "authoritative source for supplier specifications. Use its exact values and "
+        "units (for example K, mAh, lm, h, IP codes) where useful. If a key is absent, "
+        "omit that specification everywhere; NEVER infer, estimate, round into a new "
+        "claim, or copy an unsupported number from category expectations. Preserve the "
+        "meaning of ranges.\n"
         "BRAND RULE (absolute, overrides everything): the ONLY brand that may "
         "ever appear in ANY output field is the site's own brand given in "
         "`site_brand`. NEVER mention any third-party brand, manufacturer, or "
@@ -342,7 +351,17 @@ def image_art_direction_instruction() -> str:
         ' "placement": "gallery" | "description",'
         ' "aspect_ratio": "<THIS image\'s ratio, machine-readable like 1:1 / 4:5 / 16:9>",'
         ' "mission": "<CTR/看懂/想要/...>", "prompt": "<English prompt for this image>",'
-        ' "overlay_text": "<on-image text or empty>",'
+        ' "overlay": null | {"schema_version": "k-info-overlay-v1",'
+        ' "role": "feature_callout" | "dimension" | "spec", "items": ['
+        '{"type": "callout", "source_field": "<structured_specs_json path>",'
+        ' "anchor": {"x": <0..1>, "y": <0..1>},'
+        ' "text_anchor": {"x": <0..1>, "y": <0..1>},'
+        ' "leader_direction": "auto" | "left" | "right" | "up" | "down"}'
+        ' | {"type": "dimension", "source_field": "dimensions.<length|width|height>",'
+        ' "line": {'
+        '"start": {"x": <0..1>, "y": <0..1>},'
+        ' "end": {"x": <0..1>, "y": <0..1>}},'
+        ' "text_anchor": {"x": <0..1>, "y": <0..1>}}]},'
         ' "title": "<image title for WordPress media, English>",'
         ' "alt": "<alt text: descriptive, SEO + accessibility, English, weave the'
         " product's real keywords in naturally, no stuffing>\","
@@ -371,20 +390,22 @@ def image_art_direction_instruction() -> str:
         "(English for US). alt must describe the image accurately with the product's real "
         "keywords woven in naturally; never keyword-stuff; never fabricate features.\n"
         "BRAND RULE (absolute): NEVER put any third-party brand name, manufacturer, or "
-        "trademark into ANY field (prompt / overlay_text / title / alt / caption / "
+        "trademark into ANY field (prompt / title / alt / caption / "
         "description) — including anything in `forbidden_brand_terms`. Refer to the product "
         "generically. Every image prompt MUST instruct the renderer to remove any brand "
         "logo or brand text visible on the reference product (replace with clean unbranded "
-        "surface, keeping shape/color/structure). overlay_text must never contain a brand.\n"
-        "FINISHED-IMAGE RULE (absolute): every image is published EXACTLY as rendered — "
-        "there is NO post-production step, no human will add text later. NEVER design "
-        "blank text boxes, empty rows, placeholder frames, or 'space reserved for later "
-        "text'. If an infographic needs labels, the COMPLETE final wording of every label "
-        "must be written in overlay_text (verified facts only); an icon may only appear "
-        "with its finished text beside it. If you lack verified facts for a spec-style "
-        "infographic, do NOT design one — plan a purely visual image instead (detail "
-        "close-up, usage scene, texture shot). Prompts must never contain phrases like "
-        "'blank', 'empty placeholder', or 'for post-production text'."
+        "surface, keeping shape/color/structure). Overlay items must never contain "
+        "free-form text.\n"
+        "PROGRAMMATIC OVERLAY RULE (absolute): feature_callout, dimension, and spec images "
+        "are clean BASE images. The image model must render NO text, letters, numbers, "
+        "badges, arrows, leader lines, or measurement lines; leave uncluttered negative "
+        "space at the overlay coordinates. Supply the exact structured `overlay` object "
+        "instead. Every `source_field` MUST resolve to an existing value in "
+        "product.structured_specs_json (for example lumens, ip_rating, "
+        "dimensions.height); labels are server-owned, so never emit `label`, `text`, or "
+        "a value field, and never infer a missing field. Use overlay=null for all other "
+        "images. If there are no verified "
+        "fields for an infographic, plan a purely visual detail/usage/texture image."
     )
 
 

@@ -1,0 +1,831 @@
+"""Verified, source-preserving product specification normalization.
+
+``structured_specs_json`` is a cross-module contract.  F-series builds it from
+real 1688 attribute/detail evidence, K-series supplies it to copy/image jobs,
+and P-series may later map it to store attributes and Product JSON-LD.
+
+The normalizer is deliberately deterministic: a missing or unparseable value
+is omitted, never guessed.  Every normalized field retains the supplier's
+original label and value so downstream consumers can audit what was claimed.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import unicodedata
+from decimal import Decimal, InvalidOperation
+from typing import Any
+
+
+STRUCTURED_SPECS_SCHEMA_VERSION = "1.0"
+
+STANDARD_SPEC_KEYS = frozenset(
+    {
+        "lumens",
+        "color_temperature_k",
+        "battery_type",
+        "battery_capacity_mah",
+        "charge_time_h",
+        "runtime_h",
+        "ip_rating",
+        "dimensions",
+        "weight",
+        "material",
+        "mount_type",
+        "certifications",
+    }
+)
+
+_ATTRIBUTE_CONTAINER_KEYS = frozenset(
+    {
+        "structured_attributes",
+        "attributes",
+        "attribute_list",
+        "attributelist",
+        "product_attributes",
+        "productattributes",
+        "product_attribute_list",
+        "productattributelist",
+        "product_attribute",
+        "productattribute",
+        "product_feature_list",
+        "productfeaturelist",
+        "feature_list",
+        "featurelist",
+        "properties",
+        "property_list",
+        "propertylist",
+        "props",
+        "product_props",
+        "productprops",
+    }
+)
+
+_LABEL_KEYS = (
+    "attribute_name",
+    "attributename",
+    "attr_name",
+    "attrname",
+    "property_name",
+    "propertyname",
+    "prop_name",
+    "propname",
+    "feature_name",
+    "featurename",
+    "label",
+    "name",
+    "key",
+)
+_VALUE_KEYS = (
+    "attribute_value",
+    "attributevalue",
+    "attr_value",
+    "attrvalue",
+    "property_value",
+    "propertyvalue",
+    "prop_value",
+    "propvalue",
+    "feature_value",
+    "featurevalue",
+    "value_name",
+    "valuename",
+    "value_names",
+    "valuenames",
+    "values",
+    "value",
+)
+
+_EMPTY_VALUE_MARKERS = frozenset(
+    {
+        "",
+        "-",
+        "--",
+        "n/a",
+        "na",
+        "none",
+        "null",
+        "unknown",
+        "not provided",
+        "not specified",
+        "无",
+        "暂无",
+        "未知",
+        "未提供",
+        "未标注",
+    }
+)
+
+_IDENTITY_LABEL_TERMS = (
+    "品牌",
+    "brand",
+    "manufacturer",
+    "生产厂家",
+    "制造商",
+    "厂名",
+    "供应商",
+    "seller",
+)
+
+_CERTIFICATION_PATTERN = re.compile(
+    r"(?<![A-Z0-9])(?:CE|FCC|ROHS|UL|ETL|PSE|CCC|CSA|TUV|GS|SAA|UKCA|"
+    r"REACH|EMC|LVD|CB|BSCI|ISO\s*\d{4,5})(?![A-Z0-9])",
+    flags=re.IGNORECASE,
+)
+
+
+def normalize_1688_structured_specs(
+    payload: Any,
+    *,
+    source_url: str | None = None,
+    weight_note: str | None = None,
+) -> dict[str, Any] | None:
+    """Return the v1 verified-spec contract extracted from a 1688 payload.
+
+    The function accepts the compact payload attached to ``SupplierApiOffer``
+    as well as common 1688 product-attribute shapes.  It never invokes AI and
+    never fills a field merely because a category would usually have it.
+    """
+
+    source_payload = payload if isinstance(payload, dict) else {}
+    output: dict[str, Any] = {
+        "schema_version": STRUCTURED_SPECS_SCHEMA_VERSION,
+        "source": _source_record(source_payload, source_url=source_url),
+    }
+    additional: list[dict[str, Any]] = []
+    additional_seen: set[tuple[str, str]] = set()
+
+    for label, raw_value in _collect_attribute_pairs(source_payload):
+        value_text = _value_text(raw_value)
+        if not _usable_value(value_text):
+            continue
+        if any(term in _label_token(label) for term in _IDENTITY_LABEL_TERMS):
+            # Identity fields are not product specifications and must never
+            # smuggle a supplier/third-party brand into K generation prompts.
+            continue
+        spec_key = _standard_key(label)
+        if spec_key is None:
+            item = _additional_spec(label, value_text)
+            dedupe_key = (item["label"].casefold(), item["raw_value"].casefold())
+            if dedupe_key not in additional_seen:
+                additional_seen.add(dedupe_key)
+                additional.append(item)
+            continue
+        parsed = _standard_spec(spec_key, label=label, raw_value=value_text)
+        if parsed is None:
+            # The supplier supplied something, but it was not strong enough to
+            # support the standard claim (for example "waterproof" without an
+            # IP code).  Preserve the evidence only as an unmapped attribute.
+            item = _additional_spec(label, value_text)
+            dedupe_key = (item["label"].casefold(), item["raw_value"].casefold())
+            if dedupe_key not in additional_seen:
+                additional_seen.add(dedupe_key)
+                additional.append(item)
+            continue
+        _merge_standard_spec(output, spec_key, parsed)
+
+    _merge_detail_measurements(output, source_payload)
+    if weight_note and "weight" not in output:
+        weight = _weight_spec("供应商报重", weight_note)
+        if weight is not None:
+            output["weight"] = weight
+
+    if additional:
+        output["additional_specs"] = additional[:100]
+
+    if not any(key in output for key in STANDARD_SPEC_KEYS) and not additional:
+        return None
+    return output
+
+
+def has_standard_specs(value: Any) -> bool:
+    """Whether a stored contract contains at least one normalized standard key."""
+
+    return isinstance(value, dict) and any(key in value for key in STANDARD_SPEC_KEYS)
+
+
+def _source_record(payload: dict[str, Any], *, source_url: str | None) -> dict[str, Any]:
+    record: dict[str, Any] = {"platform": "1688"}
+    offer_id = _clean_text(payload.get("offer_id") or payload.get("offerId"))
+    if offer_id:
+        record["offer_id"] = offer_id[:128]
+    url = _clean_text(source_url or payload.get("detail_url") or payload.get("detailUrl"))
+    if url:
+        record["url"] = url[:2048]
+    return record
+
+
+def _collect_attribute_pairs(payload: dict[str, Any]) -> list[tuple[str, Any]]:
+    containers: list[Any] = []
+
+    def visit(value: Any, *, depth: int) -> None:
+        if depth > 5:
+            return
+        if isinstance(value, dict):
+            for raw_key, nested in value.items():
+                key = _normalized_key(raw_key)
+                if key in _ATTRIBUTE_CONTAINER_KEYS:
+                    containers.append(nested)
+                elif isinstance(nested, (dict, list)):
+                    visit(nested, depth=depth + 1)
+        elif isinstance(value, list):
+            for nested in value:
+                if isinstance(nested, (dict, list)):
+                    visit(nested, depth=depth + 1)
+
+    visit(payload, depth=0)
+    pairs: list[tuple[str, Any]] = []
+    for container in containers:
+        pairs.extend(_pairs_from_container(container))
+    return _dedupe_pairs(pairs)
+
+
+def _pairs_from_container(value: Any) -> list[tuple[str, Any]]:
+    if isinstance(value, list):
+        pairs: list[tuple[str, Any]] = []
+        for item in value:
+            pairs.extend(_pairs_from_container(item))
+        return pairs
+    if not isinstance(value, dict):
+        return []
+
+    normalized = {_normalized_key(key): nested for key, nested in value.items()}
+    label = next(
+        (
+            _clean_text(normalized.get(key))
+            for key in _LABEL_KEYS
+            if normalized.get(key) is not None
+        ),
+        None,
+    )
+    raw_value = next(
+        (normalized.get(key) for key in _VALUE_KEYS if normalized.get(key) is not None),
+        None,
+    )
+    if label and raw_value is not None:
+        return [(label[:255], raw_value)]
+
+    # Some APIs return a direct {"材质": "ABS", "防护等级": "IP65"}
+    # mapping.  This branch is only reached inside a known attribute container.
+    pairs = []
+    metadata_keys = set(_LABEL_KEYS) | set(_VALUE_KEYS) | {
+        "id",
+        "attribute_id",
+        "attributeid",
+        "property_id",
+        "propertyid",
+    }
+    for raw_key, nested in value.items():
+        if _normalized_key(raw_key) in metadata_keys:
+            continue
+        if isinstance(nested, (str, int, float, Decimal, bool)):
+            pairs.append((str(raw_key), nested))
+        elif isinstance(nested, list):
+            text = _value_text(nested)
+            if text:
+                pairs.append((str(raw_key), text))
+    return pairs
+
+
+def _dedupe_pairs(pairs: list[tuple[str, Any]]) -> list[tuple[str, Any]]:
+    output: list[tuple[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for label, value in pairs:
+        cleaned_label = _clean_text(label)
+        cleaned_value = _value_text(value)
+        if not cleaned_label or not cleaned_value:
+            continue
+        key = (cleaned_label.casefold(), cleaned_value.casefold())
+        if key in seen:
+            continue
+        seen.add(key)
+        output.append((cleaned_label[:255], cleaned_value[:1000]))
+    return output
+
+
+def _standard_key(label: str) -> str | None:
+    key = _label_token(label)
+    if any(term in key for term in ("光通量", "流明", "luminousflux", "lumens", "lumen")):
+        return "lumens"
+    if any(term in key for term in ("色温", "colortemperature", "colourtemperature")):
+        return "color_temperature_k"
+    if any(term in key for term in ("电池容量", "电芯容量", "batterycapacity")):
+        return "battery_capacity_mah"
+    if any(term in key for term in ("电池类型", "电芯类型", "电池种类", "batterytype", "batterychemistry")):
+        return "battery_type"
+    if any(term in key for term in ("充电时间", "充满时间", "chargetime", "chargingtime")):
+        return "charge_time_h"
+    if any(
+        term in key
+        for term in (
+            "续航时间",
+            "续航时长",
+            "工作时间",
+            "照明时间",
+            "放电时间",
+            "runtime",
+            "workingtime",
+            "operatingtime",
+            "lightingtime",
+        )
+    ):
+        return "runtime_h"
+    if any(term in key for term in ("防护等级", "防水等级", "ip等级", "iprating", "ingressprotection")):
+        return "ip_rating"
+    if key in {"长", "长度", "length", "productlength", "产品长度"}:
+        return "dimensions.length"
+    if key in {"宽", "宽度", "width", "productwidth", "产品宽度"}:
+        return "dimensions.width"
+    if key in {"高", "高度", "height", "productheight", "产品高度"}:
+        return "dimensions.height"
+    if any(
+        term in key
+        for term in (
+            "产品尺寸",
+            "外形尺寸",
+            "商品尺寸",
+            "规格尺寸",
+            "dimensions",
+            "productsize",
+            "itemsize",
+        )
+    ) or key == "尺寸":
+        return "dimensions"
+    if any(
+        term in key
+        for term in ("产品重量", "商品重量", "净重", "单重", "weight", "itemweight")
+    ) or key == "重量":
+        return "weight"
+    if any(term in key for term in ("主体材质", "外壳材质", "产品材质", "material")) or key == "材质":
+        return "material"
+    if any(
+        term in key
+        for term in (
+            "安装方式",
+            "安装类型",
+            "固定方式",
+            "底座类型",
+            "mounttype",
+            "mountingtype",
+            "installationmethod",
+        )
+    ):
+        return "mount_type"
+    if any(term in key for term in ("认证", "资质", "certification", "certifications", "compliance")):
+        return "certifications"
+    return None
+
+
+def _standard_spec(spec_key: str, *, label: str, raw_value: str) -> dict[str, Any] | None:
+    if spec_key == "lumens":
+        return _measurement_spec(label, raw_value, canonical_unit="lm", aliases=("lm", "流明"))
+    if spec_key == "color_temperature_k":
+        return _measurement_spec(label, raw_value, canonical_unit="K", aliases=("k", "开尔文"))
+    if spec_key == "battery_capacity_mah":
+        return _measurement_spec(
+            label,
+            raw_value,
+            canonical_unit="mAh",
+            aliases=("mah", "毫安时", "毫安小时"),
+        )
+    if spec_key in {"charge_time_h", "runtime_h"}:
+        return _time_spec(label, raw_value)
+    if spec_key == "ip_rating":
+        match = re.search(
+            r"\bIP\s*([0-6X][0-9X][A-Z]?)\b",
+            raw_value,
+            flags=re.IGNORECASE,
+        )
+        if not match:
+            return None
+        return _evidence(
+            value=f"IP{match.group(1).upper()}",
+            raw_value=raw_value,
+            source_label=label,
+        )
+    if spec_key == "dimensions":
+        return _combined_dimensions_spec(label, raw_value)
+    if spec_key.startswith("dimensions."):
+        axis = spec_key.split(".", 1)[1]
+        leaf = _dimension_leaf(label, raw_value)
+        return {axis: leaf, "raw_value": raw_value, "source_label": label} if leaf else None
+    if spec_key == "weight":
+        return _weight_spec(label, raw_value)
+    if spec_key in {"battery_type", "material", "mount_type"}:
+        return _evidence(value=raw_value, raw_value=raw_value, source_label=label)
+    if spec_key == "certifications":
+        values = []
+        seen: set[str] = set()
+        for match in _CERTIFICATION_PATTERN.finditer(raw_value.upper()):
+            certification = re.sub(r"\s+", " ", match.group(0).upper()).strip()
+            if certification == "ROHS":
+                certification = "RoHS"
+            if certification not in seen:
+                seen.add(certification)
+                values.append(certification)
+        if not values:
+            return None
+        return _evidence(value=values, raw_value=raw_value, source_label=label)
+    return None
+
+
+def _measurement_spec(
+    label: str,
+    raw_value: str,
+    *,
+    canonical_unit: str,
+    aliases: tuple[str, ...],
+) -> dict[str, Any] | None:
+    unit_pattern = "|".join(re.escape(alias) for alias in aliases)
+    measurement_pattern = re.compile(
+        r"([0-9]+(?:\.[0-9]+)?)"
+        r"(?:\s*(?:-|~|～|至|到)\s*([0-9]+(?:\.[0-9]+)?))?"
+        rf"\s*(?:{unit_pattern})",
+        flags=re.IGNORECASE,
+    )
+    normalized_raw = raw_value.replace(",", "")
+    matches = list(measurement_pattern.finditer(normalized_raw))
+    values: list[Decimal] = []
+    for match in matches:
+        for raw_number in match.groups():
+            parsed = _decimal(raw_number)
+            if parsed is not None:
+                values.append(parsed)
+    label_unit_fallback = False
+    if not values and re.search(unit_pattern, label, flags=re.IGNORECASE):
+        # When the unit exists only in the label, accept an entirely bare
+        # scalar or an explicit two-endpoint range.  Do not reinterpret option
+        # lists such as ``3色 3000/4500/6000`` as a numeric range.
+        values = _label_unit_measurement_values(raw_value)
+        label_unit_fallback = bool(values)
+    if not values:
+        return None
+    if not label_unit_fallback:
+        # Every number in the raw value must belong to an explicitly unit-bound
+        # measurement.  This rejects partial matches such as
+        # ``3色 3000/4500/6000K`` instead of publishing only 6000 K.
+        if len(_all_numbers(normalized_raw)) != len(values) or len(values) > 10:
+            return None
+        has_explicit_range = any(match.group(2) is not None for match in matches)
+        if has_explicit_range and len(matches) != 1:
+            return None
+        if len(values) > 1 and not has_explicit_range:
+            value: Any = [_json_number(item) for item in values]
+        else:
+            value = _range_or_value(values)
+    else:
+        value = _range_or_value(values)
+    return _evidence(
+        value=value,
+        unit=canonical_unit,
+        raw_value=raw_value,
+        source_label=label,
+    )
+
+
+def _time_spec(label: str, raw_value: str) -> dict[str, Any] | None:
+    combined = f"{label} {raw_value}".lower()
+    hour_pattern = r"(?:小时|时长|(?<![a-z])(?:hours?|hrs?|h)(?![a-z]))"
+    minute_pattern = r"(?:分钟|(?<![a-z])(?:minutes?|mins?|min)(?![a-z]))"
+    if not re.search(f"(?:{hour_pattern}|{minute_pattern})", combined):
+        return None
+    values = _all_numbers(raw_value)
+    if not values:
+        return None
+    if len(values) > 2:
+        return None
+    if len(values) == 2 and not re.search(
+        r"[0-9]+(?:\.[0-9]+)?\s*(?:-|~|～|至|到|to)\s*"
+        r"[0-9]+(?:\.[0-9]+)?",
+        raw_value,
+        flags=re.IGNORECASE,
+    ):
+        # Two unrelated numbers (for example a mode count plus a runtime) are
+        # not silently reinterpreted as a duration range.
+        return None
+    if re.search(minute_pattern, combined):
+        values = [value / Decimal("60") for value in values]
+    return _evidence(
+        value=_range_or_value(values),
+        unit="h",
+        raw_value=raw_value,
+        source_label=label,
+    )
+
+
+def _combined_dimensions_spec(label: str, raw_value: str) -> dict[str, Any] | None:
+    match = re.search(
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:x|×|\*)\s*"
+        r"([0-9]+(?:\.[0-9]+)?)\s*(?:x|×|\*)\s*"
+        r"([0-9]+(?:\.[0-9]+)?)\s*(mm|毫米|cm|厘米|m|米|in|inch|英寸)?",
+        raw_value,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    unit = _dimension_unit(match.group(4) or _unit_from_label(label))
+    if unit is None:
+        return None
+    values = [_decimal(match.group(index)) for index in (1, 2, 3)]
+    if any(value is None or value <= 0 for value in values):
+        return None
+    converted = [_dimension_to_cm(value, unit) for value in values if value is not None]
+    if len(converted) != 3:
+        return None
+    return {
+        "length": _evidence(
+            value=_json_number(converted[0]),
+            unit="cm",
+            raw_value=raw_value,
+            source_label=label,
+        ),
+        "width": _evidence(
+            value=_json_number(converted[1]),
+            unit="cm",
+            raw_value=raw_value,
+            source_label=label,
+        ),
+        "height": _evidence(
+            value=_json_number(converted[2]),
+            unit="cm",
+            raw_value=raw_value,
+            source_label=label,
+        ),
+        "unit": "cm",
+        "raw_value": raw_value,
+        "source_label": label,
+    }
+
+
+def _dimension_leaf(label: str, raw_value: str) -> dict[str, Any] | None:
+    values = _numbers(raw_value)
+    if not values:
+        return None
+    unit_match = re.search(r"(mm|毫米|cm|厘米|m|米|in|inch|英寸)\b?", raw_value, flags=re.IGNORECASE)
+    unit = _dimension_unit(unit_match.group(1) if unit_match else _unit_from_label(label))
+    if unit is None:
+        return None
+    value_cm = _dimension_to_cm(values[0], unit)
+    return _evidence(
+        value=_json_number(value_cm),
+        unit="cm",
+        raw_value=raw_value,
+        source_label=label,
+    )
+
+
+def _weight_spec(label: str, raw_value: str) -> dict[str, Any] | None:
+    match = re.search(
+        r"([0-9]+(?:\.[0-9]+)?)\s*(kg|千克|公斤|g|克|lb|lbs|pounds?|磅|oz|盎司)",
+        raw_value,
+        flags=re.IGNORECASE,
+    )
+    if not match:
+        return None
+    value = _decimal(match.group(1))
+    if value is None or value <= 0:
+        return None
+    unit = match.group(2).lower()
+    if unit in {"g", "克"}:
+        value /= Decimal("1000")
+    elif unit in {"lb", "lbs", "pound", "pounds", "磅"}:
+        value *= Decimal("0.45359237")
+    elif unit in {"oz", "盎司"}:
+        value *= Decimal("0.028349523125")
+    return _evidence(
+        value=_json_number(value),
+        unit="kg",
+        raw_value=raw_value,
+        source_label=label,
+    )
+
+
+def _merge_standard_spec(output: dict[str, Any], spec_key: str, value: dict[str, Any]) -> None:
+    if spec_key.startswith("dimensions."):
+        axis = spec_key.split(".", 1)[1]
+        dimensions = output.setdefault("dimensions", {"unit": "cm"})
+        if isinstance(dimensions, dict) and axis not in dimensions and axis in value:
+            dimensions[axis] = value[axis]
+            dimensions.setdefault("raw_value", value.get("raw_value"))
+            dimensions.setdefault("source_label", value.get("source_label"))
+        return
+    if spec_key == "certifications" and spec_key in output:
+        existing = output[spec_key]
+        if isinstance(existing, dict) and isinstance(existing.get("value"), list):
+            existing_values = list(existing["value"])
+            for item in value.get("value") or []:
+                if item not in existing_values:
+                    existing_values.append(item)
+            existing["value"] = existing_values
+        return
+    output.setdefault(spec_key, value)
+
+
+def _merge_detail_measurements(output: dict[str, Any], payload: dict[str, Any]) -> None:
+    detail = payload.get("detail_page_crawler")
+    detail = detail if isinstance(detail, dict) else {}
+
+    def first_number(*keys: str) -> Decimal | None:
+        for key in keys:
+            value = payload.get(key)
+            if value is None:
+                value = detail.get(key)
+            parsed = _decimal(value)
+            if parsed is not None and parsed > 0:
+                return parsed
+        return None
+
+    dimensions = output.get("dimensions")
+    if not isinstance(dimensions, dict):
+        dimensions = {"unit": "cm"}
+    for axis in ("length", "width", "height"):
+        if axis in dimensions:
+            continue
+        value = first_number(f"supplier_{axis}_cm", f"{axis}_cm")
+        if value is not None:
+            dimensions[axis] = _evidence(
+                value=_json_number(value),
+                unit="cm",
+                raw_value=f"{_json_number(value)} cm",
+                source_label="1688 detail page",
+            )
+    if any(axis in dimensions for axis in ("length", "width", "height")):
+        output["dimensions"] = dimensions
+
+    if "weight" not in output:
+        value = first_number("supplier_actual_weight_kg", "actual_weight_kg")
+        if value is not None:
+            output["weight"] = _evidence(
+                value=_json_number(value),
+                unit="kg",
+                raw_value=f"{_json_number(value)} kg",
+                source_label="1688 detail page",
+            )
+
+
+def _additional_spec(label: str, raw_value: str) -> dict[str, Any]:
+    ascii_key = re.sub(r"[^a-z0-9]+", "_", unicodedata.normalize("NFKC", label).lower()).strip("_")
+    if not ascii_key:
+        digest = hashlib.sha256(label.encode("utf-8")).hexdigest()[:10]
+        ascii_key = f"supplier_attribute_{digest}"
+    return {
+        "key": ascii_key[:128],
+        "label": label[:255],
+        "value": raw_value[:1000],
+        "raw_value": raw_value[:1000],
+    }
+
+
+def _evidence(
+    *,
+    value: Any,
+    raw_value: str,
+    source_label: str,
+    unit: str | None = None,
+) -> dict[str, Any]:
+    result: dict[str, Any] = {
+        "value": value,
+        "raw_value": raw_value[:1000],
+        "source_label": source_label[:255],
+    }
+    if unit:
+        result["unit"] = unit
+    return result
+
+
+def _numbers(value: str) -> list[Decimal]:
+    return _all_numbers(value)[:2]
+
+
+def _all_numbers(value: str) -> list[Decimal]:
+    output: list[Decimal] = []
+    for match in re.finditer(r"(?<![A-Za-z0-9])([0-9]+(?:\.[0-9]+)?)", value.replace(",", "")):
+        parsed = _decimal(match.group(1))
+        if parsed is not None:
+            output.append(parsed)
+    return output
+
+
+def _label_unit_measurement_values(value: str) -> list[Decimal]:
+    number = r"([0-9]+(?:\.[0-9]+)?)"
+    normalized = value.replace(",", "").strip()
+    range_match = re.fullmatch(
+        rf"{number}\s*(?:-|~|～|至|到)\s*{number}",
+        normalized,
+    )
+    if range_match:
+        return [
+            parsed
+            for raw_number in range_match.groups()
+            if (parsed := _decimal(raw_number)) is not None
+        ]
+    scalar_match = re.fullmatch(number, normalized)
+    if scalar_match:
+        parsed = _decimal(scalar_match.group(1))
+        return [parsed] if parsed is not None else []
+    return []
+
+
+def _range_or_value(values: list[Decimal]) -> Any:
+    if len(values) == 1:
+        return _json_number(values[0])
+    minimum, maximum = values[0], values[1]
+    if minimum > maximum:
+        minimum, maximum = maximum, minimum
+    return {"min": _json_number(minimum), "max": _json_number(maximum)}
+
+
+def _json_number(value: Decimal) -> int | float:
+    normalized = value.normalize()
+    if normalized == normalized.to_integral():
+        return int(normalized)
+    return float(normalized)
+
+
+def _decimal(value: Any) -> Decimal | None:
+    if isinstance(value, bool) or value is None:
+        return None
+    try:
+        return Decimal(str(value).strip())
+    except (InvalidOperation, ValueError):
+        return None
+
+
+def _dimension_unit(value: Any) -> str | None:
+    text = _clean_text(value).lower() if _clean_text(value) else ""
+    if text in {"mm", "毫米"}:
+        return "mm"
+    if text in {"cm", "厘米"}:
+        return "cm"
+    if text in {"m", "米"}:
+        return "m"
+    if text in {"in", "inch", "英寸"}:
+        return "in"
+    return None
+
+
+def _dimension_to_cm(value: Decimal, unit: str) -> Decimal:
+    if unit == "mm":
+        return value / Decimal("10")
+    if unit == "m":
+        return value * Decimal("100")
+    if unit == "in":
+        return value * Decimal("2.54")
+    return value
+
+
+def _unit_from_label(label: str) -> str | None:
+    match = re.search(
+        r"(?:\(|（|/|_)(mm|毫米|cm|厘米|m|米|in|inch|英寸)(?:\)|）)?",
+        label,
+        flags=re.IGNORECASE,
+    )
+    return match.group(1) if match else None
+
+
+def _usable_value(value: str) -> bool:
+    return value.strip().casefold() not in _EMPTY_VALUE_MARKERS
+
+
+def _value_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return _clean_text(value) or ""
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, list):
+        items = [_value_text(item) for item in value]
+        return ", ".join(item for item in items if item)[:1000]
+    if isinstance(value, dict):
+        normalized = {_normalized_key(key): nested for key, nested in value.items()}
+        for key in (*_VALUE_KEYS, "text", "title", "name"):
+            if key in normalized:
+                text = _value_text(normalized[key])
+                if text:
+                    return text
+        try:
+            return json.dumps(value, ensure_ascii=False, sort_keys=True, default=str)[:1000]
+        except (TypeError, ValueError):
+            return ""
+    return _clean_text(value) or ""
+
+
+def _label_token(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value).casefold()
+    return re.sub(r"[\s\W_]+", "", normalized, flags=re.UNICODE)
+
+
+def _normalized_key(value: Any) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value)).casefold()
+    return re.sub(r"[^a-z0-9\u4e00-\u9fff]+", "_", normalized).strip("_")
+
+
+def _clean_text(value: Any) -> str | None:
+    if value is None:
+        return None
+    text = re.sub(r"\s+", " ", str(value)).strip()
+    return text or None

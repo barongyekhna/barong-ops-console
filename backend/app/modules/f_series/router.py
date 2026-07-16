@@ -172,6 +172,7 @@ class CandidateItem(BaseModel):
     moq: int | None
     supplier_name: str | None
     weight_note: str | None
+    structured_specs_json: dict[str, Any] | None
     red_flags: list[dict[str, str]]
     automation_blocked: bool
     status: str
@@ -239,6 +240,11 @@ def _candidate_item(candidate: FCategoryCandidate) -> CandidateItem:
         moq=candidate.moq,
         supplier_name=candidate.supplier_name,
         weight_note=candidate.weight_note,
+        structured_specs_json=(
+            dict(candidate.structured_specs_json)
+            if isinstance(candidate.structured_specs_json, dict)
+            else None
+        ),
         red_flags=list(candidate.red_flags_json or []),
         automation_blocked=candidate.automation_blocked,
         status=candidate.status,

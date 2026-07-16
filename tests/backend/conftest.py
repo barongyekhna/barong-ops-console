@@ -85,6 +85,7 @@ from backend.app.modules.k_series.product_knowledge.models import (
     KProductKnowledgeVariant,
     KProductKnowledgeVersion,
     KProductKnowledgeWorkflowExecution,
+    KSkuSequence,
 )
 from backend.app.modules.i_series.image_system.models import (
     IImageAsset,
@@ -307,6 +308,7 @@ def clear_auth_tables() -> None:
         db.execute(delete(KProductKnowledgeAttribute))
         db.execute(delete(KProductKnowledgeVariant))
         db.execute(delete(KProductKnowledgeProduct))
+        db.execute(delete(KSkuSequence))
         db.execute(delete(KeyHealthCheck))
         db.execute(delete(KeyHealthState))
         db.execute(delete(KeyHealthRun))

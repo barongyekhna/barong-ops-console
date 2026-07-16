@@ -252,6 +252,10 @@ def execute_run(run_id: UUID) -> None:
                     note = result.get("channel_note")
                     if note and note not in node_errors:
                         node_errors.append(note)
+                    for warning in result.get("warnings") or []:
+                        message = f"{node.get('name')} 找货降级: {str(warning)[:140]}"
+                        if message not in node_errors:
+                            node_errors.append(message)
                 except RAQuotaExhaustedError as exc:
                     db.rollback()
                     run = db.get(FEnrichmentRun, run_id)

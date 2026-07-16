@@ -40,10 +40,12 @@ from ...k_series.product_knowledge.category_resolver import (
     google_category_path,
     repair_legacy_google_category_path,
 )
+from ...k_series.product_knowledge.sku_allocator import ensure_product_sku
 from .description_html import (
     build_description_html,
     plain_text_from_copy,
 )
+from .product_schema import project_verified_product_specs
 from .wc_categories import ensure_wc_category_path
 
 LAYOUT_SKILL_VERSION = "p-product-page-layout-v1"
@@ -104,6 +106,42 @@ def _availability(stock_status: str | None) -> str:
     if "pre" in s:
         return "preorder"
     return "in_stock"
+
+
+def _optional_text(value: Any) -> str | None:
+    """Return non-empty generated text without coercing malformed AI output."""
+    if not isinstance(value, str):
+        return None
+    normalized = value.strip()
+    return normalized or None
+
+
+def _seo_for_upload(marketing_copy_json: Any, product: Any) -> Seo:
+    """Project K's generated SEO copy into the P upload contract.
+
+    The marketing-copy result is where the K generator writes ``seo.title`` and
+    ``seo.meta_description``.  Older rows may instead have the dedicated K SEO
+    columns populated, so those remain a compatibility fallback.  Description
+    HTML is deliberately not consulted: Woo/Yoast must receive the authored
+    meta description, never text produced by stripping markup.
+    """
+    generated_seo: dict[str, Any] = {}
+    if isinstance(marketing_copy_json, dict):
+        candidate = marketing_copy_json.get("seo")
+        if isinstance(candidate, dict):
+            generated_seo = candidate
+
+    return Seo(
+        title=(
+            _optional_text(generated_seo.get("title"))
+            or _optional_text(getattr(product, "seo_title_en", None))
+        ),
+        description=(
+            _optional_text(generated_seo.get("meta_description"))
+            or _optional_text(generated_seo.get("description"))
+            or _optional_text(getattr(product, "seo_description_en", None))
+        ),
+    )
 
 
 def _media_fetch_url(
@@ -314,8 +352,10 @@ def assemble_upload_package(
     job_id: str | None = None,
     job_token: str | None = None,
     workflow_trace_id: str | None = None,
+    woo_existing_product_id: str | None = None,
 ) -> UploadPackage:
     """门禁必须已通过（调用方先查 gate_blockers）。"""
+    sku_before_allocation = str(getattr(product, "sku", None) or "").strip()
     mcj = product.marketing_copy_json or {}
     images = _image_assets(
         db, product, base_url, job_id=job_id, job_token=job_token
@@ -349,13 +389,27 @@ def assemble_upload_package(
         if str(b).strip()
     ]
     currency = (product.price_currency or "USD")[:3]
-    # Finish the package's regular DB reads before category sync may call WC REST.
-    variants = _variants(db, product)
     category_path, wc_category_id = _resolve_wc_category(db, product)
+    attributes, product_schema = project_verified_product_specs(
+        getattr(product, "structured_specs_json", None)
+    )
+    # Category fail-safe handling above may roll back its transaction. Allocate
+    # afterwards so a legacy ASIN replacement cannot be undone by that rollback.
+    issued_sku = ensure_product_sku(db, product)
+    # SKU migration rekeys legacy variants atomically; read them only after the
+    # product identifier is final so the package cannot leak ASIN-derived SKUs.
+    variants = _variants(db, product)
     return UploadPackage(
         schema_version=UPLOAD_PACKAGE_SCHEMA_VERSION,
         job_id=job_id,
         product_id=product.id,
+        woo_existing_product_id=(
+            str(woo_existing_product_id).strip()
+            if woo_existing_product_id is not None
+            and str(woo_existing_product_id).strip()
+            else None
+        ),
+        woo_lookup_sku=sku_before_allocation or issued_sku,
         workflow_trace_id=workflow_trace_id,
         channel="woocommerce",
         generated_at=datetime.now(UTC),
@@ -402,13 +456,12 @@ def assemble_upload_package(
                 wc_category_id=wc_category_id,
             ),
             images=images,
+            attributes=attributes,
+            structured_data=product_schema,
             keywords=Keywords(
                 primary=[product.primary_keyword] if product.primary_keyword else [],
             ),
-            seo=Seo(
-                title=getattr(product, "seo_title_en", None),
-                description=getattr(product, "seo_description_en", None),
-            ),
+            seo=_seo_for_upload(mcj, product),
             variants=variants,
             item_group_id=product.product_key,
         ),

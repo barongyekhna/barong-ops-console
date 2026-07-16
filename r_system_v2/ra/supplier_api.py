@@ -413,6 +413,34 @@ class Alibaba1688OfficialApiProvider:
         payload = self._call_cps_image_search(image_url=image_url, limit=limit)
         return _normalize_cps_offers(payload, limit=limit)
 
+    def enrich_offer_specs(self, offer: SupplierApiOffer) -> SupplierApiOffer:
+        """Best-effort compact product-attribute lookup for an accepted F offer.
+
+        Search responses differ by 1688 API family and often omit attributes.
+        Keep this lookup separate from search so F can run it only after its
+        relevance/dedupe gates.  The caller owns quota accounting and treats an
+        empty result as a non-blocking data gap.
+        """
+
+        payload = dict(offer.payload or {})
+        offer_id = _optional_string(payload.get("offer_id")) or _offer_id_from_url(
+            offer.supplier_url
+        )
+        if not offer_id:
+            return offer
+        detail_payload = self._call_product_info(offer_id)
+        if not detail_payload:
+            return offer
+        product_info = _product_info_payload(detail_payload)
+        attributes = _extract_structured_attributes(product_info)
+        if attributes:
+            payload["structured_attributes"] = _merge_structured_attributes(
+                payload.get("structured_attributes"),
+                attributes,
+            )
+        payload["product_info_api"] = _compact_api_payload(detail_payload)
+        return replace(offer, payload=payload)
+
     def _call_image_search(
         self,
         *,
@@ -710,6 +738,12 @@ class Alibaba1688OfficialApiProvider:
         if detail_payload:
             payload["product_info_api"] = _compact_api_payload(detail_payload)
             product_info = _product_info_payload(detail_payload)
+            structured_attributes = _extract_structured_attributes(product_info)
+            if structured_attributes:
+                payload["structured_attributes"] = _merge_structured_attributes(
+                    payload.get("structured_attributes"),
+                    structured_attributes,
+                )
             sku_id = _extract_sku_id(product_info)
             if sku_id:
                 payload["sku_id"] = sku_id
@@ -991,6 +1025,8 @@ def _normalize_image_search_offers(
                     "raw_price": item.get("oldPrice")
                     or item.get("price")
                     or _dict_value(item.get("offerPrice")).get("price"),
+                    "structured_attributes": _extract_structured_attributes(item)
+                    or None,
                 },
             )
         )
@@ -1089,6 +1125,8 @@ def _normalize_cps_offers(
                     "category_id": item.get("categoryId"),
                     "raw_price_cent": item.get("price"),
                     "raw_old_price_cent": item.get("oldPrice"),
+                    "structured_attributes": _extract_structured_attributes(item)
+                    or None,
                 },
             )
         )
@@ -1195,6 +1233,8 @@ def _normalize_crossborder_keyword_offers(
                     "is_one_psale": item.get("isOnePsale") is True,
                     "repurchase_rate": _optional_string(item.get("repurchaseRate")),
                     "monthly_sold": monthly_sales,
+                    "structured_attributes": _extract_structured_attributes(item)
+                    or None,
                 },
             )
         )
@@ -1975,6 +2015,163 @@ def _product_info_payload(payload: dict[str, Any]) -> dict[str, Any]:
     nested_result = _dict_value(result.get("result"))
     product_info = _dict_value(nested_result.get("productInfo"))
     return product_info or result or payload
+
+
+_STRUCTURED_ATTRIBUTE_CONTAINER_KEYS = {
+    "attributes",
+    "attributelist",
+    "productattributes",
+    "productattributelist",
+    "productattribute",
+    "productfeaturelist",
+    "featurelist",
+    "properties",
+    "propertylist",
+    "props",
+    "productprops",
+}
+_STRUCTURED_ATTRIBUTE_LABEL_KEYS = (
+    "attributename",
+    "attrname",
+    "propertyname",
+    "propname",
+    "featurename",
+    "label",
+    "name",
+    "key",
+)
+_STRUCTURED_ATTRIBUTE_VALUE_KEYS = (
+    "attributevalue",
+    "attrvalue",
+    "propertyvalue",
+    "propvalue",
+    "featurevalue",
+    "valuename",
+    "valuenames",
+    "values",
+    "value",
+)
+
+
+def _extract_structured_attributes(value: Any) -> list[dict[str, str]]:
+    """Compact common 1688 attribute containers without retaining raw payloads."""
+
+    containers: list[Any] = []
+
+    def visit(current: Any, depth: int) -> None:
+        if depth > 5:
+            return
+        if isinstance(current, dict):
+            for key, nested in current.items():
+                token = re.sub(r"[^a-z0-9]+", "", str(key).casefold())
+                if token in _STRUCTURED_ATTRIBUTE_CONTAINER_KEYS:
+                    containers.append(nested)
+                elif isinstance(nested, (dict, list)):
+                    visit(nested, depth + 1)
+        elif isinstance(current, list):
+            for nested in current:
+                if isinstance(nested, (dict, list)):
+                    visit(nested, depth + 1)
+
+    visit(value, 0)
+    output: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for container in containers:
+        for label, raw_value in _structured_attribute_pairs(container):
+            cleaned_label = re.sub(r"\s+", " ", str(label)).strip()[:255]
+            cleaned_value = _structured_attribute_value_text(raw_value)[:1000]
+            if not cleaned_label or not cleaned_value:
+                continue
+            dedupe_key = (cleaned_label.casefold(), cleaned_value.casefold())
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            output.append({"name": cleaned_label, "value": cleaned_value})
+            if len(output) >= 100:
+                return output
+    return output
+
+
+def _structured_attribute_pairs(value: Any) -> list[tuple[str, Any]]:
+    if isinstance(value, list):
+        output: list[tuple[str, Any]] = []
+        for item in value:
+            output.extend(_structured_attribute_pairs(item))
+        return output
+    if not isinstance(value, dict):
+        return []
+    normalized = {
+        re.sub(r"[^a-z0-9]+", "", str(key).casefold()): nested
+        for key, nested in value.items()
+    }
+    label = next(
+        (
+            normalized[key]
+            for key in _STRUCTURED_ATTRIBUTE_LABEL_KEYS
+            if normalized.get(key) is not None
+        ),
+        None,
+    )
+    raw_value = next(
+        (
+            normalized[key]
+            for key in _STRUCTURED_ATTRIBUTE_VALUE_KEYS
+            if normalized.get(key) is not None
+        ),
+        None,
+    )
+    if label is not None and raw_value is not None:
+        return [(str(label), raw_value)]
+    # Direct mapping shape inside a known container.
+    return [
+        (str(key), nested)
+        for key, nested in value.items()
+        if isinstance(nested, (str, int, float, Decimal, bool, list))
+    ]
+
+
+def _structured_attribute_value_text(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return re.sub(r"\s+", " ", value).strip()
+    if isinstance(value, (int, float, Decimal)) and not isinstance(value, bool):
+        return str(value)
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, list):
+        parts = [_structured_attribute_value_text(item) for item in value]
+        return ", ".join(part for part in parts if part)
+    if isinstance(value, dict):
+        normalized = {
+            re.sub(r"[^a-z0-9]+", "", str(key).casefold()): nested
+            for key, nested in value.items()
+        }
+        for key in (*_STRUCTURED_ATTRIBUTE_VALUE_KEYS, "text", "title", "name"):
+            if key in normalized:
+                text_value = _structured_attribute_value_text(normalized[key])
+                if text_value:
+                    return text_value
+    return ""
+
+
+def _merge_structured_attributes(
+    existing: Any,
+    incoming: list[dict[str, str]],
+) -> list[dict[str, str]]:
+    merged: list[dict[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+    for item in [*(existing if isinstance(existing, list) else []), *incoming]:
+        if not isinstance(item, dict):
+            continue
+        name = re.sub(r"\s+", " ", str(item.get("name") or "")).strip()
+        value = re.sub(r"\s+", " ", str(item.get("value") or "")).strip()
+        key = (name.casefold(), value.casefold())
+        if not name or not value or key in seen:
+            continue
+        seen.add(key)
+        merged.append({"name": name[:255], "value": value[:1000]})
+    return merged[:100]
 
 
 def _extract_sku_id(value: Any) -> str | None:

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import re
 from uuid import UUID, uuid4
 
 from sqlalchemy import delete, or_, select
@@ -36,6 +35,7 @@ from .schemas import (
     ProductKnowledgeUpdate,
 )
 from .scope_shim import KScopeContext, apply_scope_filters, normalize_scope_context
+from .sku_allocator import ensure_product_sku
 
 PRODUCT_CREATE_FIELDS = frozenset(
     {
@@ -43,8 +43,6 @@ PRODUCT_CREATE_FIELDS = frozenset(
         "raw_input_language",
         "source_system",
         "source_record_id",
-        "sku",
-        "parent_sku",
         "target_market",
         "product_status",
         "review_status",
@@ -69,8 +67,6 @@ PRODUCT_UPDATE_FIELDS = frozenset(
     {
         "source_system",
         "source_record_id",
-        "sku",
-        "parent_sku",
         "target_market",
         "product_status",
         "review_status",
@@ -152,7 +148,6 @@ def create_product(
 ) -> KProductKnowledgeProduct:
     context = normalize_scope_context(scope_context)
     product_data = _selected_model_dump(payload, PRODUCT_CREATE_FIELDS)
-    parent_sku = _normalize_sku(payload.parent_sku or payload.sku)
     target_locale = (
         payload.target_locale
         or payload.canonical_language
@@ -162,18 +157,15 @@ def create_product(
     product_type = payload.product_type or "simple_product"
 
     for attempt in range(PRODUCT_CREATE_MAX_ATTEMPTS):
-        _ensure_sku_available(db, scope_context=context, sku=parent_sku)
         product_key = _generate_unique_product_key(db)
         attempt_data = dict(product_data)
         attempt_data.update(
             {
                 "canonical_language": target_locale,
-                "parent_sku": parent_sku,
                 "primary_keyword": payload.main_keyword,
                 "product_key": product_key,
                 "product_type": product_type,
                 "raw_input_language": target_locale,
-                "sku": parent_sku,
                 "target_market": payload.target_market,
                 "variant_group_key": (
                     product_key if product_type == "variable_product" else None
@@ -190,6 +182,9 @@ def create_product(
         )
         product.channel = (payload.channel or "dtc").strip().lower()
         _apply_manual_category(db, product, payload.category_id)
+        # User/source-provided SKU values are intentionally ignored.  K owns
+        # the public identifier and issues it exactly once from the leaf.
+        parent_sku = ensure_product_sku(db, product, force_allocate=True)
         variants = _variant_rows_for_payload(
             db=db,
             product=product,
@@ -606,13 +601,6 @@ def _ensure_sku_available(
 ) -> None:
     if _sku_exists(db, scope_context=scope_context, sku=sku):
         raise KConflictError("SKU already exists for this workspace.")
-
-
-def _normalize_sku(value: str | None) -> str:
-    if value is None:
-        return f"SKU-{uuid4().hex[:12].upper()}"
-    normalized = re.sub(r"[^A-Za-z0-9_-]+", "-", value.strip()).strip("-_").upper()
-    return normalized or f"SKU-{uuid4().hex[:12].upper()}"
 
 
 def _variant_hash(seed: dict[str, object]) -> str:

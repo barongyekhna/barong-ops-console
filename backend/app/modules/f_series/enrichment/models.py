@@ -257,6 +257,10 @@ class FCategoryCandidate(FUUIDPrimaryKeyMixin, FTimestampMixin, Base):
     supplier_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # 供应商报重（自由文本，先记录来源；W 系列运费规则表落地后转结构化）
     weight_note: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # 只存 1688 真实属性/详情证据归一化后的规格；缺失字段直接省略，不由 AI 补齐。
+    structured_specs_json: Mapped[Any | None] = mapped_column(
+        json_type(), nullable=True
+    )
     red_flags_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
     automation_blocked: Mapped[bool] = mapped_column(
         Boolean,

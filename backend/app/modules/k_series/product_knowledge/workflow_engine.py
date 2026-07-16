@@ -2490,6 +2490,7 @@ def _product_snapshot(product: KProductKnowledgeProduct) -> dict[str, Any]:
         "long_description_en": product.long_description_en,
         "primary_use_case_en": product.primary_use_case_en,
         "target_customer_en": product.target_customer_en,
+        "structured_specs_json": product.structured_specs_json,
         "organization_name": product.organization_name,
     }
 

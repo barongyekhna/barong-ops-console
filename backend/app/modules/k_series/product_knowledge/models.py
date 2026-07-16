@@ -59,6 +59,39 @@ class KTimestampMixin:
     )
 
 
+class KSkuSequence(Base):
+    """Atomic, global counter and prefix reservation for one leaf category."""
+
+    __tablename__ = "k_sku_sequences"
+    __table_args__ = (
+        CheckConstraint(
+            "next_seq > 0",
+            name=conv("ck_k_sku_sequences_next_positive"),
+        ),
+        UniqueConstraint("prefix", name="uq_k_sku_sequences_prefix"),
+    )
+
+    leaf_key: Mapped[str] = mapped_column(String(128), primary_key=True)
+    leaf_name: Mapped[str] = mapped_column(String(512), nullable=False)
+    prefix: Mapped[str] = mapped_column(String(16), nullable=False)
+    next_seq: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        server_default="1",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
 class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     __tablename__ = "k_product_knowledge_products"
     __table_args__ = (
@@ -206,6 +239,11 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     )
     tax_class: Mapped[str | None] = mapped_column(String(128), nullable=True)
     materials_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
+    # F→K verified specification contract.  Source evidence is preserved in
+    # every leaf; missing supplier facts are omitted rather than generated.
+    structured_specs_json: Mapped[Any | None] = mapped_column(
+        json_type(), nullable=True
+    )
     dimensions_json: Mapped[Any | None] = mapped_column(json_type(), nullable=True)
     package_dimensions_json: Mapped[Any | None] = mapped_column(
         json_type(),

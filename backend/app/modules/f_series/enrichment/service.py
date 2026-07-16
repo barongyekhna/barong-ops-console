@@ -23,6 +23,7 @@ from ....models.user import User
 from ....modules.k_series.product_knowledge.category_resolver import (
     bind_google_category_id,
 )
+from ....modules.k_series.product_knowledge.sku_allocator import ensure_product_sku
 from ....services.data_isolation import without_org_data_isolation
 from ..enrichment import constants as C
 from .models import FCategoryCandidate, FCategoryKeyword
@@ -250,6 +251,7 @@ def create_candidate(
     profile_product_zh: str | None = None,
     profile_product_en: str | None = None,
     score_json: dict[str, Any] | None = None,
+    structured_specs_json: dict[str, Any] | None = None,
 ) -> FCategoryCandidate:
     node = category_node(db, category_id)
     if node is None:
@@ -275,6 +277,7 @@ def create_candidate(
         moq=moq,
         supplier_name=(supplier_name or None),
         weight_note=(weight_note or None),
+        structured_specs_json=(structured_specs_json or None),
         red_flags_json=(flags or None),
         automation_blocked=bool(flags),
         status="pending_review",
@@ -387,10 +390,12 @@ def import_candidate_to_k(
         review_status="draft",
         raw_input_text="\n".join(raw_lines),
         raw_input_language="zh" if _contains_cjk(candidate.title) else "en",
+        structured_specs_json=candidate.structured_specs_json,
     )
     product.category_review_needed = not bind_google_category_id(
         db, product, candidate.category_id
     )
+    ensure_product_sku(db, product, force_allocate=True)
     db.add(product)
     candidate.status = "imported_to_k"
     candidate.k_product_id = product.id

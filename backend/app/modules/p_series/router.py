@@ -126,6 +126,18 @@ def p_upload_package(
     )
     if job is None:
         raise HTTPException(status_code=401, detail="token 无效。")
+    previous_external_product_id = db.scalar(
+        select(PUploadJob.external_product_id)
+        .where(
+            PUploadJob.product_id == product_id,
+            PUploadJob.channel == channel,
+            PUploadJob.status == "success",
+            PUploadJob.external_product_id.is_not(None),
+            PUploadJob.job_id != job.job_id,
+        )
+        .order_by(PUploadJob.finished_at.desc(), PUploadJob.created_at.desc())
+        .limit(1)
+    )
     product = _load_product(db, product_id)
     blockers = gate_blockers(db, product)
     if blockers:
@@ -139,6 +151,7 @@ def p_upload_package(
         base_url=_callback_base(),
         job_id=job.job_id,
         job_token=job.token,
+        woo_existing_product_id=previous_external_product_id,
     )
 
 

@@ -112,18 +112,32 @@ def build_description_html(
 
     image_queue = list(images)
     detail: list[str] = []
+    module_idx = 0
     for chunk in ppc.get("chunk_sections") or []:
         if not isinstance(chunk, dict):
             continue
         heading, body = _s(chunk.get("heading")), _s(chunk.get("body"))
+        text_html: list[str] = []
         if heading:
-            detail.append(f"<h3>{escape(heading)}</h3>")
+            text_html.append(f"<h3>{escape(heading)}</h3>")
         if body:
-            detail.append(f"<p>{escape(body)}</p>")
+            text_html.append(f"<p>{escape(body)}</p>")
+        fig_html = ""
         if (heading or body) and image_queue:
             image = image_queue.pop(0)
-            detail.append(_figure_html(image))
+            fig_html = _figure_html(image)
             embedded.append(_s(image.get("embed_token")))
+        if fig_html:
+            # 图文左右并排模块（隔行左右互换），CSS 端 .kp-module(.rev) 排版
+            rev = " rev" if module_idx % 2 == 1 else ""
+            detail.append(
+                f'<div class="kp-module{rev}">'
+                f'<div class="kp-module-text">{"".join(text_html)}</div>'
+                f"{fig_html}</div>"
+            )
+            module_idx += 1
+        else:
+            detail.extend(text_html)
     # 图比 chunk 多：剩余的排在 detail 末尾
     for image in image_queue:
         detail.append(_figure_html(image))

@@ -162,6 +162,16 @@ class ProductKnowledgeCreate(BaseModel):
     keywords: list[ProductKnowledgeKeywordItem] = Field(default_factory=list)
     risk_terms: list[ProductKnowledgeRiskTermItem] = Field(default_factory=list)
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_external_structured_specs(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "structured_specs_json" in value:
+            raise ValueError(
+                "structured_specs_json is supplier-verified internal data and "
+                "cannot be provided through the K product API."
+            )
+        return value
+
     @field_validator("dimensions_json", "weight_json")
     @classmethod
     def validate_physical_json(cls, value: Any) -> Any:
@@ -230,6 +240,21 @@ class ProductKnowledgeUpdate(BaseModel):
     primary_use_case_en: str | None = None
     target_customer_en: str | None = None
     manual_notes: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_external_structured_specs(cls, value: Any) -> Any:
+        if isinstance(value, dict) and "structured_specs_json" in value:
+            raise ValueError(
+                "structured_specs_json is supplier-verified internal data and "
+                "cannot be provided through the K product API."
+            )
+        return value
+
+    @field_validator("dimensions_json", "weight_json")
+    @classmethod
+    def validate_physical_json(cls, value: Any) -> Any:
+        return reject_sensitive_data(value)
 
     @model_validator(mode="after")
     def normalize_languages(self) -> "ProductKnowledgeUpdate":
@@ -303,6 +328,7 @@ class ProductKnowledgeRead(BaseModel):
     shipping_review_needed: bool = False
     shipping_assignment: dict[str, Any] | None = None
     contains_battery: bool = False
+    structured_specs_json: dict[str, Any] | None = None
     workspace_key: str
     business_context: str
     scope_mode: str

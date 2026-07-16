@@ -41,6 +41,10 @@ from r_system_v2.ra.supplier_api import (
     is_acl_denied,
 )
 
+from ...k_series.product_knowledge.structured_specs import (
+    normalize_1688_structured_specs,
+)
+
 from . import profiles as profile_engine
 from . import scoring
 from . import serper_client
@@ -311,7 +315,7 @@ def source_category(
 
         def ingest(offers: list[Any]) -> None:
             """把关+去重+落池（词搜/图搜同口径）。"""
-            nonlocal created, filtered, duplicates, offers_seen, product_created
+            nonlocal created, filtered, duplicates, offers_seen, product_created, calls_used
             offers_seen += len(offers)
             for offer in offers[:OFFERS_PER_PRODUCT]:
                 title = str(getattr(offer, "title", "") or "")
@@ -324,6 +328,51 @@ def source_category(
                     continue
                 seen_urls.add(source_url)
                 payload = getattr(offer, "payload", None) or {}
+                structured_specs = None
+                try:
+                    structured_specs = normalize_1688_structured_specs(
+                        payload,
+                        source_url=source_url,
+                    )
+                except Exception as exc:  # noqa: BLE001 - 规格缺失不得阻断候选
+                    search_errors.append(f"{product_zh} 规格解析: {str(exc)[:80]}")
+
+                # Search APIs often return only summary fields.  The official
+                # provider exposes a best-effort product-info lookup for the
+                # accepted (relevant + deduped) offer.  It is quota-accounted,
+                # but quota/fetch/parse failure degrades to the summary offer.
+                spec_enricher = getattr(provider, "enrich_offer_specs", None)
+                if not payload.get("product_info_api") and callable(spec_enricher):
+                    reserved = False
+                    try:
+                        try_consume(db, PROVIDER_F_1688_APP_CALLS)
+                        reserved = True
+                        calls_used += 1
+                        enriched_offer = spec_enricher(offer)
+                    except RAQuotaExhaustedError:
+                        search_errors.append(
+                            f"{product_zh} 规格富化: 1688 额度不足，已保留无规格候选"
+                        )
+                    except Exception as exc:  # noqa: BLE001 - fail-safe contract
+                        if reserved:
+                            refund(db, PROVIDER_F_1688_APP_CALLS)
+                            calls_used -= 1
+                        search_errors.append(
+                            f"{product_zh} 规格富化: {str(exc)[:80]}，已降级"
+                        )
+                    else:
+                        if enriched_offer is not None:
+                            offer = enriched_offer
+                            payload = getattr(offer, "payload", None) or payload
+                            try:
+                                structured_specs = normalize_1688_structured_specs(
+                                    payload,
+                                    source_url=source_url,
+                                )
+                            except Exception as exc:  # noqa: BLE001 - fail-safe
+                                search_errors.append(
+                                    f"{product_zh} 规格解析: {str(exc)[:80]}，已降级"
+                                )
                 image_url = str(payload.get("image_url") or "").strip() or None
                 moq_value = getattr(offer, "moq", None)
                 moq_int = int(moq_value) if moq_value is not None else None
@@ -352,6 +401,7 @@ def source_category(
                         ),
                         one_piece_hint=bool(getattr(offer, "one_piece_hint", False)),
                     ),
+                    structured_specs_json=structured_specs,
                 )
                 created += 1
                 product_created += 1
@@ -448,4 +498,5 @@ def source_category(
             if channels_used and "crossborder" not in channels_used
             else None
         ),
+        "warnings": search_errors[:20],
     }

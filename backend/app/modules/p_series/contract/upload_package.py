@@ -25,7 +25,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v3"
+UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v4"
 # n8n barongPupload001 must write ``shipping.shipping_class`` to the Woo
 # product's shipping_class; the n8n workflow change is intentionally external.
 
@@ -114,6 +114,30 @@ class ImageAsset(BaseModel):
     embed_token: str | None = None
 
 
+class ProductAttribute(BaseModel):
+    """One verified, visible WooCommerce product attribute."""
+
+    model_config = ConfigDict(extra="forbid")
+    name: str
+    value: str
+    unit: str | None = None
+
+
+class ProductSchemaProperty(BaseModel):
+    """Schema.org ``PropertyValue`` projected from a verified supplier fact."""
+
+    model_config = ConfigDict(extra="forbid")
+    type: Literal["PropertyValue"] = "PropertyValue"
+    name: str
+    value: str
+    unit_text: str | None = None
+
+
+class ProductSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    additional_property: list[ProductSchemaProperty] = Field(default_factory=list)
+
+
 class FaqItem(BaseModel):
     model_config = ConfigDict(extra="forbid")
     question: str
@@ -153,6 +177,10 @@ class Product(BaseModel):
     # v2: rich image objects. Gallery images first (main/hero leads), then
     # description-embedded images; see ImageAsset.placement.
     images: list[ImageAsset] = Field(default_factory=list)
+    # v4: the same verified facts feed Woo's visible Additional information
+    # attributes and its server-side Product JSON-LD filter.
+    attributes: list[ProductAttribute] = Field(default_factory=list)
+    structured_data: ProductSchema = Field(default_factory=ProductSchema)
     keywords: Keywords = Field(default_factory=Keywords)
     seo: Seo = Field(default_factory=Seo)
     variants: list[Variant] = Field(default_factory=list)
@@ -173,6 +201,12 @@ class UploadPackage(BaseModel):
     schema_version: str = UPLOAD_PACKAGE_SCHEMA_VERSION
     job_id: str | None = None
     product_id: UUID
+    # Woo migration identity is separate from the newly issued public SKU.
+    # Existing IDs come only from successful P upload receipts; lookup_sku may
+    # temporarily contain a legacy ASIN so that the same product is PUT/rekeyed
+    # instead of duplicated during its first allocator-backed upload.
+    woo_existing_product_id: str | None = None
+    woo_lookup_sku: str | None = None
     workflow_trace_id: str | None = None
     channel: Channel = "woocommerce"
     generated_at: datetime

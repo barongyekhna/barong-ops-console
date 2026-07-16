@@ -106,15 +106,17 @@ def test_assemble_includes_resolved_path_and_wc_leaf_id(
 
     payload = _assemble(_product(), db).model_dump(mode="json")
 
-    assert payload["schema_version"] == "p-upload-package-v3"
-    assert UPLOAD_PACKAGE_SCHEMA_VERSION == "p-upload-package-v3"
+    assert payload["schema_version"] == "p-upload-package-v4"
+    assert UPLOAD_PACKAGE_SCHEMA_VERSION == "p-upload-package-v4"
     assert payload["product"]["category"]["path"] == [
         "Home & Garden",
         "Kitchen & Dining",
         "Kitchen Tools",
     ]
     assert payload["product"]["category"]["wc_category_id"] == 321
-    assert events == ["variants", "resolve", "ensure"]
+    # Category fail-safe may roll back; SKU finalization/variant reads therefore
+    # happen only after the category transaction is settled.
+    assert events == ["resolve", "ensure", "variants"]
 
 
 def test_assemble_skips_wc_when_google_category_is_missing(

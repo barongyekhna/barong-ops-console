@@ -130,9 +130,9 @@ def test_variable_product_creates_parent_sku_and_variant_skus() -> None:
 
     assert UUID(product.product_key).version == 4
     assert product.product_type == "variable_product"
-    assert product.parent_sku == "PUMP-FAMILY"
+    assert product.parent_sku == "UNC-001"
     assert len(variants) == 2
-    assert all(item.variant_sku.startswith("PUMP-FAMILY-") for item in variants)
+    assert all(item.variant_sku.startswith("UNC-001-") for item in variants)
     assert all(item.image_folder.startswith(f"images/{product.product_key}/") for item in variants)
 
 
@@ -240,7 +240,7 @@ def test_media_upload_persists_real_image_bytes_and_downloads_inline(
     assert stored_path.read_bytes() == PNG_1X1
 
 
-def test_create_validates_sku_uniqueness_before_insert() -> None:
+def test_create_ignores_manual_sku_and_issues_distinct_sequence_numbers() -> None:
     db = _session()
     first_payload = ProductKnowledgeCreate(
         parent_sku="pump family",
@@ -255,10 +255,11 @@ def test_create_validates_sku_uniqueness_before_insert() -> None:
         target_market="US",
     )
 
-    create_product(db, payload=first_payload, scope_context=_scope())
+    first = create_product(db, payload=first_payload, scope_context=_scope())
+    second = create_product(db, payload=duplicate_payload, scope_context=_scope())
 
-    with pytest.raises(KConflictError, match="SKU already exists"):
-        create_product(db, payload=duplicate_payload, scope_context=_scope())
+    assert first.sku == "UNC-001"
+    assert second.sku == "UNC-002"
 
 
 def test_create_rejects_manual_variant_sku() -> None:

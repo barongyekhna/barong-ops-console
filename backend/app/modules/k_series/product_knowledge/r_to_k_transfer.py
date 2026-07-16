@@ -22,6 +22,7 @@ from . import category_resolver as CR
 from .constants import TARGET_ORGANIZATION_NAME
 from .models import KProductKnowledgeProduct
 from .scope_shim import KScopeContext
+from .sku_allocator import ensure_product_sku
 
 _RW_COLUMNS = (
     "asin, marketplace, title, brand, category_id, category_path, "
@@ -145,8 +146,7 @@ def transfer_from_rw(
                     long_tail_keywords_json=long_tail_keywords,
                     brand_name=None,
                     detected_brand_terms=(brand_terms or None),
-                    sku=asin,
-                    parent_sku=asin,
+                    asin_reference=asin,
                     target_market="US",
                     product_type="simple_product",
                     canonical_language="en",
@@ -165,11 +165,13 @@ def transfer_from_rw(
                 # 新 Keepa 类目自动创建（#7）+ 按 channel 自动落类目（#5/#6）
                 CR.ensure_amazon_category(db, rw["category_id"], rw["category_path"])
                 CR.assign_category(db, product)
+                ensure_product_sku(db, product, force_allocate=True)
                 db.add(product)
                 db.flush()
             created.append(
                 {
                     "asin": asin,
+                    "sku": product.sku,
                     "product_id": str(product.id),
                     "channel": channel,
                     "amazon_category_id": product.amazon_category_id,

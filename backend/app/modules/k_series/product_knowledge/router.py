@@ -131,6 +131,7 @@ from .schemas import (
     ProductKnowledgeWorkflowStartRequest,
 )
 from .scope_shim import KScopeContext, apply_scope_filters
+from .sku_allocator import ensure_product_sku
 from .service import (
     archive_product,
     create_product,
@@ -769,17 +770,16 @@ def _product_by_ref(
         canonical_language="en",
         raw_input_text=f"Runtime shell for {normalized}",
         raw_input_language="en",
-        parent_sku=normalized,
-        sku=normalized,
         source_system="k_adapter",
     )
     db.add(product)
-    default_variant_sku = f"{normalized}-SHELL"
+    issued_sku = ensure_product_sku(db, product, force_allocate=True)
+    default_variant_sku = f"{issued_sku}-SHELL"
     db.add(
         KProductKnowledgeVariant(
             id=uuid4(),
             product_id=product.id,
-            parent_sku=normalized,
+            parent_sku=issued_sku,
             variant_sku=default_variant_sku,
             variant_hash="SHELL",
             attributes_json={"default_variant": True, "shell_product": True},
@@ -1403,6 +1403,7 @@ def _product_full_ai_payload(
         "description": product.long_description_en or product.short_description_en,
         "short_description": product.short_description_en,
         "long_description": product.long_description_en,
+        "structured_specs_json": product.structured_specs_json,
         "attributes": attributes,
         "variants": variants,
         "keywords": keywords,

@@ -50,6 +50,11 @@ from .models import (
     KProductKnowledgeProduct,
     KProductKnowledgeVariant,
 )
+from .info_overlay import (
+    OverlayContractError,
+    compose_info_overlay,
+    normalize_overlay_contract,
+)
 from .scope_shim import KScopeContext
 from .workflow_engine import IMAGE_SOURCE_I_SYSTEM, _user_uuid
 
@@ -84,6 +89,14 @@ HOUSE_STYLE_BLOCK = (
     "catalog aesthetic. No props, no text, no clutter. CONSISTENCY: same "
     "product as the reference image — do not alter product shape, colour, or "
     "markings."
+)
+
+INFO_OVERLAY_BASE_BLOCK = (
+    "\n\nINFOGRAPHIC BASE (programmatic overlay follows): Generate a clean image "
+    "base with generous uncluttered negative space around the requested callout "
+    "areas. Do NOT render text, letters, numbers, labels, leader lines, arrows, "
+    "measurement lines, badges, or icons. The server will add verified supplier "
+    "specifications after image generation."
 )
 
 # R->K 参考图外链只可能来自这些图源 (Amazon CDN 现在, 1688/alicdn 之后).
@@ -170,18 +183,84 @@ def _resolve_aspect_ratio(
     return "16:9"
 
 
-def _compose_prompt(spec: dict[str, Any], instruction: dict[str, Any]) -> str:
+def _compose_prompt(
+    spec: dict[str, Any],
+    instruction: dict[str, Any],
+    *,
+    allow_overlay: bool = True,
+) -> str:
     prompt = str(spec.get("prompt") or "").strip()
     style_block = str(instruction.get("style_block") or "").strip()
     if style_block and "STYLE BLOCK" not in prompt.upper():
         prompt = f"{prompt}\n\n{style_block}" if prompt else style_block
-    overlay = str(spec.get("overlay_text") or "").strip()
-    if overlay and overlay.lower() not in prompt.lower():
-        prompt += (
-            "\n\nOVERLAY TEXT (render this exact text on the image, correctly "
-            f'spelled, clean typography): "{overlay}"'
-        )
+    # Never ask the image model to spell an information overlay.  Legacy
+    # ``overlay_text`` triggers a clean base too, but is intentionally not
+    # rendered because it is not tied to a structured supplier-spec field.
+    if allow_overlay and (
+        spec.get("overlay") or str(spec.get("overlay_text") or "").strip()
+    ):
+        prompt += INFO_OVERLAY_BASE_BLOCK
     return prompt
+
+
+def _overlay_snapshot(
+    spec: dict[str, Any],
+    *,
+    product_id: UUID | None = None,
+    position: int | None = None,
+    asset_role: str | None = None,
+) -> dict[str, Any] | None:
+    """Normalize the overlay without turning a malformed brief into a blocker."""
+    if asset_role == ASSET_ROLE_MAIN:
+        if spec.get("overlay"):
+            _LOGGER.warning(
+                "main image overlay ignored product=%s position=%s",
+                product_id,
+                position,
+            )
+        return None
+    try:
+        return normalize_overlay_contract(spec.get("overlay"))
+    except OverlayContractError as exc:
+        _LOGGER.warning(
+            "invalid info overlay ignored product=%s position=%s: %s",
+            product_id,
+            position,
+            exc,
+        )
+        return None
+
+
+def _decode_overlay_snapshot(
+    value: Any,
+    *,
+    asset_role: str | None = None,
+) -> dict[str, Any] | None:
+    if not value:
+        return None
+    # Defense in depth for legacy/corrupt queue rows: storefront/feed main
+    # images must remain text-free even if enqueue-time validation was bypassed.
+    if asset_role == ASSET_ROLE_MAIN:
+        _LOGGER.warning("queued main image overlay ignored")
+        return None
+    candidate = value
+    if isinstance(value, str):
+        try:
+            candidate = json.loads(value)
+        except ValueError:
+            return None
+    try:
+        return normalize_overlay_contract(candidate)
+    except OverlayContractError:
+        return None
+
+
+def _role_label(
+    spec: dict[str, Any],
+    overlay: dict[str, Any] | None,
+) -> str | None:
+    value = overlay.get("role") if overlay is not None else spec.get("role")
+    return str(value or "").strip()[:128] or None
 
 
 def _spec_seo(spec: dict[str, Any]) -> dict[str, str]:
@@ -405,7 +484,18 @@ def enqueue_image_render_jobs(
     for position, spec in sorted(specs, key=lambda item: item[0]):
         if wanted is not None and position not in wanted:
             continue
-        prompt = _compose_prompt(spec, instruction if isinstance(instruction, dict) else {})
+        placement = _spec_placement(spec)
+        if placement == PLACEMENT_DESCRIPTION:
+            asset_role = ASSET_ROLE_DESCRIPTION
+        elif position == main_position:
+            asset_role = ASSET_ROLE_MAIN
+        else:
+            asset_role = ASSET_ROLE_GALLERY
+        prompt = _compose_prompt(
+            spec,
+            instruction if isinstance(instruction, dict) else {},
+            allow_overlay=asset_role != ASSET_ROLE_MAIN,
+        )
         if not prompt:
             raise KImageRenderError(
                 "IMAGE_PROMPT_MISSING",
@@ -424,17 +514,16 @@ def enqueue_image_render_jobs(
                 f" A previous render of this image FAILED brand review: {hint}"
                 " — make absolutely sure that mark is gone this time."
             )
-        placement = _spec_placement(spec)
-        if placement == PLACEMENT_DESCRIPTION:
-            asset_role = ASSET_ROLE_DESCRIPTION
-        elif position == main_position:
-            asset_role = ASSET_ROLE_MAIN
-        else:
-            asset_role = ASSET_ROLE_GALLERY
         # 视觉家规兜底：干净产品图（主图/画廊图）无条件套明亮暖白家规块，
         # 保证全线出图统一、绝不发灰——即便 AI 作图指令漂移到别的风格。
         if asset_role in _HOUSE_STYLE_ROLES and _HOUSE_STYLE_MARKER not in prompt:
             prompt += HOUSE_STYLE_BLOCK
+        overlay = _overlay_snapshot(
+            spec,
+            product_id=product.id,
+            position=position,
+            asset_role=asset_role,
+        )
         job_id = uuid4()
         db.execute(
             text(
@@ -457,11 +546,13 @@ def enqueue_image_render_jobs(
                 "batch_id": batch_id,
                 "position": position,
                 "placement": placement,
-                "role_label": str(spec.get("role") or "")[:128] or None,
+                "role_label": _role_label(spec, overlay),
                 "asset_role": asset_role,
                 "mission": str(spec.get("mission") or "") or None,
                 "prompt": prompt,
-                "overlay_text": str(spec.get("overlay_text") or "") or None,
+                # The historical column remains Text to avoid another queue
+                # migration; it now stores the normalized v1 overlay JSON.
+                "overlay_text": _json_dumps(overlay) if overlay else None,
                 "aspect_ratio": _resolve_aspect_ratio(
                     spec,
                     instruction if isinstance(instruction, dict) else {},
@@ -735,6 +826,33 @@ def _store_render_asset(
     user: User | None,
 ) -> KProductKnowledgeMediaAsset:
     del mime_type, width, height  # superseded by the mandatory post-process
+    overlay = _decode_overlay_snapshot(
+        job.get("overlay_text"),
+        asset_role=str(job.get("asset_role") or ""),
+    )
+    overlay_result: dict[str, Any] = {
+        "status": "not_requested",
+        "applied_items": 0,
+    }
+    if overlay is not None:
+        try:
+            contents, overlay_result = compose_info_overlay(
+                contents,
+                overlay,
+                getattr(product, "structured_specs_json", None),
+            )
+        except Exception as exc:  # noqa: BLE001 - overlay is fail-safe
+            overlay_result = {
+                "status": "failed_open",
+                "applied_items": 0,
+                "error": _error_text(exc),
+            }
+            _LOGGER.warning(
+                "info overlay failed open product=%s position=%s: %s",
+                product.id,
+                job.get("position"),
+                exc,
+            )
     contents, mime_type, width, height = _postprocess_rendered_image(
         contents, str(job["placement"])
     )
@@ -802,7 +920,8 @@ def _store_render_asset(
             "alt": str(seo.get("alt") or ""),
             "caption": str(seo.get("caption") or ""),
             "description": str(seo.get("description") or ""),
-            "overlay_text": job.get("overlay_text") or "",
+            "overlay": overlay,
+            "overlay_result": overlay_result,
             "mission": job.get("mission") or "",
             "role_label": job.get("role_label") or "",
             # provenance
@@ -1355,6 +1474,23 @@ def enqueue_rework_job(
             "this exact image — keep its composition, style, and content, and "
             "apply ONLY the revision above."
         )
+    rework_overlay = (
+        meta.get("overlay")
+        if asset.asset_role != ASSET_ROLE_MAIN
+        and isinstance(meta.get("overlay"), dict)
+        else None
+    )
+    if isinstance(rework_overlay, dict):
+        # Rework instructions are appended after the original prompt and are
+        # otherwise declared authoritative. Re-assert this pipeline boundary
+        # last so a revision can never send verified labels back to the image
+        # model instead of the deterministic compositor.
+        prompt += (
+            "\n\nFINAL PIPELINE CONSTRAINT (the revision cannot override this): "
+            "return a clean base with no text, letters, numbers, labels, icons, "
+            "arrows, leader lines, or dimension lines. The server will reapply "
+            "the verified structured overlay after this render."
+        )
 
     position = int(meta.get("position") or 0)
     seo = {
@@ -1386,11 +1522,18 @@ def enqueue_rework_job(
             "batch_id": batch_id,
             "position": position,
             "placement": meta.get("placement") or PLACEMENT_GALLERY,
-            "role_label": str(meta.get("role_label") or "")[:128] or None,
+            "role_label": _role_label(
+                {"role": meta.get("role_label")},
+                rework_overlay,
+            ),
             "asset_role": asset.asset_role,
             "mission": str(meta.get("mission") or "") or None,
             "prompt": prompt,
-            "overlay_text": str(meta.get("overlay_text") or "") or None,
+            "overlay_text": (
+                _json_dumps(rework_overlay)
+                if isinstance(rework_overlay, dict)
+                else None
+            ),
             "aspect_ratio": str(meta.get("aspect_ratio") or "1:1"),
             "seo_json": _json_dumps(seo),
             "username": user.username if user is not None else None,

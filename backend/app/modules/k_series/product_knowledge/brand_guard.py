@@ -120,6 +120,12 @@ def collect_text_surfaces(
                 value = spec.get(key)
                 if isinstance(value, str) and value.strip():
                     surfaces.append((f"image_brief[{index}].{key}", value))
+            if isinstance(spec.get("overlay"), dict):
+                _walk_strings(
+                    spec["overlay"],
+                    f"image_brief[{index}].overlay",
+                    surfaces,
+                )
     for asset in _render_assets(db, product):
         meta = asset.metadata_json if isinstance(asset.metadata_json, dict) else {}
         position = meta.get("position")
@@ -127,6 +133,12 @@ def collect_text_surfaces(
             value = meta.get(key)
             if isinstance(value, str) and value.strip():
                 surfaces.append((f"render_image[{position}].{key}", value))
+        if isinstance(meta.get("overlay"), dict):
+            _walk_strings(
+                meta["overlay"],
+                f"render_image[{position}].overlay",
+                surfaces,
+            )
     return surfaces
 
 
@@ -156,8 +168,8 @@ BRAND_REMOVAL_PROMPT_BLOCK = (
     "removed mark with a clean blank surface matching the product's material, "
     "color, and texture. Do NOT alter the product's shape, structure, "
     "proportions, or colors in any other way. Packaging, tags, and background "
-    "props must also carry no readable text or logos. The ONLY text allowed in "
-    "the final image is overlay text explicitly requested in this prompt."
+    "props must also carry no readable text or logos. No text is allowed in "
+    "the model output; verified information overlays are added server-side."
 )
 
 
