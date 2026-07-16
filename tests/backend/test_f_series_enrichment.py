@@ -17,46 +17,46 @@ from backend.app.modules.f_series.enrichment import serper_client
 pytestmark = pytest.mark.integration
 
 _TREE_ROWS = (
-    ("f988", "Sporting Goods", "Sporting Goods", None, 1, False),
+    ("990988", "Sporting Goods", "Sporting Goods", None, 1, False),
     (
-        "f989",
+        "990989",
         "Outdoor Recreation",
         "Sporting Goods > Outdoor Recreation",
-        "f988",
+        "990988",
         2,
         False,
     ),
     (
-        "f990",
+        "990990",
         "Camping & Hiking",
         "Sporting Goods > Outdoor Recreation > Camping & Hiking",
-        "f989",
+        "990989",
         3,
         False,
     ),
     (
-        "f991",
+        "990991",
         "Camp Showers",
         "Sporting Goods > Outdoor Recreation > Camping & Hiking > Camp Showers",
-        "f990",
+        "990990",
         4,
         True,
     ),
     (
-        "f992",
+        "990992",
         "Knives",
         "Sporting Goods > Hunting > Knives",
-        "f988",
+        "990988",
         2,
         True,
     ),
 )
 
 _ZH_NAMES = {
-    "f988": "体育用品",
-    "f989": "户外休闲",
-    "f990": "露营与徒步",
-    "f991": "便携式淋浴与更衣帐篷",
+    "990988": "体育用品",
+    "990989": "户外休闲",
+    "990990": "露营与徒步",
+    "990991": "便携式淋浴与更衣帐篷",
 }
 
 _SERPER_FIXTURE = {
@@ -136,7 +136,10 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
             )
         )
         db.execute(
-            text("DELETE FROM k_category_google WHERE id LIKE 'f98%' OR id LIKE 'f99%'")
+            text(
+                "DELETE FROM k_category_google "
+                "WHERE id IN ('990988', '990989', '990990', '990991', '990992')"
+            )
         )
         db.execute(
             text(
@@ -151,37 +154,41 @@ def f_env(owner_client: TestClient, monkeypatch: pytest.MonkeyPatch) -> TestClie
 def test_tree_browse_and_search(f_env: TestClient) -> None:
     response = f_env.get("/api/app/f/categories/tree")
     assert response.status_code == 200
-    roots = {item["id"]: item for item in response.json()["items"] if item["id"].startswith("f9")}
-    assert "f988" in roots
-    assert roots["f988"]["children_count"] >= 2
+    roots = {
+        item["id"]: item
+        for item in response.json()["items"]
+        if item["id"].startswith("9909")
+    }
+    assert "990988" in roots
+    assert roots["990988"]["children_count"] >= 2
 
-    response = f_env.get("/api/app/f/categories/tree", params={"parent_id": "f990"})
+    response = f_env.get("/api/app/f/categories/tree", params={"parent_id": "990990"})
     assert response.status_code == 200
     items = response.json()["items"]
-    assert [item["id"] for item in items] == ["f991"]
+    assert [item["id"] for item in items] == ["990991"]
 
     response = f_env.get("/api/app/f/categories/search", params={"q": "camp show"})
     assert response.status_code == 200
-    assert any(item["id"] == "f991" for item in response.json()["items"])
+    assert any(item["id"] == "990991" for item in response.json()["items"])
 
     # 中文名随树返回 + 中文搜索命中
     roots_zh = {item["id"]: item["name_zh"] for item in roots.values()}
-    assert roots_zh.get("f988") == "体育用品"
+    assert roots_zh.get("990988") == "体育用品"
     response = f_env.get("/api/app/f/categories/search", params={"q": "淋浴"})
     assert response.status_code == 200
     matched = response.json()["items"]
-    assert any(item["id"] == "f991" for item in matched)
+    assert any(item["id"] == "990991" for item in matched)
     assert any(item["name_zh"] == "便携式淋浴与更衣帐篷" for item in matched)
 
 
 def test_run_harvests_keywords_over_subtree(f_env: TestClient) -> None:
     response = f_env.post(
         "/api/app/f/runs",
-        json={"category_ids": ["f989"], "mode": "keywords_only"},
+        json={"category_ids": ["990989"], "mode": "keywords_only"},
     )
     assert response.status_code == 201, response.text
     run = response.json()
-    # f989 展开 = f989 + f990 + f991 三个节点
+    # 990989 展开 = 990989 + 990990 + 990991 三个节点
     assert run["categories_total"] == 3
 
     response = f_env.get(f"/api/app/f/runs/{run['run_id']}")
@@ -193,7 +200,7 @@ def test_run_harvests_keywords_over_subtree(f_env: TestClient) -> None:
     # 每节点 4 个词（2 related + 1 PAA + 1 organic）
     assert finished["keywords_found"] == 12
 
-    response = f_env.get("/api/app/f/keywords", params={"category_id": "f991"})
+    response = f_env.get("/api/app/f/keywords", params={"category_id": "990991"})
     assert response.status_code == 200
     payload = response.json()
     assert payload["total"] == 4
@@ -206,7 +213,7 @@ def test_run_harvests_keywords_over_subtree(f_env: TestClient) -> None:
     # 重跑同一选段：全部去重，keywords_found = 0
     response = f_env.post(
         "/api/app/f/runs",
-        json={"category_ids": ["f989"], "mode": "keywords_only"},
+        json={"category_ids": ["990989"], "mode": "keywords_only"},
     )
     assert response.status_code == 201
     rerun = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
@@ -214,7 +221,7 @@ def test_run_harvests_keywords_over_subtree(f_env: TestClient) -> None:
     assert rerun["keywords_found"] == 0
 
     # 树上的 F 标记层统计跟着更新
-    response = f_env.get("/api/app/f/categories/tree", params={"parent_id": "f990"})
+    response = f_env.get("/api/app/f/categories/tree", params={"parent_id": "990990"})
     assert response.json()["items"][0]["keywords_count"] == 4
 
 
@@ -224,7 +231,7 @@ def test_run_stops_gracefully_when_quota_exhausted(
     monkeypatch.setenv("RA_SERPER_DAILY_BUDGET", "2")
     response = f_env.post(
         "/api/app/f/runs",
-        json={"category_ids": ["f989"], "mode": "keywords_only"},
+        json={"category_ids": ["990989"], "mode": "keywords_only"},
     )
     assert response.status_code == 201
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
@@ -241,7 +248,7 @@ def test_candidate_red_flag_review_and_import_to_k(f_env: TestClient) -> None:
     response = f_env.post(
         "/api/app/f/candidates",
         json={
-            "category_id": "f992",
+            "category_id": "990992",
             "title": "outdoor folding knife",
             "source_url": "https://detail.1688.com/offer/123.html",
             "price_cny": "12.50",
@@ -262,7 +269,7 @@ def test_candidate_red_flag_review_and_import_to_k(f_env: TestClient) -> None:
     response = f_env.post(
         "/api/app/f/candidates",
         json={
-            "category_id": "f991",
+            "category_id": "990991",
             "title": "便携太阳能淋浴袋 camping shower",
             "source_url": "https://detail.1688.com/offer/456.html",
             "supplier_name": "示例供应商",
@@ -296,7 +303,7 @@ def test_candidate_red_flag_review_and_import_to_k(f_env: TestClient) -> None:
         ).mappings().first()
     assert row is not None
     assert row["channel"] == "dtc"
-    assert row["google_product_category"] == "f991"
+    assert row["google_product_category"] == "990991"
     assert row["category_review_needed"] is False
     assert row["source_system"] == "f_enrichment"
     assert row["moq"] == 50
@@ -425,13 +432,13 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     )
 
     response = f_env.post(
-        "/api/app/f/runs", json={"category_ids": ["f990"], "mode": "full"}
+        "/api/app/f/runs", json={"category_ids": ["990990"], "mode": "full"}
     )
     assert response.status_code == 201, response.text
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
     assert run["status"] == "succeeded"
     assert run["mode"] == "full"
-    # f990 子树 = f990 + f991 两个节点
+    # 990990 子树 = 990990 + 990991 两个节点
     assert run["categories_done"] == 2
     assert run["keywords_found"] == 8
     # 每节点：2 个画像产品 × 各 2 条相关 offer（垃圾 offer 被拦）
@@ -445,7 +452,8 @@ def test_full_run_harvests_keywords_and_sources_candidates(
     assert "跨境全站词搜权限未开通" in (run["error"] or "")
 
     response = f_env.get(
-        "/api/app/f/candidates", params={"category_id": "f991", "status": "pending_review"}
+        "/api/app/f/candidates",
+        params={"category_id": "990991", "status": "pending_review"},
     )
     items = response.json()["items"]
     assert len(items) == 4
@@ -473,7 +481,7 @@ def test_full_run_harvests_keywords_and_sources_candidates(
 
     # 同类目重跑 sourcing_only：offer URL 相同 → 全部去重 → 记「无新增货源」
     response = f_env.post(
-        "/api/app/f/runs", json={"category_ids": ["f991"], "mode": "sourcing_only"}
+        "/api/app/f/runs", json={"category_ids": ["990991"], "mode": "sourcing_only"}
     )
     assert response.status_code == 201
     rerun = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
@@ -502,7 +510,7 @@ def test_sourcing_uses_crossborder_pool_when_authorized(
     )
 
     response = f_env.post(
-        "/api/app/f/runs", json={"category_ids": ["f991"], "mode": "sourcing_only"}
+        "/api/app/f/runs", json={"category_ids": ["990991"], "mode": "sourcing_only"}
     )
     assert response.status_code == 201
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
@@ -554,7 +562,7 @@ def test_sourcing_image_relay_tops_up_from_cps_pool(
     monkeypatch.setattr(serper_client, "serper_images", fake_images)
 
     response = f_env.post(
-        "/api/app/f/runs", json={"category_ids": ["f991"], "mode": "sourcing_only"}
+        "/api/app/f/runs", json={"category_ids": ["990991"], "mode": "sourcing_only"}
     )
     assert response.status_code == 201
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
@@ -571,7 +579,7 @@ def test_sourcing_image_relay_tops_up_from_cps_pool(
 
     # 图搜候选与词搜候选同组同评分体系（组内 top3 名次覆盖全组）
     items = f_env.get(
-        "/api/app/f/candidates", params={"category_id": "f991", "limit": 50}
+        "/api/app/f/candidates", params={"category_id": "990991", "limit": 50}
     ).json()["items"]
     group = [i for i in items if i["profile_product_zh"] == "露营淋浴袋"]
     assert len(group) == 6
@@ -580,7 +588,7 @@ def test_sourcing_image_relay_tops_up_from_cps_pool(
     assert all(i["score"] is not None for i in group)
 
     # 市场参考页随种子图顺手收割：独立站优先（3 家独立站在，amazon 不占位）
-    refs = f_env.get("/api/app/f/categories/f991/market-refs").json()["groups"]
+    refs = f_env.get("/api/app/f/categories/990991/market-refs").json()["groups"]
     assert set(refs.keys()) == {"露营淋浴袋", "折叠水桶"}
     shower_refs = refs["露营淋浴袋"]
     assert len(shower_refs) == 3
@@ -604,7 +612,7 @@ def test_sourcing_stops_when_f_quota_exhausted(
     monkeypatch.setenv("F_1688_APP_CALLS_DAILY_BUDGET", "1")
 
     response = f_env.post(
-        "/api/app/f/runs", json={"category_ids": ["f990"], "mode": "sourcing_only"}
+        "/api/app/f/runs", json={"category_ids": ["990990"], "mode": "sourcing_only"}
     )
     assert response.status_code == 201
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
@@ -614,7 +622,7 @@ def test_sourcing_stops_when_f_quota_exhausted(
     assert fake.calls == ["露营淋浴袋"]
     # 额度尽前已搜完的产品成果保留在候选池（run 计数器停在中断点）
     items = f_env.get(
-        "/api/app/f/candidates", params={"category_id": "f990"}
+        "/api/app/f/candidates", params={"category_id": "990990"}
     ).json()["items"]
     assert len(items) == 2
     assert all("露营淋浴袋" in item["title"] for item in items)
@@ -623,7 +631,7 @@ def test_sourcing_stops_when_f_quota_exhausted(
 def test_full_run_degrades_gracefully_without_1688_key(f_env: TestClient) -> None:
     # 不 mock provider：SecretManager 里没有 alibaba1688 密钥 → 找货段跳过，词照收
     response = f_env.post(
-        "/api/app/f/runs", json={"category_ids": ["f991"], "mode": "full"}
+        "/api/app/f/runs", json={"category_ids": ["990991"], "mode": "full"}
     )
     assert response.status_code == 201
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
@@ -634,7 +642,7 @@ def test_full_run_degrades_gracefully_without_1688_key(f_env: TestClient) -> Non
 
     # sourcing_only 无密钥 → 直接失败，不空转
     response = f_env.post(
-        "/api/app/f/runs", json={"category_ids": ["f991"], "mode": "sourcing_only"}
+        "/api/app/f/runs", json={"category_ids": ["990991"], "mode": "sourcing_only"}
     )
     assert response.status_code == 201
     run = f_env.get(f"/api/app/f/runs/{response.json()['run_id']}").json()
@@ -670,12 +678,12 @@ def test_category_profile_generate_and_cache(
     monkeypatch.setattr(profiles, "_call_deepseek_profile", fake_deepseek)
 
     # 无缓存：GET exists=false
-    response = f_env.get("/api/app/f/categories/f991/profile")
+    response = f_env.get("/api/app/f/categories/990991/profile")
     assert response.status_code == 200
     assert response.json()["exists"] is False
 
     # 生成：POST 调 DeepSeek 一次并落库
-    response = f_env.post("/api/app/f/categories/f991/profile")
+    response = f_env.post("/api/app/f/categories/990991/profile")
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["exists"] is True
@@ -683,8 +691,8 @@ def test_category_profile_generate_and_cache(
     assert calls["n"] == 1
 
     # 缓存命中：GET 直接回、重复 POST 不再调 DeepSeek
-    assert f_env.get("/api/app/f/categories/f991/profile").json()["exists"] is True
-    assert f_env.post("/api/app/f/categories/f991/profile").status_code == 200
+    assert f_env.get("/api/app/f/categories/990991/profile").json()["exists"] is True
+    assert f_env.post("/api/app/f/categories/990991/profile").status_code == 200
     assert calls["n"] == 1
 
     # 不存在的类目 → 404
@@ -710,7 +718,7 @@ def test_candidate_image_proxy_caches_and_gates_hosts(
     created = f_env.post(
         "/api/app/f/candidates",
         json={
-            "category_id": "f991",
+            "category_id": "990991",
             "title": "带图候选",
             "image_url": "https://cbu01.alicdn.com/img/test.jpg",
         },
@@ -733,7 +741,7 @@ def test_candidate_image_proxy_caches_and_gates_hosts(
     bad = f_env.post(
         "/api/app/f/candidates",
         json={
-            "category_id": "f991",
+            "category_id": "990991",
             "title": "白名单外图源",
             "image_url": "https://evil.example.com/x.jpg",
         },
@@ -779,14 +787,14 @@ def test_f_endpoints_require_permission(
     assert auth_client.get("/api/app/f/categories/tree").status_code == 403
     assert (
         auth_client.post(
-            "/api/app/f/runs", json={"category_ids": ["f989"]}
+            "/api/app/f/runs", json={"category_ids": ["990989"]}
         ).status_code
         == 403
     )
     assert (
         auth_client.post(
             "/api/app/f/candidates",
-            json={"category_id": "f991", "title": "x"},
+            json={"category_id": "990991", "title": "x"},
         ).status_code
         == 403
     )

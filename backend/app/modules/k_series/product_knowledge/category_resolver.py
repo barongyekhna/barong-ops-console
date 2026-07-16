@@ -19,8 +19,11 @@ from decimal import Decimal
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from ....services.data_isolation import without_org_data_isolation
+
 _REVIEW_CONF_FLOOR = Decimal("0.6")
 _GOOGLE_PATH_SEPARATOR = re.compile(r"\s*[>›]\s*")
+_GOOGLE_CATEGORY_ID = re.compile(r"[0-9]+")
 
 
 def _norm(s: str) -> str:
@@ -169,6 +172,22 @@ def _google_category_path_from_full_path(
     return chain
 
 
+def _google_category_by_full_path(
+    db: Session, full_path: str
+) -> dict[str, object] | None:
+    segments = _split_google_path(full_path)
+    if not segments:
+        return None
+    expected_path = _path_key(segments)
+    matches = [
+        candidate
+        for candidate in _google_categories_named(db, segments[-1])
+        if _path_key(_split_google_path(str(candidate.get("full_path") or "")))
+        == expected_path
+    ]
+    return matches[0] if len(matches) == 1 else None
+
+
 def google_category_path(
     db: Session, google_id: str | None
 ) -> list[dict[str, str]]:
@@ -197,6 +216,56 @@ def google_category_path(
         {"google_id": str(row["id"]), "name": str(row["name"])}
         for row in chain
     ]
+
+
+def bind_google_category_id(db: Session, product, google_id: object) -> bool:
+    """The only write boundary for a K product's Google taxonomy id.
+
+    Google taxonomy primary keys are ASCII decimal ids.  AI category paths and
+    merchant taxonomy text must live in hint/path fields, never in the id field.
+    Returning ``False`` lets callers mark the product for category review
+    without ever persisting an invalid value.
+    """
+    normalized = str(google_id or "").strip()
+    with without_org_data_isolation():
+        category_exists = (
+            _GOOGLE_CATEGORY_ID.fullmatch(normalized) is not None
+            and _google_category_by_id(db, normalized) is not None
+        )
+    if not category_exists:
+        normalized = ""
+    product.google_product_category = normalized or None
+    return bool(normalized)
+
+
+def repair_legacy_google_category_path(db: Session, product) -> bool:
+    """Replace one legacy path value with its unique Google taxonomy leaf id."""
+    raw_value = str(getattr(product, "google_product_category", None) or "").strip()
+    if not raw_value or _GOOGLE_CATEGORY_ID.fullmatch(raw_value) is not None:
+        return False
+    with without_org_data_isolation():
+        leaf = _google_category_by_full_path(db, raw_value)
+    if leaf is None or not bind_google_category_id(db, product, leaf.get("id")):
+        return False
+    product.category_hint = raw_value[:255]
+    product.category_review_needed = False
+    return True
+
+
+def assign_manual_category(
+    db: Session, product, category_id: str | None
+) -> None:
+    """Bind a category selected from the channel-specific taxonomy tree."""
+    if not category_id:
+        return
+    channel = (getattr(product, "channel", None) or "dtc").strip().lower()
+    if channel == "amazon":
+        product.amazon_category_id = category_id.strip()
+        product.category_review_needed = False
+        return
+    product.category_review_needed = not bind_google_category_id(
+        db, product, category_id
+    )
 
 
 def ensure_amazon_category(
@@ -306,10 +375,10 @@ def assign_category(db: Session, product) -> None:
         product.category_review_needed = True
         return
     google_id, conf = google_for_amazon(db, amz)
-    product.google_product_category = google_id
+    category_bound = bind_google_category_id(db, product, google_id)
     product.category_confidence = conf
     product.category_review_needed = bool(
-        google_id is None or (conf is not None and conf < _REVIEW_CONF_FLOOR)
+        not category_bound or (conf is not None and conf < _REVIEW_CONF_FLOOR)
     )
 
 

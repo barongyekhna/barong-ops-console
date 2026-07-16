@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
 from backend.app.modules.k_series.product_knowledge.category_resolver import (
+    bind_google_category_id,
     google_category_path,
+    repair_legacy_google_category_path,
 )
 
 pytestmark = pytest.mark.unit
@@ -223,3 +226,61 @@ def test_unknown_or_empty_google_category_returns_empty_path() -> None:
     assert google_category_path(db, "") == []  # type: ignore[arg-type]
     assert google_category_path(db, "unknown") == []  # type: ignore[arg-type]
     assert db.id_lookups == ["unknown"]
+
+
+def test_google_category_binding_accepts_only_existing_numeric_ids() -> None:
+    db = _FakeSession(
+        [
+            _row(
+                "7401",
+                "Pathway Lighting",
+                "Lighting > Pathway Lighting",
+                parent_id=None,
+                level=2,
+            )
+        ]
+    )
+    product = SimpleNamespace(google_product_category=None)
+
+    assert bind_google_category_id(  # type: ignore[arg-type]
+        db, product, " 7401 "
+    ) is True
+    assert product.google_product_category == "7401"
+
+    assert bind_google_category_id(  # type: ignore[arg-type]
+        db, product, "Lighting > Pathway Lighting"
+    ) is False
+    assert product.google_product_category is None
+
+    assert bind_google_category_id(  # type: ignore[arg-type]
+        db, product, "9999"
+    ) is False
+    assert product.google_product_category is None
+
+
+def test_legacy_google_category_path_repairs_to_unique_leaf_id() -> None:
+    full_path = "Lighting > Pathway Lighting"
+    db = _FakeSession(
+        [
+            _row("7", "Lighting", "Lighting", parent_id=None, level=1),
+            _row(
+                "7401",
+                "Pathway Lighting",
+                full_path,
+                parent_id="7",
+                level=2,
+            ),
+        ]
+    )
+    product = SimpleNamespace(
+        google_product_category=full_path,
+        category_hint=None,
+        category_review_needed=True,
+    )
+
+    assert repair_legacy_google_category_path(  # type: ignore[arg-type]
+        db, product
+    ) is True
+    assert product.google_product_category == "7401"
+    assert product.category_hint == full_path
+    assert product.category_review_needed is False

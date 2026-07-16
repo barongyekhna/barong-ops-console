@@ -1,15 +1,25 @@
 from __future__ import annotations
 
+import json
+from decimal import Decimal
+from types import SimpleNamespace
 from typing import Any
 from uuid import UUID, uuid4
 
+import httpx
 import pytest
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import sessionmaker
 
 from backend.app.db.base import Base
 from backend.app.models.organization import OrganizationRecord
 from backend.app.models.user import User
+from backend.app.modules.k_series.product_knowledge import (
+    workflow_engine as workflow_module,
+)
+from backend.app.modules.k_series.product_knowledge.category_resolver import (
+    bind_google_category_id,
+)
 from backend.app.modules.k_series.product_knowledge.constants import (
     TARGET_ORGANIZATION_NAME,
 )
@@ -26,12 +36,13 @@ from backend.app.modules.k_series.product_knowledge.schemas import (
     ProductKnowledgeWorkflowExportRequest,
     ProductKnowledgeWorkflowStartRequest,
 )
-from backend.app.modules.k_series.product_knowledge import workflow_engine as workflow_module
 from backend.app.modules.k_series.product_knowledge.scope_shim import KScopeContext
 from backend.app.modules.k_series.product_knowledge.workflow_engine import (
     KWorkflowOrchestratorV2,
     KWorkflowStateMachineV2,
 )
+from backend.app.modules.p_series.upload import assemble as p_assemble
+from backend.app.modules.p_series.upload import wc_categories
 from backend.app.services.module_execution_gate import (
     ModuleExecutionContext,
     ModuleExecutionKey,
@@ -239,7 +250,7 @@ def test_v2_closed_loop_runs_to_risk_gate_then_exports_after_manual_gates():
         "selling_points": {"review_status": "approved"},
     }
     # The K→P hard gate requires a bound category for the product channel.
-    product.google_product_category = "Hardware > Pumps"
+    product.google_product_category = "7401"
     db.add(product)
     db.commit()
 
@@ -465,3 +476,236 @@ def test_v2_rollback_and_retry_continue_from_requested_step():
     assert KWorkflowStateMachineV2.current_state(retried, product) == (
         "RISK_PENDING_REVIEW"
     )
+
+
+def test_marketing_copy_keeps_google_id_and_p_builds_wc_category_hierarchy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    db, user, scope, engine, product = _setup_engine()
+    category_path_text = (
+        "Home & Garden > Lighting > Outdoor Lighting > Landscape Lighting > "
+        "Pathway Lighting"
+    )
+    taxonomy_rows = [
+        {
+            "id": "1",
+            "name": "Home & Garden",
+            "full_path": "Home & Garden",
+            "parent_id": None,
+            "level": 1,
+        },
+        {
+            "id": "2",
+            "name": "Lighting",
+            "full_path": "Home & Garden > Lighting",
+            "parent_id": "1",
+            "level": 2,
+        },
+        {
+            "id": "3",
+            "name": "Outdoor Lighting",
+            "full_path": "Home & Garden > Lighting > Outdoor Lighting",
+            "parent_id": "2",
+            "level": 3,
+        },
+        {
+            "id": "4",
+            "name": "Landscape Lighting",
+            "full_path": (
+                "Home & Garden > Lighting > Outdoor Lighting > Landscape Lighting"
+            ),
+            "parent_id": "3",
+            "level": 4,
+        },
+        {
+            "id": "7401",
+            "name": "Pathway Lighting",
+            "full_path": category_path_text,
+            "parent_id": "4",
+            "level": 5,
+        },
+    ]
+    db.execute(
+        text(
+            "CREATE TABLE k_category_google ("
+            "id TEXT PRIMARY KEY, name TEXT NOT NULL, full_path TEXT NOT NULL, "
+            "parent_id TEXT, level INTEGER NOT NULL)"
+        )
+    )
+    db.execute(
+        text(
+            "INSERT INTO k_category_google "
+            "(id, name, full_path, parent_id, level) "
+            "VALUES (:id, :name, :full_path, :parent_id, :level)"
+        ),
+        taxonomy_rows,
+    )
+    assert bind_google_category_id(db, product, "7401") is True
+    product.regular_price = Decimal("19.99")
+    product.price_currency = "USD"
+    product.stock_status = "in_stock"
+    product.inventory_quantity = 3
+    db.add(product)
+    db.commit()
+
+    base_provider = engine.provider_client
+    assert base_provider is not None
+
+    def provider(key: ModuleExecutionKey, payload: dict[str, Any]) -> dict[str, Any]:
+        if key.step_name == "marketing_copy_generation":
+            return {
+                "channel": "dtc",
+                "product_page_copy": {
+                    "marketing_copy": "Light every step with a clear path.",
+                    "key_bullets": ["Focused outdoor pathway illumination"],
+                },
+                # A legacy/extra AI key must be treated only as a text hint.
+                "google_product_category": category_path_text,
+            }
+        if key.step_name == "translate_zh":
+            return {"content": "清晰照亮户外小径。"}
+        output = base_provider(key, payload)
+        if key.step_name == "deepseek_enrichment":
+            return {
+                **output,
+                # Reproduces the original workflow/start corruption exactly.
+                "google_product_category": category_path_text,
+            }
+        return output
+
+    engine.provider_client = provider
+    execution = engine.run(
+        product_id=product.id,
+        payload=ProductKnowledgeWorkflowStartRequest(target_market="US"),
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+
+    assert execution.current_step == "risk_term_review_manual"
+    assert product.google_product_category == "7401"
+    assert product.category_hint == category_path_text
+    assert product.field_diff_json["deepseek_enrichment"]["category_hint"] == {
+        "before": None,
+        "after": category_path_text,
+    }
+
+    generated = engine.generate_marketing_copy(
+        product_id=product.id,
+        scope_context=scope,
+        request=None,  # type: ignore[arg-type]
+        user=user,
+    )
+    assert generated.google_product_category == "7401"
+    assert generated.category_hint == category_path_text
+
+    monkeypatch.setattr(p_assemble, "_image_assets", lambda *args, **kwargs: [])
+    monkeypatch.setattr(p_assemble, "_variants", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        p_assemble,
+        "build_description_html",
+        lambda *args, **kwargs: {
+            "html": "<p>Light every step.</p>",
+            "sections_emitted": [],
+        },
+    )
+
+    created: list[dict[str, object]] = []
+    next_term_id = iter((1001, 1002, 1003, 1004, 1005))
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.method == "GET":
+            return httpx.Response(200, json=[])
+        body = json.loads(request.content)
+        created.append(body)
+        term_id = next(next_term_id)
+        return httpx.Response(
+            201,
+            json={"id": term_id, **body},
+        )
+
+    settings = SimpleNamespace(
+        app_env="development",
+        wp_base_url="https://shop.example.test",
+        wp_app_user="category-bot",
+        wp_app_password="example-app-password",
+        wp_request_timeout_seconds=1.0,
+        wp_request_max_attempts=1,
+    )
+    with httpx.Client(
+        transport=httpx.MockTransport(handler),
+        follow_redirects=False,
+        trust_env=False,
+    ) as client:
+
+        def ensure_path(actual_db, path):
+            return wc_categories.ensure_wc_category_path(
+                actual_db,
+                path,
+                client=client,
+                settings=settings,  # type: ignore[arg-type]
+                sleep=lambda _: None,
+            )
+
+        monkeypatch.setattr(p_assemble, "ensure_wc_category_path", ensure_path)
+        package = p_assemble.assemble_upload_package(
+            db,
+            generated,
+            base_url="https://console.example.test",
+        )
+
+        # A product polluted before this fix is deterministically repaired on
+        # its next dispatch; the populated WC leaf cache avoids another POST.
+        generated.google_product_category = category_path_text
+        generated.category_review_needed = True
+        db.add(generated)
+        db.commit()
+        legacy_package = p_assemble.assemble_upload_package(
+            db,
+            generated,
+            base_url="https://console.example.test",
+        )
+
+    assert package.product.category.google_product_category == "7401"
+    assert package.product.category.path == [
+        "Home & Garden",
+        "Lighting",
+        "Outdoor Lighting",
+        "Landscape Lighting",
+        "Pathway Lighting",
+    ]
+    assert package.product.category.wc_category_id == 1005
+    assert legacy_package.product.category.google_product_category == "7401"
+    assert legacy_package.product.category.wc_category_id == 1005
+    assert generated.google_product_category == "7401"
+    assert generated.category_review_needed is False
+    assert [(item["name"], item["parent"]) for item in created] == [
+        ("Home & Garden", 0),
+        ("Lighting", 1001),
+        ("Outdoor Lighting", 1002),
+        ("Landscape Lighting", 1003),
+        ("Pathway Lighting", 1004),
+    ]
+    assert db.execute(
+        text(
+            "SELECT wc_term_id FROM k_category_wc_map "
+            "WHERE google_id = '7401'"
+        )
+    ).scalar_one() == 1005
+
+    # Old executions may already contain the polluted value in their saved
+    # field diff. A rollback must recover only the original taxonomy id.
+    generated.google_product_category = category_path_text
+    deepseek_diff = dict(generated.field_diff_json["deepseek_enrichment"])
+    deepseek_diff["google_product_category"] = {
+        "before": "7401",
+        "after": category_path_text,
+    }
+    generated.field_diff_json = {
+        **generated.field_diff_json,
+        "deepseek_enrichment": deepseek_diff,
+    }
+    workflow_module._rollback_deepseek_product_fields(db, generated)
+
+    assert generated.google_product_category == "7401"
+    assert generated.category_hint is None

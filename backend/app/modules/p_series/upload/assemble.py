@@ -38,6 +38,7 @@ from ...k_series.product_knowledge.brand_guard import (
 from ...k_series.product_knowledge.category_resolver import (
     category_is_bound,
     google_category_path,
+    repair_legacy_google_category_path,
 )
 from .description_html import (
     build_description_html,
@@ -261,6 +262,9 @@ def _resolve_wc_category(
         return None, None
 
     try:
+        if not google_id.isascii() or not google_id.isdecimal():
+            if repair_legacy_google_category_path(db, product):
+                google_id = str(product.google_product_category)
         resolved_path = google_category_path(db, google_id)
         category_path: list[str] = []
         for segment in resolved_path:

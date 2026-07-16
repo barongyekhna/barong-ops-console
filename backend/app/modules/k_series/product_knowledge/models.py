@@ -242,6 +242,8 @@ class KProductKnowledgeProduct(KUUIDPrimaryKeyMixin, KTimestampMixin, Base):
     ean: Mapped[str | None] = mapped_column(String(64), nullable=True)
     mpn: Mapped[str | None] = mapped_column(String(128), nullable=True)
     asin_reference: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # Numeric Google taxonomy id only. All writes go through
+    # category_resolver.bind_google_category_id; AI path text uses category_hint.
     google_product_category: Mapped[str | None] = mapped_column(
         String(255),
         nullable=True,

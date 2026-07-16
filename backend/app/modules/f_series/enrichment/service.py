@@ -20,6 +20,9 @@ from sqlalchemy import bindparam, func, select, text
 from sqlalchemy.orm import Session
 
 from ....models.user import User
+from ....modules.k_series.product_knowledge.category_resolver import (
+    bind_google_category_id,
+)
 from ....services.data_isolation import without_org_data_isolation
 from ..enrichment import constants as C
 from .models import FCategoryCandidate, FCategoryKeyword
@@ -375,10 +378,8 @@ def import_candidate_to_k(
         canonical_language="en",
         moq=candidate.moq,
         channel="dtc",
-        google_product_category=candidate.category_id,
         category_path=candidate.category_path,
         category_confidence=Decimal("1"),
-        category_review_needed=False,
         reference_image_url=candidate.image_url,
         source_system="f_enrichment",
         source_record_id=source_record_id,
@@ -386,6 +387,9 @@ def import_candidate_to_k(
         review_status="draft",
         raw_input_text="\n".join(raw_lines),
         raw_input_language="zh" if _contains_cjk(candidate.title) else "en",
+    )
+    product.category_review_needed = not bind_google_category_id(
+        db, product, candidate.category_id
     )
     db.add(product)
     candidate.status = "imported_to_k"

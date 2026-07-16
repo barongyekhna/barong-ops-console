@@ -312,7 +312,7 @@ def test_k_workflow_blocks_until_manual_risk_and_image_gates_pass():
         "selling_points": {"review_status": "approved"},
     }
     # The K→P hard gate requires a bound category for the product channel.
-    product.google_product_category = "Hardware > Pumps"
+    product.google_product_category = "7401"
     db.add(product)
     db.commit()
 

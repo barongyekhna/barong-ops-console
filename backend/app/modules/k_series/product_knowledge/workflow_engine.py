@@ -52,7 +52,7 @@ from .prompt_skills import (
     marketing_copy_instruction,
     plain_chinese_instruction,
 )
-from .category_resolver import category_is_bound
+from .category_resolver import bind_google_category_id, category_is_bound
 from .errors import KProductNotFoundError
 from .models import (
     KProductKnowledgeAIEvent,
@@ -136,7 +136,6 @@ DEEPSEEK_ENRICHMENT_FIELDS = (
     "primary_use_case_en",
     "target_customer_en",
     "category_hint",
-    "google_product_category",
     "merchant_product_type",
 )
 
@@ -836,16 +835,26 @@ class KProductKnowledgeWorkflowEngine:
             payload=ai_input,
         )
         diff: dict[str, dict[str, Any]] = {}
+        category_hint_before = product.category_hint
+        _capture_ai_category_hint(product, provider_output)
+        if product.category_hint != category_hint_before:
+            diff["category_hint"] = {
+                "before": category_hint_before,
+                "after": product.category_hint,
+            }
         for field in DEEPSEEK_ENRICHMENT_FIELDS:
             value = provider_output.get(field)
             if isinstance(value, str):
                 value = value.strip()
+                if field == "category_hint":
+                    value = value[:255]
             if value in (None, ""):
                 continue
             before = getattr(product, field, None)
             if before == value:
                 continue
-            diff[field] = {"before": before, "after": value}
+            original_before = diff.get(field, {}).get("before", before)
+            diff[field] = {"before": original_before, "after": value}
             setattr(product, field, value)
 
         product.deepseek_structured_output_json = provider_output
@@ -2431,11 +2440,20 @@ def _trace_has_step(
     return any(item.get("step") == step for item in execution.trace_json or [])
 
 
-def _rollback_deepseek_product_fields(product: KProductKnowledgeProduct) -> None:
+def _rollback_deepseek_product_fields(
+    db: Session, product: KProductKnowledgeProduct
+) -> None:
     diff = (product.field_diff_json or {}).get("deepseek_enrichment")
     if isinstance(diff, dict):
         for field, change in diff.items():
-            if field not in DEEPSEEK_ENRICHMENT_FIELDS or not isinstance(change, dict):
+            if not isinstance(change, dict):
+                continue
+            # Executions created before Google category ids became protected may
+            # still carry this field in their diff. Restore only a valid old id.
+            if field == "google_product_category":
+                bind_google_category_id(db, product, change.get("before"))
+                continue
+            if field not in DEEPSEEK_ENRICHMENT_FIELDS:
                 continue
             setattr(product, field, change.get("before"))
     product.deepseek_structured_output_json = None
@@ -2513,6 +2531,30 @@ def _merge_provider_output(provider_output: dict[str, Any]) -> dict[str, Any]:
     if parsed_content:
         merged = {**merged, **parsed_content}
     return merged
+
+
+def _capture_ai_category_hint(
+    product: KProductKnowledgeProduct,
+    provider_output: dict[str, Any],
+) -> None:
+    """Keep an AI-suggested taxonomy path without granting id-field access."""
+    merged = _merge_provider_output(provider_output)
+    for field in (
+        "category_hint",
+        "category_path_text",
+        "merchant_category_hint",
+        "google_product_category",
+    ):
+        value = merged.get(field)
+        if not isinstance(value, str):
+            continue
+        hint = re.sub(r"\s+", " ", value).strip()
+        if not hint or not re.search(r"[>›]", hint):
+            continue
+        # category_hint is VARCHAR(255); the unabridged provider output remains
+        # available in the corresponding structured-output JSON audit record.
+        product.category_hint = hint[:255]
+        return
 
 
 def _safe_string_list(value: Any) -> list[str]:
@@ -3570,6 +3612,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
         )
         zh = self._plain_chinese(result, "文案", user=user, request=request)
         product = self._require_product(product_id, scope_context)
+        _capture_ai_category_hint(product, result)
         product.marketing_copy_json = result
         product.marketing_copy_zh = zh
         product.marketing_copy_skill_version = skill["version"]
@@ -4008,7 +4051,7 @@ class KWorkflowOrchestratorV2(KWorkflowOrchestratorV1):
     ) -> None:
         order = _closed_loop_step_order(step)
         if order <= _closed_loop_step_order("deepseek_enrichment"):
-            _rollback_deepseek_product_fields(product)
+            _rollback_deepseek_product_fields(self.db, product)
         if order <= _closed_loop_step_order("ai_filter_chatgpt"):
             execution.chatgpt_filter_result_json = None
         if order <= _closed_loop_step_order("ai_filter_claude_opus"):

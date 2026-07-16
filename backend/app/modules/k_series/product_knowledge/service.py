@@ -10,6 +10,8 @@ from sqlalchemy import delete, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .category_resolver import assign_manual_category
+from .constants import TARGET_ORGANIZATION_NAME
 from .errors import KConflictError, KInvalidStateError, KProductNotFoundError
 from .models import (
     KProductKnowledgeAIEvent,
@@ -34,7 +36,6 @@ from .schemas import (
     ProductKnowledgeUpdate,
 )
 from .scope_shim import KScopeContext, apply_scope_filters, normalize_scope_context
-from .constants import TARGET_ORGANIZATION_NAME
 
 PRODUCT_CREATE_FIELDS = frozenset(
     {
@@ -134,16 +135,13 @@ def list_products(
     return list(db.scalars(query.limit(limit).offset(offset)))
 
 
-def _apply_manual_category(product: KProductKnowledgeProduct, category_id: str | None) -> None:
+def _apply_manual_category(
+    db: Session,
+    product: KProductKnowledgeProduct,
+    category_id: str | None,
+) -> None:
     """手动上传：用户为该 channel 选的类目直接落（下拉来自对应类目树，可信）。"""
-    if not category_id:
-        return
-    channel = (product.channel or "dtc").strip().lower()
-    if channel == "amazon":
-        product.amazon_category_id = category_id
-    else:
-        product.google_product_category = category_id
-    product.category_review_needed = False
+    assign_manual_category(db, product, category_id)
 
 
 def create_product(
@@ -191,7 +189,7 @@ def create_product(
             organization_name=TARGET_ORGANIZATION_NAME,
         )
         product.channel = (payload.channel or "dtc").strip().lower()
-        _apply_manual_category(product, payload.category_id)
+        _apply_manual_category(db, product, payload.category_id)
         variants = _variant_rows_for_payload(
             db=db,
             product=product,
