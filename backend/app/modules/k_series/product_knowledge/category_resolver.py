@@ -20,6 +20,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 _REVIEW_CONF_FLOOR = Decimal("0.6")
+_GOOGLE_PATH_SEPARATOR = re.compile(r"\s*[>›]\s*")
 
 
 def _norm(s: str) -> str:
@@ -46,6 +47,156 @@ def _leaf_name(cat_path: str | None, cat_id: str) -> str:
         if tail:
             return tail
     return cat_id
+
+
+def _split_google_path(full_path: str | None) -> list[str]:
+    """Split either taxonomy separator and normalize insignificant whitespace."""
+    if not full_path:
+        return []
+    return [
+        segment
+        for raw_segment in _GOOGLE_PATH_SEPARATOR.split(full_path)
+        if (segment := re.sub(r"\s+", " ", raw_segment).strip())
+    ]
+
+
+def _segment_key(value: object) -> str:
+    return re.sub(r"\s+", " ", str(value or "")).strip().casefold()
+
+
+def _path_key(segments: list[str]) -> tuple[str, ...]:
+    return tuple(_segment_key(segment) for segment in segments)
+
+
+def _google_category_by_id(
+    db: Session, google_id: str
+) -> dict[str, object] | None:
+    row = db.execute(
+        text(
+            "SELECT id, name, full_path, parent_id, level "
+            "FROM k_category_google WHERE id = :google_id"
+        ),
+        {"google_id": google_id},
+    ).mappings().first()
+    return dict(row) if row is not None else None
+
+
+def _google_categories_named(db: Session, name: str) -> list[dict[str, object]]:
+    """Return candidates only; callers must still match their complete path."""
+    rows = db.execute(
+        text(
+            "SELECT id, name, full_path, parent_id, level "
+            "FROM k_category_google WHERE lower(name) = lower(:name)"
+        ),
+        {"name": name},
+    ).mappings().all()
+    return [dict(row) for row in rows]
+
+
+def _validated_parent_chain(
+    db: Session, leaf: dict[str, object]
+) -> list[dict[str, object]] | None:
+    """Follow parent ids, returning None unless the entire chain is coherent."""
+    chain: list[dict[str, object]] = []
+    visited: set[str] = set()
+    current: dict[str, object] | None = leaf
+
+    while current is not None:
+        current_id = str(current.get("id") or "").strip()
+        if not current_id or current_id in visited:
+            return None
+        visited.add(current_id)
+        chain.append(current)
+
+        parent_id = str(current.get("parent_id") or "").strip()
+        if not parent_id:
+            break
+        current = _google_category_by_id(db, parent_id)
+        if current is None:
+            return None
+
+    chain.reverse()
+    leaf_segments = _split_google_path(str(leaf.get("full_path") or ""))
+    if not leaf_segments or len(chain) != len(leaf_segments):
+        return None
+
+    for index, row in enumerate(chain, start=1):
+        row_segments = _split_google_path(str(row.get("full_path") or ""))
+        expected_segments = leaf_segments[:index]
+        if _path_key(row_segments) != _path_key(expected_segments):
+            return None
+        if _segment_key(row.get("name")) != _segment_key(expected_segments[-1]):
+            return None
+        try:
+            row_level = int(row.get("level") or 0)
+        except (TypeError, ValueError):
+            return None
+        if row_level != index:
+            return None
+
+    return chain
+
+
+def _google_category_path_from_full_path(
+    db: Session, leaf: dict[str, object]
+) -> list[dict[str, object]]:
+    """Resolve every ancestor by its cumulative full path, never by name alone."""
+    leaf_id = str(leaf.get("id") or "").strip()
+    segments = _split_google_path(str(leaf.get("full_path") or ""))
+    if not leaf_id or not segments:
+        return []
+
+    chain: list[dict[str, object]] = []
+    for index, segment in enumerate(segments, start=1):
+        expected_path = _path_key(segments[:index])
+        matches = [
+            candidate
+            for candidate in _google_categories_named(db, segment)
+            if _path_key(
+                _split_google_path(str(candidate.get("full_path") or ""))
+            )
+            == expected_path
+            and _segment_key(candidate.get("name")) == _segment_key(segment)
+        ]
+        # The taxonomy has no unique constraint on full_path. Ambiguous data is
+        # not safe to project into WooCommerce, so never return a partial chain.
+        if len(matches) != 1:
+            return []
+        chain.append(matches[0])
+
+    if str(chain[-1].get("id") or "").strip() != leaf_id:
+        return []
+    return chain
+
+
+def google_category_path(
+    db: Session, google_id: str | None
+) -> list[dict[str, str]]:
+    """Return a Google taxonomy ancestor chain ordered from root to leaf.
+
+    Parent links are preferred, but the imported taxonomy deliberately has no
+    parent foreign key. A missing link, cycle, or inconsistent path therefore
+    falls back to resolving each cumulative ``full_path`` prefix. If either
+    strategy cannot prove the complete path, an empty list is returned.
+    """
+    normalized_id = str(google_id or "").strip()
+    if not normalized_id:
+        return []
+
+    leaf = _google_category_by_id(db, normalized_id)
+    if leaf is None:
+        return []
+
+    chain = _validated_parent_chain(db, leaf)
+    if chain is None:
+        chain = _google_category_path_from_full_path(db, leaf)
+    if not chain:
+        return []
+
+    return [
+        {"google_id": str(row["id"]), "name": str(row["name"])}
+        for row in chain
+    ]
 
 
 def ensure_amazon_category(

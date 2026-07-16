@@ -25,7 +25,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v2"
+UPLOAD_PACKAGE_SCHEMA_VERSION = "p-upload-package-v3"
 # n8n barongPupload001 must write ``shipping.shipping_class`` to the Woo
 # product's shipping_class; the n8n workflow change is intentionally external.
 
@@ -57,6 +57,8 @@ class Category(BaseModel):
     slug: str | None = None
     google_product_category: str | None = None
     merchant_product_type: str | None = None
+    path: list[str] | None = None
+    wc_category_id: int | None = None
 
 
 class Seo(BaseModel):

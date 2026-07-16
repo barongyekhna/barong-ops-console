@@ -1024,8 +1024,13 @@ MODULE_MANIFESTS_V1: tuple[dict[str, Any], ...] = (
         sandbox_required=False,
         feature_flag_key="modules.p.upload",
         data_boundary=_data_boundary(
-            reads=("p_upload_jobs", "k_product_knowledge_products"),
-            writes=("p_upload_jobs",),
+            reads=(
+                "p_upload_jobs",
+                "k_product_knowledge_products",
+                "k_category_google",
+                "k_category_wc_map",
+            ),
+            writes=("p_upload_jobs", "k_category_wc_map"),
         ),
         release_requirements=_release_requirements(
             staging_acceptance=True,

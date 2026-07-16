@@ -52,6 +52,11 @@ class Settings(BaseSettings):
         gt=0,
         le=60,
     )
+    wp_base_url: str | None = Field(default=None, max_length=2048)
+    wp_app_user: str | None = Field(default=None, max_length=255)
+    wp_app_password: SecretStr | None = None
+    wp_request_timeout_seconds: float = Field(default=10.0, ge=1.0, le=60.0)
+    wp_request_max_attempts: int = Field(default=3, ge=1, le=5)
     webhook_gateway_signing_secret: SecretStr | None = None
     api_key_encryption_secret: SecretStr | None = None
     c19_record_store_url: str | None = Field(default=None, max_length=2048)
@@ -168,6 +173,9 @@ class Settings(BaseSettings):
         "api_key_encryption_secret",
         "c19_record_store_url",
         "c19_record_store_token",
+        "wp_base_url",
+        "wp_app_user",
+        "wp_app_password",
         mode="before",
     )
     @classmethod
@@ -210,6 +218,8 @@ class Settings(BaseSettings):
         "c19_write_ip_rate_limit_attempts",
         "c19_stream_user_rate_limit_attempts",
         "c19_stream_ip_rate_limit_attempts",
+        "wp_request_timeout_seconds",
+        "wp_request_max_attempts",
         mode="before",
     )
     @classmethod
@@ -244,6 +254,8 @@ class Settings(BaseSettings):
             "c19_write_ip_rate_limit_attempts": 1800,
             "c19_stream_user_rate_limit_attempts": 30,
             "c19_stream_ip_rate_limit_attempts": 300,
+            "wp_request_timeout_seconds": 10.0,
+            "wp_request_max_attempts": 3,
         }
         return defaults[info.field_name]
 

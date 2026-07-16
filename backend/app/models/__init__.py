@@ -74,6 +74,7 @@ from ..modules.k_series.product_knowledge.models import (
     KProductKnowledgeTranslation,
     KProductKnowledgeWorkflowExecution,
 )
+from ..modules.p_series.upload.models import KCategoryWCMap, PUploadJob
 
 __all__ = [
     "AgentMemoryAccessLog",
@@ -107,6 +108,7 @@ __all__ = [
     "ExecutionResultRecord",
     "EventStreamRecord",
     "JobEvent",
+    "KCategoryWCMap",
     "KeyHealthCheck",
     "KeyHealthRun",
     "KeyHealthState",
@@ -135,6 +137,7 @@ __all__ = [
     "OrgMembershipRecord",
     "OrganizationRecord",
     "PermissionRegistry",
+    "PUploadJob",
     "ProviderConfigRecord",
     "ReviewItem",
     "ReplayJobRecord",

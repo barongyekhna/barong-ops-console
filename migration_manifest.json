@@ -1,12 +1,12 @@
 {
-  "alembic_head": "20260715_01_h_site_health",
+  "alembic_head": "20260716_01_p_wc_category_map",
   "environment": "staging",
-  "expected_alembic_head": "20260715_01_h_site_health",
+  "expected_alembic_head": "20260716_01_p_wc_category_map",
   "generated_at": "2026-06-17T00:00:00Z",
   "head_locked": true,
   "manifest_version": "PRE20-P-Batch10-FIX042-v1",
-  "migration_count": 59,
-  "migration_hash": "2d7668437f0f295e192b3f1792fa5ecf8b9ff88a2fa7ab5a03cb5ff9964d2c02",
+  "migration_count": 60,
+  "migration_hash": "bb7d833a47681870ef2960ff79941215d5f27c334d7f1628584b1ffa7775beb3",
   "migration_order": [
     "f07_core_001",
     "c05b_permissions_001",
@@ -66,9 +66,10 @@
     "20260714_02_f_candidate_compare",
     "20260714_03_arcade_high_scores",
     "20260714_04_f_market_refs",
-    "20260715_01_h_site_health"
+    "20260715_01_h_site_health",
+    "20260716_01_p_wc_category_map"
   ],
-  "migration_order_checksum": "753d2c206b4e4757abdcb5be9da5399a757fa1a119852777e4faff0559a35f68",
+  "migration_order_checksum": "5e76a600956f6cb02e36da7bec4f0fd309127b02e0250c141feae262adf65bde",
   "migrations": [
     {
       "applied_at": "2026-06-08T00:00:00Z",
@@ -482,6 +483,13 @@
       "down_revision": "20260714_04_f_market_refs",
       "path": "backend/alembic/versions/20260715_01_h_site_health.py",
       "version": "20260715_01_h_site_health"
+    },
+    {
+      "applied_at": "2026-07-16T00:00:00Z",
+      "checksum": "972a65d280a7ff9f93ce317cc1e8d10e26ac4b5414b71720e38b15cf5dc12fbe",
+      "down_revision": "20260715_01_h_site_health",
+      "path": "backend/alembic/versions/20260716_01_p_wc_category_map.py",
+      "version": "20260716_01_p_wc_category_map"
     }
   ]
 }

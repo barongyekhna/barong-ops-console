@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -34,13 +35,28 @@ from ...k_series.product_knowledge.brand_guard import (
     SITE_BRAND,
     audit_gate_blockers,
 )
-from ...k_series.product_knowledge.category_resolver import category_is_bound
+from ...k_series.product_knowledge.category_resolver import (
+    category_is_bound,
+    google_category_path,
+)
 from .description_html import (
     build_description_html,
     plain_text_from_copy,
 )
+from .wc_categories import ensure_wc_category_path
 
 LAYOUT_SKILL_VERSION = "p-product-page-layout-v1"
+logger = logging.getLogger(__name__)
+
+
+def _rollback_category_failure(db: Session) -> None:
+    """Clear a failed category/cache transaction without breaking packaging."""
+    try:
+        db.rollback()
+    except Exception:  # noqa: BLE001 - even rollback failure must stay fail-safe
+        logger.exception(
+            "Woo category transaction rollback failed; upload still continues"
+        )
 
 
 def gate_blockers(db: Session, product: Any) -> list[str]:
@@ -230,6 +246,61 @@ def _variants(db: Session, product: Any) -> list[Variant]:
     return out
 
 
+def _resolve_wc_category(
+    db: Session,
+    product: Any,
+) -> tuple[list[str] | None, int | None]:
+    """Resolve and ensure the buyer-facing Woo category without blocking upload."""
+    raw_google_id = getattr(product, "google_product_category", None)
+    google_id = str(raw_google_id).strip() if raw_google_id is not None else ""
+    if not google_id:
+        logger.warning(
+            "Woo category skipped: google_product_category missing product_id=%s",
+            getattr(product, "id", None),
+        )
+        return None, None
+
+    try:
+        resolved_path = google_category_path(db, google_id)
+        category_path: list[str] = []
+        for segment in resolved_path:
+            name = str(segment["name"] or "").strip()
+            if not name:
+                raise ValueError("Google category path contains an empty name")
+            category_path.append(name)
+        if not category_path:
+            raise ValueError("Google category path is empty")
+    except Exception:  # noqa: BLE001 - category enrichment must never block upload
+        logger.exception(
+            "Google category path resolution failed product_id=%s google_id=%s; "
+            "upload continues uncategorized",
+            getattr(product, "id", None),
+            google_id,
+        )
+        _rollback_category_failure(db)
+        return None, None
+
+    try:
+        wc_category_id = ensure_wc_category_path(db, resolved_path)
+        if (
+            isinstance(wc_category_id, bool)
+            or not isinstance(wc_category_id, int)
+            or wc_category_id <= 0
+        ):
+            raise ValueError("Woo category id must be a positive integer")
+    except Exception:  # noqa: BLE001 - category enrichment must never block upload
+        logger.exception(
+            "Woo category ensure failed product_id=%s google_id=%s; "
+            "upload continues uncategorized",
+            getattr(product, "id", None),
+            google_id,
+        )
+        _rollback_category_failure(db)
+        return category_path, None
+
+    return category_path, wc_category_id
+
+
 def assemble_upload_package(
     db: Session,
     product: Any,
@@ -274,6 +345,9 @@ def assemble_upload_package(
         if str(b).strip()
     ]
     currency = (product.price_currency or "USD")[:3]
+    # Finish the package's regular DB reads before category sync may call WC REST.
+    variants = _variants(db, product)
+    category_path, wc_category_id = _resolve_wc_category(db, product)
     return UploadPackage(
         schema_version=UPLOAD_PACKAGE_SCHEMA_VERSION,
         job_id=job_id,
@@ -320,6 +394,8 @@ def assemble_upload_package(
                 slug=getattr(product, "slug", None),
                 google_product_category=product.google_product_category,
                 merchant_product_type=product.merchant_product_type,
+                path=category_path,
+                wc_category_id=wc_category_id,
             ),
             images=images,
             keywords=Keywords(
@@ -329,7 +405,7 @@ def assemble_upload_package(
                 title=getattr(product, "seo_title_en", None),
                 description=getattr(product, "seo_description_en", None),
             ),
-            variants=_variants(db, product),
+            variants=variants,
             item_group_id=product.product_key,
         ),
         shipping=Shipping(shipping_class=product.shipping_class),

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import DateTime, String, Text
+from sqlalchemy import BigInteger, CheckConstraint, DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import Uuid
 
@@ -33,4 +33,22 @@ class PUploadJob(PrimaryKeyMixin, TimestampMixin, Base):
     )
     finished_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
+    )
+
+
+class KCategoryWCMap(Base):
+    """Control-plane cache from one Google taxonomy node to its WC term."""
+
+    __tablename__ = "k_category_wc_map"
+    __table_args__ = (
+        CheckConstraint("wc_term_id > 0", name="ck_k_category_wc_map_term_positive"),
+    )
+
+    google_id: Mapped[str] = mapped_column(String(32), primary_key=True)
+    wc_term_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
+    synced_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
     )

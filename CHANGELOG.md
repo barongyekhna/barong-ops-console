@@ -6,6 +6,10 @@
 
 ### Added
 
+- P 系列上架新增按需 WooCommerce 层级类目同步：控制台从 Google taxonomy
+  解析完整父链，按路径幂等查建缺失的 `product_cat` 并缓存 Google→WC term
+  映射；上架包携带叶子 term id，n8n 仅在 id 存在时挂类目，解析或 WC
+  调用失败仍按未分类继续上架。
 - 新增全局 `VPN` 模块壳：注册 `core.vpn` 与 `/vpn` 入口，不绑定组织、角色或
   额外权限，所有已登录用户均可访问；页面直接复用现有火凤凰驾驶舱
   `OperationsDashboard`，未修改任何驾驶舱组件或 CSS，本轮不接入 VPN 运行逻辑。
