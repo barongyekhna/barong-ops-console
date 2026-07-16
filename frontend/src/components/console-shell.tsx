@@ -40,8 +40,10 @@ export function ConsoleShell({ children }: { children: ReactNode }) {
     setIsLoggingOut(true);
     try {
       await logout();
-      router.replace("/login");
+    } catch {
+      // Local auth state is cleared by AuthProvider even if the API is unavailable.
     } finally {
+      window.location.replace("/login");
       setIsLoggingOut(false);
     }
   }

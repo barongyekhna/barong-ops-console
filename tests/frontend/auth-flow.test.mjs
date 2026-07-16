@@ -28,6 +28,53 @@ test("auth proxy exposes only public session endpoints with exact methods", () =
   assert.equal(isAllowedBackendProxyPath("POST", ["auth", "register"]), false);
 });
 
+test("logout always returns to login when the backend request fails", () => {
+  const consoleShellSource = readFileSync(
+    "frontend/src/components/console-shell.tsx",
+    "utf8",
+  );
+  const providerSource = readFileSync(
+    "frontend/src/components/auth-provider.tsx",
+    "utf8",
+  );
+  const handlerStart = consoleShellSource.indexOf(
+    "async function handleLogout()",
+  );
+  const handlerEnd = consoleShellSource.indexOf(
+    "function handleLogoClick()",
+    handlerStart,
+  );
+  const handlerSource = consoleShellSource.slice(handlerStart, handlerEnd);
+  const providerLogoutStart = providerSource.indexOf(
+    "const logout = useCallback(async () =>",
+  );
+  const providerLogoutEnd = providerSource.indexOf(
+    "const isOwner =",
+    providerLogoutStart,
+  );
+  const providerLogoutSource = providerSource.slice(
+    providerLogoutStart,
+    providerLogoutEnd,
+  );
+
+  assert.notEqual(handlerStart, -1);
+  assert.notEqual(handlerEnd, -1);
+  assert.match(handlerSource, /await logout\(\)/);
+  assert.match(handlerSource, /catch \{/);
+  assert.ok(
+    handlerSource.indexOf("finally {") <
+      handlerSource.indexOf('window.location.replace("/login")'),
+  );
+  assert.doesNotMatch(
+    handlerSource,
+    /await logout\(\);\s*window\.location\.replace\("\/login"\)/,
+  );
+  assert.match(
+    providerLogoutSource,
+    /try \{[\s\S]*await logoutRequest\(\);[\s\S]*\} finally \{[\s\S]*resetAuthState\(\)/,
+  );
+});
+
 test("root entry routes authenticated users home and unauthenticated users to login", () => {
   const rootPageSource = readFileSync("frontend/src/app/page.tsx", "utf8");
   const loginFormSource = readFileSync(
